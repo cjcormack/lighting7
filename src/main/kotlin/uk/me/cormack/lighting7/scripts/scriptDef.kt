@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.scripts
 
-import uk.me.cormack.show.Fixtures
+import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.script.experimental.annotations.KotlinScript
 import kotlin.script.experimental.api.*
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
@@ -16,7 +16,7 @@ object LightingScriptConfiguration : ScriptCompilationConfiguration(
     {
         // adds implicit import statements (in this case `import kotlin.script.experimental.dependencies.DependsOn`, etc.)
         // to each script on compilation
-        defaultImports("uk.me.cormack.fixture.*", "uk.me.cormack.fixture.dmx.*", "uk.me.cormack.fixture.hue.*", "java.awt.Color")
+        defaultImports("uk.me.cormack.lighting7.fixture.*", "uk.me.cormack.lighting7.fixture.dmx.*", "uk.me.cormack.lighting7.fixture.hue.*", "java.awt.Color")
 
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)

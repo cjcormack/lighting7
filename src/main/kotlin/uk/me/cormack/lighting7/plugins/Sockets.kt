@@ -9,9 +9,9 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import uk.me.cormack.artnet.IChannelChangeListener
-import uk.me.cormack.show.Fixtures
-import uk.me.cormack.show.Show
+import uk.me.cormack.lighting7.artnet.IChannelChangeListener
+import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.show.Show
 import java.time.Duration
 import java.util.*
 import java.util.concurrent.atomic.AtomicInteger

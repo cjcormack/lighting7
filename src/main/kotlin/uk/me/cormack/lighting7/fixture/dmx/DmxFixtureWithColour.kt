@@ -2,8 +2,8 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.ObsoleteCoroutinesApi
-import uk.me.cormack.artnet.ArtNetController
-import uk.me.cormack.fixture.FixtureWithColour
+import uk.me.cormack.lighting7.artnet.ArtNetController
+import uk.me.cormack.lighting7.fixture.FixtureWithColour
 import java.awt.Color
 
 @OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)

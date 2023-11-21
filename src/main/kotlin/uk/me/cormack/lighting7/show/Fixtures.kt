@@ -2,9 +2,9 @@ package uk.me.cormack.lighting7.show
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.ObsoleteCoroutinesApi
-import uk.me.cormack.artnet.ArtNetController
-import uk.me.cormack.fixture.Fixture
-import uk.me.cormack.fixture.dmx.*
+import uk.me.cormack.lighting7.artnet.ArtNetController
+import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.dmx.*
 import kotlin.reflect.full.declaredMemberProperties
 
 @Target(AnnotationTarget.PROPERTY)

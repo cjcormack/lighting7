@@ -6,11 +6,11 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.launch
 import org.jetbrains.exposed.sql.transactions.transaction
-import uk.me.cormack.dao.DatabaseFactory
+import uk.me.cormack.lighting7.dao.DatabaseFactory
 import uk.me.cormack.lighting7.models.Script
 import uk.me.cormack.lighting7.models.Scripts
-import uk.me.cormack.plugins.*
-import uk.me.cormack.show.Show
+import uk.me.cormack.lighting7.plugins.*
+import uk.me.cormack.lighting7.show.Show
 
 fun main(args: Array<String>): Unit = EngineMain.main(args)
 

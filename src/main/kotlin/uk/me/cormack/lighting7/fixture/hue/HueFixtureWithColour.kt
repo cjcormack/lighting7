@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fixture.hue
 
-import uk.me.cormack.fixture.FixtureWithColour
+import uk.me.cormack.lighting7.fixture.FixtureWithColour
 import java.awt.Color
 
 class HueFixtureWithColour(

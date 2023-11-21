@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.Script
-import uk.me.cormack.show.Show
+import uk.me.cormack.lighting7.show.Show
 import java.io.File
 import kotlin.script.experimental.api.*
 

@@ -4,10 +4,10 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.ObsoleteCoroutinesApi
-import uk.me.cormack.artnet.ArtNetController
-import uk.me.cormack.fixture.Fixture
-import uk.me.cormack.fixture.FixtureWithDimmer
-import uk.me.cormack.fixture.FixtureWithSettings
+import uk.me.cormack.lighting7.artnet.ArtNetController
+import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixtureWithDimmer
+import uk.me.cormack.lighting7.fixture.FixtureWithSettings
 
 enum class Scantastic(override val level: UByte): DmxFixtureSettingValue {
     BLACKOUT(0u),

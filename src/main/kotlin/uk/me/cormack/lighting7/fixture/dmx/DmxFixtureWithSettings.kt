@@ -1,9 +1,9 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
-import uk.me.cormack.artnet.ArtNetController
-import uk.me.cormack.fixture.FixtureSetting
-import uk.me.cormack.fixture.FixtureSettingValue
-import uk.me.cormack.fixture.FixtureWithSettings
+import uk.me.cormack.lighting7.artnet.ArtNetController
+import uk.me.cormack.lighting7.fixture.FixtureSetting
+import uk.me.cormack.lighting7.fixture.FixtureSettingValue
+import uk.me.cormack.lighting7.fixture.FixtureWithSettings
 
 interface DmxFixtureSettingValue: FixtureSettingValue {
     val level: UByte

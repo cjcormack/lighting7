@@ -4,8 +4,8 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.ObsoleteCoroutinesApi
-import uk.me.cormack.artnet.ArtNetController
-import uk.me.cormack.fixture.*
+import uk.me.cormack.lighting7.artnet.ArtNetController
+import uk.me.cormack.lighting7.fixture.*
 
 enum class WHexProgramMode(override val level: UByte): DmxFixtureSettingValue {
     NONE(0u),

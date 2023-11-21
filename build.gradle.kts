@@ -1,3 +1,6 @@
+import org.apache.tools.ant.taskdefs.ExecTask
+import org.jetbrains.kotlin.ir.backend.js.transformers.irToJs.argumentsWithVarargAsSingleArray
+
 val ktor_version: String by project
 val kotlin_version: String by project
 val logback_version: String by project
@@ -16,8 +19,35 @@ group = "uk.me.cormack"
 version = "0.0.1"
 
 application {
-    mainClass.set("uk.me.cormack.ApplicationKt")
+    mainClass.set("uk.me.cormack.lighting7.ApplicationKt")
 }
+
+tasks {
+    println()
+    register<JavaExec>("run2") {
+        args = listOf(
+            "-config=application.conf",
+            "-config=local.conf",
+        )
+    }
+}
+
+println(tasks.asMap.keys)
+
+//tasks {
+//    println("hello tasks")
+//    println(this.asMap.keys)
+//    named("run").get().doLast {
+//        println(this::class)
+//    }
+//    findByPath(":application:run")?.doLast {
+//        println("test")
+//        with (this as JavaExec) {
+//            args?.add("-config=application.conf")
+//            args?.add("-config=local.conf")
+//        }
+//    }
+//}
 
 repositories {
     mavenCentral()
