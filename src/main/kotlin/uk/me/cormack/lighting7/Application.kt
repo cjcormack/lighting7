@@ -12,7 +12,14 @@ import uk.me.cormack.lighting7.models.Scripts
 import uk.me.cormack.lighting7.plugins.*
 import uk.me.cormack.lighting7.show.Show
 
-fun main(args: Array<String>): Unit = EngineMain.main(args)
+fun main(args: Array<String>): Unit {
+    val argsWithDefaults = if (args.any { it.startsWith("-config=") }) {
+        args
+    } else {
+        args + "-config=application.conf" + "-config=local.conf"
+    }
+    EngineMain.main(argsWithDefaults)
+}
 
 @OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 fun Application.module() {
