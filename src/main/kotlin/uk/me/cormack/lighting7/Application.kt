@@ -8,6 +8,7 @@ import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.dao.DatabaseFactory
 import uk.me.cormack.lighting7.plugins.*
 import uk.me.cormack.lighting7.show.Show
+import uk.me.cormack.lighting7.state.State
 
 fun main(argv: Array<String>) {
     val args = mutableListOf("-config=application.conf")
@@ -21,12 +22,13 @@ fun main(argv: Array<String>) {
 }
 
 fun Application.module() {
+    val state = State(environment.config)
     configureHTTP()
     DatabaseFactory.init(environment.config)
-    configureSockets()
-    configureRouting()
+    configureSockets(state)
+    configureRouting(state)
 
     launch {
-        Show.start()
+        state.show.start()
     }
 }

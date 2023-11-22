@@ -10,6 +10,7 @@ import uk.me.cormack.lighting7.models.Projects
 import uk.me.cormack.lighting7.models.Script
 import uk.me.cormack.lighting7.models.Scripts
 import uk.me.cormack.lighting7.scripts.LightingScript
+import uk.me.cormack.lighting7.state.State
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.script.experimental.api.*
@@ -18,20 +19,27 @@ import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromTemplate
 import kotlin.text.toByteArray
 
-@OptIn(DelicateCoroutinesApi::class)
-object Show {
+@OptIn(DelicateCoroutinesApi::class, ObsoleteCoroutinesApi::class)
+class Show(
+    val state: State,
+    val projectName: String,
+    val runLoopScriptName: String?,
+    val runLoopDelay: Long,
+) {
     val fixtures = Fixtures()
     val compiledScripts = ConcurrentHashMap<String, ResultWithDiagnostics<CompiledScript>>()
 
-    val project = transaction {
+    val project = transaction(state.database) {
         Project.find {
-            Projects.name eq "Halloween"
+            Projects.name eq projectName
         }.first()
     }
 
     init {
-        GlobalScope.launch {
-//            runShow()
+        if (runLoopScriptName != null) {
+            GlobalScope.launch {
+                runShow(runLoopScriptName, runLoopDelay)
+            }
         }
     }
 
@@ -42,10 +50,10 @@ object Show {
     fun close() {
     }
 
-    private fun CoroutineScope.runShow() {
+    private fun CoroutineScope.runShow(runLoopScriptName: String, delay: Long) {
         var isClosed = false
 
-        val ticker = ticker(500)
+        val ticker = ticker(delay)
 
         var consecutiveErrors = 0
 
@@ -60,7 +68,7 @@ object Show {
                                 return@onReceiveCatching
                             }
 
-                            evalScriptByName("runloop", step)
+                            evalScriptByName(runLoopScriptName, step)
                             step++
                         }
                     }
@@ -89,7 +97,7 @@ object Show {
     }
 
     suspend fun evalScriptByName(scriptName: String, step: Int = 0): EvaluationResult {
-        val script = transaction {
+        val script = transaction(state.database) {
             Script.find {
                 (Scripts.name eq scriptName) and
                 (Scripts.project eq project.id)

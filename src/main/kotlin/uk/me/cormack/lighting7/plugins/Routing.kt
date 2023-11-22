@@ -21,11 +21,12 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.Script
 import uk.me.cormack.lighting7.show.Show
+import uk.me.cormack.lighting7.state.State
 import java.io.File
 import kotlin.script.experimental.api.*
 
 @OptIn(DelicateCoroutinesApi::class)
-fun Application.configureRouting() {
+fun Application.configureRouting(state: State) {
     install(Resources)
     install(ContentNegotiation) {
         json()
@@ -34,8 +35,8 @@ fun Application.configureRouting() {
         route("/api/rest") {
             route("/script") {
                 get("/list") {
-                    val scripts = transaction {
-                        Show.project.scripts.toList().map {
+                    val scripts = transaction(state.database){
+                        state.show.project.scripts.toList().map {
                             ScriptDetails(it.id.value, it.name, it.script)
                         }
                     }
@@ -48,7 +49,7 @@ fun Application.configureRouting() {
                     var response: CompileResult? = null
 
                     GlobalScope.launch {
-                        val compiledResultWithDiagnostics = Show.compileLiteralScript(script)
+                        val compiledResultWithDiagnostics = state.show.compileLiteralScript(script)
 
                         val compiledScript = compiledResultWithDiagnostics.valueOrNull()
 
@@ -78,7 +79,7 @@ fun Application.configureRouting() {
                     var response: RunResult? = null
 
                     GlobalScope.launch {
-                        val compiledResultWithDiagnostics = Show.compileLiteralScript(script)
+                        val compiledResultWithDiagnostics = state.show.compileLiteralScript(script)
 
                         val compiledScript = compiledResultWithDiagnostics.valueOrNull()
 
@@ -103,7 +104,7 @@ fun Application.configureRouting() {
                             return@launch
                         }
 
-                        val evalResultWithDiagnostics = Show.runLiteralScript(compiledScript)
+                        val evalResultWithDiagnostics = state.show.runLiteralScript(compiledScript)
 
                         val evalResult = evalResultWithDiagnostics.valueOrNull()
                         if (evalResult == null) {
@@ -151,18 +152,18 @@ fun Application.configureRouting() {
 
                 post {
                     val newScript = call.receive<NewScript>()
-                    val script = transaction {
+                    val script = transaction(state.database){
                         Script.new {
                             name = newScript.name
                             script = newScript.script
-                            project = Show.project
+                            project = state.show.project
                         }
                     }
                     call.respond(ScriptDetails(script.id.value, script.name, script.script))
                 }
 
                 get<ScriptResource> {
-                    val script = transaction {
+                    val script = transaction(state.database){
                         Script.findById(it.id)
                     }
                     if (script != null) {
@@ -172,7 +173,7 @@ fun Application.configureRouting() {
 
                 put<ScriptResource> {
                     val newScriptDetails = call.receive<NewScript>()
-                    val script = transaction {
+                    val script = transaction(state.database){
                         val script = Script.findById(it.id) ?: throw Error("Script not found")
                         script.name = newScriptDetails.name
                         script.script = newScriptDetails.script
@@ -183,7 +184,7 @@ fun Application.configureRouting() {
                 }
 
                 delete<ScriptResource> {
-                    transaction {
+                    transaction(state.database){
                         Script.findById(it.id)?.delete()
                     }
                     call.respond("")

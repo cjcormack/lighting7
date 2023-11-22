@@ -8,9 +8,11 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.Projects
 import uk.me.cormack.lighting7.models.Scripts
+import uk.me.cormack.lighting7.show.Show
 
 class State(val config: ApplicationConfig) {
-    val database: Database = initDatabase()
+    val database = initDatabase()
+    val show = initShow()
 
     private fun initDatabase(): Database {
         val url = config.property("postgres.url").getString()
@@ -35,5 +37,22 @@ class State(val config: ApplicationConfig) {
         }
 
         return database
+    }
+
+    private fun initShow(): Show {
+        val runLoopEnabled = config.propertyOrNull("lighting.runLoop.enabled")?.getString().toBoolean()
+
+        val runLoopScriptName = if (runLoopEnabled) {
+            config.propertyOrNull("lighting.runLoop.scriptName")?.getString() ?: "runloop"
+        } else {
+            null
+        }
+
+        return Show(
+            this,
+            config.property("lighting.projectName").getString(),
+            runLoopScriptName,
+            config.propertyOrNull("lighting.runLoop.delayMs")?.getString()?.toLong() ?: 500L,
+        )
     }
 }
