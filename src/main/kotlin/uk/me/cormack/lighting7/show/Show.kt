@@ -23,6 +23,8 @@ import kotlin.text.toByteArray
 class Show(
     val state: State,
     val projectName: String,
+    val loadFixturesScriptName: String,
+    val initialSceneScriptName: String,
     val runLoopScriptName: String?,
     val runLoopDelay: Long,
 ) {

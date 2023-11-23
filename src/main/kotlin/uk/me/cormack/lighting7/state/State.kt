@@ -51,6 +51,8 @@ class State(val config: ApplicationConfig) {
         return Show(
             this,
             config.property("lighting.projectName").getString(),
+            config.property("lighting.loadFixturesScriptName").getString(),
+            config.property("lighting.initialSceneScriptName").getString(),
             runLoopScriptName,
             config.propertyOrNull("lighting.runLoop.delayMs")?.getString()?.toLong() ?: 500L,
         )
