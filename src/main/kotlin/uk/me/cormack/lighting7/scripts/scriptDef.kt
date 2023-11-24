@@ -1,11 +1,14 @@
 package uk.me.cormack.lighting7.scripts
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.ObsoleteCoroutinesApi
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.script.experimental.annotations.KotlinScript
 import kotlin.script.experimental.api.*
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.jvm
 
+@OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 @KotlinScript(
     fileExtension = "lightng.kts",
     compilationConfiguration = LightingScriptConfiguration::class
@@ -16,7 +19,14 @@ object LightingScriptConfiguration : ScriptCompilationConfiguration(
     {
         // adds implicit import statements (in this case `import kotlin.script.experimental.dependencies.DependsOn`, etc.)
         // to each script on compilation
-        defaultImports("uk.me.cormack.lighting7.fixture.*", "uk.me.cormack.lighting7.fixture.dmx.*", "uk.me.cormack.lighting7.fixture.hue.*", "java.awt.Color")
+        defaultImports(
+            "uk.me.cormack.lighting7.fixture.*",
+            "uk.me.cormack.lighting7.fixture.dmx.*",
+            "uk.me.cormack.lighting7.fixture.hue.*",
+            "java.awt.Color",
+            "uk.me.cormack.lighting7.dmx.DmxController",
+            "uk.me.cormack.lighting7.dmx.ArtNetController",
+        )
 
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)

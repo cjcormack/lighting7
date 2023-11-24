@@ -2,59 +2,138 @@ package uk.me.cormack.lighting7.show
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.ObsoleteCoroutinesApi
-import uk.me.cormack.lighting7.artnet.ArtNetController
+import uk.me.cormack.lighting7.dmx.ArtNetController
+import uk.me.cormack.lighting7.dmx.DmxController
+import uk.me.cormack.lighting7.dmx.IChannelChangeListener
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.dmx.*
-import kotlin.reflect.full.declaredMemberProperties
-
-@Target(AnnotationTarget.PROPERTY)
-@Retention(AnnotationRetention.RUNTIME)
-@Repeatable()
-annotation class FixtureGroup(val name: String)
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 
 @OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 class Fixtures {
-    val raspberryPiUniverse = ArtNetController(0, 0/*, "raspberrypi.local"*/)
-//    val openDmxUniverse = ArtNetController(0, 1/*, "192.168.1.215"*/)
-    val lightStripUniverse =  ArtNetController(0, 2/*, address = "192.168.50.115"*/, needsRefresh = true)
+    private val registerLock = ReentrantReadWriteLock()
+    private val controllerRegister: MutableMap<String, DmxController> = mutableMapOf()
+    private val controllerChannelChangeListeners: MutableMap<String, IChannelChangeListener> = mutableMapOf()
 
-    val fixturesByGroup: Map<String, List<Fixture>>
-    val allFixtures : List<Fixture>
+    private val fixtureRegister: MutableMap<String, Fixture> = mutableMapOf()
+    private val fixturesByGroup: MutableMap<String, MutableList<Fixture>> = mutableMapOf()
 
-    val hex1 = HexFixture(raspberryPiUniverse, "hex1", "Hex 1", 65, 0)
-    @FixtureGroup("atmosphere")
-    val hex2 = HexFixture(raspberryPiUniverse, "hex2", "Hex 2", 81, 0)
-    @FixtureGroup("atmosphere")
-    val hex3 = HexFixture(raspberryPiUniverse, "hex3", "Hex 2", 97, 0)
-    val uv1 = UVFixture(raspberryPiUniverse, "uv1", "UV 1", 161, 1)
-    val uv2 = UVFixture(raspberryPiUniverse, "uv2", "UV 2", 177, 1)
-    val scantastic = ScantasticFixture(raspberryPiUniverse, "scantastic", "Scantastic", 193, 0)
-    val quadbar = QuadBarFixture(raspberryPiUniverse, "quadbar", "Quadbar", 225, 0)
-    val starcluster = StarClusterFixture(raspberryPiUniverse, "starcluster", "Starcluster", 241, 0)
-    val laser = LaswerworldCS100Fixture(raspberryPiUniverse, "laser", "Laser", 257, 0)
-    @FixtureGroup("atmosphere")
-    val lightstrip = LightstripFixture(lightStripUniverse, "lightstrip", "Light Strip", 0, 0)
-    val movingLeft = FusionSpotFixture(raspberryPiUniverse, "moving-left", "Moving Left", 273, 0)
-    val movingRight = FusionSpotFixture(raspberryPiUniverse, "moving-right", "Moving Right", 289, 0)
+    private val channelChangeListeners: MutableMap<String, MutableList<IChannelChangeListener>> = mutableMapOf()
 
-    init {
-        val allFixtures = mutableListOf<Fixture>()
-        val fixturesByGroup = mutableMapOf<String, MutableList<Fixture>>()
+    val controllers: List<DmxController> get () = registerLock.read {
+        controllerRegister.values.toList()
+    }
+    val fixtures: List<Fixture> get() = registerLock.read {
+        fixtureRegister.values.toList()
+    }
 
-        Fixtures::class.declaredMemberProperties.forEach { memberProperty ->
-            val member = memberProperty.get(this)
-            if (member !is Fixture) {
-                return@forEach
+//    init {
+//        val raspberryPiUniverse = registerController(ArtNetController(0, 0/*, "raspberrypi.local"*/))
+//
+//        registerFixture(HexFixture(raspberryPiUniverse, "hex1", "Hex 1", 65, 0))
+//        registerFixture(HexFixture(raspberryPiUniverse, "hex2", "Hex 2", 81, 0))
+//        registerFixture(HexFixture(raspberryPiUniverse, "hex3", "Hex 2", 97, 0))
+//        registerFixture(UVFixture(raspberryPiUniverse, "uv1", "UV 1", 161, 1))
+//        registerFixture(UVFixture(raspberryPiUniverse, "uv2", "UV 2", 177, 1))
+//        registerFixture(ScantasticFixture(raspberryPiUniverse, "scantastic", "Scantastic", 193, 0))
+//        registerFixture(QuadBarFixture(raspberryPiUniverse, "quadbar", "Quadbar", 225, 0))
+//        registerFixture(StarClusterFixture(raspberryPiUniverse, "starcluster", "Starcluster", 241, 0))
+//        registerFixture(LaswerworldCS100Fixture(raspberryPiUniverse, "laser", "Laser", 257, 0))
+//        registerFixture(FusionSpotFixture(raspberryPiUniverse, "moving-left", "Moving Left", 273, 0))
+//        registerFixture(FusionSpotFixture(raspberryPiUniverse, "moving-right", "Moving Right", 289, 0))
+//    }
+
+    private fun controllerKey(subnet: Int, universe: Int): String {
+        return "$subnet:$universe"
+    }
+
+    fun controller(subnet: Int, universe: Int): DmxController = registerLock.read {
+        val controllerKey = controllerKey(subnet, universe)
+        checkNotNull(controllerRegister[controllerKey]) { "Controller '$controllerKey' not found" }
+    }
+
+    fun untypedFixture(key: String): Fixture = registerLock.read {
+        checkNotNull(fixtureRegister[key]) { "Fixture '$key' not found" }
+    }
+
+    inline fun <reified T: Fixture> fixture(key: String): T {
+        return untypedFixture(key) as T
+    }
+
+    interface FixtureRegisterer {
+        fun addController(controller: DmxController): DmxController
+        fun <T: Fixture> addFixture(fixture: T, vararg fixtureGroups: String): T
+    }
+
+    fun register(removeUnused: Boolean = true, block: FixtureRegisterer.() -> Unit) {
+        val registerer: FixtureRegisterer = object : FixtureRegisterer {
+            override fun addController(controller: DmxController): DmxController {
+                val controllerKey = controllerKey(controller.subnet, controller.universe)
+
+                when (controller) {
+                    is ArtNetController -> controller.registerListener(channelChangeHandlerForController(controllerKey))
+                }
+
+                controllerRegister[controllerKey] = controller
+                channelChangeListeners[controllerKey] = mutableListOf()
+
+                return controller
             }
 
-            allFixtures += member
+            override fun <T : Fixture> addFixture(fixture: T, vararg fixtureGroups: String): T {
+                fixtureRegister[fixture.key] = fixture
 
-            memberProperty.annotations.filterIsInstance<FixtureGroup>().forEach {
-                fixturesByGroup.getOrPut(it.name) { mutableListOf() } += member
+                fixtureGroups.forEach {
+                    fixturesByGroup.getOrPut(it) { mutableListOf() } += fixture
+                }
+
+                return fixture
             }
         }
 
-        this.allFixtures = allFixtures
-        this.fixturesByGroup = fixturesByGroup
+        registerLock.write {
+            if (removeUnused) {
+                controllerRegister.forEach { (controllerKey, controller) ->
+                    when (controller) {
+                        is ArtNetController -> controller.unregisterListener(checkNotNull(controllerChannelChangeListeners[controllerKey]))
+                    }
+                }
+
+                controllerRegister.clear()
+                fixtureRegister.clear()
+                fixturesByGroup.clear()
+            }
+
+            block(registerer)
+        }
+    }
+
+    private fun channelChangeHandlerForController(controllerKey: String): IChannelChangeListener {
+        return object : IChannelChangeListener {
+            override fun channelsChanged(changes: Map<Int, UByte>) {
+                registerLock.read {
+                    channelChangeListeners[controllerKey]?.forEach {
+                        it.channelsChanged(changes)
+                    }
+                }
+            }
+        }
+    }
+
+    fun registerListener(subnet: Int, universe: Int, listener: IChannelChangeListener): Unit = registerLock.read {
+        val controllerKey = controllerKey(subnet, universe)
+
+        val controllerListeners = channelChangeListeners[controllerKey] ?: return
+        if (!controllerListeners.contains(listener)) {
+            controllerListeners.add(listener)
+        }
+    }
+
+    fun unregisterListener(subnet: Int, universe: Int, listener: IChannelChangeListener): Unit = registerLock.read {
+        val controllerKey = controllerKey(subnet, universe)
+
+        val controllerListeners = channelChangeListeners[controllerKey] ?: return
+        controllerListeners.remove(listener)
     }
 }

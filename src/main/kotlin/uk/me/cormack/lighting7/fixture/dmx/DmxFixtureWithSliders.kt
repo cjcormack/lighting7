@@ -1,8 +1,6 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.ObsoleteCoroutinesApi
-import uk.me.cormack.lighting7.artnet.ArtNetController
+import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.fixture.FixtureWithSliders
 
 data class DmxFixtureSliderSettings(
@@ -11,8 +9,7 @@ data class DmxFixtureSliderSettings(
     val maxValue: UByte = 255u,
 )
 
-@OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
-class DmxFixtureWithSliders(val controller: ArtNetController, val sliders: Map<String, DmxFixtureSliderSettings>) : FixtureWithSliders {
+class DmxFixtureWithSliders(val controller: DmxController, val sliders: Map<String, DmxFixtureSliderSettings>) : FixtureWithSliders {
     override fun setSlider(sliderName: String, level: UByte, fadeMs: Long) {
 //        val slider = sliders[sliderName] ?: throw Exception("No such slider ('$sliderName')")
 //

@@ -1,4 +1,4 @@
-package uk.me.cormack.lighting7.artnet
+package uk.me.cormack.lighting7.dmx
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.ObsoleteCoroutinesApi

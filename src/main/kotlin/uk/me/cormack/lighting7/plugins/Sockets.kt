@@ -5,13 +5,13 @@ import io.ktor.serialization.kotlinx.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import uk.me.cormack.lighting7.artnet.IChannelChangeListener
-import uk.me.cormack.lighting7.show.Fixtures
-import uk.me.cormack.lighting7.show.Show
+import uk.me.cormack.lighting7.dmx.IChannelChangeListener
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
 import java.util.*
@@ -65,6 +65,7 @@ class SocketConnection(val session: WebSocketServerSession) {
     val name = "conn${lastId.getAndIncrement()}"
 }
 
+@OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 fun Application.configureSockets(state: State) {
     install(WebSockets) {
         pingPeriod = Duration.ofSeconds(15)
@@ -82,48 +83,29 @@ fun Application.configureSockets(state: State) {
             connections += thisConnection
 
             try {
-                state.show.fixtures.raspberryPiUniverse.registerListener(object : IChannelChangeListener {
-                    override fun channelsChanged(changes: Map<Int, UByte>) {
-                        val changeList = changes.map {
-                            ChannelState(state.show.fixtures.raspberryPiUniverse.universe, it.key, it.value)
+                state.show.fixtures.controllers.forEach { controller ->
+                    state.show.fixtures.registerListener(controller.subnet, controller.universe, object : IChannelChangeListener {
+                        override fun channelsChanged(changes: Map<Int, UByte>) {
+                            val changeList = changes.map {
+                                ChannelState(controller.universe, it.key, it.value)
+                            }
+                            launch {
+                                sendSerialized<OutMessage>(ChannelStateOutMessage(changeList))
+                            }
                         }
-                        launch {
-                            sendSerialized<OutMessage>(ChannelStateOutMessage(changeList))
-                        }
-                    }
-                })
-//                Show.fixtures.openDmxUniverse.registerListener(object : IChannelChangeListener {
-//                    override fun channelsChanged(changes: Map<Int, UByte>) {
-//                        val changeList = changes.map {
-//                            ChannelState(Show.fixtures.openDmxUniverse.universe, it.key, it.value)
-//                        }
-//                        launch {
-//                            sendSerialized<OutMessage>(ChannelStateOutMessage(changeList))
-//                        }
-//                    }
-//                })
-                state.show.fixtures.lightStripUniverse.registerListener(object : IChannelChangeListener {
-                    override fun channelsChanged(changes: Map<Int, UByte>) {
-                        val changeList = changes.map {
-                            ChannelState(state.show.fixtures.lightStripUniverse.universe, it.key, it.value)
-                        }
-                        launch {
-                            sendSerialized<OutMessage>(ChannelStateOutMessage(changeList))
-                        }
-                    }
-                })
+                    })
+                }
 
                 for (frame in incoming) {
                     when (val message = converter?.deserialize<InMessage>(frame)) {
                         is PingInMessage -> {}
                         is ChannelStateInMessage -> {
-                            val currentValues = state.show.fixtures.raspberryPiUniverse.currentValues.map {
-                                ChannelState(state.show.fixtures.raspberryPiUniverse.universe, it.key, it.value)
-//                            } + state.show.fixtures.openDmxUniverse.currentValues.map {
-//                                ChannelState(state.show.fixtures.openDmxUniverse.universe, it.key, it.value)
-                            } + state.show.fixtures.lightStripUniverse.currentValues.map {
-                                ChannelState(state.show.fixtures.lightStripUniverse.universe, it.key, it.value)
-                            }
+                            val currentValues = state.show.fixtures.controllers.map { controller ->
+                                controller.currentValues.map {
+                                    ChannelState(controller.universe, it.key, it.value)
+                                }
+                            }.flatten()
+
                             sendSerialized<OutMessage>(ChannelStateOutMessage(currentValues))
                         }
                         is TrackDetailsInMessage -> {
@@ -131,13 +113,8 @@ fun Application.configureSockets(state: State) {
                             println(message)
                         }
                         is UpdateChannelInMessage -> {
-                            val artnet = when (message.universe) {
-                                0 -> state.show.fixtures.raspberryPiUniverse
-//                                1 -> state.show.fixtures.openDmxUniverse
-                                2 -> state.show.fixtures.lightStripUniverse
-                                else -> throw Error("Unknown universe ${message.universe}")
-                            }
-                            artnet.setValue(message.id, message.level, message.fadeTime)
+                            val controller = state.show.fixtures.controller(0, message.universe)
+                            controller.setValue(message.id, message.level, message.fadeTime)
                         }
 
                         null -> TODO()

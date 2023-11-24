@@ -1,10 +1,6 @@
-@file:OptIn(ExperimentalUnsignedTypes::class)
-
 package uk.me.cormack.lighting7.fixture.dmx
 
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.ObsoleteCoroutinesApi
-import uk.me.cormack.lighting7.artnet.ArtNetController
+import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.fixture.*
 
 enum class WHexProgramMode(override val level: UByte): DmxFixtureSettingValue {
@@ -12,9 +8,8 @@ enum class WHexProgramMode(override val level: UByte): DmxFixtureSettingValue {
     SOUND_ACTIVE(241u),
 }
 
-@OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 class WHexFixture(
-    val controller: ArtNetController,
+    val controller: DmxController,
     key: String,
     fixtureName: String,
     firstChannel: Int,

@@ -37,16 +37,19 @@ class Show(
         }.first()
     }
 
-    init {
+    suspend fun start() {
+        try {
+            evalScriptByName(loadFixturesScriptName)
+            evalScriptByName(initialSceneScriptName)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         if (runLoopScriptName != null) {
             GlobalScope.launch {
                 runShow(runLoopScriptName, runLoopDelay)
             }
         }
-    }
-
-    suspend fun start() {
-        evalScriptByName("initial-state")
     }
 
     fun close() {

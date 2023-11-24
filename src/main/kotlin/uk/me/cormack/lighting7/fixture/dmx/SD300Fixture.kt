@@ -1,10 +1,6 @@
-@file:OptIn(ExperimentalUnsignedTypes::class)
-
 package uk.me.cormack.lighting7.fixture.dmx
 
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.ObsoleteCoroutinesApi
-import uk.me.cormack.lighting7.artnet.ArtNetController
+import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixtureWithSettings
 
@@ -13,9 +9,8 @@ enum class SD300Mode(override val level: UByte): DmxFixtureSettingValue {
     SOUND_ACTIVE(50u),
 }
 
-@OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 class SD300Fixture(
-    val controller: ArtNetController,
+    val controller: DmxController,
     key: String,
     fixtureName: String,
     firstChannel: Int,

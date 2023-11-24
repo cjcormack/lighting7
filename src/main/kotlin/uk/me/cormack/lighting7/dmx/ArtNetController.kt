@@ -1,4 +1,4 @@
-package uk.me.cormack.lighting7.artnet
+package uk.me.cormack.lighting7.dmx
 
 import ch.bildspur.artnet.ArtNetClient
 import kotlinx.coroutines.*
@@ -11,7 +11,7 @@ import kotlin.math.max
 @OptIn(DelicateCoroutinesApi::class)
 @ExperimentalCoroutinesApi
 @ObsoleteCoroutinesApi
-class ArtNetController(val subnet: Int, val universe: Int, val address: String? = null, val needsRefresh: Boolean = false) {
+class ArtNetController(override val subnet: Int, override val universe: Int, val address: String? = null, val needsRefresh: Boolean = false): DmxController {
     internal val fadeTickMs = 10
 
     private val artnet = ArtNetClient()
@@ -20,7 +20,7 @@ class ArtNetController(val subnet: Int, val universe: Int, val address: String? 
 
     internal val transmissionNeeded = Channel<Unit>(Channel.Factory.CONFLATED)
 
-    internal val currentValues = ConcurrentHashMap<Int, UByte>(512)
+    override val currentValues = ConcurrentHashMap<Int, UByte>(512)
 
     private var previousSentDmxData = ByteArray(512)
 
@@ -48,7 +48,7 @@ class ArtNetController(val subnet: Int, val universe: Int, val address: String? 
 
     class ChannelUpdatePayload(val change: ChannelChange, val updateNotificationChannel: Channel<Unit>)
 
-    fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>) {
+    override fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>) {
         var valuesChanged = false
 
         runBlocking {
@@ -66,7 +66,7 @@ class ArtNetController(val subnet: Int, val universe: Int, val address: String? 
         }
     }
 
-    fun setValue(channelNo: Int, channelChange: ChannelChange) {
+    override fun setValue(channelNo: Int, channelChange: ChannelChange) {
         val hasUpdated = runBlocking {
             doSetChannel(channelNo, channelChange)
         }
@@ -78,7 +78,7 @@ class ArtNetController(val subnet: Int, val universe: Int, val address: String? 
         }
     }
 
-    fun setValue(channelNo: Int, channelValue: UByte, fadeMs: Long = 0) {
+    override fun setValue(channelNo: Int, channelValue: UByte, fadeMs: Long) {
         setValue(channelNo, ChannelChange(channelValue, fadeMs))
     }
 
@@ -103,7 +103,7 @@ class ArtNetController(val subnet: Int, val universe: Int, val address: String? 
         return true
     }
 
-    fun getValue(channelNo: Int): UByte {
+    override fun getValue(channelNo: Int): UByte {
         return currentValues[channelNo] ?: 0u
     }
 

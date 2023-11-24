@@ -1,10 +1,6 @@
-@file:OptIn(ExperimentalUnsignedTypes::class)
-
 package uk.me.cormack.lighting7.fixture.dmx
 
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.ObsoleteCoroutinesApi
-import uk.me.cormack.lighting7.artnet.ArtNetController
+import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixtureWithDimmer
 import uk.me.cormack.lighting7.fixture.FixtureWithSettings
@@ -15,9 +11,8 @@ enum class FusionSpotFunction(override val level: UByte): DmxFixtureSettingValue
     SOUND_ACTIVE(250u),
 }
 
-@OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 class FusionSpotFixture(
-    val controller: ArtNetController,
+    val controller: DmxController,
     key: String,
     fixtureName: String,
     firstChannel: Int,
