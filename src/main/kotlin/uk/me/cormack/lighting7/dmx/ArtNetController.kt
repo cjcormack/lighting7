@@ -24,7 +24,7 @@ class ArtNetController(override val subnet: Int, override val universe: Int, val
 
     private var previousSentDmxData = ByteArray(512)
 
-    private val listeners = ArrayList<IChannelChangeListener>()
+    private val listeners = ArrayList<ChannelChangeListener>()
 
     init {
         artnet.start()
@@ -107,13 +107,13 @@ class ArtNetController(override val subnet: Int, override val universe: Int, val
         return currentValues[channelNo] ?: 0u
     }
 
-    fun registerListener(listener: IChannelChangeListener) {
+    fun registerListener(listener: ChannelChangeListener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener)
         }
     }
 
-    fun unregisterListener(listener: IChannelChangeListener) {
+    fun unregisterListener(listener: ChannelChangeListener) {
         listeners.remove(listener)
     }
 

@@ -11,7 +11,9 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import uk.me.cormack.lighting7.dmx.IChannelChangeListener
+import uk.me.cormack.lighting7.dmx.DmxController
+import uk.me.cormack.lighting7.dmx.ChannelChangeListener
+import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
 import java.util.*
@@ -58,6 +60,15 @@ data class UpdateChannelInMessage(
     val fadeTime: Long,
 ) : InMessage()
 
+@Serializable
+@SerialName("universesState")
+data object UniversesStateInMessage : InMessage()
+@Serializable
+@SerialName("universesState")
+data class UniversesStateOutMessage(
+    val universes: List<Int>
+): OutMessage()
+
 class SocketConnection(val session: WebSocketServerSession) {
     companion object {
         val lastId = AtomicInteger(0)
@@ -82,20 +93,30 @@ fun Application.configureSockets(state: State) {
             val thisConnection = SocketConnection(this)
             connections += thisConnection
 
-            try {
-                state.show.fixtures.controllers.forEach { controller ->
-                    state.show.fixtures.registerListener(controller.subnet, controller.universe, object : IChannelChangeListener {
-                        override fun channelsChanged(changes: Map<Int, UByte>) {
-                            val changeList = changes.map {
-                                ChannelState(controller.universe, it.key, it.value)
-                            }
-                            launch {
-                                sendSerialized<OutMessage>(ChannelStateOutMessage(changeList))
-                            }
-                        }
-                    })
+            val listener = object : FixturesChangeListener {
+                override fun channelsChanged(subnet: Int, universe: Int, changes: Map<Int, UByte>) {
+                    if (subnet != 0) {
+                        return
+                    }
+
+                    val changeList = changes.map {
+                        ChannelState(universe, it.key, it.value)
+                    }
+                    launch {
+                        sendSerialized<OutMessage>(ChannelStateOutMessage(changeList))
+                    }
                 }
 
+                override fun controllersChanged() {
+                    val universes = state.show.fixtures.controllers.map(DmxController::universe).sortedBy { it }
+                    launch {
+                        sendSerialized<OutMessage>(UniversesStateOutMessage(universes))
+                    }
+                }
+            }
+            state.show.fixtures.registerListener(listener)
+
+            try {
                 for (frame in incoming) {
                     when (val message = converter?.deserialize<InMessage>(frame)) {
                         is PingInMessage -> {}
@@ -116,12 +137,18 @@ fun Application.configureSockets(state: State) {
                             val controller = state.show.fixtures.controller(0, message.universe)
                             controller.setValue(message.id, message.level, message.fadeTime)
                         }
+                        is UniversesStateInMessage -> {
+                            val universes = state.show.fixtures.controllers.map(DmxController::universe).sortedBy { it }
+                            sendSerialized<OutMessage>(UniversesStateOutMessage(universes))
+                        }
 
                         null -> TODO()
                     }
                 }
             } finally {
                 connections -= thisConnection
+
+                state.show.fixtures.unregisterListener(listener)
             }
         }
     }

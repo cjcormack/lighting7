@@ -4,22 +4,27 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.ObsoleteCoroutinesApi
 import uk.me.cormack.lighting7.dmx.ArtNetController
 import uk.me.cormack.lighting7.dmx.DmxController
-import uk.me.cormack.lighting7.dmx.IChannelChangeListener
+import uk.me.cormack.lighting7.dmx.ChannelChangeListener
 import uk.me.cormack.lighting7.fixture.Fixture
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
+interface FixturesChangeListener {
+    fun channelsChanged(subnet: Int, universe: Int, changes: Map<Int, UByte>)
+    fun controllersChanged()
+}
+
 @OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 class Fixtures {
     private val registerLock = ReentrantReadWriteLock()
     private val controllerRegister: MutableMap<String, DmxController> = mutableMapOf()
-    private val controllerChannelChangeListeners: MutableMap<String, IChannelChangeListener> = mutableMapOf()
+    private val controllerChannelChangeListeners: MutableMap<String, ChannelChangeListener> = mutableMapOf()
 
     private val fixtureRegister: MutableMap<String, Fixture> = mutableMapOf()
     private val fixturesByGroup: MutableMap<String, MutableList<Fixture>> = mutableMapOf()
 
-    private val channelChangeListeners: MutableMap<String, MutableList<IChannelChangeListener>> = mutableMapOf()
+    private val changeListeners: MutableList<FixturesChangeListener> = mutableListOf()
 
     val controllers: List<DmxController> get () = registerLock.read {
         controllerRegister.values.toList()
@@ -27,22 +32,6 @@ class Fixtures {
     val fixtures: List<Fixture> get() = registerLock.read {
         fixtureRegister.values.toList()
     }
-
-//    init {
-//        val raspberryPiUniverse = registerController(ArtNetController(0, 0/*, "raspberrypi.local"*/))
-//
-//        registerFixture(HexFixture(raspberryPiUniverse, "hex1", "Hex 1", 65, 0))
-//        registerFixture(HexFixture(raspberryPiUniverse, "hex2", "Hex 2", 81, 0))
-//        registerFixture(HexFixture(raspberryPiUniverse, "hex3", "Hex 2", 97, 0))
-//        registerFixture(UVFixture(raspberryPiUniverse, "uv1", "UV 1", 161, 1))
-//        registerFixture(UVFixture(raspberryPiUniverse, "uv2", "UV 2", 177, 1))
-//        registerFixture(ScantasticFixture(raspberryPiUniverse, "scantastic", "Scantastic", 193, 0))
-//        registerFixture(QuadBarFixture(raspberryPiUniverse, "quadbar", "Quadbar", 225, 0))
-//        registerFixture(StarClusterFixture(raspberryPiUniverse, "starcluster", "Starcluster", 241, 0))
-//        registerFixture(LaswerworldCS100Fixture(raspberryPiUniverse, "laser", "Laser", 257, 0))
-//        registerFixture(FusionSpotFixture(raspberryPiUniverse, "moving-left", "Moving Left", 273, 0))
-//        registerFixture(FusionSpotFixture(raspberryPiUniverse, "moving-right", "Moving Right", 289, 0))
-//    }
 
     private fun controllerKey(subnet: Int, universe: Int): String {
         return "$subnet:$universe"
@@ -61,6 +50,10 @@ class Fixtures {
         return untypedFixture(key) as T
     }
 
+    fun fixtureGroup(groupName: String): List<Fixture> = registerLock.read {
+        checkNotNull(fixturesByGroup[groupName]) { "Fixture group '$groupName' not found" }.toList()
+    }
+
     interface FixtureRegisterer {
         fun addController(controller: DmxController): DmxController
         fun <T: Fixture> addFixture(fixture: T, vararg fixtureGroups: String): T
@@ -71,12 +64,14 @@ class Fixtures {
             override fun addController(controller: DmxController): DmxController {
                 val controllerKey = controllerKey(controller.subnet, controller.universe)
 
+                val listener = channelChangeHandlerForController(controller)
+                controllerChannelChangeListeners[controllerKey] = listener
+
                 when (controller) {
-                    is ArtNetController -> controller.registerListener(channelChangeHandlerForController(controllerKey))
+                    is ArtNetController -> controller.registerListener(listener)
                 }
 
                 controllerRegister[controllerKey] = controller
-                channelChangeListeners[controllerKey] = mutableListOf()
 
                 return controller
             }
@@ -107,33 +102,31 @@ class Fixtures {
 
             block(registerer)
         }
+
+        changeListeners.forEach {
+            it.controllersChanged()
+        }
     }
 
-    private fun channelChangeHandlerForController(controllerKey: String): IChannelChangeListener {
-        return object : IChannelChangeListener {
+    private fun channelChangeHandlerForController(controller: DmxController): ChannelChangeListener {
+        return object : ChannelChangeListener {
             override fun channelsChanged(changes: Map<Int, UByte>) {
                 registerLock.read {
-                    channelChangeListeners[controllerKey]?.forEach {
-                        it.channelsChanged(changes)
+                    changeListeners.forEach {
+                        it.channelsChanged(controller.subnet, controller.universe, changes)
                     }
                 }
             }
         }
     }
 
-    fun registerListener(subnet: Int, universe: Int, listener: IChannelChangeListener): Unit = registerLock.read {
-        val controllerKey = controllerKey(subnet, universe)
-
-        val controllerListeners = channelChangeListeners[controllerKey] ?: return
-        if (!controllerListeners.contains(listener)) {
-            controllerListeners.add(listener)
+    fun registerListener(listener: FixturesChangeListener): Unit = registerLock.write {
+        if (!changeListeners.contains(listener)) {
+            changeListeners += listener
         }
     }
 
-    fun unregisterListener(subnet: Int, universe: Int, listener: IChannelChangeListener): Unit = registerLock.read {
-        val controllerKey = controllerKey(subnet, universe)
-
-        val controllerListeners = channelChangeListeners[controllerKey] ?: return
-        controllerListeners.remove(listener)
+    fun unregisterListener(listener: FixturesChangeListener): Unit = registerLock.write {
+        changeListeners.remove(listener)
     }
 }

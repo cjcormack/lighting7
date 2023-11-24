@@ -40,10 +40,10 @@ class State(val config: ApplicationConfig) {
     }
 
     private fun initShow(): Show {
-        val runLoopEnabled = config.propertyOrNull("lighting.runLoop.enabled")?.getString().toBoolean()
+        val runLoopEnabled = config.property("lighting.runLoop.enabled").getString().toBoolean()
 
         val runLoopScriptName = if (runLoopEnabled) {
-            config.propertyOrNull("lighting.runLoop.scriptName")?.getString() ?: "runloop"
+            config.property("lighting.runLoop.scriptName").getString()
         } else {
             null
         }
@@ -54,7 +54,7 @@ class State(val config: ApplicationConfig) {
             config.property("lighting.loadFixturesScriptName").getString(),
             config.property("lighting.initialSceneScriptName").getString(),
             runLoopScriptName,
-            config.propertyOrNull("lighting.runLoop.delayMs")?.getString()?.toLong() ?: 500L,
+            config.property("lighting.runLoop.delayMs").getString().toLong(),
         )
     }
 }
