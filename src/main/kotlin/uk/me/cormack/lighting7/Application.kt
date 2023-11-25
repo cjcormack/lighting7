@@ -3,10 +3,9 @@ package uk.me.cormack.lighting7
 import io.ktor.server.application.*
 import io.ktor.server.netty.*
 import kotlinx.coroutines.launch
-import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.plugins.configureHTTP
-import uk.me.cormack.lighting7.plugins.configureRouting
 import uk.me.cormack.lighting7.plugins.configureSockets
+import uk.me.cormack.lighting7.routes.configureRouting
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
 

@@ -7,6 +7,7 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.Projects
+import uk.me.cormack.lighting7.models.Scenes
 import uk.me.cormack.lighting7.models.Scripts
 import uk.me.cormack.lighting7.show.Show
 
@@ -34,6 +35,7 @@ class State(val config: ApplicationConfig) {
         transaction(database) {
             SchemaUtils.createMissingTablesAndColumns(Projects)
             SchemaUtils.createMissingTablesAndColumns(Scripts)
+            SchemaUtils.createMissingTablesAndColumns(Scenes)
         }
 
         return database
@@ -52,7 +54,7 @@ class State(val config: ApplicationConfig) {
             this,
             config.property("lighting.projectName").getString(),
             config.property("lighting.loadFixturesScriptName").getString(),
-            config.property("lighting.initialSceneScriptName").getString(),
+            config.property("lighting.initialSceneName").getString(),
             runLoopScriptName,
             config.property("lighting.runLoop.delayMs").getString().toLong(),
         )

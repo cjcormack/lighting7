@@ -5,10 +5,7 @@ import kotlinx.coroutines.channels.ticker
 import kotlinx.coroutines.selects.select
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
-import uk.me.cormack.lighting7.models.Project
-import uk.me.cormack.lighting7.models.Projects
-import uk.me.cormack.lighting7.models.Script
-import uk.me.cormack.lighting7.models.Scripts
+import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.scripts.LightingScript
 import uk.me.cormack.lighting7.state.State
 import java.security.MessageDigest
@@ -24,7 +21,7 @@ class Show(
     val state: State,
     val projectName: String,
     val loadFixturesScriptName: String,
-    val initialSceneScriptName: String,
+    val initialSceneName: String,
     val runLoopScriptName: String?,
     val runLoopDelay: Long,
 ) {
@@ -40,7 +37,7 @@ class Show(
     suspend fun start() {
         try {
             evalScriptByName(loadFixturesScriptName)
-            evalScriptByName(initialSceneScriptName)
+            runScene(initialSceneName)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -101,6 +98,37 @@ class Show(
         return md.digest(this.toByteArray()).toHexString()
     }
 
+    suspend fun runScene(id: Int): EvaluationResult {
+        val (scriptName, scriptBody) = transaction(state.database) {
+            val scene = Scene.findById(id) ?: throw Error("Scene not found")
+
+            println("Running scene '${scene.name}'")
+
+            Pair(scene.script.name, scene.script.script)
+        }
+
+        val compiledScript = compileLiteralScript(scriptBody).valueOrThrow()
+
+        return runLiteralScript(compiledScript, scriptName, 0).valueOrThrow()
+    }
+
+    suspend fun runScene(sceneName: String): EvaluationResult {
+        val (scriptName, scriptBody) = transaction(state.database) {
+            val scene = Scene.find {
+                (Scenes.name eq sceneName) and
+                (Scenes.project eq project.id)
+            }.first()
+
+            println("Running scene '${scene.name}'")
+
+            Pair(scene.script.name, scene.script.script)
+        }
+
+        val compiledScript = compileLiteralScript(scriptBody).valueOrThrow()
+
+        return runLiteralScript(compiledScript, scriptName, 0).valueOrThrow()
+    }
+
     suspend fun evalScriptByName(scriptName: String, step: Int = 0): EvaluationResult {
         val script = transaction(state.database) {
             Script.find {
@@ -115,6 +143,7 @@ class Show(
 
         return runLiteralScript(compiledScript, scriptName, step).valueOrThrow()
     }
+
 
     private suspend fun doCompileLiteralScript(key: String, script: String): ResultWithDiagnostics<CompiledScript> {
         val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<LightingScript>()
