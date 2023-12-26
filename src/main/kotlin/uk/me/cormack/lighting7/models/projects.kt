@@ -5,17 +5,17 @@ import org.jetbrains.exposed.dao.IntEntityClass
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.IntIdTable
 
-object Projects: IntIdTable() {
+object DaoProjects: IntIdTable("projects") {
     val name = varchar("name", 50).uniqueIndex()
     val description = varchar("description", 255).nullable()
 }
 
-class Project(id: EntityID<Int>) : IntEntity(id) {
-    companion object : IntEntityClass<Project>(Projects)
+class DaoProject(id: EntityID<Int>) : IntEntity(id) {
+    companion object : IntEntityClass<DaoProject>(DaoProjects)
 
-    var name by Projects.name
-    var description by Projects.description
+    var name by DaoProjects.name
+    var description by DaoProjects.description
 
-    val scripts by Script referrersOn Scripts.project
-    val scenes by Scene referrersOn Scenes.project
+    val scripts by DaoScript referrersOn DaoScripts.project
+    val scenes by DaoScene referrersOn DaoScenes.project
 }

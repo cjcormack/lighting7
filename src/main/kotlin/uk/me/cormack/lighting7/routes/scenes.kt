@@ -5,16 +5,16 @@ import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.resources.post
+import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.routing.put
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
-import uk.me.cormack.lighting7.models.Scene
-import uk.me.cormack.lighting7.models.Script
+import uk.me.cormack.lighting7.models.DaoScene
+import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.state.State
 
 @OptIn(DelicateCoroutinesApi::class)
@@ -32,11 +32,11 @@ internal fun Route.routeApiRestScene(state: State) {
         post<SceneResource> {
             val newScene = call.receive<NewScene>()
             val sceneDetails = transaction(state.database) {
-                val sceneScript = Script.findById(newScene.scriptId) ?: throw Error("Script not found")
+                val sceneScript = DaoScript.findById(newScene.scriptId) ?: throw Error("Script not found")
                 if (sceneScript.project.id != state.show.project.id) {
                     throw Error("Wrong project")
                 }
-                val scene = Scene.new {
+                val scene = DaoScene.new {
                     name = newScene.name
                     script = sceneScript
                     project = state.show.project
@@ -48,7 +48,7 @@ internal fun Route.routeApiRestScene(state: State) {
 
         get<SceneId> {
             val sceneDetails = transaction(state.database) {
-                val scene = Scene.findById(it.id) ?: throw Error("Scene not found")
+                val scene = DaoScene.findById(it.id) ?: throw Error("Scene not found")
 
                 SceneDetails(scene.id.value, scene.name, scene.script.id.value)
             }
@@ -58,12 +58,12 @@ internal fun Route.routeApiRestScene(state: State) {
         put<SceneId> {
             val newSceneDetails = call.receive<NewScene>()
             val sceneDetails = transaction(state.database) {
-                val sceneScript = Script.findById(newSceneDetails.scriptId) ?: throw Error("Script not found")
+                val sceneScript = DaoScript.findById(newSceneDetails.scriptId) ?: throw Error("Script not found")
                 if (sceneScript.project != state.show.project) {
                     throw Error("Wrong project")
                 }
 
-                val scene = Scene.findById(it.id) ?: throw Error("Scene not found")
+                val scene = DaoScene.findById(it.id) ?: throw Error("Scene not found")
                 scene.name = newSceneDetails.name
                 scene.script = sceneScript
 
@@ -74,16 +74,18 @@ internal fun Route.routeApiRestScene(state: State) {
 
         delete<SceneId> {
             transaction(state.database) {
-                Scene.findById(it.id)?.delete()
+                DaoScene.findById(it.id)?.delete()
             }
             call.respond("")
         }
 
         post<SceneId.Run> {
+            var response: RunResult? = null
+
             GlobalScope.launch {
-                state.show.runScene(it.parent.id)
+                response = state.show.runScene(it.parent.id).toRunResult()
             }.join()
-            call.respond(true)
+            call.respond(checkNotNull(response))
         }
     }
 }
@@ -102,6 +104,3 @@ data class NewScene(val name: String, val scriptId: Int)
 
 @Serializable
 data class SceneDetails(val id: Int, val name: String, val scriptId: Int)
-
-@Serializable
-data class SceneRunResult(val status: String, val messages: List<ScriptRunMessage>, val result: String?)

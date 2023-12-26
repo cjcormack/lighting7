@@ -26,11 +26,11 @@ class Show(
     val runLoopDelay: Long,
 ) {
     val fixtures = Fixtures()
-    val compiledScripts = ConcurrentHashMap<String, ResultWithDiagnostics<CompiledScript>>()
+    private val scripts = ConcurrentHashMap<String, Script>()
 
     val project = transaction(state.database) {
-        Project.find {
-            Projects.name eq projectName
+        DaoProject.find {
+            DaoProjects.name eq projectName
         }.first()
     }
 
@@ -92,31 +92,37 @@ class Show(
         }
     }
 
+    suspend fun script(scriptName: String, literalScript: String): Script {
+        val scriptKey = "$scriptName-${literalScript.cacheKey()}"
+
+        return scripts.getOrPut(scriptKey) {
+            Script(this, scriptName, literalScript)
+        }
+    }
+
     @OptIn(ExperimentalStdlibApi::class)
     private fun String.cacheKey(): String {
         val md = MessageDigest.getInstance("SHA-256")
         return md.digest(this.toByteArray()).toHexString()
     }
 
-    suspend fun runScene(id: Int): EvaluationResult {
+    suspend fun runScene(id: Int): ScriptResult {
         val (scriptName, scriptBody) = transaction(state.database) {
-            val scene = Scene.findById(id) ?: throw Error("Scene not found")
+            val scene = DaoScene.findById(id) ?: throw Error("Scene not found")
 
             println("Running scene '${scene.name}'")
 
             Pair(scene.script.name, scene.script.script)
         }
 
-        val compiledScript = compileLiteralScript(scriptBody).valueOrThrow()
-
-        return runLiteralScript(compiledScript, scriptName, 0).valueOrThrow()
+        return script(scriptName, scriptBody).run()
     }
 
-    suspend fun runScene(sceneName: String): EvaluationResult {
+    suspend fun runScene(sceneName: String): ScriptResult {
         val (scriptName, scriptBody) = transaction(state.database) {
-            val scene = Scene.find {
-                (Scenes.name eq sceneName) and
-                (Scenes.project eq project.id)
+            val scene = DaoScene.find {
+                (DaoScenes.name eq sceneName) and
+                (DaoScenes.project eq project.id)
             }.first()
 
             println("Running scene '${scene.name}'")
@@ -124,46 +130,62 @@ class Show(
             Pair(scene.script.name, scene.script.script)
         }
 
-        val compiledScript = compileLiteralScript(scriptBody).valueOrThrow()
-
-        return runLiteralScript(compiledScript, scriptName, 0).valueOrThrow()
+        return script(scriptName, scriptBody).run()
     }
 
-    suspend fun evalScriptByName(scriptName: String, step: Int = 0): EvaluationResult {
+    suspend fun evalScriptByName(scriptName: String, step: Int = 0): ScriptResult {
         val script = transaction(state.database) {
-            Script.find {
-                (Scripts.name eq scriptName) and
-                (Scripts.project eq project.id)
+            DaoScript.find {
+                (DaoScripts.name eq scriptName) and
+                (DaoScripts.project eq project.id)
             }.first()
         }
 
         println("Running ${script.name}")
 
-        val compiledScript = compileLiteralScript(script.script).valueOrThrow()
-
-        return runLiteralScript(compiledScript, scriptName, step).valueOrThrow()
+        return script(scriptName, script.script).run()
     }
 
-
-    private suspend fun doCompileLiteralScript(key: String, script: String): ResultWithDiagnostics<CompiledScript> {
-        val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<LightingScript>()
-
-        val compiledScript = BasicJvmScriptingHost().compiler(script.toScriptSource(), compilationConfiguration)
-        compiledScripts[key] = compiledScript
-
-        return compiledScript
+    suspend fun compileLiteralScript(literalScript: String): ScriptResult {
+        return script("", literalScript).compileStatus
     }
 
-    suspend fun compileLiteralScript(script: String): ResultWithDiagnostics<CompiledScript> {
-        val key = script.cacheKey()
-
-        return compiledScripts[key] ?: doCompileLiteralScript(key, script)
+    suspend fun runLiteralScript(literalScript: String, scriptName: String = "", step: Int = 0): ScriptResult {
+        return script(scriptName, literalScript).run(step)
     }
 
-    suspend fun runLiteralScript(compiledScript: CompiledScript, scriptName: String = "", step: Int = 0): ResultWithDiagnostics<EvaluationResult> =
-        BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
-            providedProperties(Pair("fixtures", fixtures))
-            providedProperties(Pair("scriptName", scriptName))
-            providedProperties(Pair("step", step))
-        })
+    class Script private constructor(
+        val show: Show,
+        val scriptName: String,
+        val literalScript: String,
+        val compiledResult: ResultWithDiagnostics<CompiledScript>,
+    ) {
+        val compileStatus: ScriptResult = ScriptResult(compiledResult)
+
+        companion object {
+            internal suspend operator fun invoke(show: Show, scriptName: String, literalScript: String): Script {
+                val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<LightingScript>()
+                val compiledResult = BasicJvmScriptingHost().compiler(literalScript.toScriptSource(), compilationConfiguration)
+
+                return Script(show, scriptName, literalScript, compiledResult)
+            }
+        }
+
+        suspend fun run(step: Int = 0): ScriptResult {
+            val compiledScript = compiledResult.valueOrNull() ?: return ScriptResult(compiledResult)
+
+            val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                providedProperties(Pair("fixtures", show.fixtures))
+                providedProperties(Pair("scriptName", scriptName))
+                providedProperties(Pair("step", step))
+            })
+
+            return ScriptResult(compiledResult, runResult)
+        }
+    }
 }
+
+data class ScriptResult(
+    val compileResult: ResultWithDiagnostics<CompiledScript>,
+    val runResult: ResultWithDiagnostics<EvaluationResult>? = null,
+)

@@ -29,7 +29,4 @@ fun Application.module() {
     launch {
         state.show.start()
     }
-
-//    state.show.fixtures.fixture<HexFixture>("hex1").rgbColor = Color.RED
-//    state.show.fixtures.fixture<HexFixture>("hex1").level = 255U
 }

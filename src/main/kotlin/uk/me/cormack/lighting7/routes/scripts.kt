@@ -4,17 +4,18 @@ import io.ktor.resources.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
+import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.routing.get
-import io.ktor.server.routing.put
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
-import uk.me.cormack.lighting7.models.Script
+import uk.me.cormack.lighting7.models.DaoScript
+import uk.me.cormack.lighting7.show.ScriptResult
 import uk.me.cormack.lighting7.state.State
+import kotlin.script.experimental.api.ResultWithDiagnostics
 import kotlin.script.experimental.api.ScriptDiagnostic
 import kotlin.script.experimental.api.valueOrNull
 
@@ -36,25 +37,7 @@ internal fun Route.routeApiRestScript(state: State) {
             var response: CompileResult? = null
 
             GlobalScope.launch {
-                val compiledResultWithDiagnostics = state.show.compileLiteralScript(script)
-
-                val compiledScript = compiledResultWithDiagnostics.valueOrNull()
-
-                response = CompileResult(
-                    compiledScript != null,
-                    compiledResultWithDiagnostics.reports.filter {
-                        it.severity != ScriptDiagnostic.Severity.DEBUG
-                    }.map {
-                        ScriptRunMessage(
-                            it.severity.name,
-                            it.message,
-                            it.sourcePath,
-                            it.location?.let { location ->
-                                "${location.start.line}:${location.start.col}"
-                            }
-                        )
-                    }
-                )
+                response = state.show.compileLiteralScript(script).toCompileResult()
             }.join()
 
             call.respond(checkNotNull(response))
@@ -66,72 +49,7 @@ internal fun Route.routeApiRestScript(state: State) {
             var response: RunResult? = null
 
             GlobalScope.launch {
-                val compiledResultWithDiagnostics = state.show.compileLiteralScript(script)
-
-                val compiledScript = compiledResultWithDiagnostics.valueOrNull()
-
-                if (compiledScript == null) {
-                    response = RunResult(
-                        "compileError",
-                        compiledResultWithDiagnostics.reports.filter {
-                            it.severity != ScriptDiagnostic.Severity.DEBUG
-                        }.map {
-                            ScriptRunMessage(
-                                it.severity.name,
-                                it.message,
-                                it.sourcePath,
-                                it.location?.let { location ->
-                                    "${location.start.line}:${location.start.col}"
-                                }
-                            )
-                        },
-                        null
-                    )
-
-                    return@launch
-                }
-
-                val evalResultWithDiagnostics = state.show.runLiteralScript(compiledScript)
-
-                val evalResult = evalResultWithDiagnostics.valueOrNull()
-                if (evalResult == null) {
-                    response = RunResult(
-                        "exception",
-                        evalResultWithDiagnostics.reports.filter {
-                            it.severity != ScriptDiagnostic.Severity.DEBUG
-                        }.map {
-                            ScriptRunMessage(
-                                it.severity.name,
-                                it.message,
-                                it.sourcePath,
-                                it.location?.let { location ->
-                                    "${location.start.line}:${location.start.col}"
-                                }
-                            )
-                        },
-                        null
-                    )
-
-                    return@launch
-                }
-
-                response = RunResult(
-                    "success",
-                    evalResultWithDiagnostics.reports.filter {
-                        it.severity != ScriptDiagnostic.Severity.DEBUG
-                    }.map {
-                        ScriptRunMessage(
-                            it.severity.name,
-                            it.message,
-                            it.sourcePath,
-                            it.location?.let { location ->
-                                "${location.start.line}:${location.start.col}"
-                            }
-                        )
-                    },
-                    evalResult.returnValue.toString()
-                )
-
+                response = state.show.runLiteralScript(script).toRunResult()
             }.join()
 
             call.respond(checkNotNull(response))
@@ -140,7 +58,7 @@ internal fun Route.routeApiRestScript(state: State) {
         post {
             val newScript = call.receive<NewScript>()
             val script = transaction(state.database) {
-                Script.new {
+                DaoScript.new {
                     name = newScript.name
                     script = newScript.script
                     project = state.show.project
@@ -151,7 +69,7 @@ internal fun Route.routeApiRestScript(state: State) {
 
         get<ScriptResource> {
             val script = transaction(state.database) {
-                Script.findById(it.id)
+                DaoScript.findById(it.id)
             }
             if (script != null) {
                 call.respond(ScriptDetails(script.id.value, script.name, script.script))
@@ -161,7 +79,7 @@ internal fun Route.routeApiRestScript(state: State) {
         put<ScriptResource> {
             val newScriptDetails = call.receive<NewScript>()
             val script = transaction(state.database) {
-                val script = Script.findById(it.id) ?: throw Error("Script not found")
+                val script = DaoScript.findById(it.id) ?: throw Error("Script not found")
                 script.name = newScriptDetails.name
                 script.script = newScriptDetails.script
 
@@ -172,7 +90,7 @@ internal fun Route.routeApiRestScript(state: State) {
 
         delete<ScriptResource> {
             transaction(state.database) {
-                Script.findById(it.id)?.delete()
+                DaoScript.findById(it.id)?.delete()
             }
             call.respond("")
         }
@@ -195,8 +113,55 @@ data class ScriptRunMessage(val severity: String,
                             val sourcePath: String?,
                             val location: String?)
 
+internal fun List<ScriptDiagnostic>.toMessages(): List<ScriptRunMessage> = filter {
+    it.severity != ScriptDiagnostic.Severity.DEBUG
+}.map {
+    ScriptRunMessage(
+        it.severity.name,
+        it.message,
+        it.sourcePath,
+        it.location?.let { location ->
+            "${location.start.line}:${location.start.col}"
+        }
+    )
+}
+
+internal fun ResultWithDiagnostics<*>.isSuccess(): Boolean {
+    return this.valueOrNull() == true
+}
+
+fun ScriptResult.toCompileResult(): CompileResult {
+    return CompileResult(
+        this.compileResult.isSuccess(),
+        compileResult.reports.toMessages(),
+    )
+}
+
+fun ScriptResult.toRunResult(): RunResult {
+    return if (runResult == null) {
+        RunResult(
+            "compileError",
+            compileResult.reports.toMessages(),
+        )
+    } else {
+        val evalResult = runResult.valueOrNull()
+        if (evalResult == null) {
+            RunResult(
+                "exception",
+                compileResult.reports.toMessages(),
+            )
+        } else {
+            RunResult(
+                "success",
+                compileResult.reports.toMessages(),
+                evalResult.returnValue.toString(),
+            )
+        }
+    }
+}
+
 @Serializable
-data class RunResult(val status: String, val messages: List<ScriptRunMessage>, val result: String?)
+data class RunResult(val status: String, val messages: List<ScriptRunMessage>, val result: String? = null)
 
 @Serializable
 data class CompileResult(val success: Boolean, val messages: List<ScriptRunMessage>)

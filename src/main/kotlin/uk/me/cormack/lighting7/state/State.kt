@@ -6,9 +6,9 @@ import io.ktor.server.config.*
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
-import uk.me.cormack.lighting7.models.Projects
-import uk.me.cormack.lighting7.models.Scenes
-import uk.me.cormack.lighting7.models.Scripts
+import uk.me.cormack.lighting7.models.DaoProjects
+import uk.me.cormack.lighting7.models.DaoScenes
+import uk.me.cormack.lighting7.models.DaoScripts
 import uk.me.cormack.lighting7.show.Show
 
 class State(val config: ApplicationConfig) {
@@ -33,9 +33,9 @@ class State(val config: ApplicationConfig) {
         )
 
         transaction(database) {
-            SchemaUtils.createMissingTablesAndColumns(Projects)
-            SchemaUtils.createMissingTablesAndColumns(Scripts)
-            SchemaUtils.createMissingTablesAndColumns(Scenes)
+            SchemaUtils.createMissingTablesAndColumns(DaoProjects)
+            SchemaUtils.createMissingTablesAndColumns(DaoScripts)
+            SchemaUtils.createMissingTablesAndColumns(DaoScenes)
         }
 
         return database
