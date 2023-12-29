@@ -21,7 +21,8 @@ fun Application.configureRouting(state: State) {
             routeApiRestFixtures(state)
         }
 
-        // Static plugin. Try to access `/static/index.html
-        staticFiles("/", File("/Users/chris/Development/Personal/lighting-react/build/"))
+        staticFiles("/", File("/Users/chris/Development/Personal/lighting-react/build/")) {
+            default("index.html")
+        }
     }
 }
