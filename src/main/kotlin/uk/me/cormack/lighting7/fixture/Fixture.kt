@@ -1,90 +1,30 @@
 package uk.me.cormack.lighting7.fixture
 
 import java.awt.Color
-import kotlin.reflect.KClass
-import kotlin.reflect.KType
+import kotlin.reflect.KProperty1
+import kotlin.reflect.full.memberProperties
 
-abstract class Fixture(val key: String, val fixtureName: String, val position: Int) {
-    val fixtureProperties: List<FixtureProperty> = this::class.supertypes.fixturePropertyAnnotations
+sealed class Fixture(val key: String, val fixtureName: String, val position: Int) {
+    data class Property(
+        val classProperty: KProperty1<out Fixture, *>,
+        val name: String,
+        val description: String,
+    )
 
-    private val List<KType>.fixturePropertyAnnotations: List<FixtureProperty>
-        get() {
-            val lightProperties = ArrayList<FixtureProperty>()
-
-            this.forEach { classifier ->
-                val classifier = classifier.classifier
-
-                if (classifier is KClass<*>) {
-                    lightProperties.addAll(classifier.annotations.mapNotNull { annotation ->
-                        if (annotation is FixtureProperty) {
-                            annotation
-                        } else {
-                            null
-                        }
-                    })
-                }
-            }
-
-            return lightProperties
+    val typeKey: String = this::class.annotations.filterIsInstance<FixtureType>().first().typeKey
+    val fixtureProperties: List<Property> = this::class.memberProperties.map { classProperty ->
+        classProperty.annotations.filterIsInstance<FixtureProperty>().map { fixtureProperty ->
+            Property(classProperty, classProperty.name, fixtureProperty.description)
         }
+    }.flatten()
 
-    open fun setDimmer(value: UByte = 255u) {
+    open fun blackout() {
         if (this is FixtureWithDimmer) {
-            this.level = 255u
-        }
-    }
-
-    open fun setSetting(settingName: String, valueName: String) {
-        if (this is FixtureWithSettings) {
-            (this as FixtureWithSettings).setSetting(settingName, valueName)
-        }
-    }
-
-    open fun setSlider(sliderName: String, sliderValue: UByte) {
-        if (this is FixtureWithSliders) {
-            (this as FixtureWithSliders).setSlider(sliderName, sliderValue)
-        }
-    }
-
-    open fun setColor(color: Color, uv: Boolean = false, fadeMs: Long = 0, level: UByte = 255u) {
-        if (this is FixtureWithDimmer) {
-            this.level = level
+            this.dimmer.value = 0u
         }
 
-        if (this is FixtureWithColour) {
-            this.fadeToColour(color, fadeMs)
-
-            if (this.uvSupport) {
-                if (uv) {
-                    this.uvLevel = 255u
-                } else {
-                    this.uvLevel = 0u
-                }
-            }
-        }
-    }
-
-    open fun setUv(fallbackColor: Color = Color.BLACK, fadeMs: Long = 0) {
-        if (this is FixtureWithDimmer) {
-            this.level = 255u
-        }
-
-        if (this is FixtureWithColour) {
-            if (this.uvSupport) {
-                this.setColor(Color.BLACK, true, fadeMs)
-            } else {
-                this.setColor(fallbackColor, false, fadeMs)
-            }
-        }
-    }
-
-    open  fun blackout() {
-        if (this is FixtureWithDimmer) {
-            this.level = 0u
-        }
-
-        if (this is FixtureWithColour) {
-            this.setColor(Color.BLACK)
+        if (this is FixtureWithColour<*>) {
+            this.rgbColour.value = Color.BLACK
         }
     }
 }

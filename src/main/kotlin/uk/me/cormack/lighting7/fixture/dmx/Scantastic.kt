@@ -1,26 +1,28 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.DmxController
-import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.FixtureWithDimmer
-import uk.me.cormack.lighting7.fixture.FixtureWithSettings
 
-enum class Scantastic(override val level: UByte): DmxFixtureSettingValue {
-    BLACKOUT(0u),
-    SOUND_ACTIVE(128u),
-}
-
+@FixtureType("scantastic")
 class ScantasticFixture (
-    val controller: DmxController,
+    controller: DmxController,
     key: String,
     fixtureName: String,
     firstChannel: Int,
     position: Int,
     maxDimmerLevel: UByte = 255u
-): Fixture(key, fixtureName, position),
-    FixtureWithDimmer by DmxFixtureWithDimmer(controller, firstChannel, maxDimmerLevel),
-    FixtureWithSettings by DmxFixtureWithSettings(
-        mapOf(
-            "mode" to DmxFixtureSetting(controller, firstChannel+16, Scantastic.entries.toTypedArray()),
-        )
-    )
+): DmxFixture(controller, firstChannel, 17, key, fixtureName, position), FixtureWithDimmer {
+    enum class Mode(override val level: UByte): DmxFixtureSettingValue {
+        BLACKOUT(0u),
+        SOUND_ACTIVE(128u),
+    }
+
+    @FixtureProperty
+    override val dimmer = DmxFixtureSlider(controller, firstChannel, max = maxDimmerLevel)
+
+    @FixtureProperty
+    val mode = DmxFixtureSetting(controller, firstChannel + 9, Mode.entries.toTypedArray())
+}

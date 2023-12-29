@@ -1,9 +1,8 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.DmxController
-import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixtureWithDimmer
-import uk.me.cormack.lighting7.fixture.FixtureWithSettings
+import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.FixtureType
 
 enum class LaswerworldCS100OperationMode(override val level: UByte): DmxFixtureSettingValue {
     DMX_MODE(0u),
@@ -11,17 +10,16 @@ enum class LaswerworldCS100OperationMode(override val level: UByte): DmxFixtureS
     AUTO_MODE(225u),
 }
 
+@FixtureType("laserword_cs100")
 class LaswerworldCS100Fixture(
-    val controller: DmxController,
+    controller: DmxController,
     key: String,
     fixtureName: String,
     firstChannel: Int,
     position: Int,
-    maxDimmerLevel: UByte = 255u
-): Fixture(key, fixtureName, position),
-    FixtureWithDimmer by DmxFixtureWithDimmer(controller, firstChannel, maxDimmerLevel),
-    FixtureWithSettings by DmxFixtureWithSettings(
-        mapOf(
-            "mode" to DmxFixtureSetting(controller, firstChannel+14, LaswerworldCS100OperationMode.entries.toTypedArray()),
-        )
-    )
+): DmxFixture(controller, firstChannel, 13, key, fixtureName, position)
+//    FixtureWithSettings by DmxFixtureWithSettingsImpl(
+//        mapOf(
+//            "mode" to DmxFixtureSettingImpl(controller, firstChannel+14, LaswerworldCS100OperationMode.entries.toTypedArray()),
+//        )
+//    )

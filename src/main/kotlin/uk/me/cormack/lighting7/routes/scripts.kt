@@ -15,6 +15,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.show.ScriptResult
 import uk.me.cormack.lighting7.state.State
+import kotlin.script.experimental.api.ResultValue
 import kotlin.script.experimental.api.ResultWithDiagnostics
 import kotlin.script.experimental.api.ScriptDiagnostic
 import kotlin.script.experimental.api.valueOrNull
@@ -151,11 +152,20 @@ fun ScriptResult.toRunResult(): RunResult {
                 compileResult.reports.toMessages(),
             )
         } else {
-            RunResult(
-                "success",
-                compileResult.reports.toMessages(),
-                evalResult.returnValue.toString(),
-            )
+            val returnValue = evalResult.returnValue
+            if (returnValue is ResultValue.Error) {
+                RunResult(
+                    "exception",
+                    compileResult.reports.toMessages(),
+                    "${returnValue.error}\n${returnValue.error.stackTraceToString()}"
+                )
+            } else {
+                RunResult(
+                    "success",
+                    compileResult.reports.toMessages(),
+                    returnValue.toString(),
+                )
+            }
         }
     }
 }

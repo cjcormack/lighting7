@@ -3,12 +3,22 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.fixture.*
 
+@FixtureType("lightstrip")
 class LightstripFixture (
-    val controller: DmxController,
+    controller: DmxController,
     key: String,
     fixtureName: String,
     firstChannel: Int,
     position: Int,
-    maxDimmerLevel: UByte = 255u
-): Fixture(key, fixtureName, position),
-    FixtureWithColour by DmxFixtureWithColour(controller, firstChannel, firstChannel + 1, firstChannel + 2, firstChannel + 4)
+): DmxFixture(controller, firstChannel, 5, key, fixtureName, position), DmxFixtureWithColour {
+    @FixtureProperty
+    override val rgbColour = DmxFixtureColour(
+        controller,
+        firstChannel,
+        firstChannel + 1,
+        firstChannel + 2,
+    )
+
+    @FixtureProperty
+    val whiteColour = DmxFixtureSlider(controller, firstChannel + 3)
+}

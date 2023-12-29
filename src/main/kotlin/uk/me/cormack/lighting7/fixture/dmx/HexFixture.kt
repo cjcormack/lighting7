@@ -3,23 +3,40 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.fixture.*
 
-enum class HexProgramMode(override val level: UByte): DmxFixtureSettingValue {
-    NONE(0u),
-    SOUND_ACTIVE(201u),
-}
-
-class HexFixture (
-    val controller: DmxController,
+@FixtureType("hex")
+class HexFixture(
+    controller: DmxController,
     key: String,
     fixtureName: String,
     firstChannel: Int,
     position: Int,
-    maxDimmerLevel: UByte = 255u
-): Fixture(key, fixtureName, position),
-    FixtureWithDimmer by DmxFixtureWithDimmer(controller, firstChannel, maxDimmerLevel),
-    FixtureWithColour by DmxFixtureWithColour(controller, firstChannel + 1, firstChannel + 2, firstChannel + 3, firstChannel + 4, firstChannel + 5, firstChannel + 6),
-    FixtureWithSettings by DmxFixtureWithSettings(
-        mapOf(
-            "mode" to DmxFixtureSetting(controller, firstChannel+9, HexProgramMode.entries.toTypedArray()),
-        )
+    maxDimmerLevel: UByte = 255u,
+) : DmxFixture(controller, firstChannel, 12, key, fixtureName, position),
+    FixtureWithDimmer, DmxFixtureWithColour, FixtureWithUv
+{
+    enum class ProgramMode(override val level: UByte) : DmxFixtureSettingValue {
+        NONE(0u),
+        SOUND_ACTIVE(201u),
+    }
+
+    @FixtureProperty
+    override val dimmer = DmxFixtureSlider(controller, firstChannel, max = maxDimmerLevel)
+
+    @FixtureProperty
+    override val rgbColour = DmxFixtureColour(
+        controller,
+        firstChannel + 1,
+        firstChannel + 2,
+        firstChannel + 3,
     )
+
+    @FixtureProperty
+    val whiteColour = DmxFixtureSlider(controller, firstChannel + 4)
+    @FixtureProperty
+    val amberColour = DmxFixtureSlider(controller, firstChannel + 5)
+    @FixtureProperty
+    override val uvColour = DmxFixtureSlider(controller, firstChannel + 6)
+
+    @FixtureProperty
+    val mode = DmxFixtureSetting(controller, firstChannel + 9, ProgramMode.entries.toTypedArray())
+}

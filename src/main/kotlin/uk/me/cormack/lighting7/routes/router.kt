@@ -18,6 +18,7 @@ fun Application.configureRouting(state: State) {
         route("/api/rest") {
             routeApiRestScript(state)
             routeApiRestScene(state)
+            routeApiRestFixtures(state)
         }
 
         // Static plugin. Try to access `/static/index.html

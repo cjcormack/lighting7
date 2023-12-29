@@ -1,5 +1,5 @@
 package uk.me.cormack.lighting7.fixture
 
-@Target(AnnotationTarget.CLASS)
+@Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
-annotation class FixtureProperty(val name: String)
+annotation class FixtureProperty(val description: String = "")
