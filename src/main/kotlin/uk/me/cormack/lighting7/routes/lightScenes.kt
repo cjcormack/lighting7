@@ -18,7 +18,7 @@ import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.state.State
 
 @OptIn(DelicateCoroutinesApi::class)
-internal fun Route.routeApiRestScene(state: State) {
+internal fun Route.routeApiRestLightsScene(state: State) {
     route("/scene") {
         get("/list") {
             val scenes = transaction(state.database) {

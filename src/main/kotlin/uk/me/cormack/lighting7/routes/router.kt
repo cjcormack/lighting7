@@ -16,10 +16,12 @@ fun Application.configureRouting(state: State) {
     }
     routing {
         route("/api/rest") {
-            routeApiRestScript(state)
-            routeApiRestScene(state)
-            routeApiRestFixtures(state)
+            routeApiRestLightsScript(state)
+            routeApiRestLightsScene(state)
+            routeApiRestLightsFixtures(state)
         }
+
+        routeKotlinCompilerServer(state)
 
         staticFiles("/", File("/Users/chris/Development/Personal/lighting-react/build/")) {
             default("index.html")

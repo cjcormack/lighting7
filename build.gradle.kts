@@ -45,8 +45,18 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
     implementation("ch.bildspur:artnet4j:0.6.2")
 
+    implementation("io.ktor:ktor-client-core")
+    implementation("io.ktor:ktor-client-cio")
+    implementation("io.ktor:ktor-client-logging-jvm")
+    implementation("io.ktor:ktor-client-content-negotiation-jvm")
+    implementation("io.ktor:ktor-client-encoding")
+
+    implementation("com.auth0:java-jwt:4.4.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime-jvm:0.5.0")
+
     implementation("org.jetbrains.kotlin:kotlin-scripting-common")
     implementation("org.jetbrains.kotlin:kotlin-scripting-jvm")
     implementation("org.jetbrains.kotlin:kotlin-scripting-jvm-host")
     implementation("org.jetbrains.kotlin:kotlin-scripting-dependencies")
 }
+

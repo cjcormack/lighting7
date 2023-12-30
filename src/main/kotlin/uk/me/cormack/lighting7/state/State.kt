@@ -9,11 +9,13 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.DaoScenes
 import uk.me.cormack.lighting7.models.DaoScripts
+import uk.me.cormack.lighting7.music.Music
 import uk.me.cormack.lighting7.show.Show
 
 class State(val config: ApplicationConfig) {
     val database = initDatabase()
     val show = initShow()
+    val music = initMusic()
 
     private fun initDatabase(): Database {
         val url = config.property("postgres.url").getString()
@@ -57,6 +59,15 @@ class State(val config: ApplicationConfig) {
             config.property("lighting.initialSceneName").getString(),
             runLoopScriptName,
             config.property("lighting.runLoop.delayMs").getString().toLong(),
+        )
+    }
+
+    private fun initMusic(): Music {
+        return Music(
+            this,
+            config.property("music.issuer").getString(),
+            config.property("music.keyId").getString(),
+            config.property("music.secret").getString().trimIndent(),
         )
     }
 }

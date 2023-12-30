@@ -21,7 +21,7 @@ import kotlin.script.experimental.api.ScriptDiagnostic
 import kotlin.script.experimental.api.valueOrNull
 
 @OptIn(DelicateCoroutinesApi::class)
-internal fun Route.routeApiRestScript(state: State) {
+internal fun Route.routeApiRestLightsScript(state: State) {
     route("/script") {
         get("/list") {
             val scripts = transaction(state.database) {

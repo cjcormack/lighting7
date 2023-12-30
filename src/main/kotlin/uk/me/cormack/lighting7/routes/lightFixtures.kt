@@ -8,7 +8,7 @@ import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.HueFixture
 import uk.me.cormack.lighting7.state.State
 
-internal fun Route.routeApiRestFixtures(state: State) {
+internal fun Route.routeApiRestLightsFixtures(state: State) {
     route("/fixture") {
         get("/list") {
             val fixtures = state.show.fixtures.fixtures.map {
