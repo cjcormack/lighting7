@@ -2,18 +2,19 @@ package uk.me.cormack.lighting7.show
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.ObsoleteCoroutinesApi
-import uk.me.cormack.lighting7.dmx.ArtNetController
-import uk.me.cormack.lighting7.dmx.DmxController
-import uk.me.cormack.lighting7.dmx.ChannelChangeListener
+import uk.me.cormack.lighting7.dmx.*
 import uk.me.cormack.lighting7.fixture.Fixture
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 interface FixturesChangeListener {
-    fun channelsChanged(subnet: Int, universe: Int, changes: Map<Int, UByte>)
+    fun channelsChanged(universe: Universe, changes: Map<Int, UByte>)
     fun controllersChanged()
+    fun scenesChanged()
 }
+
+
 
 @OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 class Fixtures {
@@ -24,7 +25,33 @@ class Fixtures {
     private val fixtureRegister: MutableMap<String, Fixture> = mutableMapOf()
     private val fixturesByGroup: MutableMap<String, MutableList<Fixture>> = mutableMapOf()
 
+    private val activeScenesLock = ReentrantReadWriteLock()
+    private val activeScenes = mutableMapOf<String, Map<Universe, Map<Int, UByte>>>()
+
     private val changeListeners: MutableList<FixturesChangeListener> = mutableListOf()
+
+    class FixturesWithTransaction(private val baseFixtures: Fixtures, val transaction: ControllerTransaction) {
+        val controllers: List<DmxController> get () = baseFixtures.controllers
+        val fixtures: List<Fixture> get() = baseFixtures.fixtures.map { it.withTransaction(transaction) }
+
+        var customChangedChannels: Map<Universe, Map<Int, UByte>>? = null
+
+        fun controller(universe: Universe): DmxController = baseFixtures.controller(universe)
+
+        fun untypedFixture(key: String): Fixture = baseFixtures.registerLock.read {
+            checkNotNull(baseFixtures.fixtureRegister[key]?.withTransaction(transaction)) { "Fixture '$key' not found" }
+        }
+
+        inline fun <reified T: Fixture> fixture(key: String): T {
+            return untypedFixture(key) as T
+        }
+
+        fun fixtureGroup(groupName: String): List<Fixture> = baseFixtures.fixtureGroup(groupName).map { it.withTransaction(transaction) }
+
+        fun register(removeUnused: Boolean = true, block: FixtureRegisterer.() -> Unit) = baseFixtures.register(removeUnused, block)
+    }
+
+    fun withTransaction(transaction: ControllerTransaction): FixturesWithTransaction = FixturesWithTransaction(this, transaction)
 
     val controllers: List<DmxController> get () = registerLock.read {
         controllerRegister.values.toList()
@@ -33,12 +60,12 @@ class Fixtures {
         fixtureRegister.values.toList()
     }
 
-    private fun controllerKey(subnet: Int, universe: Int): String {
+    private fun Universe.controllerKey(): String {
         return "$subnet:$universe"
     }
 
-    fun controller(subnet: Int, universe: Int): DmxController = registerLock.read {
-        val controllerKey = controllerKey(subnet, universe)
+    fun controller(universe: Universe): DmxController = registerLock.read {
+        val controllerKey = universe.controllerKey()
         checkNotNull(controllerRegister[controllerKey]) { "Controller '$controllerKey' not found" }
     }
 
@@ -54,6 +81,27 @@ class Fixtures {
         checkNotNull(fixturesByGroup[groupName]) { "Fixture group '$groupName' not found" }.toList()
     }
 
+    fun recordScene(sceneName: String, changeDetails: Map<Universe, Map<Int, UByte>>) {
+        activeScenesLock.write {
+            if (changeDetails.isEmpty()) {
+                activeScenes.remove(sceneName)
+            } else {
+                activeScenes[sceneName] = changeDetails
+            }
+        }
+        scenesChanged()
+    }
+
+    fun isSceneActive(sceneName: String): Boolean = activeScenesLock.read {
+        activeScenes.containsKey(sceneName)
+    }
+
+    fun scenesChanged() {
+        changeListeners.forEach {
+            it.scenesChanged()
+        }
+    }
+
     interface FixtureRegisterer {
         fun addController(controller: DmxController): DmxController
         fun <T: Fixture> addFixture(fixture: T, vararg fixtureGroups: String): T
@@ -62,7 +110,7 @@ class Fixtures {
     fun register(removeUnused: Boolean = true, block: FixtureRegisterer.() -> Unit) {
         val registerer: FixtureRegisterer = object : FixtureRegisterer {
             override fun addController(controller: DmxController): DmxController {
-                val controllerKey = controllerKey(controller.subnet, controller.universe)
+                val controllerKey = controller.universe.controllerKey()
 
                 val listener = channelChangeHandlerForController(controller)
                 controllerChannelChangeListeners[controllerKey] = listener
@@ -98,6 +146,7 @@ class Fixtures {
                 controllerRegister.clear()
                 fixtureRegister.clear()
                 fixturesByGroup.clear()
+                activeScenes.clear()
             }
 
             block(registerer)
@@ -113,8 +162,29 @@ class Fixtures {
             override fun channelsChanged(changes: Map<Int, UByte>) {
                 registerLock.read {
                     changeListeners.forEach {
-                        it.channelsChanged(controller.subnet, controller.universe, changes)
+                        it.channelsChanged(controller.universe, changes)
                     }
+                }
+                val scenesToUnset = activeScenesLock.read {
+                    activeScenes.filterValues {
+                        it[controller.universe]?.filter { (channelNo, sceneValue) ->
+                            val changeValue = changes[channelNo]
+                            if (changeValue != null) {
+                                changeValue != sceneValue
+                            } else {
+                                false
+                            }
+                        }?.isNotEmpty() ?: false
+                    }.keys
+                }
+                if (scenesToUnset.isNotEmpty()) {
+                    activeScenesLock.write {
+                        scenesToUnset.forEach {
+                            activeScenes.remove(it)
+                            println("Scene no longer set $it")
+                        }
+                    }
+                    scenesChanged()
                 }
             }
         }

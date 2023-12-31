@@ -1,17 +1,34 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
-import uk.me.cormack.lighting7.dmx.DmxController
+import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 
 @FixtureType("fustion_spot")
 class FusionSpotFixture(
-    controller: DmxController,
+    universe: Universe,
     key: String,
     fixtureName: String,
     firstChannel: Int,
     position: Int,
-    maxDimmerLevel: UByte = 255u,
-): DmxFixture(controller, firstChannel, 15, key, fixtureName, position), FixtureWithDimmer {
+    private val maxDimmerLevel: UByte = 255u,
+    transaction: ControllerTransaction? = null,
+): DmxFixture(universe, firstChannel, 15, key, fixtureName, position), FixtureWithDimmer {
+     private constructor(
+         fixture: FusionSpotFixture,
+         transaction: ControllerTransaction,
+     ) : this(
+         fixture.universe,
+         fixture.key,
+         fixture.fixtureName,
+         fixture.firstChannel,
+         fixture.position,
+         fixture.maxDimmerLevel,
+         transaction,
+     )
+
+    override fun withTransaction(transaction: ControllerTransaction): FusionSpotFixture = FusionSpotFixture(this, transaction)
+
     // TODO Add mechanism to make this meets DmxFixtureWithColour
     enum class Color(override val level: UByte): DmxFixtureSettingValue {
         WHITE(0u),
@@ -83,44 +100,44 @@ class FusionSpotFixture(
     }
 
     @FixtureProperty("Pan adjustment 0-540°")
-    val pan = DmxFixtureSlider(controller, firstChannel)
+    val pan = DmxFixtureSlider(transaction, universe, firstChannel)
     @FixtureProperty("Pan fine adjustment")
-    val panFine = DmxFixtureSlider(controller, firstChannel + 1)
+    val panFine = DmxFixtureSlider(transaction, universe, firstChannel + 1)
     @FixtureProperty("Tilt adjustment 0-210°")
-    val tilt = DmxFixtureSlider(controller, firstChannel + 2)
+    val tilt = DmxFixtureSlider(transaction, universe, firstChannel + 2)
     @FixtureProperty("Tilt fine adjustment")
-    val tiltFine = DmxFixtureSlider(controller, firstChannel + 3)
+    val tiltFine = DmxFixtureSlider(transaction, universe, firstChannel + 3)
     @FixtureProperty("Pan/tilt speed")
-    val panTiltSpeed = DmxFixtureSlider(controller, firstChannel + 4)
+    val panTiltSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 4)
 
     @FixtureProperty
-    override val dimmer = DmxFixtureSlider(controller, firstChannel + 5, max = maxDimmerLevel)
+    override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel + 5, max = maxDimmerLevel)
 
     @FixtureProperty
-    val strobe = DmxFixtureSetting(controller, firstChannel + 6, Strobe.entries.toTypedArray())
+    val strobe = DmxFixtureSetting(transaction, universe, firstChannel + 6, Strobe.entries.toTypedArray())
 
     @FixtureProperty
-    val colour = DmxFixtureSetting(controller, firstChannel + 7, Color.entries.toTypedArray())
+    val colour = DmxFixtureSetting(transaction, universe, firstChannel + 7, Color.entries.toTypedArray())
 
     @FixtureProperty
-    val gobo = DmxFixtureSetting(controller, firstChannel + 8, Gobo.entries.toTypedArray())
+    val gobo = DmxFixtureSetting(transaction, universe, firstChannel + 8, Gobo.entries.toTypedArray())
 
     // TODO add support for forward and reverse
     @FixtureProperty
-    val rotation = DmxFixtureSlider(controller, firstChannel + 9)
+    val rotation = DmxFixtureSlider(transaction, universe, firstChannel + 9)
 
     @FixtureProperty
-    val focus = DmxFixtureSlider(controller, firstChannel + 10)
+    val focus = DmxFixtureSlider(transaction, universe, firstChannel + 10)
 
     @FixtureProperty
-    val prism = DmxFixtureSetting(controller, firstChannel + 11, PrismMode.entries.toTypedArray())
+    val prism = DmxFixtureSetting(transaction, universe, firstChannel + 11, PrismMode.entries.toTypedArray())
 
     @FixtureProperty
-    val colourMode = DmxFixtureSetting(controller, firstChannel + 12, ColourMode.entries.toTypedArray())
+    val colourMode = DmxFixtureSetting(transaction, universe, firstChannel + 12, ColourMode.entries.toTypedArray())
 
     @FixtureProperty
-    val panTiltMode = DmxFixtureSetting(controller, firstChannel + 13, PanTiltMode.entries.toTypedArray())
+    val panTiltMode = DmxFixtureSetting(transaction, universe, firstChannel + 13, PanTiltMode.entries.toTypedArray())
 
     @FixtureProperty
-    val motorMode = DmxFixtureSetting(controller, firstChannel + 14, MotorMode.entries.toTypedArray())
+    val motorMode = DmxFixtureSetting(transaction, universe, firstChannel + 14, MotorMode.entries.toTypedArray())
 }

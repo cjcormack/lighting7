@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
+import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.DmxController
+import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.FixtureSettingValue
 
 interface DmxFixtureSettingValue: FixtureSettingValue {
@@ -8,13 +10,18 @@ interface DmxFixtureSettingValue: FixtureSettingValue {
 }
 
 class DmxFixtureSetting<T : DmxFixtureSettingValue>(
-    val controller: DmxController,
+    val transaction: ControllerTransaction?,
+    val universe: Universe,
     val channelNo: Int,
     settingValues: Array<T>,
 ) {
+    private val nonNullTransaction get() = checkNotNull(transaction) {
+        "Attempted to use fixture outside of a transaction"
+    }
+
     var setting: T
-        get() = valueForLevel(controller.getValue(channelNo))
-        set(value) = controller.setValue(channelNo, value.level)
+        get() = valueForLevel(nonNullTransaction.getValue(universe, channelNo))
+        set(value) = nonNullTransaction.setValue(universe, channelNo, value.level)
 
     private val sortedValues: List<T>
     private val valuesByName: Map<String, T>

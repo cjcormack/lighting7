@@ -1,19 +1,24 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
-import uk.me.cormack.lighting7.dmx.DmxController
+import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.FixtureSlider
 
 class DmxFixtureSlider(
-    val controller: DmxController,
+    val transaction: ControllerTransaction?,
+    val universe: Universe,
     val channelNo: Int,
     val min: UByte = 0u,
     val max: UByte = 255u,
 ): FixtureSlider {
+    private val nonNullTransaction get() = checkNotNull(transaction) {
+        "Attempted to use fixture outside of a transaction"
+    }
     override var value: UByte
-        get() = controller.getValue(channelNo)
-        set(value) = controller.setValue(channelNo, maxOf(min, minOf(value, max)))
+        get() = nonNullTransaction.getValue(universe, channelNo)
+        set(value) = nonNullTransaction.setValue(universe, channelNo, maxOf(min, minOf(value, max)))
 
     override fun fadeToValue(value: UByte, fadeMs: Long) {
-        controller.setValue(channelNo, maxOf(min, minOf(value, max)), fadeMs)
+        nonNullTransaction.setValue(universe, channelNo, maxOf(min, minOf(value, max)), fadeMs)
     }
 }

@@ -1,8 +1,7 @@
 package uk.me.cormack.lighting7.dmx
 
 sealed interface DmxController {
-    val subnet: Int
-    val universe: Int
+    val universe: Universe
 
     val currentValues: Map<Int, UByte>
 

@@ -23,7 +23,7 @@ internal fun Route.routeApiRestLightsScene(state: State) {
         get("/list") {
             val scenes = transaction(state.database) {
                 state.show.project.scenes.toList().map {
-                    SceneDetails(it.id.value, it.name, it.script.id.value)
+                    SceneDetails(it.id.value, it.name, it.script.id.value, state.show.fixtures.isSceneActive(it.name))
                 }
             }
             call.respond(scenes)
@@ -41,8 +41,9 @@ internal fun Route.routeApiRestLightsScene(state: State) {
                     script = sceneScript
                     project = state.show.project
                 }
-                SceneDetails(scene.id.value, scene.name, scene.script.id.value)
+                SceneDetails(scene.id.value, scene.name, scene.script.id.value, state.show.fixtures.isSceneActive(scene.name))
             }
+            state.show.fixtures.scenesChanged()
             call.respond(sceneDetails)
         }
 
@@ -50,7 +51,7 @@ internal fun Route.routeApiRestLightsScene(state: State) {
             val sceneDetails = transaction(state.database) {
                 val scene = DaoScene.findById(it.id) ?: throw Error("Scene not found")
 
-                SceneDetails(scene.id.value, scene.name, scene.script.id.value)
+                SceneDetails(scene.id.value, scene.name, scene.script.id.value, state.show.fixtures.isSceneActive(scene.name))
             }
             call.respond(sceneDetails)
         }
@@ -67,8 +68,9 @@ internal fun Route.routeApiRestLightsScene(state: State) {
                 scene.name = newSceneDetails.name
                 scene.script = sceneScript
 
-                SceneDetails(scene.id.value, scene.name, scene.script.id.value)
+                SceneDetails(scene.id.value, scene.name, scene.script.id.value, state.show.fixtures.isSceneActive(scene.name))
             }
+            state.show.fixtures.scenesChanged()
             call.respond(sceneDetails)
         }
 
@@ -76,6 +78,7 @@ internal fun Route.routeApiRestLightsScene(state: State) {
             transaction(state.database) {
                 DaoScene.findById(it.id)?.delete()
             }
+            state.show.fixtures.scenesChanged()
             call.respond("")
         }
 
@@ -103,4 +106,4 @@ data class SceneId(val id: Int) {
 data class NewScene(val name: String, val scriptId: Int)
 
 @Serializable
-data class SceneDetails(val id: Int, val name: String, val scriptId: Int)
+data class SceneDetails(val id: Int, val name: String, val scriptId: Int, val isActive: Boolean)

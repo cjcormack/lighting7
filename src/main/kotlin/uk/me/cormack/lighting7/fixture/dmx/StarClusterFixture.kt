@@ -1,18 +1,35 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
+import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.DmxController
+import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
 
 @FixtureType("starcluster")
 class StarClusterFixture(
-    controller: DmxController,
+    universe: Universe,
     key: String,
     fixtureName: String,
     firstChannel: Int,
     position: Int,
-): DmxFixture(controller, firstChannel, 5, key, fixtureName, position) {
+    transaction: ControllerTransaction? = null,
+): DmxFixture(universe, firstChannel, 5, key, fixtureName, position) {
+    private constructor(
+        fixture: StarClusterFixture,
+        transaction: ControllerTransaction,
+    ) : this(
+        fixture.universe,
+        fixture.key,
+        fixture.fixtureName,
+        fixture.firstChannel,
+        fixture.position,
+        transaction,
+    )
+
+    override fun withTransaction(transaction: ControllerTransaction): StarClusterFixture = StarClusterFixture(this, transaction)
+
     enum class Mode(override val level: UByte): DmxFixtureSettingValue {
         OFF(0u),
         AUTO_SHOW(51u),
@@ -22,5 +39,5 @@ class StarClusterFixture(
     }
 
     @FixtureProperty
-    val mode = DmxFixtureSetting(controller, firstChannel, Mode.entries.toTypedArray())
+    val mode = DmxFixtureSetting(transaction, universe, firstChannel, Mode.entries.toTypedArray())
 }

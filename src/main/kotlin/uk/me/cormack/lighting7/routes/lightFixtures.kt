@@ -19,7 +19,7 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                         }
 
                         DmxFixtureDetails(
-                            it.fixtureName, it.key, it.typeKey, it.controller.universe, channels
+                            it.fixtureName, it.key, it.typeKey, it.universe.universe, channels
                         )
                     }
                     is HueFixture -> {

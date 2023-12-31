@@ -11,7 +11,7 @@ import kotlin.math.max
 @OptIn(DelicateCoroutinesApi::class)
 @ExperimentalCoroutinesApi
 @ObsoleteCoroutinesApi
-class ArtNetController(override val subnet: Int, override val universe: Int, val address: String? = null, val needsRefresh: Boolean = false): DmxController {
+class ArtNetController(override val universe: Universe, val address: String? = null, val needsRefresh: Boolean = false): DmxController {
     internal val fadeTickMs = 10
 
     private val artnet = ArtNetClient()
@@ -135,7 +135,7 @@ class ArtNetController(override val subnet: Int, override val universe: Int, val
 
         var consecutiveErrors = 0
 
-        launch(newSingleThreadContext("ArtNetThread-$subnet-$universe")) {
+        launch(newSingleThreadContext("ArtNetThread-${universe.subnet}-${universe.universe}")) {
             while(coroutineContext.isActive && !isClosed) {
                 try {
                     select<Unit> {
@@ -246,9 +246,9 @@ class ArtNetController(override val subnet: Int, override val universe: Int, val
         previousSentDmxData = dmxData
 
         if (address == null) {
-            artnet.broadcastDmx(subnet, universe, dmxData)
+            artnet.broadcastDmx(universe.subnet, universe.universe, dmxData)
         } else {
-            artnet.unicastDmx(address, subnet, universe, dmxData)
+            artnet.unicastDmx(address, universe.subnet, universe.universe, dmxData)
         }
 
         if (changes.isNotEmpty()) {
@@ -265,15 +265,12 @@ class ArtNetController(override val subnet: Int, override val universe: Int, val
         other as ArtNetController
 
         if (universe != other.universe) return false
-        if (subnet != other.subnet) return false
         if (address != other.address) return false
 
         return true
     }
 
     override fun hashCode(): Int {
-        var result = universe
-        result = 31 * result + subnet
-        return result
+        return universe.hashCode()
     }
 }

@@ -1,12 +1,12 @@
 package uk.me.cormack.lighting7.fixture
 
-import uk.me.cormack.lighting7.dmx.DmxController
+import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureMultiSlider
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSlider
 
 abstract class DmxFixture(
-    val controller: DmxController,
+    val universe: Universe,
     val firstChannel: Int,
     val channelCount: Int,
     key: String,

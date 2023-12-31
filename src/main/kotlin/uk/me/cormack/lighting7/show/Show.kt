@@ -5,6 +5,8 @@ import kotlinx.coroutines.channels.ticker
 import kotlinx.coroutines.selects.select
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
+import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.scripts.LightingScript
 import uk.me.cormack.lighting7.state.State
@@ -107,15 +109,20 @@ class Show(
     }
 
     suspend fun runScene(id: Int): ScriptResult {
-        val (scriptName, scriptBody) = transaction(state.database) {
+        val (sceneName, scriptName, scriptBody) = transaction(state.database) {
             val scene = DaoScene.findById(id) ?: throw Error("Scene not found")
 
             println("Running scene '${scene.name}'")
 
-            Pair(scene.script.name, scene.script.script)
+            Triple(scene.name, scene.script.name, scene.script.script)
         }
 
-        return script(scriptName, scriptBody).run()
+        val sceneResult = script(scriptName, scriptBody).run(sceneName = scriptName, sceneIsActive = fixtures.isSceneActive(sceneName))
+        if (sceneResult.channelChanges != null) {
+            fixtures.recordScene(sceneName, sceneResult.channelChanges)
+        }
+
+        return sceneResult
     }
 
     suspend fun runScene(sceneName: String): ScriptResult {
@@ -130,7 +137,13 @@ class Show(
             Pair(scene.script.name, scene.script.script)
         }
 
-        return script(scriptName, scriptBody).run()
+        val sceneResult = script(scriptName, scriptBody).run(sceneName = scriptName, sceneIsActive = fixtures.isSceneActive(sceneName))
+
+        if (sceneResult.channelChanges != null) {
+            fixtures.recordScene(sceneName, sceneResult.channelChanges)
+        }
+
+        return sceneResult
     }
 
     suspend fun evalScriptByName(scriptName: String, step: Int = 0): ScriptResult {
@@ -171,16 +184,29 @@ class Show(
             }
         }
 
-        suspend fun run(step: Int = 0): ScriptResult {
+        suspend fun run(step: Int = 0, sceneName: String = "", sceneIsActive: Boolean = false): ScriptResult {
             val compiledScript = compiledResult.valueOrNull() ?: return ScriptResult(compiledResult)
 
+            val transaction = ControllerTransaction(show.fixtures.controllers)
+            val fixturesWithTransaction = show.fixtures.withTransaction(transaction)
+
             val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
-                providedProperties(Pair("fixtures", show.fixtures))
+                providedProperties(Pair("fixtures", fixturesWithTransaction))
                 providedProperties(Pair("scriptName", scriptName))
                 providedProperties(Pair("step", step))
+                providedProperties(Pair("sceneName", sceneName))
+                providedProperties(Pair("sceneIsActive", sceneIsActive))
             })
 
-            return ScriptResult(compiledResult, runResult)
+            val actualChannelChanges = transaction.apply()
+
+            val channelChanges = if (fixturesWithTransaction.customChangedChannels != null) {
+                fixturesWithTransaction.customChangedChannels
+            } else {
+                actualChannelChanges
+            }
+
+            return ScriptResult(compiledResult, runResult, channelChanges)
         }
     }
 }
@@ -188,4 +214,5 @@ class Show(
 data class ScriptResult(
     val compileResult: ResultWithDiagnostics<CompiledScript>,
     val runResult: ResultWithDiagnostics<EvaluationResult>? = null,
+    val channelChanges: Map<Universe, Map<Int, UByte>>? = null,
 )
