@@ -1,7 +1,6 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
-import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
@@ -15,9 +14,8 @@ class QuadBarFixture (
     fixtureName: String,
     firstChannel: Int,
     position: Int,
-    private val maxDimmerLevel: UByte = 255u,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 6, key, fixtureName, position), FixtureWithDimmer {
+): DmxFixture(universe, firstChannel, 1, key, fixtureName, position) {
     private constructor(
         fixture: QuadBarFixture,
         transaction: ControllerTransaction,
@@ -27,14 +25,13 @@ class QuadBarFixture (
         fixture.fixtureName,
         fixture.firstChannel,
         fixture.position,
-        fixture.maxDimmerLevel,
         transaction,
     )
 
     override fun withTransaction(transaction: ControllerTransaction): QuadBarFixture = QuadBarFixture(this, transaction)
 
-    enum class Movement(override val level: UByte): DmxFixtureSettingValue {
-        MOVEMENT_0(0u),
+    enum class ShowMode(override val level: UByte): DmxFixtureSettingValue {
+        OFF(0u),
         MOVEMENT_1(8u),
         MOVEMENT_2(23u),
         MOVEMENT_3(38u),
@@ -55,8 +52,5 @@ class QuadBarFixture (
     }
 
     @FixtureProperty
-    override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel, max = maxDimmerLevel)
-
-    @FixtureProperty
-    val movement = DmxFixtureSetting(transaction, universe, firstChannel + 2, Movement.entries.toTypedArray())
+    val showMode = DmxFixtureSetting(transaction, universe, firstChannel, ShowMode.entries.toTypedArray())
 }

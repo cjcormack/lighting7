@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
+import kotlin.math.roundToInt
 
 @FixtureType("fustion_spot")
 class FusionSpotFixture(
@@ -13,7 +14,7 @@ class FusionSpotFixture(
     position: Int,
     private val maxDimmerLevel: UByte = 255u,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 15, key, fixtureName, position), FixtureWithDimmer {
+): DmxFixture(universe, firstChannel, 15, key, fixtureName, position), FixtureWithDimmer, FixtureWithStrobe {
      private constructor(
          fixture: FusionSpotFixture,
          transaction: ControllerTransaction,
@@ -56,15 +57,14 @@ class FusionSpotFixture(
         REVERSE_RAINBOW_EFFECT(195u), // TODO also support slider for speed (reverse)
     }
 
-    enum class Strobe(override val level: UByte): DmxFixtureSettingValue {
-        BLACKOUT(0u),
-        STROBE_1(10u),
-        STROBE_20(16u),
-        STROBE_40(23u),
-        STROBE_60(31u),
-        STROBE_80(38u),
-        STROBE_100(45u),
-        LED_ON(246u),
+    class Strobe(transaction: ControllerTransaction?, universe: Universe, channelNo: Int): DmxFixtureSlider(transaction, universe, channelNo), FixtureStrobe {
+        override fun fullOn() {
+            this.value = 246u
+        }
+
+        override fun strobe(intensity: UByte) {
+            this.value = (246F / 255F * intensity.toFloat()).roundToInt().toUByte()
+        }
     }
 
     enum class PrismMode(override val level: UByte): DmxFixtureSettingValue {
@@ -114,7 +114,7 @@ class FusionSpotFixture(
     override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel + 5, max = maxDimmerLevel)
 
     @FixtureProperty
-    val strobe = DmxFixtureSetting(transaction, universe, firstChannel + 6, Strobe.entries.toTypedArray())
+    override val strobe = Strobe(transaction, universe, firstChannel + 6)
 
     @FixtureProperty
     val colour = DmxFixtureSetting(transaction, universe, firstChannel + 7, Color.entries.toTypedArray())

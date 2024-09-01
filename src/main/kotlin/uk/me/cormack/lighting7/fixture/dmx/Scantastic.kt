@@ -1,12 +1,10 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
-import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
-import uk.me.cormack.lighting7.fixture.FixtureWithDimmer
 
 @FixtureType("scantastic")
 class ScantasticFixture (
@@ -15,9 +13,8 @@ class ScantasticFixture (
     fixtureName: String,
     firstChannel: Int,
     position: Int,
-    private val maxDimmerLevel: UByte = 255u,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 17, key, fixtureName, position), FixtureWithDimmer {
+): DmxFixture(universe, firstChannel, 17, key, fixtureName, position) {
     private constructor(
         fixture: ScantasticFixture,
         transaction: ControllerTransaction,
@@ -27,11 +24,15 @@ class ScantasticFixture (
         fixture.fixtureName,
         fixture.firstChannel,
         fixture.position,
-        fixture.maxDimmerLevel,
         transaction,
     )
 
     override fun withTransaction(transaction: ControllerTransaction): ScantasticFixture = ScantasticFixture(this, transaction)
+
+    enum class OnMode(override val level: UByte): DmxFixtureSettingValue {
+        BLACKOUT(0u),
+        FULL_ON(128u),
+    }
 
     enum class Mode(override val level: UByte): DmxFixtureSettingValue {
         BLACKOUT(0u),
@@ -39,8 +40,8 @@ class ScantasticFixture (
     }
 
     @FixtureProperty
-    override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel, max = maxDimmerLevel)
+    val onMode = DmxFixtureSetting(transaction, universe, firstChannel, OnMode.entries.toTypedArray())
 
     @FixtureProperty
-    val mode = DmxFixtureSetting(transaction, universe, firstChannel + 9, Mode.entries.toTypedArray())
+    val mode = DmxFixtureSetting(transaction, universe, firstChannel + 16, Mode.entries.toTypedArray())
 }

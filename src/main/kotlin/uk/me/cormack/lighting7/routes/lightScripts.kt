@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.DaoScript
+import uk.me.cormack.lighting7.scriptSettings.ScriptSetting
+import uk.me.cormack.lighting7.scriptSettings.ScriptSettingList
 import uk.me.cormack.lighting7.show.ScriptResult
 import uk.me.cormack.lighting7.state.State
 import kotlin.script.experimental.api.ResultValue
@@ -26,31 +28,36 @@ internal fun Route.routeApiRestLightsScript(state: State) {
         get("/list") {
             val scripts = transaction(state.database) {
                 state.show.project.scripts.toList().map {
-                    ScriptDetails(it.id.value, it.name, it.script)
+                    ScriptDetails(
+                        it.id.value,
+                        it.name,
+                        it.script,
+                        it.settings?.list.orEmpty(),
+                    )
                 }
             }
             call.respond(scripts)
         }
 
         post("/compile") {
-            val script = call.receive<String>()
+            val literal = call.receive<ScriptLiteral>()
 
             var response: CompileResult? = null
 
             GlobalScope.launch {
-                response = state.show.compileLiteralScript(script).toCompileResult()
+                response = state.show.compileLiteralScript(literal.script, literal.settings.orEmpty()).toCompileResult()
             }.join()
 
             call.respond(checkNotNull(response))
         }
 
         post("/run") {
-            val script = call.receive<String>()
+            val literal = call.receive<ScriptLiteral>()
 
             var response: RunResult? = null
 
             GlobalScope.launch {
-                response = state.show.runLiteralScript(script).toRunResult()
+                response = state.show.runLiteralScript(literal.script, literal.settings.orEmpty()).toRunResult()
             }.join()
 
             call.respond(checkNotNull(response))
@@ -63,9 +70,15 @@ internal fun Route.routeApiRestLightsScript(state: State) {
                     name = newScript.name
                     script = newScript.script
                     project = state.show.project
+                    settings = ScriptSettingList(newScript.settings.orEmpty())
                 }
             }
-            call.respond(ScriptDetails(script.id.value, script.name, script.script))
+            call.respond(ScriptDetails(
+                script.id.value,
+                script.name,
+                script.script,
+                script.settings?.list.orEmpty(),
+            ))
         }
 
         get<ScriptResource> {
@@ -73,7 +86,12 @@ internal fun Route.routeApiRestLightsScript(state: State) {
                 DaoScript.findById(it.id)
             }
             if (script != null) {
-                call.respond(ScriptDetails(script.id.value, script.name, script.script))
+                call.respond(ScriptDetails(
+                    script.id.value,
+                    script.name,
+                    script.script,
+                    script.settings?.list.orEmpty(),
+                ))
             }
         }
 
@@ -83,10 +101,16 @@ internal fun Route.routeApiRestLightsScript(state: State) {
                 val script = DaoScript.findById(it.id) ?: throw Error("Script not found")
                 script.name = newScriptDetails.name
                 script.script = newScriptDetails.script
+                script.settings = ScriptSettingList(newScriptDetails.settings.orEmpty())
 
                 script
             }
-            call.respond(ScriptDetails(script.id.value, script.name, script.script))
+            call.respond(ScriptDetails(
+                script.id.value,
+                script.name,
+                script.script,
+                script.settings?.list.orEmpty(),
+            ))
         }
 
         delete<ScriptResource> {
@@ -101,12 +125,19 @@ internal fun Route.routeApiRestLightsScript(state: State) {
 @Resource("/{id}")
 data class ScriptResource(val id: Int)
 
+@Serializable
+data class ScriptLiteral(val script: String, val settings: List<ScriptSetting<*>>? = null)
 
 @Serializable
-data class NewScript(val name: String, val script: String)
+data class NewScript(val name: String, val script: String, val settings: List<ScriptSetting<*>>?)
 
 @Serializable
-data class ScriptDetails(val id: Int, val name: String, val script: String)
+data class ScriptDetails(
+    val id: Int,
+    val name: String,
+    val script: String,
+    val settings: List<ScriptSetting<*>>,
+)
 
 @Serializable
 data class ScriptRunMessage(val severity: String,

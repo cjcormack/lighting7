@@ -4,7 +4,7 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.FixtureSlider
 
-class DmxFixtureSlider(
+open class DmxFixtureSlider(
     val transaction: ControllerTransaction?,
     val universe: Universe,
     val channelNo: Int,

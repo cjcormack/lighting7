@@ -1,6 +1,5 @@
 package uk.me.cormack.lighting7.dmx
 
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.ticker
@@ -8,8 +7,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.math.ceil
 import kotlin.math.floor
 
-@ObsoleteCoroutinesApi
-@ExperimentalCoroutinesApi
+@OptIn(ObsoleteCoroutinesApi::class)
 internal class TickerState(private val controller: ArtNetController, coroutineContext: CoroutineContext, private val channelNo: Int, numberOfSteps: Int, channelUpdatePayload: ArtNetController.ChannelUpdatePayload) {
     val ticker: ReceiveChannel<Unit>
 

@@ -1,12 +1,12 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
-import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
+import kotlin.math.roundToInt
 
 @FixtureType("whex")
-class WHexFixture(
+class WhexFixture(
     universe: Universe,
     key: String,
     fixtureName: String,
@@ -14,11 +14,11 @@ class WHexFixture(
     position: Int,
     private val maxDimmerLevel: UByte = 255u,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 12, key, fixtureName, position),
-    FixtureWithDimmer, DmxFixtureWithColour
+) : DmxFixture(universe, firstChannel, 12, key, fixtureName, position),
+    FixtureWithDimmer, DmxFixtureWithColour, FixtureWithUv, FixtureWithStrobe
 {
     private constructor(
-        fixture: WHexFixture,
+        fixture: WhexFixture,
         transaction: ControllerTransaction,
     ) : this(
         fixture.universe,
@@ -30,11 +30,33 @@ class WHexFixture(
         transaction,
     )
 
-    override fun withTransaction(transaction: ControllerTransaction): WHexFixture = WHexFixture(this, transaction)
+    override fun withTransaction(transaction: ControllerTransaction): WhexFixture = WhexFixture(this, transaction)
 
-    enum class Mode(override val level: UByte): DmxFixtureSettingValue {
+    class Strobe(transaction: ControllerTransaction?, universe: Universe, channelNo: Int): DmxFixtureSlider(transaction, universe, channelNo), FixtureStrobe {
+        override fun fullOn() {
+            this.value = 0u
+        }
+
+        override fun strobe(intensity: UByte) {
+            this.value = ((255F / 245F * intensity.toFloat()).roundToInt() + 10).toUByte()
+        }
+    }
+
+    enum class ProgramMode(override val level: UByte) : DmxFixtureSettingValue {
         NONE(0u),
+        AUTO_PROGRAM_1(111u),
+        AUTO_PROGRAM_2(61u),
+        AUTO_PROGRAM_3(111u),
+        AUTO_PROGRAM_4(161u),
         SOUND_ACTIVE(241u),
+    }
+
+    enum class DimmerMode(override val level: UByte) : DmxFixtureSettingValue {
+        MANUAL(0u),
+        OFF(52u),
+        FAST(102u),
+        MEDIUM(153u),
+        SLOW(204u),
     }
 
     @FixtureProperty
@@ -54,12 +76,17 @@ class WHexFixture(
     @FixtureProperty
     val amberColour = DmxFixtureSlider(transaction, universe, firstChannel + 5)
     @FixtureProperty
-    val uvColour = DmxFixtureSlider(transaction, universe, firstChannel + 6)
+    override val uvColour = DmxFixtureSlider(transaction, universe, firstChannel + 6)
 
     @FixtureProperty
-    val mode = DmxFixtureSetting(transaction, universe, firstChannel + 9, Mode.entries.toTypedArray())
+    override val strobe = Strobe(transaction, universe, firstChannel + 7)
 
     @FixtureProperty
-    val soundSensitivity = DmxFixtureSlider(transaction, universe, firstChannel + 10, min = 11u)
+    val mode = DmxFixtureSetting(transaction, universe, firstChannel + 9, ProgramMode.entries.toTypedArray())
 
+    @FixtureProperty
+    val programSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 10)
+
+    @FixtureProperty
+    val dimmerMode = DmxFixtureSetting(transaction, universe, firstChannel + 11, DimmerMode.entries.toTypedArray())
 }

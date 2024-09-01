@@ -1,7 +1,5 @@
 package uk.me.cormack.lighting7.scripts
 
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.ObsoleteCoroutinesApi
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
@@ -10,8 +8,8 @@ import kotlin.script.experimental.annotations.KotlinScript
 import kotlin.script.experimental.api.*
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.jvm
+import kotlin.script.experimental.jvm.jvmTarget
 
-@OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 @KotlinScript(
     fileExtension = "lightng.kts",
     compilationConfiguration = LightingScriptConfiguration::class
@@ -22,6 +20,7 @@ abstract class LightingScript(
     val step: Int,
     val sceneName: String,
     val sceneIsActive: Boolean,
+    val settings: Map<String, String>,
 ) {
     fun controller(subnet: Int, universe: Int): DmxController = fixtures.controller(Universe(subnet, universe))
     inline fun <reified T: Fixture> fixture(key: String): T = fixtures.fixture(key)
@@ -36,12 +35,14 @@ object LightingScriptConfiguration : ScriptCompilationConfiguration(
             "uk.me.cormack.lighting7.fixture.*",
             "uk.me.cormack.lighting7.fixture.dmx.*",
             "uk.me.cormack.lighting7.fixture.hue.*",
+            "uk.me.cormack.lighting7.scriptSettings.*",
             "java.awt.Color",
             "uk.me.cormack.lighting7.dmx.*",
         )
 
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)
+            jvmTarget("17")
         }
         ide {
             acceptedLocations(ScriptAcceptedLocation.Everywhere)

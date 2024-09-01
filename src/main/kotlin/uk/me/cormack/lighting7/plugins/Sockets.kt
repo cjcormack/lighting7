@@ -5,14 +5,11 @@ import io.ktor.serialization.kotlinx.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import uk.me.cormack.lighting7.dmx.DmxController
-import uk.me.cormack.lighting7.dmx.ChannelChangeListener
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.state.State
@@ -82,7 +79,6 @@ class SocketConnection(val session: WebSocketServerSession) {
     val name = "conn${lastId.getAndIncrement()}"
 }
 
-@OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 fun Application.configureSockets(state: State) {
     install(WebSockets) {
         pingPeriod = Duration.ofSeconds(15)
