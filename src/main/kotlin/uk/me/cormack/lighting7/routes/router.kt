@@ -23,7 +23,7 @@ fun Application.configureRouting(state: State) {
 
         routeKotlinCompilerServer(state)
 
-        staticFiles("/", File("/Users/chris/Development/Personal/lighting-react/build/")) {
+        staticFiles("/", File("/Users/chris/Development/Personal/lighting-react/dist/")) {
             default("index.html")
         }
     }

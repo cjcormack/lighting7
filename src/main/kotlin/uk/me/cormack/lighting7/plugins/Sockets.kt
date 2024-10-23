@@ -72,6 +72,10 @@ data class UniversesStateOutMessage(
 @SerialName("scenesChanged")
 data object ScenesChangedOutMessage: OutMessage()
 
+@Serializable
+@SerialName("fixturesChanged")
+data object FixturesChangedOutMessage: OutMessage()
+
 class SocketConnection(val session: WebSocketServerSession) {
     companion object {
         val lastId = AtomicInteger(0)
@@ -114,6 +118,12 @@ fun Application.configureSockets(state: State) {
                         .sortedBy { it }
                     launch {
                         sendSerialized<OutMessage>(UniversesStateOutMessage(universes))
+                    }
+                }
+
+                override fun fixturesChanged() {
+                    launch {
+                        sendSerialized<OutMessage>(FixturesChangedOutMessage)
                     }
                 }
 

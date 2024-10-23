@@ -11,6 +11,7 @@ import kotlin.concurrent.write
 interface FixturesChangeListener {
     fun channelsChanged(universe: Universe, changes: Map<Int, UByte>)
     fun controllersChanged()
+    fun fixturesChanged()
     fun scenesChanged()
 }
 
@@ -154,6 +155,7 @@ class Fixtures {
 
         changeListeners.forEach {
             it.controllersChanged()
+            it.fixturesChanged()
         }
     }
 

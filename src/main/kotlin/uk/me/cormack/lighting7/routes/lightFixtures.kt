@@ -1,36 +1,49 @@
 package uk.me.cormack.lighting7.routes
 
+import io.ktor.resources.*
 import io.ktor.server.application.*
+import io.ktor.server.resources.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.server.routing.get
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.HueFixture
 import uk.me.cormack.lighting7.state.State
+
+internal fun Fixture.details(): FixtureDetails {
+    return when (this) {
+        is DmxFixture -> {
+            val channels = this.channelDescriptions().map { channel ->
+                DmxFixtureChannelDetails(channel.key, channel.value)
+            }
+
+            DmxFixtureDetails(
+                this.fixtureName, this.key, this.typeKey, this.universe.universe, channels
+            )
+        }
+        is HueFixture -> {
+            HueFixtureDetails(this.fixtureName, this.key, this.typeKey)
+        }
+    }
+}
 
 internal fun Route.routeApiRestLightsFixtures(state: State) {
     route("/fixture") {
         get("/list") {
-            val fixtures = state.show.fixtures.fixtures.map {
-                when (it) {
-                    is DmxFixture -> {
-                        val channels = it.channelDescriptions().map { channel ->
-                            DmxFixtureChannelDetails(channel.key, channel.value)
-                        }
+            call.respond(state.show.fixtures.fixtures.map(Fixture::details))
+        }
 
-                        DmxFixtureDetails(
-                            it.fixtureName, it.key, it.typeKey, it.universe.universe, channels
-                        )
-                    }
-                    is HueFixture -> {
-                        HueFixtureDetails(it.fixtureName, it.key, it.typeKey)
-                    }
-                }
-            }
-            call.respond(fixtures)
+        get<FixtureKey> {
+            call.respond(state.show.fixtures.fixture<Fixture>(it.key).details())
         }
     }
 }
+
+@Resource("/{key}")
+data class FixtureKey(val key: String)
 
 @Serializable
 sealed interface FixtureDetails {
