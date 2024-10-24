@@ -13,9 +13,8 @@ interface FixturesChangeListener {
     fun controllersChanged()
     fun fixturesChanged()
     fun scenesChanged()
+    fun trackChanged(isPlaying: Boolean, artist: String, name: String)
 }
-
-
 
 @OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 class Fixtures {
@@ -100,6 +99,12 @@ class Fixtures {
     fun scenesChanged() {
         changeListeners.forEach {
             it.scenesChanged()
+        }
+    }
+
+    fun trackChanged(isPlaying: Boolean, artist: String, name: String) {
+        changeListeners.forEach {
+            it.trackChanged(isPlaying, artist, name)
         }
     }
 

@@ -2,11 +2,17 @@ package uk.me.cormack.lighting7.show
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ticker
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.selects.select
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.grpc.PlayerState
+import uk.me.cormack.lighting7.grpc.TrackDetails
+import uk.me.cormack.lighting7.grpc.TrackState
+import uk.me.cormack.lighting7.grpc.trackState
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.scriptSettings.IntValue
 import uk.me.cormack.lighting7.scriptSettings.ScriptSetting
@@ -33,6 +39,8 @@ class Show(
 ) {
     val fixtures = Fixtures()
     private val scripts = ConcurrentHashMap<String, Script>()
+    private val _trackStateFlow = MutableSharedFlow<TrackState>()
+    val trackStateFlow = _trackStateFlow.asSharedFlow()
 
     val project = transaction(state.database) {
         DaoProject.find {
@@ -52,6 +60,25 @@ class Show(
         if (runLoopScriptName != null) {
             GlobalScope.launch {
                 runShow(runLoopScriptName, runLoopDelay)
+            }
+        }
+
+        val pingTicker = ticker(5_000)
+        GlobalScope.launch {
+            launch(newSingleThreadContext("TrackServerPing")) {
+                while(coroutineContext.isActive) {
+                    select<Unit> {
+                        pingTicker.onReceiveCatching {
+                            if (it.isClosed) {
+                                return@onReceiveCatching
+                            }
+
+                            _trackStateFlow.emit(trackState {
+                                playerState = PlayerState.PING
+                            })
+                        }
+                    }
+                }
             }
         }
     }
@@ -176,6 +203,16 @@ class Show(
 
     suspend fun runLiteralScript(literalScript: String, scriptSettings: List<ScriptSetting<*>>, scriptName: String = "", step: Int = 0): ScriptResult {
         return script(scriptName, literalScript, scriptSettings).run(step)
+    }
+
+    fun trackChanged(request: TrackDetails) {
+        fixtures.trackChanged(request.playerState == PlayerState.PLAYING, request.artist, request.title)
+    }
+
+    suspend fun requestCurrentTrackDetails() {
+        _trackStateFlow.emit(trackState {
+            playerState = PlayerState.HANDSHAKE
+        })
     }
 
     class Script private constructor(

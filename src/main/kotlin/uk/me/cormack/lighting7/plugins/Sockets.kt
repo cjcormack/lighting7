@@ -67,10 +67,17 @@ data class UniversesStateOutMessage(
     val universes: List<Int>
 ): OutMessage()
 
-
 @Serializable
 @SerialName("scenesChanged")
 data object ScenesChangedOutMessage: OutMessage()
+
+@Serializable
+@SerialName("trackChanged")
+data class TrackChangedOutMessage(
+    val isPlaying: Boolean,
+    val artist: String,
+    val name: String,
+): OutMessage()
 
 @Serializable
 @SerialName("fixturesChanged")
@@ -132,6 +139,12 @@ fun Application.configureSockets(state: State) {
                         sendSerialized<OutMessage>(ScenesChangedOutMessage)
                     }
                 }
+
+                override fun trackChanged(isPlaying: Boolean, artist: String, name: String) {
+                    launch {
+                        sendSerialized<OutMessage>(TrackChangedOutMessage(isPlaying, artist, name))
+                    }
+                }
             }
             state.show.fixtures.registerListener(listener)
 
@@ -149,8 +162,7 @@ fun Application.configureSockets(state: State) {
                             sendSerialized<OutMessage>(ChannelStateOutMessage(currentValues))
                         }
                         is TrackDetailsInMessage -> {
-                            println("CJC TrackDetailsMessage")
-                            println(message)
+                            state.show.requestCurrentTrackDetails()
                         }
                         is UpdateChannelInMessage -> {
                             val controller = state.show.fixtures.controller(Universe(0, message.universe))
