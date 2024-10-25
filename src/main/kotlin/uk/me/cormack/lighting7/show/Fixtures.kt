@@ -1,7 +1,5 @@
 package uk.me.cormack.lighting7.show
 
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.ObsoleteCoroutinesApi
 import uk.me.cormack.lighting7.dmx.*
 import uk.me.cormack.lighting7.fixture.Fixture
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -12,11 +10,11 @@ interface FixturesChangeListener {
     fun channelsChanged(universe: Universe, changes: Map<Int, UByte>)
     fun controllersChanged()
     fun fixturesChanged()
-    fun scenesChanged()
+    fun sceneListChanged()
+    fun sceneChanged(id: Int)
     fun trackChanged(isPlaying: Boolean, artist: String, name: String)
 }
 
-@OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class)
 class Fixtures {
     private val registerLock = ReentrantReadWriteLock()
     private val controllerRegister: MutableMap<String, DmxController> = mutableMapOf()
@@ -26,7 +24,8 @@ class Fixtures {
     private val fixturesByGroup: MutableMap<String, MutableList<Fixture>> = mutableMapOf()
 
     private val activeScenesLock = ReentrantReadWriteLock()
-    private val activeScenes = mutableMapOf<String, Map<Universe, Map<Int, UByte>>>()
+    private val activeScenes = mutableMapOf<Int, Map<Universe, Map<Int, UByte>>>()
+    private val activeChases = mutableMapOf<Int, Boolean>()
 
     private val changeListeners: MutableList<FixturesChangeListener> = mutableListOf()
 
@@ -81,24 +80,44 @@ class Fixtures {
         checkNotNull(fixturesByGroup[groupName]) { "Fixture group '$groupName' not found" }.toList()
     }
 
-    fun recordScene(sceneName: String, changeDetails: Map<Universe, Map<Int, UByte>>) {
+    fun recordScene(sceneId: Int, changeDetails: Map<Universe, Map<Int, UByte>>) {
         activeScenesLock.write {
             if (changeDetails.isEmpty()) {
-                activeScenes.remove(sceneName)
+                activeScenes.remove(sceneId)
             } else {
-                activeScenes[sceneName] = changeDetails
+                activeScenes[sceneId] = changeDetails
             }
         }
-        scenesChanged()
+        sceneChanged(sceneId)
     }
 
-    fun isSceneActive(sceneName: String): Boolean = activeScenesLock.read {
-        activeScenes.containsKey(sceneName)
+    fun recordChaseStart(sceneId: Int) {
+        activeScenesLock.write {
+            activeChases[sceneId] = true
+        }
+        sceneChanged(sceneId)
     }
 
-    fun scenesChanged() {
+    fun recordChaseStop(sceneId: Int) {
+        activeScenesLock.write {
+            activeChases[sceneId] = false
+        }
+        sceneChanged(sceneId)
+    }
+
+    fun isSceneActive(sceneId: Int): Boolean = activeScenesLock.read {
+        activeScenes.containsKey(sceneId) || activeChases.getOrDefault(sceneId, false)
+    }
+
+    fun sceneListChanged() {
         changeListeners.forEach {
-            it.scenesChanged()
+            it.sceneListChanged()
+        }
+    }
+
+    fun sceneChanged(id: Int) {
+        changeListeners.forEach {
+            it.sceneChanged(id)
         }
     }
 
@@ -153,6 +172,7 @@ class Fixtures {
                 fixtureRegister.clear()
                 fixturesByGroup.clear()
                 activeScenes.clear()
+                activeChases.clear()
             }
 
             block(registerer)
@@ -189,9 +209,9 @@ class Fixtures {
                         scenesToUnset.forEach {
                             activeScenes.remove(it)
                             println("Scene no longer set $it")
+                            sceneChanged(it)
                         }
                     }
-                    scenesChanged()
                 }
             }
         }

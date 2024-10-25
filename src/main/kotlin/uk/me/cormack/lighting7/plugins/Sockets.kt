@@ -9,8 +9,13 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.models.DaoScene
+import uk.me.cormack.lighting7.routes.SceneDetails
+import uk.me.cormack.lighting7.routes.details
+import uk.me.cormack.lighting7.scriptSettings.ScriptSettingValue
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
@@ -68,8 +73,14 @@ data class UniversesStateOutMessage(
 ): OutMessage()
 
 @Serializable
-@SerialName("scenesChanged")
-data object ScenesChangedOutMessage: OutMessage()
+@SerialName("sceneListChanged")
+data object ScenesListChangedOutMessage: OutMessage()
+
+@Serializable
+@SerialName("sceneChanged")
+data class ScenesChangedOutMessage(
+    val data: SceneDetails,
+): OutMessage()
 
 @Serializable
 @SerialName("trackChanged")
@@ -134,9 +145,20 @@ fun Application.configureSockets(state: State) {
                     }
                 }
 
-                override fun scenesChanged() {
+                override fun sceneListChanged() {
                     launch {
-                        sendSerialized<OutMessage>(ScenesChangedOutMessage)
+                        sendSerialized<OutMessage>(ScenesListChangedOutMessage)
+                    }
+                }
+
+                override fun sceneChanged(id: Int) {
+                    launch {
+                        val sceneDetails = transaction(state.database) {
+                            val scene = DaoScene.findById(id) ?: throw Error("Scene not found")
+                            scene.details(state.show)
+                        }
+
+                        sendSerialized<OutMessage>(ScenesChangedOutMessage(sceneDetails))
                     }
                 }
 

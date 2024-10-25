@@ -7,7 +7,12 @@ import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.IntIdTable
 import org.jetbrains.exposed.sql.json.json
 import uk.me.cormack.lighting7.scriptSettings.IntValue
-import uk.me.cormack.lighting7.scriptSettings.ScriptSettingValue
+
+enum class Mode
+{
+    SCENE,
+    CHASE,
+}
 
 object DaoScenes : IntIdTable("scenes") {
     val name = varchar("name", 255)
@@ -15,6 +20,7 @@ object DaoScenes : IntIdTable("scenes") {
     val project = reference("project_id", DaoProjects)
     // TODO needs to become generic
     val settingsValues = json<Map<String, IntValue>>("settings_values", Json).nullable()
+    val mode = enumerationByName("mode", 50, Mode::class).default(Mode.SCENE)
 
     init {
         uniqueIndex(project, name)
@@ -28,4 +34,5 @@ class DaoScene(id: EntityID<Int>) : IntEntity(id) {
     var script by DaoScript referencedOn DaoScenes.script
     var project by DaoProject referencedOn DaoScenes.project
     var settingsValues by DaoScenes.settingsValues
+    var mode by DaoScenes.mode
 }

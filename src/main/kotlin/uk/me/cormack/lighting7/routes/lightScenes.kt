@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -13,30 +14,28 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.DaoScene
 import uk.me.cormack.lighting7.models.DaoScenes
 import uk.me.cormack.lighting7.models.DaoScript
+import uk.me.cormack.lighting7.models.Mode
 import uk.me.cormack.lighting7.scriptSettings.IntValue
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingValue
+import uk.me.cormack.lighting7.show.Show
 import uk.me.cormack.lighting7.state.State
 
 @OptIn(DelicateCoroutinesApi::class)
 internal fun Route.routeApiRestLightsScene(state: State) {
     route("/scene") {
-        get("/list") {
-            val scenes = transaction(state.database) {
-                state.show.project.scenes.orderBy(DaoScenes.id to SortOrder.DESC).toList().map {
-                    SceneDetails(
-                        it.id.value,
-                        it.name,
-                        it.script.id.value,
-                        state.show.fixtures.isSceneActive(it.name),
-                        it.settingsValues.orEmpty(),
-                    )
-                }
+        get<ListResource> {
+            val sceneIds = transaction(state.database) {
+                val scenes = DaoScene.find { (DaoScenes.project eq state.show.project.id) and (DaoScenes.mode eq it.mode) }
+                    .orderBy(DaoScenes.id to SortOrder.DESC)
+
+                scenes.map { it.id.value }
             }
-            call.respond(scenes)
+            call.respond(sceneIds)
         }
 
         post<SceneResource> {
@@ -46,35 +45,22 @@ internal fun Route.routeApiRestLightsScene(state: State) {
                 if (sceneScript.project.id != state.show.project.id) {
                     throw Error("Wrong project")
                 }
-                val scene = DaoScene.new {
+                DaoScene.new {
+                    mode = newScene.mode
                     name = newScene.name
                     script = sceneScript
                     project = state.show.project
                     settingsValues = newScene.settingsValues
-                }
-                SceneDetails(
-                    scene.id.value,
-                    scene.name,
-                    scene.script.id.value,
-                    state.show.fixtures.isSceneActive(scene.name),
-                    scene.settingsValues.orEmpty(),
-                )
+                }.details(state.show)
             }
-            state.show.fixtures.scenesChanged()
+            state.show.fixtures.sceneListChanged()
             call.respond(sceneDetails)
         }
 
         get<SceneId> {
             val sceneDetails = transaction(state.database) {
                 val scene = DaoScene.findById(it.id) ?: throw Error("Scene not found")
-
-                SceneDetails(
-                    scene.id.value,
-                    scene.name,
-                    scene.script.id.value,
-                    state.show.fixtures.isSceneActive(scene.name),
-                    scene.settingsValues.orEmpty(),
-                )
+                scene.details(state.show)
             }
             call.respond(sceneDetails)
         }
@@ -88,19 +74,14 @@ internal fun Route.routeApiRestLightsScene(state: State) {
                 }
 
                 val scene = DaoScene.findById(it.id) ?: throw Error("Scene not found")
+                scene.mode = newSceneDetails.mode
                 scene.name = newSceneDetails.name
                 scene.script = sceneScript
                 scene.settingsValues = newSceneDetails.settingsValues
 
-                SceneDetails(
-                    scene.id.value,
-                    scene.name,
-                    scene.script.id.value,
-                    state.show.fixtures.isSceneActive(scene.name),
-                    scene.settingsValues.orEmpty(),
-                )
+                scene.details(state.show)
             }
-            state.show.fixtures.scenesChanged()
+            state.show.fixtures.sceneChanged(sceneDetails.id)
             call.respond(sceneDetails)
         }
 
@@ -108,12 +89,11 @@ internal fun Route.routeApiRestLightsScene(state: State) {
             transaction(state.database) {
                 DaoScene.findById(it.id)?.delete()
             }
-            state.show.fixtures.scenesChanged()
+            state.show.fixtures.sceneListChanged()
             call.respond("")
         }
 
         post<SceneId.Run> {
-            val runScene = call.receive<RunScene>()
             var response: RunResult? = null
 
             GlobalScope.launch {
@@ -127,6 +107,11 @@ internal fun Route.routeApiRestLightsScene(state: State) {
 @Resource("/")
 data object SceneResource
 
+@Resource("/list")
+data class ListResource(
+    val mode: Mode,
+)
+
 @Resource("/{id}")
 data class SceneId(val id: Int) {
     @Resource("/run")
@@ -135,6 +120,7 @@ data class SceneId(val id: Int) {
 
 @Serializable
 data class NewScene(
+    val mode: Mode,
     val name: String,
     val scriptId: Int,
     // TODO needs to become generic
@@ -147,8 +133,20 @@ class RunScene()
 @Serializable
 data class SceneDetails(
     val id: Int,
+    val mode: Mode,
     val name: String,
     val scriptId: Int,
     val isActive: Boolean,
     val settingsValues: Map<String, ScriptSettingValue>,
 )
+
+internal fun DaoScene.details(show: Show): SceneDetails {
+    return SceneDetails(
+        this.id.value,
+        this.mode,
+        this.name,
+        this.script.id.value,
+        show.fixtures.isSceneActive(this.id.value),
+        this.settingsValues.orEmpty(),
+    )
+}
