@@ -43,3 +43,4 @@ class DmxFixtureSetting<T : DmxFixtureSettingValue>(
         return valuesByName[name] ?: throw Exception("No such value '$name'")
     }
 }
+

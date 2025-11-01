@@ -23,7 +23,7 @@ internal class TickerState(private val controller: ArtNetController, coroutineCo
     init {
         val currentValue = controller.currentValues[channelNo] ?: 0u
 
-        val valueChange = channelUpdatePayload.change.newValue - currentValue
+        val valueChange = channelUpdatePayload.change.newValue.toInt() - currentValue.toInt()
         val stepMs = channelUpdatePayload.change.fadeMs / numberOfSteps
 
         stepValue = valueChange.toDouble() / numberOfSteps

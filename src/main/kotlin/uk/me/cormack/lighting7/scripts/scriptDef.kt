@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.grpc.TrackDetails
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.Show
 import kotlin.script.experimental.annotations.KotlinScript
@@ -25,6 +26,7 @@ abstract class LightingScript(
     val sceneIsActive: Boolean,
     val settings: Map<String, String>,
     val coroutineScope: CoroutineScope,
+    val currentTrack: TrackDetails?,
 ) {
     fun controller(subnet: Int, universe: Int): DmxController = fixtures.controller(Universe(subnet, universe))
     inline fun <reified T: Fixture> fixture(key: String): T = fixtures.fixture(key)

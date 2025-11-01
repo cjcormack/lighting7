@@ -58,6 +58,8 @@ class State(val config: ApplicationConfig) {
             config.property("lighting.loadFixturesScriptName").getString(),
             config.property("lighting.initialSceneName").getString(),
             runLoopScriptName,
+
+            config.property("lighting.trackChangedScriptName").getString(),
             config.property("lighting.runLoop.delayMs").getString().toLong(),
         )
     }
