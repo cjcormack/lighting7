@@ -67,6 +67,8 @@ dependencies {
     implementation("com.google.protobuf:protobuf-kotlin:4.28.3")
 
     runtimeOnly("io.grpc:grpc-netty:1.68.0")
+
+    implementation("com.github.pireba:applescript:0.0.5")
 }
 
 protobuf {

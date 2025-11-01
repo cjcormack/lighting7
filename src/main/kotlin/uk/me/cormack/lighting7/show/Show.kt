@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.show
 
+import com.github.pireba.applescript.AppleScript
+import com.github.pireba.applescript.AppleScriptException
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ticker
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -87,6 +89,67 @@ class Show(
                 }
             }
         }
+
+        val slideCheckTicker = ticker(250)
+        GlobalScope.launch {
+            launch(newSingleThreadContext("SlideChecker")) {
+                val command = arrayOf(
+                    "tell application \"Keynote\"",
+                    "tell document 1",
+                    "    get current slide",
+                    "end tell",
+                    "end tell",
+                )
+                val script = AppleScript(*command)
+
+                var currentSlide: String? = null
+                var currentDocument: String? = null
+                var currentPlayerState: PlayerState = PlayerState.PAUSED
+
+                val regex = "(slide \\d+) of document id \"([A-Z0-9\\-]+)\" of application \"Keynote\"".toPattern()
+
+                while(coroutineContext.isActive) {
+                    select<Unit> {
+                        slideCheckTicker.onReceiveCatching {
+                            if (it.isClosed) {
+                                return@onReceiveCatching
+                            }
+
+                            var newSlide: String? = null
+                            var newDocument: String? = null
+                            var newPlayerState: PlayerState = PlayerState.PAUSED
+
+                            try {
+                                val result = script.executeAsString()
+                                val matcher = regex.matcher(result)
+                                if (matcher.matches()) {
+                                    if (matcher.group(2) == "E9C8BA64-2188-4C31-8579-26BC786AF401") {
+                                        newSlide = matcher.group(1)
+                                        newDocument = "Lighting Talk"
+                                        newPlayerState = PlayerState.PLAYING
+                                    }
+                                }
+                            } catch (e: AppleScriptException) {
+                                // ignored
+                            }
+
+                            if (newSlide != currentSlide || newDocument != currentDocument || newPlayerState != currentPlayerState) {
+                                currentSlide = newSlide
+                                currentDocument = newDocument
+                                currentPlayerState = newPlayerState
+
+                                trackChanged(trackDetails {
+                                    artist = newDocument ?: ""
+                                    title = newSlide ?: ""
+                                    playerState = newPlayerState
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
     }
 
     fun close() {
