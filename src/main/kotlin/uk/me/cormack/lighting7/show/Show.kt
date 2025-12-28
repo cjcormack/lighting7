@@ -9,6 +9,8 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.fx.MasterClock
 import uk.me.cormack.lighting7.grpc.*
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.scriptSettings.IntValue
@@ -39,6 +41,7 @@ class Show(
     val runLoopDelay: Long,
 ) {
     val fixtures = Fixtures()
+    val fxEngine = FxEngine(fixtures, MasterClock())
     private val scripts: MutableMap<String, Script> = mutableMapOf()
     private val scriptsLock = ReentrantLock()
 
@@ -67,6 +70,9 @@ class Show(
             e.printStackTrace()
         }
 
+        // Start the FX engine after fixtures are loaded
+        fxEngine.start(GlobalScope)
+
         if (runLoopScriptName != null) {
             GlobalScope.launch {
                 runShow(runLoopScriptName, runLoopDelay)
@@ -94,6 +100,7 @@ class Show(
     }
 
     fun close() {
+        fxEngine.stop()
     }
 
     private fun CoroutineScope.runShow(runLoopScriptName: String, delay: Long) {
@@ -350,6 +357,7 @@ class Show(
                 val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
                     providedProperties(Pair("show", show))
                     providedProperties(Pair("fixtures", fixturesWithTransaction))
+                    providedProperties(Pair("fxEngine", show.fxEngine))
                     providedProperties(Pair("scriptName", script.scriptName))
                     providedProperties(Pair("step", step))
                     providedProperties(Pair("sceneName", scene?.name ?: ""))

@@ -4,8 +4,6 @@ import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.ticker
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.ceil
-import kotlin.math.floor
 
 @OptIn(ObsoleteCoroutinesApi::class)
 internal class TickerState(private val controller: ArtNetController, coroutineContext: CoroutineContext, private val channelNo: Int, numberOfSteps: Int, channelUpdatePayload: ArtNetController.ChannelUpdatePayload) {
@@ -13,7 +11,7 @@ internal class TickerState(private val controller: ArtNetController, coroutineCo
 
     private val targetValue: UByte
     private val startValue: UByte
-    private val stepValue: Double
+    private val curve: EasingCurve
 
     private val startMs: Long
     private val fadeMs: Long
@@ -22,28 +20,19 @@ internal class TickerState(private val controller: ArtNetController, coroutineCo
 
     init {
         val currentValue = controller.currentValues[channelNo] ?: 0u
-
-        val valueChange = channelUpdatePayload.change.newValue.toInt() - currentValue.toInt()
         val stepMs = channelUpdatePayload.change.fadeMs / numberOfSteps
-
-        stepValue = valueChange.toDouble() / numberOfSteps
 
         startValue = currentValue
         lastSetValue = currentValue
 
         targetValue = channelUpdatePayload.change.newValue
+        curve = channelUpdatePayload.change.curve
         ticker = ticker(stepMs, context = coroutineContext)
         startMs = System.currentTimeMillis()
         fadeMs = channelUpdatePayload.change.fadeMs
     }
 
     suspend fun setValue(currentTickTimeMs: Long = System.currentTimeMillis() - startMs): Boolean {
-        val currentTickCount = if (currentTickTimeMs > 0) {
-            currentTickTimeMs / controller.fadeTickMs.toDouble()
-        } else {
-            1.0
-        }
-
         val hasFinished: Boolean
         val newValue: UByte
 
@@ -53,11 +42,10 @@ internal class TickerState(private val controller: ArtNetController, coroutineCo
             newValue = targetValue
         } else {
             hasFinished = false
-            newValue = if (stepValue > 0) {
-                floor(startValue.toFloat() + (currentTickCount * stepValue)).toInt().toUByte()
-            } else {
-                ceil(startValue.toFloat() + (currentTickCount * stepValue)).toInt().toUByte()
-            }
+            // Calculate progress as a ratio of elapsed time to total fade time
+            val progress = currentTickTimeMs.toDouble() / fadeMs.toDouble()
+            // Apply easing curve to interpolate between start and target values
+            newValue = curve.interpolate(startValue, targetValue, progress)
         }
 
         if (newValue != lastSetValue) {

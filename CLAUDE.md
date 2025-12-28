@@ -33,10 +33,12 @@ A professional stage/event lighting control system built in Kotlin using Ktor. C
 ```
 src/main/kotlin/uk/me/cormack/lighting7/
 ├── Application.kt          # Entry point
-├── dmx/                    # DMX/ArtNet controllers
+├── dmx/                    # DMX/ArtNet controllers, easing curves
 ├── fixture/                # Fixture abstractions
 │   ├── dmx/               # Specific DMX fixture types
 │   └── hue/               # Philips Hue integration
+├── fx/                     # FX (effects) system
+│   └── effects/           # Effect implementations
 ├── show/                   # Show orchestration & script runner
 ├── state/                  # Application state management
 ├── models/                 # Database entities (projects, scenes, scripts)
@@ -56,6 +58,7 @@ Fixtures represent physical lighting devices. They use trait-based composition:
 - `FixtureWithColour` - RGB color control
 - `FixtureWithStrobe` - strobe effects
 - `FixtureWithUv` - UV lighting
+- `FixtureWithPosition` - pan/tilt control for moving heads
 
 Add new fixtures in `fixture/dmx/` by extending the appropriate base classes and traits.
 
@@ -74,12 +77,41 @@ Lighting scripts use embedded Kotlin via `LightingScript` base class:
 - `ArtNetController` implements ArtNet protocol
 - `Universe` represents subnet + universe addressing
 - Use `ControllerTransaction` to batch channel updates with fades
+- `EasingCurve` enum provides curve types for smooth fades (sine, quad, cubic, step)
+
+### FX System
+Tempo-synchronized effects for continuous animations without complex scripts:
+- **MasterClock** - Global BPM reference (20-300 BPM), emits 24 ticks/beat
+- **FxEngine** - Processes active effects, applies to fixtures via transactions
+- **BeatDivision** - Timing constants (QUARTER, HALF, WHOLE, ONE_BAR, etc.)
+- **BlendMode** - How effects combine: OVERRIDE, ADDITIVE, MULTIPLY, MAX, MIN
+
+Effect types:
+- **Dimmer**: SineWave, Pulse, RampUp/Down, Triangle, Strobe, Flicker, Breathe
+- **Colour**: ColourCycle, RainbowCycle, ColourStrobe, ColourPulse, ColourFade
+- **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition
+
+Scripts can apply effects using extension functions:
+```kotlin
+fixture.applyDimmerFx(fxEngine, SineWave(), FxTiming(BeatDivision.HALF))
+fixture.applyColourFx(fxEngine, RainbowCycle(), FxTiming(BeatDivision.ONE_BAR))
+```
 
 ## API Endpoints
 
 - **REST API**: `http://localhost:8413/api/rest`
-- **WebSocket**: `ws://localhost:8413/ws`
+- **WebSocket**: `ws://localhost:8413/api`
 - **Swagger UI**: `http://localhost:8413/openapi`
+
+### FX REST Endpoints
+- `GET /api/rest/fx/clock/status` - Get BPM and clock state
+- `POST /api/rest/fx/clock/bpm` - Set BPM
+- `POST /api/rest/fx/clock/tap` - Tap tempo
+- `GET /api/rest/fx/active` - List active effects
+- `POST /api/rest/fx/add` - Add effect to fixture
+- `DELETE /api/rest/fx/{id}` - Remove effect
+- `POST /api/rest/fx/{id}/pause` / `resume` - Control effect
+- `GET /api/rest/fx/library` - Available effect types
 
 ### WebSocket Messages
 - `channelState` - DMX channel value updates
@@ -87,6 +119,11 @@ Lighting scripts use embedded Kotlin via `LightingScript` base class:
 - `sceneListChanged` - Scene list modifications
 - `updateChannel` - Direct channel control
 - `trackDetails` - Music track info
+- `fxState` - Request/receive FX state (BPM, active effects)
+- `setFxBpm` - Set tempo
+- `tapTempo` - Tap for tempo
+- `removeFx` / `pauseFx` / `resumeFx` / `clearFx` - Effect control
+- `fxChanged` - Broadcast on effect add/remove/update
 
 ## Database
 
@@ -110,6 +147,7 @@ Scripts extend `LightingScript` and have access to:
 - `fixtures` - Registry of all fixtures
 - `controller` - DMX controller
 - `show` - Show management
+- `fxEngine` - FX system with `masterClock`, `bpm`, `setBpm()`, `tapTempo()`
 - Coroutine scope for async operations
 
 ### Modifying REST API
@@ -135,3 +173,4 @@ For deeper technical details, see the docs in `docs/`:
 - [Scenes & Chases](docs/scenes-chases-engineering.md) - Scene recording, active tracking, chase execution
 - [WebSocket Protocol](docs/websocket-engineering.md) - Real-time client communication, message types, update flow
 - [Music Sync](docs/music-sync-engineering.md) - gRPC track notifications, script triggering, player state
+- [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes

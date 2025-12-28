@@ -19,6 +19,7 @@ fun Application.configureRouting(state: State) {
             routeApiRestLightsScript(state)
             routeApiRestLightsScene(state)
             routeApiRestLightsFixtures(state)
+            routeApiRestFx(state)
         }
 
         routeKotlinCompilerServer(state)
