@@ -12,6 +12,7 @@ import io.ktor.server.routing.*
 import io.ktor.server.routing.post as routingPost
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingList
@@ -385,6 +386,154 @@ internal fun Route.routeApiRestProjects(state: State) {
                 call.respond(HttpStatusCode.OK, response)
             }
         }
+
+        // POST /{id}/clone - Clone a project with all scripts and scenes
+        post<CloneProjectResource> { resource ->
+            val request = call.receive<CloneProjectRequest>()
+
+            val result = transaction(state.database) {
+                val sourceProject = DaoProject.findById(resource.id)
+                    ?: return@transaction null to "Source project not found"
+
+                // Check if name is already taken
+                val existingProject = DaoProject.find { DaoProjects.name eq request.name }.firstOrNull()
+                if (existingProject != null) {
+                    return@transaction null to "A project with name '${request.name}' already exists"
+                }
+
+                // Create new project
+                val newProject = DaoProject.new {
+                    name = request.name
+                    description = request.description ?: sourceProject.description
+                    isCurrent = false
+                    runLoopDelayMs = sourceProject.runLoopDelayMs
+                }
+
+                // Clone all scripts, maintaining ID mapping
+                val scriptIdMapping = mutableMapOf<Int, Int>() // old ID -> new ID
+                sourceProject.scripts.forEach { sourceScript ->
+                    val newScript = DaoScript.new {
+                        name = sourceScript.name
+                        script = sourceScript.script
+                        project = newProject
+                        settings = sourceScript.settings
+                    }
+                    scriptIdMapping[sourceScript.id.value] = newScript.id.value
+                }
+
+                // Clone all scenes, updating script FKs
+                val sceneIdMapping = mutableMapOf<Int, Int>() // old ID -> new ID
+                sourceProject.scenes.forEach { sourceScene ->
+                    val newScriptId = scriptIdMapping[sourceScene.script.id.value]
+                    val newScript = newScriptId?.let { DaoScript.findById(it) }
+                        ?: return@transaction null to "Failed to map scene script"
+
+                    val newScene = DaoScene.new {
+                        name = sourceScene.name
+                        script = newScript
+                        project = newProject
+                        mode = sourceScene.mode
+                        settingsValues = sourceScene.settingsValues
+                    }
+                    sceneIdMapping[sourceScene.id.value] = newScene.id.value
+                }
+
+                // Update project FK references to point to cloned entities
+                sourceProject.loadFixturesScriptId?.let { oldId ->
+                    newProject.loadFixturesScriptId = scriptIdMapping[oldId]
+                }
+                sourceProject.trackChangedScriptId?.let { oldId ->
+                    newProject.trackChangedScriptId = scriptIdMapping[oldId]
+                }
+                sourceProject.runLoopScriptId?.let { oldId ->
+                    newProject.runLoopScriptId = scriptIdMapping[oldId]
+                }
+                sourceProject.initialSceneId?.let { oldId ->
+                    newProject.initialSceneId = sceneIdMapping[oldId]
+                }
+
+                CloneProjectResponse(
+                    project = newProject.toDetailDto(),
+                    scriptsCloned = scriptIdMapping.size,
+                    scenesCloned = sceneIdMapping.size,
+                    message = "Project cloned successfully"
+                ) to null
+            }
+
+            val (response, error) = result
+            if (response != null) {
+                call.respond(HttpStatusCode.Created, response)
+            } else {
+                val statusCode = if (error == "Source project not found") {
+                    HttpStatusCode.NotFound
+                } else {
+                    HttpStatusCode.Conflict
+                }
+                call.respond(statusCode, ErrorResponse(error ?: "Unknown error"))
+            }
+        }
+
+        // POST /{id}/scripts/{scriptId}/copy - Copy a script to another project
+        post<CopyScriptResource> { resource ->
+            val request = call.receive<CopyScriptRequest>()
+
+            val result = transaction(state.database) {
+                // Find source project and script
+                val sourceProject = DaoProject.findById(resource.parent.id)
+                    ?: return@transaction null to "Source project not found"
+
+                val sourceScript = DaoScript.findById(resource.scriptId)
+                    ?: return@transaction null to "Script not found"
+
+                // Verify script belongs to source project
+                if (sourceScript.project.id != sourceProject.id) {
+                    return@transaction null to "Script does not belong to specified project"
+                }
+
+                // Find target project
+                val targetProject = DaoProject.findById(request.targetProjectId)
+                    ?: return@transaction null to "Target project not found"
+
+                // Determine script name (use provided name or source name)
+                val scriptName = request.newName ?: sourceScript.name
+
+                // Check for name conflict in target project
+                val existingScript = DaoScript.find {
+                    (DaoScripts.project eq targetProject.id) and (DaoScripts.name eq scriptName)
+                }.firstOrNull()
+                if (existingScript != null) {
+                    return@transaction null to "A script with name '$scriptName' already exists in target project"
+                }
+
+                // Create new script in target project
+                val newScript = DaoScript.new {
+                    name = scriptName
+                    script = sourceScript.script
+                    project = targetProject
+                    settings = sourceScript.settings
+                }
+
+                CopyScriptResponse(
+                    scriptId = newScript.id.value,
+                    scriptName = newScript.name,
+                    targetProjectId = targetProject.id.value,
+                    targetProjectName = targetProject.name,
+                    message = "Script copied successfully"
+                ) to null
+            }
+
+            val (response, error) = result
+            if (response != null) {
+                call.respond(HttpStatusCode.Created, response)
+            } else {
+                val statusCode = when (error) {
+                    "Source project not found", "Script not found", "Target project not found" -> HttpStatusCode.NotFound
+                    "Script does not belong to specified project" -> HttpStatusCode.BadRequest
+                    else -> HttpStatusCode.Conflict
+                }
+                call.respond(statusCode, ErrorResponse(error ?: "Unknown error"))
+            }
+        }
     }
 }
 
@@ -412,6 +561,12 @@ class CreateTrackChangedScriptResource
 
 @Resource("/current/create-run-loop-script")
 class CreateRunLoopScriptResource
+
+@Resource("/{id}/clone")
+data class CloneProjectResource(val id: Int)
+
+@Resource("/{scriptId}/copy")
+data class CopyScriptResource(val parent: ProjectScriptsResource, val scriptId: Int)
 
 // DTOs
 @Serializable
@@ -479,6 +634,35 @@ data class TemplateCreatedResponse(
     val scriptName: String,
     val sceneId: Int? = null,
     val sceneName: String? = null,
+    val message: String
+)
+
+@Serializable
+data class CloneProjectRequest(
+    val name: String,
+    val description: String? = null
+)
+
+@Serializable
+data class CloneProjectResponse(
+    val project: ProjectDetailDto,
+    val scriptsCloned: Int,
+    val scenesCloned: Int,
+    val message: String
+)
+
+@Serializable
+data class CopyScriptRequest(
+    val targetProjectId: Int,
+    val newName: String? = null
+)
+
+@Serializable
+data class CopyScriptResponse(
+    val scriptId: Int,
+    val scriptName: String,
+    val targetProjectId: Int,
+    val targetProjectName: String,
     val message: String
 )
 
