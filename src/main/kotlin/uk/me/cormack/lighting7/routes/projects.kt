@@ -256,7 +256,7 @@ data class SetCurrentProjectResource(val id: Int)
 @Resource("/{id}/scripts")
 data class ProjectScriptsResource(val id: Int)
 
-@Resource("/{id}/scripts/{scriptId}")
+@Resource("/{scriptId}")
 data class ProjectScriptResource(val parent: ProjectScriptsResource, val scriptId: Int)
 
 @Resource("/{id}/scenes")
