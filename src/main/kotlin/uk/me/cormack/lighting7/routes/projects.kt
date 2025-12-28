@@ -243,6 +243,148 @@ internal fun Route.routeApiRestProjects(state: State) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
             }
         }
+
+        // POST /current/create-initial-scene - Create initial scene template (script + scene)
+        post<CreateInitialSceneResource> {
+            val result = transaction(state.database) {
+                val project = state.projectManager.currentProject
+
+                // Check if initial scene already exists
+                if (project.initialSceneId != null) {
+                    val existingScene = DaoScene.findById(project.initialSceneId!!)
+                    if (existingScene != null) {
+                        return@transaction TemplateCreatedResponse(
+                            scriptId = existingScene.script.id.value,
+                            scriptName = existingScene.script.name,
+                            sceneId = existingScene.id.value,
+                            sceneName = existingScene.name,
+                            message = "Initial scene already exists"
+                        ) to false
+                    }
+                }
+
+                // Create the script
+                val script = DaoScript.new {
+                    name = "initial-scene"
+                    script = INITIAL_SCENE_SCRIPT_TEMPLATE
+                    this.project = project
+                    settings = ScriptSettingList(emptyList())
+                }
+
+                // Create the scene referencing the script
+                val scene = DaoScene.new {
+                    name = "Initial"
+                    this.script = script
+                    this.project = project
+                    mode = Mode.SCENE
+                    settingsValues = emptyMap()
+                }
+
+                // Update project to reference this scene
+                project.initialSceneId = scene.id.value
+
+                TemplateCreatedResponse(
+                    scriptId = script.id.value,
+                    scriptName = script.name,
+                    sceneId = scene.id.value,
+                    sceneName = scene.name,
+                    message = "Initial scene created successfully"
+                ) to true
+            }
+
+            val (response, created) = result
+            if (created) {
+                call.respond(HttpStatusCode.Created, response)
+            } else {
+                call.respond(HttpStatusCode.OK, response)
+            }
+        }
+
+        // POST /current/create-track-changed-script - Create track changed script template
+        post<CreateTrackChangedScriptResource> {
+            val result = transaction(state.database) {
+                val project = state.projectManager.currentProject
+
+                // Check if track changed script already exists
+                if (project.trackChangedScriptId != null) {
+                    val existingScript = DaoScript.findById(project.trackChangedScriptId!!)
+                    if (existingScript != null) {
+                        return@transaction TemplateCreatedResponse(
+                            scriptId = existingScript.id.value,
+                            scriptName = existingScript.name,
+                            message = "Track changed script already exists"
+                        ) to false
+                    }
+                }
+
+                // Create the script
+                val script = DaoScript.new {
+                    name = "track-changed"
+                    script = TRACK_CHANGED_SCRIPT_TEMPLATE
+                    this.project = project
+                    settings = ScriptSettingList(emptyList())
+                }
+
+                // Update project to reference this script
+                project.trackChangedScriptId = script.id.value
+
+                TemplateCreatedResponse(
+                    scriptId = script.id.value,
+                    scriptName = script.name,
+                    message = "Track changed script created successfully"
+                ) to true
+            }
+
+            val (response, created) = result
+            if (created) {
+                call.respond(HttpStatusCode.Created, response)
+            } else {
+                call.respond(HttpStatusCode.OK, response)
+            }
+        }
+
+        // POST /current/create-run-loop-script - Create run loop script template
+        post<CreateRunLoopScriptResource> {
+            val result = transaction(state.database) {
+                val project = state.projectManager.currentProject
+
+                // Check if run loop script already exists
+                if (project.runLoopScriptId != null) {
+                    val existingScript = DaoScript.findById(project.runLoopScriptId!!)
+                    if (existingScript != null) {
+                        return@transaction TemplateCreatedResponse(
+                            scriptId = existingScript.id.value,
+                            scriptName = existingScript.name,
+                            message = "Run loop script already exists"
+                        ) to false
+                    }
+                }
+
+                // Create the script
+                val script = DaoScript.new {
+                    name = "run-loop"
+                    script = RUN_LOOP_SCRIPT_TEMPLATE
+                    this.project = project
+                    settings = ScriptSettingList(emptyList())
+                }
+
+                // Update project to reference this script
+                project.runLoopScriptId = script.id.value
+
+                TemplateCreatedResponse(
+                    scriptId = script.id.value,
+                    scriptName = script.name,
+                    message = "Run loop script created successfully"
+                ) to true
+            }
+
+            val (response, created) = result
+            if (created) {
+                call.respond(HttpStatusCode.Created, response)
+            } else {
+                call.respond(HttpStatusCode.OK, response)
+            }
+        }
     }
 }
 
@@ -261,6 +403,15 @@ data class ProjectScriptResource(val parent: ProjectScriptsResource, val scriptI
 
 @Resource("/{id}/scenes")
 data class ProjectScenesResource(val id: Int)
+
+@Resource("/current/create-initial-scene")
+class CreateInitialSceneResource
+
+@Resource("/current/create-track-changed-script")
+class CreateTrackChangedScriptResource
+
+@Resource("/current/create-run-loop-script")
+class CreateRunLoopScriptResource
 
 // DTOs
 @Serializable
@@ -322,6 +473,15 @@ data class SceneSummaryDto(
     val scriptName: String
 )
 
+@Serializable
+data class TemplateCreatedResponse(
+    val scriptId: Int,
+    val scriptName: String,
+    val sceneId: Int? = null,
+    val sceneName: String? = null,
+    val message: String
+)
+
 // ErrorResponse is defined in lightFx.kt
 
 private enum class DeleteResult { SUCCESS, NOT_FOUND, IS_CURRENT }
@@ -366,5 +526,52 @@ private const val LOAD_FIXTURES_TEMPLATE = """// Register your fixtures here
 //     createGroup<RgbParFixture>("front-pars") {
 //         addSpread(listOf(par1, par2), panSpread = 60.0)
 //     }
+// }
+"""
+
+private const val INITIAL_SCENE_SCRIPT_TEMPLATE = """// Initial scene script - sets fixture states when the project loads
+// This script runs once at startup to establish baseline lighting
+// Example:
+//
+// fixtures.all<FixtureWithDimmer>().forEach { fixture ->
+//     fixture.dimmer = 0.0  // Start with all lights off
+// }
+//
+// fixtures.byKey<RgbParFixture>("par-1")?.let { par ->
+//     par.dimmer = 0.5
+//     par.colour = Colour.WARM_WHITE
+// }
+"""
+
+private const val TRACK_CHANGED_SCRIPT_TEMPLATE = """// Track changed script - runs when the music track changes
+// Use this to synchronize lighting with music playback
+// Available context:
+//   trackName: String? - Name of the current track
+//   artistName: String? - Artist name
+//   albumName: String? - Album name
+//   artworkUrl: String? - URL to album artwork
+//   isPlaying: Boolean - Whether music is currently playing
+// Example:
+//
+// if (isPlaying) {
+//     // React to new track
+//     fixtures.all<FixtureWithDimmer>().forEach { it.dimmer = 0.8 }
+// } else {
+//     // Music paused/stopped
+//     fixtures.all<FixtureWithDimmer>().forEach { it.dimmer = 0.2 }
+// }
+"""
+
+private const val RUN_LOOP_SCRIPT_TEMPLATE = """// Run loop script - executes continuously during the show
+// Use this for ongoing effects or reactive lighting
+// The loop runs at the interval configured in runLoopDelayMs (default: 100ms)
+// Example:
+//
+// // Use the FX engine for tempo-synced effects
+// val bpm = fxEngine.bpm
+//
+// // Or implement custom timing logic
+// fixtures.all<FixtureWithColour>().forEach { fixture ->
+//     // Your effect logic here
 // }
 """
