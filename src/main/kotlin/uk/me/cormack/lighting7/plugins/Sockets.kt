@@ -213,6 +213,28 @@ data class GroupFxClearedOutMessage(
     val removedCount: Int
 ) : OutMessage()
 
+// Project-related messages
+
+@Serializable
+@SerialName("projectState")
+data object ProjectStateInMessage : InMessage()
+
+@Serializable
+@SerialName("projectState")
+data class ProjectStateOutMessage(
+    val projectId: Int,
+    val projectName: String,
+    val description: String?
+) : OutMessage()
+
+@Serializable
+@SerialName("projectChanged")
+data class ProjectChangedOutMessage(
+    val previousProjectId: Int?,
+    val newProjectId: Int,
+    val newProjectName: String
+) : OutMessage()
+
 class SocketConnection(val session: WebSocketServerSession) {
     companion object {
         val lastId = AtomicInteger(0)
@@ -310,6 +332,26 @@ fun Application.configureSockets(state: State) {
                 }
                 .launchIn(this)
 
+            // Track current fixtures for listener re-registration on project change
+            var currentFixtures = state.show.fixtures
+
+            // Subscribe to project changes
+            val projectChangeJob = state.projectManager.projectChangedFlow
+                .onEach { event ->
+                    // Unregister listener from old fixtures and register on new
+                    currentFixtures.unregisterListener(listener)
+                    currentFixtures = state.show.fixtures
+                    currentFixtures.registerListener(listener)
+
+                    // Broadcast project change
+                    sendSerialized<OutMessage>(ProjectChangedOutMessage(
+                        previousProjectId = event.previousProjectId,
+                        newProjectId = event.newProjectId,
+                        newProjectName = event.newProjectName
+                    ))
+                }
+                .launchIn(this)
+
             try {
                 for (frame in incoming) {
                     when (val message = converter?.deserialize<InMessage>(frame)) {
@@ -389,13 +431,24 @@ fun Application.configureSockets(state: State) {
                             }
                         }
 
+                        // Project-related message handlers
+                        is ProjectStateInMessage -> {
+                            val project = state.projectManager.currentProject
+                            sendSerialized<OutMessage>(ProjectStateOutMessage(
+                                projectId = project.id.value,
+                                projectName = project.name,
+                                description = project.description
+                            ))
+                        }
+
                         null -> TODO()
                     }
                 }
             } finally {
                 connections -= thisConnection
                 fxStateJob.cancel()
-                state.show.fixtures.unregisterListener(listener)
+                projectChangeJob.cancel()
+                currentFixtures.unregisterListener(listener)
             }
         }
     }

@@ -14,8 +14,21 @@ import uk.me.cormack.lighting7.show.Show
 
 class State(val config: ApplicationConfig) {
     val database = initDatabase()
-    val show = initShow()
+    val projectManager = ProjectManager(config, database) { this }
     val music = initMusic()
+
+    /**
+     * Delegate show access through ProjectManager.
+     * The show is only available after initializeShow() is called.
+     */
+    val show: Show get() = projectManager.show
+
+    /**
+     * Initialize the show through the project manager.
+     * This finds (or migrates) the current project from the database and creates the Show.
+     * Must be called explicitly after State construction.
+     */
+    fun initializeShow(): Show = projectManager.initialize()
 
     private fun initDatabase(): Database {
         val url = config.property("postgres.url").getString()
@@ -35,33 +48,14 @@ class State(val config: ApplicationConfig) {
         )
 
         transaction(database) {
+            // Create tables - order matters for FK constraints
+            // DaoProjects now includes all columns (FK columns as plain integers)
             SchemaUtils.createMissingTablesAndColumns(DaoProjects)
             SchemaUtils.createMissingTablesAndColumns(DaoScripts)
             SchemaUtils.createMissingTablesAndColumns(DaoScenes)
         }
 
         return database
-    }
-
-    private fun initShow(): Show {
-        val runLoopEnabled = config.property("lighting.runLoop.enabled").getString().toBoolean()
-
-        val runLoopScriptName = if (runLoopEnabled) {
-            config.property("lighting.runLoop.scriptName").getString()
-        } else {
-            null
-        }
-
-        return Show(
-            this,
-            config.property("lighting.projectName").getString(),
-            config.property("lighting.loadFixturesScriptName").getString(),
-            config.property("lighting.initialSceneName").getString(),
-            runLoopScriptName,
-
-            config.property("lighting.trackChangedScriptName").getString(),
-            config.property("lighting.runLoop.delayMs").getString().toLong(),
-        )
     }
 
     private fun initMusic(): Music {

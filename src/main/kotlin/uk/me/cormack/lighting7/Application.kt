@@ -31,7 +31,10 @@ fun Application.module() {
     configureRouting(state)
 
     launch {
-        state.show.start()
+        // Initialize the show through the project manager
+        // This finds or migrates the current project from the database
+        val show = state.initializeShow()
+        show.start()
 
         GlobalScope.launch {
             val port = 50051

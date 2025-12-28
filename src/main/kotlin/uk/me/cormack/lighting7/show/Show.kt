@@ -33,9 +33,9 @@ import kotlin.time.measureTime
 @OptIn(DelicateCoroutinesApi::class, ObsoleteCoroutinesApi::class, ExperimentalCoroutinesApi::class)
 class Show(
     val state: State,
-    val projectName: String,
+    val project: DaoProject,
     val loadFixturesScriptName: String,
-    val initialSceneName: String,
+    val initialSceneName: String?,
     val runLoopScriptName: String?,
     val trackChangedScriptName: String?,
     val runLoopDelay: Long,
@@ -56,16 +56,12 @@ class Show(
     private var currentTrack: TrackDetails? = null
     private val currentTrackLock = ReentrantReadWriteLock()
 
-    val project = transaction(state.database) {
-        DaoProject.find {
-            DaoProjects.name eq projectName
-        }.first()
-    }
-
     fun start() {
         try {
             evalScriptByName(loadFixturesScriptName)
-            runScene(initialSceneName)
+            if (initialSceneName != null) {
+                runScene(initialSceneName)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -99,7 +95,20 @@ class Show(
         }
     }
 
+    /**
+     * Stop all running scenes.
+     */
+    fun stopAllScenes() {
+        runningScenesLock.write {
+            runningScenes.values.forEach { runner ->
+                runner.stop()
+            }
+            runningScenes.clear()
+        }
+    }
+
     fun close() {
+        stopAllScenes()
         fxEngine.stop()
     }
 
