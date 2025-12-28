@@ -8,6 +8,7 @@ import kotlinx.coroutines.selects.select
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 
+@OptIn(DelicateCoroutinesApi::class, ObsoleteCoroutinesApi::class, ExperimentalCoroutinesApi::class)
 class ArtNetController(override val universe: Universe, val address: String? = null, val needsRefresh: Boolean = false): DmxController {
     internal val fadeTickMs = 10
 

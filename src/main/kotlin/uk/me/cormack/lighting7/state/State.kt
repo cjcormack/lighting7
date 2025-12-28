@@ -50,9 +50,10 @@ class State(val config: ApplicationConfig) {
         transaction(database) {
             // Create tables - order matters for FK constraints
             // DaoProjects now includes all columns (FK columns as plain integers)
-            SchemaUtils.createMissingTablesAndColumns(DaoProjects)
-            SchemaUtils.createMissingTablesAndColumns(DaoScripts)
-            SchemaUtils.createMissingTablesAndColumns(DaoScenes)
+            // Note: createMissingTablesAndColumns is deprecated in favor of migration tools,
+            // but is acceptable for this development/personal project setup
+            @Suppress("DEPRECATION")
+            SchemaUtils.createMissingTablesAndColumns(DaoProjects, DaoScripts, DaoScenes)
         }
 
         return database
