@@ -69,10 +69,12 @@ class Show(
         // Start the FX engine after fixtures are loaded
         fxEngine.start(GlobalScope)
 
-        if (runLoopScriptName != null) {
+        if (runLoopScriptName != null && scriptExists(runLoopScriptName)) {
             GlobalScope.launch {
                 runShow(runLoopScriptName, runLoopDelay)
             }
+        } else if (runLoopScriptName != null) {
+            println("Run-loop script '$runLoopScriptName' not found, skipping run loop")
         }
 
         val pingTicker = ticker(5_000)
@@ -241,13 +243,22 @@ class Show(
         }
     }
 
-    fun evalScriptByName(scriptName: String, step: Int = 0): ScriptResult {
+    fun scriptExists(scriptName: String): Boolean {
+        return transaction(state.database) {
+            DaoScript.find {
+                (DaoScripts.name eq scriptName) and
+                (DaoScripts.project eq project.id)
+            }.firstOrNull() != null
+        }
+    }
+
+    fun evalScriptByName(scriptName: String, step: Int = 0): ScriptResult? {
         val scriptData = transaction(state.database) {
             DaoScript.find {
                 (DaoScripts.name eq scriptName) and
                 (DaoScripts.project eq project.id)
-            }.first()
-        }
+            }.firstOrNull()
+        } ?: return null
 
         val script = script(scriptName, scriptData.script, scriptData.settings?.list.orEmpty())
 
