@@ -12,21 +12,21 @@ Both are stored in the database and associated with a script. The difference is 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                            REST API / UI                                │
-│                                                                         │
-│   POST /scene/{id}/run  ─────────────────────────────────────────────┐ │
-│                                                                       │ │
-└───────────────────────────────────────────────────────────────────────┼─┘
-                                                                        │
-                                                                        ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                            REST API / UI                                  │
+│                                                                           │
+│   POST /scene/{id}/run  ─────────────────────────────────────────────┐    │
+│                                                                      │    │
+└──────────────────────────────────────────────────────────────────────┼────┘
+                                                                       │
+                                                                       ▼
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                                 Show                                      │
 │                                                                           │
 │   runScene(id)                                                            │
 │       │                                                                   │
 │       ▼                                                                   │
-│   ┌─────────────────────────────────────────────────────────────────┐    │
+│   ┌──────────────────────────────────────────────────────────────────┐    │
 │   │                       ScriptRunner                               │    │
 │   │                                                                  │    │
 │   │   1. Load scene from database                                    │    │
@@ -35,15 +35,15 @@ Both are stored in the database and associated with a script. The difference is 
 │   │   4. Apply transaction (DMX output)                              │    │
 │   │   5. Record based on mode:                                       │    │
 │   │                                                                  │    │
-│   │      ┌─────────────────┐     ┌─────────────────────────┐        │    │
-│   │      │   Mode.SCENE    │     │      Mode.CHASE         │        │    │
-│   │      │                 │     │                         │        │    │
-│   │      │ recordScene()   │     │ recordChaseStart()      │        │    │
-│   │      │ (channel values)│     │ (mark as running)       │        │    │
-│   │      │                 │     │ ...script runs...       │        │    │
-│   │      │                 │     │ recordChaseStop()       │        │    │
-│   │      └─────────────────┘     └─────────────────────────┘        │    │
-│   └─────────────────────────────────────────────────────────────────┘    │
+│   │      ┌─────────────────┐     ┌─────────────────────────┐         │    │
+│   │      │   Mode.SCENE    │     │      Mode.CHASE         │         │    │
+│   │      │                 │     │                         │         │    │
+│   │      │ recordScene()   │     │ recordChaseStart()      │         │    │
+│   │      │ (channel values)│     │ (mark as running)       │         │    │
+│   │      │                 │     │ ...script runs...       │         │    │
+│   │      │                 │     │ recordChaseStop()       │         │    │
+│   │      └─────────────────┘     └─────────────────────────┘         │    │
+│   └──────────────────────────────────────────────────────────────────┘    │
 │                                                                           │
 └───────────────────────────────────────────────────────────────────────────┘
                                         │
@@ -51,17 +51,17 @@ Both are stored in the database and associated with a script. The difference is 
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                              Fixtures                                     │
 │                                                                           │
-│   ┌─────────────────────────────────────────────────────────────────┐    │
-│   │                    Active Scene Tracking                         │    │
-│   │                                                                  │    │
-│   │   activeScenes: Map<sceneId, Map<Universe, Map<channelNo, value>>>   │
-│   │   activeChases: Map<sceneId, Boolean>                            │    │
-│   │                                                                  │    │
-│   │   When channel values change:                                    │    │
-│   │     → Check if any activeScene values no longer match            │    │
-│   │     → Remove from activeScenes if mismatch                       │    │
-│   │     → Notify listeners (sceneChanged)                            │    │
-│   └─────────────────────────────────────────────────────────────────┘    │
+│   ┌────────────────────────────────────────────────────────────────────┐  │
+│   │                    Active Scene Tracking                           │  │
+│   │                                                                    │  │
+│   │  activeScenes: Map<sceneId, Map<Universe, Map<channelNo, value>>>  │  │
+│   │  activeChases: Map<sceneId, Boolean>                               │  │
+│   │                                                                    │  │
+│   │  When channel values change:                                       │  │
+│   │    → Check if any activeScene values no longer match               │  │
+│   │    → Remove from activeScenes if mismatch                          │  │
+│   │    → Notify listeners (sceneChanged)                               │  │
+│   └────────────────────────────────────────────────────────────────────┘  │
 │                                                                           │
 └───────────────────────────────────────────────────────────────────────────┘
 ```

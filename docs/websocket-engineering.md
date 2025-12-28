@@ -25,33 +25,33 @@ The WebSocket API provides:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           Frontend (React)                              │
 │                                                                         │
-│   ┌─────────────────────────────────────────────────────────────────┐  │
-│   │                    WebSocket Client                              │  │
-│   │                                                                  │  │
-│   │  Send: ping, channelState, updateChannel, universesState        │  │
-│   │  Receive: channelState, sceneListChanged, sceneChanged, etc.    │  │
-│   └─────────────────────────────────────────────────────────────────┘  │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    WebSocket Client                             │   │
+│   │                                                                 │   │
+│   │  Send: ping, channelState, updateChannel, universesState        │   │
+│   │  Receive: channelState, sceneListChanged, sceneChanged, etc.    │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────┬───────────────────────────────────────┘
                                   │ WebSocket
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         Ktor WebSocket Handler                          │
 │                                                                         │
-│   ┌───────────────────────────────────────────────────────────────┐    │
-│   │                    SocketConnection                            │    │
-│   │                   (per-client session)                         │    │
-│   │                                                                │    │
-│   │   ┌─────────────────────────────────────────────────────────┐ │    │
-│   │   │              FixturesChangeListener                      │ │    │
-│   │   │                                                          │ │    │
-│   │   │  channelsChanged() ──────► ChannelStateOutMessage       │ │    │
-│   │   │  controllersChanged() ───► UniversesStateOutMessage     │ │    │
-│   │   │  fixturesChanged() ──────► FixturesChangedOutMessage    │ │    │
-│   │   │  sceneListChanged() ─────► ScenesListChangedOutMessage  │ │    │
-│   │   │  sceneChanged(id) ───────► ScenesChangedOutMessage      │ │    │
-│   │   │  trackChanged() ─────────► TrackChangedOutMessage       │ │    │
-│   │   └─────────────────────────────────────────────────────────┘ │    │
-│   └───────────────────────────────────────────────────────────────┘    │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    SocketConnection                             │   │
+│   │                   (per-client session)                          │   │
+│   │                                                                 │   │
+│   │   ┌──────────────────────────────────────────────────────────┐  │   │
+│   │   │              FixturesChangeListener                      │  │   │
+│   │   │                                                          │  │   │
+│   │   │  channelsChanged() ──────► ChannelStateOutMessage        │  │   │
+│   │   │  controllersChanged() ───► UniversesStateOutMessage      │  │   │
+│   │   │  fixturesChanged() ──────► FixturesChangedOutMessage     │  │   │
+│   │   │  sceneListChanged() ─────► ScenesListChangedOutMessage   │  │   │
+│   │   │  sceneChanged(id) ───────► ScenesChangedOutMessage       │  │   │
+│   │   │  trackChanged() ─────────► TrackChangedOutMessage        │  │   │
+│   │   └──────────────────────────────────────────────────────────┘  │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │   connections: Set<SocketConnection>                                    │
 └─────────────────────────────────────────────────────────────────────────┘

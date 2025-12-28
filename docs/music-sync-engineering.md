@@ -21,14 +21,14 @@ The music sync system uses gRPC to receive track change notifications from an ex
 │                           TrackServer                                   │
 │                         (port 50051)                                    │
 │                                                                         │
-│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   ┌──────────────────────────────────────────────────────────────────┐  │
 │   │                    TrackDetailsService                           │  │
 │   │                                                                  │  │
-│   │   NotifyCurrentTrack(TrackDetails) ──────► show.trackChanged()  │  │
+│   │   NotifyCurrentTrack(TrackDetails) ──────► show.trackChanged()   │  │
 │   │                                                                  │  │
-│   │   PlayerStateNotifier() ◄──────────────── show.trackStateFlow   │  │
-│   │   (streaming response)                    (PING, HANDSHAKE)     │  │
-│   └─────────────────────────────────────────────────────────────────┘  │
+│   │   PlayerStateNotifier() ◄──────────────── show.trackStateFlow    │  │
+│   │   (streaming response)                    (PING, HANDSHAKE)      │  │
+│   └──────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────┬───────────────────────────────────────┘
                                   │
                                   ▼
