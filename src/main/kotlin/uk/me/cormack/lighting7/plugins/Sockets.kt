@@ -14,6 +14,7 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.models.DaoScene
 import uk.me.cormack.lighting7.routes.SceneDetails
@@ -161,6 +162,55 @@ data class FxStateOutMessage(
 data class FxChangedOutMessage(
     val changeType: String,  // "added", "removed", "updated", "cleared"
     val effectId: Long? = null
+) : OutMessage()
+
+// Group-related messages
+
+@Serializable
+@SerialName("groupsState")
+data object GroupsStateInMessage : InMessage()
+
+@Serializable
+@SerialName("groupsState")
+data class GroupsStateOutMessage(
+    val groups: List<GroupSummary>
+) : OutMessage()
+
+@Serializable
+data class GroupSummary(
+    val name: String,
+    val memberCount: Int,
+    val capabilities: List<String>
+)
+
+@Serializable
+@SerialName("addGroupFx")
+data class AddGroupFxInMessage(
+    val groupName: String,
+    val effectType: String,
+    val propertyName: String,
+    val beatDivision: Double = 1.0,
+    val blendMode: String = "OVERRIDE",
+    val distribution: String = "LINEAR",
+    val phaseOffset: Double = 0.0
+) : InMessage()
+
+@Serializable
+@SerialName("groupFxAdded")
+data class GroupFxAddedOutMessage(
+    val groupName: String,
+    val effectIds: List<Long>
+) : OutMessage()
+
+@Serializable
+@SerialName("clearGroupFx")
+data class ClearGroupFxInMessage(val groupName: String) : InMessage()
+
+@Serializable
+@SerialName("groupFxCleared")
+data class GroupFxClearedOutMessage(
+    val groupName: String,
+    val removedCount: Int
 ) : OutMessage()
 
 class SocketConnection(val session: WebSocketServerSession) {
@@ -319,6 +369,26 @@ fun Application.configureSockets(state: State) {
                             // This is a simplified handler - complex effect creation should use REST
                         }
 
+                        // Group-related message handlers
+                        is GroupsStateInMessage -> {
+                            sendSerialized<OutMessage>(buildGroupsStateMessage(state))
+                        }
+                        is AddGroupFxInMessage -> {
+                            // Note: For adding group effects via WebSocket, use REST API instead
+                            // The REST API provides more complete error handling
+                        }
+                        is ClearGroupFxInMessage -> {
+                            try {
+                                val group = state.show.fixtures.untypedGroup(message.groupName)
+                                val count = group.sumOf {
+                                    state.show.fxEngine.removeEffectsForFixture(it.fixture.key)
+                                }
+                                sendSerialized<OutMessage>(GroupFxClearedOutMessage(message.groupName, count))
+                            } catch (e: Exception) {
+                                // Group not found - ignore
+                            }
+                        }
+
                         null -> TODO()
                     }
                 }
@@ -347,4 +417,31 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
         isClockRunning = state.show.fxEngine.masterClock.isRunning.value,
         activeEffects = effectStates
     )
+}
+
+private fun buildGroupsStateMessage(state: State): GroupsStateOutMessage {
+    val groups = state.show.fixtures.groups.map { group ->
+        val capabilities = mutableListOf<String>()
+        if (group.isNotEmpty()) {
+            val first = group.first().fixture
+            if (first is FixtureWithDimmer && group.all { it.fixture is FixtureWithDimmer }) {
+                capabilities.add("dimmer")
+            }
+            if (first is FixtureWithColour<*> && group.all { it.fixture is FixtureWithColour<*> }) {
+                capabilities.add("colour")
+            }
+            if (first is FixtureWithPosition && group.all { it.fixture is FixtureWithPosition }) {
+                capabilities.add("position")
+            }
+            if (first is FixtureWithUv && group.all { it.fixture is FixtureWithUv }) {
+                capabilities.add("uv")
+            }
+        }
+        GroupSummary(
+            name = group.name,
+            memberCount = group.size,
+            capabilities = capabilities
+        )
+    }
+    return GroupsStateOutMessage(groups)
 }

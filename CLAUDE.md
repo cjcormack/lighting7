@@ -36,9 +36,11 @@ src/main/kotlin/uk/me/cormack/lighting7/
 ├── dmx/                    # DMX/ArtNet controllers, easing curves
 ├── fixture/                # Fixture abstractions
 │   ├── dmx/               # Specific DMX fixture types
+│   ├── group/             # Fixture group system
 │   └── hue/               # Philips Hue integration
 ├── fx/                     # FX (effects) system
-│   └── effects/           # Effect implementations
+│   ├── effects/           # Effect implementations
+│   └── group/             # Group FX distribution
 ├── show/                   # Show orchestration & script runner
 ├── state/                  # Application state management
 ├── models/                 # Database entities (projects, scenes, scripts)
@@ -97,6 +99,37 @@ fixture.applyDimmerFx(fxEngine, SineWave(), FxTiming(BeatDivision.HALF))
 fixture.applyColourFx(fxEngine, RainbowCycle(), FxTiming(BeatDivision.ONE_BAR))
 ```
 
+### Fixture Groups
+Type-safe fixture groups for treating multiple fixtures as a single unit:
+- **FixtureGroup<T>** - Generic group with compile-time type safety
+- **GroupMember** - Fixture wrapper with position and metadata (pan/tilt offsets, tags)
+- **DistributionStrategy** - Phase distribution patterns (LINEAR, UNIFIED, CENTER_OUT, etc.)
+- **MultiElementFixture** - Support for fixtures with multiple controllable elements
+
+Creating groups in registration scripts:
+```kotlin
+fixtures.register {
+    val hex1 = addFixture(HexFixture(universe, "hex-1", "Hex 1", 1, 1))
+    val hex2 = addFixture(HexFixture(universe, "hex-2", "Hex 2", 13, 2))
+
+    createGroup<HexFixture>("front-wash") {
+        addSpread(listOf(hex1, hex2), panSpread = 60.0)
+        configure(symmetricMode = SymmetricMode.MIRROR)
+    }
+}
+```
+
+Applying effects to groups:
+```kotlin
+val group = fixtures.group<HexFixture>("front-wash")
+
+// Chase effect with linear distribution
+group.applyDimmerFx(fxEngine, Pulse(), distribution = DistributionStrategy.LINEAR)
+
+// Unified colour across all fixtures
+group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrategy.UNIFIED)
+```
+
 ## API Endpoints
 
 - **REST API**: `http://localhost:8413/api/rest`
@@ -113,6 +146,13 @@ fixture.applyColourFx(fxEngine, RainbowCycle(), FxTiming(BeatDivision.ONE_BAR))
 - `POST /api/rest/fx/{id}/pause` / `resume` - Control effect
 - `GET /api/rest/fx/library` - Available effect types
 
+### Group REST Endpoints
+- `GET /api/rest/groups` - List all fixture groups
+- `GET /api/rest/groups/{name}` - Get group details with members
+- `POST /api/rest/groups/{name}/fx` - Apply effect to group
+- `DELETE /api/rest/groups/{name}/fx` - Clear all effects for group
+- `GET /api/rest/groups/distribution-strategies` - List distribution strategies
+
 ### WebSocket Messages
 - `channelState` - DMX channel value updates
 - `universesState` - Available DMX universes
@@ -124,6 +164,9 @@ fixture.applyColourFx(fxEngine, RainbowCycle(), FxTiming(BeatDivision.ONE_BAR))
 - `tapTempo` - Tap for tempo
 - `removeFx` / `pauseFx` / `resumeFx` / `clearFx` - Effect control
 - `fxChanged` - Broadcast on effect add/remove/update
+- `groupsState` - Request/receive fixture groups state
+- `clearGroupFx` - Clear all effects for a group
+- `groupFxCleared` - Confirmation of group effect removal
 
 ## Database
 
@@ -174,3 +217,4 @@ For deeper technical details, see the docs in `docs/`:
 - [WebSocket Protocol](docs/websocket-engineering.md) - Real-time client communication, message types, update flow
 - [Music Sync](docs/music-sync-engineering.md) - gRPC track notifications, script triggering, player state
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes
+- [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, multi-element fixtures

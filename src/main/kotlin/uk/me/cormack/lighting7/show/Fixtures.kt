@@ -2,6 +2,8 @@ package uk.me.cormack.lighting7.show
 
 import uk.me.cormack.lighting7.dmx.*
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.group.FixtureGroup
+import uk.me.cormack.lighting7.fixture.group.GroupBuilder
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -22,6 +24,7 @@ class Fixtures {
 
     private val fixtureRegister: MutableMap<String, Fixture> = mutableMapOf()
     private val fixturesByGroup: MutableMap<String, MutableList<Fixture>> = mutableMapOf()
+    private val groupRegister: MutableMap<String, FixtureGroup<*>> = mutableMapOf()
 
     private val activeScenesLock = ReentrantReadWriteLock()
     private val activeScenes = mutableMapOf<Int, Map<Universe, Map<Int, UByte>>>()
@@ -29,7 +32,7 @@ class Fixtures {
 
     private val changeListeners: MutableList<FixturesChangeListener> = mutableListOf()
 
-    class FixturesWithTransaction(private val baseFixtures: Fixtures, val transaction: ControllerTransaction) {
+    class FixturesWithTransaction(@PublishedApi internal val baseFixtures: Fixtures, val transaction: ControllerTransaction) {
         val controllers: List<DmxController> get () = baseFixtures.controllers
         val fixtures: List<Fixture> get() = baseFixtures.fixtures.map { it.withTransaction(transaction) }
 
@@ -46,6 +49,21 @@ class Fixtures {
         }
 
         fun fixtureGroup(groupName: String): List<Fixture> = baseFixtures.fixtureGroup(groupName).map { it.withTransaction(transaction) }
+
+        /**
+         * Get all registered typed fixture groups.
+         */
+        val groups: List<FixtureGroup<*>> get() = baseFixtures.groups.map { it.withTransaction(transaction) }
+
+        /**
+         * Get a typed fixture group by name (untyped version).
+         */
+        fun untypedGroup(name: String): FixtureGroup<*> = baseFixtures.untypedGroup(name).withTransaction(transaction)
+
+        /**
+         * Get a typed fixture group by name.
+         */
+        inline fun <reified T : Fixture> group(name: String): FixtureGroup<T> = baseFixtures.group<T>(name).withTransaction(transaction)
 
         fun register(removeUnused: Boolean = true, block: FixtureRegisterer.() -> Unit) = baseFixtures.register(removeUnused, block)
     }
@@ -78,6 +96,30 @@ class Fixtures {
 
     fun fixtureGroup(groupName: String): List<Fixture> = registerLock.read {
         checkNotNull(fixturesByGroup[groupName]) { "Fixture group '$groupName' not found" }.toList()
+    }
+
+    /**
+     * Get all registered typed fixture groups.
+     */
+    val groups: List<FixtureGroup<*>> get() = registerLock.read {
+        groupRegister.values.toList()
+    }
+
+    /**
+     * Get a typed fixture group by name (untyped version).
+     */
+    fun untypedGroup(name: String): FixtureGroup<*> = registerLock.read {
+        checkNotNull(groupRegister[name]) { "Fixture group '$name' not found" }
+    }
+
+    /**
+     * Get a typed fixture group by name.
+     *
+     * @throws IllegalStateException if the group doesn't exist or doesn't match the type
+     */
+    inline fun <reified T : Fixture> group(name: String): FixtureGroup<T> {
+        val group = untypedGroup(name)
+        return group.requireCapable()
     }
 
     fun recordScene(sceneId: Int, changeDetails: Map<Universe, Map<Int, UByte>>) {
@@ -130,6 +172,16 @@ class Fixtures {
     interface FixtureRegisterer {
         fun addController(controller: DmxController): DmxController
         fun <T: Fixture> addFixture(fixture: T, vararg fixtureGroups: String): T
+
+        /**
+         * Register a typed fixture group.
+         */
+        fun <T : Fixture> addGroup(group: FixtureGroup<T>): FixtureGroup<T>
+
+        /**
+         * Create and register a typed fixture group using a DSL builder.
+         */
+        fun <T : Fixture> createGroup(name: String, block: GroupBuilder<T>.() -> Unit): FixtureGroup<T>
     }
 
     fun register(removeUnused: Boolean = true, block: FixtureRegisterer.() -> Unit) {
@@ -158,6 +210,16 @@ class Fixtures {
 
                 return fixture
             }
+
+            override fun <T : Fixture> addGroup(group: FixtureGroup<T>): FixtureGroup<T> {
+                groupRegister[group.name] = group
+                return group
+            }
+
+            override fun <T : Fixture> createGroup(name: String, block: GroupBuilder<T>.() -> Unit): FixtureGroup<T> {
+                val group = GroupBuilder<T>(name).apply(block).build()
+                return addGroup(group)
+            }
         }
 
         registerLock.write {
@@ -171,6 +233,7 @@ class Fixtures {
                 controllerRegister.clear()
                 fixtureRegister.clear()
                 fixturesByGroup.clear()
+                groupRegister.clear()
                 activeScenes.clear()
                 activeChases.clear()
             }

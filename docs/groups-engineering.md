@@ -1,0 +1,366 @@
+# Fixture Groups Engineering Documentation
+
+This document describes the type-safe fixture group system for treating multiple fixtures as a single unit.
+
+## Overview
+
+The fixture group system provides:
+- **Type-safe groups**: Compile-time enforcement of fixture capabilities
+- **Position-aware members**: Each fixture has a position within the group for effect distribution
+- **Distribution strategies**: Various patterns for distributing effect phases across group members
+- **Multi-element support**: Fixtures with multiple controllable elements (e.g., quad moving head bars)
+
+## Architecture
+
+### Core Components
+
+```
+fixture/group/
+├── GroupMember.kt           # Member wrapper with metadata
+├── FixtureGroup.kt          # Type-safe group class
+├── GroupBuilder.kt          # DSL for group construction
+└── MultiElementFixture.kt   # Multi-element fixture support
+
+fx/group/
+├── DistributionStrategy.kt  # Phase distribution strategies
+└── GroupFxExtensions.kt     # Extension functions for group effects
+```
+
+### Type System
+
+Groups are parameterized by fixture type:
+
+```kotlin
+class FixtureGroup<T : Fixture>
+```
+
+This enables compile-time type checking:
+
+```kotlin
+// Type-safe: only HexFixture methods available
+val group: FixtureGroup<HexFixture> = ...
+group.fixtures.forEach { it.dimmer.value = 255u }
+
+// Type narrowing for capability checks
+val dimmerGroup: FixtureGroup<FixtureWithDimmer>? = group.asCapable()
+```
+
+## Group Members
+
+Each fixture in a group is wrapped in `GroupMember`:
+
+```kotlin
+data class GroupMember<T : Fixture>(
+    val fixture: T,
+    val index: Int,               // 0-based position in group
+    val normalizedPosition: Double, // 0.0 to 1.0
+    val metadata: MemberMetadata
+)
+
+data class MemberMetadata(
+    val panOffset: Double = 0.0,       // Pan center offset (degrees)
+    val tiltOffset: Double = 0.0,      // Tilt center offset (degrees)
+    val symmetricInvert: Boolean = false, // Invert for mirror effects
+    val tags: Set<String> = emptySet()   // Filtering tags
+)
+```
+
+## Creating Groups
+
+### Using the DSL Builder
+
+```kotlin
+fixtures.register {
+    val hex1 = addFixture(HexFixture(universe, "hex-1", "Hex 1", 1, 1))
+    val hex2 = addFixture(HexFixture(universe, "hex-2", "Hex 2", 13, 2))
+    val hex3 = addFixture(HexFixture(universe, "hex-3", "Hex 3", 25, 3))
+    val hex4 = addFixture(HexFixture(universe, "hex-4", "Hex 4", 37, 4))
+
+    // Create group with spread pan offsets
+    createGroup<HexFixture>("front-wash") {
+        addSpread(listOf(hex1, hex2, hex3, hex4), panSpread = 120.0)
+        configure(symmetricMode = SymmetricMode.MIRROR)
+    }
+
+    // Or add individually with custom metadata
+    createGroup<HexFixture>("stage-left") {
+        add(hex1, panOffset = -60.0)
+        add(hex2, panOffset = -30.0, tags = setOf("inner"))
+    }
+}
+```
+
+### Standalone Groups
+
+```kotlin
+val myGroup = fixtureGroup<HexFixture>("my-group") {
+    addAll(hex1, hex2, hex3)
+}
+```
+
+## Distribution Strategies
+
+Distribution strategies determine how effect phases are distributed across group members:
+
+| Strategy | Description |
+|----------|-------------|
+| `LINEAR` | Evenly spaced phases (chase effect) |
+| `UNIFIED` | All fixtures same phase (synchronized) |
+| `CENTER_OUT` | Effects radiate from center |
+| `EDGES_IN` | Effects converge to center |
+| `REVERSE` | Reverse linear order |
+| `SPLIT` | Left/right halves mirror each other |
+| `PING_PONG` | Back-and-forth sweep |
+| `RANDOM(seed)` | Deterministic random offsets |
+| `POSITIONAL` | Based on normalized position |
+| `CUSTOM(fn)` | Lambda-based calculation |
+
+### Example Usage
+
+```kotlin
+val group = fixtures.group<HexFixture>("front-wash")
+
+// Chase effect - each fixture offset
+group.applyDimmerFx(
+    fxEngine,
+    Pulse(),
+    distribution = DistributionStrategy.LINEAR
+)
+
+// Synchronized colour - all same
+group.applyColourFx(
+    fxEngine,
+    RainbowCycle(),
+    distribution = DistributionStrategy.UNIFIED
+)
+
+// Center-out dimmer effect
+group.applyDimmerFx(
+    fxEngine,
+    SineWave(),
+    distribution = DistributionStrategy.CENTER_OUT
+)
+```
+
+## Group FX Extensions
+
+Extension functions provide type-safe effect application:
+
+```kotlin
+// Single effect type
+fun <T> FixtureGroup<T>.applyDimmerFx(...): List<Long>
+    where T : Fixture, T : FixtureWithDimmer
+
+fun <T> FixtureGroup<T>.applyColourFx(...): List<Long>
+    where T : Fixture, T : FixtureWithColour<*>
+
+fun <T> FixtureGroup<T>.applyPositionFx(...): List<Long>
+    where T : Fixture, T : FixtureWithPosition
+
+fun <T> FixtureGroup<T>.applyUvFx(...): List<Long>
+    where T : Fixture, T : FixtureWithUv
+
+// Clear all effects for group
+fun FixtureGroup<*>.clearFx(engine: FxEngine): Int
+```
+
+### DSL Builder for Multiple Effects
+
+```kotlin
+group.fx(fxEngine) {
+    dimmer<HexFixture>(
+        Pulse(),
+        beatDivision = BeatDivision.QUARTER,
+        distribution = DistributionStrategy.LINEAR
+    )
+    colour<HexFixture>(
+        RainbowCycle(),
+        beatDivision = BeatDivision.ONE_BAR,
+        distribution = DistributionStrategy.UNIFIED
+    )
+}
+```
+
+## Group Manipulation
+
+Groups support various filtering and transformation operations:
+
+```kotlin
+val group = fixtures.group<HexFixture>("front-wash")
+
+// Get subsets
+val left = group.leftHalf()
+val right = group.rightHalf()
+val center = group.center(margin = 0.25)
+val edges = group.edges(margin = 0.25)
+
+// Filter by predicate
+val evens = group.everyNth(2, offset = 0)
+val tagged = group.withTags("inner", "front")
+
+// Transform
+val reversed = group.reversed()
+val (leftSplit, rightSplit) = group.splitAt(0.5)
+
+// Type narrowing
+val positionGroup: FixtureGroup<FixtureWithPosition>? = group.asCapable()
+```
+
+## Multi-Element Fixtures
+
+Fixtures with multiple controllable elements implement `MultiElementFixture`:
+
+```kotlin
+interface FixtureElement<P : Fixture> {
+    val parentFixture: P
+    val elementIndex: Int
+    val elementKey: String
+}
+
+interface MultiElementFixture<E : FixtureElement<*>> {
+    val elements: List<E>
+    val elementCount: Int
+}
+```
+
+### Example: QuadMoverBarFixture
+
+```kotlin
+@FixtureType("quad-mover-bar")
+class QuadMoverBarFixture(...) : DmxFixture(...),
+    FixtureWithDimmer,
+    MultiElementFixture<QuadMoverBarFixture.Head>
+{
+    inner class Head(override val elementIndex: Int) :
+        Fixture(...),
+        FixtureElement<QuadMoverBarFixture>,
+        FixtureWithDimmer,
+        FixtureWithColour<DmxFixtureColour>,
+        FixtureWithPosition
+    {
+        override val parentFixture get() = this@QuadMoverBarFixture
+        // ... implement traits
+    }
+
+    override val elements = (0 until 4).map { Head(it) }
+    override val dimmer = DmxFixtureSlider(...)  // Master dimmer
+}
+```
+
+### Adding Elements to Groups
+
+```kotlin
+val quadBar = addFixture(QuadMoverBarFixture(...))
+
+// Add all heads as separate group members
+createGroup<FixtureWithPosition>("all-heads") {
+    addElements(quadBar, panSpread = 60.0)
+}
+
+// Apply chase across individual heads
+fixtures.group<FixtureWithPosition>("all-heads").applyPositionFx(
+    fxEngine,
+    Circle(),
+    distribution = DistributionStrategy.LINEAR
+)
+```
+
+## REST API
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/rest/groups` | List all groups |
+| GET | `/api/rest/groups/{name}` | Get group details |
+| POST | `/api/rest/groups/{name}/fx` | Apply effect to group |
+| DELETE | `/api/rest/groups/{name}/fx` | Clear group effects |
+| GET | `/api/rest/groups/distribution-strategies` | List strategies |
+
+### Request/Response Examples
+
+**List Groups:**
+```json
+GET /api/rest/groups
+
+[
+  {
+    "name": "front-wash",
+    "memberCount": 4,
+    "capabilities": ["dimmer", "colour", "uv"],
+    "symmetricMode": "MIRROR",
+    "defaultDistribution": "LINEAR"
+  }
+]
+```
+
+**Add Group Effect:**
+```json
+POST /api/rest/groups/front-wash/fx
+{
+  "effectType": "pulse",
+  "propertyName": "dimmer",
+  "beatDivision": 1.0,
+  "blendMode": "OVERRIDE",
+  "distribution": "LINEAR",
+  "parameters": {
+    "min": "0",
+    "max": "255"
+  }
+}
+
+Response:
+{
+  "effectIds": [1001, 1002, 1003, 1004]
+}
+```
+
+## WebSocket Messages
+
+### Inbound (Client → Server)
+
+| Message | Description |
+|---------|-------------|
+| `groupsState` | Request current groups state |
+| `clearGroupFx` | Clear all effects for a group |
+
+### Outbound (Server → Client)
+
+| Message | Description |
+|---------|-------------|
+| `groupsState` | Groups list with capabilities |
+| `groupFxCleared` | Confirmation of effect removal |
+
+## Symmetric Modes
+
+Groups can be configured with symmetric effect behavior:
+
+| Mode | Description |
+|------|-------------|
+| `NONE` | No symmetry |
+| `MIRROR` | Left/right halves mirror each other |
+| `CENTER_OUT` | Effects radiate from center |
+| `EDGES_IN` | Effects converge to center |
+
+These modes work with the `symmetricInvert` member metadata to automatically invert effect directions for symmetric positioning.
+
+## Transaction Support
+
+Groups integrate with the transaction system:
+
+```kotlin
+val transaction = controller.startTransaction(fadeMs = 1000)
+
+val group = fixtures.withTransaction(transaction).group<HexFixture>("front-wash")
+group.fixtures.forEach { it.dimmer.value = 255u }
+
+transaction.commit()
+```
+
+## Best Practices
+
+1. **Use specific types**: Create groups with the most specific type possible for better type safety
+2. **Name groups descriptively**: Use names that indicate location/purpose (e.g., "front-wash", "back-movers")
+3. **Configure pan/tilt offsets**: For position effects, set member offsets based on physical fixture positions
+4. **Use distribution strategies**: Choose appropriate strategies for the desired visual effect
+5. **Clear effects before new ones**: Call `clearFx()` before applying new effects to avoid accumulation
