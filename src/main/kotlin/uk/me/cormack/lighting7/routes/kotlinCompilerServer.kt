@@ -12,7 +12,6 @@ import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.util.pipeline.*
 import uk.me.cormack.lighting7.state.State
 
 val kotlinCompilerServerClient = HttpClient(CIO) {
@@ -43,14 +42,15 @@ private fun Route.handleKotlinCompilerServerRequest() {
         val action = call.parameters["action"]
         if (action == "run") {
             // TODO handle locally and create a compatible response
-            proxyKotlinCompileServerRequest(path)
+            proxyKotlinCompileServerRequest(call, path)
         } else {
-            proxyKotlinCompileServerRequest(path)
+            proxyKotlinCompileServerRequest(call, path)
         }
     }
 }
 
-private suspend fun PipelineContext<Unit, ApplicationCall>.proxyKotlinCompileServerRequest(
+private suspend fun proxyKotlinCompileServerRequest(
+    call: RoutingCall,
     path: String,
 ) {
     val requestBody = call.receive<ByteArray>()

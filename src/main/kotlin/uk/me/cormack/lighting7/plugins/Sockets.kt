@@ -22,8 +22,8 @@ import uk.me.cormack.lighting7.routes.details
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingValue
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.state.State
-import java.time.Duration
 import java.util.*
+import kotlin.time.Duration.Companion.seconds
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.LinkedHashSet
 
@@ -244,8 +244,8 @@ class SocketConnection(val session: WebSocketServerSession) {
 
 fun Application.configureSockets(state: State) {
     install(WebSockets) {
-        pingPeriod = Duration.ofSeconds(15)
-        timeout = Duration.ofSeconds(15)
+        pingPeriod = 15.seconds
+        timeout = 15.seconds
         maxFrameSize = Long.MAX_VALUE
         masking = false
         contentConverter = KotlinxWebsocketSerializationConverter(Json)

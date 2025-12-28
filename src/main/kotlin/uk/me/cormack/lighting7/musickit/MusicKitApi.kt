@@ -11,16 +11,16 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.core.*
-import kotlinx.datetime.Clock
-import kotlinx.datetime.toJavaInstant
 import kotlinx.serialization.json.Json
 import java.security.KeyFactory
 import java.security.interfaces.ECKey
 import java.security.spec.PKCS8EncodedKeySpec
 import java.util.*
 import kotlin.text.toByteArray
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.toJavaInstant
 
 class MusicKitApi(private val issuer: String, private val keyId: String, private val secret: String) : Closeable {
     private val client: HttpClient
