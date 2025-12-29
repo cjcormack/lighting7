@@ -159,7 +159,7 @@ internal fun List<ScriptDiagnostic>.toMessages(): List<ScriptRunMessage> = filte
 }
 
 internal fun ResultWithDiagnostics<*>.isSuccess(): Boolean {
-    return this.valueOrNull() == true
+    return this.valueOrNull() != null
 }
 
 fun ScriptResult.toCompileResult(): CompileResult {
