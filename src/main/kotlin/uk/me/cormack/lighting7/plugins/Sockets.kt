@@ -296,7 +296,7 @@ fun Application.configureSockets(state: State) {
                     launch {
                         val sceneDetails = transaction(state.database) {
                             val scene = DaoScene.findById(id) ?: throw Error("Scene not found")
-                            scene.details(state.show)
+                            scene.details(state.show, isCurrentProject = true) // WebSocket broadcasts are always for current project
                         }
 
                         sendSerialized<OutMessage>(ScenesChangedOutMessage(sceneDetails))

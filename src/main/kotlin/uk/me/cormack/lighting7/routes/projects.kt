@@ -12,11 +12,35 @@ import io.ktor.server.routing.*
 import io.ktor.server.routing.post as routingPost
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingList
 import uk.me.cormack.lighting7.state.State
+
+/**
+ * Resolves a project ID string to a DaoProject.
+ * Supports both numeric IDs and the "current" keyword.
+ *
+ * @return The resolved DaoProject or null if not found
+ */
+internal fun State.resolveProject(projectIdStr: String): DaoProject? {
+    return transaction(database) {
+        if (projectIdStr.equals("current", ignoreCase = true)) {
+            projectManager.currentProject
+        } else {
+            projectIdStr.toIntOrNull()?.let { DaoProject.findById(it) }
+        }
+    }
+}
+
+/**
+ * Checks if the given project is the current active project.
+ */
+internal fun State.isCurrentProject(project: DaoProject): Boolean {
+    return transaction(database) {
+        project.id == projectManager.currentProject.id
+    }
+}
 
 internal fun Route.routeApiRestProjects(state: State) {
     route("/project") {
@@ -171,74 +195,9 @@ internal fun Route.routeApiRestProjects(state: State) {
             }
         }
 
-        // GET /{id}/scripts - List scripts for any project (read-only)
-        get<ProjectScriptsResource> { resource ->
-            val scripts = transaction(state.database) {
-                val project = DaoProject.findById(resource.id)
-                    ?: return@transaction null
-
-                project.scripts.toList().map { script ->
-                    ScriptSummaryDto(
-                        id = script.id.value,
-                        name = script.name,
-                        settingsCount = script.settings?.list?.size ?: 0
-                    )
-                }
-            }
-
-            if (scripts != null) {
-                call.respond(scripts)
-            } else {
-                call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            }
-        }
-
-        // GET /{id}/scripts/{scriptId} - Get specific script from any project (read-only)
-        get<ProjectScriptResource> { resource ->
-            val script = transaction(state.database) {
-                val project = DaoProject.findById(resource.parent.id)
-                    ?: return@transaction null
-
-                val script = DaoScript.findById(resource.scriptId)
-                    ?: return@transaction null
-
-                // Verify script belongs to this project
-                if (script.project.id != project.id) {
-                    return@transaction null
-                }
-
-                script.toScriptDetails()
-            }
-
-            if (script != null) {
-                call.respond(script)
-            } else {
-                call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
-            }
-        }
-
-        // GET /{id}/scenes - List scenes for any project (read-only)
-        get<ProjectScenesResource> { resource ->
-            val scenes = transaction(state.database) {
-                val project = DaoProject.findById(resource.id)
-                    ?: return@transaction null
-
-                project.scenes.toList().map { scene ->
-                    SceneSummaryDto(
-                        id = scene.id.value,
-                        name = scene.name,
-                        mode = scene.mode.name,
-                        scriptName = scene.script.name
-                    )
-                }
-            }
-
-            if (scenes != null) {
-                call.respond(scenes)
-            } else {
-                call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            }
-        }
+        // Script and Scene endpoints are defined in separate files
+        routeApiRestProjectScripts(state)
+        routeApiRestProjectScenes(state)
 
         // POST /current/create-initial-scene - Create initial scene template (script + scene)
         post<CreateInitialSceneResource> {
@@ -467,68 +426,6 @@ internal fun Route.routeApiRestProjects(state: State) {
                 call.respond(statusCode, ErrorResponse(error ?: "Unknown error"))
             }
         }
-
-        // POST /{id}/scripts/{scriptId}/copy - Copy a script to another project
-        post<CopyScriptResource> { resource ->
-            val request = call.receive<CopyScriptRequest>()
-
-            val result = transaction(state.database) {
-                // Find source project and script
-                val sourceProject = DaoProject.findById(resource.parent.id)
-                    ?: return@transaction null to "Source project not found"
-
-                val sourceScript = DaoScript.findById(resource.scriptId)
-                    ?: return@transaction null to "Script not found"
-
-                // Verify script belongs to source project
-                if (sourceScript.project.id != sourceProject.id) {
-                    return@transaction null to "Script does not belong to specified project"
-                }
-
-                // Find target project
-                val targetProject = DaoProject.findById(request.targetProjectId)
-                    ?: return@transaction null to "Target project not found"
-
-                // Determine script name (use provided name or source name)
-                val scriptName = request.newName ?: sourceScript.name
-
-                // Check for name conflict in target project
-                val existingScript = DaoScript.find {
-                    (DaoScripts.project eq targetProject.id) and (DaoScripts.name eq scriptName)
-                }.firstOrNull()
-                if (existingScript != null) {
-                    return@transaction null to "A script with name '$scriptName' already exists in target project"
-                }
-
-                // Create new script in target project
-                val newScript = DaoScript.new {
-                    name = scriptName
-                    script = sourceScript.script
-                    project = targetProject
-                    settings = sourceScript.settings
-                }
-
-                CopyScriptResponse(
-                    scriptId = newScript.id.value,
-                    scriptName = newScript.name,
-                    targetProjectId = targetProject.id.value,
-                    targetProjectName = targetProject.name,
-                    message = "Script copied successfully"
-                ) to null
-            }
-
-            val (response, error) = result
-            if (response != null) {
-                call.respond(HttpStatusCode.Created, response)
-            } else {
-                val statusCode = when (error) {
-                    "Source project not found", "Script not found", "Target project not found" -> HttpStatusCode.NotFound
-                    "Script does not belong to specified project" -> HttpStatusCode.BadRequest
-                    else -> HttpStatusCode.Conflict
-                }
-                call.respond(statusCode, ErrorResponse(error ?: "Unknown error"))
-            }
-        }
     }
 }
 
@@ -538,15 +435,6 @@ data class ProjectIdResource(val id: Int)
 
 @Resource("/{id}/set-current")
 data class SetCurrentProjectResource(val id: Int)
-
-@Resource("/{id}/scripts")
-data class ProjectScriptsResource(val id: Int)
-
-@Resource("/{scriptId}")
-data class ProjectScriptResource(val parent: ProjectScriptsResource, val scriptId: Int)
-
-@Resource("/{id}/scenes")
-data class ProjectScenesResource(val id: Int)
 
 @Resource("/current/create-initial-scene")
 class CreateInitialSceneResource
@@ -559,9 +447,6 @@ class CreateRunLoopScriptResource
 
 @Resource("/{id}/clone")
 data class CloneProjectResource(val id: Int)
-
-@Resource("/{scriptId}/copy")
-data class CopyScriptResource(val parent: ProjectScriptsResource, val scriptId: Int)
 
 // DTOs
 @Serializable
@@ -609,21 +494,6 @@ data class UpdateProjectRequest(
 )
 
 @Serializable
-data class ScriptSummaryDto(
-    val id: Int,
-    val name: String,
-    val settingsCount: Int
-)
-
-@Serializable
-data class SceneSummaryDto(
-    val id: Int,
-    val name: String,
-    val mode: String,
-    val scriptName: String
-)
-
-@Serializable
 data class TemplateCreatedResponse(
     val scriptId: Int,
     val scriptName: String,
@@ -643,21 +513,6 @@ data class CloneProjectResponse(
     val project: ProjectDetailDto,
     val scriptsCloned: Int,
     val scenesCloned: Int,
-    val message: String
-)
-
-@Serializable
-data class CopyScriptRequest(
-    val targetProjectId: Int,
-    val newName: String? = null
-)
-
-@Serializable
-data class CopyScriptResponse(
-    val scriptId: Int,
-    val scriptName: String,
-    val targetProjectId: Int,
-    val targetProjectName: String,
     val message: String
 )
 

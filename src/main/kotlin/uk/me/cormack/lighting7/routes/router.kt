@@ -17,8 +17,6 @@ fun Application.configureRouting(state: State) {
     routing {
         route("/api/rest") {
             routeApiRestProjects(state)
-            routeApiRestLightsScript(state)
-            routeApiRestLightsScene(state)
             routeApiRestLightsFixtures(state)
             routeApiRestFx(state)
             routeApiRestGroups(state)
