@@ -12,7 +12,11 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
+import io.ktor.http.*
+import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.DaoScript
+import uk.me.cormack.lighting7.models.Mode
 import uk.me.cormack.lighting7.scriptSettings.ScriptSetting
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingList
 import uk.me.cormack.lighting7.show.ScriptResult
@@ -27,14 +31,7 @@ internal fun Route.routeApiRestLightsScript(state: State) {
     route("/script") {
         get("/list") {
             val scripts = transaction(state.database) {
-                state.show.project.scripts.toList().map {
-                    ScriptDetails(
-                        it.id.value,
-                        it.name,
-                        it.script,
-                        it.settings?.list.orEmpty(),
-                    )
-                }
+                state.show.project.scripts.toList().map { it.toScriptDetails() }
             }
             call.respond(scripts)
         }
@@ -65,65 +62,118 @@ internal fun Route.routeApiRestLightsScript(state: State) {
 
         post {
             val newScript = call.receive<NewScript>()
-            val script = transaction(state.database) {
+            val scriptDetails = transaction(state.database) {
                 DaoScript.new {
                     name = newScript.name
                     script = newScript.script
                     project = state.show.project
                     settings = ScriptSettingList(newScript.settings.orEmpty())
-                }
+                }.toScriptDetails()
             }
-            call.respond(ScriptDetails(
-                script.id.value,
-                script.name,
-                script.script,
-                script.settings?.list.orEmpty(),
-            ))
+            call.respond(scriptDetails)
         }
 
         get<ScriptResource> {
-            val script = transaction(state.database) {
-                DaoScript.findById(it.id)
+            val scriptDetails = transaction(state.database) {
+                DaoScript.findById(it.id)?.toScriptDetails()
             }
-            if (script != null) {
-                call.respond(ScriptDetails(
-                    script.id.value,
-                    script.name,
-                    script.script,
-                    script.settings?.list.orEmpty(),
-                ))
+            if (scriptDetails != null) {
+                call.respond(scriptDetails)
             }
         }
 
         put<ScriptResource> {
-            val newScriptDetails = call.receive<NewScript>()
-            val script = transaction(state.database) {
+            val newScriptData = call.receive<NewScript>()
+            val scriptDetails = transaction(state.database) {
                 val script = DaoScript.findById(it.id) ?: throw Error("Script not found")
-                script.name = newScriptDetails.name
-                script.script = newScriptDetails.script
-                script.settings = ScriptSettingList(newScriptDetails.settings.orEmpty())
-
-                script
+                script.name = newScriptData.name
+                script.script = newScriptData.script
+                script.settings = ScriptSettingList(newScriptData.settings.orEmpty())
+                script.toScriptDetails()
             }
-            call.respond(ScriptDetails(
-                script.id.value,
-                script.name,
-                script.script,
-                script.settings?.list.orEmpty(),
-            ))
+            call.respond(scriptDetails)
         }
 
         delete<ScriptResource> {
-            transaction(state.database) {
-                DaoScript.findById(it.id)?.delete()
+            val result = transaction(state.database) {
+                val script = DaoScript.findById(it.id)
+                    ?: return@transaction ScriptDeleteResult.NOT_FOUND
+
+                // Check if used as loadFixturesScript (required, cannot delete)
+                val usedAsLoadFixtures = DaoProject.find {
+                    DaoProjects.loadFixturesScriptId eq script.id.value
+                }.count() > 0
+
+                if (usedAsLoadFixtures) {
+                    return@transaction ScriptDeleteResult.BLOCKED_REQUIRED_PROPERTY
+                }
+
+                // Nullify optional project properties
+                DaoProject.find { DaoProjects.trackChangedScriptId eq script.id.value }
+                    .forEach { it.trackChangedScriptId = null }
+                DaoProject.find { DaoProjects.runLoopScriptId eq script.id.value }
+                    .forEach { it.runLoopScriptId = null }
+
+                // Cascade delete scenes
+                script.scenes.forEach { it.delete() }
+
+                // Delete the script
+                script.delete()
+                ScriptDeleteResult.SUCCESS
             }
-            call.respond("")
+
+            when (result) {
+                ScriptDeleteResult.NOT_FOUND -> call.respond(HttpStatusCode.NotFound)
+                ScriptDeleteResult.BLOCKED_REQUIRED_PROPERTY -> call.respond(
+                    HttpStatusCode.Conflict,
+                    DeleteErrorResponse("Script is used as loadFixturesScript and cannot be deleted")
+                )
+                ScriptDeleteResult.SUCCESS -> call.respond(HttpStatusCode.OK)
+            }
         }
     }
 }
 
 @Resource("/{id}")
 data class ScriptResource(val id: Int)
+
+internal fun DaoScript.toScriptDetails(): ScriptDetails {
+    val allScenes = this.scenes.toList()
+    val sceneNames = allScenes.filter { it.mode == Mode.SCENE }.map { it.name }
+    val chaseNames = allScenes.filter { it.mode == Mode.CHASE }.map { it.name }
+
+    val usedByProperties = mutableListOf<String>()
+    val isLoadFixtures = DaoProject.find { DaoProjects.loadFixturesScriptId eq this@toScriptDetails.id.value }.count() > 0
+    if (isLoadFixtures) usedByProperties.add("loadFixturesScript")
+    if (DaoProject.find { DaoProjects.trackChangedScriptId eq this@toScriptDetails.id.value }.count() > 0) {
+        usedByProperties.add("trackChangedScript")
+    }
+    if (DaoProject.find { DaoProjects.runLoopScriptId eq this@toScriptDetails.id.value }.count() > 0) {
+        usedByProperties.add("runLoopScript")
+    }
+
+    val canDelete = !isLoadFixtures
+    val cannotDeleteReason = if (isLoadFixtures) "Script is used as loadFixturesScript (required)" else null
+
+    return ScriptDetails(
+        id = this.id.value,
+        name = this.name,
+        script = this.script,
+        settings = this.settings?.list.orEmpty(),
+        sceneNames = sceneNames,
+        chaseNames = chaseNames,
+        usedByProperties = usedByProperties,
+        canDelete = canDelete,
+        cannotDeleteReason = cannotDeleteReason,
+    )
+}
+
+private enum class ScriptDeleteResult {
+    SUCCESS, NOT_FOUND, BLOCKED_REQUIRED_PROPERTY
+}
+
+@Serializable
+data class DeleteErrorResponse(val error: String)
 
 @Serializable
 data class ScriptLiteral(val script: String, val settings: List<ScriptSetting<*>>? = null)
@@ -137,6 +187,11 @@ data class ScriptDetails(
     val name: String,
     val script: String,
     val settings: List<ScriptSetting<*>>,
+    val sceneNames: List<String>,
+    val chaseNames: List<String>,
+    val usedByProperties: List<String>,
+    val canDelete: Boolean,
+    val cannotDeleteReason: String? = null,
 )
 
 @Serializable

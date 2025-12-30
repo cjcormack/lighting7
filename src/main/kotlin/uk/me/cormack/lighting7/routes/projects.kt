@@ -207,12 +207,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                     return@transaction null
                 }
 
-                ScriptDetails(
-                    id = script.id.value,
-                    name = script.name,
-                    script = script.script,
-                    settings = script.settings?.list.orEmpty()
-                )
+                script.toScriptDetails()
             }
 
             if (script != null) {
