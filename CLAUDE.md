@@ -185,6 +185,29 @@ Key tables:
 3. Implement required traits (Dimmer, Colour, etc.)
 4. Use `@FixtureProperty` to annotate controllable properties
 
+### Multi-Mode Fixtures
+Some fixtures support multiple DMX channel modes (set via DIP switches). Use the sealed class pattern:
+- `DmxChannelMode` - Interface for mode definitions with `channelCount` and `modeName`
+- `MultiModeFixtureFamily<M>` - Marker interface associating fixture with its mode
+
+**Pattern:**
+```kotlin
+sealed class MyFixture(...) : DmxFixture(...), MultiModeFixtureFamily<MyFixture.Mode> {
+    enum class Mode(override val channelCount: Int, override val modeName: String) : DmxChannelMode {
+        MODE_6CH(6, "6-Channel"),
+        MODE_12CH(12, "12-Channel")
+    }
+
+    @FixtureType("my-fixture-6ch")
+    class Mode6Ch(...) : MyFixture(...), FixtureWithDimmer { ... }
+
+    @FixtureType("my-fixture-12ch")
+    class Mode12Ch(...) : MyFixture(...), FixtureWithDimmer, MultiElementFixture<Head> { ... }
+}
+```
+
+**Example:** `SlenderBeamBarQuadFixture` - 4-head LED bar with 5 modes (1/6/12/14/27 channel)
+
 ### Writing a Lighting Script
 Scripts extend `LightingScript` and have access to:
 - `fixtures` - Registry of all fixtures

@@ -556,11 +556,23 @@ private const val LOAD_FIXTURES_TEMPLATE = """// Register your fixtures here
 //     val universe = Universe(0, 1)
 //     addController(ArtNetController(universe, "192.168.1.100"))
 //
-//     val par1 = addFixture(RgbParFixture(universe, "par-1", "PAR 1", 1, 1))
-//     val par2 = addFixture(RgbParFixture(universe, "par-2", "PAR 2", 8, 2))
+//     // Simple RGB fixture
+//     val par1 = addFixture(HexFixture(universe, "par-1", "PAR 1", 1, 1))
+//     val par2 = addFixture(HexFixture(universe, "par-2", "PAR 2", 13, 2))
 //
-//     createGroup<RgbParFixture>("front-pars") {
+//     // Multi-mode fixture (select the mode matching your DIP switch setting)
+//     val beamBar = addFixture(SlenderBeamBarQuadFixture.Mode14Ch(
+//         universe, "beam-bar-1", "Beam Bar 1", 25, 3
+//     ))
+//
+//     // Create groups for batch control
+//     createGroup<HexFixture>("front-pars") {
 //         addSpread(listOf(par1, par2), panSpread = 60.0)
+//     }
+//
+//     // Group individual heads from multi-element fixtures
+//     createGroup<SlenderBeamBarQuadFixture.BasicHead>("beam-heads") {
+//         addElements(beamBar, panSpread = 90.0)
 //     }
 // }
 """

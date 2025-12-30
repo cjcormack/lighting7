@@ -396,6 +396,146 @@ When implementing fixtures, refer to the manufacturer's DMX chart. Common patter
 | RGBAW+UV | 6 | HexFixture style |
 | Full feature | 8-16 | Moving heads, complex LEDs |
 
+## Multi-Mode Fixtures
+
+Many professional fixtures support multiple DMX channel modes (personalities), selectable via DIP switches. For example, a fixture might offer:
+- **6-channel mode**: Basic control (dimmer, strobe, color presets)
+- **14-channel mode**: Per-head control with global dimmer
+- **27-channel mode**: Full control with fine positioning
+
+### Infrastructure
+
+Two interfaces support multi-mode fixtures:
+
+#### DmxChannelMode
+
+```kotlin
+interface DmxChannelMode {
+    val channelCount: Int   // Number of DMX channels
+    val modeName: String    // Human-readable name
+}
+```
+
+#### MultiModeFixtureFamily
+
+```kotlin
+interface MultiModeFixtureFamily<M : DmxChannelMode> {
+    val mode: M
+    val familyName: String  // Auto-derived from class name
+}
+```
+
+### Implementation Pattern
+
+Use a **sealed class hierarchy** where:
+- The sealed base class contains shared enums and common functionality
+- Each mode is a distinct subclass with its own `@FixtureType` annotation
+- Each subclass implements only the traits available in that mode
+
+```kotlin
+sealed class MyBarFixture(
+    universe: Universe,
+    firstChannel: Int,
+    channelCount: Int,  // Passed from subclass
+    key: String,
+    fixtureName: String,
+    position: Int,
+    protected val transaction: ControllerTransaction? = null,
+) : DmxFixture(universe, firstChannel, channelCount, key, fixtureName, position),
+    MultiModeFixtureFamily<MyBarFixture.Mode>
+{
+    // Mode enum
+    enum class Mode(
+        override val channelCount: Int,
+        override val modeName: String
+    ) : DmxChannelMode {
+        MODE_6CH(6, "6-Channel"),
+        MODE_14CH(14, "14-Channel")
+    }
+
+    // Shared enums for all modes
+    enum class Colour(override val level: UByte) : DmxFixtureSettingValue {
+        RED(10u), GREEN(20u), BLUE(30u)
+    }
+
+    // Mode-specific subclasses
+    @FixtureType("my-bar-6ch")
+    class Mode6Ch(...) : MyBarFixture(..., 6, ...), FixtureWithDimmer {
+        override val mode = Mode.MODE_6CH
+        // 6-channel properties...
+    }
+
+    @FixtureType("my-bar-14ch")
+    class Mode14Ch(...) : MyBarFixture(..., 14, ...),
+        FixtureWithDimmer, MultiElementFixture<Head>
+    {
+        override val mode = Mode.MODE_14CH
+        // 14-channel properties + per-head control...
+    }
+}
+```
+
+### Per-Head Control with MultiElementFixture
+
+For fixtures with multiple independently controllable elements (e.g., a bar with 4 heads), combine multi-mode with `MultiElementFixture`:
+
+```kotlin
+// Define head classes inside the sealed base
+abstract inner class Head(
+    override val elementIndex: Int,
+    protected val headTransaction: ControllerTransaction?
+) : FixtureElement<MyBarFixture> {
+    override val parentFixture get() = this@MyBarFixture
+    override val elementKey get() = "${key}.head-$elementIndex"
+}
+
+// Basic head for simpler modes
+inner class BasicHead(
+    elementIndex: Int,
+    headTransaction: ControllerTransaction?,
+    private val headFirstChannel: Int
+) : Head(elementIndex, headTransaction), FixtureWithPosition {
+    override val pan = DmxFixtureSlider(headTransaction, universe, headFirstChannel)
+    override val tilt = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 1)
+}
+
+// Full head for advanced modes
+inner class FullHead(...) : Head(...), FixtureWithPosition {
+    // Additional properties like fine control, speed, etc.
+}
+```
+
+### Example: SlenderBeamBarQuadFixture
+
+The Equinox Slender Beam Bar Quad demonstrates all these patterns:
+
+| Mode | Channels | Traits | Description |
+|------|----------|--------|-------------|
+| `Mode1Ch` | 1 | - | Show presets only |
+| `Mode6Ch` | 6 | Dimmer, Strobe | Basic global control |
+| `Mode12Ch` | 12 | MultiElementFixture<BasicHead> | Per-head control, no global dimmer |
+| `Mode14Ch` | 14 | Dimmer, Strobe, MultiElementFixture<BasicHead> | Global + per-head |
+| `Mode27Ch` | 27 | Dimmer, Strobe, MultiElementFixture<FullHead> | Full control with fine channels |
+
+**Usage:**
+```kotlin
+// Register a 14-channel mode fixture
+val beamBar = SlenderBeamBarQuadFixture.Mode14Ch(
+    universe, "beam-bar-1", "Beam Bar 1", 1, 1
+)
+
+// Global control
+beamBar.dimmer.value = 255u
+beamBar.strobe.fullOn()
+
+// Per-head control
+beamBar.head(0).pan.value = 128u
+beamBar.head(0).colour.setting = SlenderBeamBarQuadFixture.Colour.RED
+
+// All heads same color
+beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
+```
+
 ## File Reference
 
 | File | Purpose |
@@ -415,6 +555,8 @@ When implementing fixtures, refer to the manufacturer's DMX chart. Common patter
 | `dmx/DmxFixtureColour.kt` | DMX RGB implementation |
 | `dmx/DmxFixtureSetting.kt` | DMX enum mapping |
 | `dmx/DmxFixtureMultiSlider.kt` | DMX multi-slider interface |
+| `DmxChannelMode.kt` | Multi-mode channel configuration interface |
+| `MultiModeFixtureFamily.kt` | Multi-mode fixture marker interface |
 | `show/Fixtures.kt` | Registry and transaction wrapper |
 
 ## Existing Fixture Implementations
@@ -431,3 +573,8 @@ When implementing fixtures, refer to the manufacturer's DMX chart. Common patter
 | `HazerFixture` | hazer | 2 | Sliders (haze, fan) |
 | `FusionSpotFixture` | fusionspot | 14 | Dimmer, Colour, pan/tilt |
 | `LaserworldCS100Fixture` | laserworld-cs-100 | 7 | Settings, pattern control |
+| `SlenderBeamBarQuadFixture.Mode1Ch` | slender-beam-bar-quad-1ch | 1 | Settings (show presets) |
+| `SlenderBeamBarQuadFixture.Mode6Ch` | slender-beam-bar-quad-6ch | 6 | Dimmer, Strobe |
+| `SlenderBeamBarQuadFixture.Mode12Ch` | slender-beam-bar-quad-12ch | 12 | MultiElementFixture (4 heads) |
+| `SlenderBeamBarQuadFixture.Mode14Ch` | slender-beam-bar-quad-14ch | 14 | Dimmer, Strobe, MultiElementFixture |
+| `SlenderBeamBarQuadFixture.Mode27Ch` | slender-beam-bar-quad-27ch | 27 | Dimmer, Strobe, MultiElementFixture (full) |
