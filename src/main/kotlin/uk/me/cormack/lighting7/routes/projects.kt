@@ -473,7 +473,8 @@ data class ProjectDetailDto(
     val runLoopScriptName: String?,
     val runLoopDelayMs: Long,
     val scriptCount: Int,
-    val sceneCount: Int
+    val sceneCount: Int,
+    val chaseCount: Int
 )
 
 @Serializable
@@ -543,7 +544,8 @@ private fun DaoProject.toDetailDto() = ProjectDetailDto(
     runLoopScriptName = runLoopScriptId?.let { DaoScript.findById(it)?.name },
     runLoopDelayMs = runLoopDelayMs,
     scriptCount = scripts.count().toInt(),
-    sceneCount = scenes.count().toInt()
+    sceneCount = scenes.filter { it.mode == Mode.SCENE }.count(),
+    chaseCount = scenes.filter { it.mode == Mode.CHASE }.count()
 )
 
 // Template for new projects
