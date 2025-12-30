@@ -116,22 +116,27 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
             return@put
         }
 
-        val script = transaction(state.database) {
-            DaoScript.findById(resource.scriptId)
-        }
-        if (script == null || script.project.id != project.id) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
-            return@put
-        }
-
         val newScriptData = call.receive<NewScript>()
         val scriptDetails = transaction(state.database) {
+            val script = DaoScript.findById(resource.scriptId)
+                ?: return@transaction null
+
+            // Verify script belongs to this project
+            if (script.project.id != project.id) {
+                return@transaction null
+            }
+
             script.name = newScriptData.name
             script.script = newScriptData.script
             script.settings = ScriptSettingList(newScriptData.settings.orEmpty())
             script.toScriptDetails(isCurrentProject = true) // Only current project can update
         }
-        call.respond(scriptDetails)
+
+        if (scriptDetails != null) {
+            call.respond(scriptDetails)
+        } else {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
+        }
     }
 
     // DELETE /{projectId}/scripts/{scriptId} - Delete script (current project only)
