@@ -6,6 +6,8 @@ This document describes the type-safe fixture group system for treating multiple
 
 The fixture group system provides:
 - **Type-safe groups**: Compile-time enforcement of fixture capabilities
+- **FxTargetable interface**: Groups implement the same targeting interface as fixtures
+- **Group-level FX targeting**: A single FxInstance targets the entire group; engine expands at processing time
 - **Position-aware members**: Each fixture has a position within the group for effect distribution
 - **Distribution strategies**: Various patterns for distributing effect phases across group members
 - **Multi-element support**: Fixtures with multiple controllable elements (e.g., quad moving head bars)
@@ -28,13 +30,20 @@ fx/group/
 
 ### Type System
 
-Groups are parameterized by fixture type:
+Groups are parameterized by fixture type and implement `FxTargetable`:
 
 ```kotlin
-class FixtureGroup<T : Fixture>
+class FixtureGroup<T : Fixture> : FxTargetable {
+    override val targetKey: String get() = name
+    override val isGroup: Boolean get() = true
+    override val memberCount: Int get() = size
+}
 ```
 
-This enables compile-time type checking:
+This enables:
+- Compile-time type checking for fixture operations
+- Unified FX targeting (same interface as individual fixtures)
+- Querying which effects are active on a group
 
 ```kotlin
 // Type-safe: only HexFixture methods available
@@ -43,6 +52,9 @@ group.fixtures.forEach { it.dimmer.value = 255u }
 
 // Type narrowing for capability checks
 val dimmerGroup: FixtureGroup<FixtureWithDimmer>? = group.asCapable()
+
+// FxTargetable allows querying effects
+val effects = fxEngine.getEffectsForGroup(group.name)
 ```
 
 ## Group Members
@@ -144,24 +156,50 @@ group.applyDimmerFx(
 
 ## Group FX Extensions
 
-Extension functions provide type-safe effect application:
+Extension functions provide type-safe effect application. Each function creates a **single group-level FxInstance** that the engine expands to group members at processing time:
 
 ```kotlin
-// Single effect type
-fun <T> FixtureGroup<T>.applyDimmerFx(...): List<Long>
+// Each returns a single effect ID (not a list)
+fun <T> FixtureGroup<T>.applyDimmerFx(...): Long
     where T : Fixture, T : FixtureWithDimmer
 
-fun <T> FixtureGroup<T>.applyColourFx(...): List<Long>
+fun <T> FixtureGroup<T>.applyColourFx(...): Long
     where T : Fixture, T : FixtureWithColour<*>
 
-fun <T> FixtureGroup<T>.applyPositionFx(...): List<Long>
+fun <T> FixtureGroup<T>.applyPositionFx(...): Long
     where T : Fixture, T : FixtureWithPosition
 
-fun <T> FixtureGroup<T>.applyUvFx(...): List<Long>
+fun <T> FixtureGroup<T>.applyUvFx(...): Long
     where T : Fixture, T : FixtureWithUv
 
-// Clear all effects for group
+// Clear all effects for group (both group-level and per-fixture)
 fun FixtureGroup<*>.clearFx(engine: FxEngine): Int
+```
+
+### Group-Level Targeting
+
+The key architectural decision is that group effects create a single `FxInstance` with a group target:
+
+```kotlin
+// This creates ONE effect that targets the group
+val effectId = group.applyDimmerFx(fxEngine, Pulse(),
+    distribution = DistributionStrategy.LINEAR)
+
+// The FxInstance stores:
+// - target: FxTargetRef.GroupRef("front-wash")
+// - distributionStrategy: LINEAR
+
+// At processing time, FxEngine:
+// 1. Looks up the group by name
+// 2. Iterates members with distribution offsets
+// 3. Applies effect to each fixture
+```
+
+This enables querying effects by group:
+
+```kotlin
+val activeEffects = fxEngine.getEffectsForGroup("front-wash")
+fxEngine.removeEffectsForGroup("front-wash")
 ```
 
 ### DSL Builder for Multiple Effects
@@ -273,6 +311,7 @@ fixtures.group<FixtureWithPosition>("all-heads").applyPositionFx(
 |--------|------|-------------|
 | GET | `/api/rest/groups` | List all groups |
 | GET | `/api/rest/groups/{name}` | Get group details |
+| GET | `/api/rest/groups/{name}/fx` | Get active effects for group |
 | POST | `/api/rest/groups/{name}/fx` | Apply effect to group |
 | DELETE | `/api/rest/groups/{name}/fx` | Clear group effects |
 | GET | `/api/rest/groups/distribution-strategies` | List strategies |
@@ -294,6 +333,23 @@ GET /api/rest/groups
 ]
 ```
 
+**Get Group Effects:**
+```json
+GET /api/rest/groups/front-wash/fx
+
+[
+  {
+    "id": 1001,
+    "effectType": "Pulse",
+    "propertyName": "dimmer",
+    "beatDivision": 1.0,
+    "blendMode": "OVERRIDE",
+    "distribution": "LINEAR",
+    "isRunning": true
+  }
+]
+```
+
 **Add Group Effect:**
 ```json
 POST /api/rest/groups/front-wash/fx
@@ -311,9 +367,11 @@ POST /api/rest/groups/front-wash/fx
 
 Response:
 {
-  "effectIds": [1001, 1002, 1003, 1004]
+  "effectId": 1001
 }
 ```
+
+Note: The response returns a single `effectId` because one `FxInstance` is created that targets the entire group. The engine expands this to group members at processing time.
 
 ## WebSocket Messages
 

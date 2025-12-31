@@ -1,7 +1,20 @@
 package uk.me.cormack.lighting7.fx.group
 
-import uk.me.cormack.lighting7.fixture.group.GroupMember
 import kotlin.math.abs
+
+/**
+ * Information about a member for distribution calculation.
+ *
+ * This interface abstracts the member properties needed by distribution strategies,
+ * allowing both GroupMember and synthetic members (for FxEngine processing) to be used.
+ */
+interface DistributionMemberInfo {
+    /** Zero-based index within the group */
+    val index: Int
+
+    /** Position normalized to 0.0-1.0 range across the group */
+    val normalizedPosition: Double
+}
 
 /**
  * Strategies for distributing effect phases across group members.
@@ -14,11 +27,11 @@ sealed interface DistributionStrategy {
     /**
      * Calculate the phase offset for a group member.
      *
-     * @param member The group member
+     * @param member The member info (index and normalized position)
      * @param groupSize Total number of members in the group
      * @return Phase offset from 0.0 to 1.0
      */
-    fun calculateOffset(member: GroupMember<*>, groupSize: Int): Double
+    fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double
 
     /**
      * Linear distribution: evenly spaced phases across the group.
@@ -27,7 +40,7 @@ sealed interface DistributionStrategy {
      * Member 0 has offset 0.0, and offsets increase linearly.
      */
     data object LINEAR : DistributionStrategy {
-        override fun calculateOffset(member: GroupMember<*>, groupSize: Int): Double {
+        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             return if (groupSize > 1) member.index.toDouble() / groupSize else 0.0
         }
     }
@@ -39,7 +52,7 @@ sealed interface DistributionStrategy {
      * useful for synchronized group effects.
      */
     data object UNIFIED : DistributionStrategy {
-        override fun calculateOffset(member: GroupMember<*>, groupSize: Int) = 0.0
+        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int) = 0.0
     }
 
     /**
@@ -49,7 +62,7 @@ sealed interface DistributionStrategy {
      * Useful for "explosion" or "bloom" effects.
      */
     data object CENTER_OUT : DistributionStrategy {
-        override fun calculateOffset(member: GroupMember<*>, groupSize: Int): Double {
+        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             if (groupSize <= 1) return 0.0
             val center = (groupSize - 1) / 2.0
             val distanceFromCenter = abs(member.index - center)
@@ -65,7 +78,7 @@ sealed interface DistributionStrategy {
      * The inverse of CENTER_OUT.
      */
     data object EDGES_IN : DistributionStrategy {
-        override fun calculateOffset(member: GroupMember<*>, groupSize: Int): Double {
+        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             return 1.0 - CENTER_OUT.calculateOffset(member, groupSize)
         }
     }
@@ -79,7 +92,7 @@ sealed interface DistributionStrategy {
      * @param seed Random seed for offset calculation
      */
     data class RANDOM(val seed: Int = 0) : DistributionStrategy {
-        override fun calculateOffset(member: GroupMember<*>, groupSize: Int): Double {
+        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             // Simple hash-based pseudo-random that's deterministic
             val hash = (member.index * 31 + seed).hashCode()
             return (hash and 0x7FFFFFFF).toDouble() / Int.MAX_VALUE
@@ -94,7 +107,7 @@ sealed interface DistributionStrategy {
      * left edge to right edge and back.
      */
     data object PING_PONG : DistributionStrategy {
-        override fun calculateOffset(member: GroupMember<*>, groupSize: Int): Double {
+        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             if (groupSize <= 1) return 0.0
             // For a ping-pong, we want indices to go 0,1,2,3,2,1,0,1,2...
             // But for offset calculation, we just space them evenly for the sweep
@@ -109,7 +122,7 @@ sealed interface DistributionStrategy {
      * Last member has offset 0.0, first member fires last.
      */
     data object REVERSE : DistributionStrategy {
-        override fun calculateOffset(member: GroupMember<*>, groupSize: Int): Double {
+        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             return if (groupSize > 1) 1.0 - (member.index.toDouble() / groupSize) else 0.0
         }
     }
@@ -121,7 +134,7 @@ sealed interface DistributionStrategy {
      * linear distribution from center outward. Creates a mirrored effect.
      */
     data object SPLIT : DistributionStrategy {
-        override fun calculateOffset(member: GroupMember<*>, groupSize: Int): Double {
+        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             if (groupSize <= 1) return 0.0
             val halfSize = groupSize / 2
             return if (member.index < halfSize) {
@@ -143,7 +156,7 @@ sealed interface DistributionStrategy {
      * @param offsetFn Function mapping normalized position to phase offset
      */
     data class CUSTOM(val offsetFn: (Double) -> Double) : DistributionStrategy {
-        override fun calculateOffset(member: GroupMember<*>, groupSize: Int): Double {
+        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             return offsetFn(member.normalizedPosition).coerceIn(0.0, 1.0)
         }
     }
@@ -155,7 +168,7 @@ sealed interface DistributionStrategy {
      * which accounts for any filtering or subsetting of the group.
      */
     data object POSITIONAL : DistributionStrategy {
-        override fun calculateOffset(member: GroupMember<*>, groupSize: Int): Double {
+        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             return member.normalizedPosition
         }
     }

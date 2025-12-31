@@ -199,7 +199,7 @@ data class AddGroupFxInMessage(
 @SerialName("groupFxAdded")
 data class GroupFxAddedOutMessage(
     val groupName: String,
-    val effectIds: List<Long>
+    val effectId: Long
 ) : OutMessage()
 
 @Serializable
@@ -422,10 +422,12 @@ fun Application.configureSockets(state: State) {
                         is ClearGroupFxInMessage -> {
                             try {
                                 val group = state.show.fixtures.untypedGroup(message.groupName)
-                                val count = group.sumOf {
+                                // Remove group-level effects first, then any per-fixture effects
+                                val groupCount = state.show.fxEngine.removeEffectsForGroup(message.groupName)
+                                val fixtureCount = group.sumOf {
                                     state.show.fxEngine.removeEffectsForFixture(it.fixture.key)
                                 }
-                                sendSerialized<OutMessage>(GroupFxClearedOutMessage(message.groupName, count))
+                                sendSerialized<OutMessage>(GroupFxClearedOutMessage(message.groupName, groupCount + fixtureCount))
                             } catch (e: Exception) {
                                 // Group not found - ignore
                             }
@@ -459,7 +461,7 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
         FxEffectState(
             id = effect.id,
             effectType = effect.effect.name,
-            targetKey = "${effect.target.fixtureKey}.${effect.target.propertyName}",
+            targetKey = "${effect.target.targetKey}.${effect.target.propertyName}",
             isRunning = effect.isRunning,
             phase = effect.lastPhase,
             blendMode = effect.blendMode.name

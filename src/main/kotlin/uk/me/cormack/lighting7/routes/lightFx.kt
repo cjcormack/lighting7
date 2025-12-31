@@ -183,7 +183,7 @@ data class ErrorResponse(val error: String)
 data class EffectDto(
     val id: Long,
     val effectType: String,
-    val fixtureKey: String,
+    val targetKey: String,
     val propertyName: String,
     val beatDivision: Double,
     val blendMode: String,
@@ -213,7 +213,7 @@ data class ParameterInfo(
 private fun FxInstance.toDto() = EffectDto(
     id = id,
     effectType = effect.name,
-    fixtureKey = target.fixtureKey,
+    targetKey = target.targetKey,
     propertyName = target.propertyName,
     beatDivision = timing.beatDivision,
     blendMode = blendMode.name,

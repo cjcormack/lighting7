@@ -170,6 +170,8 @@ See the Swagger UI at `/openapi` for full API documentation.
 - [Scenes & Chases](docs/scenes-chases-engineering.md) - Scene recording and active state tracking
 - [WebSocket Protocol](docs/websocket-engineering.md) - Real-time client communication
 - [Music Sync](docs/music-sync-engineering.md) - gRPC-based music track synchronization
+- [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, blend modes
+- [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, group FX targeting
 
 ## Tech Stack
 

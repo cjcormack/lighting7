@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fixture.group
 
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 
 /**
  * Metadata for a fixture within a group.
@@ -28,10 +29,10 @@ data class MemberMetadata(
  */
 data class GroupMember<T : Fixture>(
     val fixture: T,
-    val index: Int,
-    val normalizedPosition: Double,
+    override val index: Int,
+    override val normalizedPosition: Double,
     val metadata: MemberMetadata = MemberMetadata()
-) {
+) : DistributionMemberInfo {
     /** Fixture key for convenience */
     val key: String get() = fixture.key
 

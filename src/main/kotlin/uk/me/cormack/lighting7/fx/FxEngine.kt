@@ -58,6 +58,9 @@ class FxEngine(
         val id: Long,
         val effectType: String,
         val targetKey: String,
+        val propertyName: String,
+        val isGroupTarget: Boolean,
+        val distributionStrategy: String?,
         val isRunning: Boolean,
         val currentPhase: Double,
         val blendMode: BlendMode
@@ -132,15 +135,27 @@ class FxEngine(
     fun getActiveEffects(): List<FxInstance> = activeEffects.values.toList()
 
     /**
-     * Get all active effects for a given fixture/property.
+     * Get all active effects for a given target key and property.
      *
-     * @param fixtureKey The fixture key
+     * @param targetKey The fixture key or group name
      * @param propertyName The property name
      * @return List of matching effect instances
      */
-    fun getEffectsForTarget(fixtureKey: String, propertyName: String): List<FxInstance> {
+    fun getEffectsForTarget(targetKey: String, propertyName: String): List<FxInstance> {
         return activeEffects.values.filter {
-            it.target.fixtureKey == fixtureKey && it.target.propertyName == propertyName
+            it.target.targetKey == targetKey && it.target.propertyName == propertyName
+        }
+    }
+
+    /**
+     * Get all active effects targeting a specific group.
+     *
+     * @param groupName The group name
+     * @return List of effect instances targeting this group
+     */
+    fun getEffectsForGroup(groupName: String): List<FxInstance> {
+        return activeEffects.values.filter {
+            it.isGroupEffect && it.target.targetKey == groupName
         }
     }
 
@@ -167,7 +182,26 @@ class FxEngine(
      * @return Number of effects removed
      */
     fun removeEffectsForFixture(fixtureKey: String): Int {
-        val toRemove = activeEffects.values.filter { it.target.fixtureKey == fixtureKey }
+        val toRemove = activeEffects.values.filter {
+            !it.isGroupEffect && it.target.targetKey == fixtureKey
+        }
+        toRemove.forEach { activeEffects.remove(it.id) }
+        if (toRemove.isNotEmpty()) {
+            emitStateUpdate()
+        }
+        return toRemove.size
+    }
+
+    /**
+     * Remove all effects targeting a specific group.
+     *
+     * @param groupName The group name
+     * @return Number of effects removed
+     */
+    fun removeEffectsForGroup(groupName: String): Int {
+        val toRemove = activeEffects.values.filter {
+            it.isGroupEffect && it.target.targetKey == groupName
+        }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             emitStateUpdate()
@@ -189,23 +223,16 @@ class FxEngine(
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
 
-        // Group effects by target (for future stacking support)
-        val effectsByTarget = activeEffects.values.groupBy { it.target }
-
-        for ((target, effects) in effectsByTarget) {
-            // Currently: single effect per target (last wins)
-            // Future: blend multiple effects based on priority/stacking rules
-            val effect = effects.filter { it.isRunning }.lastOrNull() ?: continue
+        // Process each active effect
+        for ((_, effect) in activeEffects) {
+            if (!effect.isRunning) continue
 
             try {
-                // Calculate effect phase based on timing
-                val effectPhase = effect.calculatePhase(tick, masterClock)
-
-                // Get output value from effect
-                val output = effect.effect.calculate(effectPhase)
-
-                // Apply to fixture property via target
-                target.applyValue(fixturesWithTx, output, effect.blendMode)
+                if (effect.isGroupEffect) {
+                    processGroupEffect(tick, effect, fixturesWithTx)
+                } else {
+                    processFixtureEffect(tick, effect, fixturesWithTx)
+                }
             } catch (e: Exception) {
                 // Log but don't crash the engine
                 System.err.println("FX Engine error processing effect ${effect.id}: ${e.message}")
@@ -215,12 +242,63 @@ class FxEngine(
         transaction.apply()
     }
 
+    /**
+     * Process an effect targeting a single fixture.
+     */
+    private fun processFixtureEffect(
+        tick: MasterClock.ClockTick,
+        effect: FxInstance,
+        fixturesWithTx: Fixtures.FixturesWithTransaction
+    ) {
+        // Calculate effect phase based on timing
+        val effectPhase = effect.calculatePhase(tick, masterClock)
+
+        // Get output value from effect
+        val output = effect.effect.calculate(effectPhase)
+
+        // Apply to fixture property via target
+        effect.target.applyValue(fixturesWithTx, effect.target.targetKey, output, effect.blendMode)
+    }
+
+    /**
+     * Process an effect targeting a group - expands to all members with distribution.
+     */
+    private fun processGroupEffect(
+        tick: MasterClock.ClockTick,
+        effect: FxInstance,
+        fixturesWithTx: Fixtures.FixturesWithTransaction
+    ) {
+        val groupName = effect.target.targetKey
+        val group = try {
+            fixtures.untypedGroup(groupName)
+        } catch (e: Exception) {
+            System.err.println("FX Engine: Group '$groupName' not found for effect ${effect.id}")
+            return
+        }
+
+        val groupSize = group.size
+
+        // Apply to each member with distributed phase
+        for (member in group) {
+            val memberPhase = effect.calculatePhaseForMember(
+                tick, masterClock, member, groupSize
+            )
+
+            val output = effect.effect.calculate(memberPhase)
+            effect.target.applyValue(fixturesWithTx, member.fixture.key, output, effect.blendMode)
+        }
+    }
+
     private fun emitStateUpdate() {
         val states = activeEffects.mapValues { (_, instance) ->
             FxInstanceState(
                 id = instance.id,
                 effectType = instance.effect.name,
-                targetKey = "${instance.target.fixtureKey}.${instance.target.propertyName}",
+                targetKey = instance.target.targetKey,
+                propertyName = instance.target.propertyName,
+                isGroupTarget = instance.isGroupEffect,
+                distributionStrategy = if (instance.isGroupEffect)
+                    instance.distributionStrategy.javaClass.simpleName else null,
                 isRunning = instance.isRunning,
                 currentPhase = instance.lastPhase,
                 blendMode = instance.blendMode

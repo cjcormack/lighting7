@@ -85,6 +85,8 @@ Lighting scripts use embedded Kotlin via `LightingScript` base class:
 Tempo-synchronized effects for continuous animations without complex scripts:
 - **MasterClock** - Global BPM reference (20-300 BPM), emits 24 ticks/beat
 - **FxEngine** - Processes active effects, applies to fixtures via transactions
+- **FxTargetable** - Common interface for Fixture and FixtureGroup (enables unified FX targeting)
+- **FxTargetRef** - Reference type distinguishing fixture vs group targets
 - **BeatDivision** - Timing constants (QUARTER, HALF, WHOLE, ONE_BAR, etc.)
 - **BlendMode** - How effects combine: OVERRIDE, ADDITIVE, MULTIPLY, MAX, MIN
 
@@ -101,10 +103,14 @@ fixture.applyColourFx(fxEngine, RainbowCycle(), FxTiming(BeatDivision.ONE_BAR))
 
 ### Fixture Groups
 Type-safe fixture groups for treating multiple fixtures as a single unit:
-- **FixtureGroup<T>** - Generic group with compile-time type safety
+- **FixtureGroup<T>** - Generic group with compile-time type safety, implements `FxTargetable`
 - **GroupMember** - Fixture wrapper with position and metadata (pan/tilt offsets, tags)
 - **DistributionStrategy** - Phase distribution patterns (LINEAR, UNIFIED, CENTER_OUT, etc.)
 - **MultiElementFixture** - Support for fixtures with multiple controllable elements
+
+**Group FX Targeting**: A single `FxInstance` targets the entire group. The `FxEngine` expands
+the effect to group members at processing time, applying distribution strategy offsets.
+This allows querying which effects are active on a group.
 
 Creating groups in registration scripts:
 ```kotlin
@@ -119,15 +125,18 @@ fixtures.register {
 }
 ```
 
-Applying effects to groups:
+Applying effects to groups (creates a single group-level FxInstance):
 ```kotlin
 val group = fixtures.group<HexFixture>("front-wash")
 
-// Chase effect with linear distribution
-group.applyDimmerFx(fxEngine, Pulse(), distribution = DistributionStrategy.LINEAR)
+// Chase effect with linear distribution - returns single effect ID
+val effectId = group.applyDimmerFx(fxEngine, Pulse(), distribution = DistributionStrategy.LINEAR)
 
 // Unified colour across all fixtures
 group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrategy.UNIFIED)
+
+// Query active effects for a group
+val activeEffects = fxEngine.getEffectsForGroup("front-wash")
 ```
 
 ## API Endpoints
@@ -149,7 +158,8 @@ group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrateg
 ### Group REST Endpoints
 - `GET /api/rest/groups` - List all fixture groups
 - `GET /api/rest/groups/{name}` - Get group details with members
-- `POST /api/rest/groups/{name}/fx` - Apply effect to group
+- `GET /api/rest/groups/{name}/fx` - Get active effects for group
+- `POST /api/rest/groups/{name}/fx` - Apply effect to group (returns single `effectId`)
 - `DELETE /api/rest/groups/{name}/fx` - Clear all effects for group
 - `GET /api/rest/groups/distribution-strategies` - List distribution strategies
 

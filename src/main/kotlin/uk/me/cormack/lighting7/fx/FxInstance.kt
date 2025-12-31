@@ -1,5 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
+import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+
 /**
  * Configuration for effect timing relative to the master clock.
  *
@@ -39,7 +42,7 @@ enum class BlendMode {
  * effect can run simultaneously on different targets.
  *
  * @param effect The effect to run
- * @param target The fixture property to apply the effect to
+ * @param target The fixture or group property to apply the effect to
  * @param timing Timing configuration relative to master clock
  * @param blendMode How to blend effect output with fixture value
  */
@@ -68,6 +71,23 @@ class FxInstance(
     var startedAtBeat: Long = 0
 
     /**
+     * Distribution strategy for group targets.
+     * Determines how phase offsets are calculated for each group member.
+     * Ignored for fixture targets.
+     */
+    var distributionStrategy: DistributionStrategy = DistributionStrategy.LINEAR
+
+    /**
+     * Whether this effect targets a group (vs individual fixture).
+     */
+    val isGroupEffect: Boolean get() = target.isGroupTarget
+
+    /**
+     * The group name if this is a group effect, null otherwise.
+     */
+    val groupName: String? get() = if (isGroupEffect) target.targetKey else null
+
+    /**
      * Calculate the current phase for this effect based on clock timing.
      *
      * @param tick The current clock tick
@@ -78,6 +98,31 @@ class FxInstance(
         val basePhase = clock.phaseForDivision(tick, timing.beatDivision)
         val phase = (basePhase + phaseOffset) % 1.0
         lastPhase = phase
+        return phase
+    }
+
+    /**
+     * Calculate the phase for a specific group member (includes distribution offset).
+     *
+     * @param tick The current clock tick
+     * @param clock The master clock for timing calculations
+     * @param memberInfo The member's distribution info (index and normalized position)
+     * @param groupSize Total number of members in the group
+     * @return Phase from 0.0 to 1.0 within the effect cycle
+     */
+    fun calculatePhaseForMember(
+        tick: MasterClock.ClockTick,
+        clock: MasterClock,
+        memberInfo: DistributionMemberInfo,
+        groupSize: Int
+    ): Double {
+        val basePhase = clock.phaseForDivision(tick, timing.beatDivision)
+
+        // Calculate distribution offset using the member's position
+        val distributionOffset = distributionStrategy.calculateOffset(memberInfo, groupSize)
+
+        val phase = (basePhase + phaseOffset + distributionOffset) % 1.0
+        lastPhase = phase // Store last calculated (might be last member)
         return phase
     }
 

@@ -7,19 +7,22 @@ import uk.me.cormack.lighting7.fx.*
 /**
  * Extension functions for applying effects to fixture groups.
  *
- * These functions automatically handle phase distribution across group members,
- * enabling sophisticated chase and synchronized effects with minimal code.
+ * These functions create single group-level FxInstances that automatically
+ * handle phase distribution across group members at processing time.
  */
 
 /**
- * Apply a dimmer effect to all members of a group with distribution.
+ * Apply a dimmer effect to this group.
  *
- * @param engine The FX engine to add effects to
+ * Creates a single FxInstance that targets the entire group.
+ * Distribution strategy is applied at processing time.
+ *
+ * @param engine The FX engine to add the effect to
  * @param effect The effect to apply
  * @param timing Effect timing configuration
  * @param blendMode How to blend with existing values
  * @param distribution Strategy for distributing phases across members
- * @return List of effect IDs created (one per group member)
+ * @return The effect ID for the group effect
  */
 fun <T> FixtureGroup<T>.applyDimmerFx(
     engine: FxEngine,
@@ -27,26 +30,26 @@ fun <T> FixtureGroup<T>.applyDimmerFx(
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
     distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
-): List<Long> where T : Fixture, T : FixtureWithDimmer {
-    return map { member ->
-        val offset = distribution.calculateOffset(member, size)
-        val target = SliderTarget(member.fixture.key, "dimmer")
-        val instance = FxInstance(effect, target, timing, blendMode).apply {
-            phaseOffset = offset
-        }
-        engine.addEffect(instance)
+): Long where T : Fixture, T : FixtureWithDimmer {
+    val target = SliderTarget.forGroup(name, "dimmer")
+    val instance = FxInstance(effect, target, timing, blendMode).apply {
+        distributionStrategy = distribution
     }
+    return engine.addEffect(instance)
 }
 
 /**
- * Apply a UV effect to all members of a group with distribution.
+ * Apply a UV effect to this group.
  *
- * @param engine The FX engine to add effects to
+ * Creates a single FxInstance that targets the entire group.
+ * Distribution strategy is applied at processing time.
+ *
+ * @param engine The FX engine to add the effect to
  * @param effect The effect to apply
  * @param timing Effect timing configuration
  * @param blendMode How to blend with existing values
  * @param distribution Strategy for distributing phases across members
- * @return List of effect IDs created (one per group member)
+ * @return The effect ID for the group effect
  */
 fun <T> FixtureGroup<T>.applyUvFx(
     engine: FxEngine,
@@ -54,26 +57,26 @@ fun <T> FixtureGroup<T>.applyUvFx(
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
     distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
-): List<Long> where T : Fixture, T : FixtureWithUv {
-    return map { member ->
-        val offset = distribution.calculateOffset(member, size)
-        val target = SliderTarget(member.fixture.key, "uvColour")
-        val instance = FxInstance(effect, target, timing, blendMode).apply {
-            phaseOffset = offset
-        }
-        engine.addEffect(instance)
+): Long where T : Fixture, T : FixtureWithUv {
+    val target = SliderTarget.forGroup(name, "uvColour")
+    val instance = FxInstance(effect, target, timing, blendMode).apply {
+        distributionStrategy = distribution
     }
+    return engine.addEffect(instance)
 }
 
 /**
- * Apply a colour effect to all members of a group with distribution.
+ * Apply a colour effect to this group.
  *
- * @param engine The FX engine to add effects to
+ * Creates a single FxInstance that targets the entire group.
+ * Distribution strategy is applied at processing time.
+ *
+ * @param engine The FX engine to add the effect to
  * @param effect The effect to apply
  * @param timing Effect timing configuration
  * @param blendMode How to blend with existing values
  * @param distribution Strategy for distributing phases across members
- * @return List of effect IDs created (one per group member)
+ * @return The effect ID for the group effect
  */
 fun <T> FixtureGroup<T>.applyColourFx(
     engine: FxEngine,
@@ -81,100 +84,57 @@ fun <T> FixtureGroup<T>.applyColourFx(
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
     distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
-): List<Long> where T : Fixture, T : FixtureWithColour<*> {
-    return map { member ->
-        val offset = distribution.calculateOffset(member, size)
-        val target = ColourTarget(member.fixture.key)
-        val instance = FxInstance(effect, target, timing, blendMode).apply {
-            phaseOffset = offset
-        }
-        engine.addEffect(instance)
+): Long where T : Fixture, T : FixtureWithColour<*> {
+    val target = ColourTarget.forGroup(name)
+    val instance = FxInstance(effect, target, timing, blendMode).apply {
+        distributionStrategy = distribution
     }
+    return engine.addEffect(instance)
 }
 
 /**
- * Apply a position effect to all members of a group with distribution.
+ * Apply a position effect to this group.
  *
- * Position effects can optionally apply member-specific pan/tilt offsets
- * from the group configuration.
+ * Creates a single FxInstance that targets the entire group.
+ * Distribution strategy is applied at processing time.
  *
- * @param engine The FX engine to add effects to
+ * @param engine The FX engine to add the effect to
  * @param effect The effect to apply
  * @param timing Effect timing configuration
  * @param blendMode How to blend with existing values
  * @param distribution Strategy for distributing phases across members
- * @param applyMemberOffsets Whether to apply member pan/tilt offsets
- * @return List of effect IDs created (one per group member)
+ * @return The effect ID for the group effect
  */
 fun <T> FixtureGroup<T>.applyPositionFx(
     engine: FxEngine,
     effect: Effect,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
-    distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName),
-    applyMemberOffsets: Boolean = true
-): List<Long> where T : Fixture, T : FixtureWithPosition {
-    return map { member ->
-        val offset = distribution.calculateOffset(member, size)
-
-        // Wrap effect with member offsets if configured
-        val adjustedEffect = if (applyMemberOffsets &&
-            (member.metadata.panOffset != 0.0 || member.metadata.tiltOffset != 0.0)
-        ) {
-            OffsetPositionEffect(
-                effect,
-                member.metadata.panOffset,
-                member.metadata.tiltOffset
-            )
-        } else effect
-
-        val target = PositionTarget(member.fixture.key)
-        val instance = FxInstance(adjustedEffect, target, timing, blendMode).apply {
-            phaseOffset = offset
-        }
-        engine.addEffect(instance)
+    distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
+): Long where T : Fixture, T : FixtureWithPosition {
+    val target = PositionTarget.forGroup(name)
+    val instance = FxInstance(effect, target, timing, blendMode).apply {
+        distributionStrategy = distribution
     }
+    return engine.addEffect(instance)
 }
 
 /**
- * Clear all effects for fixtures in this group.
+ * Clear all effects for this group.
+ *
+ * This removes both:
+ * - Group-level effects (effects targeting this group as a whole)
+ * - Per-fixture effects (effects targeting individual fixtures in this group)
  *
  * @param engine The FX engine
  * @return Total number of effects removed
  */
 fun FixtureGroup<*>.clearFx(engine: FxEngine): Int {
-    return sumOf { engine.removeEffectsForFixture(it.fixture.key) }
-}
-
-/**
- * Helper effect that applies pan/tilt offsets to another position effect.
- *
- * This wraps a position effect and adds constant offsets to the output,
- * useful for spreading multiple fixtures across a stage while using
- * the same base movement pattern.
- */
-private class OffsetPositionEffect(
-    private val delegate: Effect,
-    private val panOffsetDegrees: Double,
-    private val tiltOffsetDegrees: Double
-) : Effect {
-    override val name get() = "${delegate.name}+Offset"
-    override val outputType get() = FxOutputType.POSITION
-
-    override fun calculate(phase: Double): FxOutput {
-        val base = delegate.calculate(phase)
-        if (base !is FxOutput.Position) return base
-
-        // Convert offset degrees to DMX values
-        // Typical moving heads: 540 degrees pan (0-255), 270 degrees tilt (0-255)
-        val panOffsetDmx = (panOffsetDegrees / 540.0 * 255.0).toInt()
-        val tiltOffsetDmx = (tiltOffsetDegrees / 270.0 * 255.0).toInt()
-
-        return FxOutput.Position(
-            (base.pan.toInt() + panOffsetDmx).coerceIn(0, 255).toUByte(),
-            (base.tilt.toInt() + tiltOffsetDmx).coerceIn(0, 255).toUByte()
-        )
-    }
+    // First remove group-level effects
+    val groupEffectsRemoved = engine.removeEffectsForGroup(name)
+    // Then remove any per-fixture effects
+    val fixtureEffectsRemoved = sumOf { engine.removeEffectsForFixture(it.fixture.key) }
+    return groupEffectsRemoved + fixtureEffectsRemoved
 }
 
 /**
@@ -204,11 +164,11 @@ class GroupFxBuilder<T : Fixture> @PublishedApi internal constructor(
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
         distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
-    ): List<Long> where R : Fixture, R : FixtureWithDimmer {
+    ): Long where R : Fixture, R : FixtureWithDimmer {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyDimmerFx(
             engine, effect, FxTiming(beatDivision), blendMode, distribution
-        ).also { effectIds.addAll(it) }
+        ).also { effectIds.add(it) }
     }
 
     /**
@@ -220,11 +180,11 @@ class GroupFxBuilder<T : Fixture> @PublishedApi internal constructor(
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
         distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
-    ): List<Long> where R : Fixture, R : FixtureWithColour<*> {
+    ): Long where R : Fixture, R : FixtureWithColour<*> {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyColourFx(
             engine, effect, FxTiming(beatDivision), blendMode, distribution
-        ).also { effectIds.addAll(it) }
+        ).also { effectIds.add(it) }
     }
 
     /**
@@ -236,11 +196,11 @@ class GroupFxBuilder<T : Fixture> @PublishedApi internal constructor(
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
         distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
-    ): List<Long> where R : Fixture, R : FixtureWithUv {
+    ): Long where R : Fixture, R : FixtureWithUv {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyUvFx(
             engine, effect, FxTiming(beatDivision), blendMode, distribution
-        ).also { effectIds.addAll(it) }
+        ).also { effectIds.add(it) }
     }
 
     /**
@@ -251,13 +211,12 @@ class GroupFxBuilder<T : Fixture> @PublishedApi internal constructor(
         effect: Effect,
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
-        distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName),
-        applyMemberOffsets: Boolean = true
-    ): List<Long> where R : Fixture, R : FixtureWithPosition {
+        distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
+    ): Long where R : Fixture, R : FixtureWithPosition {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyPositionFx(
-            engine, effect, FxTiming(beatDivision), blendMode, distribution, applyMemberOffsets
-        ).also { effectIds.addAll(it) }
+            engine, effect, FxTiming(beatDivision), blendMode, distribution
+        ).also { effectIds.add(it) }
     }
 
     /** All effect IDs created by this builder */

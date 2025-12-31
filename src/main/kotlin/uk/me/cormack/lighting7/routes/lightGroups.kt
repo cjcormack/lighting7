@@ -47,8 +47,8 @@ internal fun Route.routeApiRestGroups(state: State) {
             val request = call.receive<AddGroupFxRequest>()
             try {
                 val group = state.show.fixtures.untypedGroup(resource.name)
-                val effectIds = applyGroupEffect(state, group, request)
-                call.respond(AddGroupFxResponse(effectIds))
+                val effectId = applyGroupEffect(state, group, request)
+                call.respond(AddGroupFxResponse(effectId))
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
             } catch (e: Exception) {
@@ -62,6 +62,32 @@ internal fun Route.routeApiRestGroups(state: State) {
                 val group = state.show.fixtures.untypedGroup(resource.name)
                 val count = group.clearFx(state.show.fxEngine)
                 call.respond(ClearGroupFxResponse(count))
+            } catch (e: IllegalStateException) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
+            }
+        }
+
+        // Get active effects for a group
+        get<GroupActiveFxResource> { resource ->
+            try {
+                // Validate group exists
+                state.show.fixtures.untypedGroup(resource.name)
+
+                val effects = state.show.fxEngine.getEffectsForGroup(resource.name)
+                val dtos = effects.map { instance ->
+                    GroupEffectDto(
+                        id = instance.id,
+                        effectType = instance.effect.name,
+                        propertyName = instance.target.propertyName,
+                        beatDivision = instance.timing.beatDivision,
+                        blendMode = instance.blendMode.name,
+                        distribution = instance.distributionStrategy.javaClass.simpleName,
+                        isRunning = instance.isRunning,
+                        phaseOffset = instance.phaseOffset,
+                        currentPhase = instance.lastPhase
+                    )
+                }
+                call.respond(dtos)
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
             }
@@ -85,6 +111,9 @@ data class GroupResource(val name: String)
 
 @Resource("/{name}/fx")
 data class GroupFxResource(val name: String)
+
+@Resource("/{name}/fx/active")
+data class GroupActiveFxResource(val name: String)
 
 @Resource("/distribution-strategies")
 data object DistributionStrategiesResource
@@ -134,7 +163,20 @@ data class AddGroupFxRequest(
 
 @Serializable
 data class AddGroupFxResponse(
-    val effectIds: List<Long>
+    val effectId: Long
+)
+
+@Serializable
+data class GroupEffectDto(
+    val id: Long,
+    val effectType: String,
+    val propertyName: String,
+    val beatDivision: Double,
+    val blendMode: String,
+    val distribution: String,
+    val isRunning: Boolean,
+    val phaseOffset: Double,
+    val currentPhase: Double
 )
 
 @Serializable
@@ -209,56 +251,53 @@ private fun applyGroupEffect(
     state: State,
     group: FixtureGroup<*>,
     request: AddGroupFxRequest
-): List<Long> {
+): Long {
     val effect = createEffectFromType(request.effectType, request.parameters)
     val timing = FxTiming(request.beatDivision)
     val blendMode = BlendMode.valueOf(request.blendMode)
     val distribution = DistributionStrategy.fromName(request.distribution)
     val engine = state.show.fxEngine
 
-    // Create effect instances for each member with proper distribution
-    fun createEffects(targetFactory: (fixtureKey: String) -> FxTarget): List<Long> {
-        return group.map { member ->
-            val offset = distribution.calculateOffset(member, group.size)
-            val target = targetFactory(member.fixture.key)
-            val instance = FxInstance(effect, target, timing, blendMode).apply {
-                phaseOffset = offset + request.phaseOffset
-            }
-            engine.addEffect(instance)
-        }
-    }
-
-    return when (request.propertyName.lowercase()) {
+    // Create appropriate group target based on property type
+    val target = when (request.propertyName.lowercase()) {
         "dimmer" -> {
             if (!group.fixtures.all { it is FixtureWithDimmer }) {
                 throw IllegalStateException("Not all fixtures in group support dimmer")
             }
-            createEffects { key -> SliderTarget(key, "dimmer") }
+            SliderTarget.forGroup(group.name, "dimmer")
         }
 
         "colour", "color" -> {
             if (!group.fixtures.all { it is FixtureWithColour<*> }) {
                 throw IllegalStateException("Not all fixtures in group support colour")
             }
-            createEffects { key -> ColourTarget(key) }
+            ColourTarget.forGroup(group.name)
         }
 
         "position" -> {
             if (!group.fixtures.all { it is FixtureWithPosition }) {
                 throw IllegalStateException("Not all fixtures in group support position")
             }
-            createEffects { key -> PositionTarget(key) }
+            PositionTarget.forGroup(group.name)
         }
 
         "uv" -> {
             if (!group.fixtures.all { it is FixtureWithUv }) {
                 throw IllegalStateException("Not all fixtures in group support UV")
             }
-            createEffects { key -> SliderTarget(key, "uvColour") }
+            SliderTarget.forGroup(group.name, "uvColour")
         }
 
         else -> throw IllegalArgumentException("Unknown property name: ${request.propertyName}")
     }
+
+    // Create SINGLE FxInstance for the entire group
+    val instance = FxInstance(effect, target, timing, blendMode).apply {
+        phaseOffset = request.phaseOffset
+        distributionStrategy = distribution
+    }
+
+    return engine.addEffect(instance)
 }
 
 private fun createEffectFromType(effectType: String, parameters: Map<String, String>): Effect {

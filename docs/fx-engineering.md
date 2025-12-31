@@ -159,13 +159,47 @@ The low-level DMX fading system supports easing curves via `EasingCurve`:
 
 ## FX Targets
 
-Effects target fixture properties via `FxTarget` subclasses:
+Effects target fixture properties via `FxTarget` subclasses. Targets can reference either a single fixture or an entire group using `FxTargetRef`:
+
+### Target Reference Types
+
+```kotlin
+sealed class FxTargetRef {
+    data class FixtureRef(val targetKey: String)  // Single fixture
+    data class GroupRef(val targetKey: String)    // Fixture group
+}
+```
+
+### Target Types
 
 | Target | Properties | Fixture Trait |
 |--------|------------|---------------|
 | `SliderTarget` | `dimmer`, `uvColour` | `FixtureWithDimmer`, `FixtureWithUv` |
 | `ColourTarget` | `rgbColour` | `FixtureWithColour` |
 | `PositionTarget` | `pan`, `tilt` | `FixtureWithPosition` |
+
+### Group Targets
+
+Create group-targeting effects using factory methods:
+
+```kotlin
+// Target a group instead of a single fixture
+val target = SliderTarget.forGroup("front-wash", "dimmer")
+val colourTarget = ColourTarget.forGroup("front-wash")
+val positionTarget = PositionTarget.forGroup("moving-heads")
+```
+
+### FxTargetable Interface
+
+Both `Fixture` and `FixtureGroup` implement `FxTargetable`:
+
+```kotlin
+interface FxTargetable {
+    val targetKey: String   // Fixture key or group name
+    val isGroup: Boolean    // true for groups
+    val memberCount: Int    // 1 for fixtures, N for groups
+}
+```
 
 ## Script Integration
 
@@ -196,21 +230,55 @@ fixture.fx(fxEngine) {
 fixture.clearFx(fxEngine)
 ```
 
-### Chase Example
+### Chase Example (Group-Level Targeting)
 
 ```kotlin
-// Chase effect across fixture group with phase offsets
-val phaseStep = 1.0 / fixtureGroup("front").size
-fixtureGroup("front").forEachIndexed { index, fixture ->
-    fixture.fx(fxEngine) {
-        dimmer(
-            Pulse(min = 0u, max = 255u),
-            beatDivision = BeatDivision.QUARTER,
-            phaseOffset = index * phaseStep
-        )
-    }
-}
+// Chase effect across fixture group - single FxInstance with distribution
+val group = fixtures.group<HexFixture>("front-wash")
+val effectId = group.applyDimmerFx(
+    fxEngine,
+    Pulse(min = 0u, max = 255u),
+    timing = FxTiming(BeatDivision.QUARTER),
+    distribution = DistributionStrategy.LINEAR  // Auto phase offsets
+)
+
+// Query effects for this group
+val activeEffects = fxEngine.getEffectsForGroup("front-wash")
 ```
+
+## Group Effect Processing
+
+When an `FxInstance` targets a group, the `FxEngine` expands it at processing time:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Group Effect Processing                       │
+│                                                                  │
+│   FxInstance (group target)                                      │
+│        │                                                         │
+│        ▼                                                         │
+│   For each group member:                                         │
+│     1. Get member's index and normalizedPosition                 │
+│     2. Calculate phase offset via DistributionStrategy           │
+│     3. effect.calculate(phase + offset) → output                 │
+│     4. Apply to member fixture                                   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Distribution Strategies
+
+| Strategy | Description |
+|----------|-------------|
+| `LINEAR` | Evenly spaced phases (chase effect) |
+| `UNIFIED` | All fixtures same phase (synchronized) |
+| `CENTER_OUT` | Effects radiate from center |
+| `EDGES_IN` | Effects converge to center |
+| `REVERSE` | Reverse linear order |
+| `SPLIT` | Left/right halves mirror |
+| `PING_PONG` | Back-and-forth sweep |
+| `RANDOM(seed)` | Deterministic random |
+| `POSITIONAL` | Based on normalized position |
 
 ## REST API
 
@@ -289,15 +357,19 @@ GET  /api/rest/fx/library          → [EffectTypeInfo...]
 | `fx/MasterClock.kt` | Global tempo management |
 | `fx/BeatDivision.kt` | Timing constants |
 | `fx/Effect.kt` | Effect interface and FxOutput types |
-| `fx/FxInstance.kt` | Running effect state |
-| `fx/FxTarget.kt` | Fixture property targeting |
-| `fx/FxEngine.kt` | Effect processing loop |
+| `fx/FxInstance.kt` | Running effect state, distributionStrategy |
+| `fx/FxTarget.kt` | Fixture/group property targeting, FxTargetRef |
+| `fx/FxTargetable.kt` | Common interface for Fixture and FixtureGroup |
+| `fx/FxEngine.kt` | Effect processing loop, group expansion |
 | `fx/FxExtensions.kt` | Script DSL helpers |
+| `fx/group/DistributionStrategy.kt` | Phase distribution strategies |
+| `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
 | `fx/effects/DimmerEffects.kt` | Slider effect implementations |
 | `fx/effects/ColourEffects.kt` | Color effect implementations |
 | `fx/effects/PositionEffects.kt` | Position effect implementations |
 | `fixture/FixtureWithPosition.kt` | Position trait for moving heads |
-| `routes/lightFx.kt` | REST API endpoints |
+| `routes/lightFx.kt` | FX REST API endpoints |
+| `routes/lightGroups.kt` | Group REST API endpoints |
 | `plugins/Sockets.kt` | WebSocket message handlers |
 
 ## Threading Model
@@ -314,7 +386,7 @@ GET  /api/rest/fx/library          → [EffectTypeInfo...]
 
 1. **Effect Stacking**: Multiple effects on same property with priority/mixing
 2. **Effect Presets**: Saved effect configurations
-3. **Effect Groups**: Apply same effect to fixture groups with auto phase offsets
-4. **MIDI Clock Sync**: Accept external MIDI clock as tempo source
-5. **Beat Detection**: Auto-detect BPM from audio input
-6. **Effect Modulation**: Effects that modulate other effects' parameters
+3. **MIDI Clock Sync**: Accept external MIDI clock as tempo source
+4. **Beat Detection**: Auto-detect BPM from audio input
+5. **Effect Modulation**: Effects that modulate other effects' parameters
+6. **Custom Distribution Functions**: User-defined distribution curves via scripts

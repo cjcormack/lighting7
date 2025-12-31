@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fixture.group
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fx.FxTargetable
 
 /**
  * Symmetric mode for group effects.
@@ -49,7 +50,12 @@ class FixtureGroup<T : Fixture>(
     val name: String,
     @PublishedApi internal val members: List<GroupMember<T>>,
     val metadata: GroupMetadata = GroupMetadata()
-) : List<GroupMember<T>> by members {
+) : List<GroupMember<T>> by members, FxTargetable {
+
+    // FxTargetable implementation
+    override val targetKey: String get() = name
+    override val isGroup: Boolean get() = true
+    override val memberCount: Int get() = size
 
     /** All fixtures in the group (convenience accessor without member wrapper) */
     val fixtures: List<T> get() = members.map { it.fixture }

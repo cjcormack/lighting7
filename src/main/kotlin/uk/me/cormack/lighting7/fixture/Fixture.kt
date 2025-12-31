@@ -1,11 +1,17 @@
 package uk.me.cormack.lighting7.fixture
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.fx.FxTargetable
 import java.awt.Color
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.memberProperties
 
-sealed class Fixture(val key: String, val fixtureName: String, val position: Int) {
+sealed class Fixture(val key: String, val fixtureName: String, val position: Int) : FxTargetable {
+
+    // FxTargetable implementation
+    override val targetKey: String get() = key
+    override val isGroup: Boolean get() = false
+    override val memberCount: Int get() = 1
     abstract fun withTransaction(transaction: ControllerTransaction): Fixture
 
     data class Property(
