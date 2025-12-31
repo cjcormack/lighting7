@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fixture.group
 
-import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixtureTarget
 
 /**
  * DSL builder for creating fixture groups.
@@ -18,10 +18,10 @@ import uk.me.cormack.lighting7.fixture.Fixture
  * }
  * ```
  *
- * @param T The fixture type for this group
+ * @param T The fixture or element type for this group
  * @param name The group name
  */
-class GroupBuilder<T : Fixture> @PublishedApi internal constructor(private val name: String) {
+class GroupBuilder<T : FixtureTarget> @PublishedApi internal constructor(private val name: String) {
     private val members = mutableListOf<Pair<T, MemberMetadata>>()
     private var groupMetadata = GroupMetadata()
 
@@ -179,12 +179,12 @@ class GroupBuilder<T : Fixture> @PublishedApi internal constructor(private val n
  * }
  * ```
  *
- * @param T The fixture type for this group
+ * @param T The fixture or element type for this group
  * @param name The group name
  * @param block Configuration block
  * @return The constructed fixture group
  */
-inline fun <reified T : Fixture> fixtureGroup(
+inline fun <reified T : FixtureTarget> fixtureGroup(
     name: String,
     block: GroupBuilder<T>.() -> Unit
 ): FixtureGroup<T> {
@@ -192,14 +192,14 @@ inline fun <reified T : Fixture> fixtureGroup(
 }
 
 /**
- * Create a fixture group from a list of fixtures with automatic indexing.
+ * Create a fixture group from a list of fixtures/elements with automatic indexing.
  *
- * @param T The fixture type
+ * @param T The fixture or element type
  * @param name The group name
- * @param fixtures The fixtures to include
+ * @param fixtures The fixtures/elements to include
  * @return The constructed fixture group
  */
-fun <T : Fixture> fixtureGroupOf(
+fun <T : FixtureTarget> fixtureGroupOf(
     name: String,
     fixtures: List<T>
 ): FixtureGroup<T> {
@@ -209,14 +209,14 @@ fun <T : Fixture> fixtureGroupOf(
 }
 
 /**
- * Create a fixture group from vararg fixtures with automatic indexing.
+ * Create a fixture group from vararg fixtures/elements with automatic indexing.
  *
- * @param T The fixture type
+ * @param T The fixture or element type
  * @param name The group name
- * @param fixtures The fixtures to include
+ * @param fixtures The fixtures/elements to include
  * @return The constructed fixture group
  */
-fun <T : Fixture> fixtureGroupOf(
+fun <T : FixtureTarget> fixtureGroupOf(
     name: String,
     vararg fixtures: T
 ): FixtureGroup<T> {

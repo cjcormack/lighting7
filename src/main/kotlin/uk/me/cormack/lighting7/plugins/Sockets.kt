@@ -425,7 +425,7 @@ fun Application.configureSockets(state: State) {
                                 // Remove group-level effects first, then any per-fixture effects
                                 val groupCount = state.show.fxEngine.removeEffectsForGroup(message.groupName)
                                 val fixtureCount = group.sumOf {
-                                    state.show.fxEngine.removeEffectsForFixture(it.fixture.key)
+                                    state.show.fxEngine.removeEffectsForFixture(it.key)
                                 }
                                 sendSerialized<OutMessage>(GroupFxClearedOutMessage(message.groupName, groupCount + fixtureCount))
                             } catch (e: Exception) {

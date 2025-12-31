@@ -285,7 +285,7 @@ class FxEngine(
             )
 
             val output = effect.effect.calculate(memberPhase)
-            effect.target.applyValue(fixturesWithTx, member.fixture.key, output, effect.blendMode)
+            effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
         }
     }
 

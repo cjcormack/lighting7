@@ -224,8 +224,8 @@ private fun FixtureGroup<*>.toDetailedDto(): GroupDetailDto {
         defaultDistribution = metadata.defaultDistributionName,
         members = map { member ->
             GroupMemberDto(
-                fixtureKey = member.fixture.key,
-                fixtureName = member.fixture.fixtureName,
+                fixtureKey = member.key,
+                fixtureName = member.name,
                 index = member.index,
                 normalizedPosition = member.normalizedPosition,
                 panOffset = member.metadata.panOffset,

@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.fixture.group
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
-import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixtureTarget
 import uk.me.cormack.lighting7.fx.FxTargetable
 
 /**
@@ -33,20 +33,23 @@ data class GroupMetadata(
 )
 
 /**
- * A type-safe, position-aware group of fixtures sharing common capabilities.
+ * A type-safe, position-aware group of fixtures or elements sharing common capabilities.
  *
  * FixtureGroup provides compile-time type safety for fixture operations by
- * parameterizing the group with the fixture type or capability interface.
+ * parameterizing the group with the fixture/element type or capability interface.
  * This allows operations like effect application to be type-checked at compile time.
+ *
+ * Groups can contain either standalone [Fixture][uk.me.cormack.lighting7.fixture.Fixture]
+ * instances or [FixtureElement] components from multi-element fixtures.
  *
  * Groups also provide position-aware operations, with each member having an index
  * and normalized position (0.0-1.0) that can be used for phase-distributed effects.
  *
- * @param T The capability bound - all fixtures must be at least this type
+ * @param T The capability bound - all members must be at least this type
  * @property name The group name for identification
  * @property metadata Group-level configuration
  */
-class FixtureGroup<T : Fixture>(
+class FixtureGroup<T : FixtureTarget>(
     val name: String,
     @PublishedApi internal val members: List<GroupMember<T>>,
     val metadata: GroupMetadata = GroupMetadata()
@@ -63,12 +66,12 @@ class FixtureGroup<T : Fixture>(
     /**
      * Safely narrow this group to a more specific capability type.
      *
-     * Use this when you know the group contains fixtures with additional capabilities
+     * Use this when you know the group contains members with additional capabilities
      * beyond the declared type, and you want to access those capabilities safely.
      *
      * @return The group cast to the more specific type, or null if any member doesn't support it
      */
-    inline fun <reified R : Fixture> asCapable(): FixtureGroup<R>? {
+    inline fun <reified R : FixtureTarget> asCapable(): FixtureGroup<R>? {
         return if (members.all { it.fixture is R }) {
             @Suppress("UNCHECKED_CAST")
             FixtureGroup(
@@ -95,7 +98,7 @@ class FixtureGroup<T : Fixture>(
      * @return The group cast to the more specific type
      * @throws IllegalStateException if any member doesn't support the capability
      */
-    inline fun <reified R : Fixture> requireCapable(): FixtureGroup<R> {
+    inline fun <reified R : FixtureTarget> requireCapable(): FixtureGroup<R> {
         return asCapable()
             ?: throw IllegalStateException(
                 "Group '$name' does not support ${R::class.simpleName}. " +

@@ -173,7 +173,7 @@ sealed class SlenderBeamBarQuadFixture(
         /** Display name for this head */
         val headName: String = "$fixtureName Head ${elementIndex + 1}"
 
-        abstract fun withTransaction(transaction: ControllerTransaction): Head
+        abstract override fun withTransaction(transaction: ControllerTransaction): Head
     }
 
     /**

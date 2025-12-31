@@ -62,6 +62,7 @@ object LightingScriptConfiguration : ScriptCompilationConfiguration(
             "uk.me.cormack.lighting7.fixture.*",
             "uk.me.cormack.lighting7.fixture.dmx.*",
             "uk.me.cormack.lighting7.fixture.hue.*",
+            "uk.me.cormack.lighting7.fixture.group.*",
             "uk.me.cormack.lighting7.scriptSettings.*",
             "uk.me.cormack.lighting7.fx.*",
             "uk.me.cormack.lighting7.fx.effects.*",

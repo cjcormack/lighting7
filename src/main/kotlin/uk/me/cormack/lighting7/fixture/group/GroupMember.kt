@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fixture.group
 
-import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixtureTarget
 import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 
 /**
@@ -19,23 +19,23 @@ data class MemberMetadata(
 )
 
 /**
- * A fixture within a group, with position and metadata.
+ * A fixture or element within a group, with position and metadata.
  *
- * @param T The fixture type
- * @property fixture The fixture instance
+ * @param T The fixture/element type (must implement FixtureTarget)
+ * @property fixture The fixture or element instance
  * @property index Zero-based position within the group
  * @property normalizedPosition Position normalized to 0.0-1.0 range across the group
  * @property metadata Additional member-specific configuration
  */
-data class GroupMember<T : Fixture>(
+data class GroupMember<T : FixtureTarget>(
     val fixture: T,
     override val index: Int,
     override val normalizedPosition: Double,
     val metadata: MemberMetadata = MemberMetadata()
 ) : DistributionMemberInfo {
-    /** Fixture key for convenience */
-    val key: String get() = fixture.key
+    /** Target key for convenience */
+    val key: String get() = fixture.targetKey
 
-    /** Fixture name for convenience */
-    val name: String get() = fixture.fixtureName
+    /** Display name for convenience */
+    val name: String get() = fixture.displayName
 }

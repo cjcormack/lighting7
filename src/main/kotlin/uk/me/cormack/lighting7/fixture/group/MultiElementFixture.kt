@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.fixture.group
 
+import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixtureTarget
 
 /**
  * Represents a single controllable element within a multi-element fixture.
@@ -15,9 +17,12 @@ import uk.me.cormack.lighting7.fixture.Fixture
  * Elements are typically inner classes of the parent fixture and share the
  * parent's transaction context and DMX controller.
  *
+ * This interface extends [FixtureTarget], enabling elements to be used in
+ * fixture groups alongside standalone fixtures.
+ *
  * @param P The parent fixture type
  */
-interface FixtureElement<P : Fixture> {
+interface FixtureElement<P : Fixture> : FixtureTarget {
     /**
      * The parent fixture containing this element.
      */
@@ -36,6 +41,21 @@ interface FixtureElement<P : Fixture> {
      */
     val elementKey: String
         get() = "${parentFixture.key}.element-$elementIndex"
+
+    // FixtureTarget implementation
+    override val targetKey: String
+        get() = elementKey
+
+    override val displayName: String
+        get() = "${parentFixture.fixtureName} Element ${elementIndex + 1}"
+
+    override val isGroup: Boolean
+        get() = false
+
+    override val memberCount: Int
+        get() = 1
+
+    override fun withTransaction(transaction: ControllerTransaction): FixtureElement<P>
 }
 
 /**
@@ -96,17 +116,16 @@ interface MultiElementFixture<E : FixtureElement<*>> {
  * automatic positioning based on their element index.
  *
  * @param P The parent fixture type
- * @param E The element type (must also be the group's fixture type)
+ * @param E The element type (must extend FixtureElement)
  * @param fixture The multi-element fixture to expand
  * @param panSpread Total pan spread in degrees across all elements
  * @param tiltSpread Total tilt spread in degrees across all elements
  */
-@Suppress("UNCHECKED_CAST")
-inline fun <P : Fixture, reified E> GroupBuilder<E>.addElements(
+inline fun <P : Fixture, reified E : FixtureElement<P>> GroupBuilder<E>.addElements(
     fixture: MultiElementFixture<*>,
     panSpread: Double = 0.0,
     tiltSpread: Double = 0.0
-) where E : Fixture, E : FixtureElement<P> {
+) {
     val elements = fixture.elements.filterIsInstance<E>()
     val count = elements.size
 
@@ -126,17 +145,16 @@ inline fun <P : Fixture, reified E> GroupBuilder<E>.addElements(
  * with symmetric positioning.
  *
  * @param P The parent fixture type
- * @param E The element type (must also be the group's fixture type)
+ * @param E The element type (must extend FixtureElement)
  * @param fixture The multi-element fixture to expand
  * @param panSpread Total pan spread in degrees
  * @param tiltSpread Total tilt spread in degrees
  */
-@Suppress("UNCHECKED_CAST")
-inline fun <P : Fixture, reified E> GroupBuilder<E>.addElementsSymmetric(
+inline fun <P : Fixture, reified E : FixtureElement<P>> GroupBuilder<E>.addElementsSymmetric(
     fixture: MultiElementFixture<*>,
     panSpread: Double = 0.0,
     tiltSpread: Double = 0.0
-) where E : Fixture, E : FixtureElement<P> {
+) {
     val elements = fixture.elements.filterIsInstance<E>()
     val count = elements.size
 

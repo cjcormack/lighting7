@@ -109,7 +109,7 @@ class QuadMoverBarFixture(
         override val tilt = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 6)
 
         /** Create a copy of this head bound to a transaction */
-        fun withTransaction(transaction: ControllerTransaction): Head =
+        override fun withTransaction(transaction: ControllerTransaction): Head =
             Head(elementIndex, transaction)
 
         /** Set all head values to black/off */
