@@ -10,9 +10,12 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 
-internal fun Fixture.details(): FixtureDetails {
+internal fun Fixture.details(fixtures: Fixtures): FixtureDetails {
+    val fixtureGroups = fixtures.groupsForFixture(this.key)
+
     return when (this) {
         is DmxFixture -> {
             val channels = this.channelDescriptions().map { channel ->
@@ -32,6 +35,7 @@ internal fun Fixture.details(): FixtureDetails {
                 name = this.fixtureName,
                 key = this.key,
                 typeKey = this.typeKey,
+                groups = fixtureGroups,
                 manufacturer = this.manufacturer.ifEmpty { null },
                 model = this.model.ifEmpty { null },
                 universe = this.universe.universe,
@@ -45,7 +49,7 @@ internal fun Fixture.details(): FixtureDetails {
             )
         }
         is HueFixture -> {
-            HueFixtureDetails(this.fixtureName, this.key, this.typeKey)
+            HueFixtureDetails(this.fixtureName, this.key, this.typeKey, fixtureGroups)
         }
     }
 }
@@ -64,11 +68,13 @@ private fun DmxFixture.detectCapabilities(): List<String> {
 internal fun Route.routeApiRestLightsFixtures(state: State) {
     route("/fixture") {
         get("/list") {
-            call.respond(state.show.fixtures.fixtures.map(Fixture::details))
+            val fixtures = state.show.fixtures
+            call.respond(fixtures.fixtures.map { it.details(fixtures) })
         }
 
         get<FixtureKey> {
-            call.respond(state.show.fixtures.fixture<Fixture>(it.key).details())
+            val fixtures = state.show.fixtures
+            call.respond(fixtures.fixture<Fixture>(it.key).details(fixtures))
         }
     }
 }
@@ -81,6 +87,7 @@ sealed interface FixtureDetails {
     val name: String
     val key: String
     val typeKey: String
+    val groups: List<String>
 }
 
 @Serializable
@@ -94,6 +101,7 @@ data class DmxFixtureDetails(
     override val name: String,
     override val key: String,
     override val typeKey: String,
+    override val groups: List<String>,
     val manufacturer: String?,
     val model: String?,
     val universe: Int,
@@ -111,6 +119,7 @@ data class HueFixtureDetails(
     override val name: String,
     override val key: String,
     override val typeKey: String,
+    override val groups: List<String>,
 ): FixtureDetails
 
 // Property Descriptor Types

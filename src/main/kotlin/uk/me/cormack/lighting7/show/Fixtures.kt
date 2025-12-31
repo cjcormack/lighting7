@@ -122,6 +122,15 @@ class Fixtures {
         return group.requireCapable()
     }
 
+    /**
+     * Get the names of all groups that contain a fixture with the given key.
+     */
+    fun groupsForFixture(fixtureKey: String): List<String> = registerLock.read {
+        groupRegister.values
+            .filter { group -> group.any { member -> member.fixture.key == fixtureKey } }
+            .map { it.name }
+    }
+
     fun recordScene(sceneId: Int, changeDetails: Map<Universe, Map<Int, UByte>>) {
         activeScenesLock.write {
             if (changeDetails.isEmpty()) {
