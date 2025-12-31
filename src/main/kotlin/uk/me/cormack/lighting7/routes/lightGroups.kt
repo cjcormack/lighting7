@@ -11,6 +11,7 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
+import uk.me.cormack.lighting7.fixture.group.generateGroupPropertyDescriptors
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.effects.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
@@ -37,6 +38,17 @@ internal fun Route.routeApiRestGroups(state: State) {
             try {
                 val group = state.show.fixtures.untypedGroup(resource.name)
                 call.respond(group.toDetailedDto())
+            } catch (e: IllegalStateException) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
+            }
+        }
+
+        // Get group properties (aggregated property descriptors for all members)
+        get<GroupPropertiesResource> { resource ->
+            try {
+                val group = state.show.fixtures.untypedGroup(resource.name)
+                val properties = group.generateGroupPropertyDescriptors()
+                call.respond(properties)
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
             }
@@ -108,6 +120,9 @@ data object GroupsResource
 
 @Resource("/{name}")
 data class GroupResource(val name: String)
+
+@Resource("/{name}/properties")
+data class GroupPropertiesResource(val name: String)
 
 @Resource("/{name}/fx")
 data class GroupFxResource(val name: String)

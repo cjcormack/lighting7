@@ -112,6 +112,11 @@ Type-safe fixture groups for treating multiple fixtures as a single unit:
 the effect to group members at processing time, applying distribution strategy offsets.
 This allows querying which effects are active on a group.
 
+**Group Properties**: Groups expose aggregated property descriptors via the REST API, allowing
+the frontend to view and edit properties across all group members simultaneously. The
+`/groups/{name}/properties` endpoint returns descriptors with member channel references,
+enabling range/summary display for mixed values and bulk updates.
+
 Creating groups in registration scripts:
 ```kotlin
 fixtures.register {
@@ -158,6 +163,7 @@ val activeEffects = fxEngine.getEffectsForGroup("front-wash")
 ### Group REST Endpoints
 - `GET /api/rest/groups` - List all fixture groups
 - `GET /api/rest/groups/{name}` - Get group details with members
+- `GET /api/rest/groups/{name}/properties` - Get aggregated property descriptors for group members
 - `GET /api/rest/groups/{name}/fx` - Get active effects for group
 - `POST /api/rest/groups/{name}/fx` - Apply effect to group (returns single `effectId`)
 - `DELETE /api/rest/groups/{name}/fx` - Clear all effects for group

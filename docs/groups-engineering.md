@@ -311,6 +311,7 @@ fixtures.group<FixtureWithPosition>("all-heads").applyPositionFx(
 |--------|------|-------------|
 | GET | `/api/rest/groups` | List all groups |
 | GET | `/api/rest/groups/{name}` | Get group details |
+| GET | `/api/rest/groups/{name}/properties` | Get aggregated property descriptors |
 | GET | `/api/rest/groups/{name}/fx` | Get active effects for group |
 | POST | `/api/rest/groups/{name}/fx` | Apply effect to group |
 | DELETE | `/api/rest/groups/{name}/fx` | Clear group effects |
@@ -372,6 +373,54 @@ Response:
 ```
 
 Note: The response returns a single `effectId` because one `FxInstance` is created that targets the entire group. The engine expands this to group members at processing time.
+
+## Group Properties
+
+Groups expose aggregated property descriptors that include channel references for all group members.
+This enables the frontend to:
+- View property values with range/summary display for mixed values (e.g., "50-100%")
+- Set uniform values across all group members simultaneously
+
+### Property Aggregation
+
+The `generateGroupPropertyDescriptors()` extension function collects property descriptors from all
+group members and combines them:
+
+```kotlin
+// Extension function in fixture/group/GroupPropertyAggregation.kt
+fun FixtureGroup<*>.generateGroupPropertyDescriptors(): List<GroupPropertyDescriptor>
+
+// Returns descriptors with memberChannels list for each property
+// Only properties common to ALL members are included
+```
+
+### Setting Properties in Scripts
+
+To set properties on all group fixtures programmatically:
+
+```kotlin
+val group = fixtures.group<HexFixture>("front-wash")
+
+// Set all fixtures to same dimmer value
+group.fixtures.forEach { it.dimmer.value = 200u }
+
+// Set all fixtures to same colour
+group.fixtures.forEach {
+    it.rgbColour.value = Color(255, 128, 0)  // Orange
+}
+
+// With fade transition
+val transaction = controller.startTransaction(fadeMs = 1000)
+val groupWithTx = fixtures.withTransaction(transaction).group<HexFixture>("front-wash")
+groupWithTx.fixtures.forEach { it.dimmer.value = 255u }
+transaction.commit()
+```
+
+### Frontend Integration
+
+The frontend Properties dialog in "By Group" view uses WebSocket `updateChannel` messages
+to set values. When editing a group property, it sends individual channel updates for each
+member fixture, which the backend processes and broadcasts as `channelState` updates.
 
 ## WebSocket Messages
 
