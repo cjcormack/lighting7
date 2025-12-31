@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.FixtureWithDimmer
+import uk.me.cormack.lighting7.fixture.PropertyCategory
 
 @FixtureType("quadbar")
 class QuadBarFixture (
@@ -51,6 +52,6 @@ class QuadBarFixture (
         SOUND_ACTIVE(248u),
     }
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.SETTING)
     val showMode = DmxFixtureSetting(transaction, universe, firstChannel, ShowMode.entries.toTypedArray())
 }

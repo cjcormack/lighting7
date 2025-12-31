@@ -2,7 +2,10 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fixture.*
+import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureType
+import uk.me.cormack.lighting7.fixture.PropertyCategory
 
 @FixtureType("hazer")
 class HazerFixture (
@@ -27,9 +30,9 @@ class HazerFixture (
 
     override fun withTransaction(transaction: ControllerTransaction): HazerFixture = HazerFixture(this, transaction)
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.OTHER)
     val pumpControl = DmxFixtureSlider(transaction, universe, firstChannel)
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.SPEED)
     val fanSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 1)
 }

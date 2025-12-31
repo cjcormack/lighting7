@@ -5,6 +5,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
+import uk.me.cormack.lighting7.fixture.PropertyCategory
 
 @FixtureType("scantastic")
 class ScantasticFixture (
@@ -39,9 +40,9 @@ class ScantasticFixture (
         SOUND_ACTIVE(128u),
     }
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.SETTING)
     val onMode = DmxFixtureSetting(transaction, universe, firstChannel, OnMode.entries.toTypedArray())
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.SETTING)
     val mode = DmxFixtureSetting(transaction, universe, firstChannel + 16, Mode.entries.toTypedArray())
 }

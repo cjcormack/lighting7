@@ -32,7 +32,7 @@ import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
  *
  * Note: This is an example fixture. Actual channel layouts vary by manufacturer.
  */
-@FixtureType("quad-mover-bar")
+@FixtureType("quad-mover-bar", manufacturer = "Example", model = "Quad Mover Bar")
 class QuadMoverBarFixture(
     universe: Universe,
     key: String,
@@ -87,10 +87,10 @@ class QuadMoverBarFixture(
 
         private val headFirstChannel = firstChannel + 1 + (elementIndex * 7)
 
-        @FixtureProperty("Head dimmer")
+        @FixtureProperty("Head dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxFixtureSlider(headTransaction, universe, headFirstChannel)
 
-        @FixtureProperty("Head RGB colour")
+        @FixtureProperty("Head RGB colour", category = PropertyCategory.COLOUR)
         override val rgbColour = DmxFixtureColour(
             headTransaction,
             universe,
@@ -99,13 +99,13 @@ class QuadMoverBarFixture(
             headFirstChannel + 3,  // Blue
         )
 
-        @FixtureProperty("Head pan (horizontal)")
+        @FixtureProperty("Head pan (horizontal)", category = PropertyCategory.POSITION)
         override val pan = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 4)
 
-        @FixtureProperty("Head pan fine")
+        @FixtureProperty("Head pan fine", category = PropertyCategory.POSITION)
         val panFine = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 5)
 
-        @FixtureProperty("Head tilt (vertical)")
+        @FixtureProperty("Head tilt (vertical)", category = PropertyCategory.POSITION)
         override val tilt = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 6)
 
         /** Create a copy of this head bound to a transaction */
@@ -122,7 +122,7 @@ class QuadMoverBarFixture(
     }
 
     /** Master dimmer affecting all heads */
-    @FixtureProperty("Master dimmer")
+    @FixtureProperty("Master dimmer", category = PropertyCategory.DIMMER)
     override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel)
 
     /** The four individual heads */

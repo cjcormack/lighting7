@@ -63,23 +63,26 @@ sealed class SlenderBeamBarQuadFixture(
      * Color presets for the RGBW LED heads.
      * Values based on DMX chart from manual.
      */
-    enum class Colour(override val level: UByte) : DmxFixtureSettingValue {
-        BLACKOUT(0u),
-        RED(8u),
-        GREEN(25u),
-        BLUE(42u),
-        WHITE(58u),
-        RED_GREEN(75u),
-        RED_BLUE(91u),
-        RED_WHITE(108u),
-        GREEN_BLUE(124u),
-        GREEN_WHITE(141u),
-        BLUE_WHITE(157u),
-        RED_GREEN_BLUE(174u),
-        RED_GREEN_WHITE(190u),
-        RED_BLUE_WHITE(207u),
-        GREEN_BLUE_WHITE(223u),
-        RED_GREEN_BLUE_WHITE(240u);
+    enum class Colour(
+        override val level: UByte,
+        override val colourPreview: String?
+    ) : DmxFixtureColourSettingValue {
+        BLACKOUT(0u, null),
+        RED(8u, "#FF0000"),
+        GREEN(25u, "#00FF00"),
+        BLUE(42u, "#0000FF"),
+        WHITE(58u, "#FFFFFF"),
+        RED_GREEN(75u, "#FFFF00"),
+        RED_BLUE(91u, "#FF00FF"),
+        RED_WHITE(108u, "#FF8080"),
+        GREEN_BLUE(124u, "#00FFFF"),
+        GREEN_WHITE(141u, "#80FF80"),
+        BLUE_WHITE(157u, "#8080FF"),
+        RED_GREEN_BLUE(174u, "#FFFFFF"),
+        RED_GREEN_WHITE(190u, "#FFFF80"),
+        RED_BLUE_WHITE(207u, "#FF80FF"),
+        GREEN_BLUE_WHITE(223u, "#80FFFF"),
+        RED_GREEN_BLUE_WHITE(240u, "#FFFFFF");
     }
 
     /**
@@ -182,13 +185,13 @@ sealed class SlenderBeamBarQuadFixture(
         private val headFirstChannel: Int
     ) : Head(elementIndex, headTransaction), FixtureWithPosition {
 
-        @FixtureProperty("Head pan 0-540")
+        @FixtureProperty("Head pan 0-540", category = PropertyCategory.POSITION)
         override val pan = DmxFixtureSlider(headTransaction, universe, headFirstChannel)
 
-        @FixtureProperty("Head tilt 0-270")
+        @FixtureProperty("Head tilt 0-270", category = PropertyCategory.POSITION)
         override val tilt = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 1)
 
-        @FixtureProperty("Head colour preset")
+        @FixtureProperty("Head colour preset", category = PropertyCategory.COLOUR)
         val colour = DmxFixtureSetting(headTransaction, universe, headFirstChannel + 2, Colour.entries.toTypedArray())
 
         override fun withTransaction(transaction: ControllerTransaction): BasicHead =
@@ -206,22 +209,22 @@ sealed class SlenderBeamBarQuadFixture(
         private val headFirstChannel: Int
     ) : Head(elementIndex, headTransaction), FixtureWithPosition {
 
-        @FixtureProperty("Head pan 0-540")
+        @FixtureProperty("Head pan 0-540", category = PropertyCategory.POSITION)
         override val pan = DmxFixtureSlider(headTransaction, universe, headFirstChannel)
 
-        @FixtureProperty("Head pan fine")
+        @FixtureProperty("Head pan fine", category = PropertyCategory.POSITION)
         val panFine = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 1)
 
-        @FixtureProperty("Head tilt 0-270")
+        @FixtureProperty("Head tilt 0-270", category = PropertyCategory.POSITION)
         override val tilt = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 2)
 
-        @FixtureProperty("Head tilt fine")
+        @FixtureProperty("Head tilt fine", category = PropertyCategory.POSITION)
         val tiltFine = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 3)
 
-        @FixtureProperty("Head pan/tilt speed (fast to slow)")
+        @FixtureProperty("Head pan/tilt speed (fast to slow)", category = PropertyCategory.SPEED)
         val speed = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 4)
 
-        @FixtureProperty("Head colour preset")
+        @FixtureProperty("Head colour preset", category = PropertyCategory.COLOUR)
         val colour = DmxFixtureSetting(headTransaction, universe, headFirstChannel + 5, Colour.entries.toTypedArray())
 
         override fun withTransaction(transaction: ControllerTransaction): FullHead =
@@ -240,7 +243,7 @@ sealed class SlenderBeamBarQuadFixture(
      * DMX Layout (1 channel):
      * - Ch 1: Show mode preset
      */
-    @FixtureType("slender-beam-bar-quad-1ch")
+    @FixtureType("slender-beam-bar-quad-1ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad")
     class Mode1Ch(
         universe: Universe,
         key: String,
@@ -261,7 +264,7 @@ sealed class SlenderBeamBarQuadFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode1Ch =
             Mode1Ch(this, transaction)
 
-        @FixtureProperty("Show mode preset")
+        @FixtureProperty("Show mode preset", category = PropertyCategory.SETTING)
         val showMode = DmxFixtureSetting(transaction, universe, firstChannel, ShowMode.entries.toTypedArray())
     }
 
@@ -276,7 +279,7 @@ sealed class SlenderBeamBarQuadFixture(
      * - Ch 5: Colour chase preset
      * - Ch 6: Colour chase speed
      */
-    @FixtureType("slender-beam-bar-quad-6ch")
+    @FixtureType("slender-beam-bar-quad-6ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad")
     class Mode6Ch(
         universe: Universe,
         key: String,
@@ -298,22 +301,22 @@ sealed class SlenderBeamBarQuadFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode6Ch =
             Mode6Ch(this, transaction)
 
-        @FixtureProperty("Dimmer")
+        @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Strobe")
+        @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
         override val strobe = Strobe(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Movement preset")
+        @FixtureProperty("Movement preset", category = PropertyCategory.SETTING)
         val movementPreset = DmxFixtureSetting(transaction, universe, firstChannel + 2, ShowMode.entries.toTypedArray())
 
-        @FixtureProperty("Movement speed")
+        @FixtureProperty("Movement speed", category = PropertyCategory.SPEED)
         val movementSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 3)
 
-        @FixtureProperty("Colour chase")
+        @FixtureProperty("Colour chase", category = PropertyCategory.SETTING)
         val colourChase = DmxFixtureSetting(transaction, universe, firstChannel + 4, ColourChase.entries.toTypedArray())
 
-        @FixtureProperty("Colour chase speed")
+        @FixtureProperty("Colour chase speed", category = PropertyCategory.SPEED)
         val colourChaseSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 5)
     }
 
@@ -326,7 +329,7 @@ sealed class SlenderBeamBarQuadFixture(
      *   - +1: Tilt
      *   - +2: Colour preset
      */
-    @FixtureType("slender-beam-bar-quad-12ch")
+    @FixtureType("slender-beam-bar-quad-12ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad")
     class Mode12Ch(
         universe: Universe,
         key: String,
@@ -376,7 +379,7 @@ sealed class SlenderBeamBarQuadFixture(
      *   - +1: Tilt
      *   - +2: Colour preset
      */
-    @FixtureType("slender-beam-bar-quad-14ch")
+    @FixtureType("slender-beam-bar-quad-14ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad")
     class Mode14Ch(
         universe: Universe,
         key: String,
@@ -398,10 +401,10 @@ sealed class SlenderBeamBarQuadFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode14Ch =
             Mode14Ch(this, transaction)
 
-        @FixtureProperty("Master dimmer")
+        @FixtureProperty("Master dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Master strobe")
+        @FixtureProperty("Master strobe", category = PropertyCategory.STROBE)
         override val strobe = Strobe(transaction, universe, firstChannel + 1)
 
         override val elements: List<BasicHead> = (0 until 4).map { idx ->
@@ -441,7 +444,7 @@ sealed class SlenderBeamBarQuadFixture(
      *   - +5: Colour preset
      * - Ch 27: Special function (reset, etc.)
      */
-    @FixtureType("slender-beam-bar-quad-27ch")
+    @FixtureType("slender-beam-bar-quad-27ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad")
     class Mode27Ch(
         universe: Universe,
         key: String,
@@ -463,10 +466,10 @@ sealed class SlenderBeamBarQuadFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode27Ch =
             Mode27Ch(this, transaction)
 
-        @FixtureProperty("Master dimmer")
+        @FixtureProperty("Master dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Master strobe")
+        @FixtureProperty("Master strobe", category = PropertyCategory.STROBE)
         override val strobe = Strobe(transaction, universe, firstChannel + 1)
 
         override val elements: List<FullHead> = (0 until 4).map { idx ->
@@ -480,7 +483,7 @@ sealed class SlenderBeamBarQuadFixture(
             return elements[index]
         }
 
-        @FixtureProperty("Special function")
+        @FixtureProperty("Special function", category = PropertyCategory.SETTING)
         val specialFunction = DmxFixtureSetting(transaction, universe, firstChannel + 26, SpecialFunction.entries.toTypedArray())
 
         /** Set all heads to the same colour */

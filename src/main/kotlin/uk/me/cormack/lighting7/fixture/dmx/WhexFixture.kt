@@ -59,10 +59,10 @@ class WhexFixture(
         SLOW(204u),
     }
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.DIMMER)
     override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel, max = maxDimmerLevel)
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.COLOUR)
     override val rgbColour = DmxFixtureColour(
         transaction,
         universe,
@@ -71,22 +71,24 @@ class WhexFixture(
         firstChannel + 3,
     )
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.WHITE, bundleWithColour = true)
     val whiteColour = DmxFixtureSlider(transaction, universe, firstChannel + 4)
-    @FixtureProperty
+
+    @FixtureProperty(category = PropertyCategory.AMBER, bundleWithColour = true)
     val amberColour = DmxFixtureSlider(transaction, universe, firstChannel + 5)
-    @FixtureProperty
+
+    @FixtureProperty(category = PropertyCategory.UV, bundleWithColour = true)
     override val uvColour = DmxFixtureSlider(transaction, universe, firstChannel + 6)
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.STROBE)
     override val strobe = Strobe(transaction, universe, firstChannel + 7)
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.SETTING)
     val mode = DmxFixtureSetting(transaction, universe, firstChannel + 9, ProgramMode.entries.toTypedArray())
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.SPEED)
     val programSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 10)
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.SETTING)
     val dimmerMode = DmxFixtureSetting(transaction, universe, firstChannel + 11, DimmerMode.entries.toTypedArray())
 }

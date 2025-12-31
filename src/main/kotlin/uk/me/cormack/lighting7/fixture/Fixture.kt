@@ -18,12 +18,23 @@ sealed class Fixture(val key: String, val fixtureName: String, val position: Int
         val classProperty: KProperty1<out Fixture, *>,
         val name: String,
         val description: String,
+        val category: PropertyCategory,
+        val bundleWithColour: Boolean,
     )
 
-    val typeKey: String = this::class.annotations.filterIsInstance<FixtureType>().first().typeKey
+    private val fixtureTypeAnnotation: FixtureType = this::class.annotations.filterIsInstance<FixtureType>().first()
+    val typeKey: String = fixtureTypeAnnotation.typeKey
+    val manufacturer: String = fixtureTypeAnnotation.manufacturer
+    val model: String = fixtureTypeAnnotation.model
     val fixtureProperties: List<Property> = this::class.memberProperties.map { classProperty ->
         classProperty.annotations.filterIsInstance<FixtureProperty>().map { fixtureProperty ->
-            Property(classProperty, classProperty.name, fixtureProperty.description)
+            Property(
+                classProperty,
+                classProperty.name,
+                fixtureProperty.description,
+                fixtureProperty.category,
+                fixtureProperty.bundleWithColour
+            )
         }
     }.flatten()
 

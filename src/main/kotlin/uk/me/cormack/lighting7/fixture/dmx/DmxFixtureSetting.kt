@@ -9,6 +9,15 @@ interface DmxFixtureSettingValue: FixtureSettingValue {
     val level: UByte
 }
 
+/**
+ * Setting value with an associated colour preview for display in the UI.
+ * Use this for colour preset enums (e.g., RED, GREEN, BLUE presets).
+ */
+interface DmxFixtureColourSettingValue : DmxFixtureSettingValue {
+    /** Hex colour string for UI preview (e.g., "#FF0000"), or null for no preview */
+    val colourPreview: String?
+}
+
 class DmxFixtureSetting<T : DmxFixtureSettingValue>(
     val transaction: ControllerTransaction?,
     val universe: Universe,
@@ -23,7 +32,7 @@ class DmxFixtureSetting<T : DmxFixtureSettingValue>(
         get() = valueForLevel(nonNullTransaction.getValue(universe, channelNo))
         set(value) = nonNullTransaction.setValue(universe, channelNo, value.level)
 
-    private val sortedValues: List<T>
+    val sortedValues: List<T>
     private val valuesByName: Map<String, T>
 
     init {

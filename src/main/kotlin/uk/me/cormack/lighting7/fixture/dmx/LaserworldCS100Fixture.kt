@@ -5,6 +5,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
+import uk.me.cormack.lighting7.fixture.PropertyCategory
 
 @FixtureType("laserword_cs100")
 class LaserworldCS100Fixture(
@@ -36,31 +37,42 @@ class LaserworldCS100Fixture(
         DMX_MODE(150u),
     }
 
-    @FixtureProperty
+    @FixtureProperty(category = PropertyCategory.SETTING)
     val mode = DmxFixtureSetting(transaction, universe, firstChannel, OperationMode.entries.toTypedArray())
 
-    @FixtureProperty("Pattern select")
+    @FixtureProperty("Pattern select", category = PropertyCategory.SETTING)
     val pattern = DmxFixtureSlider(transaction, universe, firstChannel + 1)
-    @FixtureProperty("Rotation (Z-axis)")
+
+    @FixtureProperty("Rotation (Z-axis)", category = PropertyCategory.OTHER)
     val rotationZ = DmxFixtureSlider(transaction, universe, firstChannel + 2)
-    @FixtureProperty("Rotation X-axis")
+
+    @FixtureProperty("Rotation X-axis", category = PropertyCategory.OTHER)
     val rotationX = DmxFixtureSlider(transaction, universe, firstChannel + 3)
-    @FixtureProperty("Rotation Y-axis")
+
+    @FixtureProperty("Rotation Y-axis", category = PropertyCategory.OTHER)
     val rotationY = DmxFixtureSlider(transaction, universe, firstChannel + 4)
-    @FixtureProperty("Offset X-axis")
+
+    @FixtureProperty("Offset X-axis", category = PropertyCategory.POSITION)
     val offsetX = DmxFixtureSlider(transaction, universe, firstChannel + 5)
-    @FixtureProperty("Offset Y-axis")
+
+    @FixtureProperty("Offset Y-axis", category = PropertyCategory.POSITION)
     val offsetY = DmxFixtureSlider(transaction, universe, firstChannel + 6)
-    @FixtureProperty("Size X")
+
+    @FixtureProperty("Size X", category = PropertyCategory.OTHER)
     val sizeX = DmxFixtureSlider(transaction, universe, firstChannel + 7)
-    @FixtureProperty("Size Y")
+
+    @FixtureProperty("Size Y", category = PropertyCategory.OTHER)
     val sizeY = DmxFixtureSlider(transaction, universe, firstChannel + 8)
-    @FixtureProperty("Drawing effect")
+
+    @FixtureProperty("Drawing effect", category = PropertyCategory.SETTING)
     val drawingEffect = DmxFixtureSlider(transaction, universe, firstChannel + 9)
-    @FixtureProperty("Scan speed / Points")
+
+    @FixtureProperty("Scan speed / Points", category = PropertyCategory.SPEED)
     val scanSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 10)
-    @FixtureProperty("Colour change")
+
+    @FixtureProperty("Colour change", category = PropertyCategory.COLOUR)
     val colourChange = DmxFixtureSlider(transaction, universe, firstChannel + 11)
-    @FixtureProperty("Colour speed")
+
+    @FixtureProperty("Colour speed", category = PropertyCategory.SPEED)
     val colourSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 12)
 }
