@@ -171,6 +171,7 @@ val activeEffects = fxEngine.getEffectsForGroup("front-wash")
 
 ### WebSocket Messages
 - `channelState` - DMX channel value updates
+- `channelMappingState` - Channel-to-fixture mapping (sent on connect and fixtures change)
 - `universesState` - Available DMX universes
 - `sceneListChanged` - Scene list modifications
 - `updateChannel` - Direct channel control

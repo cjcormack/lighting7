@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.show
 
 import uk.me.cormack.lighting7.dmx.*
+import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixtureTarget
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
@@ -26,6 +27,16 @@ class Fixtures {
     private val fixtureRegister: MutableMap<String, Fixture> = mutableMapOf()
     private val fixturesByGroup: MutableMap<String, MutableList<Fixture>> = mutableMapOf()
     private val groupRegister: MutableMap<String, FixtureGroup<*>> = mutableMapOf()
+
+    // Channel-to-fixture mapping: "universe:channel" -> ChannelMapping
+    data class ChannelMapping(
+        val fixtureKey: String,
+        val fixtureName: String,
+        val description: String
+    )
+    private val channelMappings: MutableMap<String, ChannelMapping> = mutableMapOf()
+
+    private fun channelMappingKey(universe: Universe, channel: Int) = "${universe.universe}:$channel"
 
     private val activeScenesLock = ReentrantReadWriteLock()
     private val activeScenes = mutableMapOf<Int, Map<Universe, Map<Int, UByte>>>()
@@ -104,6 +115,18 @@ class Fixtures {
      */
     val groups: List<FixtureGroup<*>> get() = registerLock.read {
         groupRegister.values.toList()
+    }
+
+    /**
+     * Get channel-to-fixture mappings organized by universe.
+     * Returns Map<universe, Map<channel, ChannelMapping>>
+     */
+    fun getChannelMappings(): Map<Int, Map<Int, ChannelMapping>> = registerLock.read {
+        channelMappings.entries
+            .groupBy { it.key.split(":")[0].toInt() }
+            .mapValues { (_, entries) ->
+                entries.associate { it.key.split(":")[1].toInt() to it.value }
+            }
     }
 
     /**
@@ -214,6 +237,17 @@ class Fixtures {
             override fun <T : Fixture> addFixture(fixture: T, vararg fixtureGroups: String): T {
                 fixtureRegister[fixture.key] = fixture
 
+                // Build channel-to-fixture mapping for DMX fixtures
+                if (fixture is DmxFixture) {
+                    fixture.channelDescriptions().forEach { (channel, description) ->
+                        channelMappings[channelMappingKey(fixture.universe, channel)] = ChannelMapping(
+                            fixtureKey = fixture.key,
+                            fixtureName = fixture.fixtureName,
+                            description = description
+                        )
+                    }
+                }
+
                 fixtureGroups.forEach {
                     fixturesByGroup.getOrPut(it) { mutableListOf() } += fixture
                 }
@@ -244,6 +278,7 @@ class Fixtures {
                 fixtureRegister.clear()
                 fixturesByGroup.clear()
                 groupRegister.clear()
+                channelMappings.clear()
                 activeScenes.clear()
                 activeChases.clear()
             }

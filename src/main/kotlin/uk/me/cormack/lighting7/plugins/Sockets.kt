@@ -98,6 +98,25 @@ data class TrackChangedOutMessage(
 @SerialName("fixturesChanged")
 data object FixturesChangedOutMessage: OutMessage()
 
+// Channel mapping messages
+
+@Serializable
+@SerialName("channelMappingState")
+data object ChannelMappingStateInMessage : InMessage()
+
+@Serializable
+data class ChannelMappingEntry(
+    val fixtureKey: String,
+    val fixtureName: String,
+    val description: String
+)
+
+@Serializable
+@SerialName("channelMappingState")
+data class ChannelMappingStateOutMessage(
+    val mappings: Map<Int, Map<Int, ChannelMappingEntry>>
+) : OutMessage()
+
 // FX-related messages
 
 @Serializable
@@ -283,6 +302,7 @@ fun Application.configureSockets(state: State) {
                 override fun fixturesChanged() {
                     launch {
                         sendSerialized<OutMessage>(FixturesChangedOutMessage)
+                        sendSerialized<OutMessage>(buildChannelMappingMessage(state))
                     }
                 }
 
@@ -310,6 +330,11 @@ fun Application.configureSockets(state: State) {
                 }
             }
             state.show.fixtures.registerListener(listener)
+
+            // Send initial channel mapping state
+            launch {
+                sendSerialized<OutMessage>(buildChannelMappingMessage(state))
+            }
 
             // Subscribe to FX state changes
             val fxStateJob = state.show.fxEngine.fxStateFlow
@@ -376,6 +401,9 @@ fun Application.configureSockets(state: State) {
                             val universes = state.show.fixtures.controllers.map(DmxController::universe).map(Universe::universe)
                                 .sortedBy { it }
                             sendSerialized<OutMessage>(UniversesStateOutMessage(universes))
+                        }
+                        is ChannelMappingStateInMessage -> {
+                            sendSerialized<OutMessage>(buildChannelMappingMessage(state))
                         }
 
                         // FX-related message handlers
@@ -472,6 +500,20 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
         isClockRunning = state.show.fxEngine.masterClock.isRunning.value,
         activeEffects = effectStates
     )
+}
+
+private fun buildChannelMappingMessage(state: State): ChannelMappingStateOutMessage {
+    val mappings = state.show.fixtures.getChannelMappings()
+        .mapValues { (_, channels) ->
+            channels.mapValues { (_, mapping) ->
+                ChannelMappingEntry(
+                    fixtureKey = mapping.fixtureKey,
+                    fixtureName = mapping.fixtureName,
+                    description = mapping.description
+                )
+            }
+        }
+    return ChannelMappingStateOutMessage(mappings)
 }
 
 private fun buildGroupsStateMessage(state: State): GroupsStateOutMessage {

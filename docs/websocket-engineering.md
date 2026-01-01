@@ -28,8 +28,8 @@ The WebSocket API provides:
 │   ┌─────────────────────────────────────────────────────────────────┐   │
 │   │                    WebSocket Client                             │   │
 │   │                                                                 │   │
-│   │  Send: ping, channelState, updateChannel, universesState        │   │
-│   │  Receive: channelState, sceneListChanged, sceneChanged, etc.    │   │
+│   │  Send: ping, channelState, channelMappingState, updateChannel   │   │
+│   │  Receive: channelState, channelMappingState, sceneChanged, etc. │   │
 │   └─────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────┬───────────────────────────────────────┘
                                   │ WebSocket
@@ -47,6 +47,7 @@ The WebSocket API provides:
 │   │   │  channelsChanged() ──────► ChannelStateOutMessage        │  │   │
 │   │   │  controllersChanged() ───► UniversesStateOutMessage      │  │   │
 │   │   │  fixturesChanged() ──────► FixturesChangedOutMessage     │  │   │
+│   │   │                      ────► ChannelMappingStateOutMessage │  │   │
 │   │   │  sceneListChanged() ─────► ScenesListChangedOutMessage   │  │   │
 │   │   │  sceneChanged(id) ───────► ScenesChangedOutMessage       │  │   │
 │   │   │  trackChanged() ─────────► TrackChangedOutMessage        │  │   │
@@ -98,6 +99,18 @@ Request list of available DMX universes.
 ```
 
 **Response**: `universesState` message with universe list.
+
+#### channelMappingState
+
+Request channel-to-fixture mapping.
+
+```json
+{ "type": "channelMappingState" }
+```
+
+**Response**: `channelMappingState` message with mapping data.
+
+Note: This is also automatically sent on connection and when fixtures change.
 
 #### updateChannel
 
@@ -160,6 +173,31 @@ List of available DMX universes.
 }
 ```
 
+#### channelMappingState
+
+Channel-to-fixture mapping, organized by universe. Sent automatically on connection,
+when fixtures change, or in response to a `channelMappingState` request.
+
+```json
+{
+    "type": "channelMappingState",
+    "mappings": {
+        "0": {
+            "1": { "fixtureKey": "hex-1", "fixtureName": "Hex 1", "description": "Dimmer" },
+            "2": { "fixtureKey": "hex-1", "fixtureName": "Hex 1", "description": "Red" },
+            "3": { "fixtureKey": "hex-1", "fixtureName": "Hex 1", "description": "Green" }
+        }
+    }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| mappings | Map<Int, Map<Int, Entry>> | Universe → Channel → Mapping |
+| fixtureKey | String | Unique fixture identifier |
+| fixtureName | String | Display name of the fixture |
+| description | String | Channel description (e.g., "Dimmer", "Red") |
+
 #### sceneListChanged
 
 Notification that the scene list has changed (scene added/deleted).
@@ -218,7 +256,8 @@ Music track information update.
 1. New `SocketConnection` created with unique ID
 2. Added to global `connections` set
 3. `FixturesChangeListener` registered with `Fixtures`
-4. Connection ready to receive messages
+4. Initial `channelMappingState` sent to client
+5. Connection ready to receive messages
 
 ### Message Loop
 
