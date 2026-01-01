@@ -20,7 +20,10 @@ abstract class DmxFixture(
     position: Int
 ): Fixture(key, fixtureName, position) {
     fun channelDescriptions(): Map<Int, String> {
-        val channelDescriptions =  fixtureProperties.map {
+        val channelDescriptions = mutableMapOf<Int, String>()
+
+        // Add fixture-level properties
+        fixtureProperties.forEach {
             val name = if (it.description == "") {
                 it.name
             } else {
@@ -28,15 +31,60 @@ abstract class DmxFixture(
             }
 
             when (val property = checkNotNull(it.classProperty.call(this))) {
-                is DmxFixtureSlider -> listOf(property.channelNo to name)
-                is DmxFixtureSetting<*> -> listOf(property.channelNo to name)
-                is DmxFixtureMultiSlider -> property.sliders.map { slider ->
-                    slider.value.channelNo to slider.key
+                is DmxFixtureSlider -> channelDescriptions[property.channelNo] = name
+                is DmxFixtureSetting<*> -> channelDescriptions[property.channelNo] = name
+                is DmxFixtureMultiSlider -> property.sliders.forEach { slider ->
+                    channelDescriptions[slider.value.channelNo] = slider.key
                 }
 
                 else -> throw Error("Unsupported property type ${property::class}")
             }
-        }.flatten().toMap()
+        }
+
+        // Add element properties for multi-element fixtures
+        if (this is MultiElementFixture<*>) {
+            for (element in elements) {
+                val elementPrefix = "Head ${element.elementIndex + 1}"
+
+                val elementProperties = element::class.memberProperties.flatMap { classProperty ->
+                    classProperty.annotations.filterIsInstance<FixtureProperty>().map { fixtureProperty ->
+                        Fixture.Property(
+                            classProperty as kotlin.reflect.KProperty1<out Fixture, *>,
+                            classProperty.name,
+                            fixtureProperty.description,
+                            fixtureProperty.category,
+                            fixtureProperty.bundleWithColour
+                        )
+                    }
+                }
+
+                for (prop in elementProperties) {
+                    @Suppress("UNCHECKED_CAST")
+                    val propTyped = prop.classProperty as kotlin.reflect.KProperty1<Any, *>
+                    val value = propTyped.call(element) ?: continue
+                    val propName = if (prop.description.isEmpty()) {
+                        prop.name.replaceFirstChar { it.uppercase() }
+                    } else {
+                        // Strip "Head " prefix to avoid redundant "Head 1 Head ..." descriptions
+                        prop.description.removePrefix("Head ")
+                    }
+                    val name = "$elementPrefix $propName"
+
+                    when (value) {
+                        is DmxFixtureSlider -> channelDescriptions[value.channelNo] = name
+                        is DmxFixtureSetting<*> -> channelDescriptions[value.channelNo] = name
+                        is DmxFixtureColour -> {
+                            channelDescriptions[value.redSlider.channelNo] = "$elementPrefix Red"
+                            channelDescriptions[value.greenSlider.channelNo] = "$elementPrefix Green"
+                            channelDescriptions[value.blueSlider.channelNo] = "$elementPrefix Blue"
+                        }
+                        is DmxFixtureMultiSlider -> value.sliders.forEach { slider ->
+                            channelDescriptions[slider.value.channelNo] = "$elementPrefix ${slider.key}"
+                        }
+                    }
+                }
+            }
+        }
 
         return firstChannel.rangeUntil(firstChannel + channelCount).associateWith {
             channelDescriptions[it].orEmpty()
@@ -146,9 +194,7 @@ abstract class DmxFixture(
     fun generateElementDescriptors(): List<ElementDescriptor>? {
         if (this !is MultiElementFixture<*>) return null
 
-        return elements.mapNotNull { element ->
-            if (element !is FixtureElement<*>) return@mapNotNull null
-
+        return elements.map { element ->
             val properties = extractElementProperties(element)
             ElementDescriptor(
                 index = element.elementIndex,
