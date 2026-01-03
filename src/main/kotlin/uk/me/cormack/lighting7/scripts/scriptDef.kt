@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.MasterClock
 import uk.me.cormack.lighting7.grpc.TrackDetails
@@ -46,6 +47,7 @@ abstract class LightingScript(
     fun controller(subnet: Int, universe: Int): DmxController = fixtures.controller(Universe(subnet, universe))
     inline fun <reified T: Fixture> fixture(key: String): T = fixtures.fixture(key)
     fun fixtureGroup(groupName: String): List<Fixture> = fixtures.fixtureGroup(groupName)
+    inline fun <reified T: Fixture> group(key: String): FixtureGroup<T> = fixtures.group(key)
     fun runScene(sceneName: String) {
         show.runScene(sceneName)
     }

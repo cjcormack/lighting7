@@ -159,7 +159,13 @@ internal fun Route.routeApiRestProjects(state: State) {
                     return@transaction DeleteResult.IS_CURRENT
                 }
 
-                // Delete associated scenes and scripts first
+                // Clear FK references first to avoid constraint violations
+                project.loadFixturesScriptId = null
+                project.trackChangedScriptId = null
+                project.runLoopScriptId = null
+                project.initialSceneId = null
+
+                // Delete associated scenes and scripts
                 project.scenes.forEach { it.delete() }
                 project.scripts.forEach { it.delete() }
                 project.delete()
