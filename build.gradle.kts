@@ -7,10 +7,13 @@ val exposed_version: String by project
 val hikaricp_version: String by project
 
 plugins {
-    kotlin("jvm") version "2.3.0"
+    // Kotlin 2.1.21: Newer versions cause kotlin-compiler-server to return empty responses
+    // from the completion and highlight endpoints. Do not upgrade until that is resolved.
+    kotlin("jvm") version "2.1.21"
     id("io.ktor.plugin") version "3.3.3"
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.3.0"
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.1.21"
     id("com.google.protobuf") version "0.9.6"
+    id("maven-publish")
 }
 
 group = "uk.me.cormack"

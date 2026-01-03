@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package uk.me.cormack.lighting7.musickit
 
 import com.auth0.jwt.JWT
