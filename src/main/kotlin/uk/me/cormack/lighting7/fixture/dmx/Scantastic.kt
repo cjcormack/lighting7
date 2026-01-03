@@ -13,9 +13,8 @@ class ScantasticFixture (
     key: String,
     fixtureName: String,
     firstChannel: Int,
-    position: Int,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 17, key, fixtureName, position) {
+): DmxFixture(universe, firstChannel, 17, key, fixtureName) {
     private constructor(
         fixture: ScantasticFixture,
         transaction: ControllerTransaction,
@@ -24,7 +23,6 @@ class ScantasticFixture (
         fixture.key,
         fixture.fixtureName,
         fixture.firstChannel,
-        fixture.position,
         transaction,
     )
 

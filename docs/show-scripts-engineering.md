@@ -165,7 +165,7 @@ abstract class LightingScript(
 ```kotlin
 fun controller(subnet: Int, universe: Int): DmxController
 inline fun <reified T: Fixture> fixture(key: String): T
-fun fixtureGroup(groupName: String): List<Fixture>
+inline fun <reified T: Fixture> group(key: String): FixtureGroup<T>
 fun runScene(sceneName: String)   // Blocking
 fun startScene(sceneName: String) // Non-blocking
 ```

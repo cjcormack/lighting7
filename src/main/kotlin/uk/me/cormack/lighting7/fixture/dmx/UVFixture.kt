@@ -17,10 +17,9 @@ class UVFixture (
     key: String,
     fixtureName: String,
     firstChannel: Int,
-    position: Int,
     private val maxDimmerLevel: UByte = 255u,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 1, key, fixtureName, position),
+): DmxFixture(universe, firstChannel, 1, key, fixtureName),
     FixtureWithDimmer, FixtureWithUv
 {
     private constructor(
@@ -31,7 +30,6 @@ class UVFixture (
         fixture.key,
         fixture.fixtureName,
         fixture.firstChannel,
-        fixture.position,
         fixture.maxDimmerLevel,
         transaction,
     )

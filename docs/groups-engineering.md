@@ -83,10 +83,10 @@ data class MemberMetadata(
 
 ```kotlin
 fixtures.register {
-    val hex1 = addFixture(HexFixture(universe, "hex-1", "Hex 1", 1, 1))
-    val hex2 = addFixture(HexFixture(universe, "hex-2", "Hex 2", 13, 2))
-    val hex3 = addFixture(HexFixture(universe, "hex-3", "Hex 3", 25, 3))
-    val hex4 = addFixture(HexFixture(universe, "hex-4", "Hex 4", 37, 4))
+    val hex1 = addFixture(HexFixture(universe, "hex-1", "Hex 1", 1))
+    val hex2 = addFixture(HexFixture(universe, "hex-2", "Hex 2", 13))
+    val hex3 = addFixture(HexFixture(universe, "hex-3", "Hex 3", 25))
+    val hex4 = addFixture(HexFixture(universe, "hex-4", "Hex 4", 37))
 
     // Create group with spread pan offsets
     createGroup<HexFixture>("front-wash") {

@@ -38,9 +38,8 @@ class QuadMoverBarFixture(
     key: String,
     fixtureName: String,
     firstChannel: Int,
-    position: Int,
     transaction: ControllerTransaction? = null,
-) : DmxFixture(universe, firstChannel, 29, key, fixtureName, position),
+) : DmxFixture(universe, firstChannel, 29, key, fixtureName),
     FixtureWithDimmer,
     MultiElementFixture<QuadMoverBarFixture.Head> {
 
@@ -52,7 +51,6 @@ class QuadMoverBarFixture(
         fixture.key,
         fixture.fixtureName,
         fixture.firstChannel,
-        fixture.position,
         transaction,
     )
 

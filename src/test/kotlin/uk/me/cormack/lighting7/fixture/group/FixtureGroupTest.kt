@@ -15,7 +15,7 @@ class FixtureGroupTest {
     private val testUniverse = Universe(0, 0)
 
     private fun createFixture(index: Int): UVFixture {
-        return UVFixture(testUniverse, "test-$index", "Test $index", index, index)
+        return UVFixture(testUniverse, "test-$index", "Test $index", index)
     }
 
     private fun createTestGroup(count: Int = 4): FixtureGroup<UVFixture> {

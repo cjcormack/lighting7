@@ -17,8 +17,7 @@ abstract class DmxFixture(
     val channelCount: Int,
     key: String,
     fixtureName: String,
-    position: Int
-): Fixture(key, fixtureName, position) {
+): Fixture(key, fixtureName) {
     fun channelDescriptions(): Map<Int, String> {
         val channelDescriptions = mutableMapOf<Int, String>()
 

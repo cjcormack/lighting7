@@ -13,9 +13,8 @@ class LaserworldCS100Fixture(
     key: String,
     fixtureName: String,
     firstChannel: Int,
-    position: Int,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 13, key, fixtureName, position) {
+): DmxFixture(universe, firstChannel, 13, key, fixtureName) {
     private constructor(
         fixture: LaserworldCS100Fixture,
         transaction: ControllerTransaction,
@@ -24,7 +23,6 @@ class LaserworldCS100Fixture(
         fixture.key,
         fixture.fixtureName,
         fixture.firstChannel,
-        fixture.position,
         transaction,
     )
 

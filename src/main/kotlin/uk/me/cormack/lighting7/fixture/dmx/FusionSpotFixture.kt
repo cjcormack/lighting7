@@ -17,10 +17,9 @@ class FusionSpotFixture(
     key: String,
     fixtureName: String,
     firstChannel: Int,
-    position: Int,
     private val maxDimmerLevel: UByte = 255u,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 15, key, fixtureName, position), FixtureWithDimmer, FixtureWithStrobe {
+): DmxFixture(universe, firstChannel, 15, key, fixtureName), FixtureWithDimmer, FixtureWithStrobe {
      private constructor(
          fixture: FusionSpotFixture,
          transaction: ControllerTransaction,
@@ -29,7 +28,6 @@ class FusionSpotFixture(
          fixture.key,
          fixture.fixtureName,
          fixture.firstChannel,
-         fixture.position,
          fixture.maxDimmerLevel,
          transaction,
      )

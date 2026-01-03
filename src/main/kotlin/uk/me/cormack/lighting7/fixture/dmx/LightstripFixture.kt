@@ -14,9 +14,8 @@ class LightstripFixture (
     key: String,
     fixtureName: String,
     firstChannel: Int,
-    position: Int,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 5, key, fixtureName, position), DmxFixtureWithColour {
+): DmxFixture(universe, firstChannel, 5, key, fixtureName), DmxFixtureWithColour {
     private constructor(
         fixture: LightstripFixture,
         transaction: ControllerTransaction,
@@ -25,7 +24,6 @@ class LightstripFixture (
         fixture.key,
         fixture.fixtureName,
         fixture.firstChannel,
-        fixture.position,
         transaction,
     )
 

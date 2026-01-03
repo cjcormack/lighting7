@@ -31,9 +31,8 @@ sealed class SlenderBeamBarQuadFixture(
     channelCount: Int,
     key: String,
     fixtureName: String,
-    position: Int,
     protected val transaction: ControllerTransaction? = null,
-) : DmxFixture(universe, firstChannel, channelCount, key, fixtureName, position),
+) : DmxFixture(universe, firstChannel, channelCount, key, fixtureName),
     MultiModeFixtureFamily<SlenderBeamBarQuadFixture.Mode> {
 
     // ============================================
@@ -249,16 +248,15 @@ sealed class SlenderBeamBarQuadFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : SlenderBeamBarQuadFixture(
-        universe, firstChannel, 1, key, fixtureName, position, transaction
+        universe, firstChannel, 1, key, fixtureName, transaction
     ) {
         override val mode = Mode.MODE_1CH
 
         private constructor(fixture: Mode1Ch, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode1Ch =
@@ -285,17 +283,16 @@ sealed class SlenderBeamBarQuadFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : SlenderBeamBarQuadFixture(
-        universe, firstChannel, 6, key, fixtureName, position, transaction
+        universe, firstChannel, 6, key, fixtureName, transaction
     ), FixtureWithDimmer, FixtureWithStrobe {
 
         override val mode = Mode.MODE_6CH
 
         private constructor(fixture: Mode6Ch, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode6Ch =
@@ -335,17 +332,16 @@ sealed class SlenderBeamBarQuadFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : SlenderBeamBarQuadFixture(
-        universe, firstChannel, 12, key, fixtureName, position, transaction
+        universe, firstChannel, 12, key, fixtureName, transaction
     ), MultiElementFixture<SlenderBeamBarQuadFixture.BasicHead> {
 
         override val mode = Mode.MODE_12CH
 
         private constructor(fixture: Mode12Ch, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode12Ch =
@@ -385,17 +381,16 @@ sealed class SlenderBeamBarQuadFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : SlenderBeamBarQuadFixture(
-        universe, firstChannel, 14, key, fixtureName, position, transaction
+        universe, firstChannel, 14, key, fixtureName, transaction
     ), FixtureWithDimmer, FixtureWithStrobe, MultiElementFixture<SlenderBeamBarQuadFixture.BasicHead> {
 
         override val mode = Mode.MODE_14CH
 
         private constructor(fixture: Mode14Ch, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode14Ch =
@@ -450,17 +445,16 @@ sealed class SlenderBeamBarQuadFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : SlenderBeamBarQuadFixture(
-        universe, firstChannel, 27, key, fixtureName, position, transaction
+        universe, firstChannel, 27, key, fixtureName, transaction
     ), FixtureWithDimmer, FixtureWithStrobe, MultiElementFixture<SlenderBeamBarQuadFixture.FullHead> {
 
         override val mode = Mode.MODE_27CH
 
         private constructor(fixture: Mode27Ch, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode27Ch =

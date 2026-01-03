@@ -120,8 +120,8 @@ enabling range/summary display for mixed values and bulk updates.
 Creating groups in registration scripts:
 ```kotlin
 fixtures.register {
-    val hex1 = addFixture(HexFixture(universe, "hex-1", "Hex 1", 1, 1))
-    val hex2 = addFixture(HexFixture(universe, "hex-2", "Hex 2", 13, 2))
+    val hex1 = addFixture(HexFixture(universe, "hex-1", "Hex 1", 1))
+    val hex2 = addFixture(HexFixture(universe, "hex-2", "Hex 2", 13))
 
     createGroup<HexFixture>("front-wash") {
         addSpread(listOf(hex1, hex2), panSpread = 60.0)

@@ -13,9 +13,8 @@ class HazerFixture (
     key: String,
     fixtureName: String,
     firstChannel: Int,
-    position: Int = 0,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 2, key, fixtureName, position) {
+): DmxFixture(universe, firstChannel, 2, key, fixtureName) {
     private constructor(
         fixture: HazerFixture,
         transaction: ControllerTransaction,
@@ -24,7 +23,6 @@ class HazerFixture (
         fixture.key,
         fixture.fixtureName,
         fixture.firstChannel,
-        fixture.position,
         transaction,
     )
 

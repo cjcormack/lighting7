@@ -563,12 +563,12 @@ private const val LOAD_FIXTURES_TEMPLATE = """// Register your fixtures here
 //     addController(ArtNetController(universe, "192.168.1.100"))
 //
 //     // Simple RGB fixture
-//     val par1 = addFixture(HexFixture(universe, "par-1", "PAR 1", 1, 1))
-//     val par2 = addFixture(HexFixture(universe, "par-2", "PAR 2", 13, 2))
+//     val par1 = addFixture(HexFixture(universe, "par-1", "PAR 1", 1))
+//     val par2 = addFixture(HexFixture(universe, "par-2", "PAR 2", 13))
 //
 //     // Multi-mode fixture (select the mode matching your DIP switch setting)
 //     val beamBar = addFixture(SlenderBeamBarQuadFixture.Mode14Ch(
-//         universe, "beam-bar-1", "Beam Bar 1", 25, 3
+//         universe, "beam-bar-1", "Beam Bar 1", 25
 //     ))
 //
 //     // Create groups for batch control

@@ -34,9 +34,8 @@ sealed class LedLightbar12PixelFixture(
     channelCount: Int,
     key: String,
     fixtureName: String,
-    position: Int,
     protected val transaction: ControllerTransaction? = null,
-) : DmxFixture(universe, firstChannel, channelCount, key, fixtureName, position),
+) : DmxFixture(universe, firstChannel, channelCount, key, fixtureName),
     MultiModeFixtureFamily<LedLightbar12PixelFixture.Mode> {
 
     // ============================================
@@ -255,17 +254,16 @@ sealed class LedLightbar12PixelFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
-        universe, firstChannel, 4, key, fixtureName, position, transaction
+        universe, firstChannel, 4, key, fixtureName, transaction
     ), FixtureWithStrobe {
 
         override val mode = Mode.MODE_4CH_PROGRAM
 
         private constructor(fixture: Mode4ChProgram, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode4ChProgram =
@@ -299,17 +297,16 @@ sealed class LedLightbar12PixelFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
-        universe, firstChannel, 4, key, fixtureName, position, transaction
+        universe, firstChannel, 4, key, fixtureName, transaction
     ), DmxFixtureWithColour {
 
         override val mode = Mode.MODE_4CH_RGBW
 
         private constructor(fixture: Mode4ChRgbw, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode4ChRgbw =
@@ -345,17 +342,16 @@ sealed class LedLightbar12PixelFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
-        universe, firstChannel, 6, key, fixtureName, position, transaction
+        universe, firstChannel, 6, key, fixtureName, transaction
     ), FixtureWithDimmer, DmxFixtureWithColour, FixtureWithStrobe {
 
         override val mode = Mode.MODE_6CH
 
         private constructor(fixture: Mode6Ch, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode6Ch =
@@ -395,17 +391,16 @@ sealed class LedLightbar12PixelFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
-        universe, firstChannel, 10, key, fixtureName, position, transaction
+        universe, firstChannel, 10, key, fixtureName, transaction
     ), FixtureWithDimmer, FixtureWithStrobe, MultiElementFixture<LedLightbar12PixelFixture.RgbwPixel> {
 
         override val mode = Mode.MODE_10CH
 
         private constructor(fixture: Mode10Ch, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode10Ch =
@@ -462,17 +457,16 @@ sealed class LedLightbar12PixelFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
-        universe, firstChannel, 12, key, fixtureName, position, transaction
+        universe, firstChannel, 12, key, fixtureName, transaction
     ), FixtureWithDimmer, DmxFixtureWithColour, FixtureWithStrobe {
 
         override val mode = Mode.MODE_12CH
 
         private constructor(fixture: Mode12Ch, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode12Ch =
@@ -532,17 +526,16 @@ sealed class LedLightbar12PixelFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
-        universe, firstChannel, 18, key, fixtureName, position, transaction
+        universe, firstChannel, 18, key, fixtureName, transaction
     ), FixtureWithDimmer, FixtureWithStrobe, MultiElementFixture<LedLightbar12PixelFixture.RgbwPixel> {
 
         override val mode = Mode.MODE_18CH
 
         private constructor(fixture: Mode18Ch, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode18Ch =
@@ -599,17 +592,16 @@ sealed class LedLightbar12PixelFixture(
         key: String,
         fixtureName: String,
         firstChannel: Int,
-        position: Int,
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
-        universe, firstChannel, 48, key, fixtureName, position, transaction
+        universe, firstChannel, 48, key, fixtureName, transaction
     ), MultiElementFixture<LedLightbar12PixelFixture.RgbwPixel> {
 
         override val mode = Mode.MODE_48CH
 
         private constructor(fixture: Mode48Ch, transaction: ControllerTransaction) : this(
             fixture.universe, fixture.key, fixture.fixtureName,
-            fixture.firstChannel, fixture.position, transaction
+            fixture.firstChannel, transaction
         )
 
         override fun withTransaction(transaction: ControllerTransaction): Mode48Ch =

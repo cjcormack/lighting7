@@ -13,9 +13,8 @@ class StarClusterFixture(
     key: String,
     fixtureName: String,
     firstChannel: Int,
-    position: Int,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 5, key, fixtureName, position) {
+): DmxFixture(universe, firstChannel, 5, key, fixtureName) {
     private constructor(
         fixture: StarClusterFixture,
         transaction: ControllerTransaction,
@@ -24,7 +23,6 @@ class StarClusterFixture(
         fixture.key,
         fixture.fixtureName,
         fixture.firstChannel,
-        fixture.position,
         transaction,
     )
 

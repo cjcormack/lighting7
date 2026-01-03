@@ -25,7 +25,6 @@ class Fixtures {
     private val controllerChannelChangeListeners: MutableMap<String, ChannelChangeListener> = mutableMapOf()
 
     private val fixtureRegister: MutableMap<String, Fixture> = mutableMapOf()
-    private val fixturesByGroup: MutableMap<String, MutableList<Fixture>> = mutableMapOf()
     private val groupRegister: MutableMap<String, FixtureGroup<*>> = mutableMapOf()
 
     // Channel-to-fixture mapping: "universe:channel" -> ChannelMapping
@@ -59,8 +58,6 @@ class Fixtures {
         inline fun <reified T: Fixture> fixture(key: String): T {
             return untypedFixture(key) as T
         }
-
-        fun fixtureGroup(groupName: String): List<Fixture> = baseFixtures.fixtureGroup(groupName).map { it.withTransaction(transaction) }
 
         /**
          * Get all registered typed fixture groups.
@@ -104,10 +101,6 @@ class Fixtures {
 
     inline fun <reified T: Fixture> fixture(key: String): T {
         return untypedFixture(key) as T
-    }
-
-    fun fixtureGroup(groupName: String): List<Fixture> = registerLock.read {
-        checkNotNull(fixturesByGroup[groupName]) { "Fixture group '$groupName' not found" }.toList()
     }
 
     /**
@@ -204,7 +197,7 @@ class Fixtures {
 
     interface FixtureRegisterer {
         fun addController(controller: DmxController): DmxController
-        fun <T: Fixture> addFixture(fixture: T, vararg fixtureGroups: String): T
+        fun <T: Fixture> addFixture(fixture: T): T
 
         /**
          * Register a typed fixture group.
@@ -234,7 +227,7 @@ class Fixtures {
                 return controller
             }
 
-            override fun <T : Fixture> addFixture(fixture: T, vararg fixtureGroups: String): T {
+            override fun <T : Fixture> addFixture(fixture: T): T {
                 fixtureRegister[fixture.key] = fixture
 
                 // Build channel-to-fixture mapping for DMX fixtures
@@ -246,10 +239,6 @@ class Fixtures {
                             description = description
                         )
                     }
-                }
-
-                fixtureGroups.forEach {
-                    fixturesByGroup.getOrPut(it) { mutableListOf() } += fixture
                 }
 
                 return fixture
@@ -276,7 +265,6 @@ class Fixtures {
 
                 controllerRegister.clear()
                 fixtureRegister.clear()
-                fixturesByGroup.clear()
                 groupRegister.clear()
                 channelMappings.clear()
                 activeScenes.clear()

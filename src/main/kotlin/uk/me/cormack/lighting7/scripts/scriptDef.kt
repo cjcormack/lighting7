@@ -46,7 +46,6 @@ abstract class LightingScript(
 
     fun controller(subnet: Int, universe: Int): DmxController = fixtures.controller(Universe(subnet, universe))
     inline fun <reified T: Fixture> fixture(key: String): T = fixtures.fixture(key)
-    fun fixtureGroup(groupName: String): List<Fixture> = fixtures.fixtureGroup(groupName)
     inline fun <reified T: Fixture> group(key: String): FixtureGroup<T> = fixtures.group(key)
     fun runScene(sceneName: String) {
         show.runScene(sceneName)

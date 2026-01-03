@@ -74,8 +74,7 @@ The fixture system provides a type-safe, trait-based abstraction over raw DMX ch
 ```kotlin
 sealed class Fixture(
     val key: String,           // Unique identifier (e.g., "front-wash-1")
-    val fixtureName: String,   // Display name (e.g., "Front Wash Left")
-    val position: Int          // Ordering for UI display
+    val fixtureName: String    // Display name (e.g., "Front Wash Left")
 )
 ```
 
@@ -93,8 +92,7 @@ abstract class DmxFixture(
     val firstChannel: Int,     // Starting DMX channel (1-512)
     val channelCount: Int,     // Number of channels used
     key: String,
-    fixtureName: String,
-    position: Int
+    fixtureName: String
 )
 ```
 
@@ -318,9 +316,8 @@ class MyFixture(
     key: String,
     fixtureName: String,
     firstChannel: Int,
-    position: Int,
     transaction: ControllerTransaction? = null,
-) : DmxFixture(universe, firstChannel, CHANNEL_COUNT, key, fixtureName, position),
+) : DmxFixture(universe, firstChannel, CHANNEL_COUNT, key, fixtureName),
     FixtureWithDimmer,           // If it has a dimmer
     DmxFixtureWithColour         // If it has RGB
 {
@@ -337,7 +334,6 @@ class MyFixture(
         fixture.key,
         fixture.fixtureName,
         fixture.firstChannel,
-        fixture.position,
         transaction,
     )
 
@@ -380,7 +376,7 @@ Map each DMX channel to a property:
 fixtures.register {
     addController(ArtNetController(Universe(0, 0)))
 
-    addFixture(MyFixture(Universe(0, 0), "my-1", "My Fixture 1", 1, 1))
+    addFixture(MyFixture(Universe(0, 0), "my-1", "My Fixture 1", 1))
 }
 ```
 
@@ -439,9 +435,8 @@ sealed class MyBarFixture(
     channelCount: Int,  // Passed from subclass
     key: String,
     fixtureName: String,
-    position: Int,
     protected val transaction: ControllerTransaction? = null,
-) : DmxFixture(universe, firstChannel, channelCount, key, fixtureName, position),
+) : DmxFixture(universe, firstChannel, channelCount, key, fixtureName),
     MultiModeFixtureFamily<MyBarFixture.Mode>
 {
     // Mode enum

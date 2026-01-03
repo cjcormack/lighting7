@@ -11,10 +11,9 @@ class WhexFixture(
     key: String,
     fixtureName: String,
     firstChannel: Int,
-    position: Int,
     private val maxDimmerLevel: UByte = 255u,
     transaction: ControllerTransaction? = null,
-) : DmxFixture(universe, firstChannel, 12, key, fixtureName, position),
+) : DmxFixture(universe, firstChannel, 12, key, fixtureName),
     FixtureWithDimmer, DmxFixtureWithColour, FixtureWithUv, FixtureWithStrobe
 {
     private constructor(
@@ -25,7 +24,6 @@ class WhexFixture(
         fixture.key,
         fixture.fixtureName,
         fixture.firstChannel,
-        fixture.position,
         fixture.maxDimmerLevel,
         transaction,
     )

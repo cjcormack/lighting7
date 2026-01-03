@@ -14,9 +14,8 @@ class QuadBarFixture (
     key: String,
     fixtureName: String,
     firstChannel: Int,
-    position: Int,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 1, key, fixtureName, position) {
+): DmxFixture(universe, firstChannel, 1, key, fixtureName) {
     private constructor(
         fixture: QuadBarFixture,
         transaction: ControllerTransaction,
@@ -25,7 +24,6 @@ class QuadBarFixture (
         fixture.key,
         fixture.fixtureName,
         fixture.firstChannel,
-        fixture.position,
         transaction,
     )
 

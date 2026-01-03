@@ -18,7 +18,7 @@ class DistributionStrategyTest {
     private val testUniverse = Universe(0, 0)
 
     private fun createMember(index: Int, groupSize: Int): GroupMember<UVFixture> {
-        val fixture = UVFixture(testUniverse, "test-$index", "Test $index", index, index)
+        val fixture = UVFixture(testUniverse, "test-$index", "Test $index", index)
         return GroupMember(
             fixture = fixture,
             index = index,
