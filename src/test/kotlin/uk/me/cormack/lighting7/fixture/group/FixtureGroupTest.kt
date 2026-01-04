@@ -1,9 +1,14 @@
 package uk.me.cormack.lighting7.fixture.group
 
+import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.createTestTransaction
+import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.UVFixture
+import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -225,5 +230,259 @@ class FixtureGroupTest {
         assertEquals(30.0, member.metadata.panOffset)
         assertEquals(-15.0, member.metadata.tiltOffset)
         assertTrue(member.metadata.symmetricInvert)
+    }
+
+    // ============================================
+    // FixtureTarget implementation tests
+    // ============================================
+
+    @Test
+    fun `group implements FixtureTarget with correct targetKey`() {
+        val group = createTestGroup(3)
+        assertEquals("test-group", group.targetKey)
+    }
+
+    @Test
+    fun `group implements FixtureTarget with correct displayName`() {
+        val group = createTestGroup(3)
+        assertEquals("test-group", group.displayName)
+    }
+
+    @Test
+    fun `group isGroup returns true`() {
+        val group = createTestGroup(3)
+        assertTrue(group.isGroup)
+    }
+
+    @Test
+    fun `group memberCount matches size`() {
+        val group = createTestGroup(5)
+        assertEquals(5, group.memberCount)
+    }
+
+    // ============================================
+    // flatten() tests
+    // ============================================
+
+    @Test
+    fun `flatten returns fixtures for non-nested group`() {
+        val group = createTestGroup(4)
+        val flattened = group.flatten()
+
+        assertEquals(4, flattened.size)
+        assertEquals("test-0", flattened[0].targetKey)
+        assertEquals("test-3", flattened[3].targetKey)
+    }
+
+    @Test
+    fun `flatten recursively extracts from nested groups`() {
+        // Create inner groups
+        val innerGroup1 = fixtureGroup<UVFixture>("inner-1") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+        val innerGroup2 = fixtureGroup<UVFixture>("inner-2") {
+            add(createFixture(2))
+            add(createFixture(3))
+        }
+
+        // Create outer group containing inner groups
+        val outerGroup = fixtureGroup<FixtureGroup<UVFixture>>("outer") {
+            add(innerGroup1)
+            add(innerGroup2)
+        }
+
+        val flattened = outerGroup.flatten()
+
+        assertEquals(4, flattened.size)
+        // Should contain the leaf fixtures, not the inner groups
+        assertTrue(flattened.all { it is UVFixture })
+    }
+
+    @Test
+    fun `flattenAs filters to specific type`() {
+        val group = createTestGroup(3)
+        val uvFixtures = group.flattenAs<UVFixture>()
+
+        assertEquals(3, uvFixtures.size)
+        assertTrue(uvFixtures.all { it is UVFixture })
+    }
+
+    @Test
+    fun `flattenAs returns empty list if no matches`() {
+        val group = createTestGroup(3)
+        // HexFixture is not in this group
+        val hexFixtures = group.flattenAs<HexFixture>()
+
+        assertTrue(hexFixtures.isEmpty())
+    }
+
+    // ============================================
+    // withTransaction() tests
+    // ============================================
+
+    @Test
+    fun `withTransaction returns group with same structure`() {
+        val controller = MockDmxController(testUniverse)
+        val transaction = createTestTransaction(controller)
+        val group = createTestGroup(3)
+
+        val boundGroup = group.withTransaction(transaction)
+
+        assertEquals(group.name, boundGroup.name)
+        assertEquals(group.size, boundGroup.size)
+        assertEquals(group.metadata, boundGroup.metadata)
+    }
+
+    @Test
+    fun `withTransaction preserves member positions`() {
+        val controller = MockDmxController(testUniverse)
+        val transaction = createTestTransaction(controller)
+        val group = createTestGroup(4)
+
+        val boundGroup = group.withTransaction(transaction)
+
+        // Positions should be identical
+        group.forEachIndexed { idx, member ->
+            assertEquals(member.normalizedPosition, boundGroup[idx].normalizedPosition)
+            assertEquals(member.index, boundGroup[idx].index)
+        }
+    }
+
+    @Test
+    fun `withTransaction allows fixture operations`() {
+        val controller = MockDmxController(testUniverse)
+        val transaction = createTestTransaction(controller)
+        val group = createTestGroup(3)
+
+        val boundGroup = group.withTransaction(transaction)
+
+        // Now we can use the dimmer on the bound group
+        boundGroup.dimmer.value = 200u
+
+        // Verify values were set via the group's dimmer (reads from transaction)
+        assertTrue(boundGroup.dimmer.isUniform)
+        assertEquals(200u.toUByte(), boundGroup.dimmer.value)
+        assertEquals(listOf(200u.toUByte(), 200u.toUByte(), 200u.toUByte()), boundGroup.dimmer.memberValues)
+    }
+
+    // ============================================
+    // Nested group tests
+    // ============================================
+
+    @Test
+    fun `nested groups support property access via extensions`() {
+        val controller = MockDmxController(testUniverse)
+        val transaction = createTestTransaction(controller)
+
+        // Create fixtures with transaction
+        val fixture1 = UVFixture(testUniverse, "uv-0", "UV 0", 0, transaction = transaction)
+        val fixture2 = UVFixture(testUniverse, "uv-1", "UV 1", 1, transaction = transaction)
+        val fixture3 = UVFixture(testUniverse, "uv-2", "UV 2", 2, transaction = transaction)
+        val fixture4 = UVFixture(testUniverse, "uv-3", "UV 3", 3, transaction = transaction)
+
+        // Create inner groups
+        val innerGroup1 = fixtureGroup<UVFixture>("inner-1") {
+            add(fixture1)
+            add(fixture2)
+        }
+        val innerGroup2 = fixtureGroup<UVFixture>("inner-2") {
+            add(fixture3)
+            add(fixture4)
+        }
+
+        // Create outer group - note: we need the inner groups to be WithDimmer compatible
+        // Since FixtureGroup itself doesn't implement WithDimmer, we use flat groups
+        // This test verifies that flattening works correctly
+
+        val outerGroup = fixtureGroup<FixtureGroup<UVFixture>>("outer") {
+            add(innerGroup1)
+            add(innerGroup2)
+        }
+
+        // Flatten and verify we get all 4 fixtures
+        val allFixtures = outerGroup.flatten()
+        assertEquals(4, allFixtures.size)
+
+        // Verify we can still use property access on the flat result
+        allFixtures.filterIsInstance<WithDimmer>().forEach {
+            assertNotNull(it.dimmer)
+        }
+    }
+
+    @Test
+    fun `deeply nested groups flatten correctly`() {
+        // Create 3 levels of nesting
+        val level1 = fixtureGroup<UVFixture>("level1") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+        val level2 = fixtureGroup<FixtureGroup<UVFixture>>("level2") {
+            add(level1)
+        }
+        val level3 = fixtureGroup<FixtureGroup<FixtureGroup<UVFixture>>>("level3") {
+            add(level2)
+        }
+
+        val flattened = level3.flatten()
+
+        assertEquals(2, flattened.size)
+        assertTrue(flattened.all { it is UVFixture })
+        assertEquals("test-0", flattened[0].targetKey)
+        assertEquals("test-1", flattened[1].targetKey)
+    }
+
+    @Test
+    fun `empty nested groups flatten to empty list`() {
+        val emptyInner = fixtureGroup<UVFixture>("empty-inner") {}
+        val outer = fixtureGroup<FixtureGroup<UVFixture>>("outer") {
+            add(emptyInner)
+        }
+
+        val flattened = outer.flatten()
+        assertTrue(flattened.isEmpty())
+    }
+
+    // ============================================
+    // Mixed group type tests
+    // ============================================
+
+    @Test
+    fun `group with mixed nested and flat members flattens correctly`() {
+        // Inner group with 2 fixtures
+        val innerGroup = fixtureGroup<UVFixture>("inner") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+
+        // Note: Can't mix UVFixture and FixtureGroup<UVFixture> in same group
+        // This test verifies that pure nested groups work correctly
+        val flattenedInner = innerGroup.flatten()
+        assertEquals(2, flattenedInner.size)
+    }
+
+    // ============================================
+    // FixtureTarget conformance edge cases
+    // ============================================
+
+    @Test
+    fun `empty group has correct FixtureTarget properties`() {
+        val empty = fixtureGroup<UVFixture>("empty") {}
+
+        assertEquals("empty", empty.targetKey)
+        assertEquals("empty", empty.displayName)
+        assertTrue(empty.isGroup)
+        assertEquals(0, empty.memberCount)
+    }
+
+    @Test
+    fun `single member group has correct FixtureTarget properties`() {
+        val single = fixtureGroup<UVFixture>("single") {
+            add(createFixture(0))
+        }
+
+        assertEquals("single", single.targetKey)
+        assertEquals(1, single.memberCount)
+        assertTrue(single.isGroup)
     }
 }

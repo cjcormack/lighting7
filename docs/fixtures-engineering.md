@@ -45,7 +45,7 @@ The fixture system provides a type-safe, trait-based abstraction over raw DMX ch
 │   ┌────────────────────────────────────────────────────────────────┐    │
 │   │  Concrete Fixtures (HexFixture, QuadBarFixture, etc.)          │    │
 │   │                                                                │    │
-│   │  Implements traits: FixtureWithDimmer, FixtureWithColour, etc. │    │
+│   │  Implements traits: WithDimmer, WithColour, WithPosition, etc. │    │
 │   └────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────┬───────────────────────────────────────┘
                                   │
@@ -54,7 +54,7 @@ The fixture system provides a type-safe, trait-based abstraction over raw DMX ch
 │                         Property Types                                  │
 │                                                                         │
 │   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────┐     │
-│   │ DmxFixtureSlider│  │ DmxFixtureColour│  │ DmxFixtureSetting   │     │
+│   │    DmxSlider    │  │    DmxColour    │  │ DmxFixtureSetting   │     │
 │   │  (single value) │  │   (RGB group)   │  │  (enum mapping)     │     │
 │   └────────┬────────┘  └────────┬────────┘  └──────────┬──────────┘     │
 │            │                    │                      │                │
@@ -100,41 +100,58 @@ Adds DMX-specific addressing. The `channelDescriptions()` method returns a map o
 
 ## Trait Interfaces
 
-Fixtures compose capabilities through trait interfaces:
+Fixtures compose capabilities through trait interfaces (in `fixture/trait/`):
 
 | Trait | Property | Purpose |
 |-------|----------|---------|
-| `FixtureWithDimmer` | `dimmer: FixtureSlider` | Master brightness control |
-| `FixtureWithColour<T>` | `rgbColour: T` | RGB color mixing |
-| `FixtureWithStrobe` | `strobe: FixtureStrobe` | Strobe effect control |
-| `FixtureWithUv` | `uvColour: FixtureSlider` | UV channel control |
+| `WithDimmer` | `dimmer: Slider` | Master brightness control |
+| `WithColour` | `rgbColour: Colour` | RGB color mixing |
+| `WithStrobe` | `strobe: Strobe` | Strobe effect control |
+| `WithUv` | `uv: Slider` | UV channel control |
+| `WithPosition` | `pan: Slider, tilt: Slider` | Pan/tilt control |
 
-### FixtureSlider
+## Property Interfaces
+
+Properties (in `fixture/property/`) provide a unified interface for fixture and group control:
+
+### Slider
 
 ```kotlin
-interface FixtureSlider {
-    var value: UByte                           // Immediate set (0-255)
-    fun fadeToValue(value: UByte, fadeMs: Long) // Timed fade
+interface Slider {
+    var value: UByte?                          // Nullable for groups (null if non-uniform)
+    fun fadeToValue(value: UByte, fadeMs: Long)
+}
+
+interface AggregateSlider : Slider {
+    val memberValues: List<UByte?>   // Values from all members
+    val isUniform: Boolean           // True if all same
+    val minValue: UByte?             // Min across members
+    val maxValue: UByte?             // Max across members
 }
 ```
 
-### FixtureColour
+### Colour
 
 ```kotlin
-abstract class FixtureColour<T: FixtureSlider>(
-    val redSlider: T,
-    val greenSlider: T,
-    val blueSlider: T
-) {
-    var value: Color                              // Get/set as java.awt.Color
-    fun fadeToColour(rgbColor: Color, fadeMs: Long)
+interface Colour {
+    val redSlider: Slider
+    val greenSlider: Slider
+    val blueSlider: Slider
+    var value: Color?                          // Nullable for groups
+    fun fadeToColour(colour: Color, fadeMs: Long)
+}
+
+interface AggregateColour : Colour {
+    override val redSlider: AggregateSlider
+    val memberValues: List<Color?>
+    val isUniform: Boolean
 }
 ```
 
-### FixtureStrobe
+### Strobe
 
 ```kotlin
-interface FixtureStrobe {
+interface Strobe {
     fun fullOn()                    // Disable strobe, full output
     fun strobe(intensity: UByte)    // Enable strobe at speed
 }
@@ -142,39 +159,40 @@ interface FixtureStrobe {
 
 ## DMX Property Implementations
 
-### DmxFixtureSlider
+### DmxSlider
 
-Maps a single DMX channel to a slider:
+Maps a single DMX channel to a slider (in `fixture/dmx/`):
 
 ```kotlin
-class DmxFixtureSlider(
+class DmxSlider(
     val transaction: ControllerTransaction?,
     val universe: Universe,
     val channelNo: Int,
     val min: UByte = 0u,      // Clamp minimum
     val max: UByte = 255u     // Clamp maximum
-)
+) : Slider
 ```
 
 - Reads/writes through the transaction (not direct to controller)
 - Automatically clamps values to min/max range
+- `value` always returns non-null for single fixtures
 - Throws if used without a transaction
 
-### DmxFixtureColour
+### DmxColour
 
 Groups three channels as RGB:
 
 ```kotlin
-class DmxFixtureColour(
+class DmxColour(
     transaction: ControllerTransaction?,
     universe: Universe,
     redChannelNo: Int,
     greenChannelNo: Int,
     blueChannelNo: Int
-)
+) : Colour
 ```
 
-Creates three `DmxFixtureSlider` instances internally.
+Creates three `DmxSlider` instances internally.
 
 ### DmxFixtureSetting
 
@@ -318,8 +336,8 @@ class MyFixture(
     firstChannel: Int,
     transaction: ControllerTransaction? = null,
 ) : DmxFixture(universe, firstChannel, CHANNEL_COUNT, key, fixtureName),
-    FixtureWithDimmer,           // If it has a dimmer
-    DmxFixtureWithColour         // If it has RGB
+    WithDimmer,           // If it has a dimmer
+    WithColour            // If it has RGB
 {
     companion object {
         const val CHANNEL_COUNT = 8  // Total DMX channels
@@ -348,11 +366,11 @@ Map each DMX channel to a property:
 ```kotlin
     // Channel 1: Dimmer
     @FixtureProperty
-    override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel)
+    override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
     // Channels 2-4: RGB
     @FixtureProperty
-    override val rgbColour = DmxFixtureColour(
+    override val rgbColour = DmxColour(
         transaction, universe,
         firstChannel + 1,  // Red
         firstChannel + 2,  // Green
@@ -455,14 +473,14 @@ sealed class MyBarFixture(
 
     // Mode-specific subclasses
     @FixtureType("my-bar-6ch")
-    class Mode6Ch(...) : MyBarFixture(..., 6, ...), FixtureWithDimmer {
+    class Mode6Ch(...) : MyBarFixture(..., 6, ...), WithDimmer {
         override val mode = Mode.MODE_6CH
         // 6-channel properties...
     }
 
     @FixtureType("my-bar-14ch")
     class Mode14Ch(...) : MyBarFixture(..., 14, ...),
-        FixtureWithDimmer, MultiElementFixture<Head>
+        WithDimmer, MultiElementFixture<Head>
     {
         override val mode = Mode.MODE_14CH
         // 14-channel properties + per-head control...
@@ -489,13 +507,13 @@ inner class BasicHead(
     elementIndex: Int,
     headTransaction: ControllerTransaction?,
     private val headFirstChannel: Int
-) : Head(elementIndex, headTransaction), FixtureWithPosition {
-    override val pan = DmxFixtureSlider(headTransaction, universe, headFirstChannel)
-    override val tilt = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 1)
+) : Head(elementIndex, headTransaction), WithPosition {
+    override val pan = DmxSlider(headTransaction, universe, headFirstChannel)
+    override val tilt = DmxSlider(headTransaction, universe, headFirstChannel + 1)
 }
 
 // Full head for advanced modes
-inner class FullHead(...) : Head(...), FixtureWithPosition {
+inner class FullHead(...) : Head(...), WithPosition {
     // Additional properties like fine control, speed, etc.
 }
 ```
@@ -539,17 +557,21 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `DmxFixture.kt` | DMX-specific base with addressing |
 | `FixtureType.kt` | Class annotation |
 | `FixtureProperty.kt` | Property annotation |
-| `FixtureSlider.kt` | Single-value interface |
-| `FixtureColour.kt` | RGB grouping base class |
-| `FixtureMultiSlider.kt` | Named slider collection interface |
-| `FixtureWithDimmer.kt` | Dimmer trait |
-| `FixtureWithColour.kt` | Colour trait |
-| `FixtureWithStrobe.kt` | Strobe trait |
-| `FixtureWithUv.kt` | UV trait |
-| `dmx/DmxFixtureSlider.kt` | DMX slider implementation |
-| `dmx/DmxFixtureColour.kt` | DMX RGB implementation |
+| `property/Slider.kt` | Single-value interface, AggregateSlider |
+| `property/Colour.kt` | RGB colour interface, AggregateColour |
+| `property/Position.kt` | Position interface |
+| `property/Strobe.kt` | Strobe interface |
+| `trait/WithDimmer.kt` | Dimmer trait |
+| `trait/WithColour.kt` | Colour trait |
+| `trait/WithStrobe.kt` | Strobe trait |
+| `trait/WithUv.kt` | UV trait |
+| `trait/WithPosition.kt` | Position trait |
+| `dmx/DmxSlider.kt` | DMX slider implementation |
+| `dmx/DmxColour.kt` | DMX RGB implementation |
 | `dmx/DmxFixtureSetting.kt` | DMX enum mapping |
-| `dmx/DmxFixtureMultiSlider.kt` | DMX multi-slider interface |
+| `group/property/GroupSlider.kt` | AggregateSlider for groups |
+| `group/property/GroupColour.kt` | AggregateColour for groups |
+| `group/GroupExtensions.kt` | Extension properties for groups |
 | `DmxChannelMode.kt` | Multi-mode channel configuration interface |
 | `MultiModeFixtureFamily.kt` | Multi-mode fixture marker interface |
 | `show/Fixtures.kt` | Registry and transaction wrapper |

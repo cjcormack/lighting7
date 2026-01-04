@@ -1,6 +1,11 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fixture.*
+import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixtureTarget
+import uk.me.cormack.lighting7.fixture.trait.WithColour
+import uk.me.cormack.lighting7.fixture.trait.WithDimmer
+import uk.me.cormack.lighting7.fixture.trait.WithPosition
+import uk.me.cormack.lighting7.fixture.trait.WithUv
 
 /**
  * Extension functions for applying FX to fixtures in a type-safe manner.
@@ -15,14 +20,13 @@ import uk.me.cormack.lighting7.fixture.*
  * @param blendMode How to blend with existing value
  * @return The effect ID
  */
-fun FixtureWithDimmer.applyDimmerFx(
+fun <T> T.applyDimmerFx(
     engine: FxEngine,
     effect: Effect,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE
-): Long {
-    val fixture = this as Fixture
-    val target = SliderTarget(fixture.key, "dimmer")
+): Long where T : FixtureTarget, T : WithDimmer {
+    val target = SliderTarget(this.targetKey, "dimmer")
     val instance = FxInstance(effect, target, timing, blendMode)
     return engine.addEffect(instance)
 }
@@ -36,14 +40,13 @@ fun FixtureWithDimmer.applyDimmerFx(
  * @param blendMode How to blend with existing value
  * @return The effect ID
  */
-fun FixtureWithUv.applyUvFx(
+fun <T> T.applyUvFx(
     engine: FxEngine,
     effect: Effect,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE
-): Long {
-    val fixture = this as Fixture
-    val target = SliderTarget(fixture.key, "uvColour")
+): Long where T : FixtureTarget, T : WithUv {
+    val target = SliderTarget(this.targetKey, "uv")
     val instance = FxInstance(effect, target, timing, blendMode)
     return engine.addEffect(instance)
 }
@@ -57,14 +60,13 @@ fun FixtureWithUv.applyUvFx(
  * @param blendMode How to blend with existing value
  * @return The effect ID
  */
-fun <T : FixtureColour<*>> FixtureWithColour<T>.applyColourFx(
+fun <T> T.applyColourFx(
     engine: FxEngine,
     effect: Effect,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE
-): Long {
-    val fixture = this as Fixture
-    val target = ColourTarget(fixture.key)
+): Long where T : FixtureTarget, T : WithColour {
+    val target = ColourTarget(this.targetKey)
     val instance = FxInstance(effect, target, timing, blendMode)
     return engine.addEffect(instance)
 }
@@ -78,14 +80,13 @@ fun <T : FixtureColour<*>> FixtureWithColour<T>.applyColourFx(
  * @param blendMode How to blend with existing value
  * @return The effect ID
  */
-fun FixtureWithPosition.applyPositionFx(
+fun <T> T.applyPositionFx(
     engine: FxEngine,
     effect: Effect,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE
-): Long {
-    val fixture = this as Fixture
-    val target = PositionTarget(fixture.key)
+): Long where T : FixtureTarget, T : WithPosition {
+    val target = PositionTarget(this.targetKey)
     val instance = FxInstance(effect, target, timing, blendMode)
     return engine.addEffect(instance)
 }
@@ -105,7 +106,7 @@ fun FixtureWithPosition.applyPositionFx(
  */
 class FxBuilder(
     private val engine: FxEngine,
-    private val fixtureKey: String
+    private val targetKey: String
 ) {
     /**
      * Add a dimmer effect.
@@ -124,7 +125,7 @@ class FxBuilder(
     ): Long {
         val instance = FxInstance(
             effect = effect,
-            target = SliderTarget(fixtureKey, "dimmer"),
+            target = SliderTarget(targetKey, "dimmer"),
             timing = FxTiming(beatDivision),
             blendMode = blendMode
         )
@@ -149,7 +150,7 @@ class FxBuilder(
     ): Long {
         val instance = FxInstance(
             effect = effect,
-            target = ColourTarget(fixtureKey),
+            target = ColourTarget(targetKey),
             timing = FxTiming(beatDivision),
             blendMode = blendMode
         )
@@ -174,7 +175,7 @@ class FxBuilder(
     ): Long {
         val instance = FxInstance(
             effect = effect,
-            target = SliderTarget(fixtureKey, "uvColour"),
+            target = SliderTarget(targetKey, "uv"),
             timing = FxTiming(beatDivision),
             blendMode = blendMode
         )
@@ -199,7 +200,7 @@ class FxBuilder(
     ): Long {
         val instance = FxInstance(
             effect = effect,
-            target = PositionTarget(fixtureKey),
+            target = PositionTarget(targetKey),
             timing = FxTiming(beatDivision),
             blendMode = blendMode
         )
@@ -209,13 +210,13 @@ class FxBuilder(
 }
 
 /**
- * Apply multiple effects to a fixture using a DSL builder.
+ * Apply multiple effects to a target using a DSL builder.
  *
  * @param engine The FX engine
  * @param block Configuration block for adding effects
  */
-fun Fixture.fx(engine: FxEngine, block: FxBuilder.() -> Unit) {
-    FxBuilder(engine, this.key).block()
+fun FixtureTarget.fx(engine: FxEngine, block: FxBuilder.() -> Unit) {
+    FxBuilder(engine, this.targetKey).block()
 }
 
 /**
@@ -224,6 +225,6 @@ fun Fixture.fx(engine: FxEngine, block: FxBuilder.() -> Unit) {
  * @param engine The FX engine
  * @return Number of effects removed
  */
-fun Fixture.clearFx(engine: FxEngine): Int {
-    return engine.removeEffectsForFixture(this.key)
+fun FixtureTarget.clearFx(engine: FxEngine): Int {
+    return engine.removeEffectsForFixture(this.targetKey)
 }

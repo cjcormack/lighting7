@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.fixture
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.fixture.trait.WithColour
+import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import java.awt.Color
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.memberProperties
@@ -39,11 +41,11 @@ sealed class Fixture(val key: String, val fixtureName: String) : FixtureTarget {
     }.flatten()
 
     open fun blackout() {
-        if (this is FixtureWithDimmer) {
+        if (this is WithDimmer) {
             this.dimmer.value = 0u
         }
 
-        if (this is FixtureWithColour<*>) {
+        if (this is WithColour) {
             this.rgbColour.value = Color.BLACK
         }
     }

@@ -9,16 +9,16 @@ import io.ktor.server.resources.post
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.generateGroupPropertyDescriptors
+import uk.me.cormack.lighting7.fixture.trait.WithColour
+import uk.me.cormack.lighting7.fixture.trait.WithDimmer
+import uk.me.cormack.lighting7.fixture.trait.WithPosition
+import uk.me.cormack.lighting7.fixture.trait.WithStrobe
+import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.effects.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
-import uk.me.cormack.lighting7.fx.group.applyColourFx
-import uk.me.cormack.lighting7.fx.group.applyDimmerFx
-import uk.me.cormack.lighting7.fx.group.applyPositionFx
-import uk.me.cormack.lighting7.fx.group.applyUvFx
 import uk.me.cormack.lighting7.fx.group.clearFx
 import uk.me.cormack.lighting7.state.State
 
@@ -243,19 +243,19 @@ private fun FixtureGroup<*>.detectCapabilities(): List<String> {
     val capabilities = mutableListOf<String>()
     val first = first().fixture
 
-    if (first is FixtureWithDimmer && all { it.fixture is FixtureWithDimmer }) {
+    if (first is WithDimmer && all { it.fixture is WithDimmer }) {
         capabilities.add("dimmer")
     }
-    if (first is FixtureWithColour<*> && all { it.fixture is FixtureWithColour<*> }) {
+    if (first is WithColour && all { it.fixture is WithColour }) {
         capabilities.add("colour")
     }
-    if (first is FixtureWithPosition && all { it.fixture is FixtureWithPosition }) {
+    if (first is WithPosition && all { it.fixture is WithPosition }) {
         capabilities.add("position")
     }
-    if (first is FixtureWithUv && all { it.fixture is FixtureWithUv }) {
+    if (first is WithUv && all { it.fixture is WithUv }) {
         capabilities.add("uv")
     }
-    if (first is FixtureWithStrobe && all { it.fixture is FixtureWithStrobe }) {
+    if (first is WithStrobe && all { it.fixture is WithStrobe }) {
         capabilities.add("strobe")
     }
 
@@ -276,31 +276,31 @@ private fun applyGroupEffect(
     // Create appropriate group target based on property type
     val target = when (request.propertyName.lowercase()) {
         "dimmer" -> {
-            if (!group.fixtures.all { it is FixtureWithDimmer }) {
+            if (!group.fixtures.all { it is WithDimmer }) {
                 throw IllegalStateException("Not all fixtures in group support dimmer")
             }
             SliderTarget.forGroup(group.name, "dimmer")
         }
 
         "colour", "color" -> {
-            if (!group.fixtures.all { it is FixtureWithColour<*> }) {
+            if (!group.fixtures.all { it is WithColour }) {
                 throw IllegalStateException("Not all fixtures in group support colour")
             }
             ColourTarget.forGroup(group.name)
         }
 
         "position" -> {
-            if (!group.fixtures.all { it is FixtureWithPosition }) {
+            if (!group.fixtures.all { it is WithPosition }) {
                 throw IllegalStateException("Not all fixtures in group support position")
             }
             PositionTarget.forGroup(group.name)
         }
 
         "uv" -> {
-            if (!group.fixtures.all { it is FixtureWithUv }) {
+            if (!group.fixtures.all { it is WithUv }) {
                 throw IllegalStateException("Not all fixtures in group support UV")
             }
-            SliderTarget.forGroup(group.name, "uvColour")
+            SliderTarget.forGroup(group.name, "uv")
         }
 
         else -> throw IllegalArgumentException("Unknown property name: ${request.propertyName}")

@@ -5,6 +5,9 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fixture.trait.WithColour
+import uk.me.cormack.lighting7.fixture.trait.WithDimmer
+import uk.me.cormack.lighting7.fixture.trait.WithPosition
 
 /**
  * Example multi-element fixture: a bar with 4 independent moving heads.
@@ -40,7 +43,7 @@ class QuadMoverBarFixture(
     firstChannel: Int,
     transaction: ControllerTransaction? = null,
 ) : DmxFixture(universe, firstChannel, 29, key, fixtureName),
-    FixtureWithDimmer,
+    WithDimmer,
     MultiElementFixture<QuadMoverBarFixture.Head> {
 
     private constructor(
@@ -70,9 +73,9 @@ class QuadMoverBarFixture(
         override val elementIndex: Int,
         private val headTransaction: ControllerTransaction?
     ) : FixtureElement<QuadMoverBarFixture>,
-        FixtureWithDimmer,
-        DmxFixtureWithColour,
-        FixtureWithPosition {
+        WithDimmer,
+        WithColour,
+        WithPosition {
 
         override val parentFixture: QuadMoverBarFixture
             get() = this@QuadMoverBarFixture
@@ -86,10 +89,10 @@ class QuadMoverBarFixture(
         private val headFirstChannel = firstChannel + 1 + (elementIndex * 7)
 
         @FixtureProperty("Head dimmer", category = PropertyCategory.DIMMER)
-        override val dimmer = DmxFixtureSlider(headTransaction, universe, headFirstChannel)
+        override val dimmer = DmxSlider(headTransaction, universe, headFirstChannel)
 
         @FixtureProperty("Head RGB colour", category = PropertyCategory.COLOUR)
-        override val rgbColour = DmxFixtureColour(
+        override val rgbColour = DmxColour(
             headTransaction,
             universe,
             headFirstChannel + 1,  // Red
@@ -98,13 +101,13 @@ class QuadMoverBarFixture(
         )
 
         @FixtureProperty("Head pan (horizontal)", category = PropertyCategory.POSITION)
-        override val pan = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 4)
+        override val pan = DmxSlider(headTransaction, universe, headFirstChannel + 4)
 
         @FixtureProperty("Head pan fine", category = PropertyCategory.POSITION)
-        val panFine = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 5)
+        val panFine = DmxSlider(headTransaction, universe, headFirstChannel + 5)
 
         @FixtureProperty("Head tilt (vertical)", category = PropertyCategory.POSITION)
-        override val tilt = DmxFixtureSlider(headTransaction, universe, headFirstChannel + 6)
+        override val tilt = DmxSlider(headTransaction, universe, headFirstChannel + 6)
 
         /** Create a copy of this head bound to a transaction */
         override fun withTransaction(transaction: ControllerTransaction): Head =
@@ -121,7 +124,7 @@ class QuadMoverBarFixture(
 
     /** Master dimmer affecting all heads */
     @FixtureProperty("Master dimmer", category = PropertyCategory.DIMMER)
-    override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel)
+    override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
     /** The four individual heads */
     override val elements: List<Head> = (0 until 4).map { Head(it, transaction) }

@@ -18,6 +18,19 @@ interface DmxFixtureColourSettingValue : DmxFixtureSettingValue {
     val colourPreview: String?
 }
 
+/**
+ * Maps an enum of setting values to a single DMX channel.
+ *
+ * Unlike [DmxSlider] and [DmxColour], this class retains the "Fixture" prefix because
+ * settings are inherently fixture-specific (each fixture defines its own enum values).
+ * There's no generic `Setting` interface since the type parameter varies per fixture.
+ *
+ * @param T The fixture-specific enum type implementing [DmxFixtureSettingValue]
+ * @param transaction The controller transaction context
+ * @param universe The DMX universe containing the channel
+ * @param channelNo The DMX channel number
+ * @param settingValues Array of all possible setting values
+ */
 class DmxFixtureSetting<T : DmxFixtureSettingValue>(
     val transaction: ControllerTransaction?,
     val universe: Universe,

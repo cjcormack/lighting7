@@ -170,3 +170,36 @@ inline fun <P : Fixture, reified E : FixtureElement<P>> GroupBuilder<E>.addEleme
         )
     }
 }
+
+/**
+ * Get all elements of this multi-element fixture as a [FixtureGroup].
+ *
+ * This provides a convenient way to operate on all elements as a single unit,
+ * enabling operations like:
+ * - Setting all element dimmers: `fixture.elementsGroup.dimmer.value = 200u`
+ * - Filtering elements: `fixture.elementsGroup.everyNth(2)`
+ * - Applying effects with distribution across elements
+ *
+ * Elements are automatically indexed with normalized positions (0.0-1.0)
+ * and tagged with "element" and "element-N" for filtering.
+ *
+ * The group name is derived from the fixture key as "{fixture-key}-elements".
+ *
+ * @return A FixtureGroup containing all elements with proper positioning
+ */
+val <F, E> F.elementsGroup: FixtureGroup<E>
+    where F : Fixture, F : MultiElementFixture<E>, E : FixtureElement<*>
+    get() {
+        val count = elements.size
+        return FixtureGroup(
+            name = "$key-elements",
+            members = elements.mapIndexed { idx, element ->
+                GroupMember(
+                    fixture = element,
+                    index = idx,
+                    normalizedPosition = if (count > 1) idx.toDouble() / (count - 1) else 0.5,
+                    metadata = MemberMetadata(tags = setOf("element", "element-$idx"))
+                )
+            }
+        )
+    }

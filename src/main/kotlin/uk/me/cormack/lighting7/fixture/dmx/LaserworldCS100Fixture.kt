@@ -39,38 +39,38 @@ class LaserworldCS100Fixture(
     val mode = DmxFixtureSetting(transaction, universe, firstChannel, OperationMode.entries.toTypedArray())
 
     @FixtureProperty("Pattern select", category = PropertyCategory.SETTING)
-    val pattern = DmxFixtureSlider(transaction, universe, firstChannel + 1)
+    val pattern = DmxSlider(transaction, universe, firstChannel + 1)
 
     @FixtureProperty("Rotation (Z-axis)", category = PropertyCategory.OTHER)
-    val rotationZ = DmxFixtureSlider(transaction, universe, firstChannel + 2)
+    val rotationZ = DmxSlider(transaction, universe, firstChannel + 2)
 
     @FixtureProperty("Rotation X-axis", category = PropertyCategory.OTHER)
-    val rotationX = DmxFixtureSlider(transaction, universe, firstChannel + 3)
+    val rotationX = DmxSlider(transaction, universe, firstChannel + 3)
 
     @FixtureProperty("Rotation Y-axis", category = PropertyCategory.OTHER)
-    val rotationY = DmxFixtureSlider(transaction, universe, firstChannel + 4)
+    val rotationY = DmxSlider(transaction, universe, firstChannel + 4)
 
     @FixtureProperty("Offset X-axis", category = PropertyCategory.POSITION)
-    val offsetX = DmxFixtureSlider(transaction, universe, firstChannel + 5)
+    val offsetX = DmxSlider(transaction, universe, firstChannel + 5)
 
     @FixtureProperty("Offset Y-axis", category = PropertyCategory.POSITION)
-    val offsetY = DmxFixtureSlider(transaction, universe, firstChannel + 6)
+    val offsetY = DmxSlider(transaction, universe, firstChannel + 6)
 
     @FixtureProperty("Size X", category = PropertyCategory.OTHER)
-    val sizeX = DmxFixtureSlider(transaction, universe, firstChannel + 7)
+    val sizeX = DmxSlider(transaction, universe, firstChannel + 7)
 
     @FixtureProperty("Size Y", category = PropertyCategory.OTHER)
-    val sizeY = DmxFixtureSlider(transaction, universe, firstChannel + 8)
+    val sizeY = DmxSlider(transaction, universe, firstChannel + 8)
 
     @FixtureProperty("Drawing effect", category = PropertyCategory.SETTING)
-    val drawingEffect = DmxFixtureSlider(transaction, universe, firstChannel + 9)
+    val drawingEffect = DmxSlider(transaction, universe, firstChannel + 9)
 
     @FixtureProperty("Scan speed / Points", category = PropertyCategory.SPEED)
-    val scanSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 10)
+    val scanSpeed = DmxSlider(transaction, universe, firstChannel + 10)
 
     @FixtureProperty("Colour change", category = PropertyCategory.COLOUR)
-    val colourChange = DmxFixtureSlider(transaction, universe, firstChannel + 11)
+    val colourChange = DmxSlider(transaction, universe, firstChannel + 11)
 
     @FixtureProperty("Colour speed", category = PropertyCategory.SPEED)
-    val colourSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 12)
+    val colourSpeed = DmxSlider(transaction, universe, firstChannel + 12)
 }

@@ -5,6 +5,10 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fixture.property.Strobe
+import uk.me.cormack.lighting7.fixture.trait.WithColour
+import uk.me.cormack.lighting7.fixture.trait.WithDimmer
+import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import kotlin.math.roundToInt
 
 /**
@@ -165,11 +169,11 @@ sealed class LedLightbar12PixelFixture(
      * Strobe control for modes that support it.
      * 0-1 = off, 2-255 = strobe slow to fast (0-20Hz)
      */
-    class Strobe(
+    class StrobeChannel(
         transaction: ControllerTransaction?,
         universe: Universe,
         channelNo: Int
-    ) : DmxFixtureSlider(transaction, universe, channelNo), FixtureStrobe {
+    ) : DmxSlider(transaction, universe, channelNo), Strobe {
         override fun fullOn() {
             value = 0u
         }
@@ -215,10 +219,10 @@ sealed class LedLightbar12PixelFixture(
         elementIndex: Int,
         pixelTransaction: ControllerTransaction?,
         private val pixelFirstChannel: Int
-    ) : Pixel(elementIndex, pixelTransaction), DmxFixtureWithColour {
+    ) : Pixel(elementIndex, pixelTransaction), WithColour {
 
         @FixtureProperty("Red", category = PropertyCategory.COLOUR)
-        override val rgbColour = DmxFixtureColour(
+        override val rgbColour = DmxColour(
             pixelTransaction,
             universe,
             pixelFirstChannel,
@@ -227,7 +231,7 @@ sealed class LedLightbar12PixelFixture(
         )
 
         @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
-        val white = DmxFixtureSlider(pixelTransaction, universe, pixelFirstChannel + 3)
+        val white = DmxSlider(pixelTransaction, universe, pixelFirstChannel + 3)
 
         override fun withTransaction(transaction: ControllerTransaction): RgbwPixel =
             RgbwPixel(elementIndex, transaction, pixelFirstChannel)
@@ -257,7 +261,7 @@ sealed class LedLightbar12PixelFixture(
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
         universe, firstChannel, 4, key, fixtureName, transaction
-    ), FixtureWithStrobe {
+    ), WithStrobe {
 
         override val mode = Mode.MODE_4CH_PROGRAM
 
@@ -276,10 +280,10 @@ sealed class LedLightbar12PixelFixture(
         val colorRunningProgram = DmxFixtureSetting(transaction, universe, firstChannel + 1, ColorRunningProgram.entries.toTypedArray())
 
         @FixtureProperty("Speed", category = PropertyCategory.SPEED)
-        val speed = DmxFixtureSlider(transaction, universe, firstChannel + 2)
+        val speed = DmxSlider(transaction, universe, firstChannel + 2)
 
         @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
-        override val strobe = Strobe(transaction, universe, firstChannel + 3)
+        override val strobe = StrobeChannel(transaction, universe, firstChannel + 3)
     }
 
     /**
@@ -300,7 +304,7 @@ sealed class LedLightbar12PixelFixture(
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
         universe, firstChannel, 4, key, fixtureName, transaction
-    ), DmxFixtureWithColour {
+    ), WithColour {
 
         override val mode = Mode.MODE_4CH_RGBW
 
@@ -313,7 +317,7 @@ sealed class LedLightbar12PixelFixture(
             Mode4ChRgbw(this, transaction)
 
         @FixtureProperty(category = PropertyCategory.COLOUR)
-        override val rgbColour = DmxFixtureColour(
+        override val rgbColour = DmxColour(
             transaction,
             universe,
             firstChannel,
@@ -322,7 +326,7 @@ sealed class LedLightbar12PixelFixture(
         )
 
         @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
-        val white = DmxFixtureSlider(transaction, universe, firstChannel + 3)
+        val white = DmxSlider(transaction, universe, firstChannel + 3)
     }
 
     /**
@@ -345,7 +349,7 @@ sealed class LedLightbar12PixelFixture(
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
         universe, firstChannel, 6, key, fixtureName, transaction
-    ), FixtureWithDimmer, DmxFixtureWithColour, FixtureWithStrobe {
+    ), WithDimmer, WithColour, WithStrobe {
 
         override val mode = Mode.MODE_6CH
 
@@ -358,13 +362,13 @@ sealed class LedLightbar12PixelFixture(
             Mode6Ch(this, transaction)
 
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
-        override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel)
+        override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
-        override val strobe = Strobe(transaction, universe, firstChannel + 1)
+        override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
         @FixtureProperty(category = PropertyCategory.COLOUR)
-        override val rgbColour = DmxFixtureColour(
+        override val rgbColour = DmxColour(
             transaction,
             universe,
             firstChannel + 2,
@@ -373,7 +377,7 @@ sealed class LedLightbar12PixelFixture(
         )
 
         @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
-        val white = DmxFixtureSlider(transaction, universe, firstChannel + 5)
+        val white = DmxSlider(transaction, universe, firstChannel + 5)
     }
 
     /**
@@ -394,7 +398,7 @@ sealed class LedLightbar12PixelFixture(
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
         universe, firstChannel, 10, key, fixtureName, transaction
-    ), FixtureWithDimmer, FixtureWithStrobe, MultiElementFixture<LedLightbar12PixelFixture.RgbwPixel> {
+    ), WithDimmer, WithStrobe, MultiElementFixture<LedLightbar12PixelFixture.RgbwPixel> {
 
         override val mode = Mode.MODE_10CH
 
@@ -407,10 +411,10 @@ sealed class LedLightbar12PixelFixture(
             Mode10Ch(this, transaction)
 
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
-        override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel)
+        override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
-        override val strobe = Strobe(transaction, universe, firstChannel + 1)
+        override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
         override val elements: List<RgbwPixel> = (0 until 2).map { idx ->
             RgbwPixel(idx, transaction, firstChannel + 2 + (idx * 4))
@@ -460,7 +464,7 @@ sealed class LedLightbar12PixelFixture(
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
         universe, firstChannel, 12, key, fixtureName, transaction
-    ), FixtureWithDimmer, DmxFixtureWithColour, FixtureWithStrobe {
+    ), WithDimmer, WithColour, WithStrobe {
 
         override val mode = Mode.MODE_12CH
 
@@ -473,13 +477,13 @@ sealed class LedLightbar12PixelFixture(
             Mode12Ch(this, transaction)
 
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
-        override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel)
+        override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
-        override val strobe = Strobe(transaction, universe, firstChannel + 1)
+        override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
         @FixtureProperty("Random strobe", category = PropertyCategory.STROBE)
-        val randomStrobe = Strobe(transaction, universe, firstChannel + 2)
+        val randomStrobe = StrobeChannel(transaction, universe, firstChannel + 2)
 
         @FixtureProperty("Color preset", category = PropertyCategory.COLOUR)
         val colorPreset = DmxFixtureSetting(transaction, universe, firstChannel + 3, ColorPreset.entries.toTypedArray())
@@ -491,13 +495,13 @@ sealed class LedLightbar12PixelFixture(
         val colorRunningProgram = DmxFixtureSetting(transaction, universe, firstChannel + 5, ColorRunningProgram.entries.toTypedArray())
 
         @FixtureProperty("Speed", category = PropertyCategory.SPEED)
-        val speed = DmxFixtureSlider(transaction, universe, firstChannel + 6)
+        val speed = DmxSlider(transaction, universe, firstChannel + 6)
 
         @FixtureProperty("Sound mode", category = PropertyCategory.SETTING)
         val soundMode = DmxFixtureSetting(transaction, universe, firstChannel + 7, SoundMode.entries.toTypedArray())
 
         @FixtureProperty(category = PropertyCategory.COLOUR)
-        override val rgbColour = DmxFixtureColour(
+        override val rgbColour = DmxColour(
             transaction,
             universe,
             firstChannel + 8,
@@ -506,7 +510,7 @@ sealed class LedLightbar12PixelFixture(
         )
 
         @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
-        val white = DmxFixtureSlider(transaction, universe, firstChannel + 11)
+        val white = DmxSlider(transaction, universe, firstChannel + 11)
     }
 
     /**
@@ -529,7 +533,7 @@ sealed class LedLightbar12PixelFixture(
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
         universe, firstChannel, 18, key, fixtureName, transaction
-    ), FixtureWithDimmer, FixtureWithStrobe, MultiElementFixture<LedLightbar12PixelFixture.RgbwPixel> {
+    ), WithDimmer, WithStrobe, MultiElementFixture<LedLightbar12PixelFixture.RgbwPixel> {
 
         override val mode = Mode.MODE_18CH
 
@@ -542,10 +546,10 @@ sealed class LedLightbar12PixelFixture(
             Mode18Ch(this, transaction)
 
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
-        override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel)
+        override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
-        override val strobe = Strobe(transaction, universe, firstChannel + 1)
+        override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
         override val elements: List<RgbwPixel> = (0 until 4).map { idx ->
             RgbwPixel(idx, transaction, firstChannel + 2 + (idx * 4))

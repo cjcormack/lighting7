@@ -1,6 +1,11 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fixture.*
+import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.trait.WithColour
+import uk.me.cormack.lighting7.fixture.trait.WithDimmer
+import uk.me.cormack.lighting7.fixture.trait.WithPosition
+import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
 
@@ -119,7 +124,7 @@ data class SliderTarget(
 
         val slider = getSlider(fixture) ?: return
 
-        val baseValue = slider.value
+        val baseValue = slider.value ?: 0u
         val newValue = applyBlendMode(baseValue, output.value, blendMode)
         slider.value = newValue
     }
@@ -129,10 +134,10 @@ data class SliderTarget(
         return FxOutput.Slider(slider?.value ?: 0u)
     }
 
-    private fun getSlider(fixture: Fixture): FixtureSlider? {
+    private fun getSlider(fixture: Fixture): Slider? {
         return when (propertyName) {
-            "dimmer" -> (fixture as? FixtureWithDimmer)?.dimmer
-            "uv", "uvColour" -> (fixture as? FixtureWithUv)?.uvColour
+            "dimmer" -> (fixture as? WithDimmer)?.dimmer
+            "uv" -> (fixture as? WithUv)?.uv
             else -> null
         }
     }
@@ -172,15 +177,15 @@ data class ColourTarget(
     ) {
         if (output !is FxOutput.Colour) return
 
-        val colour = (fixture as? FixtureWithColour<*>)?.rgbColour ?: return
+        val colour = (fixture as? WithColour)?.rgbColour ?: return
 
-        val baseColour = colour.value
+        val baseColour = colour.value ?: Color.BLACK
         val newColour = applyBlendMode(baseColour, output.color, blendMode)
         colour.value = newColour
     }
 
     override fun getCurrentValueFromFixture(fixture: Fixture): FxOutput {
-        val colour = (fixture as? FixtureWithColour<*>)?.rgbColour
+        val colour = (fixture as? WithColour)?.rgbColour
         return FxOutput.Colour(colour?.value ?: Color.BLACK)
     }
 
@@ -234,10 +239,10 @@ data class PositionTarget(
     ) {
         if (output !is FxOutput.Position) return
 
-        val positionFixture = fixture as? FixtureWithPosition ?: return
+        val positionFixture = fixture as? WithPosition ?: return
 
-        val basePan = positionFixture.pan.value
-        val baseTilt = positionFixture.tilt.value
+        val basePan = positionFixture.pan.value ?: 128u
+        val baseTilt = positionFixture.tilt.value ?: 128u
 
         val newPan = applyBlendMode(basePan, output.pan, blendMode)
         val newTilt = applyBlendMode(baseTilt, output.tilt, blendMode)
@@ -247,7 +252,7 @@ data class PositionTarget(
     }
 
     override fun getCurrentValueFromFixture(fixture: Fixture): FxOutput {
-        val positionFixture = fixture as? FixtureWithPosition
+        val positionFixture = fixture as? WithPosition
         return FxOutput.Position(
             positionFixture?.pan?.value ?: 128u,
             positionFixture?.tilt?.value ?: 128u

@@ -35,8 +35,11 @@ src/main/kotlin/uk/me/cormack/lighting7/
 ├── Application.kt          # Entry point
 ├── dmx/                    # DMX/ArtNet controllers, easing curves
 ├── fixture/                # Fixture abstractions
-│   ├── dmx/               # Specific DMX fixture types
+│   ├── dmx/               # Specific DMX fixture types (DmxSlider, DmxColour, fixtures)
 │   ├── group/             # Fixture group system
+│   │   └── property/      # Group property aggregators (GroupSlider, GroupColour)
+│   ├── property/          # Property interfaces (Slider, Colour, Position, Strobe)
+│   ├── trait/             # Trait interfaces (WithDimmer, WithColour, etc.)
 │   └── hue/               # Philips Hue integration
 ├── fx/                     # FX (effects) system
 │   ├── effects/           # Effect implementations
@@ -56,13 +59,36 @@ src/main/kotlin/uk/me/cormack/lighting7/
 
 ### Fixtures
 Fixtures represent physical lighting devices. They use trait-based composition:
-- `FixtureWithDimmer` - brightness control
-- `FixtureWithColour` - RGB color control
-- `FixtureWithStrobe` - strobe effects
-- `FixtureWithUv` - UV lighting
-- `FixtureWithPosition` - pan/tilt control for moving heads
+- `WithDimmer` - brightness control via `dimmer: Slider`
+- `WithColour` - RGB color control via `rgbColour: Colour`
+- `WithStrobe` - strobe effects via `strobe: Strobe`
+- `WithUv` - UV lighting via `uv: Slider`
+- `WithPosition` - pan/tilt control via `pan: Slider`, `tilt: Slider`
 
 Add new fixtures in `fixture/dmx/` by extending the appropriate base classes and traits.
+
+### Property System
+Properties provide a unified interface for fixture and group control:
+
+**Property Interfaces** (`fixture/property/`):
+- `Slider` - Single value control (dimmer, UV, pan, tilt)
+- `Colour` - RGB colour with `redSlider`, `greenSlider`, `blueSlider`
+- `Position` - Pan/tilt via `panSlider`, `tiltSlider`
+- `Strobe` - Strobe control with `fullOn()`, `strobe(intensity)`
+
+**Aggregate Interfaces** (for groups):
+- `AggregateSlider` extends `Slider` - adds `memberValues`, `isUniform`, `minValue`, `maxValue`
+- `AggregateColour` extends `Colour` - adds `memberValues`, `isUniform`
+
+**Value Semantics**:
+- Single fixtures: `value` always returns the actual value (non-null)
+- Groups: `value` returns null if members have different values
+```kotlin
+group.dimmer.value = 200u        // Sets all members
+val level = group.dimmer.value   // null if non-uniform
+val uniform = group.dimmer.isUniform
+val all = group.dimmer.memberValues  // [200, 200, 200]
+```
 
 ### Scenes and Chases
 - **Scene** (`Mode.SCENE`): A recorded snapshot of fixture states
@@ -103,19 +129,40 @@ fixture.applyColourFx(fxEngine, RainbowCycle(), FxTiming(BeatDivision.ONE_BAR))
 
 ### Fixture Groups
 Type-safe fixture groups for treating multiple fixtures as a single unit:
-- **FixtureGroup<T>** - Generic group with compile-time type safety, implements `FxTargetable`
+- **FixtureGroup<T>** - Generic group with compile-time type safety, implements `FixtureTarget`
 - **GroupMember** - Fixture wrapper with position and metadata (pan/tilt offsets, tags)
 - **DistributionStrategy** - Phase distribution patterns (LINEAR, UNIFIED, CENTER_OUT, etc.)
 - **MultiElementFixture** - Support for fixtures with multiple controllable elements
 
+**Group Property Access**: Groups expose trait properties through extension properties:
+```kotlin
+val group = fixtures.group<HexFixture>("front-wash")
+
+// Direct property access (returns AggregateSlider/AggregateColour)
+group.dimmer.value = 255u                    // Set all dimmers
+group.rgbColour.value = Color.RED            // Set all colours
+group.uv.value = 128u                        // Set all UV
+
+// Uniformity detection
+if (group.dimmer.isUniform) {
+    println("All at ${group.dimmer.value}")
+} else {
+    println("Mixed: ${group.dimmer.memberValues}")
+}
+
+// Access individual channels
+group.rgbColour.redSlider.value = 200u       // Set all reds
+```
+
+**Flatten for Recursive Groups**: Use `flatten()` to get leaf fixtures from nested groups:
+```kotlin
+val allWash: FixtureGroup<FixtureGroup<HexFixture>> = ...
+val allFixtures = allWash.flatten()          // List<FixtureTarget>
+val hexOnly = allWash.flattenAs<HexFixture>() // List<HexFixture>
+```
+
 **Group FX Targeting**: A single `FxInstance` targets the entire group. The `FxEngine` expands
 the effect to group members at processing time, applying distribution strategy offsets.
-This allows querying which effects are active on a group.
-
-**Group Properties**: Groups expose aggregated property descriptors via the REST API, allowing
-the frontend to view and edit properties across all group members simultaneously. The
-`/groups/{name}/properties` endpoint returns descriptors with member channel references,
-enabling range/summary display for mixed values and bulk updates.
 
 Creating groups in registration scripts:
 ```kotlin
@@ -130,18 +177,15 @@ fixtures.register {
 }
 ```
 
-Applying effects to groups (creates a single group-level FxInstance):
+Applying effects to groups:
 ```kotlin
 val group = fixtures.group<HexFixture>("front-wash")
 
-// Chase effect with linear distribution - returns single effect ID
+// Chase effect with linear distribution
 val effectId = group.applyDimmerFx(fxEngine, Pulse(), distribution = DistributionStrategy.LINEAR)
 
 // Unified colour across all fixtures
 group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrategy.UNIFIED)
-
-// Query active effects for a group
-val activeEffects = fxEngine.getEffectsForGroup("front-wash")
 ```
 
 ## API Endpoints

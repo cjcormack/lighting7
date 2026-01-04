@@ -1,12 +1,12 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
-import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.trait.WithColour
 
 @FixtureType("lightstrip")
 class LightstripFixture (
@@ -15,7 +15,7 @@ class LightstripFixture (
     fixtureName: String,
     firstChannel: Int,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 5, key, fixtureName), DmxFixtureWithColour {
+): DmxFixture(universe, firstChannel, 5, key, fixtureName), WithColour {
     private constructor(
         fixture: LightstripFixture,
         transaction: ControllerTransaction,
@@ -30,7 +30,7 @@ class LightstripFixture (
     override fun withTransaction(transaction: ControllerTransaction): LightstripFixture = LightstripFixture(this, transaction)
 
     @FixtureProperty(category = PropertyCategory.COLOUR)
-    override val rgbColour = DmxFixtureColour(
+    override val rgbColour = DmxColour(
         transaction,
         universe,
         firstChannel,
@@ -39,5 +39,5 @@ class LightstripFixture (
     )
 
     @FixtureProperty(category = PropertyCategory.WHITE, bundleWithColour = true)
-    val whiteColour = DmxFixtureSlider(transaction, universe, firstChannel + 3)
+    val whiteColour = DmxSlider(transaction, universe, firstChannel + 3)
 }

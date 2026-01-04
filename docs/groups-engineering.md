@@ -33,7 +33,7 @@ fx/group/
 Groups are parameterized by fixture type and implement `FxTargetable`:
 
 ```kotlin
-class FixtureGroup<T : Fixture> : FxTargetable {
+class FixtureGroup<T : FixtureTarget> : FixtureTarget, FxTargetable {
     override val targetKey: String get() = name
     override val isGroup: Boolean get() = true
     override val memberCount: Int get() = size
@@ -50,8 +50,14 @@ This enables:
 val group: FixtureGroup<HexFixture> = ...
 group.fixtures.forEach { it.dimmer.value = 255u }
 
+// Direct group property access (aggregated)
+group.dimmer.value = 255u          // Sets all fixtures
+group.rgbColour.value = Color.RED  // Sets all fixtures
+val level: UByte? = group.dimmer.value  // null if non-uniform
+val levels = group.dimmer.memberValues  // [255, 255, ...]
+
 // Type narrowing for capability checks
-val dimmerGroup: FixtureGroup<FixtureWithDimmer>? = group.asCapable()
+val dimmerGroup: FixtureGroup<WithDimmer>? = group.asCapable()
 
 // FxTargetable allows querying effects
 val effects = fxEngine.getEffectsForGroup(group.name)
@@ -62,7 +68,7 @@ val effects = fxEngine.getEffectsForGroup(group.name)
 Each fixture in a group is wrapped in `GroupMember`:
 
 ```kotlin
-data class GroupMember<T : Fixture>(
+data class GroupMember<T : FixtureTarget>(
     val fixture: T,
     val index: Int,               // 0-based position in group
     val normalizedPosition: Double, // 0.0 to 1.0
@@ -161,16 +167,16 @@ Extension functions provide type-safe effect application. Each function creates 
 ```kotlin
 // Each returns a single effect ID (not a list)
 fun <T> FixtureGroup<T>.applyDimmerFx(...): Long
-    where T : Fixture, T : FixtureWithDimmer
+    where T : FixtureTarget, T : WithDimmer
 
 fun <T> FixtureGroup<T>.applyColourFx(...): Long
-    where T : Fixture, T : FixtureWithColour<*>
+    where T : FixtureTarget, T : WithColour
 
 fun <T> FixtureGroup<T>.applyPositionFx(...): Long
-    where T : Fixture, T : FixtureWithPosition
+    where T : FixtureTarget, T : WithPosition
 
 fun <T> FixtureGroup<T>.applyUvFx(...): Long
-    where T : Fixture, T : FixtureWithUv
+    where T : FixtureTarget, T : WithUv
 
 // Clear all effects for group (both group-level and per-fixture)
 fun FixtureGroup<*>.clearFx(engine: FxEngine): Int
@@ -241,7 +247,7 @@ val reversed = group.reversed()
 val (leftSplit, rightSplit) = group.splitAt(0.5)
 
 // Type narrowing
-val positionGroup: FixtureGroup<FixtureWithPosition>? = group.asCapable()
+val positionGroup: FixtureGroup<WithPosition>? = group.asCapable()
 ```
 
 ## Multi-Element Fixtures
@@ -266,22 +272,22 @@ interface MultiElementFixture<E : FixtureElement<*>> {
 ```kotlin
 @FixtureType("quad-mover-bar")
 class QuadMoverBarFixture(...) : DmxFixture(...),
-    FixtureWithDimmer,
+    WithDimmer,
     MultiElementFixture<QuadMoverBarFixture.Head>
 {
     inner class Head(override val elementIndex: Int) :
         Fixture(...),
         FixtureElement<QuadMoverBarFixture>,
-        FixtureWithDimmer,
-        FixtureWithColour<DmxFixtureColour>,
-        FixtureWithPosition
+        WithDimmer,
+        WithColour,
+        WithPosition
     {
         override val parentFixture get() = this@QuadMoverBarFixture
         // ... implement traits
     }
 
     override val elements = (0 until 4).map { Head(it) }
-    override val dimmer = DmxFixtureSlider(...)  // Master dimmer
+    override val dimmer = DmxSlider(...)  // Master dimmer
 }
 ```
 
@@ -291,17 +297,52 @@ class QuadMoverBarFixture(...) : DmxFixture(...),
 val quadBar = addFixture(QuadMoverBarFixture(...))
 
 // Add all heads as separate group members
-createGroup<FixtureWithPosition>("all-heads") {
+createGroup<WithPosition>("all-heads") {
     addElements(quadBar, panSpread = 60.0)
 }
 
 // Apply chase across individual heads
-fixtures.group<FixtureWithPosition>("all-heads").applyPositionFx(
+fixtures.group<WithPosition>("all-heads").applyPositionFx(
     fxEngine,
     Circle(),
     distribution = DistributionStrategy.LINEAR
 )
 ```
+
+### Direct Element Access via elementsGroup
+
+Multi-element fixtures provide a convenient `elementsGroup` extension property that returns all elements as a `FixtureGroup`:
+
+```kotlin
+val quadBar: SlenderBeamBarQuadFixture.Mode14Ch = ...
+
+// Get elements as a group
+val headGroup = quadBar.elementsGroup  // FixtureGroup<BasicHead>
+
+// The group name is "{fixture-key}-elements"
+assertEquals("quad-bar-elements", headGroup.name)
+
+// Set all heads to same position
+headGroup.fixtures.forEach { head ->
+    head.pan.value = 128u
+    head.tilt.value = 64u
+}
+
+// Use group filtering operations
+val leftHeads = quadBar.elementsGroup.leftHalf()
+val everyOther = quadBar.elementsGroup.everyNth(2)
+val reversed = quadBar.elementsGroup.reversed()
+
+// Filter by element tags (automatically set as "element" and "element-N")
+val head1Only = quadBar.elementsGroup.withTags("element-1")
+```
+
+Elements are automatically indexed with:
+- Sequential indices (0 to elementCount-1)
+- Normalized positions (0.0 to 1.0)
+- Tags: `"element"` and `"element-N"` for each element
+
+This is simpler than creating a named group via `addElements()` when you just need to operate on a single fixture's elements.
 
 ## REST API
 
@@ -376,7 +417,49 @@ Note: The response returns a single `effectId` because one `FxInstance` is creat
 
 ## Group Properties
 
-Groups expose aggregated property descriptors that include channel references for all group members.
+Groups support direct property access via extension properties that aggregate across all members.
+
+### Direct Property Access
+
+Extension properties provide type-safe access to group properties:
+
+```kotlin
+// Extension properties require bounded types
+val <T> FixtureGroup<T>.dimmer: AggregateSlider
+    where T : FixtureTarget, T : WithDimmer
+
+val <T> FixtureGroup<T>.rgbColour: AggregateColour
+    where T : FixtureTarget, T : WithColour
+
+val <T> FixtureGroup<T>.uv: AggregateSlider
+    where T : FixtureTarget, T : WithUv
+```
+
+### Value Semantics
+
+- **Setting**: `group.dimmer.value = 200u` sets ALL member fixtures
+- **Getting uniform**: Returns value if all members match, null otherwise
+- **Getting non-uniform**: `group.dimmer.memberValues` returns list of individual values
+- **Uniformity check**: `group.dimmer.isUniform` checks if all values match
+- **Range access**: `group.dimmer.minValue` / `maxValue` for bounds
+
+```kotlin
+val group = fixtures.group<HexFixture>("front-wash")
+
+group.dimmer.value = 200u                    // Set all to 200
+assertTrue(group.dimmer.isUniform)           // All same
+assertEquals(200u, group.dimmer.value)       // Returns uniform value
+
+fixtures[0].dimmer.value = 100u              // Change one
+assertFalse(group.dimmer.isUniform)          // Now non-uniform
+assertNull(group.dimmer.value)               // Null because mixed
+assertEquals(100u, group.dimmer.minValue)
+assertEquals(200u, group.dimmer.maxValue)
+```
+
+### REST API Property Aggregation
+
+Groups also expose aggregated property descriptors that include channel references for all group members.
 This enables the frontend to:
 - View property values with range/summary display for mixed values (e.g., "50-100%")
 - Set uniform values across all group members simultaneously
@@ -401,18 +484,17 @@ To set properties on all group fixtures programmatically:
 ```kotlin
 val group = fixtures.group<HexFixture>("front-wash")
 
-// Set all fixtures to same dimmer value
-group.fixtures.forEach { it.dimmer.value = 200u }
+// Direct group property access (preferred)
+group.dimmer.value = 200u
+group.rgbColour.value = Color(255, 128, 0)  // Orange
 
-// Set all fixtures to same colour
-group.fixtures.forEach {
-    it.rgbColour.value = Color(255, 128, 0)  // Orange
-}
+// Or iterate through fixtures individually
+group.fixtures.forEach { it.dimmer.value = 200u }
 
 // With fade transition
 val transaction = controller.startTransaction(fadeMs = 1000)
 val groupWithTx = fixtures.withTransaction(transaction).group<HexFixture>("front-wash")
-groupWithTx.fixtures.forEach { it.dimmer.value = 255u }
+groupWithTx.dimmer.value = 255u  // Fade all to full
 transaction.commit()
 ```
 
@@ -450,6 +532,61 @@ Groups can be configured with symmetric effect behavior:
 | `EDGES_IN` | Effects converge to center |
 
 These modes work with the `symmetricInvert` member metadata to automatically invert effect directions for symmetric positioning.
+
+## Recursive Groups and Flatten
+
+Groups can contain other groups, and the `flatten()` method recursively extracts all leaf fixtures.
+
+### flatten() Method
+
+```kotlin
+// Recursively extract all non-group FixtureTargets
+fun FixtureGroup<*>.flatten(): List<FixtureTarget>
+
+// Type-filtered flattening
+inline fun <reified R : FixtureTarget> FixtureGroup<*>.flattenAs(): List<R>
+```
+
+### Nested Group Example
+
+```kotlin
+// Create inner groups
+val leftGroup = fixtureGroup<HexFixture>("left-wash") {
+    add(hex1)
+    add(hex2)
+}
+val rightGroup = fixtureGroup<HexFixture>("right-wash") {
+    add(hex3)
+    add(hex4)
+}
+
+// Create outer group containing inner groups
+val allWash = fixtureGroup<FixtureGroup<HexFixture>>("all-wash") {
+    add(leftGroup)
+    add(rightGroup)
+}
+
+// Flatten to get all 4 HexFixtures
+val allFixtures = allWash.flatten()
+assertEquals(4, allFixtures.size)
+
+// Type-safe flattening
+val hexFixtures = allWash.flattenAs<HexFixture>()
+```
+
+### Deeply Nested Groups
+
+The `flatten()` method handles arbitrary nesting depth:
+
+```kotlin
+val level1 = fixtureGroup<UVFixture>("level1") { add(uv1, uv2) }
+val level2 = fixtureGroup<FixtureGroup<UVFixture>>("level2") { add(level1) }
+val level3 = fixtureGroup<FixtureGroup<FixtureGroup<UVFixture>>>("level3") { add(level2) }
+
+// Still extracts the 2 leaf fixtures
+val flattened = level3.flatten()
+assertEquals(2, flattened.size)
+```
 
 ## Transaction Support
 

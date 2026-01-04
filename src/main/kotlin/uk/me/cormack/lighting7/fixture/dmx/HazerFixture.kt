@@ -29,8 +29,8 @@ class HazerFixture (
     override fun withTransaction(transaction: ControllerTransaction): HazerFixture = HazerFixture(this, transaction)
 
     @FixtureProperty(category = PropertyCategory.OTHER)
-    val pumpControl = DmxFixtureSlider(transaction, universe, firstChannel)
+    val pumpControl = DmxSlider(transaction, universe, firstChannel)
 
     @FixtureProperty(category = PropertyCategory.SPEED)
-    val fanSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 1)
+    val fanSpeed = DmxSlider(transaction, universe, firstChannel + 1)
 }

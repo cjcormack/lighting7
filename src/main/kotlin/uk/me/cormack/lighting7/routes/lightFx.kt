@@ -224,7 +224,8 @@ private fun FxInstance.toDto() = EffectDto(
 
 private fun createTargetFromRequest(request: AddEffectRequest): FxTarget {
     return when (request.propertyName) {
-        "dimmer", "uv", "uvColour" -> SliderTarget(request.fixtureKey, request.propertyName)
+        "dimmer" -> SliderTarget(request.fixtureKey, "dimmer")
+        "uv" -> SliderTarget(request.fixtureKey, "uv")
         "rgbColour", "colour" -> ColourTarget(request.fixtureKey)
         "position" -> PositionTarget(request.fixtureKey)
         else -> throw IllegalArgumentException("Unknown property: ${request.propertyName}")

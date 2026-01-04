@@ -1,10 +1,6 @@
 package uk.me.cormack.lighting7.fixture.group
 
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColour
-import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColourSettingValue
-import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
-import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSlider
 import uk.me.cormack.lighting7.routes.*
 
 /**

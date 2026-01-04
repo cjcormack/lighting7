@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 
@@ -56,11 +57,11 @@ internal fun Fixture.details(fixtures: Fixtures): FixtureDetails {
 
 private fun DmxFixture.detectCapabilities(): List<String> {
     val caps = mutableListOf<String>()
-    if (this is FixtureWithDimmer) caps.add("dimmer")
-    if (this is FixtureWithColour<*>) caps.add("colour")
-    if (this is FixtureWithPosition) caps.add("position")
-    if (this is FixtureWithUv) caps.add("uv")
-    if (this is FixtureWithStrobe) caps.add("strobe")
+    if (this is WithDimmer) caps.add("dimmer")
+    if (this is WithColour) caps.add("colour")
+    if (this is WithPosition) caps.add("position")
+    if (this is WithUv) caps.add("uv")
+    if (this is WithStrobe) caps.add("strobe")
     if (this is MultiElementFixture<*>) caps.add("multi-element")
     return caps
 }

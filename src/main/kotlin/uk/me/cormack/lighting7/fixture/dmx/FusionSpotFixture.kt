@@ -4,11 +4,11 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
-import uk.me.cormack.lighting7.fixture.FixtureStrobe
 import uk.me.cormack.lighting7.fixture.FixtureType
-import uk.me.cormack.lighting7.fixture.FixtureWithDimmer
-import uk.me.cormack.lighting7.fixture.FixtureWithStrobe
 import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.property.Strobe
+import uk.me.cormack.lighting7.fixture.trait.WithDimmer
+import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import kotlin.math.roundToInt
 
 @FixtureType("fustion_spot")
@@ -19,7 +19,7 @@ class FusionSpotFixture(
     firstChannel: Int,
     private val maxDimmerLevel: UByte = 255u,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 15, key, fixtureName), FixtureWithDimmer, FixtureWithStrobe {
+): DmxFixture(universe, firstChannel, 15, key, fixtureName), WithDimmer, WithStrobe {
      private constructor(
          fixture: FusionSpotFixture,
          transaction: ControllerTransaction,
@@ -34,7 +34,7 @@ class FusionSpotFixture(
 
     override fun withTransaction(transaction: ControllerTransaction): FusionSpotFixture = FusionSpotFixture(this, transaction)
 
-    // TODO Add mechanism to make this meets DmxFixtureWithColour
+    // TODO Add mechanism to make this meets WithColour
     enum class Color(
         override val level: UByte,
         override val colourPreview: String? = null
@@ -64,7 +64,7 @@ class FusionSpotFixture(
         REVERSE_RAINBOW_EFFECT(195u), // TODO also support slider for speed (reverse)
     }
 
-    class Strobe(transaction: ControllerTransaction?, universe: Universe, channelNo: Int): DmxFixtureSlider(transaction, universe, channelNo), FixtureStrobe {
+    class DmxStrobe(transaction: ControllerTransaction?, universe: Universe, channelNo: Int): DmxSlider(transaction, universe, channelNo), Strobe {
         override fun fullOn() {
             this.value = 246u
         }
@@ -107,25 +107,25 @@ class FusionSpotFixture(
     }
 
     @FixtureProperty("Pan adjustment 0-540°", category = PropertyCategory.POSITION)
-    val pan = DmxFixtureSlider(transaction, universe, firstChannel)
+    val pan = DmxSlider(transaction, universe, firstChannel)
 
     @FixtureProperty("Pan fine adjustment", category = PropertyCategory.POSITION)
-    val panFine = DmxFixtureSlider(transaction, universe, firstChannel + 1)
+    val panFine = DmxSlider(transaction, universe, firstChannel + 1)
 
     @FixtureProperty("Tilt adjustment 0-210°", category = PropertyCategory.POSITION)
-    val tilt = DmxFixtureSlider(transaction, universe, firstChannel + 2)
+    val tilt = DmxSlider(transaction, universe, firstChannel + 2)
 
     @FixtureProperty("Tilt fine adjustment", category = PropertyCategory.POSITION)
-    val tiltFine = DmxFixtureSlider(transaction, universe, firstChannel + 3)
+    val tiltFine = DmxSlider(transaction, universe, firstChannel + 3)
 
     @FixtureProperty("Pan/tilt speed", category = PropertyCategory.SPEED)
-    val panTiltSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 4)
+    val panTiltSpeed = DmxSlider(transaction, universe, firstChannel + 4)
 
     @FixtureProperty(category = PropertyCategory.DIMMER)
-    override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel + 5, max = maxDimmerLevel)
+    override val dimmer = DmxSlider(transaction, universe, firstChannel + 5, max = maxDimmerLevel)
 
     @FixtureProperty(category = PropertyCategory.STROBE)
-    override val strobe = Strobe(transaction, universe, firstChannel + 6)
+    override val strobe = DmxStrobe(transaction, universe, firstChannel + 6)
 
     @FixtureProperty(category = PropertyCategory.COLOUR)
     val colour = DmxFixtureSetting(transaction, universe, firstChannel + 7, Color.entries.toTypedArray())
@@ -135,10 +135,10 @@ class FusionSpotFixture(
 
     // TODO add support for forward and reverse
     @FixtureProperty(category = PropertyCategory.OTHER)
-    val rotation = DmxFixtureSlider(transaction, universe, firstChannel + 9)
+    val rotation = DmxSlider(transaction, universe, firstChannel + 9)
 
     @FixtureProperty(category = PropertyCategory.OTHER)
-    val focus = DmxFixtureSlider(transaction, universe, firstChannel + 10)
+    val focus = DmxSlider(transaction, universe, firstChannel + 10)
 
     @FixtureProperty(category = PropertyCategory.SETTING)
     val prism = DmxFixtureSetting(transaction, universe, firstChannel + 11, PrismMode.entries.toTypedArray())

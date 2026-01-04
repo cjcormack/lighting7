@@ -1,7 +1,11 @@
 package uk.me.cormack.lighting7.fx.group
 
-import uk.me.cormack.lighting7.fixture.*
+import uk.me.cormack.lighting7.fixture.FixtureTarget
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
+import uk.me.cormack.lighting7.fixture.trait.WithColour
+import uk.me.cormack.lighting7.fixture.trait.WithDimmer
+import uk.me.cormack.lighting7.fixture.trait.WithPosition
+import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fx.*
 
 /**
@@ -30,7 +34,7 @@ fun <T> FixtureGroup<T>.applyDimmerFx(
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
     distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
-): Long where T : Fixture, T : FixtureWithDimmer {
+): Long where T : FixtureTarget, T : WithDimmer {
     val target = SliderTarget.forGroup(name, "dimmer")
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         distributionStrategy = distribution
@@ -57,8 +61,8 @@ fun <T> FixtureGroup<T>.applyUvFx(
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
     distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
-): Long where T : Fixture, T : FixtureWithUv {
-    val target = SliderTarget.forGroup(name, "uvColour")
+): Long where T : FixtureTarget, T : WithUv {
+    val target = SliderTarget.forGroup(name, "uv")
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         distributionStrategy = distribution
     }
@@ -84,7 +88,7 @@ fun <T> FixtureGroup<T>.applyColourFx(
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
     distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
-): Long where T : Fixture, T : FixtureWithColour<*> {
+): Long where T : FixtureTarget, T : WithColour {
     val target = ColourTarget.forGroup(name)
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         distributionStrategy = distribution
@@ -111,7 +115,7 @@ fun <T> FixtureGroup<T>.applyPositionFx(
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
     distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
-): Long where T : Fixture, T : FixtureWithPosition {
+): Long where T : FixtureTarget, T : WithPosition {
     val target = PositionTarget.forGroup(name)
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         distributionStrategy = distribution
@@ -148,7 +152,7 @@ fun FixtureGroup<*>.clearFx(engine: FxEngine): Int {
  * }
  * ```
  */
-class GroupFxBuilder<T : Fixture> @PublishedApi internal constructor(
+class GroupFxBuilder<T : FixtureTarget> @PublishedApi internal constructor(
     @PublishedApi internal val engine: FxEngine,
     @PublishedApi internal val group: FixtureGroup<T>
 ) {
@@ -164,7 +168,7 @@ class GroupFxBuilder<T : Fixture> @PublishedApi internal constructor(
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
         distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
-    ): Long where R : Fixture, R : FixtureWithDimmer {
+    ): Long where R : FixtureTarget, R : WithDimmer {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyDimmerFx(
             engine, effect, FxTiming(beatDivision), blendMode, distribution
@@ -180,7 +184,7 @@ class GroupFxBuilder<T : Fixture> @PublishedApi internal constructor(
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
         distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
-    ): Long where R : Fixture, R : FixtureWithColour<*> {
+    ): Long where R : FixtureTarget, R : WithColour {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyColourFx(
             engine, effect, FxTiming(beatDivision), blendMode, distribution
@@ -196,7 +200,7 @@ class GroupFxBuilder<T : Fixture> @PublishedApi internal constructor(
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
         distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
-    ): Long where R : Fixture, R : FixtureWithUv {
+    ): Long where R : FixtureTarget, R : WithUv {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyUvFx(
             engine, effect, FxTiming(beatDivision), blendMode, distribution
@@ -212,7 +216,7 @@ class GroupFxBuilder<T : Fixture> @PublishedApi internal constructor(
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
         distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
-    ): Long where R : Fixture, R : FixtureWithPosition {
+    ): Long where R : FixtureTarget, R : WithPosition {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyPositionFx(
             engine, effect, FxTiming(beatDivision), blendMode, distribution
@@ -230,7 +234,7 @@ class GroupFxBuilder<T : Fixture> @PublishedApi internal constructor(
  * @param block Configuration block for adding effects
  * @return List of all effect IDs created
  */
-inline fun <reified T : Fixture> FixtureGroup<T>.fx(
+inline fun <reified T : FixtureTarget> FixtureGroup<T>.fx(
     engine: FxEngine,
     block: GroupFxBuilder<T>.() -> Unit
 ): List<Long> {

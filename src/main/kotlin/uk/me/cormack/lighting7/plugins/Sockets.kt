@@ -15,6 +15,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
+import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.models.DaoScene
 import uk.me.cormack.lighting7.routes.SceneDetails
@@ -521,16 +522,16 @@ private fun buildGroupsStateMessage(state: State): GroupsStateOutMessage {
         val capabilities = mutableListOf<String>()
         if (group.isNotEmpty()) {
             val first = group.first().fixture
-            if (first is FixtureWithDimmer && group.all { it.fixture is FixtureWithDimmer }) {
+            if (first is WithDimmer && group.all { it.fixture is WithDimmer }) {
                 capabilities.add("dimmer")
             }
-            if (first is FixtureWithColour<*> && group.all { it.fixture is FixtureWithColour<*> }) {
+            if (first is WithColour && group.all { it.fixture is WithColour }) {
                 capabilities.add("colour")
             }
-            if (first is FixtureWithPosition && group.all { it.fixture is FixtureWithPosition }) {
+            if (first is WithPosition && group.all { it.fixture is WithPosition }) {
                 capabilities.add("position")
             }
-            if (first is FixtureWithUv && group.all { it.fixture is FixtureWithUv }) {
+            if (first is WithUv && group.all { it.fixture is WithUv }) {
                 capabilities.add("uv")
             }
         }

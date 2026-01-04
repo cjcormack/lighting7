@@ -174,9 +174,9 @@ sealed class FxTargetRef {
 
 | Target | Properties | Fixture Trait |
 |--------|------------|---------------|
-| `SliderTarget` | `dimmer`, `uvColour` | `FixtureWithDimmer`, `FixtureWithUv` |
-| `ColourTarget` | `rgbColour` | `FixtureWithColour` |
-| `PositionTarget` | `pan`, `tilt` | `FixtureWithPosition` |
+| `SliderTarget` | `dimmer`, `uv` | `WithDimmer`, `WithUv` |
+| `ColourTarget` | `rgbColour` | `WithColour` |
+| `PositionTarget` | `pan`, `tilt` | `WithPosition` |
 
 ### Group Targets
 
@@ -367,7 +367,11 @@ GET  /api/rest/fx/library          → [EffectTypeInfo...]
 | `fx/effects/DimmerEffects.kt` | Slider effect implementations |
 | `fx/effects/ColourEffects.kt` | Color effect implementations |
 | `fx/effects/PositionEffects.kt` | Position effect implementations |
-| `fixture/FixtureWithPosition.kt` | Position trait for moving heads |
+| `fixture/trait/WithPosition.kt` | Position trait for moving heads |
+| `fixture/trait/WithDimmer.kt` | Dimmer trait |
+| `fixture/trait/WithColour.kt` | Colour trait |
+| `fixture/trait/WithUv.kt` | UV trait |
+| `fixture/group/GroupExtensions.kt` | Group property extensions |
 | `routes/lightFx.kt` | FX REST API endpoints |
 | `routes/lightGroups.kt` | Group REST API endpoints |
 | `plugins/Sockets.kt` | WebSocket message handlers |

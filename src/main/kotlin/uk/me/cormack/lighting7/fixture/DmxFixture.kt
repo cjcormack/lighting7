@@ -1,13 +1,13 @@
 package uk.me.cormack.lighting7.fixture
 
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColour
+import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColourSettingValue
-import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureMultiSlider
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
-import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSlider
+import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.routes.*
 import kotlin.reflect.full.memberProperties
 
@@ -30,11 +30,13 @@ abstract class DmxFixture(
             }
 
             when (val property = checkNotNull(it.classProperty.call(this))) {
-                is DmxFixtureSlider -> channelDescriptions[property.channelNo] = name
-                is DmxFixtureSetting<*> -> channelDescriptions[property.channelNo] = name
-                is DmxFixtureMultiSlider -> property.sliders.forEach { slider ->
-                    channelDescriptions[slider.value.channelNo] = slider.key
+                is DmxSlider -> channelDescriptions[property.channelNo] = name
+                is DmxColour -> {
+                    channelDescriptions[property.redSlider.channelNo] = "$name Red"
+                    channelDescriptions[property.greenSlider.channelNo] = "$name Green"
+                    channelDescriptions[property.blueSlider.channelNo] = "$name Blue"
                 }
+                is DmxFixtureSetting<*> -> channelDescriptions[property.channelNo] = name
 
                 else -> throw Error("Unsupported property type ${property::class}")
             }
@@ -70,16 +72,13 @@ abstract class DmxFixture(
                     val name = "$elementPrefix $propName"
 
                     when (value) {
-                        is DmxFixtureSlider -> channelDescriptions[value.channelNo] = name
-                        is DmxFixtureSetting<*> -> channelDescriptions[value.channelNo] = name
-                        is DmxFixtureColour -> {
+                        is DmxSlider -> channelDescriptions[value.channelNo] = name
+                        is DmxColour -> {
                             channelDescriptions[value.redSlider.channelNo] = "$elementPrefix Red"
                             channelDescriptions[value.greenSlider.channelNo] = "$elementPrefix Green"
                             channelDescriptions[value.blueSlider.channelNo] = "$elementPrefix Blue"
                         }
-                        is DmxFixtureMultiSlider -> value.sliders.forEach { slider ->
-                            channelDescriptions[slider.value.channelNo] = "$elementPrefix ${slider.key}"
-                        }
+                        is DmxFixtureSetting<*> -> channelDescriptions[value.channelNo] = name
                     }
                 }
             }
@@ -105,7 +104,7 @@ abstract class DmxFixture(
             val displayName = prop.description.ifEmpty { prop.name.formatPropertyName() }
 
             when (value) {
-                is DmxFixtureColour -> {
+                is DmxColour -> {
                     // Create base colour descriptor, will add extended channels after
                     colourDescriptor = ColourPropertyDescriptor(
                         name = prop.name,
@@ -115,7 +114,7 @@ abstract class DmxFixture(
                         blueChannel = ChannelRef(universe.universe, value.blueSlider.channelNo)
                     )
                 }
-                is DmxFixtureSlider -> {
+                is DmxSlider -> {
                     // Check if this is an extended colour channel to bundle
                     if (prop.bundleWithColour) {
                         when (prop.category) {
@@ -168,10 +167,10 @@ abstract class DmxFixture(
         }
 
         // Add position descriptor if fixture has pan and tilt
-        if (this is FixtureWithPosition) {
+        if (this is WithPosition) {
             val panSlider = this.pan
             val tiltSlider = this.tilt
-            if (panSlider is DmxFixtureSlider && tiltSlider is DmxFixtureSlider) {
+            if (panSlider is DmxSlider && tiltSlider is DmxSlider) {
                 descriptors.add(
                     PositionPropertyDescriptor(
                         name = "position",
@@ -227,7 +226,7 @@ abstract class DmxFixture(
             val displayName = prop.description.ifEmpty { prop.name.formatPropertyName() }
 
             when (value) {
-                is DmxFixtureColour -> {
+                is DmxColour -> {
                     descriptors.add(
                         ColourPropertyDescriptor(
                             name = prop.name,
@@ -238,7 +237,7 @@ abstract class DmxFixture(
                         )
                     )
                 }
-                is DmxFixtureSlider -> {
+                is DmxSlider -> {
                     // Skip bundled colour channels in element properties
                     if (!prop.bundleWithColour) {
                         descriptors.add(
@@ -275,10 +274,10 @@ abstract class DmxFixture(
         }
 
         // Add position descriptor if element has pan and tilt
-        if (element is FixtureWithPosition) {
+        if (element is WithPosition) {
             val panSlider = element.pan
             val tiltSlider = element.tilt
-            if (panSlider is DmxFixtureSlider && tiltSlider is DmxFixtureSlider) {
+            if (panSlider is DmxSlider && tiltSlider is DmxSlider) {
                 descriptors.add(
                     PositionPropertyDescriptor(
                         name = "position",

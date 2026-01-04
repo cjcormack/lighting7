@@ -3,6 +3,11 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
+import uk.me.cormack.lighting7.fixture.property.Strobe
+import uk.me.cormack.lighting7.fixture.trait.WithColour
+import uk.me.cormack.lighting7.fixture.trait.WithDimmer
+import uk.me.cormack.lighting7.fixture.trait.WithStrobe
+import uk.me.cormack.lighting7.fixture.trait.WithUv
 import kotlin.math.roundToInt
 
 @FixtureType("hex", manufacturer = "Chauvet", model = "Freedom Par Hex")
@@ -14,7 +19,7 @@ class HexFixture(
     private val maxDimmerLevel: UByte = 255u,
     transaction: ControllerTransaction? = null,
 ) : DmxFixture(universe, firstChannel, 12, key, fixtureName),
-    FixtureWithDimmer, DmxFixtureWithColour, FixtureWithUv, FixtureWithStrobe
+    WithDimmer, WithColour, WithUv, WithStrobe
 {
     private constructor(
         fixture: HexFixture,
@@ -30,7 +35,10 @@ class HexFixture(
 
     override fun withTransaction(transaction: ControllerTransaction): HexFixture = HexFixture(this, transaction)
 
-    class Strobe(transaction: ControllerTransaction?, universe: Universe, channelNo: Int): DmxFixtureSlider(transaction, universe, channelNo), FixtureStrobe {
+    /**
+     * DMX strobe implementation with channel mapping for this fixture.
+     */
+    class DmxStrobe(transaction: ControllerTransaction?, universe: Universe, channelNo: Int): DmxSlider(transaction, universe, channelNo), Strobe {
         override fun fullOn() {
             this.value = 0u
         }
@@ -55,10 +63,10 @@ class HexFixture(
     }
 
     @FixtureProperty(category = PropertyCategory.DIMMER)
-    override val dimmer = DmxFixtureSlider(transaction, universe, firstChannel, max = maxDimmerLevel)
+    override val dimmer = DmxSlider(transaction, universe, firstChannel, max = maxDimmerLevel)
 
     @FixtureProperty(category = PropertyCategory.COLOUR)
-    override val rgbColour = DmxFixtureColour(
+    override val rgbColour = DmxColour(
         transaction,
         universe,
         firstChannel + 1,
@@ -67,22 +75,22 @@ class HexFixture(
     )
 
     @FixtureProperty(category = PropertyCategory.AMBER, bundleWithColour = true)
-    val amberColour = DmxFixtureSlider(transaction, universe, firstChannel + 4)
+    val amberColour = DmxSlider(transaction, universe, firstChannel + 4)
 
     @FixtureProperty(category = PropertyCategory.WHITE, bundleWithColour = true)
-    val whiteColour = DmxFixtureSlider(transaction, universe, firstChannel + 5)
+    val whiteColour = DmxSlider(transaction, universe, firstChannel + 5)
 
     @FixtureProperty(category = PropertyCategory.UV, bundleWithColour = true)
-    override val uvColour = DmxFixtureSlider(transaction, universe, firstChannel + 6)
+    override val uv = DmxSlider(transaction, universe, firstChannel + 6)
 
     @FixtureProperty(category = PropertyCategory.STROBE)
-    override val strobe = Strobe(transaction, universe, firstChannel + 7)
+    override val strobe = DmxStrobe(transaction, universe, firstChannel + 7)
 
     @FixtureProperty(category = PropertyCategory.SETTING)
     val mode = DmxFixtureSetting(transaction, universe, firstChannel + 9, ProgramMode.entries.toTypedArray())
 
     @FixtureProperty(category = PropertyCategory.SPEED)
-    val programSpeed = DmxFixtureSlider(transaction, universe, firstChannel + 10)
+    val programSpeed = DmxSlider(transaction, universe, firstChannel + 10)
 
     @FixtureProperty(category = PropertyCategory.SETTING)
     val dimmerMode = DmxFixtureSetting(transaction, universe, firstChannel + 11, DimmerMode.entries.toTypedArray())

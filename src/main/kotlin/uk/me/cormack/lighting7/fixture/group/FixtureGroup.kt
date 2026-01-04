@@ -2,7 +2,6 @@ package uk.me.cormack.lighting7.fixture.group
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.fixture.FixtureTarget
-import uk.me.cormack.lighting7.fx.FxTargetable
 
 /**
  * Symmetric mode for group effects.
@@ -53,15 +52,45 @@ class FixtureGroup<T : FixtureTarget>(
     val name: String,
     @PublishedApi internal val members: List<GroupMember<T>>,
     val metadata: GroupMetadata = GroupMetadata()
-) : List<GroupMember<T>> by members, FxTargetable {
+) : List<GroupMember<T>> by members, FixtureTarget {
 
-    // FxTargetable implementation
+    // FixtureTarget implementation
     override val targetKey: String get() = name
+    override val displayName: String get() = name
     override val isGroup: Boolean get() = true
     override val memberCount: Int get() = size
 
     /** All fixtures in the group (convenience accessor without member wrapper) */
     val fixtures: List<T> get() = members.map { it.fixture }
+
+    /**
+     * Flatten nested groups to get all leaf targets.
+     *
+     * For non-nested groups, returns the fixtures directly.
+     * For nested groups (e.g., FixtureGroup<FixtureGroup<T>>), recursively
+     * extracts all leaf fixtures.
+     *
+     * @return List of all leaf FixtureTarget instances
+     */
+    fun flatten(): List<FixtureTarget> {
+        return members.flatMap { member ->
+            when (val fixture = member.fixture) {
+                is FixtureGroup<*> -> fixture.flatten()
+                else -> listOf(fixture)
+            }
+        }
+    }
+
+    /**
+     * Flatten and filter to a specific type.
+     *
+     * Recursively flattens the group and returns only targets matching the specified type.
+     *
+     * @return List of all leaf targets matching type R
+     */
+    inline fun <reified R : FixtureTarget> flattenAs(): List<R> {
+        return flatten().filterIsInstance<R>()
+    }
 
     /**
      * Safely narrow this group to a more specific capability type.
@@ -116,7 +145,7 @@ class FixtureGroup<T : FixtureTarget>(
      * @return A new group with all members bound to the transaction
      */
     @Suppress("UNCHECKED_CAST")
-    fun withTransaction(transaction: ControllerTransaction): FixtureGroup<T> {
+    override fun withTransaction(transaction: ControllerTransaction): FixtureGroup<T> {
         val boundMembers = members.map { member ->
             member.copy(fixture = member.fixture.withTransaction(transaction) as T)
         }
