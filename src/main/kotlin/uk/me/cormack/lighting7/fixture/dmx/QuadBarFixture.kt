@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.CompactDisplayRole
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
@@ -49,6 +50,6 @@ class QuadBarFixture (
         SOUND_ACTIVE(248u),
     }
 
-    @FixtureProperty(category = PropertyCategory.SETTING)
+    @FixtureProperty(category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
     val showMode = DmxFixtureSetting(transaction, universe, firstChannel, ShowMode.entries.toTypedArray())
 }

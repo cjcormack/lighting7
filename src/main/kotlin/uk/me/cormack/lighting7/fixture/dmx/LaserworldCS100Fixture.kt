@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.CompactDisplayRole
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.PropertyCategory
@@ -35,7 +36,7 @@ class LaserworldCS100Fixture(
         DMX_MODE(150u),
     }
 
-    @FixtureProperty(category = PropertyCategory.SETTING)
+    @FixtureProperty(category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
     val mode = DmxFixtureSetting(transaction, universe, firstChannel, OperationMode.entries.toTypedArray())
 
     @FixtureProperty("Pattern select", category = PropertyCategory.SETTING)
@@ -65,7 +66,7 @@ class LaserworldCS100Fixture(
     @FixtureProperty("Drawing effect", category = PropertyCategory.SETTING)
     val drawingEffect = DmxSlider(transaction, universe, firstChannel + 9)
 
-    @FixtureProperty("Scan speed / Points", category = PropertyCategory.SPEED)
+    @FixtureProperty("Scan speed / Points", category = PropertyCategory.SPEED, compactDisplay = CompactDisplayRole.SECONDARY)
     val scanSpeed = DmxSlider(transaction, universe, firstChannel + 10)
 
     @FixtureProperty("Colour change", category = PropertyCategory.COLOUR)

@@ -53,7 +53,8 @@ abstract class DmxFixture(
                             classProperty.name,
                             fixtureProperty.description,
                             fixtureProperty.category,
-                            fixtureProperty.bundleWithColour
+                            fixtureProperty.bundleWithColour,
+                            fixtureProperty.compactDisplay
                         )
                     }
                 }
@@ -110,7 +111,8 @@ abstract class DmxFixture(
                         displayName = displayName,
                         redChannel = ChannelRef(universe.universe, value.redSlider.channelNo),
                         greenChannel = ChannelRef(universe.universe, value.greenSlider.channelNo),
-                        blueChannel = ChannelRef(universe.universe, value.blueSlider.channelNo)
+                        blueChannel = ChannelRef(universe.universe, value.blueSlider.channelNo),
+                        compactDisplay = prop.compactDisplay.serialized()
                     )
                 }
                 is DmxSlider -> {
@@ -130,7 +132,8 @@ abstract class DmxFixture(
                                 category = prop.category.name.lowercase(),
                                 channel = ChannelRef(universe.universe, value.channelNo),
                                 min = value.min.toInt(),
-                                max = value.max.toInt()
+                                max = value.max.toInt(),
+                                compactDisplay = prop.compactDisplay.serialized()
                             )
                         )
                     }
@@ -149,7 +152,8 @@ abstract class DmxFixture(
                                     displayName = settingValue.name.formatSettingName(),
                                     colourPreview = (settingValue as? DmxFixtureColourSettingValue)?.colourPreview
                                 )
-                            }
+                            },
+                            compactDisplay = prop.compactDisplay.serialized()
                         )
                     )
                 }
@@ -310,7 +314,8 @@ abstract class DmxFixture(
                             displayName = displayName,
                             redChannel = ChannelRef(universe.universe, value.redSlider.channelNo),
                             greenChannel = ChannelRef(universe.universe, value.greenSlider.channelNo),
-                            blueChannel = ChannelRef(universe.universe, value.blueSlider.channelNo)
+                            blueChannel = ChannelRef(universe.universe, value.blueSlider.channelNo),
+                            compactDisplay = prop.compactDisplay.serialized()
                         )
                     )
                 }
@@ -324,7 +329,8 @@ abstract class DmxFixture(
                                 category = prop.category.name.lowercase(),
                                 channel = ChannelRef(universe.universe, value.channelNo),
                                 min = value.min.toInt(),
-                                max = value.max.toInt()
+                                max = value.max.toInt(),
+                                compactDisplay = prop.compactDisplay.serialized()
                             )
                         )
                     }
@@ -343,7 +349,8 @@ abstract class DmxFixture(
                                     displayName = settingValue.name.formatSettingName(),
                                     colourPreview = (settingValue as? DmxFixtureColourSettingValue)?.colourPreview
                                 )
-                            }
+                            },
+                            compactDisplay = prop.compactDisplay.serialized()
                         )
                     )
                 }

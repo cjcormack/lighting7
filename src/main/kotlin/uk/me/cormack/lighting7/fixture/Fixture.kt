@@ -22,6 +22,7 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
         val description: String,
         val category: PropertyCategory,
         val bundleWithColour: Boolean,
+        val compactDisplay: CompactDisplayRole = CompactDisplayRole.NONE,
     )
 
     private val fixtureTypeAnnotation: FixtureType = this::class.annotations.filterIsInstance<FixtureType>().first()
@@ -35,7 +36,8 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
                 classProperty.name,
                 fixtureProperty.description,
                 fixtureProperty.category,
-                fixtureProperty.bundleWithColour
+                fixtureProperty.bundleWithColour,
+                fixtureProperty.compactDisplay
             )
         }
     }.flatten()

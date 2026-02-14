@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.CompactDisplayRole
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.PropertyCategory
@@ -36,6 +37,6 @@ class StarClusterFixture(
         DMX_MODE_2(201u),
     }
 
-    @FixtureProperty(category = PropertyCategory.SETTING)
+    @FixtureProperty(category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
     val dmxMode = DmxFixtureSetting(transaction, universe, firstChannel, DmxMode.entries.toTypedArray())
 }

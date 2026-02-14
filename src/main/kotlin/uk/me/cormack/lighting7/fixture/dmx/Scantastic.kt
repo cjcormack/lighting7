@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.CompactDisplayRole
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.PropertyCategory
@@ -38,9 +39,9 @@ class ScantasticFixture (
         SOUND_ACTIVE(128u),
     }
 
-    @FixtureProperty(category = PropertyCategory.SETTING)
+    @FixtureProperty(category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
     val onMode = DmxFixtureSetting(transaction, universe, firstChannel, OnMode.entries.toTypedArray())
 
-    @FixtureProperty(category = PropertyCategory.SETTING)
+    @FixtureProperty(category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.SECONDARY)
     val mode = DmxFixtureSetting(transaction, universe, firstChannel + 16, Mode.entries.toTypedArray())
 }

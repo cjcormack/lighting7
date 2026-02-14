@@ -147,6 +147,7 @@ sealed interface PropertyDescriptor {
     val name: String
     val displayName: String
     val category: String
+    val compactDisplay: String?
 }
 
 @Serializable
@@ -157,7 +158,8 @@ data class SliderPropertyDescriptor(
     override val category: String,
     val channel: ChannelRef,
     val min: Int = 0,
-    val max: Int = 255
+    val max: Int = 255,
+    override val compactDisplay: String? = null
 ) : PropertyDescriptor
 
 @Serializable
@@ -170,7 +172,8 @@ data class ColourPropertyDescriptor(
     val blueChannel: ChannelRef,
     val whiteChannel: ChannelRef? = null,
     val amberChannel: ChannelRef? = null,
-    val uvChannel: ChannelRef? = null
+    val uvChannel: ChannelRef? = null,
+    override val compactDisplay: String? = null
 ) : PropertyDescriptor {
     override val category: String = "colour"
 }
@@ -185,7 +188,8 @@ data class PositionPropertyDescriptor(
     val panMin: Int = 0,
     val panMax: Int = 255,
     val tiltMin: Int = 0,
-    val tiltMax: Int = 255
+    val tiltMax: Int = 255,
+    override val compactDisplay: String? = null
 ) : PropertyDescriptor {
     override val category: String = "position"
 }
@@ -197,7 +201,8 @@ data class SettingPropertyDescriptor(
     override val displayName: String,
     override val category: String,
     val channel: ChannelRef,
-    val options: List<SettingOption>
+    val options: List<SettingOption>,
+    override val compactDisplay: String? = null
 ) : PropertyDescriptor
 
 @Serializable
