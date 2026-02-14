@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fixture.group.property
 
-import uk.me.cormack.lighting7.fixture.FixtureTarget
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.property.AggregateColour
 import uk.me.cormack.lighting7.fixture.property.AggregateSlider
@@ -17,7 +17,7 @@ import java.awt.Color
  * @param group The fixture group to aggregate over
  * @param colourAccessor Function to extract the colour from each member
  */
-class GroupColour<T : FixtureTarget>(
+class GroupColour<T : GroupableFixture>(
     private val group: FixtureGroup<T>,
     private val colourAccessor: (T) -> Colour
 ) : AggregateColour {

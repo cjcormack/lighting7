@@ -4,14 +4,13 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.fx.FxTargetable
 
 /**
- * Common interface for entities that can be members of fixture groups.
+ * Common interface for entities that can be targeted by the FX system.
  *
- * Both standalone [Fixture] classes and [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement]
- * components implement this interface, enabling them to be used interchangeably
- * in groups and FX targeting.
+ * This includes standalone [Fixture] classes, [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement]
+ * components, and [FixtureGroup][uk.me.cormack.lighting7.fixture.group.FixtureGroup] collections.
  *
  * This interface extends [FxTargetable] to enable effect targeting, and adds
- * the [withTransaction] method required for batched DMX operations within groups.
+ * the [withTransaction] method required for batched DMX operations.
  */
 interface FixtureTarget : FxTargetable {
     /**
@@ -19,6 +18,7 @@ interface FixtureTarget : FxTargetable {
      *
      * For fixtures, this is typically the fixture name.
      * For elements, this is typically "ParentName Element N" or similar.
+     * For groups, this is typically the group name.
      */
     val displayName: String
 
@@ -32,4 +32,20 @@ interface FixtureTarget : FxTargetable {
      * @return A new instance bound to the transaction
      */
     fun withTransaction(transaction: ControllerTransaction): FixtureTarget
+}
+
+/**
+ * Marker interface for fixture targets that can be members of a [FixtureGroup][uk.me.cormack.lighting7.fixture.group.FixtureGroup].
+ *
+ * This interface is implemented by:
+ * - [Fixture] - standalone lighting fixtures
+ * - [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement] - elements within multi-element fixtures
+ *
+ * Notably, [FixtureGroup][uk.me.cormack.lighting7.fixture.group.FixtureGroup] does NOT implement this interface,
+ * which prevents recursive group types like `FixtureGroup<FixtureGroup<T>>`.
+ * Instead, use the [subGroups][uk.me.cormack.lighting7.fixture.group.FixtureGroup.subGroups] property
+ * for hierarchical group composition.
+ */
+interface GroupableFixture : FixtureTarget {
+    override fun withTransaction(transaction: ControllerTransaction): GroupableFixture
 }

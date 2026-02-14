@@ -154,11 +154,29 @@ if (group.dimmer.isUniform) {
 group.rgbColour.redSlider.value = 200u       // Set all reds
 ```
 
-**Flatten for Recursive Groups**: Use `flatten()` to get leaf fixtures from nested groups:
+**Hierarchical Groups (SubGroups)**: Groups can contain other groups of the same type:
 ```kotlin
-val allWash: FixtureGroup<FixtureGroup<HexFixture>> = ...
-val allFixtures = allWash.flatten()          // List<FixtureTarget>
-val hexOnly = allWash.flattenAs<HexFixture>() // List<HexFixture>
+val frontHexes = createGroup<HexFixture>("front-hexes") {
+    addSpread(listOf(hex1, hex2))
+}
+val atmosphericHexes = createGroup<HexFixture>("atmospheric-hexes") {
+    addSpread(listOf(hex3, hex4))
+}
+val allHexes = createGroup<HexFixture>("all-hexes") {
+    addGroup(frontHexes)
+    addGroup(atmosphericHexes)
+    // Or: addGroups(listOf(frontHexes, atmosphericHexes))
+}
+// allHexes.fixtures returns all 4 HexFixtures
+// allHexes.subGroups returns [frontHexes, atmosphericHexes]
+allHexes.dimmer.value = 255u  // Sets all 4 fixtures
+```
+
+**Flatten Method**: Use `flatten()` to get all fixtures including from sub-groups:
+```kotlin
+val allHexes: FixtureGroup<HexFixture> = ...
+val allFixtures = allHexes.flatten()          // List<FixtureTarget>
+val hexOnly = allHexes.flattenAs<HexFixture>() // List<HexFixture>
 ```
 
 **Group FX Targeting**: A single `FxInstance` targets the entire group. The `FxEngine` expands

@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fixture.group.property
 
-import uk.me.cormack.lighting7.fixture.FixtureTarget
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.property.AggregateSlider
 import uk.me.cormack.lighting7.fixture.property.Slider
@@ -15,7 +15,7 @@ import uk.me.cormack.lighting7.fixture.property.Slider
  * @param group The fixture group to aggregate over
  * @param sliderAccessor Function to extract the slider from each member
  */
-class GroupSlider<T : FixtureTarget>(
+class GroupSlider<T : GroupableFixture>(
     private val group: FixtureGroup<T>,
     private val sliderAccessor: (T) -> Slider
 ) : AggregateSlider {

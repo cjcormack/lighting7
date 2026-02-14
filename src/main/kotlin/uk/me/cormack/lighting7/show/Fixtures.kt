@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.show
 import uk.me.cormack.lighting7.dmx.*
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixtureTarget
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.GroupBuilder
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -202,12 +202,12 @@ class Fixtures {
         /**
          * Register a typed fixture group.
          */
-        fun <T : FixtureTarget> addGroup(group: FixtureGroup<T>): FixtureGroup<T>
+        fun <T : GroupableFixture> addGroup(group: FixtureGroup<T>): FixtureGroup<T>
 
         /**
          * Create and register a typed fixture group using a DSL builder.
          */
-        fun <T : FixtureTarget> createGroup(name: String, block: GroupBuilder<T>.() -> Unit): FixtureGroup<T>
+        fun <T : GroupableFixture> createGroup(name: String, block: GroupBuilder<T>.() -> Unit): FixtureGroup<T>
     }
 
     fun register(removeUnused: Boolean = true, block: FixtureRegisterer.() -> Unit) {
@@ -245,12 +245,12 @@ class Fixtures {
                 return fixture
             }
 
-            override fun <T : FixtureTarget> addGroup(group: FixtureGroup<T>): FixtureGroup<T> {
+            override fun <T : GroupableFixture> addGroup(group: FixtureGroup<T>): FixtureGroup<T> {
                 groupRegister[group.name] = group
                 return group
             }
 
-            override fun <T : FixtureTarget> createGroup(name: String, block: GroupBuilder<T>.() -> Unit): FixtureGroup<T> {
+            override fun <T : GroupableFixture> createGroup(name: String, block: GroupBuilder<T>.() -> Unit): FixtureGroup<T> {
                 val group = GroupBuilder<T>(name).apply(block).build()
                 return addGroup(group)
             }

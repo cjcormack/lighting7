@@ -208,7 +208,7 @@ data class DistributionStrategiesResponse(
 private fun FixtureGroup<*>.toDto(): GroupSummaryDto {
     return GroupSummaryDto(
         name = name,
-        memberCount = size,
+        memberCount = memberCount,  // Uses allMembers.size (includes subgroups)
         capabilities = detectCapabilities(),
         symmetricMode = metadata.symmetricMode.name,
         defaultDistribution = metadata.defaultDistributionName
@@ -218,11 +218,11 @@ private fun FixtureGroup<*>.toDto(): GroupSummaryDto {
 private fun FixtureGroup<*>.toDetailedDto(): GroupDetailDto {
     return GroupDetailDto(
         name = name,
-        memberCount = size,
+        memberCount = memberCount,  // Uses allMembers.size (includes subgroups)
         capabilities = detectCapabilities(),
         symmetricMode = metadata.symmetricMode.name,
         defaultDistribution = metadata.defaultDistributionName,
-        members = map { member ->
+        members = allMembers.map { member ->  // Use allMembers to include subgroups
             GroupMemberDto(
                 fixtureKey = member.key,
                 fixtureName = member.name,
@@ -238,24 +238,25 @@ private fun FixtureGroup<*>.toDetailedDto(): GroupDetailDto {
 }
 
 private fun FixtureGroup<*>.detectCapabilities(): List<String> {
-    if (isEmpty()) return emptyList()
+    val allFixtures = fixtures  // Uses allMembers (includes subgroups)
+    if (allFixtures.isEmpty()) return emptyList()
 
     val capabilities = mutableListOf<String>()
-    val first = first().fixture
+    val first = allFixtures.first()
 
-    if (first is WithDimmer && all { it.fixture is WithDimmer }) {
+    if (first is WithDimmer && allFixtures.all { it is WithDimmer }) {
         capabilities.add("dimmer")
     }
-    if (first is WithColour && all { it.fixture is WithColour }) {
+    if (first is WithColour && allFixtures.all { it is WithColour }) {
         capabilities.add("colour")
     }
-    if (first is WithPosition && all { it.fixture is WithPosition }) {
+    if (first is WithPosition && allFixtures.all { it is WithPosition }) {
         capabilities.add("position")
     }
-    if (first is WithUv && all { it.fixture is WithUv }) {
+    if (first is WithUv && allFixtures.all { it is WithUv }) {
         capabilities.add("uv")
     }
-    if (first is WithStrobe && all { it.fixture is WithStrobe }) {
+    if (first is WithStrobe && allFixtures.all { it is WithStrobe }) {
         capabilities.add("strobe")
     }
 

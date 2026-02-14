@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fixture.group
 
-import uk.me.cormack.lighting7.fixture.FixtureTarget
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 
 /**
  * DSL builder for creating fixture groups.
@@ -21,8 +21,9 @@ import uk.me.cormack.lighting7.fixture.FixtureTarget
  * @param T The fixture or element type for this group
  * @param name The group name
  */
-class GroupBuilder<T : FixtureTarget> @PublishedApi internal constructor(private val name: String) {
+class GroupBuilder<T : GroupableFixture> @PublishedApi internal constructor(private val name: String) {
     private val members = mutableListOf<Pair<T, MemberMetadata>>()
+    private val subGroups = mutableListOf<FixtureGroup<T>>()
     private var groupMetadata = GroupMetadata()
 
     /**
@@ -85,6 +86,37 @@ class GroupBuilder<T : FixtureTarget> @PublishedApi internal constructor(private
                 tiltOffset = (position - 0.5) * tiltSpread
             )
         }
+    }
+
+    /**
+     * Add a sub-group to this group.
+     *
+     * Sub-groups are stored separately and their fixtures are included
+     * when accessing the group's fixtures. This allows hierarchical
+     * organization of fixtures.
+     *
+     * @param group The sub-group to add
+     */
+    fun addGroup(group: FixtureGroup<T>) {
+        subGroups.add(group)
+    }
+
+    /**
+     * Add multiple sub-groups to this group.
+     *
+     * @param groups The sub-groups to add
+     */
+    fun addGroups(groups: List<FixtureGroup<T>>) {
+        subGroups.addAll(groups)
+    }
+
+    /**
+     * Add multiple sub-groups to this group (vararg version).
+     *
+     * @param groups The sub-groups to add
+     */
+    fun addGroups(vararg groups: FixtureGroup<T>) {
+        subGroups.addAll(groups)
     }
 
     /**
@@ -164,7 +196,7 @@ class GroupBuilder<T : FixtureTarget> @PublishedApi internal constructor(private
                 metadata = meta
             )
         }
-        return FixtureGroup(name, indexedMembers, groupMetadata)
+        return FixtureGroup(name, indexedMembers, subGroups.toList(), groupMetadata)
     }
 }
 
@@ -184,7 +216,7 @@ class GroupBuilder<T : FixtureTarget> @PublishedApi internal constructor(private
  * @param block Configuration block
  * @return The constructed fixture group
  */
-inline fun <reified T : FixtureTarget> fixtureGroup(
+inline fun <reified T : GroupableFixture> fixtureGroup(
     name: String,
     block: GroupBuilder<T>.() -> Unit
 ): FixtureGroup<T> {
@@ -199,7 +231,7 @@ inline fun <reified T : FixtureTarget> fixtureGroup(
  * @param fixtures The fixtures/elements to include
  * @return The constructed fixture group
  */
-fun <T : FixtureTarget> fixtureGroupOf(
+fun <T : GroupableFixture> fixtureGroupOf(
     name: String,
     fixtures: List<T>
 ): FixtureGroup<T> {
@@ -216,7 +248,7 @@ fun <T : FixtureTarget> fixtureGroupOf(
  * @param fixtures The fixtures/elements to include
  * @return The constructed fixture group
  */
-fun <T : FixtureTarget> fixtureGroupOf(
+fun <T : GroupableFixture> fixtureGroupOf(
     name: String,
     vararg fixtures: T
 ): FixtureGroup<T> {

@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fixture.group.property
 
-import uk.me.cormack.lighting7.fixture.FixtureTarget
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.property.AggregateStrobe
 import uk.me.cormack.lighting7.fixture.property.Strobe
@@ -15,7 +15,7 @@ import uk.me.cormack.lighting7.fixture.property.Strobe
  * @param group The fixture group to aggregate over
  * @param strobeAccessor Function to extract the strobe from each member
  */
-class GroupStrobe<T : FixtureTarget>(
+class GroupStrobe<T : GroupableFixture>(
     private val group: FixtureGroup<T>,
     private val strobeAccessor: (T) -> Strobe
 ) : AggregateStrobe {

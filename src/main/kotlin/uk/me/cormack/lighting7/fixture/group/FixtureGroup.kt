@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fixture.group
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.fixture.FixtureTarget
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 
 /**
  * Symmetric mode for group effects.
@@ -41,16 +42,23 @@ data class GroupMetadata(
  * Groups can contain either standalone [Fixture][uk.me.cormack.lighting7.fixture.Fixture]
  * instances or [FixtureElement] components from multi-element fixtures.
  *
+ * Groups support hierarchical composition through [subGroups], allowing you to
+ * create groups of groups. Sub-groups are automatically flattened when accessing
+ * [fixtures] or iterating.
+ *
  * Groups also provide position-aware operations, with each member having an index
  * and normalized position (0.0-1.0) that can be used for phase-distributed effects.
  *
  * @param T The capability bound - all members must be at least this type
  * @property name The group name for identification
+ * @property members Direct fixture members of this group
+ * @property subGroups Child groups whose fixtures are included when flattening
  * @property metadata Group-level configuration
  */
-class FixtureGroup<T : FixtureTarget>(
+class FixtureGroup<T : GroupableFixture>(
     val name: String,
     @PublishedApi internal val members: List<GroupMember<T>>,
+    val subGroups: List<FixtureGroup<T>> = emptyList(),
     val metadata: GroupMetadata = GroupMetadata()
 ) : List<GroupMember<T>> by members, FixtureTarget {
 
@@ -58,28 +66,30 @@ class FixtureGroup<T : FixtureTarget>(
     override val targetKey: String get() = name
     override val displayName: String get() = name
     override val isGroup: Boolean get() = true
-    override val memberCount: Int get() = size
-
-    /** All fixtures in the group (convenience accessor without member wrapper) */
-    val fixtures: List<T> get() = members.map { it.fixture }
+    override val memberCount: Int get() = allMembers.size
 
     /**
-     * Flatten nested groups to get all leaf targets.
+     * All members including those from sub-groups, with recalculated indices.
      *
-     * For non-nested groups, returns the fixtures directly.
-     * For nested groups (e.g., FixtureGroup<FixtureGroup<T>>), recursively
-     * extracts all leaf fixtures.
+     * This flattens the hierarchy into a single list of members with proper
+     * indexing and normalized positions.
+     */
+    val allMembers: List<GroupMember<T>> by lazy {
+        val combined = members + subGroups.flatMap { it.allMembers }
+        reindexMembers(combined)
+    }
+
+    /** All fixtures in the group including sub-groups (convenience accessor without member wrapper) */
+    val fixtures: List<T> get() = allMembers.map { it.fixture }
+
+    /**
+     * Flatten this group to get all leaf targets.
+     *
+     * Returns all fixtures from this group and all sub-groups recursively.
      *
      * @return List of all leaf FixtureTarget instances
      */
-    fun flatten(): List<FixtureTarget> {
-        return members.flatMap { member ->
-            when (val fixture = member.fixture) {
-                is FixtureGroup<*> -> fixture.flatten()
-                else -> listOf(fixture)
-            }
-        }
-    }
+    fun flatten(): List<FixtureTarget> = allMembers.map { it.fixture }
 
     /**
      * Flatten and filter to a specific type.
@@ -100,23 +110,28 @@ class FixtureGroup<T : FixtureTarget>(
      *
      * @return The group cast to the more specific type, or null if any member doesn't support it
      */
-    inline fun <reified R : FixtureTarget> asCapable(): FixtureGroup<R>? {
-        return if (members.all { it.fixture is R }) {
-            @Suppress("UNCHECKED_CAST")
-            FixtureGroup(
-                name,
-                members.map { member ->
-                    @Suppress("UNCHECKED_CAST")
-                    GroupMember(
-                        fixture = member.fixture as R,
-                        index = member.index,
-                        normalizedPosition = member.normalizedPosition,
-                        metadata = member.metadata
-                    )
-                },
-                metadata
+    inline fun <reified R : GroupableFixture> asCapable(): FixtureGroup<R>? {
+        return asCapableInternal(R::class.java)
+    }
+
+    @PublishedApi
+    internal fun <R : GroupableFixture> asCapableInternal(clazz: Class<R>): FixtureGroup<R>? {
+        val allFixturesCapable = allMembers.all { clazz.isInstance(it.fixture) }
+        if (!allFixturesCapable) return null
+
+        @Suppress("UNCHECKED_CAST")
+        val castMembers = members.map { member ->
+            GroupMember(
+                fixture = member.fixture as R,
+                index = member.index,
+                normalizedPosition = member.normalizedPosition,
+                metadata = member.metadata
             )
-        } else null
+        }
+        val castSubGroups = subGroups.mapNotNull { it.asCapableInternal(clazz) }
+        if (castSubGroups.size != subGroups.size) return null
+
+        return FixtureGroup(name, castMembers, castSubGroups, metadata)
     }
 
     /**
@@ -127,7 +142,7 @@ class FixtureGroup<T : FixtureTarget>(
      * @return The group cast to the more specific type
      * @throws IllegalStateException if any member doesn't support the capability
      */
-    inline fun <reified R : FixtureTarget> requireCapable(): FixtureGroup<R> {
+    inline fun <reified R : GroupableFixture> requireCapable(): FixtureGroup<R> {
         return asCapable()
             ?: throw IllegalStateException(
                 "Group '$name' does not support ${R::class.simpleName}. " +
@@ -149,22 +164,24 @@ class FixtureGroup<T : FixtureTarget>(
         val boundMembers = members.map { member ->
             member.copy(fixture = member.fixture.withTransaction(transaction) as T)
         }
-        return FixtureGroup(name, boundMembers, metadata)
+        val boundSubGroups = subGroups.map { it.withTransaction(transaction) }
+        return FixtureGroup(name, boundMembers, boundSubGroups, metadata)
     }
 
     /**
      * Get a subset of this group by filter.
      *
      * The resulting group will have members re-indexed starting from 0,
-     * with normalized positions recalculated.
+     * with normalized positions recalculated. This operates on all members
+     * including those from sub-groups (flattening the hierarchy).
      *
      * @param predicate Filter function for members
      * @return A new group containing only matching members
      */
     fun filter(predicate: (GroupMember<T>) -> Boolean): FixtureGroup<T> {
-        val filtered = members.filter(predicate)
+        val filtered = allMembers.filter(predicate)
         val reindexed = reindexMembers(filtered)
-        return FixtureGroup("$name-filtered", reindexed, metadata)
+        return FixtureGroup("$name-filtered", reindexed, emptyList(), metadata)
     }
 
     /**
@@ -192,16 +209,17 @@ class FixtureGroup<T : FixtureTarget>(
      * Reverse the group order.
      *
      * The resulting group will have members in reverse order with
-     * normalized positions inverted.
+     * normalized positions inverted. This operates on all members
+     * including those from sub-groups (flattening the hierarchy).
      */
     fun reversed(): FixtureGroup<T> {
-        val reversedMembers = members.reversed().mapIndexed { newIdx, member ->
+        val reversedMembers = allMembers.reversed().mapIndexed { newIdx, member ->
             member.copy(
                 index = newIdx,
                 normalizedPosition = 1.0 - member.normalizedPosition
             )
         }
-        return FixtureGroup("$name-reversed", reversedMembers, metadata)
+        return FixtureGroup("$name-reversed", reversedMembers, emptyList(), metadata)
     }
 
     /**

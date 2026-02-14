@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.fixture.group
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixtureTarget
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 
 /**
  * Represents a single controllable element within a multi-element fixture.
@@ -17,12 +17,12 @@ import uk.me.cormack.lighting7.fixture.FixtureTarget
  * Elements are typically inner classes of the parent fixture and share the
  * parent's transaction context and DMX controller.
  *
- * This interface extends [FixtureTarget], enabling elements to be used in
+ * This interface extends [GroupableFixture], enabling elements to be used in
  * fixture groups alongside standalone fixtures.
  *
  * @param P The parent fixture type
  */
-interface FixtureElement<P : Fixture> : FixtureTarget {
+interface FixtureElement<P : Fixture> : GroupableFixture {
     /**
      * The parent fixture containing this element.
      */

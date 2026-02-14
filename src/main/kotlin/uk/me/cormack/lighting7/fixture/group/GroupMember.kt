@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fixture.group
 
-import uk.me.cormack.lighting7.fixture.FixtureTarget
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 
 /**
@@ -27,7 +27,7 @@ data class MemberMetadata(
  * @property normalizedPosition Position normalized to 0.0-1.0 range across the group
  * @property metadata Additional member-specific configuration
  */
-data class GroupMember<T : FixtureTarget>(
+data class GroupMember<T : GroupableFixture>(
     val fixture: T,
     override val index: Int,
     override val normalizedPosition: Double,

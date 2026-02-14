@@ -30,15 +30,20 @@ fx/group/
 
 ### Type System
 
-Groups are parameterized by fixture type and implement `FxTargetable`:
+Groups are parameterized by fixture type and implement `FixtureTarget`:
 
 ```kotlin
-class FixtureGroup<T : FixtureTarget> : FixtureTarget, FxTargetable {
+// GroupableFixture is implemented by Fixture and FixtureElement
+// FixtureGroup does NOT implement GroupableFixture (prevents recursive types)
+class FixtureGroup<T : GroupableFixture> : FixtureTarget, FxTargetable {
     override val targetKey: String get() = name
     override val isGroup: Boolean get() = true
     override val memberCount: Int get() = size
 }
 ```
+
+The `GroupableFixture` interface prevents recursive group types (`FixtureGroup<FixtureGroup<T>>`).
+Use `subGroups` for hierarchical organization instead.
 
 This enables:
 - Compile-time type checking for fixture operations
@@ -533,59 +538,144 @@ Groups can be configured with symmetric effect behavior:
 
 These modes work with the `symmetricInvert` member metadata to automatically invert effect directions for symmetric positioning.
 
-## Recursive Groups and Flatten
+## Hierarchical Groups (SubGroups)
 
-Groups can contain other groups, and the `flatten()` method recursively extracts all leaf fixtures.
+Groups support hierarchical composition through the `subGroups` property. This allows you to create groups that contain other groups of the same fixture type, with automatic flattening when accessing fixtures.
 
-### flatten() Method
+### Adding SubGroups
+
+Use `addGroup()` or `addGroups()` in the builder to add child groups:
 
 ```kotlin
-// Recursively extract all non-group FixtureTargets
+// Create sub-groups
+val frontHexes = createGroup<HexFixture>("front-hexes") {
+    addSpread(listOf(hex1, hex2))
+}
+val atmosphericHexes = createGroup<HexFixture>("atmospheric-hexes") {
+    addSpread(listOf(hex3, hex4))
+}
+
+// Create parent group containing sub-groups
+val allHexes = createGroup<HexFixture>("all-hexes") {
+    addGroup(frontHexes)
+    addGroup(atmosphericHexes)
+    // Or: addGroups(listOf(frontHexes, atmosphericHexes))
+    // Or: addGroups(frontHexes, atmosphericHexes)
+}
+
+// Access flattened fixtures - all 4 HexFixtures
+allHexes.fixtures.forEach { it.dimmer.value = 255u }
+
+// Or use group properties directly
+allHexes.dimmer.value = 255u  // Sets all 4 fixtures
+```
+
+### Key Properties
+
+- `subGroups`: List of child `FixtureGroup<T>` instances
+- `members`: Direct fixture members only (excludes subgroup fixtures)
+- `allMembers`: Combined list of direct members + subgroup members, reindexed
+- `fixtures`: Shorthand for `allMembers.map { it.fixture }`
+
+### Member Ordering
+
+When a group has both direct members and subgroups, `allMembers` orders them as:
+1. Direct members (in order added)
+2. Subgroup members (flattened, in order subgroups were added)
+
+```kotlin
+val subGroup = fixtureGroup<UVFixture>("sub") {
+    add(fixture0)
+    add(fixture1)
+}
+
+val parentGroup = fixtureGroup<UVFixture>("parent") {
+    add(fixture10)      // Direct member
+    addGroup(subGroup)  // Subgroup with 2 fixtures
+    add(fixture20)      // Direct member
+}
+
+// Result order: fixture10, fixture20, fixture0, fixture1
+assertEquals("fixture-10", parentGroup.fixtures[0].key)
+assertEquals("fixture-20", parentGroup.fixtures[1].key)
+assertEquals("fixture-0", parentGroup.fixtures[2].key)
+assertEquals("fixture-1", parentGroup.fixtures[3].key)
+```
+
+### Nested SubGroups
+
+SubGroups can themselves contain subgroups, and flattening is recursive:
+
+```kotlin
+val innerGroup = fixtureGroup<HexFixture>("inner") {
+    add(hex1)
+}
+
+val middleGroup = fixtureGroup<HexFixture>("middle") {
+    addGroup(innerGroup)
+    add(hex2)
+}
+
+val outerGroup = fixtureGroup<HexFixture>("outer") {
+    addGroup(middleGroup)
+    add(hex3)
+}
+
+// Flattens to: hex3, hex2, hex1 (direct members first at each level)
+assertEquals(3, outerGroup.fixtures.size)
+```
+
+### Operations with SubGroups
+
+All group operations work with the flattened `allMembers`:
+
+```kotlin
+val group = fixtureGroup<HexFixture>("parent") {
+    addGroup(subGroup1)  // 2 fixtures
+    addGroup(subGroup2)  // 2 fixtures
+}
+
+// Filter operates on all 4 fixtures
+val leftHalf = group.leftHalf()
+
+// memberCount includes all fixtures
+assertEquals(4, group.memberCount)
+
+// Transaction propagates to subgroups
+val boundGroup = group.withTransaction(transaction)
+```
+
+## Flatten Method
+
+The `flatten()` method returns all fixtures from the group and sub-groups:
+
+```kotlin
+// Recursively extract all fixtures
 fun FixtureGroup<*>.flatten(): List<FixtureTarget>
 
 // Type-filtered flattening
 inline fun <reified R : FixtureTarget> FixtureGroup<*>.flattenAs(): List<R>
 ```
 
-### Nested Group Example
+### Example
 
 ```kotlin
-// Create inner groups
-val leftGroup = fixtureGroup<HexFixture>("left-wash") {
+val innerGroup = fixtureGroup<HexFixture>("inner") {
     add(hex1)
     add(hex2)
 }
-val rightGroup = fixtureGroup<HexFixture>("right-wash") {
+
+val outerGroup = fixtureGroup<HexFixture>("outer") {
     add(hex3)
-    add(hex4)
+    addGroup(innerGroup)
 }
 
-// Create outer group containing inner groups
-val allWash = fixtureGroup<FixtureGroup<HexFixture>>("all-wash") {
-    add(leftGroup)
-    add(rightGroup)
-}
-
-// Flatten to get all 4 HexFixtures
-val allFixtures = allWash.flatten()
-assertEquals(4, allFixtures.size)
+// Flatten returns all 3 HexFixtures: hex3, hex1, hex2
+val allFixtures = outerGroup.flatten()
+assertEquals(3, allFixtures.size)
 
 // Type-safe flattening
-val hexFixtures = allWash.flattenAs<HexFixture>()
-```
-
-### Deeply Nested Groups
-
-The `flatten()` method handles arbitrary nesting depth:
-
-```kotlin
-val level1 = fixtureGroup<UVFixture>("level1") { add(uv1, uv2) }
-val level2 = fixtureGroup<FixtureGroup<UVFixture>>("level2") { add(level1) }
-val level3 = fixtureGroup<FixtureGroup<FixtureGroup<UVFixture>>>("level3") { add(level2) }
-
-// Still extracts the 2 leaf fixtures
-val flattened = level3.flatten()
-assertEquals(2, flattened.size)
+val hexFixtures = outerGroup.flattenAs<HexFixture>()
 ```
 
 ## Transaction Support

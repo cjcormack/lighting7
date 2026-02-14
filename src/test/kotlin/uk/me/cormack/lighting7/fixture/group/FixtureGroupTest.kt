@@ -275,7 +275,7 @@ class FixtureGroupTest {
     }
 
     @Test
-    fun `flatten recursively extracts from nested groups`() {
+    fun `flatten recursively extracts from subgroups`() {
         // Create inner groups
         val innerGroup1 = fixtureGroup<UVFixture>("inner-1") {
             add(createFixture(0))
@@ -286,10 +286,10 @@ class FixtureGroupTest {
             add(createFixture(3))
         }
 
-        // Create outer group containing inner groups
-        val outerGroup = fixtureGroup<FixtureGroup<UVFixture>>("outer") {
-            add(innerGroup1)
-            add(innerGroup2)
+        // Create outer group containing inner groups as subgroups
+        val outerGroup = fixtureGroup<UVFixture>("outer") {
+            addGroup(innerGroup1)
+            addGroup(innerGroup2)
         }
 
         val flattened = outerGroup.flatten()
@@ -367,11 +367,11 @@ class FixtureGroupTest {
     }
 
     // ============================================
-    // Nested group tests
+    // Hierarchical group tests (using subGroups)
     // ============================================
 
     @Test
-    fun `nested groups support property access via extensions`() {
+    fun `hierarchical groups support property access via extensions`() {
         val controller = MockDmxController(testUniverse)
         val transaction = createTestTransaction(controller)
 
@@ -391,40 +391,35 @@ class FixtureGroupTest {
             add(fixture4)
         }
 
-        // Create outer group - note: we need the inner groups to be WithDimmer compatible
-        // Since FixtureGroup itself doesn't implement WithDimmer, we use flat groups
-        // This test verifies that flattening works correctly
-
-        val outerGroup = fixtureGroup<FixtureGroup<UVFixture>>("outer") {
-            add(innerGroup1)
-            add(innerGroup2)
+        // Create outer group using subGroups
+        val outerGroup = fixtureGroup<UVFixture>("outer") {
+            addGroup(innerGroup1)
+            addGroup(innerGroup2)
         }
 
-        // Flatten and verify we get all 4 fixtures
-        val allFixtures = outerGroup.flatten()
-        assertEquals(4, allFixtures.size)
+        // Verify we get all 4 fixtures
+        assertEquals(4, outerGroup.fixtures.size)
 
-        // Verify we can still use property access on the flat result
-        allFixtures.filterIsInstance<WithDimmer>().forEach {
-            assertNotNull(it.dimmer)
-        }
+        // Verify direct property access works on the hierarchical group
+        outerGroup.dimmer.value = 200u
+        assertTrue(outerGroup.dimmer.isUniform)
     }
 
     @Test
-    fun `deeply nested groups flatten correctly`() {
-        // Create 3 levels of nesting
-        val level1 = fixtureGroup<UVFixture>("level1") {
+    fun `deeply nested subgroups flatten correctly`() {
+        // Create nested subgroups
+        val innerGroup = fixtureGroup<UVFixture>("inner") {
             add(createFixture(0))
             add(createFixture(1))
         }
-        val level2 = fixtureGroup<FixtureGroup<UVFixture>>("level2") {
-            add(level1)
+        val middleGroup = fixtureGroup<UVFixture>("middle") {
+            addGroup(innerGroup)
         }
-        val level3 = fixtureGroup<FixtureGroup<FixtureGroup<UVFixture>>>("level3") {
-            add(level2)
+        val outerGroup = fixtureGroup<UVFixture>("outer") {
+            addGroup(middleGroup)
         }
 
-        val flattened = level3.flatten()
+        val flattened = outerGroup.flatten()
 
         assertEquals(2, flattened.size)
         assertTrue(flattened.all { it is UVFixture })
@@ -433,32 +428,25 @@ class FixtureGroupTest {
     }
 
     @Test
-    fun `empty nested groups flatten to empty list`() {
+    fun `empty subgroups flatten to empty list`() {
         val emptyInner = fixtureGroup<UVFixture>("empty-inner") {}
-        val outer = fixtureGroup<FixtureGroup<UVFixture>>("outer") {
-            add(emptyInner)
+        val outer = fixtureGroup<UVFixture>("outer") {
+            addGroup(emptyInner)
         }
 
         val flattened = outer.flatten()
         assertTrue(flattened.isEmpty())
     }
 
-    // ============================================
-    // Mixed group type tests
-    // ============================================
-
     @Test
-    fun `group with mixed nested and flat members flattens correctly`() {
-        // Inner group with 2 fixtures
-        val innerGroup = fixtureGroup<UVFixture>("inner") {
+    fun `group with direct members flattens correctly`() {
+        val group = fixtureGroup<UVFixture>("group") {
             add(createFixture(0))
             add(createFixture(1))
         }
 
-        // Note: Can't mix UVFixture and FixtureGroup<UVFixture> in same group
-        // This test verifies that pure nested groups work correctly
-        val flattenedInner = innerGroup.flatten()
-        assertEquals(2, flattenedInner.size)
+        val flattened = group.flatten()
+        assertEquals(2, flattened.size)
     }
 
     // ============================================
@@ -484,5 +472,306 @@ class FixtureGroupTest {
         assertEquals("single", single.targetKey)
         assertEquals(1, single.memberCount)
         assertTrue(single.isGroup)
+    }
+
+    // ============================================
+    // SubGroups feature tests
+    // ============================================
+
+    @Test
+    fun `addGroup adds subgroup to group`() {
+        val subGroup1 = fixtureGroup<UVFixture>("sub-1") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+        val subGroup2 = fixtureGroup<UVFixture>("sub-2") {
+            add(createFixture(2))
+            add(createFixture(3))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            addGroup(subGroup1)
+            addGroup(subGroup2)
+        }
+
+        assertEquals(2, parentGroup.subGroups.size)
+        assertEquals("sub-1", parentGroup.subGroups[0].name)
+        assertEquals("sub-2", parentGroup.subGroups[1].name)
+    }
+
+    @Test
+    fun `addGroups adds multiple subgroups`() {
+        val subGroup1 = fixtureGroup<UVFixture>("sub-1") {
+            add(createFixture(0))
+        }
+        val subGroup2 = fixtureGroup<UVFixture>("sub-2") {
+            add(createFixture(1))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            addGroups(listOf(subGroup1, subGroup2))
+        }
+
+        assertEquals(2, parentGroup.subGroups.size)
+    }
+
+    @Test
+    fun `fixtures property includes subgroup fixtures`() {
+        val subGroup1 = fixtureGroup<UVFixture>("sub-1") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+        val subGroup2 = fixtureGroup<UVFixture>("sub-2") {
+            add(createFixture(2))
+            add(createFixture(3))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            addGroup(subGroup1)
+            addGroup(subGroup2)
+        }
+
+        // Should have all 4 fixtures from the subgroups
+        assertEquals(4, parentGroup.fixtures.size)
+        assertEquals("test-0", parentGroup.fixtures[0].key)
+        assertEquals("test-1", parentGroup.fixtures[1].key)
+        assertEquals("test-2", parentGroup.fixtures[2].key)
+        assertEquals("test-3", parentGroup.fixtures[3].key)
+    }
+
+    @Test
+    fun `allMembers has correct indices for subgroup fixtures`() {
+        val subGroup1 = fixtureGroup<UVFixture>("sub-1") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+        val subGroup2 = fixtureGroup<UVFixture>("sub-2") {
+            add(createFixture(2))
+            add(createFixture(3))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            addGroup(subGroup1)
+            addGroup(subGroup2)
+        }
+
+        // allMembers should be reindexed from 0-3
+        assertEquals(4, parentGroup.allMembers.size)
+        assertEquals(0, parentGroup.allMembers[0].index)
+        assertEquals(1, parentGroup.allMembers[1].index)
+        assertEquals(2, parentGroup.allMembers[2].index)
+        assertEquals(3, parentGroup.allMembers[3].index)
+    }
+
+    @Test
+    fun `allMembers has correct normalized positions`() {
+        val subGroup1 = fixtureGroup<UVFixture>("sub-1") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+        val subGroup2 = fixtureGroup<UVFixture>("sub-2") {
+            add(createFixture(2))
+            add(createFixture(3))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            addGroup(subGroup1)
+            addGroup(subGroup2)
+        }
+
+        // With 4 total members: 0.0, 0.333, 0.666, 1.0
+        assertEquals(0.0, parentGroup.allMembers[0].normalizedPosition, 0.01)
+        assertEquals(0.333, parentGroup.allMembers[1].normalizedPosition, 0.01)
+        assertEquals(0.666, parentGroup.allMembers[2].normalizedPosition, 0.01)
+        assertEquals(1.0, parentGroup.allMembers[3].normalizedPosition, 0.01)
+    }
+
+    @Test
+    fun `memberCount includes subgroup members`() {
+        val subGroup = fixtureGroup<UVFixture>("sub") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            add(createFixture(2))  // Direct member
+            addGroup(subGroup)      // 2 members via subgroup
+        }
+
+        assertEquals(3, parentGroup.memberCount)
+    }
+
+    @Test
+    fun `mixed direct members and subgroups works correctly`() {
+        val subGroup = fixtureGroup<UVFixture>("sub") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            add(createFixture(10))  // Direct member first
+            addGroup(subGroup)       // Then subgroup members
+            add(createFixture(20))  // Another direct member
+        }
+
+        // Direct members come first, then subgroup members
+        // Order: test-10, test-20 (direct), then test-0, test-1 (from subgroup)
+        assertEquals(4, parentGroup.fixtures.size)
+        assertEquals("test-10", parentGroup.fixtures[0].key)
+        assertEquals("test-20", parentGroup.fixtures[1].key)
+        assertEquals("test-0", parentGroup.fixtures[2].key)
+        assertEquals("test-1", parentGroup.fixtures[3].key)
+    }
+
+    @Test
+    fun `withTransaction propagates to subgroups`() {
+        val controller = MockDmxController(testUniverse)
+        val transaction = createTestTransaction(controller)
+
+        val subGroup = fixtureGroup<UVFixture>("sub") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            addGroup(subGroup)
+        }
+
+        val boundGroup = parentGroup.withTransaction(transaction)
+
+        // The bound group should have the subgroup also bound
+        assertEquals(1, boundGroup.subGroups.size)
+        assertEquals(2, boundGroup.fixtures.size)
+
+        // Operations should work via transaction
+        boundGroup.dimmer.value = 150u
+        assertTrue(boundGroup.dimmer.isUniform)
+        assertEquals(150u.toUByte(), boundGroup.dimmer.value)
+    }
+
+    @Test
+    fun `filter operates on allMembers including subgroups`() {
+        val subGroup = fixtureGroup<UVFixture>("sub") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            add(createFixture(10))
+            addGroup(subGroup)
+        }
+
+        // Filter to keep only first two members (by position)
+        val filtered = parentGroup.filter { it.normalizedPosition < 0.5 }
+
+        // With 3 members (positions 0.0, 0.5, 1.0), positions < 0.5 means only the first
+        assertEquals(1, filtered.size)
+        assertEquals("test-10", filtered.fixtures[0].key)
+    }
+
+    @Test
+    fun `reversed works with subgroups`() {
+        val subGroup = fixtureGroup<UVFixture>("sub") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            addGroup(subGroup)
+        }
+
+        val reversed = parentGroup.reversed()
+
+        assertEquals(2, reversed.size)
+        assertEquals("test-1", reversed.fixtures[0].key)
+        assertEquals("test-0", reversed.fixtures[1].key)
+    }
+
+    @Test
+    fun `nested subgroups flatten recursively`() {
+        val innerSubGroup = fixtureGroup<UVFixture>("inner-sub") {
+            add(createFixture(0))
+        }
+
+        val middleGroup = fixtureGroup<UVFixture>("middle") {
+            addGroup(innerSubGroup)
+            add(createFixture(1))
+        }
+
+        val outerGroup = fixtureGroup<UVFixture>("outer") {
+            addGroup(middleGroup)
+            add(createFixture(2))
+        }
+
+        // Direct members come first, then subgroup members (recursively)
+        // outer direct (2), then middle flattened (direct 1, then inner 0)
+        assertEquals(3, outerGroup.fixtures.size)
+        assertEquals("test-2", outerGroup.fixtures[0].key)
+        assertEquals("test-1", outerGroup.fixtures[1].key)
+        assertEquals("test-0", outerGroup.fixtures[2].key)
+    }
+
+    @Test
+    fun `empty subgroups handled correctly`() {
+        val emptySubGroup = fixtureGroup<UVFixture>("empty-sub") {}
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            add(createFixture(0))
+            addGroup(emptySubGroup)
+        }
+
+        // Should only have the direct member
+        assertEquals(1, parentGroup.fixtures.size)
+        assertEquals("test-0", parentGroup.fixtures[0].key)
+    }
+
+    @Test
+    fun `subgroups property returns correct subgroups`() {
+        val sub1 = fixtureGroup<UVFixture>("sub-1") { add(createFixture(0)) }
+        val sub2 = fixtureGroup<UVFixture>("sub-2") { add(createFixture(1)) }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            addGroups(sub1, sub2)
+        }
+
+        assertEquals(2, parentGroup.subGroups.size)
+        assertEquals(sub1.name, parentGroup.subGroups[0].name)
+        assertEquals(sub2.name, parentGroup.subGroups[1].name)
+    }
+
+    @Test
+    fun `asCapable works with subgroups`() {
+        val subGroup = fixtureGroup<UVFixture>("sub") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            addGroup(subGroup)
+        }
+
+        // Should succeed since all fixtures are UVFixture
+        val capable = parentGroup.asCapable<UVFixture>()
+        assertNotNull(capable)
+        assertEquals(2, capable.fixtures.size)
+        assertEquals(1, capable.subGroups.size)
+    }
+
+    @Test
+    fun `flatten returns all fixtures from subgroups`() {
+        val subGroup = fixtureGroup<UVFixture>("sub") {
+            add(createFixture(0))
+            add(createFixture(1))
+        }
+
+        val parentGroup = fixtureGroup<UVFixture>("parent") {
+            add(createFixture(2))
+            addGroup(subGroup)
+        }
+
+        val flattened = parentGroup.flatten()
+
+        assertEquals(3, flattened.size)
+        assertTrue(flattened.all { it is UVFixture })
     }
 }

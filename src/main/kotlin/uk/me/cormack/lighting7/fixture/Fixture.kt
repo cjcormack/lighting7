@@ -7,7 +7,7 @@ import java.awt.Color
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.memberProperties
 
-sealed class Fixture(val key: String, val fixtureName: String) : FixtureTarget {
+sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixture {
 
     // FixtureTarget implementation
     override val targetKey: String get() = key
