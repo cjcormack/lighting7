@@ -221,7 +221,7 @@ sealed class LedLightbar12PixelFixture(
         private val pixelFirstChannel: Int
     ) : Pixel(elementIndex, pixelTransaction), WithColour {
 
-        @FixtureProperty("Red", category = PropertyCategory.COLOUR)
+        @FixtureProperty("RGB colour", category = PropertyCategory.COLOUR)
         override val rgbColour = DmxColour(
             pixelTransaction,
             universe,

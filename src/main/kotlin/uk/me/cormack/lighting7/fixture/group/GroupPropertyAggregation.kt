@@ -15,6 +15,9 @@ import uk.me.cormack.lighting7.routes.*
  * Only properties that are common to ALL group members are included. Properties
  * are matched by name and type.
  *
+ * For multi-element fixtures, element group properties (virtual "all heads" properties)
+ * are also included if all group members have matching element group properties.
+ *
  * @return List of group property descriptors, or empty list if group is empty or has no DMX fixtures
  */
 fun FixtureGroup<*>.generateGroupPropertyDescriptors(): List<GroupPropertyDescriptor> {
@@ -24,15 +27,96 @@ fun FixtureGroup<*>.generateGroupPropertyDescriptors(): List<GroupPropertyDescri
     val dmxFixtures = fixtures.filterIsInstance<DmxFixture>()
     if (dmxFixtures.isEmpty()) return emptyList()
 
+    val result = mutableListOf<GroupPropertyDescriptor>()
+
+    // Aggregate fixture-level properties
     val firstFixture = dmxFixtures.first()
     val templateProperties = firstFixture.generatePropertyDescriptors()
 
-    return templateProperties.mapNotNull { templateProp ->
-        when (templateProp) {
+    for (templateProp in templateProperties) {
+        val aggregated = when (templateProp) {
             is SliderPropertyDescriptor -> aggregateSliderProperty(templateProp, dmxFixtures)
             is ColourPropertyDescriptor -> aggregateColourProperty(templateProp, dmxFixtures)
             is PositionPropertyDescriptor -> aggregatePositionProperty(templateProp, dmxFixtures)
             is SettingPropertyDescriptor -> aggregateSettingProperty(templateProp, dmxFixtures)
+        }
+        if (aggregated != null) result.add(aggregated)
+    }
+
+    // Aggregate element group properties (virtual "all heads" properties from multi-head fixtures)
+    val allEgp = dmxFixtures.map { it.generateElementGroupPropertyDescriptors() }
+    if (allEgp.all { it != null } && allEgp.isNotEmpty()) {
+        val egpLists = allEgp.filterNotNull()
+        val templateEgp = egpLists.first()
+
+        for (templateProp in templateEgp) {
+            // Skip if fixture-level aggregation already covered this property name+type
+            if (result.any { it.name == templateProp.name && it::class == templateProp::class }) continue
+
+            val aggregated = aggregateElementGroupProperty(templateProp, egpLists)
+            if (aggregated != null) result.add(aggregated)
+        }
+    }
+
+    return result
+}
+
+/**
+ * Aggregate a single element group property across all fixtures' element group properties.
+ *
+ * This merges the member channels from each fixture's version of the property into
+ * a single group property descriptor that covers all elements across all fixtures.
+ */
+private fun aggregateElementGroupProperty(
+    template: GroupPropertyDescriptor,
+    allEgpLists: List<List<GroupPropertyDescriptor>>
+): GroupPropertyDescriptor? {
+    // Find matching property in each fixture's element group properties
+    val allMatching = allEgpLists.map { egpList ->
+        egpList.find { it.name == template.name && it::class == template::class }
+    }
+    if (allMatching.any { it == null }) return null
+
+    return when (template) {
+        is GroupSliderPropertyDescriptor -> {
+            val allChannels = allMatching.flatMap { (it as GroupSliderPropertyDescriptor).memberChannels }
+            GroupSliderPropertyDescriptor(
+                name = template.name,
+                displayName = template.displayName,
+                category = template.category,
+                min = template.min,
+                max = template.max,
+                memberChannels = allChannels
+            )
+        }
+        is GroupColourPropertyDescriptor -> {
+            val allChannels = allMatching.flatMap { (it as GroupColourPropertyDescriptor).memberColourChannels }
+            GroupColourPropertyDescriptor(
+                name = template.name,
+                displayName = template.displayName,
+                memberColourChannels = allChannels
+            )
+        }
+        is GroupPositionPropertyDescriptor -> {
+            val allChannels = allMatching.flatMap { (it as GroupPositionPropertyDescriptor).memberPositionChannels }
+            GroupPositionPropertyDescriptor(
+                name = template.name,
+                displayName = template.displayName,
+                memberPositionChannels = allChannels
+            )
+        }
+        is GroupSettingPropertyDescriptor -> {
+            val matching = allMatching.filterNotNull().filterIsInstance<GroupSettingPropertyDescriptor>()
+            // Verify all have matching options
+            if (matching.any { !optionsMatch(template.options, it.options) }) return null
+            val allChannels = matching.flatMap { it.memberChannels }
+            GroupSettingPropertyDescriptor(
+                name = template.name,
+                displayName = template.displayName,
+                category = template.category,
+                options = template.options,
+                memberChannels = allChannels
+            )
         }
     }
 }

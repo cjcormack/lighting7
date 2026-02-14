@@ -9,7 +9,7 @@ import io.ktor.server.routing.get
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
@@ -45,6 +45,7 @@ internal fun Fixture.details(fixtures: Fixtures): FixtureDetails {
                 channels = channels,
                 properties = this.generatePropertyDescriptors(),
                 elements = this.generateElementDescriptors(),
+                elementGroupProperties = this.generateElementGroupPropertyDescriptors(),
                 mode = modeInfo,
                 capabilities = capabilities
             )
@@ -62,7 +63,16 @@ private fun DmxFixture.detectCapabilities(): List<String> {
     if (this is WithPosition) caps.add("position")
     if (this is WithUv) caps.add("uv")
     if (this is WithStrobe) caps.add("strobe")
-    if (this is MultiElementFixture<*>) caps.add("multi-element")
+    if (this is MultiElementFixture<*>) {
+        caps.add("multi-element")
+        // Also detect capabilities available via element group properties
+        val egp = generateElementGroupPropertyDescriptors()
+        if (egp != null) {
+            if ("dimmer" !in caps && egp.any { it is GroupSliderPropertyDescriptor && it.category == "dimmer" }) caps.add("dimmer")
+            if ("colour" !in caps && egp.any { it is GroupColourPropertyDescriptor }) caps.add("colour")
+            if ("position" !in caps && egp.any { it is GroupPositionPropertyDescriptor }) caps.add("position")
+        }
+    }
     return caps
 }
 
@@ -111,6 +121,7 @@ data class DmxFixtureDetails(
     val channels: List<DmxFixtureChannelDetails>,
     val properties: List<PropertyDescriptor>,
     val elements: List<ElementDescriptor>?,
+    val elementGroupProperties: List<GroupPropertyDescriptor>?,
     val mode: ModeInfo?,
     val capabilities: List<String>
 ): FixtureDetails

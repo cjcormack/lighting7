@@ -5,8 +5,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColourSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
-import uk.me.cormack.lighting7.fixture.group.FixtureElement
-import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.routes.*
 import kotlin.reflect.full.memberProperties
@@ -200,6 +199,84 @@ abstract class DmxFixture(
                 displayName = "Head ${element.elementIndex + 1}",
                 properties = properties
             )
+        }
+    }
+
+    /**
+     * Generates aggregated group property descriptors across all elements of a multi-element fixture.
+     *
+     * This allows the frontend to display "all heads" controls that operate on every element
+     * simultaneously, using the same group property visualizers used for fixture groups.
+     *
+     * Only properties common to ALL elements (matched by name and type) are included.
+     *
+     * @return List of group property descriptors, or null if not a multi-element fixture or has fewer than 2 elements
+     */
+    fun generateElementGroupPropertyDescriptors(): List<GroupPropertyDescriptor>? {
+        val elementDescriptors = generateElementDescriptors() ?: return null
+        if (elementDescriptors.size < 2) return null
+
+        val template = elementDescriptors.first()
+
+        return template.properties.mapNotNull { templateProp ->
+            val allMatching = elementDescriptors.map { elem ->
+                elem.properties.find { it.name == templateProp.name && it::class == templateProp::class }
+            }
+            if (allMatching.any { it == null }) return@mapNotNull null
+
+            @Suppress("UNCHECKED_CAST")
+            when (templateProp) {
+                is SliderPropertyDescriptor -> GroupSliderPropertyDescriptor(
+                    name = templateProp.name,
+                    displayName = templateProp.displayName,
+                    category = templateProp.category,
+                    min = templateProp.min,
+                    max = templateProp.max,
+                    memberChannels = allMatching.map { (it as SliderPropertyDescriptor).channel }
+                )
+                is ColourPropertyDescriptor -> GroupColourPropertyDescriptor(
+                    name = templateProp.name,
+                    displayName = templateProp.displayName,
+                    memberColourChannels = elementDescriptors.mapIndexed { idx, elem ->
+                        val p = allMatching[idx] as ColourPropertyDescriptor
+                        MemberColourChannels(
+                            fixtureKey = elem.key,
+                            redChannel = p.redChannel,
+                            greenChannel = p.greenChannel,
+                            blueChannel = p.blueChannel,
+                            whiteChannel = p.whiteChannel,
+                            amberChannel = p.amberChannel,
+                            uvChannel = p.uvChannel
+                        )
+                    }
+                )
+                is PositionPropertyDescriptor -> GroupPositionPropertyDescriptor(
+                    name = templateProp.name,
+                    displayName = templateProp.displayName,
+                    memberPositionChannels = elementDescriptors.mapIndexed { idx, elem ->
+                        val p = allMatching[idx] as PositionPropertyDescriptor
+                        MemberPositionChannels(
+                            fixtureKey = elem.key,
+                            panChannel = p.panChannel,
+                            tiltChannel = p.tiltChannel,
+                            panMin = p.panMin,
+                            panMax = p.panMax,
+                            tiltMin = p.tiltMin,
+                            tiltMax = p.tiltMax
+                        )
+                    }
+                )
+                is SettingPropertyDescriptor -> GroupSettingPropertyDescriptor(
+                    name = templateProp.name,
+                    displayName = templateProp.displayName,
+                    category = templateProp.category,
+                    options = templateProp.options,
+                    memberChannels = elementDescriptors.mapIndexed { idx, _ ->
+                        val p = allMatching[idx] as SettingPropertyDescriptor
+                        MemberSettingChannel(fixtureKey = elementDescriptors[idx].key, channel = p.channel)
+                    }
+                )
+            }
         }
     }
 

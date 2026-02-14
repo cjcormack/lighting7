@@ -9,13 +9,9 @@ import io.ktor.server.resources.post
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.fixture.group.FixtureGroup
-import uk.me.cormack.lighting7.fixture.group.generateGroupPropertyDescriptors
-import uk.me.cormack.lighting7.fixture.trait.WithColour
-import uk.me.cormack.lighting7.fixture.trait.WithDimmer
-import uk.me.cormack.lighting7.fixture.trait.WithPosition
-import uk.me.cormack.lighting7.fixture.trait.WithStrobe
-import uk.me.cormack.lighting7.fixture.trait.WithUv
+import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.group.*
+import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.effects.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
@@ -242,22 +238,39 @@ private fun FixtureGroup<*>.detectCapabilities(): List<String> {
     if (allFixtures.isEmpty()) return emptyList()
 
     val capabilities = mutableListOf<String>()
-    val first = allFixtures.first()
 
-    if (first is WithDimmer && allFixtures.all { it is WithDimmer }) {
+    if (allFixtures.all { it is WithDimmer }) {
         capabilities.add("dimmer")
     }
-    if (first is WithColour && allFixtures.all { it is WithColour }) {
+    if (allFixtures.all { it is WithColour }) {
         capabilities.add("colour")
     }
-    if (first is WithPosition && allFixtures.all { it is WithPosition }) {
+    if (allFixtures.all { it is WithPosition }) {
         capabilities.add("position")
     }
-    if (first is WithUv && allFixtures.all { it is WithUv }) {
+    if (allFixtures.all { it is WithUv }) {
         capabilities.add("uv")
     }
-    if (first is WithStrobe && allFixtures.all { it is WithStrobe }) {
+    if (allFixtures.all { it is WithStrobe }) {
         capabilities.add("strobe")
+    }
+
+    // Also detect capabilities available via element group properties on multi-head DmxFixtures
+    val dmxFixtures = allFixtures.filterIsInstance<DmxFixture>()
+    if (dmxFixtures.size == allFixtures.size && dmxFixtures.isNotEmpty()) {
+        val allEgp = dmxFixtures.map { it.generateElementGroupPropertyDescriptors() }
+        if (allEgp.all { it != null }) {
+            val egpList = allEgp.filterNotNull()
+            if ("dimmer" !in capabilities && egpList.all { egp -> egp.any { it is GroupSliderPropertyDescriptor && it.category == "dimmer" } }) {
+                capabilities.add("dimmer")
+            }
+            if ("colour" !in capabilities && egpList.all { egp -> egp.any { it is GroupColourPropertyDescriptor } }) {
+                capabilities.add("colour")
+            }
+            if ("position" !in capabilities && egpList.all { egp -> egp.any { it is GroupPositionPropertyDescriptor } }) {
+                capabilities.add("position")
+            }
+        }
     }
 
     return capabilities
