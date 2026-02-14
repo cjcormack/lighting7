@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fx.effects
 import uk.me.cormack.lighting7.fx.Effect
 import uk.me.cormack.lighting7.fx.FxOutput
 import uk.me.cormack.lighting7.fx.FxOutputType
+import uk.me.cormack.lighting7.fx.toHexString
 import java.awt.Color
 
 /**
@@ -20,6 +21,10 @@ data class ColourCycle(
 ) : Effect {
     override val name = "Colour Cycle"
     override val outputType = FxOutputType.COLOUR
+    override val parameters get() = mapOf(
+        "colours" to colours.joinToString(",") { it.toHexString() },
+        "fadeRatio" to fadeRatio.toString()
+    )
 
     override fun calculate(phase: Double): FxOutput {
         if (colours.isEmpty()) return FxOutput.Colour(Color.BLACK)
@@ -85,6 +90,7 @@ data class RainbowCycle(
 ) : Effect {
     override val name = "Rainbow Cycle"
     override val outputType = FxOutputType.COLOUR
+    override val parameters get() = mapOf("saturation" to saturation.toString(), "brightness" to brightness.toString())
 
     override fun calculate(phase: Double): FxOutput {
         val color = Color.getHSBColor(phase.toFloat(), saturation, brightness)
@@ -108,6 +114,7 @@ data class ColourStrobe(
 ) : Effect {
     override val name = "Colour Strobe"
     override val outputType = FxOutputType.COLOUR
+    override val parameters get() = mapOf("onColor" to onColor.toHexString(), "offColor" to offColor.toHexString(), "onRatio" to onRatio.toString())
 
     override fun calculate(phase: Double): FxOutput {
         val color = if (phase < onRatio) onColor else offColor
@@ -129,6 +136,7 @@ data class ColourPulse(
 ) : Effect {
     override val name = "Colour Pulse"
     override val outputType = FxOutputType.COLOUR
+    override val parameters get() = mapOf("colorA" to colorA.toHexString(), "colorB" to colorB.toHexString())
 
     override fun calculate(phase: Double): FxOutput {
         // Use sine wave for smooth pulse
@@ -159,6 +167,7 @@ data class ColourFade(
 ) : Effect {
     override val name = "Colour Fade"
     override val outputType = FxOutputType.COLOUR
+    override val parameters get() = mapOf("fromColor" to fromColor.toHexString(), "toColor" to toColor.toHexString(), "pingPong" to pingPong.toString())
 
     override fun calculate(phase: Double): FxOutput {
         val ratio = if (pingPong && phase > 0.5) {
@@ -191,6 +200,7 @@ data class ColourFlicker(
 ) : Effect {
     override val name = "Colour Flicker"
     override val outputType = FxOutputType.COLOUR
+    override val parameters get() = mapOf("baseColor" to baseColor.toHexString(), "variation" to variation.toString())
 
     override fun calculate(phase: Double): FxOutput {
         // Pseudo-random but deterministic variations
@@ -218,6 +228,7 @@ data class StaticColour(
 ) : Effect {
     override val name = "Static Colour"
     override val outputType = FxOutputType.COLOUR
+    override val parameters get() = mapOf("color" to color.toHexString())
 
     override fun calculate(phase: Double): FxOutput {
         return FxOutput.Colour(color)

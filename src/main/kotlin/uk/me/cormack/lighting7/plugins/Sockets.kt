@@ -5,6 +5,8 @@ import io.ktor.serialization.kotlinx.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -184,6 +186,16 @@ data class FxChangedOutMessage(
     val effectId: Long? = null
 ) : OutMessage()
 
+// Beat sync message - sent on each beat for UI synchronization
+
+@Serializable
+@SerialName("beatSync")
+data class BeatSyncOutMessage(
+    val beatNumber: Long,
+    val bpm: Double,
+    val timestampMs: Long
+) : OutMessage()
+
 // Group-related messages
 
 @Serializable
@@ -358,6 +370,32 @@ fun Application.configureSockets(state: State) {
                 }
                 .launchIn(this)
 
+            // Periodic beat sync for UI drift correction (every 16 beats ≈ 8s at 120 BPM)
+            val beatSyncJob = state.show.fxEngine.masterClock.beatFlow
+                .filter { beat -> beat.beatNumber % 16 == 0L }
+                .onEach { beat ->
+                    sendSerialized<OutMessage>(BeatSyncOutMessage(
+                        beatNumber = beat.beatNumber,
+                        bpm = state.show.fxEngine.masterClock.bpm.value,
+                        timestampMs = beat.timestampMs
+                    ))
+                }
+                .launchIn(this)
+
+            // Immediate beat sync whenever BPM changes (tap tempo, setBpm, etc.)
+            val bpmChangeJob = state.show.fxEngine.masterClock.bpm
+                .drop(1) // Skip initial value emission
+                .onEach { newBpm ->
+                    val clock = state.show.fxEngine.masterClock
+                    val now = System.currentTimeMillis()
+                    sendSerialized<OutMessage>(BeatSyncOutMessage(
+                        beatNumber = -1, // Indicates this is a BPM-change sync, not a beat boundary
+                        bpm = newBpm,
+                        timestampMs = now
+                    ))
+                }
+                .launchIn(this)
+
             // Track current fixtures for listener re-registration on project change
             var currentFixtures = state.show.fixtures
 
@@ -478,6 +516,8 @@ fun Application.configureSockets(state: State) {
             } finally {
                 connections -= thisConnection
                 fxStateJob.cancel()
+                beatSyncJob.cancel()
+                bpmChangeJob.cancel()
                 projectChangeJob.cancel()
                 currentFixtures.unregisterListener(listener)
             }

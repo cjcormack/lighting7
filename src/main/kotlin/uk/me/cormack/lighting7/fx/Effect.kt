@@ -31,6 +31,14 @@ interface Effect {
     val outputType: FxOutputType
 
     /**
+     * Returns the current parameters of this effect as a serializable map.
+     * Keys are parameter names, values are string representations.
+     * This allows running effects to report their configuration for UI display/editing.
+     */
+    val parameters: Map<String, String>
+        get() = emptyMap()
+
+    /**
      * Calculate the output value for the given phase.
      *
      * @param phase Position in the effect cycle, from 0.0 (start) to 1.0 (end)
@@ -38,6 +46,9 @@ interface Effect {
      */
     fun calculate(phase: Double): FxOutput
 }
+
+/** Serialize a Color to a hex string (e.g., "#ff0000") */
+internal fun Color.toHexString(): String = "#%02x%02x%02x".format(red, green, blue)
 
 /**
  * Types of output an effect can produce.

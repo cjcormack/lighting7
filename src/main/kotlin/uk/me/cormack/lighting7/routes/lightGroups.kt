@@ -13,7 +13,6 @@ import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.effects.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.fx.group.clearFx
 import uk.me.cormack.lighting7.state.State
@@ -92,7 +91,8 @@ internal fun Route.routeApiRestGroups(state: State) {
                         distribution = instance.distributionStrategy.javaClass.simpleName,
                         isRunning = instance.isRunning,
                         phaseOffset = instance.phaseOffset,
-                        currentPhase = instance.lastPhase
+                        currentPhase = instance.lastPhase,
+                        parameters = instance.effect.parameters
                     )
                 }
                 call.respond(dtos)
@@ -187,7 +187,8 @@ data class GroupEffectDto(
     val distribution: String,
     val isRunning: Boolean,
     val phaseOffset: Double,
-    val currentPhase: Double
+    val currentPhase: Double,
+    val parameters: Map<String, String>
 )
 
 @Serializable
@@ -281,7 +282,7 @@ private fun applyGroupEffect(
     group: FixtureGroup<*>,
     request: AddGroupFxRequest
 ): Long {
-    val effect = createEffectFromType(request.effectType, request.parameters)
+    val effect = createEffectFromTypeAndParams(request.effectType, request.parameters)
     val timing = FxTiming(request.beatDivision)
     val blendMode = BlendMode.valueOf(request.blendMode)
     val distribution = DistributionStrategy.fromName(request.distribution)
@@ -329,152 +330,3 @@ private fun applyGroupEffect(
     return engine.addEffect(instance)
 }
 
-private fun createEffectFromType(effectType: String, parameters: Map<String, String>): Effect {
-    return when (effectType.lowercase()) {
-        // Dimmer effects
-        "sinewave", "sine" -> SineWave(
-            min = parameters["min"]?.toUByteOrNull() ?: 0u,
-            max = parameters["max"]?.toUByteOrNull() ?: 255u
-        )
-        "pulse" -> Pulse(
-            min = parameters["min"]?.toUByteOrNull() ?: 0u,
-            max = parameters["max"]?.toUByteOrNull() ?: 255u,
-            attackRatio = parameters["attackRatio"]?.toDoubleOrNull() ?: 0.1,
-            holdRatio = parameters["holdRatio"]?.toDoubleOrNull() ?: 0.3
-        )
-        "rampup" -> RampUp(
-            min = parameters["min"]?.toUByteOrNull() ?: 0u,
-            max = parameters["max"]?.toUByteOrNull() ?: 255u
-        )
-        "rampdown" -> RampDown(
-            min = parameters["min"]?.toUByteOrNull() ?: 0u,
-            max = parameters["max"]?.toUByteOrNull() ?: 255u
-        )
-        "triangle" -> Triangle(
-            min = parameters["min"]?.toUByteOrNull() ?: 0u,
-            max = parameters["max"]?.toUByteOrNull() ?: 255u
-        )
-        "squarewave", "square" -> SquareWave(
-            min = parameters["min"]?.toUByteOrNull() ?: 0u,
-            max = parameters["max"]?.toUByteOrNull() ?: 255u,
-            dutyCycle = parameters["dutyCycle"]?.toDoubleOrNull() ?: 0.5
-        )
-        "strobe" -> Strobe(
-            offValue = parameters["offValue"]?.toUByteOrNull() ?: 0u,
-            onValue = parameters["onValue"]?.toUByteOrNull() ?: 255u,
-            onRatio = parameters["onRatio"]?.toDoubleOrNull() ?: 0.1
-        )
-        "flicker" -> Flicker(
-            min = parameters["min"]?.toUByteOrNull() ?: 100u,
-            max = parameters["max"]?.toUByteOrNull() ?: 255u
-        )
-        "breathe" -> Breathe(
-            min = parameters["min"]?.toUByteOrNull() ?: 0u,
-            max = parameters["max"]?.toUByteOrNull() ?: 255u
-        )
-
-        // Colour effects
-        "rainbowcycle", "rainbow" -> RainbowCycle(
-            saturation = parameters["saturation"]?.toFloatOrNull() ?: 1.0f,
-            brightness = parameters["brightness"]?.toFloatOrNull() ?: 1.0f
-        )
-        "colourstrobe", "colorstrobe" -> ColourStrobe(
-            onColor = parameters["onColor"]?.toColorOrNull() ?: java.awt.Color.WHITE,
-            offColor = parameters["offColor"]?.toColorOrNull() ?: java.awt.Color.BLACK,
-            onRatio = parameters["onRatio"]?.toDoubleOrNull() ?: 0.1
-        )
-        "colourpulse", "colorpulse" -> ColourPulse(
-            colorA = parameters["colorA"]?.toColorOrNull() ?: java.awt.Color.BLACK,
-            colorB = parameters["colorB"]?.toColorOrNull() ?: java.awt.Color.WHITE
-        )
-        "colourfade", "colorfade" -> ColourFade(
-            fromColor = parameters["fromColor"]?.toColorOrNull() ?: java.awt.Color.RED,
-            toColor = parameters["toColor"]?.toColorOrNull() ?: java.awt.Color.BLUE,
-            pingPong = parameters["pingPong"]?.toBooleanStrictOrNull() ?: true
-        )
-        "colourflicker", "colorflicker" -> ColourFlicker(
-            baseColor = parameters["baseColor"]?.toColorOrNull() ?: java.awt.Color.ORANGE,
-            variation = parameters["variation"]?.toIntOrNull() ?: 50
-        )
-
-        // Position effects
-        "circle" -> Circle(
-            panCenter = parameters["panCenter"]?.toUByteOrNull() ?: 128u,
-            tiltCenter = parameters["tiltCenter"]?.toUByteOrNull() ?: 128u,
-            panRadius = parameters["panRadius"]?.toUByteOrNull() ?: 64u,
-            tiltRadius = parameters["tiltRadius"]?.toUByteOrNull() ?: 64u
-        )
-        "figure8" -> Figure8(
-            panCenter = parameters["panCenter"]?.toUByteOrNull() ?: 128u,
-            tiltCenter = parameters["tiltCenter"]?.toUByteOrNull() ?: 128u,
-            panRadius = parameters["panRadius"]?.toUByteOrNull() ?: 64u,
-            tiltRadius = parameters["tiltRadius"]?.toUByteOrNull() ?: 32u
-        )
-        "sweep" -> Sweep(
-            startPan = parameters["startPan"]?.toUByteOrNull() ?: 64u,
-            startTilt = parameters["startTilt"]?.toUByteOrNull() ?: 128u,
-            endPan = parameters["endPan"]?.toUByteOrNull() ?: 192u,
-            endTilt = parameters["endTilt"]?.toUByteOrNull() ?: 128u,
-            pingPong = parameters["pingPong"]?.toBooleanStrictOrNull() ?: true
-        )
-        "pansweep" -> PanSweep(
-            startPan = parameters["startPan"]?.toUByteOrNull() ?: 64u,
-            endPan = parameters["endPan"]?.toUByteOrNull() ?: 192u,
-            tilt = parameters["tilt"]?.toUByteOrNull() ?: 128u,
-            pingPong = parameters["pingPong"]?.toBooleanStrictOrNull() ?: true
-        )
-        "tiltsweep" -> TiltSweep(
-            startTilt = parameters["startTilt"]?.toUByteOrNull() ?: 64u,
-            endTilt = parameters["endTilt"]?.toUByteOrNull() ?: 192u,
-            pan = parameters["pan"]?.toUByteOrNull() ?: 128u,
-            pingPong = parameters["pingPong"]?.toBooleanStrictOrNull() ?: true
-        )
-        "randomposition" -> RandomPosition(
-            panCenter = parameters["panCenter"]?.toUByteOrNull() ?: 128u,
-            tiltCenter = parameters["tiltCenter"]?.toUByteOrNull() ?: 128u,
-            panRange = parameters["panRange"]?.toUByteOrNull() ?: 64u,
-            tiltRange = parameters["tiltRange"]?.toUByteOrNull() ?: 64u
-        )
-
-        else -> throw IllegalArgumentException("Unknown effect type: $effectType")
-    }
-}
-
-/**
- * Parse a color string to a Color object.
- * Supports hex colors (#RRGGBB or #RGB) and common named colors.
- */
-private fun String.toColorOrNull(): java.awt.Color? {
-    return try {
-        when {
-            startsWith("#") && length == 7 -> {
-                java.awt.Color(
-                    substring(1, 3).toInt(16),
-                    substring(3, 5).toInt(16),
-                    substring(5, 7).toInt(16)
-                )
-            }
-            startsWith("#") && length == 4 -> {
-                val r = substring(1, 2).toInt(16)
-                val g = substring(2, 3).toInt(16)
-                val b = substring(3, 4).toInt(16)
-                java.awt.Color(r * 17, g * 17, b * 17)
-            }
-            else -> when (lowercase()) {
-                "red" -> java.awt.Color.RED
-                "green" -> java.awt.Color.GREEN
-                "blue" -> java.awt.Color.BLUE
-                "white" -> java.awt.Color.WHITE
-                "black" -> java.awt.Color.BLACK
-                "yellow" -> java.awt.Color.YELLOW
-                "cyan" -> java.awt.Color.CYAN
-                "magenta" -> java.awt.Color.MAGENTA
-                "orange" -> java.awt.Color.ORANGE
-                "pink" -> java.awt.Color.PINK
-                else -> null
-            }
-        }
-    } catch (e: Exception) {
-        null
-    }
-}

@@ -24,6 +24,10 @@ data class Circle(
 ) : Effect {
     override val name = "Circle"
     override val outputType = FxOutputType.POSITION
+    override val parameters get() = mapOf(
+        "panCenter" to panCenter.toString(), "tiltCenter" to tiltCenter.toString(),
+        "panRadius" to panRadius.toString(), "tiltRadius" to tiltRadius.toString()
+    )
 
     override fun calculate(phase: Double): FxOutput {
         val angle = phase * 2 * PI
@@ -53,6 +57,10 @@ data class Figure8(
 ) : Effect {
     override val name = "Figure 8"
     override val outputType = FxOutputType.POSITION
+    override val parameters get() = mapOf(
+        "panCenter" to panCenter.toString(), "tiltCenter" to tiltCenter.toString(),
+        "panRadius" to panRadius.toString(), "tiltRadius" to tiltRadius.toString()
+    )
 
     override fun calculate(phase: Double): FxOutput {
         val angle = phase * 2 * PI
@@ -87,6 +95,11 @@ data class Sweep(
 ) : Effect {
     override val name = "Sweep"
     override val outputType = FxOutputType.POSITION
+    override val parameters get() = mapOf(
+        "startPan" to startPan.toString(), "startTilt" to startTilt.toString(),
+        "endPan" to endPan.toString(), "endTilt" to endTilt.toString(),
+        "curve" to curve.name, "pingPong" to pingPong.toString()
+    )
 
     override fun calculate(phase: Double): FxOutput {
         val effectivePhase = if (pingPong && phase > 0.5) {
@@ -128,6 +141,10 @@ data class PanSweep(
 ) : Effect {
     override val name = "Pan Sweep"
     override val outputType = FxOutputType.POSITION
+    override val parameters get() = mapOf(
+        "startPan" to startPan.toString(), "endPan" to endPan.toString(),
+        "tilt" to tilt.toString(), "curve" to curve.name, "pingPong" to pingPong.toString()
+    )
 
     override fun calculate(phase: Double): FxOutput {
         val effectivePhase = if (pingPong && phase > 0.5) {
@@ -166,6 +183,10 @@ data class TiltSweep(
 ) : Effect {
     override val name = "Tilt Sweep"
     override val outputType = FxOutputType.POSITION
+    override val parameters get() = mapOf(
+        "startTilt" to startTilt.toString(), "endTilt" to endTilt.toString(),
+        "pan" to pan.toString(), "curve" to curve.name, "pingPong" to pingPong.toString()
+    )
 
     override fun calculate(phase: Double): FxOutput {
         val effectivePhase = if (pingPong && phase > 0.5) {
@@ -202,6 +223,10 @@ data class RandomPosition(
 ) : Effect {
     override val name = "Random Position"
     override val outputType = FxOutputType.POSITION
+    override val parameters get() = mapOf(
+        "panCenter" to panCenter.toString(), "tiltCenter" to tiltCenter.toString(),
+        "panRange" to panRange.toString(), "tiltRange" to tiltRange.toString()
+    )
 
     override fun calculate(phase: Double): FxOutput {
         // Pseudo-random but deterministic based on phase
@@ -229,6 +254,7 @@ data class StaticPosition(
 ) : Effect {
     override val name = "Static Position"
     override val outputType = FxOutputType.POSITION
+    override val parameters get() = mapOf("pan" to pan.toString(), "tilt" to tilt.toString())
 
     override fun calculate(phase: Double): FxOutput {
         return FxOutput.Position(pan, tilt)

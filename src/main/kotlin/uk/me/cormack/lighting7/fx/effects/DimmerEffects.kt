@@ -21,6 +21,7 @@ data class SineWave(
 ) : Effect {
     override val name = "Sine Wave"
     override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString())
 
     override fun calculate(phase: Double): FxOutput {
         // Full sine cycle: 0 -> 1 -> 0 over phase 0..1
@@ -48,6 +49,7 @@ data class RampUp(
 ) : Effect {
     override val name = "Ramp Up"
     override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString(), "curve" to curve.name)
 
     override fun calculate(phase: Double): FxOutput {
         val easedPhase = curve.apply(phase)
@@ -73,6 +75,7 @@ data class RampDown(
 ) : Effect {
     override val name = "Ramp Down"
     override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString(), "curve" to curve.name)
 
     override fun calculate(phase: Double): FxOutput {
         val easedPhase = curve.apply(1.0 - phase)
@@ -98,6 +101,7 @@ data class Triangle(
 ) : Effect {
     override val name = "Triangle"
     override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString(), "curve" to curve.name)
 
     override fun calculate(phase: Double): FxOutput {
         val trianglePhase = if (phase < 0.5) {
@@ -132,6 +136,11 @@ data class Pulse(
 ) : Effect {
     override val name = "Pulse"
     override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf(
+        "min" to min.toString(), "max" to max.toString(),
+        "attackRatio" to attackRatio.toString(), "holdRatio" to holdRatio.toString(),
+        "curve" to curve.name
+    )
 
     private val releaseRatio = 1.0 - attackRatio - holdRatio
 
@@ -170,6 +179,7 @@ data class SquareWave(
 ) : Effect {
     override val name = "Square Wave"
     override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString(), "dutyCycle" to dutyCycle.toString())
 
     override fun calculate(phase: Double): FxOutput {
         val value = if (phase < dutyCycle) max else min
@@ -193,6 +203,7 @@ data class Strobe(
 ) : Effect {
     override val name = "Strobe"
     override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf("offValue" to offValue.toString(), "onValue" to onValue.toString(), "onRatio" to onRatio.toString())
 
     override fun calculate(phase: Double): FxOutput {
         val value = if (phase < onRatio) onValue else offValue
@@ -214,6 +225,7 @@ data class Flicker(
 ) : Effect {
     override val name = "Flicker"
     override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString())
 
     override fun calculate(phase: Double): FxOutput {
         // Use phase to seed pseudo-random but deterministic values
@@ -241,6 +253,7 @@ data class Breathe(
 ) : Effect {
     override val name = "Breathe"
     override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString())
 
     override fun calculate(phase: Double): FxOutput {
         // sin² curve for smooth breathing effect

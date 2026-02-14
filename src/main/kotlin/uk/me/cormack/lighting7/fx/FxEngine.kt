@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fx
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -160,6 +161,90 @@ class FxEngine(
     }
 
     /**
+     * Get all active effects directly targeting a specific fixture.
+     *
+     * @param fixtureKey The fixture key
+     * @return List of effect instances directly targeting this fixture
+     */
+    fun getEffectsForFixture(fixtureKey: String): List<FxInstance> {
+        return activeEffects.values.filter {
+            !it.isGroupEffect && it.target.targetKey == fixtureKey
+        }
+    }
+
+    /**
+     * Get all active effects that indirectly affect a fixture through group membership.
+     *
+     * @param fixtureKey The fixture key
+     * @return List of group effect instances whose groups contain this fixture
+     */
+    fun getIndirectEffectsForFixture(fixtureKey: String): List<FxInstance> {
+        val groupNames = fixtures.groupsForFixture(fixtureKey).toSet()
+        if (groupNames.isEmpty()) return emptyList()
+
+        return activeEffects.values.filter {
+            it.isGroupEffect && it.target.targetKey in groupNames
+        }
+    }
+
+    /**
+     * Update a running effect in place.
+     *
+     * Mutable fields (phaseOffset, distributionStrategy) are updated directly.
+     * Immutable fields (effect, timing, blendMode) trigger an atomic swap -
+     * a new FxInstance replaces the old one, preserving id, start time, and running state.
+     *
+     * @param effectId The effect ID to update
+     * @param newEffect New effect (or null to keep existing)
+     * @param newTiming New timing (or null to keep existing)
+     * @param newBlendMode New blend mode (or null to keep existing)
+     * @param newPhaseOffset New phase offset (or null to keep existing)
+     * @param newDistributionStrategy New distribution strategy (or null to keep existing)
+     * @return The updated effect instance, or null if not found
+     */
+    fun updateEffect(
+        effectId: Long,
+        newEffect: Effect? = null,
+        newTiming: FxTiming? = null,
+        newBlendMode: BlendMode? = null,
+        newPhaseOffset: Double? = null,
+        newDistributionStrategy: DistributionStrategy? = null
+    ): FxInstance? {
+        val existing = activeEffects[effectId] ?: return null
+
+        // Determine if we need an atomic swap (immutable fields changed)
+        val needsSwap = newEffect != null || newTiming != null || newBlendMode != null
+
+        val updated = if (needsSwap) {
+            FxInstance(
+                effect = newEffect ?: existing.effect,
+                target = existing.target,
+                timing = newTiming ?: existing.timing,
+                blendMode = newBlendMode ?: existing.blendMode
+            ).apply {
+                id = existing.id
+                startedAtMs = existing.startedAtMs
+                startedAtBeat = existing.startedAtBeat
+                isRunning = existing.isRunning
+                lastPhase = existing.lastPhase
+                phaseOffset = newPhaseOffset ?: existing.phaseOffset
+                distributionStrategy = newDistributionStrategy ?: existing.distributionStrategy
+            }
+        } else {
+            // Only mutable fields changed - update in place
+            newPhaseOffset?.let { existing.phaseOffset = it }
+            newDistributionStrategy?.let { existing.distributionStrategy = it }
+            existing
+        }
+
+        if (needsSwap) {
+            activeEffects[effectId] = updated
+        }
+        emitStateUpdate()
+        return updated
+    }
+
+    /**
      * Pause an effect by ID.
      */
     fun pauseEffect(effectId: Long) {
@@ -276,10 +361,11 @@ class FxEngine(
             return
         }
 
-        val groupSize = group.size
+        val allMembers = group.allMembers
+        val groupSize = allMembers.size
 
-        // Apply to each member with distributed phase
-        for (member in group) {
+        // Apply to each member with distributed phase (includes subgroup members)
+        for (member in allMembers) {
             val memberPhase = effect.calculatePhaseForMember(
                 tick, masterClock, member, groupSize
             )

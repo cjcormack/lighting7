@@ -136,8 +136,8 @@ fun <T> FixtureGroup<T>.applyPositionFx(
 fun FixtureGroup<*>.clearFx(engine: FxEngine): Int {
     // First remove group-level effects
     val groupEffectsRemoved = engine.removeEffectsForGroup(name)
-    // Then remove any per-fixture effects
-    val fixtureEffectsRemoved = sumOf { engine.removeEffectsForFixture(it.key) }
+    // Then remove any per-fixture effects (including subgroup members)
+    val fixtureEffectsRemoved = allMembers.sumOf { engine.removeEffectsForFixture(it.key) }
     return groupEffectsRemoved + fixtureEffectsRemoved
 }
 

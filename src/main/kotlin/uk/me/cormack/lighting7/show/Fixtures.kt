@@ -144,7 +144,7 @@ class Fixtures {
      */
     fun groupsForFixture(fixtureKey: String): List<String> = registerLock.read {
         groupRegister.values
-            .filter { group -> group.any { member -> member.key == fixtureKey } }
+            .filter { group -> group.allMembers.any { member -> member.key == fixtureKey } }
             .map { it.name }
     }
 
