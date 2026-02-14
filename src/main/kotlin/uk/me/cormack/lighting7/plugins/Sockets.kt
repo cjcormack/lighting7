@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.state.State
 import java.util.*
 import kotlin.time.Duration.Companion.seconds
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.LinkedHashSet
 
@@ -160,6 +161,10 @@ data class ResumeFxInMessage(val effectId: Long) : InMessage()
 @Serializable
 @SerialName("clearFx")
 data object ClearFxInMessage : InMessage()
+
+@Serializable
+@SerialName("requestBeatSync")
+data object RequestBeatSyncInMessage : InMessage()
 
 @Serializable
 data class FxEffectState(
@@ -370,9 +375,13 @@ fun Application.configureSockets(state: State) {
                 }
                 .launchIn(this)
 
-            // Periodic beat sync for UI drift correction (every 16 beats ≈ 8s at 120 BPM)
+            // Flag to send a beatSync on the next beat boundary (set on requestBeatSync)
+            val sendNextBeat = AtomicBoolean(true)
+
+            // Periodic beat sync for UI drift correction (every 16 beats ≈ 8s at 120 BPM),
+            // plus immediate sync on next beat when requested
             val beatSyncJob = state.show.fxEngine.masterClock.beatFlow
-                .filter { beat -> beat.beatNumber % 16 == 0L }
+                .filter { beat -> beat.beatNumber % 16 == 0L || sendNextBeat.get() }
                 .onEach { beat ->
                     sendSerialized<OutMessage>(BeatSyncOutMessage(
                         beatNumber = beat.beatNumber,
@@ -476,6 +485,9 @@ fun Application.configureSockets(state: State) {
                         is AddFxInMessage -> {
                             // Note: For adding effects via WebSocket, use REST API instead
                             // This is a simplified handler - complex effect creation should use REST
+                        }
+                        is RequestBeatSyncInMessage -> {
+                            sendNextBeat.set(true)
                         }
 
                         // Group-related message handlers
