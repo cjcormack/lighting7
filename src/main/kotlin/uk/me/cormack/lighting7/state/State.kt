@@ -6,6 +6,7 @@ import io.ktor.server.config.*
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
+import uk.me.cormack.lighting7.models.DaoFxPresets
 import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.DaoScenes
 import uk.me.cormack.lighting7.models.DaoScripts
@@ -53,7 +54,7 @@ class State(val config: ApplicationConfig) {
             // Note: createMissingTablesAndColumns is deprecated in favor of migration tools,
             // but is acceptable for this development/personal project setup
             @Suppress("DEPRECATION")
-            SchemaUtils.createMissingTablesAndColumns(DaoProjects, DaoScripts, DaoScenes)
+            SchemaUtils.createMissingTablesAndColumns(DaoProjects, DaoScripts, DaoScenes, DaoFxPresets)
         }
 
         return database

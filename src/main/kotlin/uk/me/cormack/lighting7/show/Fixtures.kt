@@ -17,6 +17,7 @@ interface FixturesChangeListener {
     fun fixturesChanged()
     fun sceneListChanged()
     fun sceneChanged(id: Int)
+    fun presetListChanged()
     fun trackChanged(isPlaying: Boolean, artist: String, name: String)
 }
 
@@ -255,6 +256,12 @@ class Fixtures {
     fun sceneChanged(id: Int) {
         changeListeners.forEach {
             it.sceneChanged(id)
+        }
+    }
+
+    fun presetListChanged() {
+        changeListeners.forEach {
+            it.presetListChanged()
         }
     }
 

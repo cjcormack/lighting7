@@ -91,6 +91,10 @@ data class ScenesChangedOutMessage(
 ): OutMessage()
 
 @Serializable
+@SerialName("presetListChanged")
+data object PresetListChangedOutMessage: OutMessage()
+
+@Serializable
 @SerialName("trackChanged")
 data class TrackChangedOutMessage(
     val isPlaying: Boolean,
@@ -338,6 +342,12 @@ fun Application.configureSockets(state: State) {
                         }
 
                         sendSerialized<OutMessage>(ScenesChangedOutMessage(sceneDetails))
+                    }
+                }
+
+                override fun presetListChanged() {
+                    launch {
+                        sendSerialized<OutMessage>(PresetListChangedOutMessage)
                     }
                 }
 

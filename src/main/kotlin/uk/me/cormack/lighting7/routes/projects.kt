@@ -201,9 +201,10 @@ internal fun Route.routeApiRestProjects(state: State) {
             }
         }
 
-        // Script and Scene endpoints are defined in separate files
+        // Script, Scene, and Preset endpoints are defined in separate files
         routeApiRestProjectScripts(state)
         routeApiRestProjectScenes(state)
+        routeApiRestProjectFxPresets(state)
 
         // POST /current/create-initial-scene - Create initial scene template (script + scene)
         post<CreateInitialSceneResource> {
