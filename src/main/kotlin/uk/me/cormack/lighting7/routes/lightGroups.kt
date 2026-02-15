@@ -80,8 +80,10 @@ internal fun Route.routeApiRestGroups(state: State) {
                 // Validate group exists
                 state.show.fixtures.untypedGroup(resource.name)
 
-                val effects = state.show.fxEngine.getEffectsForGroup(resource.name)
+                val engine = state.show.fxEngine
+                val effects = engine.getEffectsForGroup(resource.name)
                 val dtos = effects.map { instance ->
+                    val expanded = engine.isMultiElementExpanded(instance)
                     GroupEffectDto(
                         id = instance.id,
                         effectType = instance.effect.name,
@@ -89,6 +91,7 @@ internal fun Route.routeApiRestGroups(state: State) {
                         beatDivision = instance.timing.beatDivision,
                         blendMode = instance.blendMode.name,
                         distribution = instance.distributionStrategy.javaClass.simpleName,
+                        elementMode = if (expanded) instance.elementMode.name else null,
                         isRunning = instance.isRunning,
                         phaseOffset = instance.phaseOffset,
                         currentPhase = instance.lastPhase,
@@ -169,7 +172,8 @@ data class AddGroupFxRequest(
     val blendMode: String = "OVERRIDE",
     val distribution: String = "LINEAR",
     val phaseOffset: Double = 0.0,
-    val parameters: Map<String, String> = emptyMap()
+    val parameters: Map<String, String> = emptyMap(),
+    val elementMode: String = "PER_FIXTURE"  // PER_FIXTURE or FLAT
 )
 
 @Serializable
@@ -185,6 +189,7 @@ data class GroupEffectDto(
     val beatDivision: Double,
     val blendMode: String,
     val distribution: String,
+    val elementMode: String? = null,
     val isRunning: Boolean,
     val phaseOffset: Double,
     val currentPhase: Double,
@@ -277,6 +282,44 @@ private fun FixtureGroup<*>.detectCapabilities(): List<String> {
     return capabilities
 }
 
+/**
+ * Check whether a group supports a given property, either directly on the
+ * fixtures or via multi-element fixture elements.
+ */
+private fun groupSupportsProperty(group: FixtureGroup<*>, propertyName: String): Boolean {
+    val allFixtures = group.fixtures
+    if (allFixtures.isEmpty()) return false
+
+    val normalised = propertyName.lowercase()
+
+    // Check direct support first
+    val directSupport = when (normalised) {
+        "dimmer" -> allFixtures.all { it is WithDimmer }
+        "colour", "color", "rgbcolour" -> allFixtures.all { it is WithColour }
+        "position" -> allFixtures.all { it is WithPosition }
+        "uv" -> allFixtures.all { it is WithUv }
+        else -> false
+    }
+    if (directSupport) return true
+
+    // Check multi-element fixtures — all must be MultiElementFixture with
+    // elements that have the property
+    val multiElementFixtures = allFixtures.filterIsInstance<MultiElementFixture<*>>()
+    if (multiElementFixtures.size != allFixtures.size) return false
+    if (multiElementFixtures.isEmpty()) return false
+
+    return multiElementFixtures.all { mef ->
+        val firstElement = mef.elements.firstOrNull() ?: return@all false
+        when (normalised) {
+            "dimmer" -> firstElement is WithDimmer
+            "colour", "color", "rgbcolour" -> firstElement is WithColour
+            "position" -> firstElement is WithPosition
+            "uv" -> firstElement is WithUv
+            else -> false
+        }
+    }
+}
+
 private fun applyGroupEffect(
     state: State,
     group: FixtureGroup<*>,
@@ -286,38 +329,23 @@ private fun applyGroupEffect(
     val timing = FxTiming(request.beatDivision)
     val blendMode = BlendMode.valueOf(request.blendMode)
     val distribution = DistributionStrategy.fromName(request.distribution)
+    val elementMode = ElementMode.valueOf(request.elementMode)
     val engine = state.show.fxEngine
+
+    // Validate property support (direct or via elements)
+    if (!groupSupportsProperty(group, request.propertyName)) {
+        throw IllegalStateException(
+            "Not all fixtures in group support ${request.propertyName} " +
+                "(directly or via elements)"
+        )
+    }
 
     // Create appropriate group target based on property type
     val target = when (request.propertyName.lowercase()) {
-        "dimmer" -> {
-            if (!group.fixtures.all { it is WithDimmer }) {
-                throw IllegalStateException("Not all fixtures in group support dimmer")
-            }
-            SliderTarget.forGroup(group.name, "dimmer")
-        }
-
-        "colour", "color" -> {
-            if (!group.fixtures.all { it is WithColour }) {
-                throw IllegalStateException("Not all fixtures in group support colour")
-            }
-            ColourTarget.forGroup(group.name)
-        }
-
-        "position" -> {
-            if (!group.fixtures.all { it is WithPosition }) {
-                throw IllegalStateException("Not all fixtures in group support position")
-            }
-            PositionTarget.forGroup(group.name)
-        }
-
-        "uv" -> {
-            if (!group.fixtures.all { it is WithUv }) {
-                throw IllegalStateException("Not all fixtures in group support UV")
-            }
-            SliderTarget.forGroup(group.name, "uv")
-        }
-
+        "dimmer" -> SliderTarget.forGroup(group.name, "dimmer")
+        "colour", "color", "rgbcolour" -> ColourTarget.forGroup(group.name)
+        "position" -> PositionTarget.forGroup(group.name)
+        "uv" -> SliderTarget.forGroup(group.name, "uv")
         else -> throw IllegalArgumentException("Unknown property name: ${request.propertyName}")
     }
 
@@ -325,6 +353,7 @@ private fun applyGroupEffect(
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         phaseOffset = request.phaseOffset
         distributionStrategy = distribution
+        this.elementMode = elementMode
     }
 
     return engine.addEffect(instance)

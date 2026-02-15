@@ -257,14 +257,34 @@ When an `FxInstance` targets a group, the `FxEngine` expands it at processing ti
 │   FxInstance (group target)                                      │
 │        │                                                         │
 │        ▼                                                         │
-│   For each group member:                                         │
-│     1. Get member's index and normalizedPosition                 │
-│     2. Calculate phase offset via DistributionStrategy           │
-│     3. effect.calculate(phase + offset) → output                 │
-│     4. Apply to member fixture                                   │
+│   Members have target property directly?                         │
+│     ├─ YES → Apply to each member with distribution offsets      │
+│     └─ NO  → Are members MultiElementFixture?                    │
+│               └─ YES → Do elements have the property?            │
+│                         └─ YES → Check elementMode:              │
+│                              ├─ PER_FIXTURE: For each parent,    │
+│                              │   distribute across its elements  │
+│                              │   (all fixtures look the same)    │
+│                              └─ FLAT: Collect all elements into  │
+│                                  one list, distribute across all │
+│                                  (chase sweeps across everything)│
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### Element Mode for Multi-Element Groups
+
+When a group effect targets a property only available on elements (not the parent
+fixtures), `ElementMode` determines the distribution dimension:
+
+| Mode | Description | Example (2×4-head fixtures) |
+|------|-------------|----------------------------|
+| `PER_FIXTURE` | Each fixture gets the effect independently. Distribution runs within each fixture's elements. | All fixtures look the same — head #0 on fixture A matches head #0 on fixture B |
+| `FLAT` | All elements across all fixtures form one flat list. Distribution runs across the entire set. | 8 elements total (indices 0-7), chase sweeps across all heads sequentially |
+
+`ElementMode` is stored on `FxInstance` and defaults to `PER_FIXTURE`. It is only
+relevant when group members are multi-element fixtures and the target property is
+at the element level. It has no effect when members directly have the target property.
 
 ### Distribution Strategies
 
@@ -396,11 +416,12 @@ The `distributionStrategy` field is optional. When provided, it sets the distrib
   "beatDivision": 2.0,
   "blendMode": "ADDITIVE",
   "phaseOffset": 0.25,
-  "distributionStrategy": "CENTER_OUT"
+  "distributionStrategy": "CENTER_OUT",
+  "elementMode": "FLAT"
 }
 ```
 
-All fields are optional. Immutable fields (`effectType`, `parameters`, `beatDivision`, `blendMode`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and running state. Mutable fields (`phaseOffset`, `distributionStrategy`) are updated in place.
+All fields are optional. Immutable fields (`effectType`, `parameters`, `beatDivision`, `blendMode`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and running state. Mutable fields (`phaseOffset`, `distributionStrategy`, `elementMode`) are updated in place.
 
 ## WebSocket Messages
 
@@ -443,7 +464,7 @@ The `beatSync` message enables the frontend to synchronize a local beat visualiz
 | `fx/MasterClock.kt` | Global tempo management |
 | `fx/BeatDivision.kt` | Timing constants |
 | `fx/Effect.kt` | Effect interface and FxOutput types |
-| `fx/FxInstance.kt` | Running effect state, distributionStrategy |
+| `fx/FxInstance.kt` | Running effect state, distributionStrategy, ElementMode |
 | `fx/FxTarget.kt` | Fixture/group property targeting, FxTargetRef |
 | `fx/FxTargetable.kt` | Common interface for Fixture and FixtureGroup |
 | `fx/FxEngine.kt` | Effect processing loop, group expansion |

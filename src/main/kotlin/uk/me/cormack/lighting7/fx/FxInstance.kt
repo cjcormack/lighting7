@@ -4,6 +4,35 @@ import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 
 /**
+ * Controls how group effects interact with multi-element fixture members.
+ *
+ * When a group contains multi-element fixtures (e.g. quad moving head bars)
+ * and the effect targets a property only the elements have (e.g. colour),
+ * this mode determines the distribution dimension.
+ *
+ * Has no effect when group members directly have the target property.
+ */
+enum class ElementMode {
+    /**
+     * Each fixture gets the effect applied independently to its own elements.
+     *
+     * Distribution runs within each fixture's heads separately.
+     * Head #0 on fixture A = head #0 on fixture B (all fixtures look the same).
+     * Group size for distribution = element count per fixture.
+     */
+    PER_FIXTURE,
+
+    /**
+     * All elements across all fixtures form one flat list.
+     *
+     * Distribution runs across the entire flat list of elements.
+     * 2×4-head fixtures = 8 elements total, distributed as indices 0-7.
+     * Creates chase effects that sweep across all heads sequentially.
+     */
+    FLAT
+}
+
+/**
  * Configuration for effect timing relative to the master clock.
  *
  * @param beatDivision Length of one effect cycle in beats (see [BeatDivision])
@@ -76,6 +105,19 @@ class FxInstance(
      * Ignored for fixture targets.
      */
     var distributionStrategy: DistributionStrategy = DistributionStrategy.LINEAR
+
+    /**
+     * Element mode for group effects on multi-element fixtures.
+     *
+     * Determines whether distribution runs per-fixture (each fixture looks
+     * the same) or across all elements as a flat list (chase sweeps across
+     * all heads). Only relevant when group members are multi-element fixtures
+     * and the target property is at the element level.
+     *
+     * Ignored for fixture targets and groups where members directly have
+     * the target property.
+     */
+    var elementMode: ElementMode = ElementMode.PER_FIXTURE
 
     /**
      * Whether this effect targets a group (vs individual fixture).

@@ -64,6 +64,7 @@ class FxEngine(
         val propertyName: String,
         val isGroupTarget: Boolean,
         val distributionStrategy: String?,
+        val elementMode: String?,
         val isRunning: Boolean,
         val currentPhase: Double,
         val blendMode: BlendMode
@@ -192,7 +193,7 @@ class FxEngine(
     /**
      * Update a running effect in place.
      *
-     * Mutable fields (phaseOffset, distributionStrategy) are updated directly.
+     * Mutable fields (phaseOffset, distributionStrategy, elementMode) are updated directly.
      * Immutable fields (effect, timing, blendMode) trigger an atomic swap -
      * a new FxInstance replaces the old one, preserving id, start time, and running state.
      *
@@ -202,6 +203,7 @@ class FxEngine(
      * @param newBlendMode New blend mode (or null to keep existing)
      * @param newPhaseOffset New phase offset (or null to keep existing)
      * @param newDistributionStrategy New distribution strategy (or null to keep existing)
+     * @param newElementMode New element mode (or null to keep existing)
      * @return The updated effect instance, or null if not found
      */
     fun updateEffect(
@@ -210,7 +212,8 @@ class FxEngine(
         newTiming: FxTiming? = null,
         newBlendMode: BlendMode? = null,
         newPhaseOffset: Double? = null,
-        newDistributionStrategy: DistributionStrategy? = null
+        newDistributionStrategy: DistributionStrategy? = null,
+        newElementMode: ElementMode? = null
     ): FxInstance? {
         val existing = activeEffects[effectId] ?: return null
 
@@ -231,11 +234,13 @@ class FxEngine(
                 lastPhase = existing.lastPhase
                 phaseOffset = newPhaseOffset ?: existing.phaseOffset
                 distributionStrategy = newDistributionStrategy ?: existing.distributionStrategy
+                elementMode = newElementMode ?: existing.elementMode
             }
         } else {
             // Only mutable fields changed - update in place
             newPhaseOffset?.let { existing.phaseOffset = it }
             newDistributionStrategy?.let { existing.distributionStrategy = it }
+            newElementMode?.let { existing.elementMode = it }
             existing
         }
 
@@ -397,6 +402,16 @@ class FxEngine(
 
     /**
      * Process an effect targeting a group - expands to all members with distribution.
+     *
+     * If members have the target property directly, applies the effect to each member
+     * using the distribution strategy (existing behaviour).
+     *
+     * If members are [MultiElementFixture]s whose elements have the target property,
+     * the [ElementMode] on the effect instance determines the expansion strategy:
+     * - [ElementMode.PER_FIXTURE]: Each fixture gets the effect independently across
+     *   its own elements. All fixtures look the same.
+     * - [ElementMode.FLAT]: All elements across all fixtures form one flat list.
+     *   Distribution runs across the entire set.
      */
     private fun processGroupEffect(
         tick: MasterClock.ClockTick,
@@ -412,27 +427,134 @@ class FxEngine(
         }
 
         val allMembers = group.allMembers
-        val groupSize = allMembers.size
+        if (allMembers.isEmpty()) return
 
-        // Apply to each member with distributed phase (includes subgroup members)
-        for (member in allMembers) {
-            val memberPhase = effect.calculatePhaseForMember(
-                tick, masterClock, member, groupSize
-            )
+        // Check if members have the target property directly
+        val firstMemberFixture = try {
+            fixtures.untypedFixture(allMembers.first().key)
+        } catch (_: Exception) { return }
 
-            val output = effect.effect.calculate(memberPhase)
-            effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
+        if (effect.target.fixtureHasProperty(firstMemberFixture)) {
+            // Direct application to members (existing behaviour)
+            val groupSize = allMembers.size
+            for (member in allMembers) {
+                val memberPhase = effect.calculatePhaseForMember(
+                    tick, masterClock, member, groupSize
+                )
+                val output = effect.effect.calculate(memberPhase)
+                effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
+            }
+            return
+        }
+
+        // Members don't have the property — check for multi-element expansion
+        if (firstMemberFixture !is MultiElementFixture<*>) return
+        val firstElements = firstMemberFixture.elements
+        if (firstElements.isEmpty() || !effect.target.fixtureHasProperty(firstElements.first())) return
+
+        when (effect.elementMode) {
+            ElementMode.PER_FIXTURE -> {
+                // Each fixture gets the effect independently across its own elements
+                for (member in allMembers) {
+                    val parentFixture = try {
+                        fixtures.untypedFixture(member.key)
+                    } catch (_: Exception) { continue }
+
+                    if (parentFixture is MultiElementFixture<*>) {
+                        processMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements)
+                    }
+                }
+            }
+            ElementMode.FLAT -> {
+                // Collect all elements across all fixtures into one flat list
+                processGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers)
+            }
         }
     }
 
     /**
-     * Check if a fixture effect targets a multi-element fixture and expands to elements.
+     * Process a group effect in FLAT element mode — all elements across all
+     * group members form a single flat list for distribution.
+     *
+     * For example, 2 fixtures with 4 heads each = 8 elements total,
+     * distributed as indices 0-7.
+     */
+    private fun processGroupFlatElementEffect(
+        tick: MasterClock.ClockTick,
+        effect: FxInstance,
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        allMembers: List<uk.me.cormack.lighting7.fixture.group.GroupMember<*>>
+    ) {
+        // Collect all elements in order
+        data class FlatElement(
+            val elementKey: String,
+            val globalIndex: Int
+        )
+
+        val flatElements = mutableListOf<FlatElement>()
+        for (member in allMembers) {
+            val parentFixture = try {
+                fixtures.untypedFixture(member.key)
+            } catch (_: Exception) { continue }
+
+            if (parentFixture is MultiElementFixture<*>) {
+                for (element in parentFixture.elements) {
+                    flatElements.add(FlatElement(element.elementKey, flatElements.size))
+                }
+            }
+        }
+
+        if (flatElements.isEmpty()) return
+        val totalCount = flatElements.size
+
+        for (flatElement in flatElements) {
+            val memberInfo = object : DistributionMemberInfo {
+                override val index: Int = flatElement.globalIndex
+                override val normalizedPosition: Double =
+                    if (totalCount > 1) flatElement.globalIndex.toDouble() / (totalCount - 1) else 0.5
+            }
+
+            val memberPhase = effect.calculatePhaseForMember(
+                tick, masterClock, memberInfo, totalCount
+            )
+
+            val output = effect.effect.calculate(memberPhase)
+            effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
+        }
+    }
+
+    /**
+     * Check if an effect expands to multi-element fixture elements.
+     *
+     * Returns true for:
+     * - Fixture effects where the parent doesn't have the property but its elements do
+     * - Group effects where members are multi-element fixtures and the target
+     *   property is at the element level
      *
      * @param instance The effect instance to check
-     * @return true if this fixture effect will be expanded to elements
+     * @return true if this effect will be expanded to elements
      */
     fun isMultiElementExpanded(instance: FxInstance): Boolean {
-        if (instance.isGroupEffect) return false
+        if (instance.isGroupEffect) {
+            // Check if group members need element expansion
+            val group = try {
+                fixtures.untypedGroup(instance.target.targetKey)
+            } catch (_: Exception) {
+                return false
+            }
+            val firstMember = group.allMembers.firstOrNull() ?: return false
+            val fixture = try {
+                fixtures.untypedFixture(firstMember.key)
+            } catch (_: Exception) {
+                return false
+            }
+            if (instance.target.fixtureHasProperty(fixture)) return false
+            if (fixture !is MultiElementFixture<*>) return false
+            val elements = fixture.elements
+            return elements.isNotEmpty() && instance.target.fixtureHasProperty(elements.first())
+        }
+
+        // Fixture effect
         val fixture = try {
             fixtures.untypedFixture(instance.target.targetKey)
         } catch (_: Exception) {
@@ -446,7 +568,8 @@ class FxEngine(
 
     private fun emitStateUpdate() {
         val states = activeEffects.mapValues { (_, instance) ->
-            val showDistribution = instance.isGroupEffect || isMultiElementExpanded(instance)
+            val expanded = isMultiElementExpanded(instance)
+            val showDistribution = instance.isGroupEffect || expanded
             FxInstanceState(
                 id = instance.id,
                 effectType = instance.effect.name,
@@ -455,6 +578,8 @@ class FxEngine(
                 isGroupTarget = instance.isGroupEffect,
                 distributionStrategy = if (showDistribution)
                     instance.distributionStrategy.javaClass.simpleName else null,
+                elementMode = if (instance.isGroupEffect && expanded)
+                    instance.elementMode.name else null,
                 isRunning = instance.isRunning,
                 currentPhase = instance.lastPhase,
                 blendMode = instance.blendMode

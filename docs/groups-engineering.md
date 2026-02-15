@@ -326,6 +326,53 @@ POST /api/rest/fx/add
 
 See the [FX System docs](fx-engineering.md#multi-element-fixture-expansion) for full details.
 
+### Group FX Element Mode
+
+When a group contains multi-element fixtures and the effect targets an element-level property, the `elementMode` field controls how distribution is applied:
+
+| Mode | Behaviour | Example (2 quad movers, 4 heads each) |
+|------|-----------|---------------------------------------|
+| `PER_FIXTURE` | Each fixture gets the effect independently across its own elements. All fixtures look the same. | Head #0 on both fixtures = same colour. Distribution across 4 heads per fixture. |
+| `FLAT` | All elements across all fixtures form one flat list. Distribution runs across the entire set. | 8 elements total (0-7). A LINEAR chase sweeps across all 8 heads sequentially. |
+
+`elementMode` defaults to `PER_FIXTURE` and is only relevant when group members are multi-element fixtures whose elements have the target property. When members directly have the property, `elementMode` is ignored.
+
+**Script example:**
+```kotlin
+val group = fixtures.group<QuadMoverBarFixture>("all-movers")
+
+// PER_FIXTURE: each fixture's heads run the same rainbow
+fxEngine.addEffect(FxInstance(
+    effect = RainbowCycle(),
+    target = ColourTarget.forGroup("all-movers"),
+    timing = FxTiming(BeatDivision.ONE_BAR),
+).apply {
+    distributionStrategy = DistributionStrategy.LINEAR
+    elementMode = ElementMode.PER_FIXTURE
+})
+
+// FLAT: rainbow sweeps across all 8 heads sequentially
+fxEngine.addEffect(FxInstance(
+    effect = RainbowCycle(),
+    target = ColourTarget.forGroup("all-movers"),
+    timing = FxTiming(BeatDivision.ONE_BAR),
+).apply {
+    distributionStrategy = DistributionStrategy.LINEAR
+    elementMode = ElementMode.FLAT
+})
+```
+
+**REST API:**
+```json
+POST /api/rest/groups/all-movers/fx
+{
+  "effectType": "RainbowCycle",
+  "propertyName": "colour",
+  "distribution": "LINEAR",
+  "elementMode": "FLAT"
+}
+```
+
 ### Adding Elements to Groups
 
 ```kotlin
@@ -422,10 +469,13 @@ GET /api/rest/groups/front-wash/fx
     "beatDivision": 1.0,
     "blendMode": "OVERRIDE",
     "distribution": "LINEAR",
+    "elementMode": null,
     "isRunning": true
   }
 ]
 ```
+
+The `elementMode` field is `null` when the effect targets properties that members have directly. It shows `"PER_FIXTURE"` or `"FLAT"` when the effect expands to multi-element fixture elements.
 
 **Add Group Effect:**
 ```json
@@ -436,6 +486,7 @@ POST /api/rest/groups/front-wash/fx
   "beatDivision": 1.0,
   "blendMode": "OVERRIDE",
   "distribution": "LINEAR",
+  "elementMode": "PER_FIXTURE",
   "parameters": {
     "min": "0",
     "max": "255"
@@ -447,6 +498,8 @@ Response:
   "effectId": 1001
 }
 ```
+
+The `elementMode` field defaults to `"PER_FIXTURE"` and controls how effects distribute across multi-element fixture elements. See [Group FX Element Mode](#group-fx-element-mode).
 
 Note: The response returns a single `effectId` because one `FxInstance` is created that targets the entire group. The engine expands this to group members at processing time.
 

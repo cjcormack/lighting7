@@ -121,6 +121,7 @@ internal fun Route.routeApiRestFx(state: State) {
                 val newTiming = request.beatDivision?.let { FxTiming(it, existing.timing.startOnBeat) }
                 val newBlendMode = request.blendMode?.let { BlendMode.valueOf(it) }
                 val newDistribution = request.distributionStrategy?.let { DistributionStrategy.fromName(it) }
+                val newElementMode = request.elementMode?.let { ElementMode.valueOf(it) }
 
                 val updated = engine.updateEffect(
                     effectId = resource.id,
@@ -128,7 +129,8 @@ internal fun Route.routeApiRestFx(state: State) {
                     newTiming = newTiming,
                     newBlendMode = newBlendMode,
                     newPhaseOffset = request.phaseOffset,
-                    newDistributionStrategy = newDistribution
+                    newDistributionStrategy = newDistribution,
+                    newElementMode = newElementMode
                 )
 
                 if (updated != null) {
@@ -265,7 +267,8 @@ data class UpdateEffectRequest(
     val beatDivision: Double? = null,
     val blendMode: String? = null,
     val phaseOffset: Double? = null,
-    val distributionStrategy: String? = null
+    val distributionStrategy: String? = null,
+    val elementMode: String? = null
 )
 
 @Serializable
@@ -281,7 +284,8 @@ data class EffectDto(
     val currentPhase: Double,
     val parameters: Map<String, String>,
     val isGroupTarget: Boolean,
-    val distributionStrategy: String? = null
+    val distributionStrategy: String? = null,
+    val elementMode: String? = null
 )
 
 @Serializable
@@ -316,7 +320,9 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
     parameters = effect.parameters,
     isGroupTarget = isGroupEffect,
     distributionStrategy = if (isGroupEffect || isMultiElementExpanded)
-        distributionStrategy.javaClass.simpleName else null
+        distributionStrategy.javaClass.simpleName else null,
+    elementMode = if (isGroupEffect && isMultiElementExpanded)
+        elementMode.name else null
 )
 
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(
