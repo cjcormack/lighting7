@@ -159,7 +159,7 @@ The low-level DMX fading system supports easing curves via `EasingCurve`:
 
 ## FX Targets
 
-Effects target fixture properties via `FxTarget` subclasses. Targets can reference either a single fixture or an entire group using `FxTargetRef`:
+Effects target fixture or element properties via `FxTarget` subclasses. Targets can reference either a single fixture or an entire group using `FxTargetRef`. The `applyValueToFixture` method accepts `GroupableFixture` (not `Fixture`), allowing it to work with both standalone fixtures and fixture elements:
 
 ### Target Reference Types
 
@@ -280,6 +280,62 @@ When an `FxInstance` targets a group, the `FxEngine` expands it at processing ti
 | `RANDOM(seed)` | Deterministic random |
 | `POSITIONAL` | Based on normalized position |
 
+## Multi-Element Fixture Expansion
+
+When a fixture effect targets a property that the parent fixture doesn't have, but its elements do (e.g. applying a colour FX to a `QuadMoverBarFixture` whose heads have `WithColour` but the parent does not), the FX engine automatically expands the effect to all elements.
+
+This makes multi-element fixtures behave like implicit groups for FX purposes, without requiring the user to manually create a fixture group.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              Multi-Element Effect Expansion                       │
+│                                                                  │
+│   FxInstance (fixture target, e.g. "quad-mover-1")               │
+│        │                                                         │
+│        ▼                                                         │
+│   Parent has target property?                                    │
+│     ├─ YES → Apply directly to parent (normal behaviour)         │
+│     └─ NO  → Is parent a MultiElementFixture?                    │
+│               ├─ NO  → Skip (silent no-op)                       │
+│               └─ YES → Do elements have the property?            │
+│                         ├─ NO  → Skip                            │
+│                         └─ YES → Expand to all elements:         │
+│                                   For each element:              │
+│                                     1. Create DistributionInfo   │
+│                                     2. Calculate phase + offset  │
+│                                     3. Apply via element key     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Element Key Resolution
+
+Element keys follow the convention `"parent-key.suffix"` (e.g. `"quad-mover-1.head-0"`). The `Fixtures.untypedGroupableFixture(key)` method resolves these by:
+
+1. Checking the fixture register for a direct match
+2. If not found, splitting on the last `.` to find the parent key
+3. Checking if the parent implements `MultiElementFixture`
+4. Searching its elements for a matching `elementKey`
+
+### Distribution Strategy Support
+
+Multi-element expansion uses the same `DistributionStrategy` machinery as group effects. The `distributionStrategy` field on `FxInstance` (which defaults to `LINEAR`) is used to calculate per-element phase offsets based on element index and normalized position.
+
+The REST API `AddEffectRequest` includes an optional `distributionStrategy` field for fixture effects targeting multi-element fixtures.
+
+### Example
+
+```
+POST /api/rest/fx/add
+{
+  "effectType": "RainbowCycle",
+  "fixtureKey": "quad-mover-1",
+  "propertyName": "rgbColour",
+  "distributionStrategy": "LINEAR"
+}
+```
+
+This applies a rainbow cycle to all 4 heads of the quad mover bar, with each head offset in phase to create a chase effect across the heads.
+
 ## REST API
 
 ### Clock Control
@@ -293,13 +349,15 @@ POST /api/rest/fx/clock/tap        (tap tempo)
 ### Effect Management
 
 ```
-GET  /api/rest/fx/active           → [EffectDto...]
-POST /api/rest/fx/add              ← AddEffectRequest → { effectId }
-DELETE /api/rest/fx/{id}           (remove effect)
-POST /api/rest/fx/{id}/pause
-POST /api/rest/fx/{id}/resume
-DELETE /api/rest/fx/fixture/{key}  (clear fixture effects)
-POST /api/rest/fx/clear            (clear all effects)
+GET    /api/rest/fx/active           → [EffectDto...]
+POST   /api/rest/fx/add              ← AddEffectRequest → { effectId }
+PUT    /api/rest/fx/{id}             ← UpdateEffectRequest → EffectDto
+DELETE /api/rest/fx/{id}             (remove effect)
+POST   /api/rest/fx/{id}/pause
+POST   /api/rest/fx/{id}/resume
+GET    /api/rest/fx/fixture/{key}    → { direct: [EffectDto...], indirect: [IndirectEffectDto...] }
+DELETE /api/rest/fx/fixture/{key}    (clear fixture effects)
+POST   /api/rest/fx/clear            (clear all effects)
 ```
 
 ### Effect Library
@@ -322,9 +380,27 @@ GET  /api/rest/fx/library          → [EffectTypeInfo...]
   "parameters": {
     "min": "0",
     "max": "255"
-  }
+  },
+  "distributionStrategy": "LINEAR"
 }
 ```
+
+The `distributionStrategy` field is optional. When provided, it sets the distribution strategy for multi-element fixture expansion (see [Multi-Element Fixture Expansion](#multi-element-fixture-expansion)). For non-multi-element fixtures, it is ignored.
+
+### UpdateEffectRequest Format
+
+```json
+{
+  "effectType": "Pulse",
+  "parameters": { "min": "50", "max": "200" },
+  "beatDivision": 2.0,
+  "blendMode": "ADDITIVE",
+  "phaseOffset": 0.25,
+  "distributionStrategy": "CENTER_OUT"
+}
+```
+
+All fields are optional. Immutable fields (`effectType`, `parameters`, `beatDivision`, `blendMode`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and running state. Mutable fields (`phaseOffset`, `distributionStrategy`) are updated in place.
 
 ## WebSocket Messages
 
@@ -339,6 +415,7 @@ GET  /api/rest/fx/library          → [EffectTypeInfo...]
 | `pauseFx` | Pause effect `{ effectId }` |
 | `resumeFx` | Resume effect `{ effectId }` |
 | `clearFx` | Clear all effects |
+| `requestBeatSync` | Request a `beatSync` message on the next beat (e.g. after tab visibility change) |
 
 ### Server → Client
 
@@ -346,6 +423,15 @@ GET  /api/rest/fx/library          → [EffectTypeInfo...]
 |---------|-------------|
 | `fxState` | Full FX state `{ bpm, isClockRunning, activeEffects }` |
 | `fxChanged` | Effect change notification `{ changeType, effectId }` |
+| `beatSync` | Beat sync for frontend clock `{ beatNumber, bpm, timestampMs }` |
+
+### Beat Sync
+
+The `beatSync` message enables the frontend to synchronize a local beat visualization with the backend's Master Clock. It is sent:
+
+- Every 16 beats (~8 seconds at 120 BPM) for periodic drift correction
+- Immediately when BPM changes (with `beatNumber: -1` to distinguish from beat boundaries)
+- On-demand when the client sends `requestBeatSync`
 
 ## File Reference
 

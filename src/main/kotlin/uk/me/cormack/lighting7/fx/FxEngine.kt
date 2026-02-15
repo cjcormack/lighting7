@@ -3,6 +3,8 @@ package uk.me.cormack.lighting7.fx
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.concurrent.ConcurrentHashMap
@@ -329,20 +331,68 @@ class FxEngine(
 
     /**
      * Process an effect targeting a single fixture.
+     *
+     * If the parent fixture doesn't have the target property but implements
+     * [MultiElementFixture] and its elements do have the property, the effect
+     * is automatically expanded to all elements with distribution strategy support.
      */
     private fun processFixtureEffect(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
         fixturesWithTx: Fixtures.FixturesWithTransaction
     ) {
-        // Calculate effect phase based on timing
-        val effectPhase = effect.calculatePhase(tick, masterClock)
+        val fixtureKey = effect.target.targetKey
+        val fixture = try {
+            fixtures.untypedFixture(fixtureKey)
+        } catch (e: Exception) {
+            System.err.println("FX Engine: Fixture '$fixtureKey' not found for effect ${effect.id}")
+            return
+        }
 
-        // Get output value from effect
-        val output = effect.effect.calculate(effectPhase)
+        // Check if the parent fixture has the target property
+        if (effect.target.fixtureHasProperty(fixture)) {
+            // Direct application to the parent fixture
+            val effectPhase = effect.calculatePhase(tick, masterClock)
+            val output = effect.effect.calculate(effectPhase)
+            effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
+        } else if (fixture is MultiElementFixture<*>) {
+            // Parent doesn't have the property — check if elements do
+            val elements = fixture.elements
+            if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
+                processMultiElementEffect(tick, effect, fixturesWithTx, elements)
+            }
+        }
+        // If neither parent nor elements have the property, silently skip
+    }
 
-        // Apply to fixture property via target
-        effect.target.applyValue(fixturesWithTx, effect.target.targetKey, output, effect.blendMode)
+    /**
+     * Process an effect expanded across multi-element fixture elements.
+     *
+     * Uses the same distribution strategy machinery as group effects,
+     * creating lightweight [DistributionMemberInfo] wrappers for each element.
+     */
+    private fun processMultiElementEffect(
+        tick: MasterClock.ClockTick,
+        effect: FxInstance,
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        elements: List<uk.me.cormack.lighting7.fixture.group.FixtureElement<*>>
+    ) {
+        val elementCount = elements.size
+
+        for ((idx, element) in elements.withIndex()) {
+            val memberInfo = object : DistributionMemberInfo {
+                override val index: Int = idx
+                override val normalizedPosition: Double =
+                    if (elementCount > 1) idx.toDouble() / (elementCount - 1) else 0.5
+            }
+
+            val memberPhase = effect.calculatePhaseForMember(
+                tick, masterClock, memberInfo, elementCount
+            )
+
+            val output = effect.effect.calculate(memberPhase)
+            effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
+        }
     }
 
     /**
@@ -375,15 +425,35 @@ class FxEngine(
         }
     }
 
+    /**
+     * Check if a fixture effect targets a multi-element fixture and expands to elements.
+     *
+     * @param instance The effect instance to check
+     * @return true if this fixture effect will be expanded to elements
+     */
+    fun isMultiElementExpanded(instance: FxInstance): Boolean {
+        if (instance.isGroupEffect) return false
+        val fixture = try {
+            fixtures.untypedFixture(instance.target.targetKey)
+        } catch (_: Exception) {
+            return false
+        }
+        if (instance.target.fixtureHasProperty(fixture)) return false
+        if (fixture !is MultiElementFixture<*>) return false
+        val elements = fixture.elements
+        return elements.isNotEmpty() && instance.target.fixtureHasProperty(elements.first())
+    }
+
     private fun emitStateUpdate() {
         val states = activeEffects.mapValues { (_, instance) ->
+            val showDistribution = instance.isGroupEffect || isMultiElementExpanded(instance)
             FxInstanceState(
                 id = instance.id,
                 effectType = instance.effect.name,
                 targetKey = instance.target.targetKey,
                 propertyName = instance.target.propertyName,
                 isGroupTarget = instance.isGroupEffect,
-                distributionStrategy = if (instance.isGroupEffect)
+                distributionStrategy = if (showDistribution)
                     instance.distributionStrategy.javaClass.simpleName else null,
                 isRunning = instance.isRunning,
                 currentPhase = instance.lastPhase,

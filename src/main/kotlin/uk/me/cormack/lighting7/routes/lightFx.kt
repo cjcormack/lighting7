@@ -52,7 +52,8 @@ internal fun Route.routeApiRestFx(state: State) {
 
         // Active effects endpoints
         get<ActiveEffects> {
-            val effects = state.show.fxEngine.getActiveEffects().map { it.toDto() }
+            val engine = state.show.fxEngine
+            val effects = engine.getActiveEffects().map { it.toDto(engine.isMultiElementExpanded(it)) }
             call.respond(effects)
         }
 
@@ -69,6 +70,9 @@ internal fun Route.routeApiRestFx(state: State) {
 
                 val instance = FxInstance(effect, target, timing, blendMode)
                 instance.phaseOffset = request.phaseOffset
+                request.distributionStrategy?.let {
+                    instance.distributionStrategy = DistributionStrategy.fromName(it)
+                }
 
                 val effectId = state.show.fxEngine.addEffect(instance)
                 call.respond(AddEffectResponse(effectId))
@@ -128,7 +132,7 @@ internal fun Route.routeApiRestFx(state: State) {
                 )
 
                 if (updated != null) {
-                    call.respond(updated.toDto())
+                    call.respond(updated.toDto(engine.isMultiElementExpanded(updated)))
                 } else {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("Effect not found"))
                 }
@@ -140,8 +144,9 @@ internal fun Route.routeApiRestFx(state: State) {
         // Get active effects for a specific fixture (direct + indirect via groups)
         get<FixtureEffects> { resource ->
             val fixtureKey = resource.fixtureKey
-            val direct = state.show.fxEngine.getEffectsForFixture(fixtureKey).map { it.toDto() }
-            val indirect = state.show.fxEngine.getIndirectEffectsForFixture(fixtureKey).map { it.toIndirectDto() }
+            val engine = state.show.fxEngine
+            val direct = engine.getEffectsForFixture(fixtureKey).map { it.toDto(engine.isMultiElementExpanded(it)) }
+            val indirect = engine.getIndirectEffectsForFixture(fixtureKey).map { it.toIndirectDto() }
             call.respond(FixtureEffectsResponse(direct, indirect))
         }
 
@@ -219,7 +224,8 @@ data class AddEffectRequest(
     val blendMode: String = "OVERRIDE",
     val startOnBeat: Boolean = true,
     val phaseOffset: Double = 0.0,
-    val parameters: Map<String, String> = emptyMap()
+    val parameters: Map<String, String> = emptyMap(),
+    val distributionStrategy: String? = null
 )
 
 @Serializable
@@ -297,7 +303,7 @@ data class ParameterInfo(
 
 // Helper functions
 
-private fun FxInstance.toDto() = EffectDto(
+private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDto(
     id = id,
     effectType = effect.name,
     targetKey = target.targetKey,
@@ -309,7 +315,8 @@ private fun FxInstance.toDto() = EffectDto(
     currentPhase = lastPhase,
     parameters = effect.parameters,
     isGroupTarget = isGroupEffect,
-    distributionStrategy = if (isGroupEffect) distributionStrategy.javaClass.simpleName else null
+    distributionStrategy = if (isGroupEffect || isMultiElementExpanded)
+        distributionStrategy.javaClass.simpleName else null
 )
 
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(

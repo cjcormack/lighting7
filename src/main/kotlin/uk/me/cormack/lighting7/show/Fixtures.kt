@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.GroupBuilder
+import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -55,6 +56,27 @@ class Fixtures {
             checkNotNull(baseFixtures.fixtureRegister[key]?.withTransaction(transaction)) { "Fixture '$key' not found" }
         }
 
+        /**
+         * Look up a fixture or fixture element by key.
+         *
+         * First checks the fixture register for a direct match. If not found,
+         * attempts to resolve the key as a fixture element by finding a parent
+         * fixture whose key is a prefix, checking if it implements [MultiElementFixture],
+         * and returning the matching element.
+         *
+         * @param key The fixture key or element key (e.g. "quad-mover-1.head-0")
+         * @return The fixture or element, bound to this transaction
+         * @throws IllegalStateException if no matching fixture or element is found
+         */
+        fun untypedGroupableFixture(key: String): GroupableFixture = baseFixtures.registerLock.read {
+            // First, try direct fixture lookup
+            baseFixtures.fixtureRegister[key]?.withTransaction(transaction)?.let { return@read it }
+
+            // Try to resolve as an element key (e.g. "fixture-key.head-0" or "fixture-key.element-0")
+            baseFixtures.resolveElement(key)?.withTransaction(transaction)
+                ?: error("Fixture or element '$key' not found")
+        }
+
         inline fun <reified T: Fixture> fixture(key: String): T {
             return untypedFixture(key) as T
         }
@@ -97,6 +119,53 @@ class Fixtures {
 
     fun untypedFixture(key: String): Fixture = registerLock.read {
         checkNotNull(fixtureRegister[key]) { "Fixture '$key' not found" }
+    }
+
+    /**
+     * Look up a fixture or fixture element by key.
+     *
+     * First checks the fixture register for a direct match. If not found,
+     * attempts to resolve the key as a fixture element by finding a parent
+     * fixture whose key is a prefix, checking if it implements [MultiElementFixture],
+     * and returning the matching element.
+     *
+     * @param key The fixture key or element key (e.g. "quad-mover-1.head-0")
+     * @return The fixture or element
+     * @throws IllegalStateException if no matching fixture or element is found
+     */
+    fun untypedGroupableFixture(key: String): GroupableFixture = registerLock.read {
+        // First, try direct fixture lookup
+        fixtureRegister[key]?.let { return@read it }
+
+        // Try to resolve as an element key
+        resolveElement(key) ?: error("Fixture or element '$key' not found")
+    }
+
+    /**
+     * Resolve an element key to its [GroupableFixture] by searching parent fixtures.
+     *
+     * Element keys follow the convention "parent-key.suffix" where the suffix
+     * identifies the element within the parent (e.g. "head-0", "element-1").
+     *
+     * Must be called within a read lock on [registerLock].
+     *
+     * @param elementKey The element key to resolve
+     * @return The matching element, or null if not found
+     */
+    internal fun resolveElement(elementKey: String): GroupableFixture? {
+        // Find a parent fixture whose key is a prefix of the element key
+        val dotIndex = elementKey.lastIndexOf('.')
+        if (dotIndex <= 0) return null
+
+        val parentKey = elementKey.substring(0, dotIndex)
+        val parent = fixtureRegister[parentKey] ?: return null
+
+        if (parent !is MultiElementFixture<*>) return null
+
+        // Search elements for a matching key
+        return parent.elements.firstOrNull { element ->
+            element.elementKey == elementKey
+        }
     }
 
     inline fun <reified T: Fixture> fixture(key: String): T {

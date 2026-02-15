@@ -296,6 +296,36 @@ class QuadMoverBarFixture(...) : DmxFixture(...),
 }
 ```
 
+### Automatic FX Expansion to Elements
+
+When a fixture effect targets a property that the parent fixture doesn't have but its elements do, the FX engine automatically expands the effect to all elements with distribution strategy support. This means you don't need to create a group just to apply effects to elements.
+
+For example, `QuadMoverBarFixture` has `WithDimmer` (master dimmer) but not `WithColour`. Its `Head` elements have `WithColour`. Applying a colour FX to the parent automatically distributes it across all heads:
+
+```kotlin
+// This automatically expands to all 4 heads with distribution
+fxEngine.addEffect(FxInstance(
+    effect = RainbowCycle(),
+    target = ColourTarget("quad-mover-1"),
+    timing = FxTiming(BeatDivision.ONE_BAR),
+).apply {
+    distributionStrategy = DistributionStrategy.LINEAR
+})
+```
+
+Via the REST API:
+```json
+POST /api/rest/fx/add
+{
+  "effectType": "RainbowCycle",
+  "fixtureKey": "quad-mover-1",
+  "propertyName": "rgbColour",
+  "distributionStrategy": "LINEAR"
+}
+```
+
+See the [FX System docs](fx-engineering.md#multi-element-fixture-expansion) for full details.
+
 ### Adding Elements to Groups
 
 ```kotlin

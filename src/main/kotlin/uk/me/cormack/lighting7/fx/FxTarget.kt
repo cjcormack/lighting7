@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
@@ -62,25 +62,36 @@ sealed class FxTarget {
     val isGroupTarget: Boolean get() = targetRef.isGroup
 
     /**
-     * Apply an effect output value to a single fixture.
+     * Apply an effect output value to a single fixture or element.
      *
-     * @param fixture The fixture to apply to
+     * @param fixture The fixture or element to apply to
      * @param output The effect output value to apply
      * @param blendMode How to blend with existing value
      */
     abstract fun applyValueToFixture(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         output: FxOutput,
         blendMode: BlendMode
     )
 
     /**
-     * Get the current value from a fixture (before FX).
+     * Get the current value from a fixture or element (before FX).
      *
-     * @param fixture The fixture to read from
+     * @param fixture The fixture or element to read from
      * @return The current value as an FxOutput
      */
-    abstract fun getCurrentValueFromFixture(fixture: Fixture): FxOutput
+    abstract fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput
+
+    /**
+     * Check whether a fixture or element has the property this target controls.
+     *
+     * Used by FxEngine to determine whether an effect needs to be expanded
+     * to multi-element fixture elements.
+     *
+     * @param fixture The fixture or element to check
+     * @return true if the fixture supports this target's property
+     */
+    abstract fun fixtureHasProperty(fixture: GroupableFixture): Boolean
 
     /**
      * Apply an effect output value to this target using the fixture registry.
@@ -98,7 +109,7 @@ sealed class FxTarget {
         output: FxOutput,
         blendMode: BlendMode
     ) {
-        val fixture = fixtures.untypedFixture(fixtureKey)
+        val fixture = fixtures.untypedGroupableFixture(fixtureKey)
         applyValueToFixture(fixture, output, blendMode)
     }
 }
@@ -116,7 +127,7 @@ data class SliderTarget(
         this(FxTargetRef.fixture(fixtureKey), propertyName)
 
     override fun applyValueToFixture(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         output: FxOutput,
         blendMode: BlendMode
     ) {
@@ -129,12 +140,16 @@ data class SliderTarget(
         slider.value = newValue
     }
 
-    override fun getCurrentValueFromFixture(fixture: Fixture): FxOutput {
+    override fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput {
         val slider = getSlider(fixture)
         return FxOutput.Slider(slider?.value ?: 0u)
     }
 
-    private fun getSlider(fixture: Fixture): Slider? {
+    override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
+        return getSlider(fixture) != null
+    }
+
+    private fun getSlider(fixture: GroupableFixture): Slider? {
         return when (propertyName) {
             "dimmer" -> (fixture as? WithDimmer)?.dimmer
             "uv" -> (fixture as? WithUv)?.uv
@@ -171,7 +186,7 @@ data class ColourTarget(
     constructor(fixtureKey: String) : this(FxTargetRef.fixture(fixtureKey))
 
     override fun applyValueToFixture(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         output: FxOutput,
         blendMode: BlendMode
     ) {
@@ -184,9 +199,13 @@ data class ColourTarget(
         colour.value = newColour
     }
 
-    override fun getCurrentValueFromFixture(fixture: Fixture): FxOutput {
+    override fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput {
         val colour = (fixture as? WithColour)?.rgbColour
         return FxOutput.Colour(colour?.value ?: Color.BLACK)
+    }
+
+    override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
+        return fixture is WithColour
     }
 
     private fun applyBlendMode(base: Color, effect: Color, mode: BlendMode): Color {
@@ -233,7 +252,7 @@ data class PositionTarget(
     constructor(fixtureKey: String) : this(FxTargetRef.fixture(fixtureKey))
 
     override fun applyValueToFixture(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         output: FxOutput,
         blendMode: BlendMode
     ) {
@@ -251,12 +270,16 @@ data class PositionTarget(
         positionFixture.tilt.value = newTilt
     }
 
-    override fun getCurrentValueFromFixture(fixture: Fixture): FxOutput {
+    override fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput {
         val positionFixture = fixture as? WithPosition
         return FxOutput.Position(
             positionFixture?.pan?.value ?: 128u,
             positionFixture?.tilt?.value ?: 128u
         )
+    }
+
+    override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
+        return fixture is WithPosition
     }
 
     private fun applyBlendMode(base: UByte, effect: UByte, mode: BlendMode): UByte {
