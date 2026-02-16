@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
@@ -153,7 +155,12 @@ data class SliderTarget(
         return when (propertyName) {
             "dimmer" -> (fixture as? WithDimmer)?.dimmer
             "uv" -> (fixture as? WithUv)?.uv
-            else -> null
+            else -> {
+                // Look up arbitrary slider properties via fixture reflection
+                val f = fixture as? Fixture ?: return null
+                val prop = f.fixtureProperties.find { it.name == propertyName } ?: return null
+                prop.classProperty.call(f) as? Slider
+            }
         }
     }
 
@@ -295,5 +302,59 @@ data class PositionTarget(
     companion object {
         /** Create a position target for a group */
         fun forGroup(groupName: String) = PositionTarget(FxTargetRef.group(groupName))
+    }
+}
+
+/**
+ * Target a fixture setting property (e.g. operating mode, colour preset).
+ *
+ * Settings map to a single DMX channel with named options. This target
+ * finds the DmxFixtureSetting by property name and sets its DMX channel
+ * directly. Only OVERRIDE blend mode is meaningful for settings.
+ */
+data class SettingTarget(
+    override val targetRef: FxTargetRef,
+    override val propertyName: String
+) : FxTarget() {
+
+    /** Convenience constructor for targeting a single fixture */
+    constructor(fixtureKey: String, propertyName: String) :
+        this(FxTargetRef.fixture(fixtureKey), propertyName)
+
+    override fun applyValueToFixture(
+        fixture: GroupableFixture,
+        output: FxOutput,
+        blendMode: BlendMode
+    ) {
+        if (output !is FxOutput.Slider) return
+
+        val setting = getSetting(fixture) ?: return
+        val transaction = setting.transaction ?: return
+
+        // Settings are discrete — always override regardless of blend mode
+        transaction.setValue(setting.universe, setting.channelNo, output.value)
+    }
+
+    override fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput {
+        val setting = getSetting(fixture) ?: return FxOutput.Slider(0u)
+        val transaction = setting.transaction ?: return FxOutput.Slider(0u)
+        val currentLevel = transaction.getValue(setting.universe, setting.channelNo)
+        return FxOutput.Slider(currentLevel)
+    }
+
+    override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
+        return getSetting(fixture) != null
+    }
+
+    private fun getSetting(fixture: GroupableFixture): DmxFixtureSetting<*>? {
+        val f = fixture as? Fixture ?: return null
+        val prop = f.fixtureProperties.find { it.name == propertyName } ?: return null
+        return prop.classProperty.call(f) as? DmxFixtureSetting<*>
+    }
+
+    companion object {
+        /** Create a setting target for a group */
+        fun forGroup(groupName: String, propertyName: String) =
+            SettingTarget(FxTargetRef.group(groupName), propertyName)
     }
 }

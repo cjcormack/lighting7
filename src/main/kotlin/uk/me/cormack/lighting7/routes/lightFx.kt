@@ -12,6 +12,8 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.dmx.EasingCurve
+import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.effects.*
 import uk.me.cormack.lighting7.state.State
@@ -61,7 +63,7 @@ internal fun Route.routeApiRestFx(state: State) {
             val request = call.receive<AddEffectRequest>()
             try {
                 val effect = createEffectFromRequest(request)
-                val target = createTargetFromRequest(request)
+                val target = createTargetFromRequest(request, state)
                 val timing = FxTiming(
                     beatDivision = request.beatDivision,
                     startOnBeat = request.startOnBeat
@@ -339,13 +341,25 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     distributionStrategy = distributionStrategy.javaClass.simpleName
 )
 
-private fun createTargetFromRequest(request: AddEffectRequest): FxTarget {
+private fun createTargetFromRequest(request: AddEffectRequest, state: State): FxTarget {
     return when (request.propertyName) {
         "dimmer" -> SliderTarget(request.fixtureKey, "dimmer")
         "uv" -> SliderTarget(request.fixtureKey, "uv")
         "rgbColour", "colour" -> ColourTarget(request.fixtureKey)
         "position" -> PositionTarget(request.fixtureKey)
-        else -> throw IllegalArgumentException("Unknown property: ${request.propertyName}")
+        else -> {
+            // Check if the property is a slider or a setting on the fixture
+            val fixture = try {
+                state.show.fixtures.untypedFixture(request.fixtureKey) as? Fixture
+            } catch (_: Exception) { null }
+            val prop = fixture?.fixtureProperties?.find { it.name == request.propertyName }
+            val propValue = prop?.classProperty?.call(fixture)
+            if (propValue is Slider) {
+                SliderTarget(request.fixtureKey, request.propertyName)
+            } else {
+                SettingTarget(request.fixtureKey, request.propertyName)
+            }
+        }
     }
 }
 
@@ -441,6 +455,9 @@ internal fun createEffectFromTypeAndParams(effectType: String, params: Map<Strin
             min = params["min"]?.toUByteOrNull() ?: 0u,
             max = params["max"]?.toUByteOrNull() ?: 255u
         )
+        "staticvalue", "static_value" -> StaticValue(
+            value = params["value"]?.toUByteOrNull() ?: 255u
+        )
 
         // Colour effects
         "colourcycle", "colour_cycle", "colorcycle", "color_cycle" -> {
@@ -472,6 +489,9 @@ internal fun createEffectFromTypeAndParams(effectType: String, params: Map<Strin
         "colourflicker", "colour_flicker", "colorflicker", "color_flicker" -> ColourFlicker(
             baseColor = params["baseColor"]?.let { parseColor(it) } ?: Color.ORANGE,
             variation = params["variation"]?.toIntOrNull() ?: 50
+        )
+        "staticcolour", "static_colour", "staticcolor", "static_color" -> StaticColour(
+            color = params["color"]?.let { parseColor(it) } ?: Color.WHITE
         )
 
         // Position effects
@@ -515,6 +535,15 @@ internal fun createEffectFromTypeAndParams(effectType: String, params: Map<Strin
             panRange = params["panRange"]?.toUByteOrNull() ?: 64u,
             tiltRange = params["tiltRange"]?.toUByteOrNull() ?: 64u
         )
+        "staticposition", "static_position" -> StaticPosition(
+            pan = params["pan"]?.toUByteOrNull() ?: 128u,
+            tilt = params["tilt"]?.toUByteOrNull() ?: 128u
+        )
+
+        // Setting effects
+        "staticsetting", "static_setting" -> StaticSetting(
+            level = params["level"]?.toUByteOrNull() ?: 0u
+        )
 
         else -> throw IllegalArgumentException("Unknown effect type: $effectType")
     }
@@ -522,8 +551,10 @@ internal fun createEffectFromTypeAndParams(effectType: String, params: Map<Strin
 
 // Effect library - available effects and their parameters
 private val dimmerProperties = listOf("dimmer", "uv")
+private val staticSliderProperties = listOf("dimmer", "uv", "slider")
 private val colourProperties = listOf("rgbColour")
 private val positionProperties = listOf("position")
+private val settingProperties = listOf("setting")
 
 private val effectLibrary = listOf(
     // Dimmer effects
@@ -571,6 +602,9 @@ private val effectLibrary = listOf(
         ParameterInfo("min", "ubyte", "0", "Minimum value"),
         ParameterInfo("max", "ubyte", "255", "Maximum value")
     ), dimmerProperties),
+    EffectTypeInfo("StaticValue", "dimmer", "SLIDER", listOf(
+        ParameterInfo("value", "ubyte", "255", "Fixed value")
+    ), staticSliderProperties),
 
     // Colour effects
     EffectTypeInfo("ColourCycle", "colour", "COLOUR", listOf(
@@ -598,6 +632,9 @@ private val effectLibrary = listOf(
     EffectTypeInfo("ColourFlicker", "colour", "COLOUR", listOf(
         ParameterInfo("baseColor", "colour", "orange", "Base colour"),
         ParameterInfo("variation", "int", "50", "Maximum RGB variation")
+    ), colourProperties),
+    EffectTypeInfo("StaticColour", "colour", "COLOUR", listOf(
+        ParameterInfo("color", "colour", "white", "Fixed colour")
     ), colourProperties),
 
     // Position effects
@@ -640,5 +677,14 @@ private val effectLibrary = listOf(
         ParameterInfo("tiltCenter", "ubyte", "128", "Tilt center position"),
         ParameterInfo("panRange", "ubyte", "64", "Pan range"),
         ParameterInfo("tiltRange", "ubyte", "64", "Tilt range")
-    ), positionProperties)
+    ), positionProperties),
+    EffectTypeInfo("StaticPosition", "position", "POSITION", listOf(
+        ParameterInfo("pan", "ubyte", "128", "Fixed pan position"),
+        ParameterInfo("tilt", "ubyte", "128", "Fixed tilt position")
+    ), positionProperties),
+
+    // Setting effects
+    EffectTypeInfo("StaticSetting", "setting", "SLIDER", listOf(
+        ParameterInfo("level", "ubyte", "0", "DMX level for the setting")
+    ), settingProperties)
 )

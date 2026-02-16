@@ -10,7 +10,10 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.group.*
+import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
@@ -298,7 +301,17 @@ private fun groupSupportsProperty(group: FixtureGroup<*>, propertyName: String):
         "colour", "color", "rgbcolour" -> allFixtures.all { it is WithColour }
         "position" -> allFixtures.all { it is WithPosition }
         "uv" -> allFixtures.all { it is WithUv }
-        else -> false
+        else -> {
+            // Check for slider or setting property by name
+            allFixtures.all { fixture ->
+                fixture is Fixture && fixture.fixtureProperties.any { prop ->
+                    prop.name == propertyName && run {
+                        val value = prop.classProperty.call(fixture)
+                        value is Slider || value is DmxFixtureSetting<*>
+                    }
+                }
+            }
+        }
     }
     if (directSupport) return true
 
@@ -346,7 +359,17 @@ private fun applyGroupEffect(
         "colour", "color", "rgbcolour" -> ColourTarget.forGroup(group.name)
         "position" -> PositionTarget.forGroup(group.name)
         "uv" -> SliderTarget.forGroup(group.name, "uv")
-        else -> throw IllegalArgumentException("Unknown property name: ${request.propertyName}")
+        else -> {
+            // Check if the property is a slider or a setting on the first fixture
+            val firstFixture = group.fixtures.firstOrNull() as? Fixture
+            val prop = firstFixture?.fixtureProperties?.find { it.name == request.propertyName }
+            val propValue = prop?.classProperty?.call(firstFixture)
+            if (propValue is Slider) {
+                SliderTarget.forGroup(group.name, request.propertyName)
+            } else {
+                SettingTarget.forGroup(group.name, request.propertyName)
+            }
+        }
     }
 
     // Create SINGLE FxInstance for the entire group

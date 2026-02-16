@@ -265,3 +265,44 @@ data class Breathe(
         return FxOutput.Slider(value)
     }
 }
+
+/**
+ * Static value - no animation.
+ *
+ * Holds a fixed slider/dimmer value. Useful for pinning a dimmer level
+ * or as a base for additive blending.
+ *
+ * @param value The static value to output (default 255)
+ */
+data class StaticValue(
+    val value: UByte = 255u
+) : Effect {
+    override val name = "Static Value"
+    override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf("value" to value.toString())
+
+    override fun calculate(phase: Double): FxOutput {
+        return FxOutput.Slider(value)
+    }
+}
+
+/**
+ * Static setting - no animation.
+ *
+ * Holds a fixed setting level. Functionally identical to StaticValue
+ * but uses "level" parameter and a distinct name so the frontend
+ * can distinguish setting effects from slider effects.
+ *
+ * @param level The DMX level for the setting (default 0)
+ */
+data class StaticSetting(
+    val level: UByte = 0u
+) : Effect {
+    override val name = "StaticSetting"
+    override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf("level" to level.toString())
+
+    override fun calculate(phase: Double): FxOutput {
+        return FxOutput.Slider(level)
+    }
+}
