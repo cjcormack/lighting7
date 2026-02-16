@@ -55,6 +55,7 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
             DaoFxPreset.new {
                 name = newPreset.name
                 description = newPreset.description
+                fixtureType = newPreset.fixtureType
                 this.project = project
                 effects = newPreset.effects
             }.toPresetDetails(isCurrentProject = true)
@@ -117,6 +118,7 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
 
             preset.name = updatedData.name
             preset.description = updatedData.description
+            preset.fixtureType = updatedData.fixtureType
             preset.effects = updatedData.effects
             preset.toPresetDetails(isCurrentProject = true)
         }
@@ -188,8 +190,11 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
 
             val presetName = request.newName ?: sourcePreset.name
 
+            val sourceFixtureType = sourcePreset.fixtureType
             val existingPreset = DaoFxPreset.find {
-                (DaoFxPresets.project eq targetProject.id) and (DaoFxPresets.name eq presetName)
+                (DaoFxPresets.project eq targetProject.id) and
+                (DaoFxPresets.name eq presetName) and
+                (DaoFxPresets.fixtureType eq sourceFixtureType)
             }.firstOrNull()
             if (existingPreset != null) {
                 return@transaction null to "A preset with name '$presetName' already exists in target project"
@@ -198,6 +203,7 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
             val newPreset = DaoFxPreset.new {
                 name = presetName
                 description = sourcePreset.description
+                fixtureType = sourceFixtureType
                 project = targetProject
                 effects = sourcePreset.effects
             }
@@ -241,6 +247,7 @@ data class CopyFxPresetResource(val parent: ProjectFxPresetsResource, val preset
 data class NewFxPreset(
     val name: String,
     val description: String? = null,
+    val fixtureType: String? = null,
     val effects: List<FxPresetEffectDto>,
 )
 
@@ -249,6 +256,7 @@ data class FxPresetDetails(
     val id: Int,
     val name: String,
     val description: String?,
+    val fixtureType: String?,
     val effects: List<FxPresetEffectDto>,
     val canEdit: Boolean,
     val canDelete: Boolean,
@@ -275,6 +283,7 @@ internal fun DaoFxPreset.toPresetDetails(isCurrentProject: Boolean): FxPresetDet
         id = this.id.value,
         name = this.name,
         description = this.description,
+        fixtureType = this.fixtureType,
         effects = this.effects,
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,

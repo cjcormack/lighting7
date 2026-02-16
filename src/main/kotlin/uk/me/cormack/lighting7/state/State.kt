@@ -55,6 +55,9 @@ class State(val config: ApplicationConfig) {
             // but is acceptable for this development/personal project setup
             @Suppress("DEPRECATION")
             SchemaUtils.createMissingTablesAndColumns(DaoProjects, DaoScripts, DaoScenes, DaoFxPresets)
+
+            // Migration: drop old unique index on (project_id, name) since we now use (project_id, fixture_type, name)
+            exec("DROP INDEX IF EXISTS fx_presets_project_id_name")
         }
 
         return database

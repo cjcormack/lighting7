@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 
 internal fun Fixture.details(fixtures: Fixtures): FixtureDetails {
     val fixtureGroups = fixtures.groupsForFixture(this.key)
@@ -81,6 +82,23 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
         get("/list") {
             val fixtures = state.show.fixtures
             call.respond(fixtures.fixtures.map { it.details(fixtures) })
+        }
+
+        get("/types") {
+            val registeredTypeKeys = state.show.fixtures.fixtures.map { it.typeKey }.toSet()
+            call.respond(FixtureTypeRegistry.allTypes.map { info ->
+                FixtureTypeDetails(
+                    typeKey = info.typeKey,
+                    manufacturer = info.manufacturer.ifEmpty { null },
+                    model = info.model.ifEmpty { null },
+                    modeName = info.modeName,
+                    channelCount = info.channelCount,
+                    isRegistered = info.typeKey in registeredTypeKeys,
+                    capabilities = info.capabilities,
+                    properties = info.properties,
+                    elementGroupProperties = info.elementGroupProperties,
+                )
+            })
         }
 
         get<FixtureKey> {
@@ -225,4 +243,17 @@ data class ElementDescriptor(
 data class ModeInfo(
     val modeName: String,
     val channelCount: Int
+)
+
+@Serializable
+data class FixtureTypeDetails(
+    val typeKey: String,
+    val manufacturer: String?,
+    val model: String?,
+    val modeName: String?,
+    val channelCount: Int?,
+    val isRegistered: Boolean,
+    val capabilities: List<String>,
+    val properties: List<PropertyDescriptor>,
+    val elementGroupProperties: List<GroupPropertyDescriptor>?,
 )
