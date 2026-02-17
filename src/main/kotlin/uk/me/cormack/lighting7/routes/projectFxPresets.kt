@@ -491,6 +491,7 @@ private fun resolvePresetEffectProperty(
         "dimmer" -> if ("dimmer" in capabilities) "dimmer" else null
         "colour" -> if ("colour" in capabilities) "colour" else null
         "position" -> if ("position" in capabilities) "position" else null
+        "controls", "setting" -> presetEffect.propertyName
         else -> null
     }
 }
@@ -507,6 +508,7 @@ private fun resolvePresetEffectPropertyForFixture(
         "dimmer" -> "dimmer"
         "colour" -> "colour"
         "position" -> "position"
+        "controls", "setting" -> presetEffect.propertyName
         else -> null
     }
 }

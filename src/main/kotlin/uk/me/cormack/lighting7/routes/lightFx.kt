@@ -553,7 +553,7 @@ internal fun createEffectFromTypeAndParams(effectType: String, params: Map<Strin
 
 // Effect library - available effects and their parameters
 private val dimmerProperties = listOf("dimmer", "uv")
-private val staticSliderProperties = listOf("dimmer", "uv", "slider")
+private val controlsSliderProperties = listOf("slider")
 private val colourProperties = listOf("rgbColour")
 private val positionProperties = listOf("position")
 private val settingProperties = listOf("setting")
@@ -606,7 +606,7 @@ private val effectLibrary = listOf(
     ), dimmerProperties),
     EffectTypeInfo("StaticValue", "dimmer", "SLIDER", listOf(
         ParameterInfo("value", "ubyte", "255", "Fixed value")
-    ), staticSliderProperties),
+    ), dimmerProperties),
 
     // Colour effects
     EffectTypeInfo("ColourCycle", "colour", "COLOUR", listOf(
@@ -685,8 +685,11 @@ private val effectLibrary = listOf(
         ParameterInfo("tilt", "ubyte", "128", "Fixed tilt position")
     ), positionProperties),
 
-    // Setting effects
-    EffectTypeInfo("StaticSetting", "setting", "SLIDER", listOf(
+    // Controls effects (settings and non-dimmer sliders)
+    EffectTypeInfo("StaticValue", "controls", "SLIDER", listOf(
+        ParameterInfo("value", "ubyte", "255", "Fixed value")
+    ), controlsSliderProperties),
+    EffectTypeInfo("StaticSetting", "controls", "SLIDER", listOf(
         ParameterInfo("level", "ubyte", "0", "DMX level for the setting")
     ), settingProperties)
 )
