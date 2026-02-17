@@ -92,7 +92,9 @@ class FxEngine(
         processingJob?.cancel()
         processingJob = null
         masterClock.stop()
+        val allEffects = activeEffects.values.toList()
         activeEffects.clear()
+        resetUncoveredProperties(allEffects)
         emitStateUpdate()
     }
 
@@ -118,11 +120,12 @@ class FxEngine(
      * @return true if an effect was removed
      */
     fun removeEffect(effectId: Long): Boolean {
-        val removed = activeEffects.remove(effectId) != null
-        if (removed) {
+        val removed = activeEffects.remove(effectId)
+        if (removed != null) {
+            resetUncoveredProperties(listOf(removed))
             emitStateUpdate()
         }
-        return removed
+        return removed != null
     }
 
     /**
@@ -280,6 +283,7 @@ class FxEngine(
         }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
+            resetUncoveredProperties(toRemove)
             emitStateUpdate()
         }
         return toRemove.size
@@ -297,6 +301,7 @@ class FxEngine(
         }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
+            resetUncoveredProperties(toRemove)
             emitStateUpdate()
         }
         return toRemove.size
@@ -306,7 +311,9 @@ class FxEngine(
      * Remove all active effects.
      */
     fun clearAllEffects() {
+        val allEffects = activeEffects.values.toList()
         activeEffects.clear()
+        resetUncoveredProperties(allEffects)
         emitStateUpdate()
     }
 
@@ -565,6 +572,155 @@ class FxEngine(
         if (fixture !is MultiElementFixture<*>) return false
         val elements = fixture.elements
         return elements.isNotEmpty() && instance.target.fixtureHasProperty(elements.first())
+    }
+
+    /**
+     * Reset fixture properties that are no longer covered by any active effect.
+     *
+     * For each removed effect, resolves all fixture keys it was controlling
+     * (handling groups and multi-element expansion), checks if any remaining
+     * active effect still covers the same property, and writes the neutral
+     * value for uncovered properties.
+     */
+    private fun resetUncoveredProperties(removedEffects: List<FxInstance>) {
+        if (removedEffects.isEmpty()) return
+
+        data class AffectedProperty(val fixtureKey: String, val target: FxTarget)
+
+        val affectedProperties = mutableSetOf<AffectedProperty>()
+        for (removed in removedEffects) {
+            for (key in resolveEffectFixtureKeys(removed)) {
+                affectedProperties.add(AffectedProperty(key, removed.target))
+            }
+        }
+
+        val remainingEffects = activeEffects.values.toList()
+        val uncovered = affectedProperties.filter { affected ->
+            !isPropertyCoveredByAny(affected.fixtureKey, affected.target.propertyName, remainingEffects)
+        }
+
+        if (uncovered.isEmpty()) return
+
+        val transaction = ControllerTransaction(fixtures.controllers)
+        val fixturesWithTx = fixtures.withTransaction(transaction)
+
+        for (affected in uncovered) {
+            try {
+                affected.target.applyNeutralValue(fixturesWithTx, affected.fixtureKey)
+            } catch (e: Exception) {
+                System.err.println("FX Engine: Failed to reset ${affected.target.propertyName} on '${affected.fixtureKey}': ${e.message}")
+            }
+        }
+
+        transaction.apply()
+    }
+
+    /**
+     * Resolve all fixture/element keys that an effect was writing to.
+     *
+     * For fixture effects: the target fixture key (or element keys if multi-element expanded).
+     * For group effects: all member keys (or element keys if multi-element expanded).
+     */
+    private fun resolveEffectFixtureKeys(effect: FxInstance): List<String> {
+        if (effect.isGroupEffect) {
+            val group = try {
+                fixtures.untypedGroup(effect.target.targetKey)
+            } catch (_: Exception) { return emptyList() }
+
+            val allMembers = group.allMembers
+            if (allMembers.isEmpty()) return emptyList()
+
+            val firstMemberFixture = try {
+                fixtures.untypedFixture(allMembers.first().key)
+            } catch (_: Exception) { return emptyList() }
+
+            if (effect.target.fixtureHasProperty(firstMemberFixture)) {
+                return allMembers.map { it.key }
+            }
+
+            // Multi-element expansion for group
+            if (firstMemberFixture is MultiElementFixture<*>) {
+                val elements = firstMemberFixture.elements
+                if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
+                    return allMembers.flatMap { member ->
+                        val fixture = try {
+                            fixtures.untypedFixture(member.key)
+                        } catch (_: Exception) { return@flatMap emptyList() }
+                        if (fixture is MultiElementFixture<*>) {
+                            fixture.elements.map { it.elementKey }
+                        } else emptyList()
+                    }
+                }
+            }
+
+            return emptyList()
+        }
+
+        // Fixture effect
+        val fixtureKey = effect.target.targetKey
+        val fixture = try {
+            fixtures.untypedFixture(fixtureKey)
+        } catch (_: Exception) { return emptyList() }
+
+        if (effect.target.fixtureHasProperty(fixture)) {
+            return listOf(fixtureKey)
+        }
+
+        // Multi-element expansion for fixture
+        if (fixture is MultiElementFixture<*>) {
+            val elements = fixture.elements
+            if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
+                return elements.map { it.elementKey }
+            }
+        }
+
+        return emptyList()
+    }
+
+    /**
+     * Check if any effect in the list covers a (fixtureKey, propertyName) pair.
+     *
+     * Handles direct fixture effects, group effects whose members include the
+     * fixture, and multi-element expansion at both levels. Paused effects still
+     * count as covering their channels.
+     */
+    private fun isPropertyCoveredByAny(
+        fixtureKey: String,
+        propertyName: String,
+        remainingEffects: List<FxInstance>
+    ): Boolean {
+        for (effect in remainingEffects) {
+            if (effect.target.propertyName != propertyName) continue
+
+            if (!effect.isGroupEffect) {
+                if (effect.target.targetKey == fixtureKey) return true
+
+                // Check multi-element: parent effect covers element keys
+                val fixture = try {
+                    fixtures.untypedFixture(effect.target.targetKey)
+                } catch (_: Exception) { continue }
+                if (fixture is MultiElementFixture<*> && !effect.target.fixtureHasProperty(fixture)) {
+                    if (fixture.elements.any { it.elementKey == fixtureKey }) return true
+                }
+            } else {
+                val group = try {
+                    fixtures.untypedGroup(effect.target.targetKey)
+                } catch (_: Exception) { continue }
+
+                if (group.allMembers.any { it.key == fixtureKey }) return true
+
+                // Element-level match
+                for (member in group.allMembers) {
+                    val memberFixture = try {
+                        fixtures.untypedFixture(member.key)
+                    } catch (_: Exception) { continue }
+                    if (memberFixture is MultiElementFixture<*>) {
+                        if (memberFixture.elements.any { it.elementKey == fixtureKey }) return true
+                    }
+                }
+            }
+        }
+        return false
     }
 
     private fun emitStateUpdate() {

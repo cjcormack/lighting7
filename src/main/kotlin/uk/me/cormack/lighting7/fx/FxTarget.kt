@@ -114,6 +114,29 @@ sealed class FxTarget {
         val fixture = fixtures.untypedGroupableFixture(fixtureKey)
         applyValueToFixture(fixture, output, blendMode)
     }
+
+    /**
+     * Reset the targeted property on a fixture to its neutral value.
+     *
+     * Called when an effect is removed and no other active effect covers
+     * the same property on the same fixture.
+     *
+     * @param fixture The fixture or element to reset
+     */
+    abstract fun applyNeutralValueToFixture(fixture: GroupableFixture)
+
+    /**
+     * Reset the targeted property using the fixture registry.
+     *
+     * @param fixtures The fixture registry with transaction
+     * @param fixtureKey The specific fixture key to reset
+     */
+    fun applyNeutralValue(fixtures: Fixtures.FixturesWithTransaction, fixtureKey: String) {
+        val fixture = try {
+            fixtures.untypedGroupableFixture(fixtureKey)
+        } catch (_: Exception) { return }
+        applyNeutralValueToFixture(fixture)
+    }
 }
 
 /**
@@ -149,6 +172,11 @@ data class SliderTarget(
 
     override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
         return getSlider(fixture) != null
+    }
+
+    override fun applyNeutralValueToFixture(fixture: GroupableFixture) {
+        val slider = getSlider(fixture) ?: return
+        slider.value = 0u
     }
 
     private fun getSlider(fixture: GroupableFixture): Slider? {
@@ -209,6 +237,11 @@ data class ColourTarget(
     override fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput {
         val colour = (fixture as? WithColour)?.rgbColour
         return FxOutput.Colour(colour?.value ?: Color.BLACK)
+    }
+
+    override fun applyNeutralValueToFixture(fixture: GroupableFixture) {
+        val colour = (fixture as? WithColour)?.rgbColour ?: return
+        colour.value = Color.BLACK
     }
 
     override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
@@ -285,6 +318,12 @@ data class PositionTarget(
         )
     }
 
+    override fun applyNeutralValueToFixture(fixture: GroupableFixture) {
+        val positionFixture = fixture as? WithPosition ?: return
+        positionFixture.pan.value = 128u
+        positionFixture.tilt.value = 128u
+    }
+
     override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
         return fixture is WithPosition
     }
@@ -340,6 +379,12 @@ data class SettingTarget(
         val transaction = setting.transaction ?: return FxOutput.Slider(0u)
         val currentLevel = transaction.getValue(setting.universe, setting.channelNo)
         return FxOutput.Slider(currentLevel)
+    }
+
+    override fun applyNeutralValueToFixture(fixture: GroupableFixture) {
+        val setting = getSetting(fixture) ?: return
+        val transaction = setting.transaction ?: return
+        transaction.setValue(setting.universe, setting.channelNo, 0u.toUByte())
     }
 
     override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
