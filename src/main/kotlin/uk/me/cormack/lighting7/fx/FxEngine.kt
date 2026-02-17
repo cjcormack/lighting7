@@ -228,6 +228,7 @@ class FxEngine(
                 blendMode = newBlendMode ?: existing.blendMode
             ).apply {
                 id = existing.id
+                presetId = existing.presetId
                 startedAtMs = existing.startedAtMs
                 startedAtBeat = existing.startedAtBeat
                 isRunning = existing.isRunning

@@ -287,7 +287,8 @@ data class EffectDto(
     val parameters: Map<String, String>,
     val isGroupTarget: Boolean,
     val distributionStrategy: String? = null,
-    val elementMode: String? = null
+    val elementMode: String? = null,
+    val presetId: Int? = null,
 )
 
 @Serializable
@@ -324,7 +325,8 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
     distributionStrategy = if (isGroupEffect || isMultiElementExpanded)
         distributionStrategy.javaClass.simpleName else null,
     elementMode = if (isGroupEffect && isMultiElementExpanded)
-        elementMode.name else null
+        elementMode.name else null,
+    presetId = presetId,
 )
 
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(

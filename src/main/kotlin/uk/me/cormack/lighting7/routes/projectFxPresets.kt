@@ -13,6 +13,11 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
+import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.group.FixtureGroup
+import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fx.*
+import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 
@@ -230,6 +235,40 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
             call.respond(statusCode, ErrorResponse(error ?: "Unknown error"))
         }
     }
+
+    // POST /{projectId}/fx-presets/{presetId}/toggle - Toggle preset on/off for targets
+    post<ToggleFxPresetResource> { resource ->
+        val project = state.resolveProject(resource.parent.projectId)
+        if (project == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
+            return@post
+        }
+
+        val request = call.receive<TogglePresetRequest>()
+        if (request.targets.isEmpty()) {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("At least one target is required"))
+            return@post
+        }
+
+        val preset = transaction(state.database) {
+            val p = DaoFxPreset.findById(resource.presetId) ?: return@transaction null
+            if (p.project.id != project.id) return@transaction null
+            p.effects
+        }
+        if (preset == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
+            return@post
+        }
+
+        try {
+            val result = togglePresetOnTargets(state, resource.presetId, preset, request.targets, request.beatDivision)
+            call.respond(result)
+        } catch (e: IllegalStateException) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
+        } catch (e: Exception) {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to toggle preset"))
+        }
+    }
 }
 
 // Resource classes
@@ -241,6 +280,9 @@ data class ProjectFxPresetResource(val parent: ProjectFxPresetsResource, val pre
 
 @Resource("/{presetId}/copy")
 data class CopyFxPresetResource(val parent: ProjectFxPresetsResource, val presetId: Int)
+
+@Resource("/{presetId}/toggle")
+data class ToggleFxPresetResource(val parent: ProjectFxPresetsResource, val presetId: Int)
 
 // DTOs
 @Serializable
@@ -277,6 +319,24 @@ data class CopyPresetResponse(
     val message: String,
 )
 
+@Serializable
+data class TogglePresetRequest(
+    val targets: List<TogglePresetTarget>,
+    val beatDivision: Double? = null,
+)
+
+@Serializable
+data class TogglePresetTarget(
+    val type: String,  // "group" or "fixture"
+    val key: String,   // group name or fixture key
+)
+
+@Serializable
+data class TogglePresetResponse(
+    val action: String,  // "applied" or "removed"
+    val effectCount: Int,
+)
+
 // Helper
 internal fun DaoFxPreset.toPresetDetails(isCurrentProject: Boolean): FxPresetDetails {
     return FxPresetDetails(
@@ -288,4 +348,219 @@ internal fun DaoFxPreset.toPresetDetails(isCurrentProject: Boolean): FxPresetDet
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
     )
+}
+
+/**
+ * Normalize an effect type name for comparison (lowercase, no spaces/underscores).
+ * Matches the frontend's normalizeEffectName function.
+ */
+private fun normalizeEffectName(name: String): String {
+    return name.lowercase().replace(Regex("[\\s_]"), "")
+}
+
+/**
+ * Check if a preset is active on a target by looking for effects tagged with the preset ID.
+ */
+private fun isPresetActiveOnTarget(
+    engine: FxEngine,
+    presetId: Int,
+    targetType: String,
+    targetKey: String,
+): Boolean {
+    val activeEffects = if (targetType == "group") {
+        engine.getEffectsForGroup(targetKey)
+    } else {
+        engine.getEffectsForFixture(targetKey)
+    }
+    return activeEffects.any { it.presetId == presetId }
+}
+
+/**
+ * Toggle a preset's effects on/off for the given targets.
+ *
+ * Uses the presetId tag on effects for deterministic matching:
+ * - If ALL targets have at least one effect tagged with this presetId, removes those effects.
+ * - Otherwise, applies all preset effects (tagged with the presetId) to each target.
+ */
+private fun togglePresetOnTargets(
+    state: State,
+    presetId: Int,
+    presetEffects: List<FxPresetEffectDto>,
+    targets: List<TogglePresetTarget>,
+    beatDivisionOverride: Double?,
+): TogglePresetResponse {
+    val engine = state.show.fxEngine
+
+    // Check if all targets have this preset active
+    val allActive = targets.all { target ->
+        isPresetActiveOnTarget(engine, presetId, target.type, target.key)
+    }
+
+    if (allActive) {
+        // Remove all effects tagged with this presetId from all targets
+        var removedCount = 0
+        for (target in targets) {
+            val activeEffects = if (target.type == "group") {
+                engine.getEffectsForGroup(target.key)
+            } else {
+                engine.getEffectsForFixture(target.key)
+            }
+            val matching = activeEffects.filter { it.presetId == presetId }
+            for (fx in matching) {
+                if (engine.removeEffect(fx.id)) {
+                    removedCount++
+                }
+            }
+        }
+        return TogglePresetResponse(action = "removed", effectCount = removedCount)
+    } else {
+        // First remove any existing effects from this preset on all targets,
+        // then apply all preset effects fresh
+        for (target in targets) {
+            val activeEffects = if (target.type == "group") {
+                engine.getEffectsForGroup(target.key)
+            } else {
+                engine.getEffectsForFixture(target.key)
+            }
+            activeEffects.filter { it.presetId == presetId }.forEach { engine.removeEffect(it.id) }
+        }
+
+        var addedCount = 0
+        for (target in targets) {
+            for (presetEffect in presetEffects) {
+                val effect = createEffectFromTypeAndParams(presetEffect.effectType, presetEffect.parameters)
+                val beatDivision = beatDivisionOverride ?: presetEffect.beatDivision
+                val timing = FxTiming(beatDivision)
+                val blendMode = try {
+                    BlendMode.valueOf(presetEffect.blendMode)
+                } catch (_: Exception) {
+                    BlendMode.OVERRIDE
+                }
+
+                if (target.type == "group") {
+                    val group = state.show.fixtures.untypedGroup(target.key)
+                    val propertyName = presetEffect.propertyName ?: resolvePresetEffectProperty(presetEffect, group.detectCapabilities())
+                    if (propertyName == null) continue
+
+                    val fxTarget = createGroupTarget(group.name, propertyName, group)
+                    val distribution = try {
+                        DistributionStrategy.fromName(presetEffect.distribution)
+                    } catch (_: Exception) {
+                        DistributionStrategy.LINEAR
+                    }
+                    val elementMode = try {
+                        presetEffect.elementMode?.let { ElementMode.valueOf(it) } ?: ElementMode.PER_FIXTURE
+                    } catch (_: Exception) {
+                        ElementMode.PER_FIXTURE
+                    }
+
+                    val instance = FxInstance(effect, fxTarget, timing, blendMode).apply {
+                        this.presetId = presetId
+                        phaseOffset = presetEffect.phaseOffset
+                        distributionStrategy = distribution
+                        this.elementMode = elementMode
+                    }
+                    engine.addEffect(instance)
+                    addedCount++
+                } else {
+                    val propertyName = presetEffect.propertyName ?: resolvePresetEffectPropertyForFixture(presetEffect, target.key, state)
+                    if (propertyName == null) continue
+
+                    val fxTarget = createFixtureTarget(target.key, propertyName, state)
+                    val instance = FxInstance(effect, fxTarget, timing, blendMode).apply {
+                        this.presetId = presetId
+                        phaseOffset = presetEffect.phaseOffset
+                    }
+                    engine.addEffect(instance)
+                    addedCount++
+                }
+            }
+        }
+        return TogglePresetResponse(action = "applied", effectCount = addedCount)
+    }
+}
+
+/**
+ * Resolve the property name for a preset effect based on its category.
+ */
+private fun resolvePresetEffectProperty(
+    presetEffect: FxPresetEffectDto,
+    capabilities: List<String>,
+): String? {
+    return when (presetEffect.category) {
+        "dimmer" -> if ("dimmer" in capabilities) "dimmer" else null
+        "colour" -> if ("colour" in capabilities) "colour" else null
+        "position" -> if ("position" in capabilities) "position" else null
+        else -> null
+    }
+}
+
+/**
+ * Resolve the property name for a preset effect on a specific fixture.
+ */
+private fun resolvePresetEffectPropertyForFixture(
+    presetEffect: FxPresetEffectDto,
+    fixtureKey: String,
+    state: State,
+): String? {
+    return when (presetEffect.category) {
+        "dimmer" -> "dimmer"
+        "colour" -> "colour"
+        "position" -> "position"
+        else -> null
+    }
+}
+
+/**
+ * Create an FxTarget for a group based on property name.
+ */
+private fun createGroupTarget(
+    groupName: String,
+    propertyName: String,
+    group: FixtureGroup<*>,
+): FxTarget {
+    return when (propertyName.lowercase()) {
+        "dimmer" -> SliderTarget.forGroup(groupName, "dimmer")
+        "colour", "color", "rgbcolour" -> ColourTarget.forGroup(groupName)
+        "position" -> PositionTarget.forGroup(groupName)
+        "uv" -> SliderTarget.forGroup(groupName, "uv")
+        else -> {
+            val firstFixture = group.fixtures.firstOrNull() as? Fixture
+            val prop = firstFixture?.fixtureProperties?.find { it.name == propertyName }
+            val propValue = prop?.classProperty?.call(firstFixture)
+            if (propValue is Slider) {
+                SliderTarget.forGroup(groupName, propertyName)
+            } else {
+                SettingTarget.forGroup(groupName, propertyName)
+            }
+        }
+    }
+}
+
+/**
+ * Create an FxTarget for a fixture based on property name.
+ */
+private fun createFixtureTarget(
+    fixtureKey: String,
+    propertyName: String,
+    state: State,
+): FxTarget {
+    return when (propertyName.lowercase()) {
+        "dimmer" -> SliderTarget(fixtureKey, "dimmer")
+        "uv" -> SliderTarget(fixtureKey, "uv")
+        "colour", "color", "rgbcolour" -> ColourTarget(fixtureKey)
+        "position" -> PositionTarget(fixtureKey)
+        else -> {
+            val fixture = try {
+                state.show.fixtures.untypedFixture(fixtureKey) as? Fixture
+            } catch (_: Exception) { null }
+            val prop = fixture?.fixtureProperties?.find { it.name == propertyName }
+            val propValue = prop?.classProperty?.call(fixture)
+            if (propValue is Slider) {
+                SliderTarget(fixtureKey, propertyName)
+            } else {
+                SettingTarget(fixtureKey, propertyName)
+            }
+        }
+    }
 }

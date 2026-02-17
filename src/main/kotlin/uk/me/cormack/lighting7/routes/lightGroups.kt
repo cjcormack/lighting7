@@ -98,7 +98,8 @@ internal fun Route.routeApiRestGroups(state: State) {
                         isRunning = instance.isRunning,
                         phaseOffset = instance.phaseOffset,
                         currentPhase = instance.lastPhase,
-                        parameters = instance.effect.parameters
+                        parameters = instance.effect.parameters,
+                        presetId = instance.presetId,
                     )
                 }
                 call.respond(dtos)
@@ -196,7 +197,8 @@ data class GroupEffectDto(
     val isRunning: Boolean,
     val phaseOffset: Double,
     val currentPhase: Double,
-    val parameters: Map<String, String>
+    val parameters: Map<String, String>,
+    val presetId: Int? = null,
 )
 
 @Serializable
@@ -242,7 +244,7 @@ private fun FixtureGroup<*>.toDetailedDto(): GroupDetailDto {
     )
 }
 
-private fun FixtureGroup<*>.detectCapabilities(): List<String> {
+internal fun FixtureGroup<*>.detectCapabilities(): List<String> {
     val allFixtures = fixtures  // Uses allMembers (includes subgroups)
     if (allFixtures.isEmpty()) return emptyList()
 
