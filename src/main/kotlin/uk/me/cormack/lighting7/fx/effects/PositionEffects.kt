@@ -263,6 +263,8 @@ data class StaticPosition(
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
         if (context.groupSize <= 1) return FxOutput.Position(pan, tilt)
         val window = 1.0 / context.groupSize
-        return if (phase < window) FxOutput.Position(pan, tilt) else FxOutput.Position(128u, 128u)
+        val base = context.basePhase(phase)
+        val windowStart = context.memberIndex * window
+        return if (base >= windowStart && base < windowStart + window) FxOutput.Position(pan, tilt) else FxOutput.Position(128u, 128u)
     }
 }

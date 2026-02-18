@@ -10,11 +10,21 @@ import java.awt.Color
  *
  * @param groupSize Total number of elements being distributed across (1 for a single fixture)
  * @param memberIndex 0-based index of the current element within the group
+ * @param distributionOffset The phase offset applied by the distribution strategy for this member (0.0–1.0)
  */
 data class EffectContext(
     val groupSize: Int,
-    val memberIndex: Int
+    val memberIndex: Int,
+    val distributionOffset: Double = 0.0
 ) {
+    /**
+     * Recover the base (un-shifted) phase from a distribution-shifted phase.
+     *
+     * Useful for effects that need to window based on absolute cycle position
+     * rather than the distribution-shifted position (e.g., static chase effects).
+     */
+    fun basePhase(shiftedPhase: Double): Double = (shiftedPhase - distributionOffset + 1.0) % 1.0
+
     companion object {
         /** Default context for a single fixture (no distribution). */
         val SINGLE = EffectContext(groupSize = 1, memberIndex = 0)

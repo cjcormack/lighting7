@@ -419,8 +419,9 @@ class FxEngine(
             val memberPhase = effect.calculatePhaseForMember(
                 tick, masterClock, memberInfo, filteredCount
             )
+            val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
-            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx)
+            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset)
             val output = effect.effect.calculate(memberPhase, context)
             effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
         }
@@ -467,7 +468,8 @@ class FxEngine(
                 val memberPhase = effect.calculatePhaseForMember(
                     tick, masterClock, member, groupSize
                 )
-                val context = EffectContext(groupSize = groupSize, memberIndex = member.index)
+                val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
+                val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset)
                 val output = effect.effect.calculate(memberPhase, context)
                 effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
             }
@@ -555,8 +557,9 @@ class FxEngine(
             val memberPhase = effect.calculatePhaseForMember(
                 tick, masterClock, memberInfo, filteredCount
             )
+            val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
-            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx)
+            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset)
             val output = effect.effect.calculate(memberPhase, context)
             effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
         }

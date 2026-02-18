@@ -224,6 +224,8 @@ data class StaticColour(
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
         if (context.groupSize <= 1) return FxOutput.Colour(color)
         val window = 1.0 / context.groupSize
-        return if (phase < window) FxOutput.Colour(color) else FxOutput.Colour(ExtendedColour.BLACK)
+        val base = context.basePhase(phase)
+        val windowStart = context.memberIndex * window
+        return if (base >= windowStart && base < windowStart + window) FxOutput.Colour(color) else FxOutput.Colour(ExtendedColour.BLACK)
     }
 }

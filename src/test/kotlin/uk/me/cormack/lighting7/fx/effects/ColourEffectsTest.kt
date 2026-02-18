@@ -212,4 +212,47 @@ class ColourEffectsTest {
         assertEquals(Color.RED, effect.calculate(0.5, context).colour())
         assertEquals(Color.RED, effect.calculate(1.0, context).colour())
     }
+
+    @Test
+    fun `StaticColour chase fires elements in forward order`() {
+        val effect = StaticColour(color = Color.RED.ext())
+        val groupSize = 4
+
+        // Simulate LINEAR distribution: element i gets offset i/N
+        // At basePhase = 0.0, element 0 should be ON (its window is [0, 0.25))
+        // At basePhase = 0.3, element 1 should be ON (its window is [0.25, 0.5))
+
+        fun contextFor(idx: Int): EffectContext {
+            val offset = idx.toDouble() / groupSize
+            return EffectContext(groupSize = groupSize, memberIndex = idx, distributionOffset = offset)
+        }
+
+        fun shiftedPhase(basePhase: Double, idx: Int): Double {
+            return (basePhase + idx.toDouble() / groupSize) % 1.0
+        }
+
+        // basePhase = 0.1 -> element 0 should be ON (window [0, 0.25))
+        assertEquals(Color.RED, effect.calculate(shiftedPhase(0.1, 0), contextFor(0)).colour())
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.1, 1), contextFor(1)).colour())
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.1, 2), contextFor(2)).colour())
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.1, 3), contextFor(3)).colour())
+
+        // basePhase = 0.3 -> element 1 should be ON (window [0.25, 0.5))
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.3, 0), contextFor(0)).colour())
+        assertEquals(Color.RED, effect.calculate(shiftedPhase(0.3, 1), contextFor(1)).colour())
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.3, 2), contextFor(2)).colour())
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.3, 3), contextFor(3)).colour())
+
+        // basePhase = 0.6 -> element 2 should be ON (window [0.5, 0.75))
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.6, 0), contextFor(0)).colour())
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.6, 1), contextFor(1)).colour())
+        assertEquals(Color.RED, effect.calculate(shiftedPhase(0.6, 2), contextFor(2)).colour())
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.6, 3), contextFor(3)).colour())
+
+        // basePhase = 0.8 -> element 3 should be ON (window [0.75, 1.0))
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.8, 0), contextFor(0)).colour())
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.8, 1), contextFor(1)).colour())
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.8, 2), contextFor(2)).colour())
+        assertEquals(Color.RED, effect.calculate(shiftedPhase(0.8, 3), contextFor(3)).colour())
+    }
 }

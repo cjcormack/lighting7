@@ -286,7 +286,9 @@ data class StaticValue(
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
         if (context.groupSize <= 1) return FxOutput.Slider(value)
         val window = 1.0 / context.groupSize
-        return if (phase < window) FxOutput.Slider(value) else FxOutput.Slider(0u)
+        val base = context.basePhase(phase)
+        val windowStart = context.memberIndex * window
+        return if (base >= windowStart && base < windowStart + window) FxOutput.Slider(value) else FxOutput.Slider(0u)
     }
 }
 

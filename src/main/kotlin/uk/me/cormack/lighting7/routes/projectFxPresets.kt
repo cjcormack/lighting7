@@ -428,68 +428,87 @@ internal fun togglePresetOnTargets(
         var addedCount = 0
         for (target in targets) {
             for (presetEffect in presetEffects) {
-                val effect = createEffectFromTypeAndParams(presetEffect.effectType, presetEffect.parameters)
-                val beatDivision = beatDivisionOverride ?: presetEffect.beatDivision
-                val timing = FxTiming(beatDivision)
-                val blendMode = try {
-                    BlendMode.valueOf(presetEffect.blendMode)
-                } catch (_: Exception) {
-                    BlendMode.OVERRIDE
-                }
+                val fxTarget = resolveTarget(state, target, presetEffect) ?: continue
 
-                if (target.type == "group") {
-                    val group = state.show.fixtures.untypedGroup(target.key)
-                    val propertyName = presetEffect.propertyName ?: resolvePresetEffectProperty(presetEffect, group.detectCapabilities())
-                    if (propertyName == null) continue
-
-                    val fxTarget = createGroupTarget(group.name, propertyName, group)
-                    val distribution = try {
-                        DistributionStrategy.fromName(presetEffect.distribution)
-                    } catch (_: Exception) {
-                        DistributionStrategy.LINEAR
-                    }
-                    val elementMode = try {
-                        presetEffect.elementMode?.let { ElementMode.valueOf(it) } ?: ElementMode.PER_FIXTURE
-                    } catch (_: Exception) {
-                        ElementMode.PER_FIXTURE
-                    }
-
-                    val elFilter = try {
-                        presetEffect.elementFilter?.let { ElementFilter.fromName(it) } ?: ElementFilter.ALL
-                    } catch (_: Exception) {
-                        ElementFilter.ALL
-                    }
-
-                    val instance = FxInstance(effect, fxTarget, timing, blendMode).apply {
-                        this.presetId = presetId
-                        phaseOffset = presetEffect.phaseOffset
-                        distributionStrategy = distribution
-                        this.elementMode = elementMode
-                        this.elementFilter = elFilter
-                    }
-                    engine.addEffect(instance)
-                    addedCount++
-                } else {
-                    val propertyName = presetEffect.propertyName ?: resolvePresetEffectPropertyForFixture(presetEffect, target.key, state)
-                    if (propertyName == null) continue
-
-                    val fxTarget = createFixtureTarget(target.key, propertyName, state)
-                    val elFilter = try {
-                        presetEffect.elementFilter?.let { ElementFilter.fromName(it) } ?: ElementFilter.ALL
-                    } catch (_: Exception) {
-                        ElementFilter.ALL
-                    }
-                    val instance = FxInstance(effect, fxTarget, timing, blendMode).apply {
-                        this.presetId = presetId
-                        phaseOffset = presetEffect.phaseOffset
-                        this.elementFilter = elFilter
-                    }
-                    engine.addEffect(instance)
-                    addedCount++
-                }
+                val instance = createInstanceFromPreset(
+                    presetEffect, fxTarget, presetId,
+                    beatDivisionOverride
+                )
+                engine.addEffect(instance)
+                addedCount++
             }
         }
         return TogglePresetResponse(action = "applied", effectCount = addedCount)
+    }
+}
+
+/**
+ * Resolve the [FxTarget] for a preset effect on a given toggle target.
+ *
+ * Returns null if the target doesn't support the effect's property,
+ * signalling that this effect should be skipped for this target.
+ */
+private fun resolveTarget(
+    state: State,
+    target: TogglePresetTarget,
+    presetEffect: FxPresetEffectDto
+): FxTarget? {
+    return if (target.type == "group") {
+        val group = state.show.fixtures.untypedGroup(target.key)
+        val propertyName = presetEffect.propertyName
+            ?: resolvePresetEffectProperty(presetEffect, group.detectCapabilities())
+            ?: return null
+        createGroupTarget(group.name, propertyName, group)
+    } else {
+        val propertyName = presetEffect.propertyName
+            ?: resolvePresetEffectPropertyForFixture(presetEffect, target.key, state)
+            ?: return null
+        createFixtureTarget(target.key, propertyName, state)
+    }
+}
+
+/**
+ * Create a fully-configured [FxInstance] from preset effect data.
+ *
+ * All FxInstance fields are populated from the [FxPresetEffectDto] in one place
+ * to avoid duplication between group and fixture target paths.
+ */
+private fun createInstanceFromPreset(
+    presetEffect: FxPresetEffectDto,
+    fxTarget: FxTarget,
+    presetId: Int,
+    beatDivisionOverride: Double?
+): FxInstance {
+    val effect = createEffectFromTypeAndParams(presetEffect.effectType, presetEffect.parameters)
+    val beatDivision = beatDivisionOverride ?: presetEffect.beatDivision
+    val timing = FxTiming(beatDivision)
+    val blendMode = try {
+        BlendMode.valueOf(presetEffect.blendMode)
+    } catch (_: Exception) {
+        BlendMode.OVERRIDE
+    }
+    val distribution = try {
+        DistributionStrategy.fromName(presetEffect.distribution)
+    } catch (_: Exception) {
+        DistributionStrategy.LINEAR
+    }
+    val elementMode = try {
+        presetEffect.elementMode?.let { ElementMode.valueOf(it) } ?: ElementMode.PER_FIXTURE
+    } catch (_: Exception) {
+        ElementMode.PER_FIXTURE
+    }
+    val elementFilter = try {
+        presetEffect.elementFilter?.let { ElementFilter.fromName(it) } ?: ElementFilter.ALL
+    } catch (_: Exception) {
+        ElementFilter.ALL
+    }
+
+    return FxInstance(effect, fxTarget, timing, blendMode).apply {
+        this.presetId = presetId
+        phaseOffset = presetEffect.phaseOffset
+        distributionStrategy = distribution
+        this.elementMode = elementMode
+        this.elementFilter = elementFilter
     }
 }
 
