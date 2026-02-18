@@ -4,6 +4,54 @@ import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 
 /**
+ * Filter for selecting which elements of a multi-element fixture receive an effect.
+ *
+ * When applied to a group, the filter is evaluated per-fixture (the element
+ * index is the local index within each fixture, not the global flat index).
+ */
+enum class ElementFilter {
+    /** All elements receive the effect (no filtering). */
+    ALL,
+
+    /** Only odd-indexed elements (1, 3, 5, ...) — using 1-based numbering. */
+    ODD,
+
+    /** Only even-indexed elements (2, 4, 6, ...) — using 1-based numbering. */
+    EVEN,
+
+    /** Only the first half of elements. */
+    FIRST_HALF,
+
+    /** Only the second half of elements. */
+    SECOND_HALF;
+
+    /**
+     * Test whether a zero-based element index passes this filter.
+     *
+     * @param zeroBasedIndex The element index (0, 1, 2, ...)
+     * @param totalElements The total number of elements in the fixture
+     * @return true if the element should receive the effect
+     */
+    fun includes(zeroBasedIndex: Int, totalElements: Int): Boolean = when (this) {
+        ALL -> true
+        ODD -> zeroBasedIndex % 2 == 0   // 0-based index 0 = element 1 (odd)
+        EVEN -> zeroBasedIndex % 2 == 1  // 0-based index 1 = element 2 (even)
+        FIRST_HALF -> zeroBasedIndex < (totalElements + 1) / 2
+        SECOND_HALF -> zeroBasedIndex >= (totalElements + 1) / 2
+    }
+
+    companion object {
+        fun fromName(name: String): ElementFilter {
+            return try {
+                valueOf(name.uppercase())
+            } catch (_: IllegalArgumentException) {
+                ALL
+            }
+        }
+    }
+}
+
+/**
  * Controls how group effects interact with multi-element fixture members.
  *
  * When a group contains multi-element fixtures (e.g. quad moving head bars)
@@ -121,6 +169,16 @@ class FxInstance(
      * the target property.
      */
     var elementMode: ElementMode = ElementMode.PER_FIXTURE
+
+    /**
+     * Optional filter to restrict which elements the effect applies to.
+     *
+     * When set, only elements whose indices match the filter will receive
+     * the effect. Other elements are skipped entirely during processing.
+     *
+     * @see ElementFilter
+     */
+    var elementFilter: ElementFilter = ElementFilter.ALL
 
     /**
      * Whether this effect targets a group (vs individual fixture).

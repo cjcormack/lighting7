@@ -216,7 +216,8 @@ class FxEngine(
         newBlendMode: BlendMode? = null,
         newPhaseOffset: Double? = null,
         newDistributionStrategy: DistributionStrategy? = null,
-        newElementMode: ElementMode? = null
+        newElementMode: ElementMode? = null,
+        newElementFilter: ElementFilter? = null
     ): FxInstance? {
         val existing = activeEffects[effectId] ?: return null
 
@@ -239,12 +240,14 @@ class FxEngine(
                 phaseOffset = newPhaseOffset ?: existing.phaseOffset
                 distributionStrategy = newDistributionStrategy ?: existing.distributionStrategy
                 elementMode = newElementMode ?: existing.elementMode
+                elementFilter = newElementFilter ?: existing.elementFilter
             }
         } else {
             // Only mutable fields changed - update in place
             newPhaseOffset?.let { existing.phaseOffset = it }
             newDistributionStrategy?.let { existing.distributionStrategy = it }
             newElementMode?.let { existing.elementMode = it }
+            newElementFilter?.let { existing.elementFilter = it }
             existing
         }
 
@@ -390,17 +393,31 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         elements: List<uk.me.cormack.lighting7.fixture.group.FixtureElement<*>>
     ) {
+        val filter = effect.elementFilter
         val elementCount = elements.size
 
-        for ((idx, element) in elements.withIndex()) {
+        // Build filtered list for distribution calculation
+        // Distribution indices are based on the filtered set so that phase
+        // offsets distribute evenly across only the included elements.
+        val filteredElements = if (filter == ElementFilter.ALL) {
+            elements.mapIndexed { idx, el -> idx to el }
+        } else {
+            elements.withIndex().filter { (idx, _) -> filter.includes(idx, elementCount) }
+                .map { (idx, el) -> idx to el }
+        }
+        val filteredCount = filteredElements.size
+        if (filteredCount == 0) return
+
+        for ((distributionIdx, pair) in filteredElements.withIndex()) {
+            val (_, element) = pair
             val memberInfo = object : DistributionMemberInfo {
-                override val index: Int = idx
+                override val index: Int = distributionIdx
                 override val normalizedPosition: Double =
-                    if (elementCount > 1) idx.toDouble() / (elementCount - 1) else 0.5
+                    if (filteredCount > 1) distributionIdx.toDouble() / (filteredCount - 1) else 0.5
             }
 
             val memberPhase = effect.calculatePhaseForMember(
-                tick, masterClock, memberInfo, elementCount
+                tick, masterClock, memberInfo, filteredCount
             )
 
             val output = effect.effect.calculate(memberPhase)
@@ -493,13 +510,15 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         allMembers: List<uk.me.cormack.lighting7.fixture.group.GroupMember<*>>
     ) {
+        val filter = effect.elementFilter
+
         // Collect all elements in order
         data class FlatElement(
             val elementKey: String,
             val globalIndex: Int
         )
 
-        val flatElements = mutableListOf<FlatElement>()
+        val allFlatElements = mutableListOf<FlatElement>()
         for (member in allMembers) {
             val parentFixture = try {
                 fixtures.untypedFixture(member.key)
@@ -507,23 +526,32 @@ class FxEngine(
 
             if (parentFixture is MultiElementFixture<*>) {
                 for (element in parentFixture.elements) {
-                    flatElements.add(FlatElement(element.elementKey, flatElements.size))
+                    allFlatElements.add(FlatElement(element.elementKey, allFlatElements.size))
                 }
             }
         }
 
-        if (flatElements.isEmpty()) return
-        val totalCount = flatElements.size
+        if (allFlatElements.isEmpty()) return
+        val totalUnfilteredCount = allFlatElements.size
 
-        for (flatElement in flatElements) {
+        // Apply element filter on the flat list
+        val flatElements = if (filter == ElementFilter.ALL) {
+            allFlatElements
+        } else {
+            allFlatElements.filter { filter.includes(it.globalIndex, totalUnfilteredCount) }
+        }
+        if (flatElements.isEmpty()) return
+        val filteredCount = flatElements.size
+
+        for ((distributionIdx, flatElement) in flatElements.withIndex()) {
             val memberInfo = object : DistributionMemberInfo {
-                override val index: Int = flatElement.globalIndex
+                override val index: Int = distributionIdx
                 override val normalizedPosition: Double =
-                    if (totalCount > 1) flatElement.globalIndex.toDouble() / (totalCount - 1) else 0.5
+                    if (filteredCount > 1) distributionIdx.toDouble() / (filteredCount - 1) else 0.5
             }
 
             val memberPhase = effect.calculatePhaseForMember(
-                tick, masterClock, memberInfo, totalCount
+                tick, masterClock, memberInfo, filteredCount
             )
 
             val output = effect.effect.calculate(memberPhase)

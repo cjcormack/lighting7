@@ -75,6 +75,9 @@ internal fun Route.routeApiRestFx(state: State) {
                 request.distributionStrategy?.let {
                     instance.distributionStrategy = DistributionStrategy.fromName(it)
                 }
+                request.elementFilter?.let {
+                    instance.elementFilter = ElementFilter.fromName(it)
+                }
 
                 val effectId = state.show.fxEngine.addEffect(instance)
                 call.respond(AddEffectResponse(effectId))
@@ -124,6 +127,7 @@ internal fun Route.routeApiRestFx(state: State) {
                 val newBlendMode = request.blendMode?.let { BlendMode.valueOf(it) }
                 val newDistribution = request.distributionStrategy?.let { DistributionStrategy.fromName(it) }
                 val newElementMode = request.elementMode?.let { ElementMode.valueOf(it) }
+                val newElementFilter = request.elementFilter?.let { ElementFilter.fromName(it) }
 
                 val updated = engine.updateEffect(
                     effectId = resource.id,
@@ -132,7 +136,8 @@ internal fun Route.routeApiRestFx(state: State) {
                     newBlendMode = newBlendMode,
                     newPhaseOffset = request.phaseOffset,
                     newDistributionStrategy = newDistribution,
-                    newElementMode = newElementMode
+                    newElementMode = newElementMode,
+                    newElementFilter = newElementFilter
                 )
 
                 if (updated != null) {
@@ -229,7 +234,8 @@ data class AddEffectRequest(
     val startOnBeat: Boolean = true,
     val phaseOffset: Double = 0.0,
     val parameters: Map<String, String> = emptyMap(),
-    val distributionStrategy: String? = null
+    val distributionStrategy: String? = null,
+    val elementFilter: String? = null
 )
 
 @Serializable
@@ -270,7 +276,8 @@ data class UpdateEffectRequest(
     val blendMode: String? = null,
     val phaseOffset: Double? = null,
     val distributionStrategy: String? = null,
-    val elementMode: String? = null
+    val elementMode: String? = null,
+    val elementFilter: String? = null
 )
 
 @Serializable
@@ -288,6 +295,7 @@ data class EffectDto(
     val isGroupTarget: Boolean,
     val distributionStrategy: String? = null,
     val elementMode: String? = null,
+    val elementFilter: String? = null,
     val presetId: Int? = null,
 )
 
@@ -326,6 +334,8 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
         distributionStrategy.javaClass.simpleName else null,
     elementMode = if (isGroupEffect && isMultiElementExpanded)
         elementMode.name else null,
+    elementFilter = if ((isGroupEffect || isMultiElementExpanded) && elementFilter != ElementFilter.ALL)
+        elementFilter.name else null,
     presetId = presetId,
 )
 

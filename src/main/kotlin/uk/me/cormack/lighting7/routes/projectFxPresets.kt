@@ -454,11 +454,18 @@ private fun togglePresetOnTargets(
                         ElementMode.PER_FIXTURE
                     }
 
+                    val elFilter = try {
+                        presetEffect.elementFilter?.let { ElementFilter.fromName(it) } ?: ElementFilter.ALL
+                    } catch (_: Exception) {
+                        ElementFilter.ALL
+                    }
+
                     val instance = FxInstance(effect, fxTarget, timing, blendMode).apply {
                         this.presetId = presetId
                         phaseOffset = presetEffect.phaseOffset
                         distributionStrategy = distribution
                         this.elementMode = elementMode
+                        this.elementFilter = elFilter
                     }
                     engine.addEffect(instance)
                     addedCount++
@@ -467,9 +474,15 @@ private fun togglePresetOnTargets(
                     if (propertyName == null) continue
 
                     val fxTarget = createFixtureTarget(target.key, propertyName, state)
+                    val elFilter = try {
+                        presetEffect.elementFilter?.let { ElementFilter.fromName(it) } ?: ElementFilter.ALL
+                    } catch (_: Exception) {
+                        ElementFilter.ALL
+                    }
                     val instance = FxInstance(effect, fxTarget, timing, blendMode).apply {
                         this.presetId = presetId
                         phaseOffset = presetEffect.phaseOffset
+                        this.elementFilter = elFilter
                     }
                     engine.addEffect(instance)
                     addedCount++

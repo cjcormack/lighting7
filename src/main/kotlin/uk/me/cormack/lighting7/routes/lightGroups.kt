@@ -135,6 +135,8 @@ internal fun Route.routeApiRestGroups(state: State) {
                         blendMode = instance.blendMode.name,
                         distribution = instance.distributionStrategy.javaClass.simpleName,
                         elementMode = if (expanded) instance.elementMode.name else null,
+                        elementFilter = if (instance.elementFilter != ElementFilter.ALL)
+                            instance.elementFilter.name else null,
                         isRunning = instance.isRunning,
                         phaseOffset = instance.phaseOffset,
                         currentPhase = instance.lastPhase,
@@ -219,7 +221,8 @@ data class AddGroupFxRequest(
     val distribution: String = "LINEAR",
     val phaseOffset: Double = 0.0,
     val parameters: Map<String, String> = emptyMap(),
-    val elementMode: String = "PER_FIXTURE"  // PER_FIXTURE or FLAT
+    val elementMode: String = "PER_FIXTURE",  // PER_FIXTURE or FLAT
+    val elementFilter: String = "ALL"
 )
 
 @Serializable
@@ -236,6 +239,7 @@ data class GroupEffectDto(
     val blendMode: String,
     val distribution: String,
     val elementMode: String? = null,
+    val elementFilter: String? = null,
     val isRunning: Boolean,
     val phaseOffset: Double,
     val currentPhase: Double,
@@ -418,11 +422,14 @@ private fun applyGroupEffect(
         }
     }
 
+    val elFilter = ElementFilter.fromName(request.elementFilter)
+
     // Create SINGLE FxInstance for the entire group
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         phaseOffset = request.phaseOffset
         distributionStrategy = distribution
         this.elementMode = elementMode
+        this.elementFilter = elFilter
     }
 
     return engine.addEffect(instance)
