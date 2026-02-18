@@ -600,7 +600,7 @@ private val colourProperties = listOf("rgbColour")
 private val positionProperties = listOf("position")
 private val settingProperties = listOf("setting")
 
-private val effectLibrary = listOf(
+internal val effectLibrary = listOf(
     // Dimmer effects
     EffectTypeInfo("SineWave", "dimmer", "SLIDER", listOf(
         ParameterInfo("min", "ubyte", "0", "Minimum value"),

@@ -382,7 +382,7 @@ private fun isPresetActiveOnTarget(
  * - If ALL targets have at least one effect tagged with this presetId, removes those effects.
  * - Otherwise, applies all preset effects (tagged with the presetId) to each target.
  */
-private fun togglePresetOnTargets(
+internal fun togglePresetOnTargets(
     state: State,
     presetId: Int,
     presetEffects: List<FxPresetEffectDto>,

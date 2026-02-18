@@ -6,10 +6,8 @@ import io.ktor.server.config.*
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
-import uk.me.cormack.lighting7.models.DaoFxPresets
-import uk.me.cormack.lighting7.models.DaoProjects
-import uk.me.cormack.lighting7.models.DaoScenes
-import uk.me.cormack.lighting7.models.DaoScripts
+import uk.me.cormack.lighting7.ai.AiService
+import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.music.Music
 import uk.me.cormack.lighting7.show.Show
 
@@ -17,6 +15,16 @@ class State(val config: ApplicationConfig) {
     val database = initDatabase()
     val projectManager = ProjectManager(config, database) { this }
     val music = initMusic()
+
+    /**
+     * AI service for Claude-powered lighting control.
+     * Null if no ANTHROPIC_API_KEY is configured (feature is optional).
+     */
+    val aiService: AiService? by lazy {
+        val apiKey = config.propertyOrNull("anthropic.apiKey")?.getString()
+        if (apiKey.isNullOrBlank()) null
+        else AiService(this, config)
+    }
 
     /**
      * Delegate show access through ProjectManager.
@@ -54,7 +62,7 @@ class State(val config: ApplicationConfig) {
             // Note: createMissingTablesAndColumns is deprecated in favor of migration tools,
             // but is acceptable for this development/personal project setup
             @Suppress("DEPRECATION")
-            SchemaUtils.createMissingTablesAndColumns(DaoProjects, DaoScripts, DaoScenes, DaoFxPresets)
+            SchemaUtils.createMissingTablesAndColumns(DaoProjects, DaoScripts, DaoScenes, DaoFxPresets, DaoAiConversations)
 
             // Migration: drop old unique index on (project_id, name) since we now use (project_id, fixture_type, name)
             exec("DROP INDEX IF EXISTS fx_presets_project_id_name")
