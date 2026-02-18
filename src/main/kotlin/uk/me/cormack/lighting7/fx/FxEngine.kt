@@ -326,6 +326,12 @@ class FxEngine(
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
 
+        // Reset all FX-controlled properties to neutral before applying effects.
+        // This prevents accumulative blend modes (MAX, ADDITIVE, etc.) from
+        // ratcheting values up/down across ticks by always blending against
+        // a clean baseline rather than the previous tick's result.
+        resetActiveProperties(fixturesWithTx)
+
         // Process each active effect
         for ((_, effect) in activeEffects) {
             if (!effect.isRunning) continue
@@ -343,6 +349,32 @@ class FxEngine(
         }
 
         transaction.apply()
+    }
+
+    /**
+     * Reset all properties that are actively controlled by running effects
+     * to their neutral values. This ensures blend modes operate against a
+     * clean baseline each tick rather than accumulating from previous ticks.
+     */
+    private fun resetActiveProperties(fixturesWithTx: Fixtures.FixturesWithTransaction) {
+        data class PropertyKey(val fixtureKey: String, val propertyName: String)
+
+        val seen = mutableSetOf<PropertyKey>()
+
+        for ((_, effect) in activeEffects) {
+            if (!effect.isRunning) continue
+
+            val keys = resolveEffectFixtureKeys(effect)
+            for (key in keys) {
+                if (seen.add(PropertyKey(key, effect.target.propertyName))) {
+                    try {
+                        effect.target.applyNeutralValue(fixturesWithTx, key)
+                    } catch (e: Exception) {
+                        // Non-fatal — the effect application will also handle missing fixtures
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -421,7 +453,7 @@ class FxEngine(
             )
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
-            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset)
+            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
             val output = effect.effect.calculate(memberPhase, context)
             effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
         }
@@ -469,7 +501,7 @@ class FxEngine(
                     tick, masterClock, member, groupSize
                 )
                 val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
-                val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset)
+                val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
                 val output = effect.effect.calculate(memberPhase, context)
                 effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
             }
@@ -559,7 +591,7 @@ class FxEngine(
             )
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
-            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset)
+            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
             val output = effect.effect.calculate(memberPhase, context)
             effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
         }

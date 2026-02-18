@@ -58,6 +58,7 @@ class DistributionStrategyTest {
     fun `CENTER_OUT starts from center and expands outward`() {
         val strategy = DistributionStrategy.CENTER_OUT
         val groupSize = 5
+        // distinctSlots(5) = 3 (center, mid, edge)
 
         val offsets = (0 until groupSize).map { idx ->
             strategy.calculateOffset(createMember(idx, groupSize), groupSize)
@@ -66,13 +67,13 @@ class DistributionStrategyTest {
         // Center member (index 2) should have offset 0.0
         assertEquals(0.0, offsets[2], 0.001)
 
-        // Edge members should have offset 1.0
-        assertEquals(1.0, offsets[0], 0.001)
-        assertEquals(1.0, offsets[4], 0.001)
+        // Symmetric pairs should share offsets
+        assertEquals(offsets[0], offsets[4], 0.001) // edge pair
+        assertEquals(offsets[1], offsets[3], 0.001) // mid pair
 
-        // Middle members should be between
-        assertTrue(offsets[1] > 0.0 && offsets[1] < 1.0)
-        assertTrue(offsets[3] > 0.0 && offsets[3] < 1.0)
+        // Offsets should increase from center to edge
+        assertTrue(offsets[1] > offsets[2]) // mid > center
+        assertTrue(offsets[0] > offsets[1]) // edge > mid
     }
 
     @Test
@@ -84,12 +85,17 @@ class DistributionStrategyTest {
             strategy.calculateOffset(createMember(idx, groupSize), groupSize)
         }
 
-        // Edge members should have offset 0.0
+        // Edge members should fire first (lowest offset)
         assertEquals(0.0, offsets[0], 0.001)
         assertEquals(0.0, offsets[4], 0.001)
 
-        // Center member should have offset 1.0
-        assertEquals(1.0, offsets[2], 0.001)
+        // Center member should fire last (highest offset)
+        assertTrue(offsets[2] > offsets[1])
+        assertTrue(offsets[2] > offsets[0])
+
+        // Symmetric pairs should share offsets
+        assertEquals(offsets[0], offsets[4], 0.001)
+        assertEquals(offsets[1], offsets[3], 0.001)
     }
 
     @Test
@@ -105,9 +111,13 @@ class DistributionStrategyTest {
             reverse.calculateOffset(createMember(idx, groupSize), groupSize)
         }
 
-        // Reverse should be 1 - linear
-        assertEquals(1.0, reverseOffsets[0], 0.001)
-        assertEquals(0.25, reverseOffsets[3], 0.001)
+        // Reverse order: last member fires first, first fires last
+        assertEquals(0.75, reverseOffsets[0], 0.001) // (4-1-0)/4 = 0.75
+        assertEquals(0.0, reverseOffsets[3], 0.001)   // (4-1-3)/4 = 0.0
+
+        // Reverse offsets should be linear offsets in reverse order
+        assertEquals(linearOffsets[0], reverseOffsets[3], 0.001)
+        assertEquals(linearOffsets[3], reverseOffsets[0], 0.001)
     }
 
     @Test
@@ -126,7 +136,7 @@ class DistributionStrategyTest {
     }
 
     @Test
-    fun `PING_PONG uses normalized position`() {
+    fun `PING_PONG uses LINEAR offsets with triangle phase`() {
         val strategy = DistributionStrategy.PING_PONG
         val groupSize = 4
 
@@ -134,9 +144,14 @@ class DistributionStrategyTest {
             strategy.calculateOffset(createMember(idx, groupSize), groupSize)
         }
 
-        // Should match normalized positions
+        // Should match LINEAR distribution offsets
         assertEquals(0.0, offsets[0], 0.001)
-        assertEquals(1.0, offsets[3], 0.001)
+        assertEquals(0.25, offsets[1], 0.001)
+        assertEquals(0.5, offsets[2], 0.001)
+        assertEquals(0.75, offsets[3], 0.001)
+
+        // PING_PONG uses triangle phase remap
+        assertTrue(strategy.usesTrianglePhase)
     }
 
     @Test

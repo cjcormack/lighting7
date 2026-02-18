@@ -25,6 +25,34 @@ interface DistributionMemberInfo {
  */
 sealed interface DistributionStrategy {
     /**
+     * Whether this strategy produces different phase offsets for different members.
+     *
+     * Returns false only for strategies that give all members the same offset
+     * (e.g., UNIFIED). Effects use this to decide whether to apply windowed
+     * chase behaviour or output uniformly to all members.
+     */
+    val hasSpread: Boolean get() = true
+
+    /**
+     * Whether the base phase should be remapped through a triangle wave
+     * before windowing, creating a bounce/ping-pong chase pattern.
+     */
+    val usesTrianglePhase: Boolean get() = false
+
+    /**
+     * Number of distinct offset slots for a given group size.
+     *
+     * For asymmetric distributions (LINEAR, REVERSE), this equals groupSize.
+     * For symmetric distributions (CENTER_OUT, SPLIT), this is fewer because
+     * multiple members share the same offset. Static effects use this for
+     * window width: `1/distinctSlots` ensures no gaps in the chase.
+     *
+     * @param groupSize Total number of members in the group
+     * @return Number of unique offset positions
+     */
+    fun distinctSlots(groupSize: Int): Int = groupSize
+
+    /**
      * Calculate the phase offset for a group member.
      *
      * @param member The member info (index and normalized position)
@@ -52,6 +80,8 @@ sealed interface DistributionStrategy {
      * useful for synchronized group effects.
      */
     data object UNIFIED : DistributionStrategy {
+        override val hasSpread: Boolean = false
+        override fun distinctSlots(groupSize: Int): Int = 1
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int) = 0.0
     }
 
@@ -59,15 +89,24 @@ sealed interface DistributionStrategy {
      * Effects radiate outward from the center of the group.
      *
      * Center fixtures fire first (offset 0.0), with edge fixtures firing last.
+     * Symmetric pairs (equidistant from center) share the same offset and fire together.
      * Useful for "explosion" or "bloom" effects.
      */
     data object CENTER_OUT : DistributionStrategy {
+        override fun distinctSlots(groupSize: Int): Int = (groupSize + 1) / 2
+
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             if (groupSize <= 1) return 0.0
+            val slots = distinctSlots(groupSize)
             val center = (groupSize - 1) / 2.0
-            val distanceFromCenter = abs(member.index - center)
-            val maxDistance = center
-            return if (maxDistance > 0) distanceFromCenter / maxDistance else 0.0
+            val distance = abs(member.index - center)
+            // Map continuous distance to integer rank (0 = center, slots-1 = edge)
+            val rank = if (groupSize % 2 == 0) {
+                (distance - 0.5).toInt()
+            } else {
+                distance.toInt()
+            }
+            return rank.toDouble() / slots
         }
     }
 
@@ -75,11 +114,20 @@ sealed interface DistributionStrategy {
      * Effects converge toward the center from the edges.
      *
      * Edge fixtures fire first (offset 0.0), with center fixtures firing last.
+     * Symmetric pairs share the same offset and fire together.
      * The inverse of CENTER_OUT.
      */
     data object EDGES_IN : DistributionStrategy {
+        override fun distinctSlots(groupSize: Int): Int = CENTER_OUT.distinctSlots(groupSize)
+
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
-            return 1.0 - CENTER_OUT.calculateOffset(member, groupSize)
+            if (groupSize <= 1) return 0.0
+            val slots = distinctSlots(groupSize)
+            val centerOutOffset = CENTER_OUT.calculateOffset(member, groupSize)
+            // Invert: rank 0 (center in CENTER_OUT) becomes rank (slots-1)
+            val centerOutRank = (centerOutOffset * slots).toInt().coerceIn(0, slots - 1)
+            val invertedRank = slots - 1 - centerOutRank
+            return invertedRank.toDouble() / slots
         }
     }
 
@@ -88,14 +136,21 @@ sealed interface DistributionStrategy {
      *
      * Creates a pseudo-random distribution that remains consistent
      * across effect applications (same seed produces same pattern).
+     * Uses a deterministic shuffle to ensure evenly-spaced offsets.
      *
      * @param seed Random seed for offset calculation
      */
     data class RANDOM(val seed: Int = 0) : DistributionStrategy {
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
-            // Simple hash-based pseudo-random that's deterministic
-            val hash = (member.index * 31 + seed).hashCode()
-            return (hash and 0x7FFFFFFF).toDouble() / Int.MAX_VALUE
+            if (groupSize <= 1) return 0.0
+            // Deterministic Fisher-Yates shuffle to get evenly-spaced offsets in random order
+            val rng = java.util.Random(seed.toLong() * 31 + groupSize)
+            val perm = (0 until groupSize).toMutableList()
+            for (i in perm.size - 1 downTo 1) {
+                val j = rng.nextInt(i + 1)
+                perm[i] = perm[j].also { perm[j] = perm[i] }
+            }
+            return perm[member.index].toDouble() / groupSize
         }
     }
 
@@ -105,13 +160,15 @@ sealed interface DistributionStrategy {
      * Creates a bouncing effect where the active point travels
      * back and forth across the group. One full cycle goes from
      * left edge to right edge and back.
+     *
+     * Uses LINEAR offsets combined with a triangle wave phase remap
+     * so that static effects sweep forward then backward.
      */
     data object PING_PONG : DistributionStrategy {
+        override val usesTrianglePhase: Boolean = true
+
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
-            if (groupSize <= 1) return 0.0
-            // For a ping-pong, we want indices to go 0,1,2,3,2,1,0,1,2...
-            // But for offset calculation, we just space them evenly for the sweep
-            return member.normalizedPosition
+            return LINEAR.calculateOffset(member, groupSize)
         }
     }
 
@@ -123,7 +180,7 @@ sealed interface DistributionStrategy {
      */
     data object REVERSE : DistributionStrategy {
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
-            return if (groupSize > 1) 1.0 - (member.index.toDouble() / groupSize) else 0.0
+            return if (groupSize > 1) (groupSize - 1 - member.index).toDouble() / groupSize else 0.0
         }
     }
 
@@ -131,19 +188,18 @@ sealed interface DistributionStrategy {
      * Split distribution: left and right halves run simultaneously.
      *
      * The group is split in half, with each half running the same
-     * linear distribution from center outward. Creates a mirrored effect.
+     * linear distribution from center outward. Members at mirrored
+     * positions share the same offset and fire together.
      */
     data object SPLIT : DistributionStrategy {
+        override fun distinctSlots(groupSize: Int): Int = (groupSize + 1) / 2
+
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             if (groupSize <= 1) return 0.0
-            val halfSize = groupSize / 2
-            return if (member.index < halfSize) {
-                // Left half: 0 to 0.5
-                member.index.toDouble() / groupSize
-            } else {
-                // Right half: mirrors left half
-                (groupSize - 1 - member.index).toDouble() / groupSize
-            }
+            val slots = distinctSlots(groupSize)
+            // Mirror: member i and member (N-1-i) get the same rank
+            val rank = minOf(member.index, groupSize - 1 - member.index)
+            return rank.toDouble() / slots
         }
     }
 

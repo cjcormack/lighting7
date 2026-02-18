@@ -285,10 +285,18 @@ data class StaticValue(
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
         if (context.groupSize <= 1) return FxOutput.Slider(value)
-        val window = 1.0 / context.groupSize
-        val base = context.basePhase(phase)
-        val windowStart = context.memberIndex * window
-        return if (base >= windowStart && base < windowStart + window) FxOutput.Slider(value) else FxOutput.Slider(0u)
+        if (!context.hasDistributionSpread) return FxOutput.Slider(value)
+
+        val window = 1.0 / context.numDistinctSlots
+        var base = context.basePhase(phase)
+
+        if (context.trianglePhase) {
+            val dist = kotlin.math.abs(base - context.distributionOffset)
+            return if (dist < window / 2.0) FxOutput.Slider(value) else FxOutput.Slider(0u)
+        }
+
+        val dist = (base - context.distributionOffset + 1.0) % 1.0
+        return if (dist < window) FxOutput.Slider(value) else FxOutput.Slider(0u)
     }
 }
 

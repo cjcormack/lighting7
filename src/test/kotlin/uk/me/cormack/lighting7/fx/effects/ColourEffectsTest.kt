@@ -190,16 +190,20 @@ class ColourEffectsTest {
     @Test
     fun `StaticColour with context auto-windows for distribution`() {
         val effect = StaticColour(color = Color.RED.ext())
-        val context = EffectContext(groupSize = 12, memberIndex = 0)
+        // Simulate member 0 of a 12-element LINEAR distribution
+        val offset = 0.0
+        val context = EffectContext(groupSize = 12, memberIndex = 0, distributionOffset = offset, hasDistributionSpread = true, numDistinctSlots = 12)
 
-        // Phase within the window (0 to 1/12) should return the colour
-        assertEquals(Color.RED, effect.calculate(0.0, context).colour())
-        assertEquals(Color.RED, effect.calculate(0.04, context).colour())
+        fun shiftedPhase(base: Double) = (base - offset + 1.0) % 1.0
 
-        // Phase outside the window should return black
-        assertEquals(Color.BLACK, effect.calculate(0.1, context).colour())
-        assertEquals(Color.BLACK, effect.calculate(0.5, context).colour())
-        assertEquals(Color.BLACK, effect.calculate(0.99, context).colour())
+        // Base phase within member 0's window [0, 1/12) should return the colour
+        assertEquals(Color.RED, effect.calculate(shiftedPhase(0.0), context).colour())
+        assertEquals(Color.RED, effect.calculate(shiftedPhase(0.04), context).colour())
+
+        // Base phase outside the window should return black
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.1), context).colour())
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.5), context).colour())
+        assertEquals(Color.BLACK, effect.calculate(shiftedPhase(0.99), context).colour())
     }
 
     @Test
@@ -214,21 +218,32 @@ class ColourEffectsTest {
     }
 
     @Test
+    fun `StaticColour with UNIFIED distribution always returns colour`() {
+        val effect = StaticColour(color = Color.RED.ext())
+        // UNIFIED: hasDistributionSpread = false
+        val context = EffectContext(groupSize = 12, memberIndex = 5, hasDistributionSpread = false)
+
+        assertEquals(Color.RED, effect.calculate(0.0, context).colour())
+        assertEquals(Color.RED, effect.calculate(0.5, context).colour())
+        assertEquals(Color.RED, effect.calculate(0.99, context).colour())
+    }
+
+    @Test
     fun `StaticColour chase fires elements in forward order`() {
         val effect = StaticColour(color = Color.RED.ext())
         val groupSize = 4
 
         // Simulate LINEAR distribution: element i gets offset i/N
-        // At basePhase = 0.0, element 0 should be ON (its window is [0, 0.25))
+        // At basePhase = 0.1, element 0 should be ON (its window is [0, 0.25))
         // At basePhase = 0.3, element 1 should be ON (its window is [0.25, 0.5))
 
         fun contextFor(idx: Int): EffectContext {
             val offset = idx.toDouble() / groupSize
-            return EffectContext(groupSize = groupSize, memberIndex = idx, distributionOffset = offset)
+            return EffectContext(groupSize = groupSize, memberIndex = idx, distributionOffset = offset, hasDistributionSpread = true, numDistinctSlots = groupSize)
         }
 
         fun shiftedPhase(basePhase: Double, idx: Int): Double {
-            return (basePhase + idx.toDouble() / groupSize) % 1.0
+            return (basePhase - idx.toDouble() / groupSize + 1.0) % 1.0
         }
 
         // basePhase = 0.1 -> element 0 should be ON (window [0, 0.25))

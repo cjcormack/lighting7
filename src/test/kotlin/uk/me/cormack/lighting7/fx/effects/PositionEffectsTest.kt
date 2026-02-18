@@ -199,16 +199,20 @@ class PositionEffectsTest {
     @Test
     fun `StaticPosition with context auto-windows for distribution`() {
         val effect = StaticPosition(pan = 50u, tilt = 200u)
-        val context = EffectContext(groupSize = 4, memberIndex = 0)
+        // Simulate member 0 of a 4-element LINEAR distribution
+        val offset = 0.0
+        val context = EffectContext(groupSize = 4, memberIndex = 0, distributionOffset = offset, hasDistributionSpread = true, numDistinctSlots = 4)
 
-        // Phase within the window (0 to 1/4) should return the position
-        assertEquals(Pair(50.toUByte(), 200.toUByte()), effect.calculate(0.0, context).position())
-        assertEquals(Pair(50.toUByte(), 200.toUByte()), effect.calculate(0.2, context).position())
+        fun shiftedPhase(base: Double) = (base - offset + 1.0) % 1.0
 
-        // Phase outside the window should return center (128, 128)
-        assertEquals(Pair(128.toUByte(), 128.toUByte()), effect.calculate(0.25, context).position())
-        assertEquals(Pair(128.toUByte(), 128.toUByte()), effect.calculate(0.5, context).position())
-        assertEquals(Pair(128.toUByte(), 128.toUByte()), effect.calculate(0.99, context).position())
+        // Base phase within member 0's window [0, 1/4) should return the position
+        assertEquals(Pair(50.toUByte(), 200.toUByte()), effect.calculate(shiftedPhase(0.0), context).position())
+        assertEquals(Pair(50.toUByte(), 200.toUByte()), effect.calculate(shiftedPhase(0.2), context).position())
+
+        // Base phase outside the window should return center (128, 128)
+        assertEquals(Pair(128.toUByte(), 128.toUByte()), effect.calculate(shiftedPhase(0.25), context).position())
+        assertEquals(Pair(128.toUByte(), 128.toUByte()), effect.calculate(shiftedPhase(0.5), context).position())
+        assertEquals(Pair(128.toUByte(), 128.toUByte()), effect.calculate(shiftedPhase(0.99), context).position())
     }
 
     @Test

@@ -157,16 +157,20 @@ class DimmerEffectsTest {
     @Test
     fun `StaticValue with context auto-windows for distribution`() {
         val effect = StaticValue(value = 200u)
-        val context = EffectContext(groupSize = 4, memberIndex = 0)
+        // Simulate member 0 of a 4-element LINEAR distribution
+        val offset = 0.0
+        val context = EffectContext(groupSize = 4, memberIndex = 0, distributionOffset = offset, hasDistributionSpread = true, numDistinctSlots = 4)
 
-        // Phase within the window (0 to 1/4) should return the value
-        assertEquals(200.toUByte(), effect.calculate(0.0, context).sliderValue())
-        assertEquals(200.toUByte(), effect.calculate(0.2, context).sliderValue())
+        fun shiftedPhase(base: Double) = (base - offset + 1.0) % 1.0
 
-        // Phase outside the window should return 0
-        assertEquals(0.toUByte(), effect.calculate(0.25, context).sliderValue())
-        assertEquals(0.toUByte(), effect.calculate(0.5, context).sliderValue())
-        assertEquals(0.toUByte(), effect.calculate(0.99, context).sliderValue())
+        // Base phase within member 0's window [0, 1/4) should return the value
+        assertEquals(200.toUByte(), effect.calculate(shiftedPhase(0.0), context).sliderValue())
+        assertEquals(200.toUByte(), effect.calculate(shiftedPhase(0.2), context).sliderValue())
+
+        // Base phase outside the window should return 0
+        assertEquals(0.toUByte(), effect.calculate(shiftedPhase(0.25), context).sliderValue())
+        assertEquals(0.toUByte(), effect.calculate(shiftedPhase(0.5), context).sliderValue())
+        assertEquals(0.toUByte(), effect.calculate(shiftedPhase(0.99), context).sliderValue())
     }
 
     @Test

@@ -219,12 +219,24 @@ class FxInstance(
         memberInfo: DistributionMemberInfo,
         groupSize: Int
     ): Double {
-        val basePhase = clock.phaseForDivision(tick, timing.beatDivision)
+        var basePhase = clock.phaseForDivision(tick, timing.beatDivision)
 
-        // Calculate distribution offset using the member's position
+        // PING_PONG: apply triangle wave remap to the base clock phase so that
+        // ALL effects (not just static ones) sweep forward then backward.
+        // Scale to [0, (N-1)/N] to match the LINEAR offset range and avoid
+        // wrapping artifacts at the turnaround points.
+        if (distributionStrategy.usesTrianglePhase && groupSize > 1) {
+            val slots = distributionStrategy.distinctSlots(groupSize)
+            val tri = if (basePhase < 0.5) basePhase * 2.0 else 2.0 * (1.0 - basePhase)
+            basePhase = tri * (slots - 1.0) / slots
+        }
+
+        // Subtract distribution offset so that higher-offset members are *behind*
+        // in the cycle, making the visual sweep flow in the natural direction
+        // (element 0 → element N for LINEAR, etc.).
         val distributionOffset = distributionStrategy.calculateOffset(memberInfo, groupSize)
 
-        val phase = (basePhase + phaseOffset + distributionOffset) % 1.0
+        val phase = (basePhase + phaseOffset - distributionOffset + 1.0) % 1.0
         lastPhase = phase // Store last calculated (might be last member)
         return phase
     }

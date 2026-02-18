@@ -11,19 +11,34 @@ import java.awt.Color
  * @param groupSize Total number of elements being distributed across (1 for a single fixture)
  * @param memberIndex 0-based index of the current element within the group
  * @param distributionOffset The phase offset applied by the distribution strategy for this member (0.0–1.0)
+ * @param hasDistributionSpread Whether the distribution strategy produces different offsets
+ *        for different members. False for UNIFIED (all offsets 0), true for LINEAR, CENTER_OUT, etc.
+ *        Effects use this to decide whether to chase (windowed) or apply uniformly.
+ * @param numDistinctSlots Number of unique offset positions in the distribution. Equals
+ *        groupSize for asymmetric distributions (LINEAR, REVERSE, RANDOM), but fewer for
+ *        symmetric ones (CENTER_OUT, SPLIT) where multiple members share an offset.
+ *        Static effects use this for window width: `1/numDistinctSlots`.
+ * @param trianglePhase When true, the base phase should be remapped through a triangle wave
+ *        before windowing, so the chase sweeps forward then backward (PING_PONG).
  */
 data class EffectContext(
     val groupSize: Int,
     val memberIndex: Int,
-    val distributionOffset: Double = 0.0
+    val distributionOffset: Double = 0.0,
+    val hasDistributionSpread: Boolean = false,
+    val numDistinctSlots: Int = groupSize,
+    val trianglePhase: Boolean = false
 ) {
     /**
      * Recover the base (un-shifted) phase from a distribution-shifted phase.
      *
+     * Since the member phase is computed as `(clock - distOffset) % 1.0`,
+     * recovery adds the offset back: `(phase + distOffset) % 1.0`.
+     *
      * Useful for effects that need to window based on absolute cycle position
      * rather than the distribution-shifted position (e.g., static chase effects).
      */
-    fun basePhase(shiftedPhase: Double): Double = (shiftedPhase - distributionOffset + 1.0) % 1.0
+    fun basePhase(shiftedPhase: Double): Double = (shiftedPhase + distributionOffset) % 1.0
 
     companion object {
         /** Default context for a single fixture (no distribution). */

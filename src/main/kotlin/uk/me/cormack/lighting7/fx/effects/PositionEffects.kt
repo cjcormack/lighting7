@@ -262,9 +262,17 @@ data class StaticPosition(
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
         if (context.groupSize <= 1) return FxOutput.Position(pan, tilt)
-        val window = 1.0 / context.groupSize
-        val base = context.basePhase(phase)
-        val windowStart = context.memberIndex * window
-        return if (base >= windowStart && base < windowStart + window) FxOutput.Position(pan, tilt) else FxOutput.Position(128u, 128u)
+        if (!context.hasDistributionSpread) return FxOutput.Position(pan, tilt)
+
+        val window = 1.0 / context.numDistinctSlots
+        var base = context.basePhase(phase)
+
+        if (context.trianglePhase) {
+            val dist = kotlin.math.abs(base - context.distributionOffset)
+            return if (dist < window / 2.0) FxOutput.Position(pan, tilt) else FxOutput.Position(128u, 128u)
+        }
+
+        val dist = (base - context.distributionOffset + 1.0) % 1.0
+        return if (dist < window) FxOutput.Position(pan, tilt) else FxOutput.Position(128u, 128u)
     }
 }

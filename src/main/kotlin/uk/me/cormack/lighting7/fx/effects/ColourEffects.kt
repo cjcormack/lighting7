@@ -223,9 +223,21 @@ data class StaticColour(
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
         if (context.groupSize <= 1) return FxOutput.Colour(color)
-        val window = 1.0 / context.groupSize
-        val base = context.basePhase(phase)
-        val windowStart = context.memberIndex * window
-        return if (base >= windowStart && base < windowStart + window) FxOutput.Colour(color) else FxOutput.Colour(ExtendedColour.BLACK)
+        if (!context.hasDistributionSpread) return FxOutput.Colour(color)
+
+        val window = 1.0 / context.numDistinctSlots
+        var base = context.basePhase(phase)
+
+        // PING_PONG: triangle remap is already applied at the phase level
+        // (in FxInstance.calculatePhaseForMember). Use absolute distance
+        // instead of modular wrapping to avoid floating-point edge cases
+        // where (maxOffset - maxOffset + 1.0) % 1.0 ≈ 1.0 instead of 0.0.
+        if (context.trianglePhase) {
+            val dist = kotlin.math.abs(base - context.distributionOffset)
+            return if (dist < window / 2.0) FxOutput.Colour(color) else FxOutput.Colour(ExtendedColour.BLACK)
+        }
+
+        val dist = (base - context.distributionOffset + 1.0) % 1.0
+        return if (dist < window) FxOutput.Colour(color) else FxOutput.Colour(ExtendedColour.BLACK)
     }
 }
