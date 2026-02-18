@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx.effects
 
+import uk.me.cormack.lighting7.fx.EffectContext
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxOutput
 import java.awt.Color
@@ -184,5 +185,31 @@ class ColourEffectsTest {
         assertEquals(128u.toUByte(), output.white)
         assertEquals(64u.toUByte(), output.amber)
         assertEquals(32u.toUByte(), output.uv)
+    }
+
+    @Test
+    fun `StaticColour with context auto-windows for distribution`() {
+        val effect = StaticColour(color = Color.RED.ext())
+        val context = EffectContext(groupSize = 12, memberIndex = 0)
+
+        // Phase within the window (0 to 1/12) should return the colour
+        assertEquals(Color.RED, effect.calculate(0.0, context).colour())
+        assertEquals(Color.RED, effect.calculate(0.04, context).colour())
+
+        // Phase outside the window should return black
+        assertEquals(Color.BLACK, effect.calculate(0.1, context).colour())
+        assertEquals(Color.BLACK, effect.calculate(0.5, context).colour())
+        assertEquals(Color.BLACK, effect.calculate(0.99, context).colour())
+    }
+
+    @Test
+    fun `StaticColour with single element context behaves like no context`() {
+        val effect = StaticColour(color = Color.RED.ext())
+        val context = EffectContext.SINGLE
+
+        // Should always return the colour regardless of phase
+        assertEquals(Color.RED, effect.calculate(0.0, context).colour())
+        assertEquals(Color.RED, effect.calculate(0.5, context).colour())
+        assertEquals(Color.RED, effect.calculate(1.0, context).colour())
     }
 }

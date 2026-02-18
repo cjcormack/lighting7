@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx.effects
 
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fx.Effect
+import uk.me.cormack.lighting7.fx.EffectContext
 import uk.me.cormack.lighting7.fx.FxOutput
 import uk.me.cormack.lighting7.fx.FxOutputType
 import kotlin.math.*
@@ -29,7 +30,7 @@ data class Circle(
         "panRadius" to panRadius.toString(), "tiltRadius" to tiltRadius.toString()
     )
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val angle = phase * 2 * PI
         val pan = (panCenter.toInt() + panRadius.toInt() * cos(angle))
             .toInt().coerceIn(0, 255).toUByte()
@@ -62,7 +63,7 @@ data class Figure8(
         "panRadius" to panRadius.toString(), "tiltRadius" to tiltRadius.toString()
     )
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val angle = phase * 2 * PI
         // sin for horizontal, sin(2x) for vertical creates figure-8
         val pan = (panCenter.toInt() + panRadius.toInt() * sin(angle))
@@ -101,7 +102,7 @@ data class Sweep(
         "curve" to curve.name, "pingPong" to pingPong.toString()
     )
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val effectivePhase = if (pingPong && phase > 0.5) {
             1.0 - (phase - 0.5) * 2
         } else if (pingPong) {
@@ -146,7 +147,7 @@ data class PanSweep(
         "tilt" to tilt.toString(), "curve" to curve.name, "pingPong" to pingPong.toString()
     )
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val effectivePhase = if (pingPong && phase > 0.5) {
             1.0 - (phase - 0.5) * 2
         } else if (pingPong) {
@@ -188,7 +189,7 @@ data class TiltSweep(
         "pan" to pan.toString(), "curve" to curve.name, "pingPong" to pingPong.toString()
     )
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val effectivePhase = if (pingPong && phase > 0.5) {
             1.0 - (phase - 0.5) * 2
         } else if (pingPong) {
@@ -228,7 +229,7 @@ data class RandomPosition(
         "panRange" to panRange.toString(), "tiltRange" to tiltRange.toString()
     )
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         // Pseudo-random but deterministic based on phase
         val panOffset = (sin(phase * 127.0) * panRange.toInt()).toInt()
         val tiltOffset = (sin(phase * 211.0) * tiltRange.toInt()).toInt()
@@ -241,9 +242,12 @@ data class RandomPosition(
 }
 
 /**
- * Static position - no movement.
+ * Static position — outputs a fixed pan/tilt position.
  *
- * Holds a fixed position, useful as a base or placeholder.
+ * When distributed across multiple elements (groupSize > 1), auto-windows
+ * to `1/groupSize` so that only one element is at the target position at a time,
+ * creating a chase effect when combined with LINEAR or other distribution strategies.
+ * Elements outside the window return to center (128, 128).
  *
  * @param pan Pan position
  * @param tilt Tilt position
@@ -256,7 +260,9 @@ data class StaticPosition(
     override val outputType = FxOutputType.POSITION
     override val parameters get() = mapOf("pan" to pan.toString(), "tilt" to tilt.toString())
 
-    override fun calculate(phase: Double): FxOutput {
-        return FxOutput.Position(pan, tilt)
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
+        if (context.groupSize <= 1) return FxOutput.Position(pan, tilt)
+        val window = 1.0 / context.groupSize
+        return if (phase < window) FxOutput.Position(pan, tilt) else FxOutput.Position(128u, 128u)
     }
 }

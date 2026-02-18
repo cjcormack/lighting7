@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx.effects
 
+import uk.me.cormack.lighting7.fx.EffectContext
 import uk.me.cormack.lighting7.fx.FxOutput
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -151,5 +152,29 @@ class DimmerEffectsTest {
 
         // Should produce varying values (not all the same)
         assertTrue(values.size > 1, "Flicker should produce varying values")
+    }
+
+    @Test
+    fun `StaticValue with context auto-windows for distribution`() {
+        val effect = StaticValue(value = 200u)
+        val context = EffectContext(groupSize = 4, memberIndex = 0)
+
+        // Phase within the window (0 to 1/4) should return the value
+        assertEquals(200.toUByte(), effect.calculate(0.0, context).sliderValue())
+        assertEquals(200.toUByte(), effect.calculate(0.2, context).sliderValue())
+
+        // Phase outside the window should return 0
+        assertEquals(0.toUByte(), effect.calculate(0.25, context).sliderValue())
+        assertEquals(0.toUByte(), effect.calculate(0.5, context).sliderValue())
+        assertEquals(0.toUByte(), effect.calculate(0.99, context).sliderValue())
+    }
+
+    @Test
+    fun `StaticValue with single element context behaves like no context`() {
+        val effect = StaticValue(value = 200u)
+
+        assertEquals(200.toUByte(), effect.calculate(0.0).sliderValue())
+        assertEquals(200.toUByte(), effect.calculate(0.5).sliderValue())
+        assertEquals(200.toUByte(), effect.calculate(1.0).sliderValue())
     }
 }

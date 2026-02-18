@@ -3,10 +3,29 @@ package uk.me.cormack.lighting7.fx
 import java.awt.Color
 
 /**
+ * Context about the group/distribution environment an effect is being calculated within.
+ *
+ * This allows effects to adapt their behaviour based on how many elements they're
+ * distributed across (e.g., static effects can auto-window to `1/groupSize`).
+ *
+ * @param groupSize Total number of elements being distributed across (1 for a single fixture)
+ * @param memberIndex 0-based index of the current element within the group
+ */
+data class EffectContext(
+    val groupSize: Int,
+    val memberIndex: Int
+) {
+    companion object {
+        /** Default context for a single fixture (no distribution). */
+        val SINGLE = EffectContext(groupSize = 1, memberIndex = 0)
+    }
+}
+
+/**
  * Base interface for all effect types.
  *
- * Effects are pure functions: given a phase (0.0-1.0), they return an output value.
- * This allows effects to be stateless and easily composable.
+ * Effects are pure functions: given a phase (0.0-1.0) and an [EffectContext],
+ * they return an output value. This allows effects to be stateless and easily composable.
  *
  * Example implementation:
  * ```
@@ -14,7 +33,7 @@ import java.awt.Color
  *     override val name = "Sine Wave"
  *     override val outputType = FxOutputType.SLIDER
  *
- *     override fun calculate(phase: Double): FxOutput {
+ *     override fun calculate(phase: Double, context: EffectContext): FxOutput {
  *         val sineValue = sin(phase * 2 * PI)
  *         val normalized = (sineValue + 1.0) / 2.0
  *         val value = (min.toInt() + (max.toInt() - min.toInt()) * normalized).toInt().toUByte()
@@ -42,9 +61,10 @@ interface Effect {
      * Calculate the output value for the given phase.
      *
      * @param phase Position in the effect cycle, from 0.0 (start) to 1.0 (end)
+     * @param context Information about the distribution group (size, member index)
      * @return The calculated output value
      */
-    fun calculate(phase: Double): FxOutput
+    fun calculate(phase: Double, context: EffectContext = EffectContext.SINGLE): FxOutput
 }
 
 /** Serialize a Color to a hex string (e.g., "#ff0000") */

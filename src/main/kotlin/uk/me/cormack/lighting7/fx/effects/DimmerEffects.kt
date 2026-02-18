@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx.effects
 
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fx.Effect
+import uk.me.cormack.lighting7.fx.EffectContext
 import uk.me.cormack.lighting7.fx.FxOutput
 import uk.me.cormack.lighting7.fx.FxOutputType
 import kotlin.math.PI
@@ -23,7 +24,7 @@ data class SineWave(
     override val outputType = FxOutputType.SLIDER
     override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString())
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         // Full sine cycle: 0 -> 1 -> 0 over phase 0..1
         val sineValue = sin(phase * 2 * PI)
         val normalized = (sineValue + 1.0) / 2.0  // Map -1..1 to 0..1
@@ -51,7 +52,7 @@ data class RampUp(
     override val outputType = FxOutputType.SLIDER
     override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString(), "curve" to curve.name)
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val easedPhase = curve.apply(phase)
         val value = (min.toInt() + (max.toInt() - min.toInt()) * easedPhase).toInt()
             .coerceIn(0, 255).toUByte()
@@ -77,7 +78,7 @@ data class RampDown(
     override val outputType = FxOutputType.SLIDER
     override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString(), "curve" to curve.name)
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val easedPhase = curve.apply(1.0 - phase)
         val value = (min.toInt() + (max.toInt() - min.toInt()) * easedPhase).toInt()
             .coerceIn(0, 255).toUByte()
@@ -103,7 +104,7 @@ data class Triangle(
     override val outputType = FxOutputType.SLIDER
     override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString(), "curve" to curve.name)
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val trianglePhase = if (phase < 0.5) {
             phase * 2  // First half: 0 -> 1
         } else {
@@ -144,7 +145,7 @@ data class Pulse(
 
     private val releaseRatio = 1.0 - attackRatio - holdRatio
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val value = when {
             phase < attackRatio -> {
                 // Attack phase: fade up
@@ -181,7 +182,7 @@ data class SquareWave(
     override val outputType = FxOutputType.SLIDER
     override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString(), "dutyCycle" to dutyCycle.toString())
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val value = if (phase < dutyCycle) max else min
         return FxOutput.Slider(value)
     }
@@ -205,7 +206,7 @@ data class Strobe(
     override val outputType = FxOutputType.SLIDER
     override val parameters get() = mapOf("offValue" to offValue.toString(), "onValue" to onValue.toString(), "onRatio" to onRatio.toString())
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val value = if (phase < onRatio) onValue else offValue
         return FxOutput.Slider(value)
     }
@@ -227,7 +228,7 @@ data class Flicker(
     override val outputType = FxOutputType.SLIDER
     override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString())
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         // Use phase to seed pseudo-random but deterministic values
         // This ensures the same phase always produces the same value
         val random = sin(phase * 127.0) * kotlin.math.cos(phase * 311.0)
@@ -255,7 +256,7 @@ data class Breathe(
     override val outputType = FxOutputType.SLIDER
     override val parameters get() = mapOf("min" to min.toString(), "max" to max.toString())
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         // sin² curve for smooth breathing effect
         val sineValue = sin(phase * PI)
         val normalized = sineValue * sineValue  // Square for smoother curve
@@ -267,10 +268,11 @@ data class Breathe(
 }
 
 /**
- * Static value - no animation.
+ * Static value — outputs a fixed slider/dimmer value.
  *
- * Holds a fixed slider/dimmer value. Useful for pinning a dimmer level
- * or as a base for additive blending.
+ * When distributed across multiple elements (groupSize > 1), auto-windows
+ * to `1/groupSize` so that only one element is "on" at a time, creating
+ * a chase effect when combined with LINEAR or other distribution strategies.
  *
  * @param value The static value to output (default 255)
  */
@@ -281,8 +283,10 @@ data class StaticValue(
     override val outputType = FxOutputType.SLIDER
     override val parameters get() = mapOf("value" to value.toString())
 
-    override fun calculate(phase: Double): FxOutput {
-        return FxOutput.Slider(value)
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
+        if (context.groupSize <= 1) return FxOutput.Slider(value)
+        val window = 1.0 / context.groupSize
+        return if (phase < window) FxOutput.Slider(value) else FxOutput.Slider(0u)
     }
 }
 
@@ -302,7 +306,7 @@ data class StaticSetting(
     override val outputType = FxOutputType.SLIDER
     override val parameters get() = mapOf("level" to level.toString())
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         return FxOutput.Slider(level)
     }
 }

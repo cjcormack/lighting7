@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fx.effects
 
 import uk.me.cormack.lighting7.dmx.EasingCurve
+import uk.me.cormack.lighting7.fx.EffectContext
 import uk.me.cormack.lighting7.fx.FxOutput
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -193,5 +194,29 @@ class PositionEffectsTest {
             assertTrue(pan <= 255u, "Pan should not exceed 255")
             assertTrue(tilt <= 255u, "Tilt should not exceed 255")
         }
+    }
+
+    @Test
+    fun `StaticPosition with context auto-windows for distribution`() {
+        val effect = StaticPosition(pan = 50u, tilt = 200u)
+        val context = EffectContext(groupSize = 4, memberIndex = 0)
+
+        // Phase within the window (0 to 1/4) should return the position
+        assertEquals(Pair(50.toUByte(), 200.toUByte()), effect.calculate(0.0, context).position())
+        assertEquals(Pair(50.toUByte(), 200.toUByte()), effect.calculate(0.2, context).position())
+
+        // Phase outside the window should return center (128, 128)
+        assertEquals(Pair(128.toUByte(), 128.toUByte()), effect.calculate(0.25, context).position())
+        assertEquals(Pair(128.toUByte(), 128.toUByte()), effect.calculate(0.5, context).position())
+        assertEquals(Pair(128.toUByte(), 128.toUByte()), effect.calculate(0.99, context).position())
+    }
+
+    @Test
+    fun `StaticPosition with single element context behaves like no context`() {
+        val effect = StaticPosition(pan = 50u, tilt = 200u)
+
+        assertEquals(Pair(50.toUByte(), 200.toUByte()), effect.calculate(0.0).position())
+        assertEquals(Pair(50.toUByte(), 200.toUByte()), effect.calculate(0.5).position())
+        assertEquals(Pair(50.toUByte(), 200.toUByte()), effect.calculate(1.0).position())
     }
 }

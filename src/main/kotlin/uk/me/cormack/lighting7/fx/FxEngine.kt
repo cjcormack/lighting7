@@ -369,7 +369,7 @@ class FxEngine(
         if (effect.target.fixtureHasProperty(fixture)) {
             // Direct application to the parent fixture
             val effectPhase = effect.calculatePhase(tick, masterClock)
-            val output = effect.effect.calculate(effectPhase)
+            val output = effect.effect.calculate(effectPhase, EffectContext.SINGLE)
             effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
         } else if (fixture is MultiElementFixture<*>) {
             // Parent doesn't have the property — check if elements do
@@ -420,7 +420,8 @@ class FxEngine(
                 tick, masterClock, memberInfo, filteredCount
             )
 
-            val output = effect.effect.calculate(memberPhase)
+            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx)
+            val output = effect.effect.calculate(memberPhase, context)
             effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
         }
     }
@@ -466,7 +467,8 @@ class FxEngine(
                 val memberPhase = effect.calculatePhaseForMember(
                     tick, masterClock, member, groupSize
                 )
-                val output = effect.effect.calculate(memberPhase)
+                val context = EffectContext(groupSize = groupSize, memberIndex = member.index)
+                val output = effect.effect.calculate(memberPhase, context)
                 effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
             }
             return
@@ -554,7 +556,8 @@ class FxEngine(
                 tick, masterClock, memberInfo, filteredCount
             )
 
-            val output = effect.effect.calculate(memberPhase)
+            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx)
+            val output = effect.effect.calculate(memberPhase, context)
             effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
         }
     }

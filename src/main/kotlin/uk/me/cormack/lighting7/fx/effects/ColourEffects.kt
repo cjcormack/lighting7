@@ -23,7 +23,7 @@ data class ColourCycle(
         "fadeRatio" to fadeRatio.toString()
     )
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         if (colours.isEmpty()) return FxOutput.Colour(ExtendedColour.BLACK)
         if (colours.size == 1) return FxOutput.Colour(colours[0])
 
@@ -83,7 +83,7 @@ data class RainbowCycle(
     override val outputType = FxOutputType.COLOUR
     override val parameters get() = mapOf("saturation" to saturation.toString(), "brightness" to brightness.toString())
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val color = Color.getHSBColor(phase.toFloat(), saturation, brightness)
         return FxOutput.Colour(color)
     }
@@ -107,7 +107,7 @@ data class ColourStrobe(
     override val outputType = FxOutputType.COLOUR
     override val parameters get() = mapOf("onColor" to onColor.toSerializedString(), "offColor" to offColor.toSerializedString(), "onRatio" to onRatio.toString())
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val color = if (phase < onRatio) onColor else offColor
         return FxOutput.Colour(color)
     }
@@ -129,7 +129,7 @@ data class ColourPulse(
     override val outputType = FxOutputType.COLOUR
     override val parameters get() = mapOf("colorA" to colorA.toSerializedString(), "colorB" to colorB.toSerializedString())
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         // Use sine wave for smooth pulse
         val sineValue = kotlin.math.sin(phase * 2 * kotlin.math.PI)
         val ratio = (sineValue + 1.0) / 2.0
@@ -156,7 +156,7 @@ data class ColourFade(
     override val outputType = FxOutputType.COLOUR
     override val parameters get() = mapOf("fromColor" to fromColor.toSerializedString(), "toColor" to toColor.toSerializedString(), "pingPong" to pingPong.toString())
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val ratio = if (pingPong && phase > 0.5) {
             1.0 - (phase - 0.5) * 2
         } else if (pingPong) {
@@ -185,7 +185,7 @@ data class ColourFlicker(
     override val outputType = FxOutputType.COLOUR
     override val parameters get() = mapOf("baseColor" to baseColor.toSerializedString(), "variation" to variation.toString())
 
-    override fun calculate(phase: Double): FxOutput {
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
         // Pseudo-random but deterministic variations
         fun vary(base: Int, seed: Double): Int {
             val v = (kotlin.math.sin(phase * seed) * variation).toInt()
@@ -206,9 +206,11 @@ data class ColourFlicker(
 }
 
 /**
- * Static colour - no animation.
+ * Static colour — outputs a fixed colour.
  *
- * Useful as a placeholder or for additive blending.
+ * When distributed across multiple elements (groupSize > 1), auto-windows
+ * to `1/groupSize` so that only one element is "on" at a time, creating
+ * a chase effect when combined with LINEAR or other distribution strategies.
  *
  * @param color The static colour to output
  */
@@ -219,7 +221,9 @@ data class StaticColour(
     override val outputType = FxOutputType.COLOUR
     override val parameters get() = mapOf("color" to color.toSerializedString())
 
-    override fun calculate(phase: Double): FxOutput {
-        return FxOutput.Colour(color)
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
+        if (context.groupSize <= 1) return FxOutput.Colour(color)
+        val window = 1.0 / context.groupSize
+        return if (phase < window) FxOutput.Colour(color) else FxOutput.Colour(ExtendedColour.BLACK)
     }
 }
