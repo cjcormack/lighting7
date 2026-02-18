@@ -123,20 +123,37 @@ val myGroup = fixtureGroup<HexFixture>("my-group") {
 
 ## Distribution Strategies
 
-Distribution strategies determine how effect phases are distributed across group members:
+Distribution strategies determine how effect phases are distributed across group members.
+The distribution offset is **subtracted** from the clock phase, so higher-offset members are
+behind in the cycle and the visual sweep flows in the natural direction.
 
-| Strategy | Description |
-|----------|-------------|
-| `LINEAR` | Evenly spaced phases (chase effect) |
-| `UNIFIED` | All fixtures same phase (synchronized) |
-| `CENTER_OUT` | Effects radiate from center |
-| `EDGES_IN` | Effects converge to center |
-| `REVERSE` | Reverse linear order |
-| `SPLIT` | Left/right halves mirror each other |
-| `PING_PONG` | Back-and-forth sweep |
-| `RANDOM(seed)` | Deterministic random offsets |
-| `POSITIONAL` | Based on normalized position |
-| `CUSTOM(fn)` | Lambda-based calculation |
+| Strategy | Description | Distinct Slots | Offset Formula |
+|----------|-------------|---------------|----------------|
+| `LINEAR` | Evenly spaced, element 0 → N | N | `index / N` |
+| `UNIFIED` | All same phase (synchronized) | 1 | `0` |
+| `CENTER_OUT` | Rank-based: center → edges | ⌈N/2⌉ | `rank / ⌈N/2⌉` (center=0) |
+| `EDGES_IN` | Rank-based: edges → center | ⌈N/2⌉ | `(maxRank - rank) / ⌈N/2⌉` |
+| `REVERSE` | Evenly spaced, element N → 0 | N | `(N-1-index) / N` |
+| `SPLIT` | Mirrored halves | ⌈N/2⌉ | `min(index, N-1-index) / ⌈N/2⌉` |
+| `PING_PONG` | LINEAR + triangle phase bounce | N | `index / N` (triangle remap at phase level) |
+| `RANDOM(seed)` | Fisher-Yates shuffle of even offsets | N | Deterministic permutation of `i/N` |
+| `POSITIONAL` | Based on normalized position | N | `member.normalizedPosition` |
+| `CUSTOM(fn)` | Lambda-based calculation | N | User-defined |
+
+**Symmetric strategies** (CENTER_OUT, EDGES_IN, SPLIT) have fewer distinct offset slots
+than group members because symmetric pairs share the same offset. This is exposed via
+`distinctSlots(groupSize)` and used by static effects for gap-free window sizing.
+
+**Strategy interface:**
+
+```kotlin
+sealed interface DistributionStrategy {
+    val hasSpread: Boolean              // false only for UNIFIED
+    val usesTrianglePhase: Boolean      // true only for PING_PONG
+    fun distinctSlots(groupSize: Int): Int
+    fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double
+}
+```
 
 ### Example Usage
 

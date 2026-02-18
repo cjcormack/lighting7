@@ -31,10 +31,11 @@ The FX system provides:
 │   ┌─────────────────────────────────────────────────────────────┐   │
 │   │              FX Processing Loop (per tick)                  │   │
 │   │                                                             │   │
+│   │   0. Reset FX-controlled properties to neutral              │   │
 │   │   For each active effect:                                   │   │
 │   │     1. Calculate phase based on clock + effect timing       │   │
-│   │     2. Effect.calculate(phase) → output value               │   │
-│   │     3. Apply blend mode (override/additive/multiply)        │   │
+│   │     2. Effect.calculate(phase, context) → output value      │   │
+│   │     3. Apply blend mode (override/additive/multiply/max)    │   │
 │   │     4. Write to ControllerTransaction                       │   │
 │   └─────────────────────────────────────────────────────────────┘   │
 │                               │                                     │
@@ -137,6 +138,75 @@ How effect output combines with fixture's base value:
 | `MULTIPLY` | Effect multiplies value | Proportional dimming |
 | `MAX` | Maximum of both | Ensure minimums |
 | `MIN` | Minimum of both | Limit maximums |
+
+### Property Reset
+
+Before processing effects each tick, the engine resets all FX-controlled properties to
+their neutral value (0 for sliders, black for colours, center for positions). This prevents
+blend modes like `MAX` and `ADDITIVE` from accumulating across ticks — without the reset,
+a `MAX` blend would read the previous tick's result as the base value, causing values to
+ratchet upward and never decrease.
+
+### Phase Calculation
+
+The phase passed to each effect determines where in the cycle it evaluates. For group/multi-element
+effects, `FxInstance.calculatePhaseForMember` computes:
+
+```
+memberPhase = (baseClock + phaseOffset - distributionOffset) % 1.0
+```
+
+The distribution offset is **subtracted** so that higher-offset members are behind in the
+cycle. This makes the visual sweep flow in the natural direction (element 0 → N for LINEAR).
+
+For PING_PONG distribution, a triangle wave remap is applied to the base clock phase before
+adding offsets, causing all effects to sweep forward then backward:
+
+```
+tri = baseClock < 0.5 ? baseClock * 2 : 2 * (1 - baseClock)    // [0→1→0]
+remappedClock = tri * (slots - 1) / slots                        // [0→maxOffset→0]
+memberPhase = (remappedClock + phaseOffset - distOffset) % 1.0
+```
+
+The scaling to `(slots - 1) / slots` ensures the sweep reaches the last element without
+wrapping back to the first (since `1.0 % 1.0 == 0.0` would alias with element 0).
+
+### EffectContext
+
+Effects receive an `EffectContext` alongside the phase, providing distribution metadata:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `groupSize` | `Int` | Total elements being distributed across (1 for single fixture) |
+| `memberIndex` | `Int` | 0-based index of the current element |
+| `distributionOffset` | `Double` | Phase offset for this member (0.0–1.0) |
+| `hasDistributionSpread` | `Boolean` | Whether distribution produces different offsets (false for UNIFIED) |
+| `numDistinctSlots` | `Int` | Unique offset positions — equals `groupSize` for asymmetric, fewer for symmetric |
+| `trianglePhase` | `Boolean` | Whether the phase was triangle-remapped (PING_PONG) |
+
+`basePhase(shiftedPhase)` recovers the un-shifted clock phase: `(phase + distributionOffset) % 1.0`.
+
+### Static Effect Windowing
+
+Static effects (StaticColour, StaticValue, StaticPosition) create chase patterns by only
+being "on" for a window of each cycle. The window width is `1 / numDistinctSlots`, which
+accounts for symmetric distributions where multiple members share an offset.
+
+For standard distributions (LINEAR, CENTER_OUT, etc.), a modular distance check determines
+which member is active:
+
+```
+base = context.basePhase(phase)                     // recover clock phase
+dist = (base - distributionOffset + 1.0) % 1.0      // modular distance
+active = dist < window
+```
+
+For PING_PONG (triangle phase), an absolute distance with half-window avoids floating-point
+edge cases at turnaround points:
+
+```
+active = abs(base - distributionOffset) < window / 2
+```
 
 ## Easing Curves
 
@@ -288,17 +358,29 @@ at the element level. It has no effect when members directly have the target pro
 
 ### Distribution Strategies
 
-| Strategy | Description |
+| Strategy | Description | Distinct Slots |
+|----------|-------------|---------------|
+| `LINEAR` | Evenly spaced phases, element 0 → N | N |
+| `UNIFIED` | All fixtures same phase (synchronized) | 1 |
+| `CENTER_OUT` | Rank-based: center fires first, radiates outward | ⌈N/2⌉ |
+| `EDGES_IN` | Rank-based: edges fire first, converges to center | ⌈N/2⌉ |
+| `REVERSE` | Evenly spaced phases, element N → 0 | N |
+| `SPLIT` | Mirrored halves: both ends fire simultaneously, converging | ⌈N/2⌉ |
+| `PING_PONG` | LINEAR offsets + triangle phase remap for bounce | N |
+| `RANDOM(seed)` | Deterministic Fisher-Yates shuffle of evenly-spaced offsets | N |
+| `POSITIONAL` | Based on normalized position | N |
+
+**Symmetric strategies** (CENTER_OUT, EDGES_IN, SPLIT) have fewer distinct offset slots
+than group members because symmetric pairs share the same offset. Static effects use
+`numDistinctSlots` for window width to ensure gap-free chases.
+
+**Strategy interface properties:**
+
+| Property | Description |
 |----------|-------------|
-| `LINEAR` | Evenly spaced phases (chase effect) |
-| `UNIFIED` | All fixtures same phase (synchronized) |
-| `CENTER_OUT` | Effects radiate from center |
-| `EDGES_IN` | Effects converge to center |
-| `REVERSE` | Reverse linear order |
-| `SPLIT` | Left/right halves mirror |
-| `PING_PONG` | Back-and-forth sweep |
-| `RANDOM(seed)` | Deterministic random |
-| `POSITIONAL` | Based on normalized position |
+| `hasSpread` | Whether offsets differ between members (false only for UNIFIED) |
+| `usesTrianglePhase` | Whether the base clock should be triangle-remapped (true for PING_PONG) |
+| `distinctSlots(groupSize)` | Number of unique offset positions for a given group size |
 
 ## Multi-Element Fixture Expansion
 
