@@ -51,12 +51,66 @@ interface Effect {
 internal fun Color.toHexString(): String = "#%02x%02x%02x".format(red, green, blue)
 
 /**
+ * Extended colour with optional white, amber, and UV channels.
+ *
+ * Wraps a standard RGB [Color] with additional channels for fixtures
+ * that have dedicated white, amber, or UV LEDs (e.g., RGBWAU fixtures).
+ *
+ * Serialization format: `#rrggbb[;wNNN][;aNNN][;uvNNN]`
+ * - Only non-zero extended channels are included in the serialized form
+ * - Backward compatible: plain `#rrggbb` parses as ExtendedColour with W/A/UV = 0
+ */
+data class ExtendedColour(
+    val color: Color,
+    val white: UByte = 0u,
+    val amber: UByte = 0u,
+    val uv: UByte = 0u,
+) {
+    /** Serialize to the extended colour format */
+    fun toSerializedString(): String {
+        val hex = color.toHexString()
+        val parts = mutableListOf(hex)
+        if (white > 0u) parts.add("w${white}")
+        if (amber > 0u) parts.add("a${amber}")
+        if (uv > 0u) parts.add("uv${uv}")
+        return parts.joinToString(";")
+    }
+
+    companion object {
+        fun fromColor(color: Color) = ExtendedColour(color)
+        val BLACK = ExtendedColour(Color.BLACK)
+        val WHITE = ExtendedColour(Color.BLACK, white = 255u)
+    }
+}
+
+/**
+ * Linearly interpolate between two [ExtendedColour] values.
+ *
+ * All channels (R, G, B, W, A, UV) are blended independently.
+ */
+fun blendExtendedColours(c1: ExtendedColour, c2: ExtendedColour, ratio: Double): ExtendedColour {
+    fun lerp(a: Int, b: Int): Int = (a + (b - a) * ratio).toInt().coerceIn(0, 255)
+    fun lerpU(a: UByte, b: UByte): UByte = lerp(a.toInt(), b.toInt()).toUByte()
+
+    return ExtendedColour(
+        color = Color(
+            lerp(c1.color.red, c2.color.red),
+            lerp(c1.color.green, c2.color.green),
+            lerp(c1.color.blue, c2.color.blue),
+        ),
+        white = lerpU(c1.white, c2.white),
+        amber = lerpU(c1.amber, c2.amber),
+        uv = lerpU(c1.uv, c2.uv),
+    )
+}
+
+/**
  * Types of output an effect can produce.
  */
 enum class FxOutputType {
     /** Single DMX value (0-255) for sliders/dimmers */
     SLIDER,
-    /** RGB color value */
+    /** RGB color value (with optional W/A/UV) */
     COLOUR,
     /** Pan/tilt position values */
     POSITION
@@ -72,9 +126,12 @@ sealed interface FxOutput {
     data class Slider(val value: UByte) : FxOutput
 
     /**
-     * RGB color value.
+     * Extended colour value (RGB + optional W/A/UV).
      */
-    data class Colour(val color: Color) : FxOutput
+    data class Colour(val color: ExtendedColour) : FxOutput {
+        /** Convenience constructor for plain RGB colours */
+        constructor(color: Color) : this(ExtendedColour.fromColor(color))
+    }
 
     /**
      * Pan/tilt position values.

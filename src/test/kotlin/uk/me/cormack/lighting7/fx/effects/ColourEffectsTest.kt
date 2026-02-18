@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx.effects
 
+import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxOutput
 import java.awt.Color
 import kotlin.test.Test
@@ -9,7 +10,13 @@ import kotlin.test.assertTrue
 
 class ColourEffectsTest {
 
-    private fun FxOutput.colour(): Color = (this as FxOutput.Colour).color
+    /** Extract the RGB [Color] from an [FxOutput.Colour] */
+    private fun FxOutput.colour(): Color = (this as FxOutput.Colour).color.color
+
+    /** Extract the [ExtendedColour] from an [FxOutput.Colour] */
+    private fun FxOutput.extColour(): ExtendedColour = (this as FxOutput.Colour).color
+
+    private fun Color.ext() = ExtendedColour.fromColor(this)
 
     @Test
     fun `RainbowCycle produces full hue rotation`() {
@@ -33,7 +40,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourCycle steps through colours`() {
-        val colours = listOf(Color.RED, Color.GREEN, Color.BLUE)
+        val colours = listOf(Color.RED, Color.GREEN, Color.BLUE).map { it.ext() }
         val effect = ColourCycle(colours = colours, fadeRatio = 0.0) // No fade for clear steps
 
         // Each color should occupy 1/3 of the phase
@@ -49,7 +56,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourCycle with fade produces intermediate colours`() {
-        val colours = listOf(Color.RED, Color.BLUE)
+        val colours = listOf(Color.RED, Color.BLUE).map { it.ext() }
         val effect = ColourCycle(colours = colours, fadeRatio = 1.0) // Full fade
 
         // Midway in fade should be purple-ish
@@ -60,7 +67,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourStrobe alternates between on and off colours`() {
-        val effect = ColourStrobe(onColor = Color.WHITE, offColor = Color.BLACK, onRatio = 0.5)
+        val effect = ColourStrobe(onColor = Color.WHITE.ext(), offColor = Color.BLACK.ext(), onRatio = 0.5)
 
         assertEquals(Color.WHITE, effect.calculate(0.0).colour())
         assertEquals(Color.WHITE, effect.calculate(0.25).colour())
@@ -70,7 +77,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourPulse oscillates using sine wave`() {
-        val effect = ColourPulse(colorA = Color.RED, colorB = Color.BLUE)
+        val effect = ColourPulse(colorA = Color.RED.ext(), colorB = Color.BLUE.ext())
 
         // ColourPulse uses sin(phase * 2π), so at phase 0 starts at midpoint
         val atStart = effect.calculate(0.0).colour()
@@ -91,7 +98,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourFade produces linear transition`() {
-        val effect = ColourFade(fromColor = Color.BLACK, toColor = Color.WHITE, pingPong = false)
+        val effect = ColourFade(fromColor = Color.BLACK.ext(), toColor = Color.WHITE.ext(), pingPong = false)
 
         val atStart = effect.calculate(0.0).colour()
         assertEquals(0, atStart.red)
@@ -110,7 +117,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourFade with pingPong returns to start`() {
-        val effect = ColourFade(fromColor = Color.BLACK, toColor = Color.WHITE, pingPong = true)
+        val effect = ColourFade(fromColor = Color.BLACK.ext(), toColor = Color.WHITE.ext(), pingPong = true)
 
         val atStart = effect.calculate(0.0).colour()
         val atEnd = effect.calculate(1.0).colour()
@@ -123,7 +130,7 @@ class ColourEffectsTest {
 
     @Test
     fun `StaticColour always returns the same colour`() {
-        val effect = StaticColour(color = Color.CYAN)
+        val effect = StaticColour(color = Color.CYAN.ext())
 
         assertEquals(Color.CYAN, effect.calculate(0.0).colour())
         assertEquals(Color.CYAN, effect.calculate(0.5).colour())
@@ -132,7 +139,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourFlicker produces variation around base colour`() {
-        val effect = ColourFlicker(baseColor = Color(128, 128, 128), variation = 50)
+        val effect = ColourFlicker(baseColor = Color(128, 128, 128).ext(), variation = 50)
         val colours = mutableSetOf<Color>()
 
         for (i in 0..100) {
@@ -152,5 +159,30 @@ class ColourEffectsTest {
 
         // Should produce varying colours
         assertTrue(colours.size > 1, "ColourFlicker should produce varying colours")
+    }
+
+    @Test
+    fun `ExtendedColour blends W A UV channels correctly`() {
+        val from = ExtendedColour(Color.RED, white = 0u, amber = 100u, uv = 200u)
+        val to = ExtendedColour(Color.BLUE, white = 255u, amber = 0u, uv = 0u)
+        val effect = ColourFade(fromColor = from, toColor = to, pingPong = false)
+
+        // At midpoint
+        val mid = effect.calculate(0.5).extColour()
+        assertTrue(mid.white.toInt() in 120..135, "White should be ~128, was ${mid.white}")
+        assertTrue(mid.amber.toInt() in 45..55, "Amber should be ~50, was ${mid.amber}")
+        assertTrue(mid.uv.toInt() in 95..105, "UV should be ~100, was ${mid.uv}")
+    }
+
+    @Test
+    fun `StaticColour preserves extended channels`() {
+        val color = ExtendedColour(Color.RED, white = 128u, amber = 64u, uv = 32u)
+        val effect = StaticColour(color = color)
+
+        val output = effect.calculate(0.5).extColour()
+        assertEquals(Color.RED, output.color)
+        assertEquals(128u.toUByte(), output.white)
+        assertEquals(64u.toUByte(), output.amber)
+        assertEquals(32u.toUByte(), output.uv)
     }
 }

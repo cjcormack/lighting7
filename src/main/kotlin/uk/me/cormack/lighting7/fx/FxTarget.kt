@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithColour
@@ -210,7 +211,10 @@ data class SliderTarget(
 }
 
 /**
- * Target RGB colour property.
+ * Target RGB colour property, with support for extended channels (W/A/UV).
+ *
+ * When the effect outputs an [ExtendedColour] with non-zero W/A/UV values,
+ * those are applied to the fixture's bundled slider properties (if present).
  */
 data class ColourTarget(
     override val targetRef: FxTargetRef,
@@ -227,11 +231,19 @@ data class ColourTarget(
     ) {
         if (output !is FxOutput.Colour) return
 
+        // Apply RGB channels
         val colour = (fixture as? WithColour)?.rgbColour ?: return
-
         val baseColour = colour.value ?: Color.BLACK
-        val newColour = applyBlendMode(baseColour, output.color, blendMode)
+        val newColour = applyRgbBlendMode(baseColour, output.color.color, blendMode)
         colour.value = newColour
+
+        // Apply extended channels (W/A/UV) to bundled slider properties
+        if (fixture is Fixture) {
+            val ext = output.color
+            applyExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, blendMode)
+            applyExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, blendMode)
+            applyExtendedChannel(fixture, PropertyCategory.UV, ext.uv, blendMode)
+        }
     }
 
     override fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput {
@@ -242,13 +254,33 @@ data class ColourTarget(
     override fun applyNeutralValueToFixture(fixture: GroupableFixture) {
         val colour = (fixture as? WithColour)?.rgbColour ?: return
         colour.value = Color.BLACK
+
+        // Reset extended channels
+        if (fixture is Fixture) {
+            resetExtendedChannel(fixture, PropertyCategory.WHITE)
+            resetExtendedChannel(fixture, PropertyCategory.AMBER)
+            resetExtendedChannel(fixture, PropertyCategory.UV)
+        }
     }
 
     override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
         return fixture is WithColour
     }
 
-    private fun applyBlendMode(base: Color, effect: Color, mode: BlendMode): Color {
+    private fun applyExtendedChannel(fixture: Fixture, category: PropertyCategory, value: UByte, blendMode: BlendMode) {
+        val prop = fixture.fixtureProperties.find { it.bundleWithColour && it.category == category } ?: return
+        val slider = prop.classProperty.call(fixture) as? Slider ?: return
+        val base = slider.value ?: 0u
+        slider.value = applySliderBlendMode(base, value, blendMode)
+    }
+
+    private fun resetExtendedChannel(fixture: Fixture, category: PropertyCategory) {
+        val prop = fixture.fixtureProperties.find { it.bundleWithColour && it.category == category } ?: return
+        val slider = prop.classProperty.call(fixture) as? Slider ?: return
+        slider.value = 0u
+    }
+
+    private fun applyRgbBlendMode(base: Color, effect: Color, mode: BlendMode): Color {
         return when (mode) {
             BlendMode.OVERRIDE -> effect
             BlendMode.ADDITIVE -> Color(
@@ -271,6 +303,16 @@ data class ColourTarget(
                 minOf(base.green, effect.green),
                 minOf(base.blue, effect.blue)
             )
+        }
+    }
+
+    private fun applySliderBlendMode(base: UByte, effect: UByte, mode: BlendMode): UByte {
+        return when (mode) {
+            BlendMode.OVERRIDE -> effect
+            BlendMode.ADDITIVE -> (base.toInt() + effect.toInt()).coerceIn(0, 255).toUByte()
+            BlendMode.MULTIPLY -> ((base.toInt() * effect.toInt()) / 255).toUByte()
+            BlendMode.MAX -> maxOf(base, effect)
+            BlendMode.MIN -> minOf(base, effect)
         }
     }
 

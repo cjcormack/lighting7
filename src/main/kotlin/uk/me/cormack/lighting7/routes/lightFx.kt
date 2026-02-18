@@ -372,7 +372,23 @@ private fun createEffectFromRequest(request: AddEffectRequest): Effect {
 private fun String.toUByteOrNull(): UByte? = toIntOrNull()?.coerceIn(0, 255)?.toUByte()
 
 internal fun parseColor(colorString: String): Color {
-    return when (colorString.lowercase()) {
+    return parseExtendedColour(colorString).color
+}
+
+/**
+ * Parse a colour string into an [ExtendedColour].
+ *
+ * Supported formats:
+ * - Named colours: "red", "green", "blue", "yellow", "cyan", "magenta", "orange", "pink", "white", "black"
+ * - Hex: "#FF0000", "FF0000", "#F00"
+ * - Extended: "#ff0000;w128;a64;uv200" (semicolons separate optional W/A/UV channels)
+ */
+internal fun parseExtendedColour(colorString: String): ExtendedColour {
+    // Split on semicolons to separate RGB from extended channels
+    val parts = colorString.split(";")
+    val rgbPart = parts[0].trim()
+
+    val baseColor = when (rgbPart.lowercase()) {
         "red" -> Color.RED
         "green" -> Color.GREEN
         "blue" -> Color.BLUE
@@ -385,7 +401,7 @@ internal fun parseColor(colorString: String): Color {
         "black" -> Color.BLACK
         else -> {
             // Try parsing as hex (e.g., "#FF0000", "FF0000", "#F00")
-            val hex = colorString.removePrefix("#")
+            val hex = rgbPart.removePrefix("#")
             when (hex.length) {
                 6 -> Color(hex.toInt(16))
                 3 -> {
@@ -398,6 +414,22 @@ internal fun parseColor(colorString: String): Color {
             }
         }
     }
+
+    // Parse extended channels from remaining parts (e.g., "w128", "a64", "uv200")
+    var white: UByte = 0u
+    var amber: UByte = 0u
+    var uv: UByte = 0u
+
+    for (i in 1 until parts.size) {
+        val part = parts[i].trim().lowercase()
+        when {
+            part.startsWith("uv") -> uv = part.removePrefix("uv").toIntOrNull()?.coerceIn(0, 255)?.toUByte() ?: 0u
+            part.startsWith("w") -> white = part.removePrefix("w").toIntOrNull()?.coerceIn(0, 255)?.toUByte() ?: 0u
+            part.startsWith("a") -> amber = part.removePrefix("a").toIntOrNull()?.coerceIn(0, 255)?.toUByte() ?: 0u
+        }
+    }
+
+    return ExtendedColour(baseColor, white, amber, uv)
 }
 
 private fun String.toEasingCurveOrNull(): EasingCurve? = try {
@@ -464,7 +496,7 @@ internal fun createEffectFromTypeAndParams(effectType: String, params: Map<Strin
         // Colour effects
         "colourcycle", "colour_cycle", "colorcycle", "color_cycle" -> {
             val colourStrings = params["colours"]?.split(",") ?: listOf("red", "green", "blue")
-            val colours = colourStrings.map { parseColor(it.trim()) }
+            val colours = colourStrings.map { parseExtendedColour(it.trim()) }
             ColourCycle(
                 colours = colours,
                 fadeRatio = params["fadeRatio"]?.toDoubleOrNull() ?: 0.5
@@ -475,25 +507,25 @@ internal fun createEffectFromTypeAndParams(effectType: String, params: Map<Strin
             brightness = params["brightness"]?.toFloatOrNull() ?: 1.0f
         )
         "colourstrobe", "colour_strobe", "colorstrobe", "color_strobe" -> ColourStrobe(
-            onColor = params["onColor"]?.let { parseColor(it) } ?: Color.WHITE,
-            offColor = params["offColor"]?.let { parseColor(it) } ?: Color.BLACK,
+            onColor = params["onColor"]?.let { parseExtendedColour(it) } ?: ExtendedColour.fromColor(Color.WHITE),
+            offColor = params["offColor"]?.let { parseExtendedColour(it) } ?: ExtendedColour.BLACK,
             onRatio = params["onRatio"]?.toDoubleOrNull() ?: 0.1
         )
         "colourpulse", "colour_pulse", "colorpulse", "color_pulse" -> ColourPulse(
-            colorA = params["colorA"]?.let { parseColor(it) } ?: Color.BLACK,
-            colorB = params["colorB"]?.let { parseColor(it) } ?: Color.WHITE
+            colorA = params["colorA"]?.let { parseExtendedColour(it) } ?: ExtendedColour.BLACK,
+            colorB = params["colorB"]?.let { parseExtendedColour(it) } ?: ExtendedColour.fromColor(Color.WHITE)
         )
         "colourfade", "colour_fade", "colorfade", "color_fade" -> ColourFade(
-            fromColor = params["fromColor"]?.let { parseColor(it) } ?: Color.RED,
-            toColor = params["toColor"]?.let { parseColor(it) } ?: Color.BLUE,
+            fromColor = params["fromColor"]?.let { parseExtendedColour(it) } ?: ExtendedColour.fromColor(Color.RED),
+            toColor = params["toColor"]?.let { parseExtendedColour(it) } ?: ExtendedColour.fromColor(Color.BLUE),
             pingPong = params["pingPong"]?.toBooleanStrictOrNull() ?: true
         )
         "colourflicker", "colour_flicker", "colorflicker", "color_flicker" -> ColourFlicker(
-            baseColor = params["baseColor"]?.let { parseColor(it) } ?: Color.ORANGE,
+            baseColor = params["baseColor"]?.let { parseExtendedColour(it) } ?: ExtendedColour.fromColor(Color.ORANGE),
             variation = params["variation"]?.toIntOrNull() ?: 50
         )
         "staticcolour", "static_colour", "staticcolor", "static_color" -> StaticColour(
-            color = params["color"]?.let { parseColor(it) } ?: Color.WHITE
+            color = params["color"]?.let { parseExtendedColour(it) } ?: ExtendedColour.fromColor(Color.WHITE)
         )
 
         // Position effects
