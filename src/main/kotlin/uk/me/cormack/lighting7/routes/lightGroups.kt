@@ -18,7 +18,11 @@ import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.fx.group.clearFx
+import uk.me.cormack.lighting7.models.DaoFxPreset
+import uk.me.cormack.lighting7.models.DaoFxPresets
+import uk.me.cormack.lighting7.models.FxPresetEffectDto
 import uk.me.cormack.lighting7.state.State
+import org.jetbrains.exposed.sql.transactions.transaction
 
 /**
  * REST API routes for fixture group management and effects.
@@ -27,7 +31,27 @@ internal fun Route.routeApiRestGroups(state: State) {
     route("/groups") {
         // List all groups
         get<GroupsResource> {
-            val groups = state.show.fixtures.groups.map { it.toDto() }
+            val currentProject = state.projectManager.currentProject
+
+            // Load all presets for the current project
+            data class PresetInfo(val id: Int, val fixtureType: String?, val effects: List<FxPresetEffectDto>)
+            val presets = transaction(state.database) {
+                DaoFxPreset.find { DaoFxPresets.project eq currentProject.id }
+                    .map { PresetInfo(it.id.value, it.fixtureType, it.effects) }
+            }
+
+            val groups = state.show.fixtures.groups.map { group ->
+                val capabilities = group.detectCapabilities().toSet()
+                val memberTypeKeys = group.fixtures.filterIsInstance<Fixture>().map { it.typeKey }.toSet()
+                val compatibleIds = presets.filter { preset ->
+                    // Check fixture type compatibility (matches any member's typeKey)
+                    if (preset.fixtureType != null && preset.fixtureType !in memberTypeKeys) return@filter false
+                    // Check capability compatibility
+                    val requiredCaps = inferPresetCapabilities(preset.effects)
+                    requiredCaps.all { it in capabilities }
+                }.map { it.id }
+                group.toDto(compatibleIds)
+            }
             call.respond(groups)
         }
 
@@ -35,7 +59,23 @@ internal fun Route.routeApiRestGroups(state: State) {
         get<GroupResource> { resource ->
             try {
                 val group = state.show.fixtures.untypedGroup(resource.name)
-                call.respond(group.toDetailedDto())
+
+                val currentProject = state.projectManager.currentProject
+                data class PresetInfo(val id: Int, val fixtureType: String?, val effects: List<FxPresetEffectDto>)
+                val presets = transaction(state.database) {
+                    DaoFxPreset.find { DaoFxPresets.project eq currentProject.id }
+                        .map { PresetInfo(it.id.value, it.fixtureType, it.effects) }
+                }
+
+                val capabilities = group.detectCapabilities().toSet()
+                val memberTypeKeys = group.fixtures.filterIsInstance<Fixture>().map { it.typeKey }.toSet()
+                val compatibleIds = presets.filter { preset ->
+                    if (preset.fixtureType != null && preset.fixtureType !in memberTypeKeys) return@filter false
+                    val requiredCaps = inferPresetCapabilities(preset.effects)
+                    requiredCaps.all { it in capabilities }
+                }.map { it.id }
+
+                call.respond(group.toDetailedDto(compatibleIds))
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
             }
@@ -143,7 +183,8 @@ data class GroupSummaryDto(
     val memberCount: Int,
     val capabilities: List<String>,
     val symmetricMode: String,
-    val defaultDistribution: String
+    val defaultDistribution: String,
+    val compatiblePresetIds: List<Int> = emptyList()
 )
 
 @Serializable
@@ -165,7 +206,8 @@ data class GroupDetailDto(
     val capabilities: List<String>,
     val symmetricMode: String,
     val defaultDistribution: String,
-    val members: List<GroupMemberDto>
+    val members: List<GroupMemberDto>,
+    val compatiblePresetIds: List<Int> = emptyList()
 )
 
 @Serializable
@@ -212,17 +254,18 @@ data class DistributionStrategiesResponse(
 )
 
 // Helper functions
-private fun FixtureGroup<*>.toDto(): GroupSummaryDto {
+private fun FixtureGroup<*>.toDto(compatiblePresetIds: List<Int> = emptyList()): GroupSummaryDto {
     return GroupSummaryDto(
         name = name,
         memberCount = memberCount,  // Uses allMembers.size (includes subgroups)
         capabilities = detectCapabilities(),
         symmetricMode = metadata.symmetricMode.name,
-        defaultDistribution = metadata.defaultDistributionName
+        defaultDistribution = metadata.defaultDistributionName,
+        compatiblePresetIds = compatiblePresetIds
     )
 }
 
-private fun FixtureGroup<*>.toDetailedDto(): GroupDetailDto {
+private fun FixtureGroup<*>.toDetailedDto(compatiblePresetIds: List<Int> = emptyList()): GroupDetailDto {
     return GroupDetailDto(
         name = name,
         memberCount = memberCount,  // Uses allMembers.size (includes subgroups)
@@ -240,7 +283,8 @@ private fun FixtureGroup<*>.toDetailedDto(): GroupDetailDto {
                 symmetricInvert = member.metadata.symmetricInvert,
                 tags = member.metadata.tags.toList()
             )
-        }
+        },
+        compatiblePresetIds = compatiblePresetIds
     )
 }
 

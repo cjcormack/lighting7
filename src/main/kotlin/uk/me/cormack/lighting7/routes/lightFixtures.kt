@@ -7,15 +7,19 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.routing.get
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.*
+import uk.me.cormack.lighting7.models.DaoFxPreset
+import uk.me.cormack.lighting7.models.DaoFxPresets
+import uk.me.cormack.lighting7.models.FxPresetEffectDto
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 
-internal fun Fixture.details(fixtures: Fixtures): FixtureDetails {
+internal fun Fixture.details(fixtures: Fixtures, compatiblePresetIds: List<Int> = emptyList()): FixtureDetails {
     val fixtureGroups = fixtures.groupsForFixture(this.key)
 
     return when (this) {
@@ -48,11 +52,12 @@ internal fun Fixture.details(fixtures: Fixtures): FixtureDetails {
                 elements = this.generateElementDescriptors(),
                 elementGroupProperties = this.generateElementGroupPropertyDescriptors(),
                 mode = modeInfo,
-                capabilities = capabilities
+                capabilities = capabilities,
+                compatiblePresetIds = compatiblePresetIds
             )
         }
         is HueFixture -> {
-            HueFixtureDetails(this.fixtureName, this.key, this.typeKey, fixtureGroups)
+            HueFixtureDetails(this.fixtureName, this.key, this.typeKey, fixtureGroups, compatiblePresetIds)
         }
     }
 }
@@ -77,11 +82,48 @@ private fun DmxFixture.detectCapabilities(): List<String> {
     return caps
 }
 
+/**
+ * Infer which capability categories a preset's effects require.
+ */
+internal fun inferPresetCapabilities(effects: List<FxPresetEffectDto>): Set<String> {
+    val caps = mutableSetOf<String>()
+    for (e in effects) {
+        when (e.category) {
+            "dimmer" -> caps.add("dimmer")
+            "colour" -> caps.add("colour")
+            "position" -> caps.add("position")
+        }
+    }
+    return caps
+}
+
 internal fun Route.routeApiRestLightsFixtures(state: State) {
     route("/fixture") {
         get("/list") {
             val fixtures = state.show.fixtures
-            call.respond(fixtures.fixtures.map { it.details(fixtures) })
+            val currentProject = state.projectManager.currentProject
+
+            // Load all presets for the current project
+            data class PresetInfo(val id: Int, val fixtureType: String?, val effects: List<FxPresetEffectDto>)
+            val presets = transaction(state.database) {
+                DaoFxPreset.find { DaoFxPresets.project eq currentProject.id }
+                    .map { PresetInfo(it.id.value, it.fixtureType, it.effects) }
+            }
+
+            call.respond(fixtures.fixtures.map { fixture ->
+                val capabilities = when (fixture) {
+                    is DmxFixture -> fixture.detectCapabilities().toSet()
+                    else -> emptySet()
+                }
+                val compatibleIds = presets.filter { preset ->
+                    // Check fixture type compatibility
+                    if (preset.fixtureType != null && preset.fixtureType != fixture.typeKey) return@filter false
+                    // Check capability compatibility
+                    val requiredCaps = inferPresetCapabilities(preset.effects)
+                    requiredCaps.all { it in capabilities }
+                }.map { it.id }
+                fixture.details(fixtures, compatibleIds)
+            })
         }
 
         get("/types") {
@@ -117,6 +159,7 @@ sealed interface FixtureDetails {
     val key: String
     val typeKey: String
     val groups: List<String>
+    val compatiblePresetIds: List<Int>
 }
 
 @Serializable
@@ -141,7 +184,8 @@ data class DmxFixtureDetails(
     val elements: List<ElementDescriptor>?,
     val elementGroupProperties: List<GroupPropertyDescriptor>?,
     val mode: ModeInfo?,
-    val capabilities: List<String>
+    val capabilities: List<String>,
+    override val compatiblePresetIds: List<Int> = emptyList()
 ): FixtureDetails
 
 @Serializable
@@ -150,6 +194,7 @@ data class HueFixtureDetails(
     override val key: String,
     override val typeKey: String,
     override val groups: List<String>,
+    override val compatiblePresetIds: List<Int> = emptyList()
 ): FixtureDetails
 
 // Property Descriptor Types
