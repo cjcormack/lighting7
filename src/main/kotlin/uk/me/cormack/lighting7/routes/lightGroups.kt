@@ -137,6 +137,7 @@ internal fun Route.routeApiRestGroups(state: State) {
                         elementMode = if (expanded) instance.elementMode.name else null,
                         elementFilter = if (instance.elementFilter != ElementFilter.ALL)
                             instance.elementFilter.name else null,
+                        stepTiming = instance.stepTiming,
                         isRunning = instance.isRunning,
                         phaseOffset = instance.phaseOffset,
                         currentPhase = instance.lastPhase,
@@ -222,7 +223,8 @@ data class AddGroupFxRequest(
     val phaseOffset: Double = 0.0,
     val parameters: Map<String, String> = emptyMap(),
     val elementMode: String = "PER_FIXTURE",  // PER_FIXTURE or FLAT
-    val elementFilter: String = "ALL"
+    val elementFilter: String = "ALL",
+    val stepTiming: Boolean? = null
 )
 
 @Serializable
@@ -240,6 +242,7 @@ data class GroupEffectDto(
     val distribution: String,
     val elementMode: String? = null,
     val elementFilter: String? = null,
+    val stepTiming: Boolean = false,
     val isRunning: Boolean,
     val phaseOffset: Double,
     val currentPhase: Double,
@@ -430,6 +433,7 @@ private fun applyGroupEffect(
         distributionStrategy = distribution
         this.elementMode = elementMode
         this.elementFilter = elFilter
+        request.stepTiming?.let { this.stepTiming = it }
     }
 
     return engine.addEffect(instance)

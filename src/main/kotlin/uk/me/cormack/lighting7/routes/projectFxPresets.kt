@@ -516,6 +516,7 @@ private fun createInstanceFromPreset(
         distributionStrategy = distribution
         this.elementMode = elementMode
         this.elementFilter = elementFilter
+        presetEffect.stepTiming?.let { this.stepTiming = it }
     }
 }
 

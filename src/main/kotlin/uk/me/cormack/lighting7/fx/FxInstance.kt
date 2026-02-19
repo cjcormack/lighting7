@@ -144,6 +144,14 @@ class FxInstance(
     /** Phase offset for syncing multiple effects (e.g., for chase effects) */
     var phaseOffset: Double = 0.0
 
+    /**
+     * Whether the beat division controls per-step timing rather than total cycle time.
+     *
+     * Initialised from [Effect.defaultStepTiming] but can be overridden per-instance
+     * via the API. See [Effect.defaultStepTiming] for full documentation.
+     */
+    var stepTiming: Boolean = effect.defaultStepTiming
+
     /** Timestamp when the effect started (for timing calculations) */
     var startedAtMs: Long = System.currentTimeMillis()
 
@@ -219,7 +227,15 @@ class FxInstance(
         memberInfo: DistributionMemberInfo,
         groupSize: Int
     ): Double {
-        var basePhase = clock.phaseForDivision(tick, timing.beatDivision)
+        // For step-timed effects, scale the beat division by the number of
+        // distinct distribution slots so the beat division controls time-per-step
+        // rather than total cycle time.
+        val effectiveDivision = if (stepTiming && groupSize > 1) {
+            timing.beatDivision * distributionStrategy.distinctSlots(groupSize)
+        } else {
+            timing.beatDivision
+        }
+        var basePhase = clock.phaseForDivision(tick, effectiveDivision)
 
         // PING_PONG: apply triangle wave remap to the base clock phase so that
         // ALL effects (not just static ones) sweep forward then backward.

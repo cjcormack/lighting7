@@ -258,6 +258,7 @@ data class StaticPosition(
 ) : Effect {
     override val name = "Static Position"
     override val outputType = FxOutputType.POSITION
+    override val defaultStepTiming = true
     override val parameters get() = mapOf("pan" to pan.toString(), "tilt" to tilt.toString())
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {

@@ -208,6 +208,7 @@ class PaletteStaticColour(
 ) : Effect {
     override val name = "Static Colour"
     override val outputType = FxOutputType.COLOUR
+    override val defaultStepTiming = true
     override val parameters get() = mapOf("color" to colorStr)
 
     private var cachedVersion = -1L

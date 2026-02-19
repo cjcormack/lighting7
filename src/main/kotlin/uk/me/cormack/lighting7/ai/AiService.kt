@@ -300,7 +300,7 @@ class AiService(
 
         // Key concepts
         sb.appendLine("## Key Concepts")
-        sb.appendLine("- Beat divisions: 0.25 (16th), 0.5 (8th), 1.0 (quarter), 2.0 (half), 4.0 (1 bar), 8.0 (2 bars)")
+        sb.appendLine("- Beat divisions: 0.125 (1/32), 0.25 (16th), 0.5 (8th), 1.0 (quarter), 2.0 (half), 4.0 (1 bar), 8.0 (2 bars)")
         sb.appendLine("- Blend modes: OVERRIDE (replace), ADDITIVE (add), MULTIPLY, MAX, MIN")
         sb.appendLine("- Distributions: LINEAR (sequential chase), UNIFIED (all same), CENTER_OUT, EDGES_IN, PING_PONG, REVERSE, SPLIT, RANDOM")
         sb.appendLine("- Colour format: hex '#FF0000', names 'red', extended '#ff0000;w128;a64;uv200', or palette refs 'P1', 'P2', etc.")
@@ -308,6 +308,7 @@ class AiService(
         sb.appendLine("- **P* wildcard**: In ColourCycle, use 'P*' as the colours parameter to automatically use ALL palette colours. This is the easiest way to create a colour cycle from the palette.")
         sb.appendLine("- Palette colours are shared across all running effects and update in real-time when changed via the set_palette tool.")
         sb.appendLine("- For group effects, use distribution=LINEAR for chases, UNIFIED for all-together")
+        sb.appendLine("- **Step timing**: Controls whether beat division means per-step time or total cycle time. When stepTiming=true, each step gets one full beat-division (total cycle = beatDivision × steps). When false, the entire cycle completes in one beat-division. Static effects default to stepTiming=true (chase), continuous effects default to false. You can override per-effect in the preset.")
         sb.appendLine("- UByte values range 0-255 (use 'u' suffix in scripts: 128u)")
 
         return sb.toString()

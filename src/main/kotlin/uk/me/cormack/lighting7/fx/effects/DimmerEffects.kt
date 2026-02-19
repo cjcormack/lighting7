@@ -281,6 +281,7 @@ data class StaticValue(
 ) : Effect {
     override val name = "Static Value"
     override val outputType = FxOutputType.SLIDER
+    override val defaultStepTiming = true
     override val parameters get() = mapOf("value" to value.toString())
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {

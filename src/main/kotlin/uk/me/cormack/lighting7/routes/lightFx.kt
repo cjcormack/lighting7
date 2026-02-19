@@ -78,6 +78,9 @@ internal fun Route.routeApiRestFx(state: State) {
                 request.elementFilter?.let {
                     instance.elementFilter = ElementFilter.fromName(it)
                 }
+                request.stepTiming?.let {
+                    instance.stepTiming = it
+                }
 
                 val effectId = state.show.fxEngine.addEffect(instance)
                 call.respond(AddEffectResponse(effectId))
@@ -141,7 +144,8 @@ internal fun Route.routeApiRestFx(state: State) {
                     newPhaseOffset = request.phaseOffset,
                     newDistributionStrategy = newDistribution,
                     newElementMode = newElementMode,
-                    newElementFilter = newElementFilter
+                    newElementFilter = newElementFilter,
+                    newStepTiming = request.stepTiming
                 )
 
                 if (updated != null) {
@@ -239,7 +243,8 @@ data class AddEffectRequest(
     val phaseOffset: Double = 0.0,
     val parameters: Map<String, String> = emptyMap(),
     val distributionStrategy: String? = null,
-    val elementFilter: String? = null
+    val elementFilter: String? = null,
+    val stepTiming: Boolean? = null
 )
 
 @Serializable
@@ -269,7 +274,8 @@ data class IndirectEffectDto(
     val phaseOffset: Double,
     val currentPhase: Double,
     val parameters: Map<String, String>,
-    val distributionStrategy: String
+    val distributionStrategy: String,
+    val stepTiming: Boolean = false
 )
 
 @Serializable
@@ -281,7 +287,8 @@ data class UpdateEffectRequest(
     val phaseOffset: Double? = null,
     val distributionStrategy: String? = null,
     val elementMode: String? = null,
-    val elementFilter: String? = null
+    val elementFilter: String? = null,
+    val stepTiming: Boolean? = null
 )
 
 @Serializable
@@ -300,6 +307,7 @@ data class EffectDto(
     val distributionStrategy: String? = null,
     val elementMode: String? = null,
     val elementFilter: String? = null,
+    val stepTiming: Boolean = false,
     val presetId: Int? = null,
 )
 
@@ -340,6 +348,7 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
         elementMode.name else null,
     elementFilter = if ((isGroupEffect || isMultiElementExpanded) && elementFilter != ElementFilter.ALL)
         elementFilter.name else null,
+    stepTiming = stepTiming,
     presetId = presetId,
 )
 
@@ -354,7 +363,8 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     phaseOffset = phaseOffset,
     currentPhase = lastPhase,
     parameters = effect.parameters,
-    distributionStrategy = distributionStrategy.javaClass.simpleName
+    distributionStrategy = distributionStrategy.javaClass.simpleName,
+    stepTiming = stepTiming
 )
 
 private fun createTargetFromRequest(request: AddEffectRequest, state: State): FxTarget {

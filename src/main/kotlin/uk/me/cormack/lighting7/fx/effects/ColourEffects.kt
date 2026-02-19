@@ -219,6 +219,7 @@ data class StaticColour(
 ) : Effect {
     override val name = "Static Colour"
     override val outputType = FxOutputType.COLOUR
+    override val defaultStepTiming = true
     override val parameters get() = mapOf("color" to color.toSerializedString())
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {

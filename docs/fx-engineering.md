@@ -72,6 +72,7 @@ Effects reference timing via `BeatDivision` constants:
 
 | Constant | Value | Description |
 |----------|-------|-------------|
+| `THIRTY_SECOND` | 0.125 | Eighth of a beat |
 | `SIXTEENTH` | 0.25 | Quarter beat |
 | `TRIPLET` | 0.333 | One-third beat |
 | `EIGHTH` | 0.5 | Half beat |
@@ -207,6 +208,31 @@ edge cases at turnaround points:
 ```
 active = abs(base - distributionOffset) < window / 2
 ```
+
+### Step Timing
+
+Step timing controls whether the beat division represents the **total cycle time** or the
+**per-step time** for distributed effects.
+
+| Mode | Beat Division Meaning | Example (4 heads, 1-beat division) |
+|------|----------------------|-------------------------------------|
+| `stepTiming = false` | Total cycle time | Full sweep in 1 beat (each head active for ¼ beat) |
+| `stepTiming = true` | Per-step time | Each head active for 1 beat, total sweep = 4 beats |
+
+When `stepTiming` is enabled and the effect is distributed across a group, the effective
+beat division is scaled:
+
+```
+effectiveDivision = beatDivision × distributionStrategy.distinctSlots(groupSize)
+```
+
+This uses `distinctSlots` rather than `groupSize` so that symmetric distributions
+(CENTER_OUT, SPLIT) scale correctly — symmetric pairs share a slot.
+
+**Default values**: Each effect type declares `defaultStepTiming` which is used when
+creating new `FxInstance`s. Static effects (StaticColour, StaticValue, StaticPosition)
+default to `true` (chase pattern), while continuous effects (SineWave, Pulse, etc.)
+default to `false` (full cycle). The value can be overridden per-instance via the API.
 
 ## Easing Curves
 
@@ -483,11 +509,14 @@ GET  /api/rest/fx/library          → [EffectTypeInfo...]
     "min": "0",
     "max": "255"
   },
-  "distributionStrategy": "LINEAR"
+  "distributionStrategy": "LINEAR",
+  "stepTiming": true
 }
 ```
 
 The `distributionStrategy` field is optional. When provided, it sets the distribution strategy for multi-element fixture expansion (see [Multi-Element Fixture Expansion](#multi-element-fixture-expansion)). For non-multi-element fixtures, it is ignored.
+
+The `stepTiming` field is optional. When provided, it overrides the effect's default step timing mode. See [Step Timing](#step-timing).
 
 ### UpdateEffectRequest Format
 
@@ -499,11 +528,12 @@ The `distributionStrategy` field is optional. When provided, it sets the distrib
   "blendMode": "ADDITIVE",
   "phaseOffset": 0.25,
   "distributionStrategy": "CENTER_OUT",
-  "elementMode": "FLAT"
+  "elementMode": "FLAT",
+  "stepTiming": false
 }
 ```
 
-All fields are optional. Immutable fields (`effectType`, `parameters`, `beatDivision`, `blendMode`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and running state. Mutable fields (`phaseOffset`, `distributionStrategy`, `elementMode`) are updated in place.
+All fields are optional. Immutable fields (`effectType`, `parameters`, `beatDivision`, `blendMode`, `stepTiming`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and running state. Mutable fields (`phaseOffset`, `distributionStrategy`, `elementMode`) are updated in place.
 
 ## WebSocket Messages
 
@@ -546,7 +576,7 @@ The `beatSync` message enables the frontend to synchronize a local beat visualiz
 | `fx/MasterClock.kt` | Global tempo management |
 | `fx/BeatDivision.kt` | Timing constants |
 | `fx/Effect.kt` | Effect interface and FxOutput types |
-| `fx/FxInstance.kt` | Running effect state, distributionStrategy, ElementMode |
+| `fx/FxInstance.kt` | Running effect state, distributionStrategy, ElementMode, stepTiming |
 | `fx/FxTarget.kt` | Fixture/group property targeting, FxTargetRef |
 | `fx/FxTargetable.kt` | Common interface for Fixture and FixtureGroup |
 | `fx/FxEngine.kt` | Effect processing loop, group expansion |

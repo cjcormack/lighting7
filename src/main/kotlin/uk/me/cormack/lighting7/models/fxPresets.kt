@@ -19,6 +19,7 @@ data class FxPresetEffectDto(
     val phaseOffset: Double = 0.0,
     val elementMode: String? = null,
     val elementFilter: String? = null,
+    val stepTiming: Boolean? = null,
     val parameters: Map<String, String> = emptyMap(),
 )
 

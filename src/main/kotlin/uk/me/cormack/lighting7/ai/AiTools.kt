@@ -339,6 +339,7 @@ class AiTools(private val state: State) {
             blendMode = obj["blendMode"]!!.jsonPrimitive.content,
             distribution = obj["distribution"]?.jsonPrimitive?.content ?: "UNIFIED",
             phaseOffset = obj["phaseOffset"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+            stepTiming = obj["stepTiming"]?.jsonPrimitive?.booleanOrNull,
             elementMode = obj["elementMode"]?.jsonPrimitive?.contentOrNull,
             elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
@@ -397,6 +398,10 @@ class AiTools(private val state: State) {
                 put("elementMode", buildJsonObject {
                     put("type", "string")
                     put("enum", buildJsonArray { add("PER_FIXTURE"); add("FLAT") })
+                })
+                put("stepTiming", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "When true, beat division controls per-step time (total cycle = beatDivision × steps). When false, beat division controls total cycle time. Defaults to true for static effects (chase), false for continuous effects.")
                 })
                 put("elementFilter", buildJsonObject {
                     put("type", "string")

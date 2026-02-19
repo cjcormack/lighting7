@@ -23,6 +23,9 @@ object BeatDivision {
     /** Quarter of a beat - sixteenth note */
     const val SIXTEENTH = 0.25
 
+    /** Eighth of a beat - thirty-second note */
+    const val THIRTY_SECOND = 0.125
+
     /** One third of a beat - triplet */
     const val TRIPLET = 1.0 / 3.0
 

@@ -84,6 +84,22 @@ interface Effect {
         get() = emptyMap()
 
     /**
+     * Default step-timing mode for new instances of this effect.
+     *
+     * When step timing is enabled and the effect is distributed across N elements,
+     * the beat division is multiplied by N so that each element gets one full
+     * beat-division of time. For example, a quarter-note (1 beat) with 4 heads
+     * means each head is active for 1 beat, giving a total chase time of 4 beats.
+     *
+     * When `false` (default), the beat division controls the total cycle time.
+     * A quarter-note with 4 heads means the entire sweep completes in 1 beat.
+     *
+     * This is the default for new [FxInstance]s; the actual value can be overridden
+     * per-instance via [FxInstance.stepTiming].
+     */
+    val defaultStepTiming: Boolean get() = false
+
+    /**
      * Calculate the output value for the given phase.
      *
      * @param phase Position in the effect cycle, from 0.0 (start) to 1.0 (end)

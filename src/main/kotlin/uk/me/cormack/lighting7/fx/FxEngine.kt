@@ -287,7 +287,8 @@ class FxEngine(
         newPhaseOffset: Double? = null,
         newDistributionStrategy: DistributionStrategy? = null,
         newElementMode: ElementMode? = null,
-        newElementFilter: ElementFilter? = null
+        newElementFilter: ElementFilter? = null,
+        newStepTiming: Boolean? = null
     ): FxInstance? {
         val existing = activeEffects[effectId] ?: return null
 
@@ -311,6 +312,7 @@ class FxEngine(
                 distributionStrategy = newDistributionStrategy ?: existing.distributionStrategy
                 elementMode = newElementMode ?: existing.elementMode
                 elementFilter = newElementFilter ?: existing.elementFilter
+                stepTiming = newStepTiming ?: existing.stepTiming
             }
         } else {
             // Only mutable fields changed - update in place
@@ -318,6 +320,7 @@ class FxEngine(
             newDistributionStrategy?.let { existing.distributionStrategy = it }
             newElementMode?.let { existing.elementMode = it }
             newElementFilter?.let { existing.elementFilter = it }
+            newStepTiming?.let { existing.stepTiming = it }
             existing
         }
 
