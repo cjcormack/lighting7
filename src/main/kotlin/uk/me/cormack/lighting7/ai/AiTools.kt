@@ -23,6 +23,7 @@ class AiTools(private val state: State) {
         setBpmTool,
         clearEffectsTool,
         getCurrentStateTool,
+        setPaletteTool,
     )
 
     /**
@@ -37,6 +38,7 @@ class AiTools(private val state: State) {
                 "set_bpm" -> executeSetBpm(input)
                 "clear_effects" -> executeClearEffects(input)
                 "get_current_state" -> executeGetCurrentState(input)
+                "set_palette" -> executeSetPalette(input)
                 else -> ToolExecutionResult(
                     success = false,
                     description = "Unknown tool: $name",
@@ -211,7 +213,7 @@ class AiTools(private val state: State) {
 
     private fun executeGetCurrentState(input: JsonObject): ToolExecutionResult {
         val include = input["include"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
-            ?: setOf("active_effects", "bpm", "fixtures", "groups", "presets")
+            ?: setOf("active_effects", "bpm", "fixtures", "groups", "presets", "palette")
 
         val result = buildJsonObject {
             if ("bpm" in include) {
@@ -281,12 +283,48 @@ class AiTools(private val state: State) {
                     }
                 })
             }
+
+            if ("palette" in include) {
+                val palette = state.show.fxEngine.getPalette()
+                put("palette", buildJsonArray {
+                    for ((i, colour) in palette.withIndex()) {
+                        addJsonObject {
+                            put("index", i + 1)
+                            put("ref", "P${i + 1}")
+                            put("colour", colour.toSerializedString())
+                        }
+                    }
+                })
+            }
         }
 
         return ToolExecutionResult(
             success = true,
             description = "Retrieved current state",
             result = result.toString()
+        )
+    }
+
+    private fun executeSetPalette(input: JsonObject): ToolExecutionResult {
+        val coloursArray = input["colours"]?.jsonArray ?: return errorResult("Missing 'colours'")
+        val colours = coloursArray.map { parseExtendedColour(it.jsonPrimitive.content) }
+        state.show.fxEngine.setPalette(colours)
+
+        val paletteStr = colours.mapIndexed { i, c -> "P${i + 1}=${c.toSerializedString()}" }.joinToString(", ")
+        return ToolExecutionResult(
+            success = true,
+            description = "Set palette to ${colours.size} colours: $paletteStr",
+            result = buildJsonObject {
+                put("paletteSize", colours.size)
+                put("palette", buildJsonArray {
+                    for ((i, colour) in colours.withIndex()) {
+                        addJsonObject {
+                            put("ref", "P${i + 1}")
+                            put("colour", colour.toSerializedString())
+                        }
+                    }
+                })
+            }.toString()
         )
     }
 
@@ -475,12 +513,28 @@ class AiTools(private val state: State) {
                         put("items", buildJsonObject {
                             put("type", "string")
                             put("enum", buildJsonArray {
-                                add("active_effects"); add("bpm"); add("fixtures"); add("groups"); add("presets")
+                                add("active_effects"); add("bpm"); add("fixtures"); add("groups"); add("presets"); add("palette")
                             })
                         })
                         put("description", "What to include. Defaults to all.")
                     })
                 })
+            }
+        )
+
+        val setPaletteTool = AnthropicToolDef(
+            name = "set_palette",
+            description = "Set the colour palette. Palette colours are shared across all running effects that use palette references (P1, P2, etc.). Changes take effect immediately on all running effects. Use colour names ('red'), hex ('#FF0000'), or extended format ('#ff0000;w128;a64;uv200').",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("colours", buildJsonObject {
+                        put("type", "array")
+                        put("items", buildJsonObject { put("type", "string") })
+                        put("description", "Ordered list of palette colours. Each can be a colour name, hex code, or extended colour string.")
+                    })
+                })
+                put("required", buildJsonArray { add("colours") })
             }
         )
     }

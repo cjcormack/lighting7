@@ -216,7 +216,7 @@ class AiService(
 
     private fun buildSystemPrompt(): String {
         val sb = StringBuilder()
-        sb.appendLine("You are an AI lighting designer assistant for a DMX lighting controller.")
+        sb.appendLine("You are Lux, an AI lighting designer assistant for a DMX lighting controller.")
         sb.appendLine("You control lights by calling tools. Always explain what you're doing to the user.")
         sb.appendLine()
 
@@ -267,6 +267,13 @@ class AiService(
         // Current state
         sb.appendLine("## Current State")
         sb.appendLine("BPM: ${state.show.fxEngine.masterClock.bpm.value}")
+        val palette = state.show.fxEngine.getPalette()
+        if (palette.isNotEmpty()) {
+            val paletteStr = palette.mapIndexed { i, c -> "P${i + 1}=${c.toSerializedString()}" }.joinToString(", ")
+            sb.appendLine("Palette: $paletteStr")
+        } else {
+            sb.appendLine("Palette: (empty)")
+        }
         val activeEffects = state.show.fxEngine.getActiveEffects()
         if (activeEffects.isNotEmpty()) {
             sb.appendLine("Active effects: ${activeEffects.size}")
@@ -296,7 +303,10 @@ class AiService(
         sb.appendLine("- Beat divisions: 0.25 (16th), 0.5 (8th), 1.0 (quarter), 2.0 (half), 4.0 (1 bar), 8.0 (2 bars)")
         sb.appendLine("- Blend modes: OVERRIDE (replace), ADDITIVE (add), MULTIPLY, MAX, MIN")
         sb.appendLine("- Distributions: LINEAR (sequential chase), UNIFIED (all same), CENTER_OUT, EDGES_IN, PING_PONG, REVERSE, SPLIT, RANDOM")
-        sb.appendLine("- Colour format: hex '#FF0000' or names 'red'. Extended: '#ff0000;w128;a64;uv200'")
+        sb.appendLine("- Colour format: hex '#FF0000', names 'red', extended '#ff0000;w128;a64;uv200', or palette refs 'P1', 'P2', etc.")
+        sb.appendLine("- **Palette references**: Use P1, P2, P3 etc. in colour parameters to reference the shared palette. 1-indexed, wraps if index exceeds palette size (e.g. P4 with 3 colours = P1). Default colour effect params use palette refs (e.g. ColourCycle defaults to P1,P2,P3).")
+        sb.appendLine("- **P* wildcard**: In ColourCycle, use 'P*' as the colours parameter to automatically use ALL palette colours. This is the easiest way to create a colour cycle from the palette.")
+        sb.appendLine("- Palette colours are shared across all running effects and update in real-time when changed via the set_palette tool.")
         sb.appendLine("- For group effects, use distribution=LINEAR for chases, UNIFIED for all-together")
         sb.appendLine("- UByte values range 0-255 (use 'u' suffix in scripts: 128u)")
 

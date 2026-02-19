@@ -432,7 +432,7 @@ internal fun togglePresetOnTargets(
 
                 val instance = createInstanceFromPreset(
                     presetEffect, fxTarget, presetId,
-                    beatDivisionOverride
+                    beatDivisionOverride, state,
                 )
                 engine.addEffect(instance)
                 addedCount++
@@ -477,9 +477,16 @@ private fun createInstanceFromPreset(
     presetEffect: FxPresetEffectDto,
     fxTarget: FxTarget,
     presetId: Int,
-    beatDivisionOverride: Double?
+    beatDivisionOverride: Double?,
+    state: State,
 ): FxInstance {
-    val effect = createEffectFromTypeAndParams(presetEffect.effectType, presetEffect.parameters)
+    val engine = state.show.fxEngine
+    val effect = createEffectFromTypeAndParams(
+        presetEffect.effectType,
+        presetEffect.parameters,
+        paletteSupplier = engine::getPalette,
+        paletteVersionSupplier = { engine.paletteVersion },
+    )
     val beatDivision = beatDivisionOverride ?: presetEffect.beatDivision
     val timing = FxTiming(beatDivision)
     val blendMode = try {

@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.routes.parseExtendedColour
 import java.awt.Color
 
 /**
@@ -94,6 +95,38 @@ interface Effect {
 
 /** Serialize a Color to a hex string (e.g., "#ff0000") */
 internal fun Color.toHexString(): String = "#%02x%02x%02x".format(red, green, blue)
+
+// --- Palette reference support ---
+
+/** Regex for palette reference syntax: P followed by one or more digits (1-indexed) */
+private val PALETTE_REF_REGEX = Regex("^P(\\d+)$", RegexOption.IGNORE_CASE)
+
+/** Check if a colour string is a palette reference (e.g., "P1", "P2") or the all-palette wildcard "P*". */
+fun isPaletteRef(value: String): Boolean {
+    val trimmed = value.trim()
+    return PALETTE_REF_REGEX.matchEntire(trimmed) != null || trimmed.equals("P*", ignoreCase = true)
+}
+
+/** Check if a colour string is the "all palette colours" wildcard ("P*"). */
+fun isAllPaletteRef(value: String): Boolean = value.trim().equals("P*", ignoreCase = true)
+
+/**
+ * Resolve a colour string that may be a palette reference.
+ *
+ * - `"P1"`, `"P2"`, etc. → resolved from the palette (1-indexed, wrapping via modulo)
+ * - Anything else → parsed as a normal extended colour via [parseExtendedColour]
+ *
+ * If the palette is empty and the value is a palette ref, falls back to [parseExtendedColour]
+ * which will return WHITE for unrecognised input.
+ */
+fun resolveColour(value: String, palette: List<ExtendedColour>): ExtendedColour {
+    val match = PALETTE_REF_REGEX.matchEntire(value.trim())
+    if (match != null && palette.isNotEmpty()) {
+        val index = match.groupValues[1].toInt()
+        return palette[(index - 1).mod(palette.size)]
+    }
+    return parseExtendedColour(value)
+}
 
 /**
  * Extended colour with optional white, amber, and UV channels.

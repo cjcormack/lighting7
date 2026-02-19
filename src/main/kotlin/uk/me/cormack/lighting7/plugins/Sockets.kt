@@ -18,8 +18,10 @@ import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.trait.*
+import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.models.DaoScene
+import uk.me.cormack.lighting7.routes.parseExtendedColour
 import uk.me.cormack.lighting7.routes.SceneDetails
 import uk.me.cormack.lighting7.routes.details
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingValue
@@ -185,7 +187,8 @@ data class FxEffectState(
 data class FxStateOutMessage(
     val bpm: Double,
     val isClockRunning: Boolean,
-    val activeEffects: List<FxEffectState>
+    val activeEffects: List<FxEffectState>,
+    val palette: List<String> = emptyList()
 ) : OutMessage()
 
 @Serializable
@@ -203,6 +206,30 @@ data class BeatSyncOutMessage(
     val beatNumber: Long,
     val bpm: Double,
     val timestampMs: Long
+) : OutMessage()
+
+// Palette-related messages
+
+@Serializable
+@SerialName("setPalette")
+data class SetPaletteInMessage(val colours: List<String>) : InMessage()
+
+@Serializable
+@SerialName("setPaletteColour")
+data class SetPaletteColourInMessage(val index: Int, val colour: String) : InMessage()
+
+@Serializable
+@SerialName("addPaletteColour")
+data class AddPaletteColourInMessage(val colour: String) : InMessage()
+
+@Serializable
+@SerialName("removePaletteColour")
+data class RemovePaletteColourInMessage(val index: Int) : InMessage()
+
+@Serializable
+@SerialName("paletteChanged")
+data class PaletteChangedOutMessage(
+    val palette: List<String>
 ) : OutMessage()
 
 // Group-related messages
@@ -385,6 +412,15 @@ fun Application.configureSockets(state: State) {
                 }
                 .launchIn(this)
 
+            // Subscribe to palette changes
+            val paletteJob = state.show.fxEngine.paletteFlow
+                .onEach { palette ->
+                    sendSerialized<OutMessage>(PaletteChangedOutMessage(
+                        palette = palette.map { it.toSerializedString() }
+                    ))
+                }
+                .launchIn(this)
+
             // Flag to send a beatSync on the next beat boundary (set on requestBeatSync)
             val sendNextBeat = AtomicBoolean(true)
 
@@ -500,6 +536,24 @@ fun Application.configureSockets(state: State) {
                             sendNextBeat.set(true)
                         }
 
+                        // Palette message handlers
+                        is SetPaletteInMessage -> {
+                            val colours = message.colours.map { parseExtendedColour(it) }
+                            state.show.fxEngine.setPalette(colours)
+                        }
+                        is SetPaletteColourInMessage -> {
+                            state.show.fxEngine.setPaletteColour(
+                                message.index,
+                                parseExtendedColour(message.colour)
+                            )
+                        }
+                        is AddPaletteColourInMessage -> {
+                            state.show.fxEngine.addPaletteColour(parseExtendedColour(message.colour))
+                        }
+                        is RemovePaletteColourInMessage -> {
+                            state.show.fxEngine.removePaletteColour(message.index)
+                        }
+
                         // Group-related message handlers
                         is GroupsStateInMessage -> {
                             sendSerialized<OutMessage>(buildGroupsStateMessage(state))
@@ -538,6 +592,7 @@ fun Application.configureSockets(state: State) {
             } finally {
                 connections -= thisConnection
                 fxStateJob.cancel()
+                paletteJob.cancel()
                 beatSyncJob.cancel()
                 bpmChangeJob.cancel()
                 projectChangeJob.cancel()
@@ -561,7 +616,8 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
     return FxStateOutMessage(
         bpm = state.show.fxEngine.masterClock.bpm.value,
         isClockRunning = state.show.fxEngine.masterClock.isRunning.value,
-        activeEffects = effectStates
+        activeEffects = effectStates,
+        palette = state.show.fxEngine.getPalette().map { it.toSerializedString() }
     )
 }
 

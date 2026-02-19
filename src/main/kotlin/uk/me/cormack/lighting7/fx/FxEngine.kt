@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.awt.Color
 
 /**
  * Central effect processing engine.
@@ -46,6 +47,72 @@ class FxEngine(
     /** Flow of FX state updates for WebSocket broadcasting */
     val fxStateFlow: SharedFlow<FxStateUpdate> = _fxStateFlow.asSharedFlow()
 
+    // --- Palette ---
+
+    private val _palette = mutableListOf(
+        ExtendedColour.fromColor(Color.RED),
+        ExtendedColour.fromColor(Color.GREEN),
+        ExtendedColour.fromColor(Color.BLUE),
+    )
+
+    /** Version counter incremented on every palette change, for caching in palette-aware effects. */
+    @Volatile
+    var paletteVersion: Long = 0L
+        private set
+
+    private val _paletteFlow = MutableSharedFlow<List<ExtendedColour>>(replay = 1, extraBufferCapacity = 1)
+
+    /** Flow of palette updates for WebSocket broadcasting */
+    val paletteFlow: SharedFlow<List<ExtendedColour>> = _paletteFlow.asSharedFlow()
+
+    /** Get a thread-safe copy of the current palette. */
+    fun getPalette(): List<ExtendedColour> = synchronized(_palette) { _palette.toList() }
+
+    /** Replace the entire palette. */
+    fun setPalette(colours: List<ExtendedColour>) {
+        synchronized(_palette) {
+            _palette.clear()
+            _palette.addAll(colours)
+            paletteVersion++
+        }
+        emitPaletteUpdate()
+    }
+
+    /** Update a single palette slot by index. */
+    fun setPaletteColour(index: Int, colour: ExtendedColour) {
+        synchronized(_palette) {
+            if (index in _palette.indices) {
+                _palette[index] = colour
+                paletteVersion++
+            }
+        }
+        emitPaletteUpdate()
+    }
+
+    /** Append a colour to the palette. */
+    fun addPaletteColour(colour: ExtendedColour) {
+        synchronized(_palette) {
+            _palette.add(colour)
+            paletteVersion++
+        }
+        emitPaletteUpdate()
+    }
+
+    /** Remove a colour from the palette by index. */
+    fun removePaletteColour(index: Int) {
+        synchronized(_palette) {
+            if (index in _palette.indices) {
+                _palette.removeAt(index)
+                paletteVersion++
+            }
+        }
+        emitPaletteUpdate()
+    }
+
+    private fun emitPaletteUpdate() {
+        _paletteFlow.tryEmit(getPalette())
+    }
+
     /**
      * Represents a state update for broadcasting.
      */
@@ -77,6 +144,9 @@ class FxEngine(
      */
     fun start(scope: CoroutineScope) {
         masterClock.start(scope)
+
+        // Emit initial palette so new WebSocket subscribers get it immediately
+        emitPaletteUpdate()
 
         processingJob = scope.launch(Dispatchers.Default) {
             masterClock.tickFlow.collect { tick ->
