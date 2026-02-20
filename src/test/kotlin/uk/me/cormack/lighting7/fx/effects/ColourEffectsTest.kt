@@ -68,7 +68,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourStrobe alternates between on and off colours`() {
-        val effect = ColourStrobe(onColor = Color.WHITE.ext(), offColor = Color.BLACK.ext(), onRatio = 0.5)
+        val effect = ColourStrobe(onColour = Color.WHITE.ext(), offColour = Color.BLACK.ext(), onRatio = 0.5)
 
         assertEquals(Color.WHITE, effect.calculate(0.0).colour())
         assertEquals(Color.WHITE, effect.calculate(0.25).colour())
@@ -78,7 +78,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourPulse oscillates using sine wave`() {
-        val effect = ColourPulse(colorA = Color.RED.ext(), colorB = Color.BLUE.ext())
+        val effect = ColourPulse(colourA = Color.RED.ext(), colourB = Color.BLUE.ext())
 
         // ColourPulse uses sin(phase * 2π), so at phase 0 starts at midpoint
         val atStart = effect.calculate(0.0).colour()
@@ -99,7 +99,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourFade produces linear transition`() {
-        val effect = ColourFade(fromColor = Color.BLACK.ext(), toColor = Color.WHITE.ext(), pingPong = false)
+        val effect = ColourFade(fromColour = Color.BLACK.ext(), toColour = Color.WHITE.ext(), pingPong = false)
 
         val atStart = effect.calculate(0.0).colour()
         assertEquals(0, atStart.red)
@@ -118,7 +118,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourFade with pingPong returns to start`() {
-        val effect = ColourFade(fromColor = Color.BLACK.ext(), toColor = Color.WHITE.ext(), pingPong = true)
+        val effect = ColourFade(fromColour = Color.BLACK.ext(), toColour = Color.WHITE.ext(), pingPong = true)
 
         val atStart = effect.calculate(0.0).colour()
         val atEnd = effect.calculate(1.0).colour()
@@ -131,7 +131,7 @@ class ColourEffectsTest {
 
     @Test
     fun `StaticColour always returns the same colour`() {
-        val effect = StaticColour(color = Color.CYAN.ext())
+        val effect = StaticColour(colour = Color.CYAN.ext())
 
         assertEquals(Color.CYAN, effect.calculate(0.0).colour())
         assertEquals(Color.CYAN, effect.calculate(0.5).colour())
@@ -140,7 +140,7 @@ class ColourEffectsTest {
 
     @Test
     fun `ColourFlicker produces variation around base colour`() {
-        val effect = ColourFlicker(baseColor = Color(128, 128, 128).ext(), variation = 50)
+        val effect = ColourFlicker(baseColour = Color(128, 128, 128).ext(), variation = 50)
         val colours = mutableSetOf<Color>()
 
         for (i in 0..100) {
@@ -166,7 +166,7 @@ class ColourEffectsTest {
     fun `ExtendedColour blends W A UV channels correctly`() {
         val from = ExtendedColour(Color.RED, white = 0u, amber = 100u, uv = 200u)
         val to = ExtendedColour(Color.BLUE, white = 255u, amber = 0u, uv = 0u)
-        val effect = ColourFade(fromColor = from, toColor = to, pingPong = false)
+        val effect = ColourFade(fromColour = from, toColour = to, pingPong = false)
 
         // At midpoint
         val mid = effect.calculate(0.5).extColour()
@@ -177,8 +177,8 @@ class ColourEffectsTest {
 
     @Test
     fun `StaticColour preserves extended channels`() {
-        val color = ExtendedColour(Color.RED, white = 128u, amber = 64u, uv = 32u)
-        val effect = StaticColour(color = color)
+        val colour = ExtendedColour(Color.RED, white = 128u, amber = 64u, uv = 32u)
+        val effect = StaticColour(colour = colour)
 
         val output = effect.calculate(0.5).extColour()
         assertEquals(Color.RED, output.color)
@@ -189,7 +189,7 @@ class ColourEffectsTest {
 
     @Test
     fun `StaticColour with context auto-windows for distribution`() {
-        val effect = StaticColour(color = Color.RED.ext())
+        val effect = StaticColour(colour = Color.RED.ext())
         // Simulate member 0 of a 12-element LINEAR distribution
         val offset = 0.0
         val context = EffectContext(groupSize = 12, memberIndex = 0, distributionOffset = offset, hasDistributionSpread = true, numDistinctSlots = 12)
@@ -208,7 +208,7 @@ class ColourEffectsTest {
 
     @Test
     fun `StaticColour with single element context behaves like no context`() {
-        val effect = StaticColour(color = Color.RED.ext())
+        val effect = StaticColour(colour = Color.RED.ext())
         val context = EffectContext.SINGLE
 
         // Should always return the colour regardless of phase
@@ -219,7 +219,7 @@ class ColourEffectsTest {
 
     @Test
     fun `StaticColour with UNIFIED distribution always returns colour`() {
-        val effect = StaticColour(color = Color.RED.ext())
+        val effect = StaticColour(colour = Color.RED.ext())
         // UNIFIED: hasDistributionSpread = false
         val context = EffectContext(groupSize = 12, memberIndex = 5, hasDistributionSpread = false)
 
@@ -230,7 +230,7 @@ class ColourEffectsTest {
 
     @Test
     fun `StaticColour chase fires elements in forward order`() {
-        val effect = StaticColour(color = Color.RED.ext())
+        val effect = StaticColour(colour = Color.RED.ext())
         val groupSize = 4
 
         // Simulate LINEAR distribution: element i gets offset i/N

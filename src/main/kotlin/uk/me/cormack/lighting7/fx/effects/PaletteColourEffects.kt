@@ -56,8 +56,8 @@ class PaletteColourCycle(
  * Palette-aware wrapper for [ColourStrobe].
  */
 class PaletteColourStrobe(
-    private val onColorStr: String,
-    private val offColorStr: String,
+    private val onColourStr: String,
+    private val offColourStr: String,
     private val onRatio: Double = 0.1,
     private val paletteSupplier: () -> List<ExtendedColour>,
     private val versionSupplier: () -> Long,
@@ -65,8 +65,8 @@ class PaletteColourStrobe(
     override val name = "Colour Strobe"
     override val outputType = FxOutputType.COLOUR
     override val parameters get() = mapOf(
-        "onColor" to onColorStr,
-        "offColor" to offColorStr,
+        "onColour" to onColourStr,
+        "offColour" to offColourStr,
         "onRatio" to onRatio.toString()
     )
 
@@ -78,8 +78,8 @@ class PaletteColourStrobe(
         if (version != cachedVersion || cachedDelegate == null) {
             val palette = paletteSupplier()
             cachedDelegate = ColourStrobe(
-                onColor = resolveColour(onColorStr, palette),
-                offColor = resolveColour(offColorStr, palette),
+                onColour = resolveColour(onColourStr, palette),
+                offColour = resolveColour(offColourStr, palette),
                 onRatio = onRatio
             )
             cachedVersion = version
@@ -94,16 +94,16 @@ class PaletteColourStrobe(
  * Palette-aware wrapper for [ColourPulse].
  */
 class PaletteColourPulse(
-    private val colorAStr: String,
-    private val colorBStr: String,
+    private val colourAStr: String,
+    private val colourBStr: String,
     private val paletteSupplier: () -> List<ExtendedColour>,
     private val versionSupplier: () -> Long,
 ) : Effect {
     override val name = "Colour Pulse"
     override val outputType = FxOutputType.COLOUR
     override val parameters get() = mapOf(
-        "colorA" to colorAStr,
-        "colorB" to colorBStr
+        "colourA" to colourAStr,
+        "colourB" to colourBStr
     )
 
     private var cachedVersion = -1L
@@ -114,8 +114,8 @@ class PaletteColourPulse(
         if (version != cachedVersion || cachedDelegate == null) {
             val palette = paletteSupplier()
             cachedDelegate = ColourPulse(
-                colorA = resolveColour(colorAStr, palette),
-                colorB = resolveColour(colorBStr, palette)
+                colourA = resolveColour(colourAStr, palette),
+                colourB = resolveColour(colourBStr, palette)
             )
             cachedVersion = version
         }
@@ -129,8 +129,8 @@ class PaletteColourPulse(
  * Palette-aware wrapper for [ColourFade].
  */
 class PaletteColourFade(
-    private val fromColorStr: String,
-    private val toColorStr: String,
+    private val fromColourStr: String,
+    private val toColourStr: String,
     private val pingPong: Boolean = true,
     private val paletteSupplier: () -> List<ExtendedColour>,
     private val versionSupplier: () -> Long,
@@ -138,8 +138,8 @@ class PaletteColourFade(
     override val name = "Colour Fade"
     override val outputType = FxOutputType.COLOUR
     override val parameters get() = mapOf(
-        "fromColor" to fromColorStr,
-        "toColor" to toColorStr,
+        "fromColour" to fromColourStr,
+        "toColour" to toColourStr,
         "pingPong" to pingPong.toString()
     )
 
@@ -151,8 +151,8 @@ class PaletteColourFade(
         if (version != cachedVersion || cachedDelegate == null) {
             val palette = paletteSupplier()
             cachedDelegate = ColourFade(
-                fromColor = resolveColour(fromColorStr, palette),
-                toColor = resolveColour(toColorStr, palette),
+                fromColour = resolveColour(fromColourStr, palette),
+                toColour = resolveColour(toColourStr, palette),
                 pingPong = pingPong
             )
             cachedVersion = version
@@ -167,7 +167,7 @@ class PaletteColourFade(
  * Palette-aware wrapper for [ColourFlicker].
  */
 class PaletteColourFlicker(
-    private val baseColorStr: String,
+    private val baseColourStr: String,
     private val variation: Int = 50,
     private val paletteSupplier: () -> List<ExtendedColour>,
     private val versionSupplier: () -> Long,
@@ -175,7 +175,7 @@ class PaletteColourFlicker(
     override val name = "Colour Flicker"
     override val outputType = FxOutputType.COLOUR
     override val parameters get() = mapOf(
-        "baseColor" to baseColorStr,
+        "baseColour" to baseColourStr,
         "variation" to variation.toString()
     )
 
@@ -187,7 +187,7 @@ class PaletteColourFlicker(
         if (version != cachedVersion || cachedDelegate == null) {
             val palette = paletteSupplier()
             cachedDelegate = ColourFlicker(
-                baseColor = resolveColour(baseColorStr, palette),
+                baseColour = resolveColour(baseColourStr, palette),
                 variation = variation
             )
             cachedVersion = version
@@ -202,14 +202,14 @@ class PaletteColourFlicker(
  * Palette-aware wrapper for [StaticColour].
  */
 class PaletteStaticColour(
-    private val colorStr: String,
+    private val colourStr: String,
     private val paletteSupplier: () -> List<ExtendedColour>,
     private val versionSupplier: () -> Long,
 ) : Effect {
     override val name = "Static Colour"
     override val outputType = FxOutputType.COLOUR
     override val defaultStepTiming = true
-    override val parameters get() = mapOf("color" to colorStr)
+    override val parameters get() = mapOf("colour" to colourStr)
 
     private var cachedVersion = -1L
     private var cachedDelegate: StaticColour? = null
@@ -218,7 +218,7 @@ class PaletteStaticColour(
         val version = versionSupplier()
         if (version != cachedVersion || cachedDelegate == null) {
             val palette = paletteSupplier()
-            cachedDelegate = StaticColour(color = resolveColour(colorStr, palette))
+            cachedDelegate = StaticColour(colour = resolveColour(colourStr, palette))
             cachedVersion = version
         }
         return cachedDelegate!!

@@ -553,63 +553,63 @@ internal fun createEffectFromTypeAndParams(
             brightness = params["brightness"]?.toFloatOrNull() ?: 1.0f
         )
         "colourstrobe", "colour_strobe", "colorstrobe", "color_strobe" -> {
-            val onColorStr = params["onColor"] ?: "P1"
-            val offColorStr = params["offColor"] ?: "black"
+            val onColourStr = params["onColour"] ?: "P1"
+            val offColourStr = params["offColour"] ?: "black"
             val onRatio = params["onRatio"]?.toDoubleOrNull() ?: 0.1
             if (usePalette) {
-                PaletteColourStrobe(onColorStr, offColorStr, onRatio, paletteSupplier!!, paletteVersionSupplier!!)
+                PaletteColourStrobe(onColourStr, offColourStr, onRatio, paletteSupplier!!, paletteVersionSupplier!!)
             } else {
                 ColourStrobe(
-                    onColor = parseExtendedColour(onColorStr),
-                    offColor = parseExtendedColour(offColorStr),
+                    onColour = parseExtendedColour(onColourStr),
+                    offColour = parseExtendedColour(offColourStr),
                     onRatio = onRatio
                 )
             }
         }
         "colourpulse", "colour_pulse", "colorpulse", "color_pulse" -> {
-            val colorAStr = params["colorA"] ?: "black"
-            val colorBStr = params["colorB"] ?: "P1"
+            val colourAStr = params["colourA"] ?: "black"
+            val colourBStr = params["colourB"] ?: "P1"
             if (usePalette) {
-                PaletteColourPulse(colorAStr, colorBStr, paletteSupplier!!, paletteVersionSupplier!!)
+                PaletteColourPulse(colourAStr, colourBStr, paletteSupplier!!, paletteVersionSupplier!!)
             } else {
                 ColourPulse(
-                    colorA = parseExtendedColour(colorAStr),
-                    colorB = parseExtendedColour(colorBStr)
+                    colourA = parseExtendedColour(colourAStr),
+                    colourB = parseExtendedColour(colourBStr)
                 )
             }
         }
         "colourfade", "colour_fade", "colorfade", "color_fade" -> {
-            val fromColorStr = params["fromColor"] ?: "P1"
-            val toColorStr = params["toColor"] ?: "P2"
+            val fromColourStr = params["fromColour"] ?: "P1"
+            val toColourStr = params["toColour"] ?: "P2"
             val pingPong = params["pingPong"]?.toBooleanStrictOrNull() ?: true
             if (usePalette) {
-                PaletteColourFade(fromColorStr, toColorStr, pingPong, paletteSupplier!!, paletteVersionSupplier!!)
+                PaletteColourFade(fromColourStr, toColourStr, pingPong, paletteSupplier!!, paletteVersionSupplier!!)
             } else {
                 ColourFade(
-                    fromColor = parseExtendedColour(fromColorStr),
-                    toColor = parseExtendedColour(toColorStr),
+                    fromColour = parseExtendedColour(fromColourStr),
+                    toColour = parseExtendedColour(toColourStr),
                     pingPong = pingPong
                 )
             }
         }
         "colourflicker", "colour_flicker", "colorflicker", "color_flicker" -> {
-            val baseColorStr = params["baseColor"] ?: "P1"
+            val baseColourStr = params["baseColour"] ?: "P1"
             val variation = params["variation"]?.toIntOrNull() ?: 50
             if (usePalette) {
-                PaletteColourFlicker(baseColorStr, variation, paletteSupplier!!, paletteVersionSupplier!!)
+                PaletteColourFlicker(baseColourStr, variation, paletteSupplier!!, paletteVersionSupplier!!)
             } else {
                 ColourFlicker(
-                    baseColor = parseExtendedColour(baseColorStr),
+                    baseColour = parseExtendedColour(baseColourStr),
                     variation = variation
                 )
             }
         }
         "staticcolour", "static_colour", "staticcolor", "static_color" -> {
-            val colorStr = params["color"] ?: "P1"
+            val colourStr = params["colour"] ?: "P1"
             if (usePalette) {
-                PaletteStaticColour(colorStr, paletteSupplier!!, paletteVersionSupplier!!)
+                PaletteStaticColour(colourStr, paletteSupplier!!, paletteVersionSupplier!!)
             } else {
-                StaticColour(color = parseExtendedColour(colorStr))
+                StaticColour(colour = parseExtendedColour(colourStr))
             }
         }
 
@@ -735,25 +735,25 @@ internal val effectLibrary = listOf(
         ParameterInfo("brightness", "float", "1.0", "Colour brightness")
     ), colourProperties),
     EffectTypeInfo("ColourStrobe", "colour", "COLOUR", listOf(
-        ParameterInfo("onColor", "colour", "P1", "Flash colour"),
-        ParameterInfo("offColor", "colour", "black", "Off colour"),
+        ParameterInfo("onColour", "colour", "P1", "Flash colour"),
+        ParameterInfo("offColour", "colour", "black", "Off colour"),
         ParameterInfo("onRatio", "double", "0.1", "On time ratio")
     ), colourProperties),
     EffectTypeInfo("ColourPulse", "colour", "COLOUR", listOf(
-        ParameterInfo("colorA", "colour", "black", "First colour"),
-        ParameterInfo("colorB", "colour", "P1", "Second colour")
+        ParameterInfo("colourA", "colour", "black", "First colour"),
+        ParameterInfo("colourB", "colour", "P1", "Second colour")
     ), colourProperties),
     EffectTypeInfo("ColourFade", "colour", "COLOUR", listOf(
-        ParameterInfo("fromColor", "colour", "P1", "Starting colour"),
-        ParameterInfo("toColor", "colour", "P2", "Ending colour"),
+        ParameterInfo("fromColour", "colour", "P1", "Starting colour"),
+        ParameterInfo("toColour", "colour", "P2", "Ending colour"),
         ParameterInfo("pingPong", "boolean", "true", "Fade back to start")
     ), colourProperties),
     EffectTypeInfo("ColourFlicker", "colour", "COLOUR", listOf(
-        ParameterInfo("baseColor", "colour", "P1", "Base colour"),
+        ParameterInfo("baseColour", "colour", "P1", "Base colour"),
         ParameterInfo("variation", "int", "50", "Maximum RGB variation")
     ), colourProperties),
     EffectTypeInfo("StaticColour", "colour", "COLOUR", listOf(
-        ParameterInfo("color", "colour", "P1", "Fixed colour")
+        ParameterInfo("colour", "colour", "P1", "Fixed colour")
     ), colourProperties),
 
     // Position effects

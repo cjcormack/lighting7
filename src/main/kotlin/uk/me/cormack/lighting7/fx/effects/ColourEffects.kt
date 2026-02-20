@@ -36,14 +36,14 @@ data class ColourCycle(
 
         // Calculate fade within segment
         val holdPortion = 1.0 - fadeRatio
-        val color = if (segmentPhase < holdPortion) {
+        val colour = if (segmentPhase < holdPortion) {
             currentColour
         } else {
             val fadePhase = (segmentPhase - holdPortion) / fadeRatio
             blendExtendedColours(currentColour, nextColour, fadePhase)
         }
 
-        return FxOutput.Colour(color)
+        return FxOutput.Colour(colour)
     }
 
     companion object {
@@ -84,8 +84,8 @@ data class RainbowCycle(
     override val parameters get() = mapOf("saturation" to saturation.toString(), "brightness" to brightness.toString())
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
-        val color = Color.getHSBColor(phase.toFloat(), saturation, brightness)
-        return FxOutput.Colour(color)
+        val colour = Color.getHSBColor(phase.toFloat(), saturation, brightness)
+        return FxOutput.Colour(colour)
     }
 }
 
@@ -94,22 +94,22 @@ data class RainbowCycle(
  *
  * Alternates between on and off colours.
  *
- * @param onColor Colour when "on" (default WHITE)
- * @param offColor Colour when "off" (default BLACK)
+ * @param onColour Colour when "on" (default WHITE)
+ * @param offColour Colour when "off" (default BLACK)
  * @param onRatio Portion of cycle that's "on" (default 0.1)
  */
 data class ColourStrobe(
-    val onColor: ExtendedColour = ExtendedColour.fromColor(Color.WHITE),
-    val offColor: ExtendedColour = ExtendedColour.BLACK,
+    val onColour: ExtendedColour = ExtendedColour.fromColor(Color.WHITE),
+    val offColour: ExtendedColour = ExtendedColour.BLACK,
     val onRatio: Double = 0.1
 ) : Effect {
     override val name = "Colour Strobe"
     override val outputType = FxOutputType.COLOUR
-    override val parameters get() = mapOf("onColor" to onColor.toSerializedString(), "offColor" to offColor.toSerializedString(), "onRatio" to onRatio.toString())
+    override val parameters get() = mapOf("onColour" to onColour.toSerializedString(), "offColour" to offColour.toSerializedString(), "onRatio" to onRatio.toString())
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
-        val color = if (phase < onRatio) onColor else offColor
-        return FxOutput.Colour(color)
+        val colour = if (phase < onRatio) onColour else offColour
+        return FxOutput.Colour(colour)
     }
 }
 
@@ -118,23 +118,23 @@ data class ColourStrobe(
  *
  * Fades from one colour to another and back.
  *
- * @param colorA First colour (default BLACK)
- * @param colorB Second colour (default WHITE)
+ * @param colourA First colour (default BLACK)
+ * @param colourB Second colour (default WHITE)
  */
 data class ColourPulse(
-    val colorA: ExtendedColour = ExtendedColour.BLACK,
-    val colorB: ExtendedColour = ExtendedColour.fromColor(Color.WHITE)
+    val colourA: ExtendedColour = ExtendedColour.BLACK,
+    val colourB: ExtendedColour = ExtendedColour.fromColor(Color.WHITE)
 ) : Effect {
     override val name = "Colour Pulse"
     override val outputType = FxOutputType.COLOUR
-    override val parameters get() = mapOf("colorA" to colorA.toSerializedString(), "colorB" to colorB.toSerializedString())
+    override val parameters get() = mapOf("colourA" to colourA.toSerializedString(), "colourB" to colourB.toSerializedString())
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
         // Use sine wave for smooth pulse
         val sineValue = kotlin.math.sin(phase * 2 * kotlin.math.PI)
         val ratio = (sineValue + 1.0) / 2.0
 
-        return FxOutput.Colour(blendExtendedColours(colorA, colorB, ratio))
+        return FxOutput.Colour(blendExtendedColours(colourA, colourB, ratio))
     }
 }
 
@@ -143,18 +143,18 @@ data class ColourPulse(
  *
  * Linear transition from one colour to another.
  *
- * @param fromColor Starting colour
- * @param toColor Ending colour
+ * @param fromColour Starting colour
+ * @param toColour Ending colour
  * @param pingPong If true, fades back to start (default true)
  */
 data class ColourFade(
-    val fromColor: ExtendedColour,
-    val toColor: ExtendedColour,
+    val fromColour: ExtendedColour,
+    val toColour: ExtendedColour,
     val pingPong: Boolean = true
 ) : Effect {
     override val name = "Colour Fade"
     override val outputType = FxOutputType.COLOUR
-    override val parameters get() = mapOf("fromColor" to fromColor.toSerializedString(), "toColor" to toColor.toSerializedString(), "pingPong" to pingPong.toString())
+    override val parameters get() = mapOf("fromColour" to fromColour.toSerializedString(), "toColour" to toColour.toSerializedString(), "pingPong" to pingPong.toString())
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
         val ratio = if (pingPong && phase > 0.5) {
@@ -165,7 +165,7 @@ data class ColourFade(
             phase
         }
 
-        return FxOutput.Colour(blendExtendedColours(fromColor, toColor, ratio))
+        return FxOutput.Colour(blendExtendedColours(fromColour, toColour, ratio))
     }
 }
 
@@ -174,16 +174,16 @@ data class ColourFade(
  *
  * Produces pseudo-random colour variations around a base colour.
  *
- * @param baseColor The base colour to vary around
+ * @param baseColour The base colour to vary around
  * @param variation Maximum channel variation (0-255, default 50)
  */
 data class ColourFlicker(
-    val baseColor: ExtendedColour,
+    val baseColour: ExtendedColour,
     val variation: Int = 50
 ) : Effect {
     override val name = "Colour Flicker"
     override val outputType = FxOutputType.COLOUR
-    override val parameters get() = mapOf("baseColor" to baseColor.toSerializedString(), "variation" to variation.toString())
+    override val parameters get() = mapOf("baseColour" to baseColour.toSerializedString(), "variation" to variation.toString())
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
         // Pseudo-random but deterministic variations
@@ -194,13 +194,13 @@ data class ColourFlicker(
 
         return FxOutput.Colour(ExtendedColour(
             color = Color(
-                vary(baseColor.color.red, 127.0),
-                vary(baseColor.color.green, 211.0),
-                vary(baseColor.color.blue, 311.0),
+                vary(baseColour.color.red, 127.0),
+                vary(baseColour.color.green, 211.0),
+                vary(baseColour.color.blue, 311.0),
             ),
-            white = vary(baseColor.white.toInt(), 173.0).toUByte(),
-            amber = vary(baseColor.amber.toInt(), 239.0).toUByte(),
-            uv = vary(baseColor.uv.toInt(), 283.0).toUByte(),
+            white = vary(baseColour.white.toInt(), 173.0).toUByte(),
+            amber = vary(baseColour.amber.toInt(), 239.0).toUByte(),
+            uv = vary(baseColour.uv.toInt(), 283.0).toUByte(),
         ))
     }
 }
@@ -212,19 +212,19 @@ data class ColourFlicker(
  * to `1/groupSize` so that only one element is "on" at a time, creating
  * a chase effect when combined with LINEAR or other distribution strategies.
  *
- * @param color The static colour to output
+ * @param colour The static colour to output
  */
 data class StaticColour(
-    val color: ExtendedColour
+    val colour: ExtendedColour
 ) : Effect {
     override val name = "Static Colour"
     override val outputType = FxOutputType.COLOUR
     override val defaultStepTiming = true
-    override val parameters get() = mapOf("color" to color.toSerializedString())
+    override val parameters get() = mapOf("colour" to colour.toSerializedString())
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
-        if (context.groupSize <= 1) return FxOutput.Colour(color)
-        if (!context.hasDistributionSpread) return FxOutput.Colour(color)
+        if (context.groupSize <= 1) return FxOutput.Colour(colour)
+        if (!context.hasDistributionSpread) return FxOutput.Colour(colour)
 
         val window = 1.0 / context.numDistinctSlots
         var base = context.basePhase(phase)
@@ -235,10 +235,10 @@ data class StaticColour(
         // where (maxOffset - maxOffset + 1.0) % 1.0 ≈ 1.0 instead of 0.0.
         if (context.trianglePhase) {
             val dist = kotlin.math.abs(base - context.distributionOffset)
-            return if (dist < window / 2.0) FxOutput.Colour(color) else FxOutput.Colour(ExtendedColour.BLACK)
+            return if (dist < window / 2.0) FxOutput.Colour(colour) else FxOutput.Colour(ExtendedColour.BLACK)
         }
 
         val dist = (base - context.distributionOffset + 1.0) % 1.0
-        return if (dist < window) FxOutput.Colour(color) else FxOutput.Colour(ExtendedColour.BLACK)
+        return if (dist < window) FxOutput.Colour(colour) else FxOutput.Colour(ExtendedColour.BLACK)
     }
 }
