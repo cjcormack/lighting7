@@ -279,7 +279,8 @@ class AiService(
             sb.appendLine("Active effects: ${activeEffects.size}")
             for (effect in activeEffects.take(20)) {
                 sb.appendLine("  - ${effect.effect.name} on ${effect.target.targetKey}.${effect.target.propertyName}" +
-                        " (beat=${effect.timing.beatDivision}, blend=${effect.blendMode})")
+                        " (beat=${effect.timing.beatDivision}, blend=${effect.blendMode}" +
+                        (effect.cueId?.let { ", cueId=$it" } ?: "") + ")")
             }
         } else {
             sb.appendLine("No active effects.")
@@ -317,11 +318,11 @@ class AiService(
         sb.appendLine("- Colour format: hex '#FF0000', names 'red', extended '#ff0000;w128;a64;uv200', or palette refs 'P1', 'P2', etc.")
         sb.appendLine("- **Palette references**: Use P1, P2, P3 etc. in colour parameters to reference the shared palette. 1-indexed, wraps if index exceeds palette size (e.g. P4 with 3 colours = P1). Default colour effect params use palette refs (e.g. ColourCycle defaults to P1,P2,P3).")
         sb.appendLine("- **P* wildcard**: In ColourCycle, use 'P*' as the colours parameter to automatically use ALL palette colours. This is the easiest way to create a colour cycle from the palette.")
-        sb.appendLine("- Palette colours are shared across all running effects and update in real-time when changed via the set_palette tool.")
+        sb.appendLine("- The global palette (set via set_palette) applies to ad-hoc effects not created from a cue. Cue effects use their cue's own palette, which is isolated from the global palette. Changing the global palette does not affect running cue effects.")
         sb.appendLine("- For group effects, use distribution=LINEAR for chases, UNIFIED for all-together")
         sb.appendLine("- **Step timing**: Controls whether beat division means per-step time or total cycle time. When stepTiming=true, each step gets one full beat-division (total cycle = beatDivision × steps). When false, the entire cycle completes in one beat-division. Static effects default to stepTiming=true (chase), continuous effects default to false. You can override per-effect in the preset.")
         sb.appendLine("- UByte values range 0-255 (use 'u' suffix in scripts: 128u)")
-        sb.appendLine("- **Cues**: A cue is a named snapshot bundling a colour palette with preset applications and ad-hoc effects. Use create_cue to save a look, apply_cue to recall it. Applying a cue replaces any previously applied cue's effects. Preset applications in cues are read fresh at apply time, so edits to presets are always reflected.")
+        sb.appendLine("- **Cues**: A cue is a named snapshot bundling a colour palette with preset applications and ad-hoc effects. Multiple cues can run concurrently — applying a cue adds it alongside existing cues. Each cue has its own isolated palette (effects resolve P1, P2 etc. against the cue's palette, not the global palette). Cues with updateGlobalPalette=true also set the global palette when applied. Re-applying the same cue refreshes it (stops and re-starts its effects). Use stop_cue to stop a specific cue without affecting others. Use apply_cue with replaceAll=true to stop all other running cues first. Preset applications in cues are read fresh at apply time, so edits to presets are always reflected.")
 
         return sb.toString()
     }

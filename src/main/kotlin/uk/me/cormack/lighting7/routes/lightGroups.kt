@@ -143,6 +143,7 @@ internal fun Route.routeApiRestGroups(state: State) {
                         currentPhase = instance.lastPhase,
                         parameters = instance.effect.parameters,
                         presetId = instance.presetId,
+                        cueId = instance.cueId,
                     )
                 }
                 call.respond(dtos)
@@ -248,6 +249,7 @@ data class GroupEffectDto(
     val currentPhase: Double,
     val parameters: Map<String, String>,
     val presetId: Int? = null,
+    val cueId: Int? = null,
 )
 
 @Serializable

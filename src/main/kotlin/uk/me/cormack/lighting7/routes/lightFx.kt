@@ -309,6 +309,7 @@ data class EffectDto(
     val elementFilter: String? = null,
     val stepTiming: Boolean = false,
     val presetId: Int? = null,
+    val cueId: Int? = null,
 )
 
 @Serializable
@@ -350,6 +351,7 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
         elementFilter.name else null,
     stepTiming = stepTiming,
     presetId = presetId,
+    cueId = cueId,
 )
 
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(

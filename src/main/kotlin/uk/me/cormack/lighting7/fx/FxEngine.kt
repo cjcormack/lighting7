@@ -113,6 +113,28 @@ class FxEngine(
         _paletteFlow.tryEmit(getPalette())
     }
 
+    // --- Per-Cue Palettes ---
+
+    private data class CuePaletteEntry(
+        val colours: List<ExtendedColour>,
+        val version: Long
+    )
+
+    private val cuePalettes = ConcurrentHashMap<Int, CuePaletteEntry>()
+    private val cuePaletteVersionCounter = AtomicLong(0)
+
+    fun setCuePalette(cueId: Int, colours: List<ExtendedColour>) {
+        cuePalettes[cueId] = CuePaletteEntry(colours, cuePaletteVersionCounter.incrementAndGet())
+    }
+
+    fun getCuePalette(cueId: Int): List<ExtendedColour>? = cuePalettes[cueId]?.colours
+
+    fun getCuePaletteVersion(cueId: Int): Long = cuePalettes[cueId]?.version ?: 0L
+
+    fun removeCuePalette(cueId: Int) {
+        cuePalettes.remove(cueId)
+    }
+
     /**
      * Represents a state update for broadcasting.
      */
@@ -134,7 +156,8 @@ class FxEngine(
         val elementMode: String?,
         val isRunning: Boolean,
         val currentPhase: Double,
-        val blendMode: BlendMode
+        val blendMode: BlendMode,
+        val cueId: Int? = null
     )
 
     /**
@@ -381,6 +404,23 @@ class FxEngine(
             resetUncoveredProperties(toRemove)
             emitStateUpdate()
         }
+        return toRemove.size
+    }
+
+    /**
+     * Remove all effects that were applied as part of a specific cue.
+     *
+     * @param cueId The cue ID whose effects should be removed
+     * @return Number of effects removed
+     */
+    fun removeEffectsForCue(cueId: Int): Int {
+        val toRemove = activeEffects.values.filter { it.cueId == cueId }
+        toRemove.forEach { activeEffects.remove(it.id) }
+        if (toRemove.isNotEmpty()) {
+            resetUncoveredProperties(toRemove)
+            emitStateUpdate()
+        }
+        removeCuePalette(cueId)
         return toRemove.size
     }
 
@@ -879,7 +919,8 @@ class FxEngine(
                     instance.elementMode.name else null,
                 isRunning = instance.isRunning,
                 currentPhase = instance.lastPhase,
-                blendMode = instance.blendMode
+                blendMode = instance.blendMode,
+                cueId = instance.cueId
             )
         }
 

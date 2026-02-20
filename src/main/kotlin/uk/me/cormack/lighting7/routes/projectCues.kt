@@ -61,6 +61,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 name = newCue.name
                 this.project = project
                 palette = newCue.palette
+                updateGlobalPalette = newCue.updateGlobalPalette
             }
             createCueChildren(cue, newCue.presetApplications, newCue.adHocEffects)
             cue.toCueDetails(isCurrentProject = true)
@@ -114,6 +115,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
             cue.name = updatedData.name
             cue.palette = updatedData.palette
+            cue.updateGlobalPalette = updatedData.updateGlobalPalette
 
             // Replace children: delete existing, create new
             deleteCueChildren(cue)
@@ -196,6 +198,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 name = cueName
                 project = targetProject
                 palette = sourceCue.palette
+                updateGlobalPalette = sourceCue.updateGlobalPalette
             }
 
             // Copy child entities
@@ -264,6 +267,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             return@post
         }
 
+        val replaceAll = call.request.queryParameters["replaceAll"]?.toBoolean() ?: false
+
         val cueData = transaction(state.database) {
             val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
             if (cue.project.id != project.id) return@transaction null
@@ -271,6 +276,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 cueId = cue.id.value,
                 cueName = cue.name,
                 palette = cue.palette,
+                updateGlobalPalette = cue.updateGlobalPalette,
                 presetApplications = cue.presetApplications.map { app ->
                     CuePresetApplicationDto(
                         presetId = app.preset.id.value,
@@ -287,11 +293,31 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         }
 
         try {
-            val result = applyCue(state, cueData)
+            val result = applyCue(state, cueData, replaceAll = replaceAll)
             call.respond(result)
         } catch (e: Exception) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to apply cue"))
         }
+    }
+
+    // POST /{projectId}/cues/{cueId}/stop - Stop a running cue (remove its effects)
+    post<StopCueResource> { resource ->
+        val project = state.resolveProject(resource.parent.projectId)
+        if (project == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
+            return@post
+        }
+
+        if (!state.isCurrentProject(project)) {
+            call.respond(
+                HttpStatusCode.Conflict,
+                ErrorResponse("Cannot stop cues from project '${project.name}' - only the current project's cues can be stopped")
+            )
+            return@post
+        }
+
+        val removedCount = state.show.fxEngine.removeEffectsForCue(resource.cueId)
+        call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
     }
 
     // GET /{projectId}/cues/current-state - Get current palette and active effects without creating a cue
@@ -344,6 +370,9 @@ data class CopyCueResource(val parent: ProjectCuesResource, val cueId: Int)
 @Resource("/{cueId}/apply")
 data class ApplyCueResource(val parent: ProjectCuesResource, val cueId: Int)
 
+@Resource("/{cueId}/stop")
+data class StopCueResource(val parent: ProjectCuesResource, val cueId: Int)
+
 @Resource("/current-state")
 data class CueCurrentStateResource(val parent: ProjectCuesResource)
 
@@ -354,6 +383,7 @@ data class NewCue(
     val palette: List<String> = emptyList(),
     val presetApplications: List<CuePresetApplicationDto> = emptyList(),
     val adHocEffects: List<CueAdHocEffectDto> = emptyList(),
+    val updateGlobalPalette: Boolean = false,
 )
 
 @Serializable
@@ -363,6 +393,7 @@ data class CueDetails(
     val palette: List<String>,
     val presetApplications: List<CuePresetApplicationDetail>,
     val adHocEffects: List<CueAdHocEffectDto>,
+    val updateGlobalPalette: Boolean = false,
     val canEdit: Boolean,
     val canDelete: Boolean,
 )
@@ -402,11 +433,18 @@ data class CueCurrentStateResponse(
     val adHocEffects: List<CueAdHocEffectDto>,
 )
 
+@Serializable
+data class StopCueResponse(
+    val removedCount: Int,
+    val cueId: Int,
+)
+
 // Internal data class for apply logic
 internal data class CueApplyData(
     val cueId: Int,
     val cueName: String,
     val palette: List<String>,
+    val updateGlobalPalette: Boolean,
     val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
 )
@@ -501,6 +539,7 @@ internal fun DaoCue.toCueDetails(isCurrentProject: Boolean): CueDetails {
         palette = this.palette,
         presetApplications = presetDetails,
         adHocEffects = this.adHocEffects.map { it.toDto() },
+        updateGlobalPalette = this.updateGlobalPalette,
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
     )
@@ -549,22 +588,40 @@ internal fun deleteCueChildren(cue: DaoCue) {
 // ─── Apply logic ────────────────────────────────────────────────────────
 
 /**
- * Apply a cue: remove previous cue effects, set palette, apply preset effects and ad-hoc effects.
+ * Apply a cue: remove previous effects, set palette, apply preset effects and ad-hoc effects.
+ *
+ * @param replaceAll If true, remove ALL running cue effects (from any cue). If false, only
+ *                   remove effects from this same cue (allowing multiple cues to run concurrently).
  */
-internal fun applyCue(state: State, cueData: CueApplyData): ApplyCueResponse {
+internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean = false): ApplyCueResponse {
     val engine = state.show.fxEngine
     var effectCount = 0
 
-    // 1. Remove all effects tagged with any cueId (from previously applied cue)
-    val toRemove = engine.getActiveEffects().filter { it.cueId != null }
-    for (effect in toRemove) {
-        engine.removeEffect(effect.id)
+    // 1. Remove effects — either all cue effects or just this cue's effects
+    if (replaceAll) {
+        val toRemove = engine.getActiveEffects().filter { it.cueId != null }
+        val removedCueIds = toRemove.mapNotNull { it.cueId }.toSet()
+        for (effect in toRemove) {
+            engine.removeEffect(effect.id)
+        }
+        for (removedCueId in removedCueIds) {
+            engine.removeCuePalette(removedCueId)
+        }
+    } else {
+        val toRemove = engine.getActiveEffects().filter { it.cueId == cueData.cueId }
+        for (effect in toRemove) {
+            engine.removeEffect(effect.id)
+        }
+        engine.removeCuePalette(cueData.cueId)
     }
 
-    // 2. Set palette
+    // 2. Set per-cue palette (isolated from global palette)
     if (cueData.palette.isNotEmpty()) {
         val colours = cueData.palette.map { parseExtendedColour(it) }
-        engine.setPalette(colours)
+        engine.setCuePalette(cueData.cueId, colours)
+        if (cueData.updateGlobalPalette) {
+            engine.setPalette(colours)
+        }
     }
 
     // 3. Apply preset effects — read each preset fresh from DB
@@ -581,7 +638,7 @@ internal fun applyCue(state: State, cueData: CueApplyData): ApplyCueResponse {
                 } catch (_: Exception) { null } ?: continue
 
                 val instance = createInstanceFromPresetForCue(
-                    presetEffect, fxTarget, presetApp.presetId, state
+                    presetEffect, fxTarget, presetApp.presetId, state, cueData.cueId
                 )
                 instance.cueId = cueData.cueId
                 engine.addEffect(instance)
@@ -611,7 +668,7 @@ internal fun applyCue(state: State, cueData: CueApplyData): ApplyCueResponse {
         } catch (_: Exception) { null } ?: continue
 
         val instance = createInstanceFromPresetForCue(
-            presetEffectDto, fxTarget, null, state
+            presetEffectDto, fxTarget, null, state, cueData.cueId
         )
         instance.cueId = cueData.cueId
         engine.addEffect(instance)
@@ -735,13 +792,14 @@ private fun createInstanceFromPresetForCue(
     fxTarget: FxTarget,
     presetId: Int?,
     state: State,
+    cueId: Int,
 ): FxInstance {
     val engine = state.show.fxEngine
     val effect = createEffectFromTypeAndParams(
         presetEffect.effectType,
         presetEffect.parameters,
-        paletteSupplier = engine::getPalette,
-        paletteVersionSupplier = { engine.paletteVersion },
+        paletteSupplier = { engine.getCuePalette(cueId) ?: engine.getPalette() },
+        paletteVersionSupplier = { engine.getCuePaletteVersion(cueId) + engine.paletteVersion },
     )
     val timing = FxTiming(presetEffect.beatDivision)
     val blendMode = try {

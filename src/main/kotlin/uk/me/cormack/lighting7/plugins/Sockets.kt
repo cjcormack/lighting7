@@ -183,7 +183,8 @@ data class FxEffectState(
     val targetKey: String,
     val isRunning: Boolean,
     val phase: Double,
-    val blendMode: String
+    val blendMode: String,
+    val cueId: Int? = null
 )
 
 @Serializable
@@ -411,7 +412,8 @@ fun Application.configureSockets(state: State) {
                             targetKey = effectState.targetKey,
                             isRunning = effectState.isRunning,
                             phase = effectState.currentPhase,
-                            blendMode = effectState.blendMode.name
+                            blendMode = effectState.blendMode.name,
+                            cueId = effectState.cueId
                         )
                     }
                     sendSerialized<OutMessage>(FxStateOutMessage(
@@ -620,7 +622,8 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
             targetKey = "${effect.target.targetKey}.${effect.target.propertyName}",
             isRunning = effect.isRunning,
             phase = effect.lastPhase,
-            blendMode = effect.blendMode.name
+            blendMode = effect.blendMode.name,
+            cueId = effect.cueId
         )
     }
     return FxStateOutMessage(

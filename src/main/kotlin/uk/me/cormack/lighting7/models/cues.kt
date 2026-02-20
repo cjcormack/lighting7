@@ -45,6 +45,7 @@ object DaoCues : IntIdTable("cues") {
     val name = varchar("name", 255)
     val project = reference("project_id", DaoProjects)
     val palette = json<List<String>>("palette", Json)
+    val updateGlobalPalette = bool("update_global_palette").default(false)
 
     init {
         uniqueIndex(project, name)
@@ -57,6 +58,7 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var name by DaoCues.name
     var project by DaoProject referencedOn DaoCues.project
     var palette by DaoCues.palette
+    var updateGlobalPalette by DaoCues.updateGlobalPalette
     val presetApplications by DaoCuePresetApplication referrersOn DaoCuePresetApplications.cue
     val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue
 }

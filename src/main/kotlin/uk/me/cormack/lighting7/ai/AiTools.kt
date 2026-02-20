@@ -26,6 +26,7 @@ class AiTools(private val state: State) {
         setPaletteTool,
         createCueTool,
         applyCueTool,
+        stopCueTool,
     )
 
     /**
@@ -43,6 +44,7 @@ class AiTools(private val state: State) {
                 "set_palette" -> executeSetPalette(input)
                 "create_cue" -> executeCreateCue(input)
                 "apply_cue" -> executeApplyCue(input)
+                "stop_cue" -> executeStopCue(input)
                 else -> ToolExecutionResult(
                     success = false,
                     description = "Unknown tool: $name",
@@ -238,6 +240,7 @@ class AiTools(private val state: State) {
                             put("blendMode", effect.blendMode.name)
                             put("isRunning", effect.isRunning)
                             effect.presetId?.let { put("presetId", it) }
+                            effect.cueId?.let { put("cueId", it) }
                         }
                     }
                 })
@@ -355,6 +358,7 @@ class AiTools(private val state: State) {
         val presetAppsArray = input["presetApplications"]?.jsonArray
         val adHocArray = input["adHocEffects"]?.jsonArray
 
+        val updateGlobalPalette = input["updateGlobalPalette"]?.jsonPrimitive?.booleanOrNull ?: false
         val palette = paletteArray?.map { it.jsonPrimitive.content } ?: emptyList()
         val presetApplications = presetAppsArray?.map { app ->
             val obj = app.jsonObject
@@ -377,6 +381,7 @@ class AiTools(private val state: State) {
                 this.name = name
                 this.project = project
                 this.palette = palette
+                this.updateGlobalPalette = updateGlobalPalette
             }
             createCueChildren(newCue, presetApplications, adHocEffects)
             newCue
@@ -399,6 +404,7 @@ class AiTools(private val state: State) {
 
     private fun executeApplyCue(input: JsonObject): ToolExecutionResult {
         val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
+        val replaceAll = input["replaceAll"]?.jsonPrimitive?.booleanOrNull ?: false
 
         val cueData = transaction(state.database) {
             val cue = DaoCue.findById(cueId) ?: return@transaction null
@@ -406,6 +412,7 @@ class AiTools(private val state: State) {
                 cueId = cue.id.value,
                 cueName = cue.name,
                 palette = cue.palette,
+                updateGlobalPalette = cue.updateGlobalPalette,
                 presetApplications = cue.presetApplications.map { app ->
                     CuePresetApplicationDto(
                         presetId = app.preset.id.value,
@@ -432,14 +439,31 @@ class AiTools(private val state: State) {
             )
         } ?: return errorResult("Cue not found: $cueId")
 
-        val result = applyCue(state, cueData)
+        val result = applyCue(state, cueData, replaceAll)
 
         return ToolExecutionResult(
             success = true,
-            description = "Applied cue '${result.cueName}' (${result.effectCount} effects)",
+            description = "Applied cue '${result.cueName}' (${result.effectCount} effects)" +
+                if (replaceAll) " [replaced all other cues]" else "",
             result = buildJsonObject {
                 put("cueName", result.cueName)
                 put("effectCount", result.effectCount)
+                put("replaceAll", replaceAll)
+            }.toString()
+        )
+    }
+
+    private fun executeStopCue(input: JsonObject): ToolExecutionResult {
+        val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
+
+        val removedCount = state.show.fxEngine.removeEffectsForCue(cueId)
+
+        return ToolExecutionResult(
+            success = true,
+            description = "Stopped cue $cueId ($removedCount effects removed)",
+            result = buildJsonObject {
+                put("cueId", cueId)
+                put("removedCount", removedCount)
             }.toString()
         )
     }
@@ -747,6 +771,10 @@ class AiTools(private val state: State) {
                         put("items", buildJsonObject { put("type", "string") })
                         put("description", "Colour palette as ordered colour strings (hex, names, extended format, or palette refs)")
                     })
+                    put("updateGlobalPalette", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "When true, applying this cue also sets the global palette (affecting ad-hoc effects). Default false.")
+                    })
                     put("presetApplications", buildJsonObject {
                         put("type", "array")
                         put("items", cuePresetApplicationSchema)
@@ -764,11 +792,27 @@ class AiTools(private val state: State) {
 
         val applyCueTool = AnthropicToolDef(
             name = "apply_cue",
-            description = "Apply a saved cue by ID. Removes any previously applied cue's effects, sets the palette, and applies all preset and ad-hoc effects defined in the cue.",
+            description = "Apply a saved cue by ID. By default, adds the cue's effects alongside other running cues. Set replaceAll=true to stop all other running cues first. The cue's palette is used for its own effects (isolated from the global palette unless updateGlobalPalette is set). If this cue is already running, its effects are refreshed.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
                     put("cueId", buildJsonObject { put("type", "integer"); put("description", "The cue ID to apply") })
+                    put("replaceAll", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "If true, stop all other running cues before applying this one. Default false.")
+                    })
+                })
+                put("required", buildJsonArray { add("cueId") })
+            }
+        )
+
+        val stopCueTool = AnthropicToolDef(
+            name = "stop_cue",
+            description = "Stop a running cue by ID, removing all its effects. Other running cues are unaffected.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("cueId", buildJsonObject { put("type", "integer"); put("description", "The cue ID to stop") })
                 })
                 put("required", buildJsonArray { add("cueId") })
             }
