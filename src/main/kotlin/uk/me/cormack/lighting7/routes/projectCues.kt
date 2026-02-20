@@ -294,93 +294,40 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         }
     }
 
-    // POST /{projectId}/cues/from-state - Create cue from current FX/palette state
-    post<CreateCueFromStateResource> { resource ->
+    // GET /{projectId}/cues/current-state - Get current palette and active effects without creating a cue
+    get<CueCurrentStateResource> { resource ->
         val project = state.resolveProject(resource.parent.projectId)
         if (project == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
+            return@get
         }
 
         if (!state.isCurrentProject(project)) {
             call.respond(
                 HttpStatusCode.Conflict,
-                ErrorResponse("Cannot create cues in project '${project.name}' - only the current project can be modified")
+                ErrorResponse("Cannot read state for project '${project.name}' - only the current project is supported")
             )
-            return@post
+            return@get
         }
 
-        val request = call.receive<CreateCueFromStateRequest>()
+        val captured = captureCurrentState(state)
 
-        // Capture current palette
-        val currentPalette = state.show.fxEngine.getPalette().map { it.toSerializedString() }
-
-        // Capture current active effects
-        val activeEffects = state.show.fxEngine.getActiveEffects()
-
-        // Separate preset-based effects from ad-hoc effects
-        val presetApplications = mutableMapOf<Int, MutableList<CueTargetDto>>()
-        val adHocEffects = mutableListOf<CueAdHocEffectDto>()
-
-        for (effect in activeEffects) {
-            val targetType = if (effect.isGroupEffect) "group" else "fixture"
-            val targetKey = effect.target.targetKey
-
-            if (effect.presetId != null) {
-                // Group by presetId, collecting targets
-                val targets = presetApplications.getOrPut(effect.presetId!!) { mutableListOf() }
-                val target = CueTargetDto(type = targetType, key = targetKey)
-                if (target !in targets) {
-                    targets.add(target)
-                }
-            } else {
-                // Ad-hoc effect — capture full definition
-                adHocEffects.add(CueAdHocEffectDto(
-                    targetType = targetType,
-                    targetKey = targetKey,
-                    effectType = effect.effect.name,
-                    category = categoryFromPropertyName(effect.target.propertyName),
-                    propertyName = effect.target.propertyName,
-                    beatDivision = effect.timing.beatDivision,
-                    blendMode = effect.blendMode.name,
-                    distribution = effect.distributionStrategy.javaClass.simpleName,
-                    phaseOffset = effect.phaseOffset,
-                    elementMode = if (effect.isGroupEffect) effect.elementMode.name else null,
-                    elementFilter = if (effect.elementFilter != ElementFilter.ALL) effect.elementFilter.name else null,
-                    stepTiming = if (effect.stepTiming != effect.effect.defaultStepTiming) effect.stepTiming else null,
-                    parameters = effect.effect.parameters,
-                ))
+        // Resolve preset names from DB
+        val presetDetails = transaction(state.database) {
+            captured.presetApplications.map { app ->
+                CuePresetApplicationDetail(
+                    presetId = app.presetId,
+                    presetName = DaoFxPreset.findById(app.presetId)?.name,
+                    targets = app.targets,
+                )
             }
         }
 
-        val presetAppDtos = presetApplications.map { (presetId, targets) ->
-            CuePresetApplicationDto(presetId = presetId, targets = targets)
-        }
-
-        val cueDetails = transaction(state.database) {
-            // Check for name uniqueness
-            val existing = DaoCue.find {
-                (DaoCues.project eq project.id) and (DaoCues.name eq request.name)
-            }.firstOrNull()
-            if (existing != null) {
-                return@transaction null
-            }
-
-            val cue = DaoCue.new {
-                name = request.name
-                this.project = project
-                palette = currentPalette
-            }
-            createCueChildren(cue, presetAppDtos, adHocEffects)
-            cue.toCueDetails(isCurrentProject = true)
-        }
-
-        if (cueDetails != null) {
-            state.show.fixtures.cueListChanged()
-            call.respond(HttpStatusCode.Created, cueDetails)
-        } else {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("A cue with name '${request.name}' already exists"))
-        }
+        call.respond(CueCurrentStateResponse(
+            palette = captured.palette,
+            presetApplications = presetDetails,
+            adHocEffects = captured.adHocEffects,
+        ))
     }
 }
 
@@ -397,8 +344,8 @@ data class CopyCueResource(val parent: ProjectCuesResource, val cueId: Int)
 @Resource("/{cueId}/apply")
 data class ApplyCueResource(val parent: ProjectCuesResource, val cueId: Int)
 
-@Resource("/from-state")
-data class CreateCueFromStateResource(val parent: ProjectCuesResource)
+@Resource("/current-state")
+data class CueCurrentStateResource(val parent: ProjectCuesResource)
 
 // DTOs
 @Serializable
@@ -449,8 +396,10 @@ data class ApplyCueResponse(
 )
 
 @Serializable
-data class CreateCueFromStateRequest(
-    val name: String,
+data class CueCurrentStateResponse(
+    val palette: List<String>,
+    val presetApplications: List<CuePresetApplicationDetail>,
+    val adHocEffects: List<CueAdHocEffectDto>,
 )
 
 // Internal data class for apply logic
@@ -461,6 +410,62 @@ internal data class CueApplyData(
     val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
 )
+
+// ─── State capture ──────────────────────────────────────────────────────
+
+private data class CapturedState(
+    val palette: List<String>,
+    val presetApplications: List<CuePresetApplicationDto>,
+    val adHocEffects: List<CueAdHocEffectDto>,
+)
+
+/** Capture the current palette and active effects from the FX engine. */
+private fun captureCurrentState(state: State): CapturedState {
+    val currentPalette = state.show.fxEngine.getPalette().map { it.toSerializedString() }
+    val activeEffects = state.show.fxEngine.getActiveEffects()
+
+    val presetApplications = mutableMapOf<Int, MutableList<CueTargetDto>>()
+    val adHocEffects = mutableListOf<CueAdHocEffectDto>()
+
+    for (effect in activeEffects) {
+        val targetType = if (effect.isGroupEffect) "group" else "fixture"
+        val targetKey = effect.target.targetKey
+
+        if (effect.presetId != null) {
+            val targets = presetApplications.getOrPut(effect.presetId!!) { mutableListOf() }
+            val target = CueTargetDto(type = targetType, key = targetKey)
+            if (target !in targets) {
+                targets.add(target)
+            }
+        } else {
+            adHocEffects.add(CueAdHocEffectDto(
+                targetType = targetType,
+                targetKey = targetKey,
+                effectType = effect.effect.name,
+                category = categoryFromPropertyName(effect.target.propertyName),
+                propertyName = effect.target.propertyName,
+                beatDivision = effect.timing.beatDivision,
+                blendMode = effect.blendMode.name,
+                distribution = effect.distributionStrategy.javaClass.simpleName,
+                phaseOffset = effect.phaseOffset,
+                elementMode = if (effect.isGroupEffect) effect.elementMode.name else null,
+                elementFilter = if (effect.elementFilter != ElementFilter.ALL) effect.elementFilter.name else null,
+                stepTiming = if (effect.stepTiming != effect.effect.defaultStepTiming) effect.stepTiming else null,
+                parameters = effect.effect.parameters,
+            ))
+        }
+    }
+
+    val presetAppDtos = presetApplications.map { (presetId, targets) ->
+        CuePresetApplicationDto(presetId = presetId, targets = targets)
+    }
+
+    return CapturedState(
+        palette = currentPalette,
+        presetApplications = presetAppDtos,
+        adHocEffects = adHocEffects,
+    )
+}
 
 // ─── Entity helpers ─────────────────────────────────────────────────────
 
