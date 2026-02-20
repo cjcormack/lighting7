@@ -3,8 +3,10 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
+import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
+import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import kotlin.math.roundToInt
 
@@ -195,7 +197,7 @@ sealed class Fusion100SpotMkIIFixture(
         transaction: ControllerTransaction? = null,
     ) : Fusion100SpotMkIIFixture(
         universe, firstChannel, 5, key, fixtureName, transaction
-    ) {
+    ), WithPosition {
         override val mode = Mode.MODE_5CH
 
         private constructor(fixture: Mode5Ch, transaction: ControllerTransaction) : this(
@@ -207,10 +209,10 @@ sealed class Fusion100SpotMkIIFixture(
             Mode5Ch(this, transaction)
 
         @FixtureProperty("Pan adjustment 0-540°", category = PropertyCategory.POSITION)
-        val pan = DmxSlider(transaction, universe, firstChannel)
+        override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Tilt adjustment 0-210°", category = PropertyCategory.POSITION)
-        val tilt = DmxSlider(transaction, universe, firstChannel + 1)
+        override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
         @FixtureProperty("LED macro", category = PropertyCategory.SETTING)
         val ledMacro = DmxFixtureSetting(transaction, universe, firstChannel + 2, LedMacro.entries.toTypedArray())
@@ -244,7 +246,7 @@ sealed class Fusion100SpotMkIIFixture(
         transaction: ControllerTransaction? = null,
     ) : Fusion100SpotMkIIFixture(
         universe, firstChannel, 8, key, fixtureName, transaction
-    ), WithDimmer {
+    ), WithDimmer, WithPosition {
         override val mode = Mode.MODE_8CH
 
         private constructor(fixture: Mode8Ch, transaction: ControllerTransaction) : this(
@@ -256,10 +258,10 @@ sealed class Fusion100SpotMkIIFixture(
             Mode8Ch(this, transaction)
 
         @FixtureProperty("Pan adjustment 0-540°", category = PropertyCategory.POSITION)
-        val pan = DmxSlider(transaction, universe, firstChannel)
+        override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Tilt adjustment 0-210°", category = PropertyCategory.POSITION)
-        val tilt = DmxSlider(transaction, universe, firstChannel + 1)
+        override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel + 2)
@@ -309,7 +311,7 @@ sealed class Fusion100SpotMkIIFixture(
         transaction: ControllerTransaction? = null,
     ) : Fusion100SpotMkIIFixture(
         universe, firstChannel, 15, key, fixtureName, transaction
-    ), WithDimmer, WithStrobe {
+    ), WithDimmer, WithStrobe, WithPosition {
         override val mode = Mode.MODE_15CH
 
         private constructor(fixture: Mode15Ch, transaction: ControllerTransaction) : this(
@@ -321,13 +323,13 @@ sealed class Fusion100SpotMkIIFixture(
             Mode15Ch(this, transaction)
 
         @FixtureProperty("Pan adjustment 0-540°", category = PropertyCategory.POSITION)
-        val pan = DmxSlider(transaction, universe, firstChannel)
+        override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Pan fine adjustment", category = PropertyCategory.POSITION)
         val panFine = DmxSlider(transaction, universe, firstChannel + 1)
 
         @FixtureProperty("Tilt adjustment 0-210°", category = PropertyCategory.POSITION)
-        val tilt = DmxSlider(transaction, universe, firstChannel + 2)
+        override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
         @FixtureProperty("Tilt fine adjustment", category = PropertyCategory.POSITION)
         val tiltFine = DmxSlider(transaction, universe, firstChannel + 3)

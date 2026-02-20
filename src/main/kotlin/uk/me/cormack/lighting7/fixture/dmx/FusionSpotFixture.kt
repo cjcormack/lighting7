@@ -6,8 +6,10 @@ import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
+import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import kotlin.math.roundToInt
 
@@ -19,7 +21,7 @@ class FusionSpotFixture(
     firstChannel: Int,
     private val maxDimmerLevel: UByte = 255u,
     transaction: ControllerTransaction? = null,
-): DmxFixture(universe, firstChannel, 15, key, fixtureName), WithDimmer, WithStrobe {
+): DmxFixture(universe, firstChannel, 15, key, fixtureName), WithDimmer, WithStrobe, WithPosition {
      private constructor(
          fixture: FusionSpotFixture,
          transaction: ControllerTransaction,
@@ -107,13 +109,13 @@ class FusionSpotFixture(
     }
 
     @FixtureProperty("Pan adjustment 0-540°", category = PropertyCategory.POSITION)
-    val pan = DmxSlider(transaction, universe, firstChannel)
+    override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
     @FixtureProperty("Pan fine adjustment", category = PropertyCategory.POSITION)
     val panFine = DmxSlider(transaction, universe, firstChannel + 1)
 
     @FixtureProperty("Tilt adjustment 0-210°", category = PropertyCategory.POSITION)
-    val tilt = DmxSlider(transaction, universe, firstChannel + 2)
+    override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
     @FixtureProperty("Tilt fine adjustment", category = PropertyCategory.POSITION)
     val tiltFine = DmxSlider(transaction, universe, firstChannel + 3)
