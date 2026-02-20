@@ -479,7 +479,7 @@ private fun captureCurrentState(state: State): CapturedState {
             adHocEffects.add(CueAdHocEffectDto(
                 targetType = targetType,
                 targetKey = targetKey,
-                effectType = effect.effect.name,
+                effectType = effect.effect.name.replace(" ", ""),
                 category = categoryFromPropertyName(effect.target.propertyName),
                 propertyName = effect.target.propertyName,
                 beatDivision = effect.timing.beatDivision,

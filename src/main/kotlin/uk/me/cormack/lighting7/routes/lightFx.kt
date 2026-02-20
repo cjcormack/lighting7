@@ -121,7 +121,7 @@ internal fun Route.routeApiRestFx(state: State) {
 
                 // Resolve new effect if type or parameters changed
                 val newEffect = if (request.effectType != null || request.parameters != null) {
-                    val effectType = request.effectType ?: existing.effect.name
+                    val effectType = request.effectType ?: existing.effect.name.replace(" ", "")
                     val params = request.parameters ?: existing.effect.parameters
                     createEffectFromTypeAndParams(
                         effectType, params,
@@ -333,7 +333,7 @@ data class ParameterInfo(
 
 private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDto(
     id = id,
-    effectType = effect.name,
+    effectType = effect.name.replace(" ", ""),
     targetKey = target.targetKey,
     propertyName = target.propertyName,
     beatDivision = timing.beatDivision,
@@ -356,7 +356,7 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
 
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     id = id,
-    effectType = effect.name,
+    effectType = effect.name.replace(" ", ""),
     groupName = target.targetKey,
     propertyName = target.propertyName,
     beatDivision = timing.beatDivision,
@@ -488,7 +488,7 @@ internal fun createEffectFromTypeAndParams(
 ): Effect {
     val usePalette = paletteSupplier != null && paletteVersionSupplier != null
 
-    return when (effectType.lowercase()) {
+    return when (effectType.lowercase().replace(" ", "")) {
         // Dimmer effects
         "sinewave", "sine_wave", "sine" -> SineWave(
             min = params["min"]?.toUByteOrNull() ?: 0u,
