@@ -55,4 +55,5 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     val scenes by DaoScene referrersOn DaoScenes.project
     val fxPresets by DaoFxPreset referrersOn DaoFxPresets.project
     val cues by DaoCue referrersOn DaoCues.project
+    val cueStacks by DaoCueStack referrersOn DaoCueStacks.project
 }

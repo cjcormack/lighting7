@@ -57,16 +57,26 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
         val newCue = call.receive<NewCue>()
         val cueDetails = transaction(state.database) {
+            val stack = newCue.cueStackId?.let { DaoCueStack.findById(it) }
             val cue = DaoCue.new {
                 name = newCue.name
                 this.project = project
                 palette = newCue.palette
                 updateGlobalPalette = newCue.updateGlobalPalette
+                autoAdvance = newCue.autoAdvance
+                autoAdvanceDelayMs = newCue.autoAdvanceDelayMs
+                fadeDurationMs = newCue.fadeDurationMs
+                fadeCurve = newCue.fadeCurve
+                if (stack != null) {
+                    cueStack = stack
+                    sortOrder = newCue.sortOrder ?: stack.cues.count().toInt()
+                }
             }
             createCueChildren(cue, newCue.presetApplications, newCue.adHocEffects)
             cue.toCueDetails(isCurrentProject = true)
         }
         state.show.fixtures.cueListChanged()
+        if (newCue.cueStackId != null) state.show.fixtures.cueStackListChanged()
         call.respond(HttpStatusCode.Created, cueDetails)
     }
 
@@ -116,6 +126,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             cue.name = updatedData.name
             cue.palette = updatedData.palette
             cue.updateGlobalPalette = updatedData.updateGlobalPalette
+            cue.autoAdvance = updatedData.autoAdvance
+            cue.autoAdvanceDelayMs = updatedData.autoAdvanceDelayMs
+            cue.fadeDurationMs = updatedData.fadeDurationMs
+            cue.fadeCurve = updatedData.fadeCurve
 
             // Replace children: delete existing, create new
             deleteCueChildren(cue)
@@ -199,6 +213,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 project = targetProject
                 palette = sourceCue.palette
                 updateGlobalPalette = sourceCue.updateGlobalPalette
+                autoAdvance = sourceCue.autoAdvance
+                autoAdvanceDelayMs = sourceCue.autoAdvanceDelayMs
+                fadeDurationMs = sourceCue.fadeDurationMs
+                fadeCurve = sourceCue.fadeCurve
             }
 
             // Copy child entities
@@ -269,10 +287,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
         val replaceAll = call.request.queryParameters["replaceAll"]?.toBoolean() ?: false
 
-        val cueData = transaction(state.database) {
+        // Read cue data and check stack membership
+        val cueInfo = transaction(state.database) {
             val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
             if (cue.project.id != project.id) return@transaction null
-            CueApplyData(
+            val stackId = cue.cueStack?.id?.value
+            val cueData = CueApplyData(
                 cueId = cue.id.value,
                 cueName = cue.name,
                 palette = cue.palette,
@@ -285,16 +305,32 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 },
                 adHocEffects = cue.adHocEffects.map { it.toDto() },
             )
+            Pair(cueData, stackId)
         }
 
-        if (cueData == null) {
+        if (cueInfo == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
             return@post
         }
 
+        val (cueData, cueStackId) = cueInfo
+
         try {
-            val result = applyCue(state, cueData, replaceAll = replaceAll)
-            call.respond(result)
+            if (cueStackId != null) {
+                // Cue belongs to a stack — delegate to CueStackManager
+                // This activates the stack (if not already active) and switches to this cue
+                @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+                val stackResult = state.show.cueStackManager.activateCueInStack(
+                    state, cueStackId, resource.cueId, kotlinx.coroutines.GlobalScope
+                )
+                call.respond(ApplyCueResponse(
+                    effectCount = stackResult.effectCount,
+                    cueName = stackResult.cueName,
+                ))
+            } else {
+                val result = applyCue(state, cueData, replaceAll = replaceAll)
+                call.respond(result)
+            }
         } catch (e: Exception) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to apply cue"))
         }
@@ -316,8 +352,19 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             return@post
         }
 
-        val removedCount = state.show.fxEngine.removeEffectsForCue(resource.cueId)
-        call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
+        // Check if this cue belongs to an active stack
+        val cueStackId = transaction(state.database) {
+            DaoCue.findById(resource.cueId)?.cueStack?.id?.value
+        }
+        val manager = state.show.cueStackManager
+        if (cueStackId != null && manager.isStackActive(cueStackId)) {
+            // Cue is in an active stack — deactivate the entire stack
+            val removedCount = manager.deactivateStack(cueStackId)
+            call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
+        } else {
+            val removedCount = state.show.fxEngine.removeEffectsForCue(resource.cueId)
+            call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
+        }
     }
 
     // GET /{projectId}/cues/current-state - Get current palette and active effects without creating a cue
@@ -384,6 +431,12 @@ data class NewCue(
     val presetApplications: List<CuePresetApplicationDto> = emptyList(),
     val adHocEffects: List<CueAdHocEffectDto> = emptyList(),
     val updateGlobalPalette: Boolean = false,
+    val cueStackId: Int? = null,
+    val sortOrder: Int? = null,
+    val autoAdvance: Boolean = false,
+    val autoAdvanceDelayMs: Long? = null,
+    val fadeDurationMs: Long? = null,
+    val fadeCurve: String = "LINEAR",
 )
 
 @Serializable
@@ -394,6 +447,13 @@ data class CueDetails(
     val presetApplications: List<CuePresetApplicationDetail>,
     val adHocEffects: List<CueAdHocEffectDto>,
     val updateGlobalPalette: Boolean = false,
+    val cueStackId: Int? = null,
+    val cueStackName: String? = null,
+    val sortOrder: Int = 0,
+    val autoAdvance: Boolean = false,
+    val autoAdvanceDelayMs: Long? = null,
+    val fadeDurationMs: Long? = null,
+    val fadeCurve: String = "LINEAR",
     val canEdit: Boolean,
     val canDelete: Boolean,
 )
@@ -447,6 +507,10 @@ internal data class CueApplyData(
     val updateGlobalPalette: Boolean,
     val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
+    val autoAdvance: Boolean = false,
+    val autoAdvanceDelayMs: Long? = null,
+    val fadeDurationMs: Long? = null,
+    val fadeCurve: String = "LINEAR",
 )
 
 // ─── State capture ──────────────────────────────────────────────────────
@@ -508,7 +572,7 @@ private fun captureCurrentState(state: State): CapturedState {
 // ─── Entity helpers ─────────────────────────────────────────────────────
 
 /** Convert a DaoCueAdHocEffect entity to its DTO form. */
-private fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
+internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     targetType = targetType,
     targetKey = targetKey,
     effectType = effectType,
@@ -540,6 +604,13 @@ internal fun DaoCue.toCueDetails(isCurrentProject: Boolean): CueDetails {
         presetApplications = presetDetails,
         adHocEffects = this.adHocEffects.map { it.toDto() },
         updateGlobalPalette = this.updateGlobalPalette,
+        cueStackId = this.cueStack?.id?.value,
+        cueStackName = this.cueStack?.name,
+        sortOrder = this.sortOrder,
+        autoAdvance = this.autoAdvance,
+        autoAdvanceDelayMs = this.autoAdvanceDelayMs,
+        fadeDurationMs = this.fadeDurationMs,
+        fadeCurve = this.fadeCurve,
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
     )
@@ -680,7 +751,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
 
 // ─── Target resolution helpers ──────────────────────────────────────────
 
-private fun resolveTargetForCue(
+internal fun resolveTargetForCue(
     state: State,
     target: TogglePresetTarget,
     presetEffect: FxPresetEffectDto,
@@ -699,7 +770,7 @@ private fun resolveTargetForCue(
     }
 }
 
-private fun resolvePresetEffectPropertyForCue(
+internal fun resolvePresetEffectPropertyForCue(
     presetEffect: FxPresetEffectDto,
     capabilities: List<String>,
 ): String? {
@@ -712,7 +783,7 @@ private fun resolvePresetEffectPropertyForCue(
     }
 }
 
-private fun resolvePresetEffectPropertyForFixtureInCue(
+internal fun resolvePresetEffectPropertyForFixtureInCue(
     presetEffect: FxPresetEffectDto,
 ): String? {
     return when (presetEffect.category) {
@@ -724,7 +795,7 @@ private fun resolvePresetEffectPropertyForFixtureInCue(
     }
 }
 
-private fun createGroupTargetForCue(
+internal fun createGroupTargetForCue(
     groupName: String,
     propertyName: String,
     group: FixtureGroup<*>,
@@ -747,7 +818,7 @@ private fun createGroupTargetForCue(
     }
 }
 
-private fun createFixtureTargetForCue(
+internal fun createFixtureTargetForCue(
     fixtureKey: String,
     propertyName: String,
     state: State,
@@ -775,7 +846,7 @@ private fun createFixtureTargetForCue(
 /**
  * Infer effect category from property name for from-state capture.
  */
-private fun categoryFromPropertyName(propertyName: String): String {
+internal fun categoryFromPropertyName(propertyName: String): String {
     return when (propertyName.lowercase()) {
         "dimmer" -> "dimmer"
         "colour", "color", "rgbcolour" -> "colour"
@@ -787,7 +858,7 @@ private fun categoryFromPropertyName(propertyName: String): String {
 /**
  * Create an FxInstance from preset effect data for cue application.
  */
-private fun createInstanceFromPresetForCue(
+internal fun createInstanceFromPresetForCue(
     presetEffect: FxPresetEffectDto,
     fxTarget: FxTarget,
     presetId: Int?,

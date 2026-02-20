@@ -165,11 +165,12 @@ internal fun Route.routeApiRestProjects(state: State) {
                 project.runLoopScriptId = null
                 project.initialSceneId = null
 
-                // Delete associated cues (children first due to FK), scenes, and scripts
+                // Delete associated cues (children first due to FK), cue stacks, scenes, and scripts
                 project.cues.forEach { cue ->
                     deleteCueChildren(cue)
                     cue.delete()
                 }
+                project.cueStacks.forEach { it.delete() }
                 project.scenes.forEach { it.delete() }
                 project.scripts.forEach { it.delete() }
                 project.delete()
@@ -205,11 +206,12 @@ internal fun Route.routeApiRestProjects(state: State) {
             }
         }
 
-        // Script, Scene, Preset, and Cue endpoints are defined in separate files
+        // Script, Scene, Preset, Cue, and Cue Stack endpoints are defined in separate files
         routeApiRestProjectScripts(state)
         routeApiRestProjectScenes(state)
         routeApiRestProjectFxPresets(state)
         routeApiRestProjectCues(state)
+        routeApiRestProjectCueStacks(state)
 
         // POST /current/create-initial-scene - Create initial scene template (script + scene)
         post<CreateInitialSceneResource> {
@@ -417,13 +419,35 @@ internal fun Route.routeApiRestProjects(state: State) {
                     presetIdMapping[sourcePreset.id.value] = newPreset.id.value
                 }
 
-                // Clone all cues, remapping preset IDs in preset applications
+                // Clone all cue stacks
+                val cueStackIdMapping = mutableMapOf<Int, Int>()
+                sourceProject.cueStacks.forEach { sourceStack ->
+                    val newStack = DaoCueStack.new {
+                        name = sourceStack.name
+                        project = newProject
+                        palette = sourceStack.palette
+                        loop = sourceStack.loop
+                    }
+                    cueStackIdMapping[sourceStack.id.value] = newStack.id.value
+                }
+
+                // Clone all cues, remapping preset IDs and cue stack IDs
                 var cuesCloned = 0
                 sourceProject.cues.forEach { sourceCue ->
+                    val newStackId = sourceCue.cueStack?.id?.value?.let { cueStackIdMapping[it] }
                     val newCue = DaoCue.new {
                         name = sourceCue.name
                         project = newProject
                         palette = sourceCue.palette
+                        updateGlobalPalette = sourceCue.updateGlobalPalette
+                        autoAdvance = sourceCue.autoAdvance
+                        autoAdvanceDelayMs = sourceCue.autoAdvanceDelayMs
+                        fadeDurationMs = sourceCue.fadeDurationMs
+                        fadeCurve = sourceCue.fadeCurve
+                        if (newStackId != null) {
+                            cueStack = DaoCueStack.findById(newStackId)
+                            sortOrder = sourceCue.sortOrder
+                        }
                     }
                     // Clone preset applications with remapped preset IDs
                     for (app in sourceCue.presetApplications) {
@@ -477,6 +501,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                     scenesCloned = sceneIdMapping.size,
                     presetsCloned = presetIdMapping.size,
                     cuesCloned = cuesCloned,
+                    cueStacksCloned = cueStackIdMapping.size,
                     message = "Project cloned successfully"
                 ) to null
             }
@@ -543,7 +568,8 @@ data class ProjectDetailDto(
     val sceneCount: Int,
     val chaseCount: Int,
     val fxPresetCount: Int,
-    val cueCount: Int
+    val cueCount: Int,
+    val cueStackCount: Int,
 )
 
 @Serializable
@@ -585,6 +611,7 @@ data class CloneProjectResponse(
     val scenesCloned: Int,
     val presetsCloned: Int,
     val cuesCloned: Int,
+    val cueStacksCloned: Int = 0,
     val message: String
 )
 
@@ -618,7 +645,8 @@ private fun DaoProject.toDetailDto() = ProjectDetailDto(
     sceneCount = scenes.filter { it.mode == Mode.SCENE }.count(),
     chaseCount = scenes.filter { it.mode == Mode.CHASE }.count(),
     fxPresetCount = fxPresets.count().toInt(),
-    cueCount = cues.count().toInt()
+    cueCount = cues.count().toInt(),
+    cueStackCount = cueStacks.count().toInt(),
 )
 
 // Template for new projects

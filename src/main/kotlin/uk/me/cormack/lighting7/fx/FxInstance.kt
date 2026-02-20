@@ -138,8 +138,21 @@ class FxInstance(
     /** If this effect was applied as part of a cue, the cue ID. Null otherwise. */
     var cueId: Int? = null
 
+    /** If this effect belongs to a cue stack, the stack ID. Null otherwise. */
+    var cueStackId: Int? = null
+
     /** Whether this effect is currently running */
     var isRunning: Boolean = true
+
+    /**
+     * Intensity multiplier for crossfade transitions (0.0 = silent, 1.0 = full).
+     *
+     * During a cue stack crossfade, outgoing effects ramp from 1→0 and incoming
+     * effects ramp from 0→1 over the fade duration. The FxEngine multiplies
+     * effect output by this value during processing.
+     */
+    @Volatile
+    var intensityMultiplier: Double = 1.0
 
     /** Most recently calculated phase (for state reporting) */
     var lastPhase: Double = 0.0

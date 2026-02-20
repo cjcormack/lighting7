@@ -46,6 +46,12 @@ object DaoCues : IntIdTable("cues") {
     val project = reference("project_id", DaoProjects)
     val palette = json<List<String>>("palette", Json)
     val updateGlobalPalette = bool("update_global_palette").default(false)
+    val cueStack = reference("cue_stack_id", DaoCueStacks).nullable()
+    val sortOrder = integer("sort_order").default(0)
+    val autoAdvance = bool("auto_advance").default(false)
+    val autoAdvanceDelayMs = long("auto_advance_delay_ms").nullable()
+    val fadeDurationMs = long("fade_duration_ms").nullable()
+    val fadeCurve = varchar("fade_curve", 50).default("LINEAR")
 
     init {
         uniqueIndex(project, name)
@@ -59,6 +65,12 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var project by DaoProject referencedOn DaoCues.project
     var palette by DaoCues.palette
     var updateGlobalPalette by DaoCues.updateGlobalPalette
+    var cueStack by DaoCueStack optionalReferencedOn DaoCues.cueStack
+    var sortOrder by DaoCues.sortOrder
+    var autoAdvance by DaoCues.autoAdvance
+    var autoAdvanceDelayMs by DaoCues.autoAdvanceDelayMs
+    var fadeDurationMs by DaoCues.fadeDurationMs
+    var fadeCurve by DaoCues.fadeCurve
     val presetApplications by DaoCuePresetApplication referrersOn DaoCuePresetApplications.cue
     val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue
 }

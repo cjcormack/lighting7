@@ -101,6 +101,10 @@ data object PresetListChangedOutMessage: OutMessage()
 data object CueListChangedOutMessage: OutMessage()
 
 @Serializable
+@SerialName("cueStackListChanged")
+data object CueStackListChangedOutMessage: OutMessage()
+
+@Serializable
 @SerialName("trackChanged")
 data class TrackChangedOutMessage(
     val isPlaying: Boolean,
@@ -184,7 +188,8 @@ data class FxEffectState(
     val isRunning: Boolean,
     val phase: Double,
     val blendMode: String,
-    val cueId: Int? = null
+    val cueId: Int? = null,
+    val cueStackId: Int? = null,
 )
 
 @Serializable
@@ -389,6 +394,12 @@ fun Application.configureSockets(state: State) {
                     }
                 }
 
+                override fun cueStackListChanged() {
+                    launch {
+                        sendSerialized<OutMessage>(CueStackListChangedOutMessage)
+                    }
+                }
+
                 override fun trackChanged(isPlaying: Boolean, artist: String, name: String) {
                     launch {
                         sendSerialized<OutMessage>(TrackChangedOutMessage(isPlaying, artist, name))
@@ -413,7 +424,8 @@ fun Application.configureSockets(state: State) {
                             isRunning = effectState.isRunning,
                             phase = effectState.currentPhase,
                             blendMode = effectState.blendMode.name,
-                            cueId = effectState.cueId
+                            cueId = effectState.cueId,
+                            cueStackId = effectState.cueStackId,
                         )
                     }
                     sendSerialized<OutMessage>(FxStateOutMessage(
@@ -623,7 +635,8 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
             isRunning = effect.isRunning,
             phase = effect.lastPhase,
             blendMode = effect.blendMode.name,
-            cueId = effect.cueId
+            cueId = effect.cueId,
+            cueStackId = effect.cueStackId,
         )
     }
     return FxStateOutMessage(

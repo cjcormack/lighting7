@@ -3,7 +3,9 @@ package uk.me.cormack.lighting7.ai
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
+import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.transactions.transaction
+import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.*
 import uk.me.cormack.lighting7.state.State
@@ -27,6 +29,11 @@ class AiTools(private val state: State) {
         createCueTool,
         applyCueTool,
         stopCueTool,
+        createCueStackTool,
+        activateCueStackTool,
+        deactivateCueStackTool,
+        advanceCueStackTool,
+        addCueToStackTool,
     )
 
     /**
@@ -45,6 +52,11 @@ class AiTools(private val state: State) {
                 "create_cue" -> executeCreateCue(input)
                 "apply_cue" -> executeApplyCue(input)
                 "stop_cue" -> executeStopCue(input)
+                "create_cue_stack" -> executeCreateCueStack(input)
+                "activate_cue_stack" -> executeActivateCueStack(input)
+                "deactivate_cue_stack" -> executeDeactivateCueStack(input)
+                "advance_cue_stack" -> executeAdvanceCueStack(input)
+                "add_cue_to_stack" -> executeAddCueToStack(input)
                 else -> ToolExecutionResult(
                     success = false,
                     description = "Unknown tool: $name",
@@ -219,7 +231,7 @@ class AiTools(private val state: State) {
 
     private fun executeGetCurrentState(input: JsonObject): ToolExecutionResult {
         val include = input["include"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
-            ?: setOf("active_effects", "bpm", "fixtures", "groups", "presets", "palette", "cues")
+            ?: setOf("active_effects", "bpm", "fixtures", "groups", "presets", "palette", "cues", "cue_stacks")
 
         val result = buildJsonObject {
             if ("bpm" in include) {
@@ -241,6 +253,7 @@ class AiTools(private val state: State) {
                             put("isRunning", effect.isRunning)
                             effect.presetId?.let { put("presetId", it) }
                             effect.cueId?.let { put("cueId", it) }
+                            effect.cueStackId?.let { put("cueStackId", it) }
                         }
                     }
                 })
@@ -319,6 +332,29 @@ class AiTools(private val state: State) {
                         }
                 }
                 put("cues", buildJsonArray { cues.forEach { add(it) } })
+            }
+
+            if ("cue_stacks" in include) {
+                val project = state.projectManager.currentProject
+                val manager = state.show.cueStackManager
+                val stacks = transaction(state.database) {
+                    DaoCueStack.find { DaoCueStacks.project eq project.id }
+                        .orderBy(DaoCueStacks.name to SortOrder.ASC)
+                        .map { stack ->
+                            val activeCueId = manager.getActiveCueId(stack.id.value)
+                            val cueCount = DaoCue.find { DaoCues.cueStack eq stack.id }
+                                .count()
+                            buildJsonObject {
+                                put("id", stack.id.value)
+                                put("name", stack.name)
+                                put("cueCount", cueCount)
+                                put("loop", stack.loop)
+                                put("isActive", activeCueId != null)
+                                activeCueId?.let { put("activeCueId", it) }
+                            }
+                        }
+                }
+                put("cueStacks", buildJsonArray { stacks.forEach { add(it) } })
             }
         }
 
@@ -464,6 +500,153 @@ class AiTools(private val state: State) {
             result = buildJsonObject {
                 put("cueId", cueId)
                 put("removedCount", removedCount)
+            }.toString()
+        )
+    }
+
+    // ─── Cue Stack Executors ────────────────────────────────────────────────
+
+    private fun executeCreateCueStack(input: JsonObject): ToolExecutionResult {
+        val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
+        val paletteArray = input["palette"]?.jsonArray
+        val palette = paletteArray?.map { it.jsonPrimitive.content } ?: emptyList()
+        val loop = input["loop"]?.jsonPrimitive?.booleanOrNull ?: false
+
+        val project = state.projectManager.currentProject
+        val stack = transaction(state.database) {
+            DaoCueStack.new {
+                this.name = name
+                this.project = project
+                this.palette = palette
+                this.loop = loop
+            }
+        }
+        state.show.fixtures.cueStackListChanged()
+
+        val stackId = stack.id.value
+        return ToolExecutionResult(
+            success = true,
+            description = "Created cue stack '$name' (id=$stackId, loop=$loop)",
+            result = buildJsonObject {
+                put("stackId", stackId)
+                put("name", name)
+                put("loop", loop)
+            }.toString()
+        )
+    }
+
+    private fun executeActivateCueStack(input: JsonObject): ToolExecutionResult {
+        val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
+        val cueId = input["cueId"]?.jsonPrimitive?.intOrNull
+
+        val manager = state.show.cueStackManager
+        val targetCueId = cueId ?: transaction(state.database) {
+            DaoCue.find { DaoCues.cueStack eq stackId }
+                .orderBy(DaoCues.sortOrder to SortOrder.ASC)
+                .firstOrNull()?.id?.value
+        } ?: return errorResult("Stack $stackId has no cues")
+
+        val result = manager.activateCueInStack(state, stackId, targetCueId)
+
+        return ToolExecutionResult(
+            success = true,
+            description = "Activated stack $stackId at cue '${result.cueName}' (${result.effectCount} effects)",
+            result = buildJsonObject {
+                put("stackId", result.stackId)
+                put("cueId", result.cueId)
+                put("cueName", result.cueName)
+                put("effectCount", result.effectCount)
+            }.toString()
+        )
+    }
+
+    private fun executeDeactivateCueStack(input: JsonObject): ToolExecutionResult {
+        val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
+
+        val manager = state.show.cueStackManager
+        val removedCount = manager.deactivateStack(stackId)
+
+        return ToolExecutionResult(
+            success = true,
+            description = "Deactivated stack $stackId ($removedCount effects removed)",
+            result = buildJsonObject {
+                put("stackId", stackId)
+                put("removedCount", removedCount)
+            }.toString()
+        )
+    }
+
+    private fun executeAdvanceCueStack(input: JsonObject): ToolExecutionResult {
+        val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
+        val directionStr = input["direction"]?.jsonPrimitive?.contentOrNull ?: "FORWARD"
+        val direction = try {
+            CueStackManager.AdvanceDirection.valueOf(directionStr)
+        } catch (_: Exception) {
+            return errorResult("Invalid direction: $directionStr (must be FORWARD or BACKWARD)")
+        }
+
+        val manager = state.show.cueStackManager
+        val result = manager.advanceStack(state, stackId, direction)
+
+        if (result == null) {
+            return ToolExecutionResult(
+                success = true,
+                description = "Stack $stackId reached end — deactivated (not looping)",
+                result = buildJsonObject {
+                    put("stackId", stackId)
+                    put("deactivated", true)
+                }.toString()
+            )
+        }
+
+        return ToolExecutionResult(
+            success = true,
+            description = "Advanced stack $stackId ${directionStr.lowercase()} to cue '${result.cueName}' (${result.effectCount} effects)",
+            result = buildJsonObject {
+                put("stackId", result.stackId)
+                put("cueId", result.cueId)
+                put("cueName", result.cueName)
+                put("effectCount", result.effectCount)
+            }.toString()
+        )
+    }
+
+    private fun executeAddCueToStack(input: JsonObject): ToolExecutionResult {
+        val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
+        val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
+        val sortOrder = input["sortOrder"]?.jsonPrimitive?.intOrNull
+
+        val result = transaction(state.database) {
+            val stack = DaoCueStack.findById(stackId)
+                ?: return@transaction null to "Cue stack not found: $stackId"
+            val cue = DaoCue.findById(cueId)
+                ?: return@transaction null to "Cue not found: $cueId"
+
+            val order = sortOrder ?: run {
+                val maxOrder = DaoCue.find { DaoCues.cueStack eq stackId }
+                    .maxByOrNull { it.sortOrder }?.sortOrder ?: -1
+                maxOrder + 1
+            }
+
+            cue.cueStack = stack
+            cue.sortOrder = order
+
+            cue.name to null
+        }
+
+        val (cueName, error) = result
+        if (error != null) return errorResult(error)
+
+        state.show.fixtures.cueStackListChanged()
+        state.show.fixtures.cueListChanged()
+
+        return ToolExecutionResult(
+            success = true,
+            description = "Added cue '$cueName' (id=$cueId) to stack $stackId",
+            result = buildJsonObject {
+                put("stackId", stackId)
+                put("cueId", cueId)
+                put("cueName", cueName)
             }.toString()
         )
     }
@@ -676,7 +859,7 @@ class AiTools(private val state: State) {
                         put("items", buildJsonObject {
                             put("type", "string")
                             put("enum", buildJsonArray {
-                                add("active_effects"); add("bpm"); add("fixtures"); add("groups"); add("presets"); add("palette"); add("cues")
+                                add("active_effects"); add("bpm"); add("fixtures"); add("groups"); add("presets"); add("palette"); add("cues"); add("cue_stacks")
                             })
                         })
                         put("description", "What to include. Defaults to all.")
@@ -815,6 +998,83 @@ class AiTools(private val state: State) {
                     put("cueId", buildJsonObject { put("type", "integer"); put("description", "The cue ID to stop") })
                 })
                 put("required", buildJsonArray { add("cueId") })
+            }
+        )
+
+        val createCueStackTool = AnthropicToolDef(
+            name = "create_cue_stack",
+            description = "Create a cue stack — an ordered container of cues for sequential playback. Stacks support looping, auto-advance, and crossfade transitions between cues. After creating, use add_cue_to_stack to add cues, then activate_cue_stack to start playback.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("name", buildJsonObject { put("type", "string"); put("description", "Stack name") })
+                    put("palette", buildJsonObject {
+                        put("type", "array")
+                        put("items", buildJsonObject { put("type", "string") })
+                        put("description", "Stack-level base palette. Cue palettes override this when set.")
+                    })
+                    put("loop", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "Loop back to start after last cue. Default false.")
+                    })
+                })
+                put("required", buildJsonArray { add("name") })
+            }
+        )
+
+        val activateCueStackTool = AnthropicToolDef(
+            name = "activate_cue_stack",
+            description = "Activate a cue stack, starting playback from the first cue (or a specific cue). The stack's palette is applied, and the cue's effects are started. If the cue has auto-advance configured, the stack will automatically advance to the next cue after the delay.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("stackId", buildJsonObject { put("type", "integer"); put("description", "The cue stack ID to activate") })
+                    put("cueId", buildJsonObject { put("type", "integer"); put("description", "Optional: start at a specific cue instead of the first") })
+                })
+                put("required", buildJsonArray { add("stackId") })
+            }
+        )
+
+        val deactivateCueStackTool = AnthropicToolDef(
+            name = "deactivate_cue_stack",
+            description = "Deactivate a cue stack, stopping all its effects and cancelling auto-advance.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("stackId", buildJsonObject { put("type", "integer"); put("description", "The cue stack ID to deactivate") })
+                })
+                put("required", buildJsonArray { add("stackId") })
+            }
+        )
+
+        val advanceCueStackTool = AnthropicToolDef(
+            name = "advance_cue_stack",
+            description = "Advance an active cue stack forward or backward to the next/previous cue. If at the end and looping is enabled, wraps around. If not looping, deactivates the stack.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("stackId", buildJsonObject { put("type", "integer"); put("description", "The cue stack ID to advance") })
+                    put("direction", buildJsonObject {
+                        put("type", "string")
+                        put("enum", buildJsonArray { add("FORWARD"); add("BACKWARD") })
+                        put("description", "Direction to advance. Default FORWARD.")
+                    })
+                })
+                put("required", buildJsonArray { add("stackId") })
+            }
+        )
+
+        val addCueToStackTool = AnthropicToolDef(
+            name = "add_cue_to_stack",
+            description = "Add an existing cue to a cue stack. The cue is moved into the stack (a cue can only belong to one stack). If sortOrder is omitted, the cue is appended to the end.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("stackId", buildJsonObject { put("type", "integer"); put("description", "The cue stack ID") })
+                    put("cueId", buildJsonObject { put("type", "integer"); put("description", "The cue ID to add") })
+                    put("sortOrder", buildJsonObject { put("type", "integer"); put("description", "Position in the stack (0-based). Omit to append.") })
+                })
+                put("required", buildJsonArray { add("stackId"); add("cueId") })
             }
         )
     }

@@ -256,16 +256,6 @@ class CueRoutesTest {
         assertEquals(response, deserialized)
     }
 
-    // ─── CreateCueFromStateRequest ───────────────────────────────────────
-
-    @Test
-    fun `CreateCueFromStateRequest serialization round-trips`() {
-        val request = CreateCueFromStateRequest(name = "Captured State")
-        val serialized = json.encodeToString(request)
-        val deserialized = json.decodeFromString<CreateCueFromStateRequest>(serialized)
-        assertEquals(request, deserialized)
-    }
-
     // ─── Complex scenario ────────────────────────────────────────────────
 
     @Test

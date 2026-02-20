@@ -9,6 +9,7 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.MasterClock
 import uk.me.cormack.lighting7.grpc.*
@@ -42,6 +43,7 @@ class Show(
 ) {
     val fixtures = Fixtures()
     val fxEngine = FxEngine(fixtures, MasterClock())
+    val cueStackManager = CueStackManager(fxEngine)
     private val scripts: MutableMap<String, Script> = mutableMapOf()
     private val scriptsLock = ReentrantLock()
 

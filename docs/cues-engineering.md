@@ -121,6 +121,38 @@ The `from-state` endpoint captures the current FxEngine state:
 
 When a preset is referenced by any cue's preset applications (via FK), the preset cannot be deleted. The delete endpoint returns 409 Conflict with the names of referencing cues.
 
+## Cue Stack Membership
+
+Cues can optionally belong to a **cue stack** for sequential playback. See `cue-stacks-engineering.md` for full details.
+
+### Database Fields
+
+The `cues` table has two additional columns:
+- `cue_stack_id` (nullable FK → `cue_stacks`) — which stack the cue belongs to, or null for standalone
+- `sort_order` (int, default 0) — position within the stack's ordered sequence
+
+### API Changes
+
+`CueDetails` includes:
+- `cueStackId: Int?` — null for standalone cues
+- `cueStackName: String?` — resolved from the stack entity
+- `sortOrder: Int` — position within stack (0 for standalone)
+
+`NewCue` accepts optional:
+- `cueStackId: Int?` — assign cue to a stack on creation
+- `sortOrder: Int?` — position within stack (appended to end if omitted)
+
+### Standalone vs Stacked Cues
+
+| Behaviour | Standalone Cue | Stacked Cue |
+|-----------|---------------|-------------|
+| Apply/Stop | Via `apply_cue`/`stop_cue` | Via stack activate/advance/deactivate |
+| Palette | Per-cue palette in FxEngine | Stack palette (cue palette overrides) |
+| Multiple concurrent | Yes (independent) | Yes (via multiple active stacks) |
+| FxInstance tagging | `cueId` set, `cueStackId` null | Both `cueId` and `cueStackId` set |
+| Crossfade | None (snap-cut on re-apply) | Intensity envelope (if cue has fadeDurationMs) |
+| Auto-advance | N/A | Per-cue (autoAdvance + autoAdvanceDelayMs) |
+
 ## FxInstance Integration
 
 The `FxInstance` class has a `cueId: Int?` field (alongside `presetId`). When a cue is applied, all created FxInstances are tagged with the cue's ID. This allows:

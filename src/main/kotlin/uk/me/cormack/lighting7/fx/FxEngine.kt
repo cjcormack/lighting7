@@ -135,6 +135,40 @@ class FxEngine(
         cuePalettes.remove(cueId)
     }
 
+    // --- Per-Stack Palettes ---
+
+    private val stackPalettes = ConcurrentHashMap<Int, CuePaletteEntry>()
+    private val stackPaletteVersionCounter = AtomicLong(0)
+
+    fun setStackPalette(stackId: Int, colours: List<ExtendedColour>) {
+        stackPalettes[stackId] = CuePaletteEntry(colours, stackPaletteVersionCounter.incrementAndGet())
+    }
+
+    fun getStackPalette(stackId: Int): List<ExtendedColour>? = stackPalettes[stackId]?.colours
+
+    fun getStackPaletteVersion(stackId: Int): Long = stackPalettes[stackId]?.version ?: 0L
+
+    fun removeStackPalette(stackId: Int) {
+        stackPalettes.remove(stackId)
+    }
+
+    /**
+     * Remove all effects that belong to a specific cue stack.
+     *
+     * @param stackId The cue stack ID whose effects should be removed
+     * @return Number of effects removed
+     */
+    fun removeEffectsForCueStack(stackId: Int): Int {
+        val toRemove = activeEffects.values.filter { it.cueStackId == stackId }
+        toRemove.forEach { activeEffects.remove(it.id) }
+        if (toRemove.isNotEmpty()) {
+            resetUncoveredProperties(toRemove)
+            emitStateUpdate()
+        }
+        removeStackPalette(stackId)
+        return toRemove.size
+    }
+
     /**
      * Represents a state update for broadcasting.
      */
@@ -157,7 +191,8 @@ class FxEngine(
         val isRunning: Boolean,
         val currentPhase: Double,
         val blendMode: BlendMode,
-        val cueId: Int? = null
+        val cueId: Int? = null,
+        val cueStackId: Int? = null
     )
 
     /**
@@ -328,6 +363,7 @@ class FxEngine(
                 id = existing.id
                 presetId = existing.presetId
                 cueId = existing.cueId
+                cueStackId = existing.cueStackId
                 startedAtMs = existing.startedAtMs
                 startedAtBeat = existing.startedAtBeat
                 isRunning = existing.isRunning
@@ -516,6 +552,7 @@ class FxEngine(
             // Direct application to the parent fixture
             val effectPhase = effect.calculatePhase(tick, masterClock)
             val output = effect.effect.calculate(effectPhase, EffectContext.SINGLE)
+                .scaled(effect.intensityMultiplier)
             effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
         } else if (fixture is MultiElementFixture<*>) {
             // Parent doesn't have the property — check if elements do
@@ -569,6 +606,7 @@ class FxEngine(
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
             val output = effect.effect.calculate(memberPhase, context)
+                .scaled(effect.intensityMultiplier)
             effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
         }
     }
@@ -617,6 +655,7 @@ class FxEngine(
                 val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
                 val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
                 val output = effect.effect.calculate(memberPhase, context)
+                    .scaled(effect.intensityMultiplier)
                 effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
             }
             return
@@ -707,6 +746,7 @@ class FxEngine(
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
             val output = effect.effect.calculate(memberPhase, context)
+                .scaled(effect.intensityMultiplier)
             effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
         }
     }
@@ -920,7 +960,8 @@ class FxEngine(
                 isRunning = instance.isRunning,
                 currentPhase = instance.lastPhase,
                 blendMode = instance.blendMode,
-                cueId = instance.cueId
+                cueId = instance.cueId,
+                cueStackId = instance.cueStackId
             )
         }
 

@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.ai
 import io.ktor.server.config.*
 import kotlinx.serialization.json.*
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.*
@@ -302,11 +303,34 @@ class AiService(
         // Existing cues
         val cues = transaction(state.database) {
             DaoCue.find { DaoCues.project eq project.id }
-                .map { "**${it.name}** (id=${it.id.value}, ${it.palette.size} palette colours, ${it.presetApplications.count()} preset applications, ${it.adHocEffects.count()} ad-hoc effects)" }
+                .map {
+                    val stackInfo = it.cueStack?.let { s -> " [stack: ${s.name}]" } ?: ""
+                    "**${it.name}** (id=${it.id.value}, ${it.palette.size} palette colours, ${it.presetApplications.count()} preset applications, ${it.adHocEffects.count()} ad-hoc effects)$stackInfo"
+                }
         }
         if (cues.isNotEmpty()) {
             sb.appendLine("## Existing Cues")
             cues.forEach { sb.appendLine("- $it") }
+            sb.appendLine()
+        }
+
+        // Existing cue stacks
+        val manager = state.show.cueStackManager
+        val stacks = transaction(state.database) {
+            DaoCueStack.find { DaoCueStacks.project eq project.id }
+                .orderBy(DaoCueStacks.name to SortOrder.ASC)
+                .map { stack ->
+                    val activeCueId = manager.getActiveCueId(stack.id.value)
+                    val stackCues = DaoCue.find { DaoCues.cueStack eq stack.id }
+                        .orderBy(DaoCues.sortOrder to SortOrder.ASC)
+                        .map { "${it.name} (id=${it.id.value})" }
+                    val activeStr = if (activeCueId != null) " [ACTIVE, cueId=$activeCueId]" else ""
+                    "**${stack.name}** (id=${stack.id.value}, ${stackCues.size} cues, loop=${stack.loop})$activeStr → ${stackCues.joinToString(" → ").ifEmpty { "(empty)" }}"
+                }
+        }
+        if (stacks.isNotEmpty()) {
+            sb.appendLine("## Existing Cue Stacks")
+            stacks.forEach { sb.appendLine("- $it") }
             sb.appendLine()
         }
 
@@ -323,6 +347,7 @@ class AiService(
         sb.appendLine("- **Step timing**: Controls whether beat division means per-step time or total cycle time. When stepTiming=true, each step gets one full beat-division (total cycle = beatDivision × steps). When false, the entire cycle completes in one beat-division. Static effects default to stepTiming=true (chase), continuous effects default to false. You can override per-effect in the preset.")
         sb.appendLine("- UByte values range 0-255 (use 'u' suffix in scripts: 128u)")
         sb.appendLine("- **Cues**: A cue is a named snapshot bundling a colour palette with preset applications and ad-hoc effects. Multiple cues can run concurrently — applying a cue adds it alongside existing cues. Each cue has its own isolated palette (effects resolve P1, P2 etc. against the cue's palette, not the global palette). Cues with updateGlobalPalette=true also set the global palette when applied. Re-applying the same cue refreshes it (stops and re-starts its effects). Use stop_cue to stop a specific cue without affecting others. Use apply_cue with replaceAll=true to stop all other running cues first. Preset applications in cues are read fresh at apply time, so edits to presets are always reflected.")
+        sb.appendLine("- **Cue Stacks**: An ordered container of cues for sequential playback (theatre-style cue-to-cue). Create a stack with create_cue_stack, add cues with add_cue_to_stack, then activate with activate_cue_stack. Use advance_cue_stack to go forward/backward. Stacks support looping (wraps at end). Individual cues within a stack can have: auto-advance (timed transition to next cue, configured per-cue via autoAdvance + autoAdvanceDelayMs), crossfade (intensity envelope between cue transitions, configured per-cue via fadeDurationMs + fadeCurve). Stack palette cascading: cue palette replaces stack palette when set; stack palette persists when a cue has no palette. Multiple stacks can be active simultaneously.")
 
         return sb.toString()
     }

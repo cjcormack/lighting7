@@ -231,4 +231,39 @@ sealed interface FxOutput {
      * Pan/tilt position values.
      */
     data class Position(val pan: UByte, val tilt: UByte) : FxOutput
+
+    /**
+     * Scale this output by a multiplier (0.0–1.0) for crossfade transitions.
+     *
+     * - Slider: scales the value toward 0
+     * - Colour: scales RGB/W/A/UV toward black
+     * - Position: no scaling (position snaps, doesn't fade)
+     */
+    fun scaled(multiplier: Double): FxOutput {
+        if (multiplier >= 1.0) return this
+        if (multiplier <= 0.0) return when (this) {
+            is Slider -> Slider(0u)
+            is Colour -> Colour(ExtendedColour.fromColor(Color.BLACK))
+            is Position -> this // Position doesn't fade
+        }
+        return when (this) {
+            is Slider -> Slider((value.toInt() * multiplier).toInt().coerceIn(0, 255).toUByte())
+            is Colour -> {
+                val c = color.color
+                val scaledColor = Color(
+                    (c.red * multiplier).toInt().coerceIn(0, 255),
+                    (c.green * multiplier).toInt().coerceIn(0, 255),
+                    (c.blue * multiplier).toInt().coerceIn(0, 255),
+                )
+                val scaledExt = ExtendedColour(
+                    scaledColor,
+                    white = (color.white.toInt() * multiplier).toInt().coerceIn(0, 255).toUByte(),
+                    amber = (color.amber.toInt() * multiplier).toInt().coerceIn(0, 255).toUByte(),
+                    uv = (color.uv.toInt() * multiplier).toInt().coerceIn(0, 255).toUByte(),
+                )
+                Colour(scaledExt)
+            }
+            is Position -> this // Position doesn't fade
+        }
+    }
 }
