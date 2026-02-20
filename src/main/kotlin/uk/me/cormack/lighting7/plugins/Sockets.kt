@@ -97,6 +97,10 @@ data class ScenesChangedOutMessage(
 data object PresetListChangedOutMessage: OutMessage()
 
 @Serializable
+@SerialName("cueListChanged")
+data object CueListChangedOutMessage: OutMessage()
+
+@Serializable
 @SerialName("trackChanged")
 data class TrackChangedOutMessage(
     val isPlaying: Boolean,
@@ -375,6 +379,12 @@ fun Application.configureSockets(state: State) {
                 override fun presetListChanged() {
                     launch {
                         sendSerialized<OutMessage>(PresetListChangedOutMessage)
+                    }
+                }
+
+                override fun cueListChanged() {
+                    launch {
+                        sendSerialized<OutMessage>(CueListChangedOutMessage)
                     }
                 }
 

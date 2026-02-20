@@ -152,23 +152,42 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
             return@delete
         }
 
-        val found = transaction(state.database) {
+        val result = transaction(state.database) {
             val preset = DaoFxPreset.findById(resource.presetId)
-                ?: return@transaction false
+                ?: return@transaction "not_found"
 
             if (preset.project.id != project.id) {
-                return@transaction false
+                return@transaction "not_found"
+            }
+
+            // Check if any cues reference this preset via FK
+            val referencingCues = DaoCuePresetApplication.find {
+                DaoCuePresetApplications.preset eq preset.id
+            }.map { it.cue.name }.distinct()
+
+            if (referencingCues.isNotEmpty()) {
+                return@transaction "used_by_cues:${referencingCues.joinToString(", ")}"
             }
 
             preset.delete()
-            true
+            "ok"
         }
 
-        if (found) {
-            state.show.fixtures.presetListChanged()
-            call.respond(HttpStatusCode.OK)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
+        when {
+            result == "ok" -> {
+                state.show.fixtures.presetListChanged()
+                call.respond(HttpStatusCode.OK)
+            }
+            result.startsWith("used_by_cues:") -> {
+                val cueNames = result.removePrefix("used_by_cues:")
+                call.respond(
+                    HttpStatusCode.Conflict,
+                    ErrorResponse("Cannot delete preset - it is referenced by cues: $cueNames")
+                )
+            }
+            else -> {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
+            }
         }
     }
 
@@ -302,6 +321,8 @@ data class FxPresetDetails(
     val effects: List<FxPresetEffectDto>,
     val canEdit: Boolean,
     val canDelete: Boolean,
+    val cannotDeleteReason: String? = null,
+    val cueUsageCount: Int = 0,
 )
 
 @Serializable
@@ -339,14 +360,21 @@ data class TogglePresetResponse(
 
 // Helper
 internal fun DaoFxPreset.toPresetDetails(isCurrentProject: Boolean): FxPresetDetails {
+    val presetId = this.id.value
+    val cueUsageCount = DaoCuePresetApplication.find {
+        DaoCuePresetApplications.preset eq this@toPresetDetails.id
+    }.map { it.cue.id }.distinct().count()
+    val usedByCues = cueUsageCount > 0
     return FxPresetDetails(
-        id = this.id.value,
+        id = presetId,
         name = this.name,
         description = this.description,
         fixtureType = this.fixtureType,
         effects = this.effects,
         canEdit = isCurrentProject,
-        canDelete = isCurrentProject,
+        canDelete = isCurrentProject && !usedByCues,
+        cannotDeleteReason = if (usedByCues) "Used by $cueUsageCount cue${if (cueUsageCount != 1) "s" else ""}" else null,
+        cueUsageCount = cueUsageCount,
     )
 }
 

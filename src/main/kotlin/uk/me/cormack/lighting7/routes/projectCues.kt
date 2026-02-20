@@ -1,0 +1,771 @@
+package uk.me.cormack.lighting7.routes
+
+import io.ktor.http.*
+import io.ktor.resources.*
+import io.ktor.server.application.*
+import io.ktor.server.request.*
+import io.ktor.server.resources.*
+import io.ktor.server.resources.post
+import io.ktor.server.resources.put
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.transactions.transaction
+import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.group.FixtureGroup
+import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fx.*
+import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.state.State
+
+internal fun Route.routeApiRestProjectCues(state: State) {
+    // GET /{projectId}/cues - List cues for a project
+    get<ProjectCuesResource> { resource ->
+        val project = state.resolveProject(resource.projectId)
+        if (project == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
+            return@get
+        }
+
+        val isCurrentProject = state.isCurrentProject(project)
+        val cues = transaction(state.database) {
+            DaoCue.find { DaoCues.project eq project.id }
+                .orderBy(DaoCues.name to SortOrder.ASC)
+                .map { it.toCueDetails(isCurrentProject) }
+        }
+        call.respond(cues)
+    }
+
+    // POST /{projectId}/cues - Create new cue (current project only)
+    post<ProjectCuesResource> { resource ->
+        val project = state.resolveProject(resource.projectId)
+        if (project == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
+            return@post
+        }
+
+        if (!state.isCurrentProject(project)) {
+            call.respond(
+                HttpStatusCode.Conflict,
+                ErrorResponse("Cannot create cues in project '${project.name}' - only the current project can be modified")
+            )
+            return@post
+        }
+
+        val newCue = call.receive<NewCue>()
+        val cueDetails = transaction(state.database) {
+            val cue = DaoCue.new {
+                name = newCue.name
+                this.project = project
+                palette = newCue.palette
+            }
+            createCueChildren(cue, newCue.presetApplications, newCue.adHocEffects)
+            cue.toCueDetails(isCurrentProject = true)
+        }
+        state.show.fixtures.cueListChanged()
+        call.respond(HttpStatusCode.Created, cueDetails)
+    }
+
+    // GET /{projectId}/cues/{cueId} - Get cue details (any project)
+    get<ProjectCueResource> { resource ->
+        val project = state.resolveProject(resource.parent.projectId)
+        if (project == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
+            return@get
+        }
+
+        val isCurrentProject = state.isCurrentProject(project)
+        val cue = transaction(state.database) {
+            val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
+            if (cue.project.id != project.id) return@transaction null
+            cue.toCueDetails(isCurrentProject)
+        }
+
+        if (cue != null) {
+            call.respond(cue)
+        } else {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+        }
+    }
+
+    // PUT /{projectId}/cues/{cueId} - Update cue (current project only)
+    put<ProjectCueResource> { resource ->
+        val project = state.resolveProject(resource.parent.projectId)
+        if (project == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
+            return@put
+        }
+
+        if (!state.isCurrentProject(project)) {
+            call.respond(
+                HttpStatusCode.Conflict,
+                ErrorResponse("Cannot modify cues in project '${project.name}' - only the current project can be modified")
+            )
+            return@put
+        }
+
+        val updatedData = call.receive<NewCue>()
+        val cueDetails = transaction(state.database) {
+            val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
+            if (cue.project.id != project.id) return@transaction null
+
+            cue.name = updatedData.name
+            cue.palette = updatedData.palette
+
+            // Replace children: delete existing, create new
+            deleteCueChildren(cue)
+            createCueChildren(cue, updatedData.presetApplications, updatedData.adHocEffects)
+
+            cue.toCueDetails(isCurrentProject = true)
+        }
+
+        if (cueDetails != null) {
+            state.show.fixtures.cueListChanged()
+            call.respond(cueDetails)
+        } else {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+        }
+    }
+
+    // DELETE /{projectId}/cues/{cueId} - Delete cue (current project only)
+    delete<ProjectCueResource> { resource ->
+        val project = state.resolveProject(resource.parent.projectId)
+        if (project == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
+            return@delete
+        }
+
+        if (!state.isCurrentProject(project)) {
+            call.respond(
+                HttpStatusCode.Conflict,
+                ErrorResponse("Cannot delete cues in project '${project.name}' - only the current project can be modified")
+            )
+            return@delete
+        }
+
+        val found = transaction(state.database) {
+            val cue = DaoCue.findById(resource.cueId) ?: return@transaction false
+            if (cue.project.id != project.id) return@transaction false
+            deleteCueChildren(cue)
+            cue.delete()
+            true
+        }
+
+        if (found) {
+            state.show.fixtures.cueListChanged()
+            call.respond(HttpStatusCode.OK)
+        } else {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+        }
+    }
+
+    // POST /{projectId}/cues/{cueId}/copy - Copy cue to another project
+    post<CopyCueResource> { resource ->
+        val sourceProject = state.resolveProject(resource.parent.projectId)
+        if (sourceProject == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Source project not found"))
+            return@post
+        }
+
+        val request = call.receive<CopyCueRequest>()
+
+        val result = transaction(state.database) {
+            val sourceCue = DaoCue.findById(resource.cueId)
+                ?: return@transaction null to "Cue not found"
+
+            if (sourceCue.project.id != sourceProject.id) {
+                return@transaction null to "Cue does not belong to specified project"
+            }
+
+            val targetProject = DaoProject.findById(request.targetProjectId)
+                ?: return@transaction null to "Target project not found"
+
+            val cueName = request.newName ?: sourceCue.name
+
+            val existingCue = DaoCue.find {
+                (DaoCues.project eq targetProject.id) and (DaoCues.name eq cueName)
+            }.firstOrNull()
+            if (existingCue != null) {
+                return@transaction null to "A cue with name '$cueName' already exists in target project"
+            }
+
+            val newCue = DaoCue.new {
+                name = cueName
+                project = targetProject
+                palette = sourceCue.palette
+            }
+
+            // Copy child entities
+            for (app in sourceCue.presetApplications) {
+                DaoCuePresetApplication.new {
+                    cue = newCue
+                    preset = app.preset
+                    targets = app.targets
+                }
+            }
+            for (effect in sourceCue.adHocEffects) {
+                DaoCueAdHocEffect.new {
+                    cue = newCue
+                    targetType = effect.targetType
+                    targetKey = effect.targetKey
+                    effectType = effect.effectType
+                    category = effect.category
+                    propertyName = effect.propertyName
+                    beatDivision = effect.beatDivision
+                    blendMode = effect.blendMode
+                    distribution = effect.distribution
+                    phaseOffset = effect.phaseOffset
+                    elementMode = effect.elementMode
+                    elementFilter = effect.elementFilter
+                    stepTiming = effect.stepTiming
+                    parameters = effect.parameters
+                }
+            }
+
+            CopyCueResponse(
+                cueId = newCue.id.value,
+                cueName = newCue.name,
+                targetProjectId = targetProject.id.value,
+                targetProjectName = targetProject.name,
+                message = "Cue copied successfully"
+            ) to null
+        }
+
+        val (response, error) = result
+        if (response != null) {
+            state.show.fixtures.cueListChanged()
+            call.respond(HttpStatusCode.Created, response)
+        } else {
+            val statusCode = when (error) {
+                "Cue not found", "Target project not found" -> HttpStatusCode.NotFound
+                "Cue does not belong to specified project" -> HttpStatusCode.BadRequest
+                else -> HttpStatusCode.Conflict
+            }
+            call.respond(statusCode, ErrorResponse(error ?: "Unknown error"))
+        }
+    }
+
+    // POST /{projectId}/cues/{cueId}/apply - Apply a cue (current project only)
+    post<ApplyCueResource> { resource ->
+        val project = state.resolveProject(resource.parent.projectId)
+        if (project == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
+            return@post
+        }
+
+        if (!state.isCurrentProject(project)) {
+            call.respond(
+                HttpStatusCode.Conflict,
+                ErrorResponse("Cannot apply cues from project '${project.name}' - only the current project's cues can be applied")
+            )
+            return@post
+        }
+
+        val cueData = transaction(state.database) {
+            val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
+            if (cue.project.id != project.id) return@transaction null
+            CueApplyData(
+                cueId = cue.id.value,
+                cueName = cue.name,
+                palette = cue.palette,
+                presetApplications = cue.presetApplications.map { app ->
+                    CuePresetApplicationDto(
+                        presetId = app.preset.id.value,
+                        targets = app.targets,
+                    )
+                },
+                adHocEffects = cue.adHocEffects.map { it.toDto() },
+            )
+        }
+
+        if (cueData == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+            return@post
+        }
+
+        try {
+            val result = applyCue(state, cueData)
+            call.respond(result)
+        } catch (e: Exception) {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to apply cue"))
+        }
+    }
+
+    // POST /{projectId}/cues/from-state - Create cue from current FX/palette state
+    post<CreateCueFromStateResource> { resource ->
+        val project = state.resolveProject(resource.parent.projectId)
+        if (project == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
+            return@post
+        }
+
+        if (!state.isCurrentProject(project)) {
+            call.respond(
+                HttpStatusCode.Conflict,
+                ErrorResponse("Cannot create cues in project '${project.name}' - only the current project can be modified")
+            )
+            return@post
+        }
+
+        val request = call.receive<CreateCueFromStateRequest>()
+
+        // Capture current palette
+        val currentPalette = state.show.fxEngine.getPalette().map { it.toSerializedString() }
+
+        // Capture current active effects
+        val activeEffects = state.show.fxEngine.getActiveEffects()
+
+        // Separate preset-based effects from ad-hoc effects
+        val presetApplications = mutableMapOf<Int, MutableList<CueTargetDto>>()
+        val adHocEffects = mutableListOf<CueAdHocEffectDto>()
+
+        for (effect in activeEffects) {
+            val targetType = if (effect.isGroupEffect) "group" else "fixture"
+            val targetKey = effect.target.targetKey
+
+            if (effect.presetId != null) {
+                // Group by presetId, collecting targets
+                val targets = presetApplications.getOrPut(effect.presetId!!) { mutableListOf() }
+                val target = CueTargetDto(type = targetType, key = targetKey)
+                if (target !in targets) {
+                    targets.add(target)
+                }
+            } else {
+                // Ad-hoc effect — capture full definition
+                adHocEffects.add(CueAdHocEffectDto(
+                    targetType = targetType,
+                    targetKey = targetKey,
+                    effectType = effect.effect.name,
+                    category = categoryFromPropertyName(effect.target.propertyName),
+                    propertyName = effect.target.propertyName,
+                    beatDivision = effect.timing.beatDivision,
+                    blendMode = effect.blendMode.name,
+                    distribution = effect.distributionStrategy.javaClass.simpleName,
+                    phaseOffset = effect.phaseOffset,
+                    elementMode = if (effect.isGroupEffect) effect.elementMode.name else null,
+                    elementFilter = if (effect.elementFilter != ElementFilter.ALL) effect.elementFilter.name else null,
+                    stepTiming = if (effect.stepTiming != effect.effect.defaultStepTiming) effect.stepTiming else null,
+                    parameters = effect.effect.parameters,
+                ))
+            }
+        }
+
+        val presetAppDtos = presetApplications.map { (presetId, targets) ->
+            CuePresetApplicationDto(presetId = presetId, targets = targets)
+        }
+
+        val cueDetails = transaction(state.database) {
+            // Check for name uniqueness
+            val existing = DaoCue.find {
+                (DaoCues.project eq project.id) and (DaoCues.name eq request.name)
+            }.firstOrNull()
+            if (existing != null) {
+                return@transaction null
+            }
+
+            val cue = DaoCue.new {
+                name = request.name
+                this.project = project
+                palette = currentPalette
+            }
+            createCueChildren(cue, presetAppDtos, adHocEffects)
+            cue.toCueDetails(isCurrentProject = true)
+        }
+
+        if (cueDetails != null) {
+            state.show.fixtures.cueListChanged()
+            call.respond(HttpStatusCode.Created, cueDetails)
+        } else {
+            call.respond(HttpStatusCode.Conflict, ErrorResponse("A cue with name '${request.name}' already exists"))
+        }
+    }
+}
+
+// Resource classes
+@Resource("/{projectId}/cues")
+data class ProjectCuesResource(val projectId: String)
+
+@Resource("/{cueId}")
+data class ProjectCueResource(val parent: ProjectCuesResource, val cueId: Int)
+
+@Resource("/{cueId}/copy")
+data class CopyCueResource(val parent: ProjectCuesResource, val cueId: Int)
+
+@Resource("/{cueId}/apply")
+data class ApplyCueResource(val parent: ProjectCuesResource, val cueId: Int)
+
+@Resource("/from-state")
+data class CreateCueFromStateResource(val parent: ProjectCuesResource)
+
+// DTOs
+@Serializable
+data class NewCue(
+    val name: String,
+    val palette: List<String> = emptyList(),
+    val presetApplications: List<CuePresetApplicationDto> = emptyList(),
+    val adHocEffects: List<CueAdHocEffectDto> = emptyList(),
+)
+
+@Serializable
+data class CueDetails(
+    val id: Int,
+    val name: String,
+    val palette: List<String>,
+    val presetApplications: List<CuePresetApplicationDetail>,
+    val adHocEffects: List<CueAdHocEffectDto>,
+    val canEdit: Boolean,
+    val canDelete: Boolean,
+)
+
+@Serializable
+data class CuePresetApplicationDetail(
+    val presetId: Int,
+    val presetName: String?,
+    val targets: List<CueTargetDto>,
+)
+
+@Serializable
+data class CopyCueRequest(
+    val targetProjectId: Int,
+    val newName: String? = null,
+)
+
+@Serializable
+data class CopyCueResponse(
+    val cueId: Int,
+    val cueName: String,
+    val targetProjectId: Int,
+    val targetProjectName: String,
+    val message: String,
+)
+
+@Serializable
+data class ApplyCueResponse(
+    val effectCount: Int,
+    val cueName: String,
+)
+
+@Serializable
+data class CreateCueFromStateRequest(
+    val name: String,
+)
+
+// Internal data class for apply logic
+internal data class CueApplyData(
+    val cueId: Int,
+    val cueName: String,
+    val palette: List<String>,
+    val presetApplications: List<CuePresetApplicationDto>,
+    val adHocEffects: List<CueAdHocEffectDto>,
+)
+
+// ─── Entity helpers ─────────────────────────────────────────────────────
+
+/** Convert a DaoCueAdHocEffect entity to its DTO form. */
+private fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
+    targetType = targetType,
+    targetKey = targetKey,
+    effectType = effectType,
+    category = category,
+    propertyName = propertyName,
+    beatDivision = beatDivision,
+    blendMode = blendMode,
+    distribution = distribution,
+    phaseOffset = phaseOffset,
+    elementMode = elementMode,
+    elementFilter = elementFilter,
+    stepTiming = stepTiming,
+    parameters = parameters,
+)
+
+/** Convert a DaoCue entity to CueDetails API response. */
+internal fun DaoCue.toCueDetails(isCurrentProject: Boolean): CueDetails {
+    val presetDetails = presetApplications.map { app ->
+        CuePresetApplicationDetail(
+            presetId = app.preset.id.value,
+            presetName = app.preset.name,
+            targets = app.targets,
+        )
+    }
+    return CueDetails(
+        id = this.id.value,
+        name = this.name,
+        palette = this.palette,
+        presetApplications = presetDetails,
+        adHocEffects = this.adHocEffects.map { it.toDto() },
+        canEdit = isCurrentProject,
+        canDelete = isCurrentProject,
+    )
+}
+
+/** Create child preset application and ad-hoc effect entities for a cue. */
+internal fun createCueChildren(
+    cue: DaoCue,
+    presetApplications: List<CuePresetApplicationDto>,
+    adHocEffects: List<CueAdHocEffectDto>,
+) {
+    for (app in presetApplications) {
+        val preset = DaoFxPreset.findById(app.presetId) ?: continue
+        DaoCuePresetApplication.new {
+            this.cue = cue
+            this.preset = preset
+            this.targets = app.targets
+        }
+    }
+    for (effect in adHocEffects) {
+        DaoCueAdHocEffect.new {
+            this.cue = cue
+            targetType = effect.targetType
+            targetKey = effect.targetKey
+            effectType = effect.effectType
+            category = effect.category
+            propertyName = effect.propertyName
+            beatDivision = effect.beatDivision
+            blendMode = effect.blendMode
+            distribution = effect.distribution
+            phaseOffset = effect.phaseOffset
+            elementMode = effect.elementMode
+            elementFilter = effect.elementFilter
+            stepTiming = effect.stepTiming
+            parameters = effect.parameters
+        }
+    }
+}
+
+/** Delete all child entities (preset applications and ad-hoc effects) for a cue. */
+internal fun deleteCueChildren(cue: DaoCue) {
+    cue.presetApplications.forEach { it.delete() }
+    cue.adHocEffects.forEach { it.delete() }
+}
+
+// ─── Apply logic ────────────────────────────────────────────────────────
+
+/**
+ * Apply a cue: remove previous cue effects, set palette, apply preset effects and ad-hoc effects.
+ */
+internal fun applyCue(state: State, cueData: CueApplyData): ApplyCueResponse {
+    val engine = state.show.fxEngine
+    var effectCount = 0
+
+    // 1. Remove all effects tagged with any cueId (from previously applied cue)
+    val toRemove = engine.getActiveEffects().filter { it.cueId != null }
+    for (effect in toRemove) {
+        engine.removeEffect(effect.id)
+    }
+
+    // 2. Set palette
+    if (cueData.palette.isNotEmpty()) {
+        val colours = cueData.palette.map { parseExtendedColour(it) }
+        engine.setPalette(colours)
+    }
+
+    // 3. Apply preset effects — read each preset fresh from DB
+    for (presetApp in cueData.presetApplications) {
+        val presetEffects = transaction(state.database) {
+            DaoFxPreset.findById(presetApp.presetId)?.effects
+        } ?: continue // Skip if preset was deleted
+
+        for (target in presetApp.targets) {
+            val toggleTarget = TogglePresetTarget(type = target.type, key = target.key)
+            for (presetEffect in presetEffects) {
+                val fxTarget = try {
+                    resolveTargetForCue(state, toggleTarget, presetEffect)
+                } catch (_: Exception) { null } ?: continue
+
+                val instance = createInstanceFromPresetForCue(
+                    presetEffect, fxTarget, presetApp.presetId, state
+                )
+                instance.cueId = cueData.cueId
+                engine.addEffect(instance)
+                effectCount++
+            }
+        }
+    }
+
+    // 4. Apply ad-hoc effects
+    for (adHoc in cueData.adHocEffects) {
+        val target = TogglePresetTarget(type = adHoc.targetType, key = adHoc.targetKey)
+        val presetEffectDto = FxPresetEffectDto(
+            effectType = adHoc.effectType,
+            category = adHoc.category,
+            propertyName = adHoc.propertyName,
+            beatDivision = adHoc.beatDivision,
+            blendMode = adHoc.blendMode,
+            distribution = adHoc.distribution,
+            phaseOffset = adHoc.phaseOffset,
+            elementMode = adHoc.elementMode,
+            elementFilter = adHoc.elementFilter,
+            stepTiming = adHoc.stepTiming,
+            parameters = adHoc.parameters,
+        )
+        val fxTarget = try {
+            resolveTargetForCue(state, target, presetEffectDto)
+        } catch (_: Exception) { null } ?: continue
+
+        val instance = createInstanceFromPresetForCue(
+            presetEffectDto, fxTarget, null, state
+        )
+        instance.cueId = cueData.cueId
+        engine.addEffect(instance)
+        effectCount++
+    }
+
+    return ApplyCueResponse(effectCount = effectCount, cueName = cueData.cueName)
+}
+
+// ─── Target resolution helpers ──────────────────────────────────────────
+
+private fun resolveTargetForCue(
+    state: State,
+    target: TogglePresetTarget,
+    presetEffect: FxPresetEffectDto,
+): FxTarget? {
+    return if (target.type == "group") {
+        val group = state.show.fixtures.untypedGroup(target.key)
+        val propertyName = presetEffect.propertyName
+            ?: resolvePresetEffectPropertyForCue(presetEffect, group.detectCapabilities())
+            ?: return null
+        createGroupTargetForCue(group.name, propertyName, group)
+    } else {
+        val propertyName = presetEffect.propertyName
+            ?: resolvePresetEffectPropertyForFixtureInCue(presetEffect)
+            ?: return null
+        createFixtureTargetForCue(target.key, propertyName, state)
+    }
+}
+
+private fun resolvePresetEffectPropertyForCue(
+    presetEffect: FxPresetEffectDto,
+    capabilities: List<String>,
+): String? {
+    return when (presetEffect.category) {
+        "dimmer" -> if ("dimmer" in capabilities) "dimmer" else null
+        "colour" -> if ("colour" in capabilities) "colour" else null
+        "position" -> if ("position" in capabilities) "position" else null
+        "controls", "setting" -> presetEffect.propertyName
+        else -> null
+    }
+}
+
+private fun resolvePresetEffectPropertyForFixtureInCue(
+    presetEffect: FxPresetEffectDto,
+): String? {
+    return when (presetEffect.category) {
+        "dimmer" -> "dimmer"
+        "colour" -> "colour"
+        "position" -> "position"
+        "controls", "setting" -> presetEffect.propertyName
+        else -> null
+    }
+}
+
+private fun createGroupTargetForCue(
+    groupName: String,
+    propertyName: String,
+    group: FixtureGroup<*>,
+): FxTarget {
+    return when (propertyName.lowercase()) {
+        "dimmer" -> SliderTarget.forGroup(groupName, "dimmer")
+        "colour", "color", "rgbcolour" -> ColourTarget.forGroup(groupName)
+        "position" -> PositionTarget.forGroup(groupName)
+        "uv" -> SliderTarget.forGroup(groupName, "uv")
+        else -> {
+            val firstFixture = group.fixtures.firstOrNull() as? Fixture
+            val prop = firstFixture?.fixtureProperties?.find { it.name == propertyName }
+            val propValue = prop?.classProperty?.call(firstFixture)
+            if (propValue is Slider) {
+                SliderTarget.forGroup(groupName, propertyName)
+            } else {
+                SettingTarget.forGroup(groupName, propertyName)
+            }
+        }
+    }
+}
+
+private fun createFixtureTargetForCue(
+    fixtureKey: String,
+    propertyName: String,
+    state: State,
+): FxTarget {
+    return when (propertyName.lowercase()) {
+        "dimmer" -> SliderTarget(fixtureKey, "dimmer")
+        "uv" -> SliderTarget(fixtureKey, "uv")
+        "colour", "color", "rgbcolour" -> ColourTarget(fixtureKey)
+        "position" -> PositionTarget(fixtureKey)
+        else -> {
+            val fixture = try {
+                state.show.fixtures.untypedFixture(fixtureKey) as? Fixture
+            } catch (_: Exception) { null }
+            val prop = fixture?.fixtureProperties?.find { it.name == propertyName }
+            val propValue = prop?.classProperty?.call(fixture)
+            if (propValue is Slider) {
+                SliderTarget(fixtureKey, propertyName)
+            } else {
+                SettingTarget(fixtureKey, propertyName)
+            }
+        }
+    }
+}
+
+/**
+ * Infer effect category from property name for from-state capture.
+ */
+private fun categoryFromPropertyName(propertyName: String): String {
+    return when (propertyName.lowercase()) {
+        "dimmer" -> "dimmer"
+        "colour", "color", "rgbcolour" -> "colour"
+        "position" -> "position"
+        else -> "controls"
+    }
+}
+
+/**
+ * Create an FxInstance from preset effect data for cue application.
+ */
+private fun createInstanceFromPresetForCue(
+    presetEffect: FxPresetEffectDto,
+    fxTarget: FxTarget,
+    presetId: Int?,
+    state: State,
+): FxInstance {
+    val engine = state.show.fxEngine
+    val effect = createEffectFromTypeAndParams(
+        presetEffect.effectType,
+        presetEffect.parameters,
+        paletteSupplier = engine::getPalette,
+        paletteVersionSupplier = { engine.paletteVersion },
+    )
+    val timing = FxTiming(presetEffect.beatDivision)
+    val blendMode = try {
+        BlendMode.valueOf(presetEffect.blendMode)
+    } catch (_: Exception) {
+        BlendMode.OVERRIDE
+    }
+    val distribution = try {
+        DistributionStrategy.fromName(presetEffect.distribution)
+    } catch (_: Exception) {
+        DistributionStrategy.LINEAR
+    }
+    val elementMode = try {
+        presetEffect.elementMode?.let { ElementMode.valueOf(it) } ?: ElementMode.PER_FIXTURE
+    } catch (_: Exception) {
+        ElementMode.PER_FIXTURE
+    }
+    val elementFilter = try {
+        presetEffect.elementFilter?.let { ElementFilter.fromName(it) } ?: ElementFilter.ALL
+    } catch (_: Exception) {
+        ElementFilter.ALL
+    }
+
+    return FxInstance(effect, fxTarget, timing, blendMode).apply {
+        this.presetId = presetId
+        phaseOffset = presetEffect.phaseOffset
+        distributionStrategy = distribution
+        this.elementMode = elementMode
+        this.elementFilter = elementFilter
+        presetEffect.stepTiming?.let { this.stepTiming = it }
+    }
+}

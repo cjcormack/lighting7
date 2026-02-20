@@ -304,6 +304,7 @@ class FxEngine(
             ).apply {
                 id = existing.id
                 presetId = existing.presetId
+                cueId = existing.cueId
                 startedAtMs = existing.startedAtMs
                 startedAtBeat = existing.startedAtBeat
                 isRunning = existing.isRunning

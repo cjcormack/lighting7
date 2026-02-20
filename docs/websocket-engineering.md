@@ -51,6 +51,8 @@ The WebSocket API provides:
 │   │   │  sceneListChanged() ─────► ScenesListChangedOutMessage   │  │   │
 │   │   │  sceneChanged(id) ───────► ScenesChangedOutMessage       │  │   │
 │   │   │  trackChanged() ─────────► TrackChangedOutMessage        │  │   │
+│   │   │  fxPresetListChanged() ► FxPresetListChangedOutMessage │  │   │
+│   │   │  cueListChanged() ─────► CueListChangedOutMessage      │  │   │
 │   │   └──────────────────────────────────────────────────────────┘  │   │
 │   └─────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
@@ -248,6 +250,26 @@ Music track information update.
     "name": "Track Title"
 }
 ```
+
+#### fxPresetListChanged
+
+Notification that the FX preset list has changed (preset added/updated/deleted).
+
+```json
+{ "type": "fxPresetListChanged" }
+```
+
+Client should refresh preset list via REST API.
+
+#### cueListChanged
+
+Notification that the cue list has changed (cue added/updated/deleted).
+
+```json
+{ "type": "cueListChanged" }
+```
+
+Client should refresh cue list via REST API.
 
 ## Connection Lifecycle
 

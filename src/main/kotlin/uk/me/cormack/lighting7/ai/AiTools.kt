@@ -24,6 +24,8 @@ class AiTools(private val state: State) {
         clearEffectsTool,
         getCurrentStateTool,
         setPaletteTool,
+        createCueTool,
+        applyCueTool,
     )
 
     /**
@@ -39,6 +41,8 @@ class AiTools(private val state: State) {
                 "clear_effects" -> executeClearEffects(input)
                 "get_current_state" -> executeGetCurrentState(input)
                 "set_palette" -> executeSetPalette(input)
+                "create_cue" -> executeCreateCue(input)
+                "apply_cue" -> executeApplyCue(input)
                 else -> ToolExecutionResult(
                     success = false,
                     description = "Unknown tool: $name",
@@ -213,7 +217,7 @@ class AiTools(private val state: State) {
 
     private fun executeGetCurrentState(input: JsonObject): ToolExecutionResult {
         val include = input["include"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
-            ?: setOf("active_effects", "bpm", "fixtures", "groups", "presets", "palette")
+            ?: setOf("active_effects", "bpm", "fixtures", "groups", "presets", "palette", "cues")
 
         val result = buildJsonObject {
             if ("bpm" in include) {
@@ -296,6 +300,23 @@ class AiTools(private val state: State) {
                     }
                 })
             }
+
+            if ("cues" in include) {
+                val project = state.projectManager.currentProject
+                val cues = transaction(state.database) {
+                    DaoCue.find { DaoCues.project eq project.id }
+                        .map { cue ->
+                            buildJsonObject {
+                                put("id", cue.id.value)
+                                put("name", cue.name)
+                                put("paletteSize", cue.palette.size)
+                                put("presetApplicationCount", cue.presetApplications.count())
+                                put("adHocEffectCount", cue.adHocEffects.count())
+                            }
+                        }
+                }
+                put("cues", buildJsonArray { cues.forEach { add(it) } })
+            }
         }
 
         return ToolExecutionResult(
@@ -328,6 +349,101 @@ class AiTools(private val state: State) {
         )
     }
 
+    private fun executeCreateCue(input: JsonObject): ToolExecutionResult {
+        val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
+        val paletteArray = input["palette"]?.jsonArray
+        val presetAppsArray = input["presetApplications"]?.jsonArray
+        val adHocArray = input["adHocEffects"]?.jsonArray
+
+        val palette = paletteArray?.map { it.jsonPrimitive.content } ?: emptyList()
+        val presetApplications = presetAppsArray?.map { app ->
+            val obj = app.jsonObject
+            CuePresetApplicationDto(
+                presetId = obj["presetId"]!!.jsonPrimitive.int,
+                targets = obj["targets"]!!.jsonArray.map { t ->
+                    val tObj = t.jsonObject
+                    CueTargetDto(
+                        type = tObj["type"]!!.jsonPrimitive.content,
+                        key = tObj["key"]!!.jsonPrimitive.content,
+                    )
+                }
+            )
+        } ?: emptyList()
+        val adHocEffects = adHocArray?.map { parseAdHocEffectFromJson(it.jsonObject) } ?: emptyList()
+
+        val project = state.projectManager.currentProject
+        val cue = transaction(state.database) {
+            val newCue = DaoCue.new {
+                this.name = name
+                this.project = project
+                this.palette = palette
+            }
+            createCueChildren(newCue, presetApplications, adHocEffects)
+            newCue
+        }
+        state.show.fixtures.cueListChanged()
+
+        val cueId = cue.id.value
+        return ToolExecutionResult(
+            success = true,
+            description = "Created cue '$name' (id=$cueId, ${palette.size} palette colours, ${presetApplications.size} preset applications, ${adHocEffects.size} ad-hoc effects)",
+            result = buildJsonObject {
+                put("cueId", cueId)
+                put("name", name)
+                put("paletteSize", palette.size)
+                put("presetApplicationCount", presetApplications.size)
+                put("adHocEffectCount", adHocEffects.size)
+            }.toString()
+        )
+    }
+
+    private fun executeApplyCue(input: JsonObject): ToolExecutionResult {
+        val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
+
+        val cueData = transaction(state.database) {
+            val cue = DaoCue.findById(cueId) ?: return@transaction null
+            CueApplyData(
+                cueId = cue.id.value,
+                cueName = cue.name,
+                palette = cue.palette,
+                presetApplications = cue.presetApplications.map { app ->
+                    CuePresetApplicationDto(
+                        presetId = app.preset.id.value,
+                        targets = app.targets,
+                    )
+                },
+                adHocEffects = cue.adHocEffects.map { effect ->
+                    CueAdHocEffectDto(
+                        targetType = effect.targetType,
+                        targetKey = effect.targetKey,
+                        effectType = effect.effectType,
+                        category = effect.category,
+                        propertyName = effect.propertyName,
+                        beatDivision = effect.beatDivision,
+                        blendMode = effect.blendMode,
+                        distribution = effect.distribution,
+                        phaseOffset = effect.phaseOffset,
+                        elementMode = effect.elementMode,
+                        elementFilter = effect.elementFilter,
+                        stepTiming = effect.stepTiming,
+                        parameters = effect.parameters,
+                    )
+                },
+            )
+        } ?: return errorResult("Cue not found: $cueId")
+
+        val result = applyCue(state, cueData)
+
+        return ToolExecutionResult(
+            success = true,
+            description = "Applied cue '${result.cueName}' (${result.effectCount} effects)",
+            result = buildJsonObject {
+                put("cueName", result.cueName)
+                put("effectCount", result.effectCount)
+            }.toString()
+        )
+    }
+
     // ─── Helpers ───────────────────────────────────────────────────────────
 
     private fun parsePresetEffect(obj: JsonObject): FxPresetEffectDto {
@@ -342,6 +458,24 @@ class AiTools(private val state: State) {
             stepTiming = obj["stepTiming"]?.jsonPrimitive?.booleanOrNull,
             elementMode = obj["elementMode"]?.jsonPrimitive?.contentOrNull,
             elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
+            parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
+        )
+    }
+
+    private fun parseAdHocEffectFromJson(obj: JsonObject): CueAdHocEffectDto {
+        return CueAdHocEffectDto(
+            targetType = obj["targetType"]!!.jsonPrimitive.content,
+            targetKey = obj["targetKey"]!!.jsonPrimitive.content,
+            effectType = obj["effectType"]!!.jsonPrimitive.content,
+            category = obj["category"]!!.jsonPrimitive.content,
+            propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull,
+            beatDivision = obj["beatDivision"]!!.jsonPrimitive.double,
+            blendMode = obj["blendMode"]!!.jsonPrimitive.content,
+            distribution = obj["distribution"]?.jsonPrimitive?.content ?: "UNIFIED",
+            phaseOffset = obj["phaseOffset"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+            elementMode = obj["elementMode"]?.jsonPrimitive?.contentOrNull,
+            elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
+            stepTiming = obj["stepTiming"]?.jsonPrimitive?.booleanOrNull,
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
         )
     }
@@ -518,7 +652,7 @@ class AiTools(private val state: State) {
                         put("items", buildJsonObject {
                             put("type", "string")
                             put("enum", buildJsonArray {
-                                add("active_effects"); add("bpm"); add("fixtures"); add("groups"); add("presets"); add("palette")
+                                add("active_effects"); add("bpm"); add("fixtures"); add("groups"); add("presets"); add("palette"); add("cues")
                             })
                         })
                         put("description", "What to include. Defaults to all.")
@@ -540,6 +674,103 @@ class AiTools(private val state: State) {
                     })
                 })
                 put("required", buildJsonArray { add("colours") })
+            }
+        )
+        private val adHocEffectSchema = buildJsonObject {
+            put("type", "object")
+            put("properties", buildJsonObject {
+                put("targetType", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray { add("group"); add("fixture") })
+                })
+                put("targetKey", buildJsonObject { put("type", "string") })
+                put("effectType", buildJsonObject { put("type", "string") })
+                put("category", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position"); add("controls") })
+                })
+                put("propertyName", buildJsonObject { put("type", "string") })
+                put("beatDivision", buildJsonObject { put("type", "number") })
+                put("blendMode", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray { add("OVERRIDE"); add("ADDITIVE"); add("MULTIPLY"); add("MAX"); add("MIN") })
+                })
+                put("distribution", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray {
+                        add("LINEAR"); add("UNIFIED"); add("CENTER_OUT"); add("EDGES_IN")
+                        add("RANDOM"); add("PING_PONG"); add("REVERSE"); add("SPLIT"); add("POSITIONAL")
+                    })
+                })
+                put("phaseOffset", buildJsonObject { put("type", "number") })
+                put("elementMode", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray { add("PER_FIXTURE"); add("FLAT") })
+                })
+                put("elementFilter", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray { add("ALL"); add("ODD"); add("EVEN"); add("FIRST_HALF"); add("SECOND_HALF") })
+                })
+                put("stepTiming", buildJsonObject { put("type", "boolean") })
+                put("parameters", buildJsonObject {
+                    put("type", "object")
+                    put("additionalProperties", buildJsonObject { put("type", "string") })
+                })
+            })
+            put("required", buildJsonArray {
+                add("targetType"); add("targetKey"); add("effectType"); add("category")
+                add("beatDivision"); add("blendMode"); add("parameters")
+            })
+        }
+
+        private val cuePresetApplicationSchema = buildJsonObject {
+            put("type", "object")
+            put("properties", buildJsonObject {
+                put("presetId", buildJsonObject { put("type", "integer") })
+                put("targets", buildJsonObject {
+                    put("type", "array")
+                    put("items", targetSchema)
+                })
+            })
+            put("required", buildJsonArray { add("presetId"); add("targets") })
+        }
+
+        val createCueTool = AnthropicToolDef(
+            name = "create_cue",
+            description = "Create a named cue that bundles a colour palette with preset applications and ad-hoc effects. Cues allow recalling a complete look with a single action. Use apply_cue to activate it later.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("name", buildJsonObject { put("type", "string"); put("description", "Unique cue name") })
+                    put("palette", buildJsonObject {
+                        put("type", "array")
+                        put("items", buildJsonObject { put("type", "string") })
+                        put("description", "Colour palette as ordered colour strings (hex, names, extended format, or palette refs)")
+                    })
+                    put("presetApplications", buildJsonObject {
+                        put("type", "array")
+                        put("items", cuePresetApplicationSchema)
+                        put("description", "Presets to apply with their targets. Presets are read fresh at apply time.")
+                    })
+                    put("adHocEffects", buildJsonObject {
+                        put("type", "array")
+                        put("items", adHocEffectSchema)
+                        put("description", "Ad-hoc effects not from a preset, stored as full effect definitions")
+                    })
+                })
+                put("required", buildJsonArray { add("name") })
+            }
+        )
+
+        val applyCueTool = AnthropicToolDef(
+            name = "apply_cue",
+            description = "Apply a saved cue by ID. Removes any previously applied cue's effects, sets the palette, and applies all preset and ad-hoc effects defined in the cue.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("cueId", buildJsonObject { put("type", "integer"); put("description", "The cue ID to apply") })
+                })
+                put("required", buildJsonArray { add("cueId") })
             }
         )
     }

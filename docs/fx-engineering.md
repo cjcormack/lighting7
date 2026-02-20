@@ -605,6 +605,50 @@ The `beatSync` message enables the frontend to synchronize a local beat visualiz
 | REST handlers | Ktor I/O | Request handling |
 | WebSocket handlers | Ktor WebSocket | Message handling |
 
+## Cue Integration
+
+Cues bundle a colour palette with FX state (preset applications + ad-hoc effects) into a named snapshot. The FX system supports cues via the `cueId` field on `FxInstance`.
+
+### FxInstance.cueId
+
+Each `FxInstance` has an optional `cueId: Int?` field (default `null`). When a cue is applied, all effects it creates are tagged with the cue's database ID. This enables:
+
+- **Cue replacement**: When applying a new cue, all effects with any non-null `cueId` are removed first, then the new cue's effects are created with the new `cueId`.
+- **Identification**: Effects created by a cue can be distinguished from manually applied effects (which have `cueId = null`).
+
+The `cueId` is preserved across atomic swaps in `FxEngine.updateEffect()`, so updating an effect's parameters doesn't lose its cue association.
+
+### Preset Applications
+
+Cues store **references** to FX presets (by ID) plus the targets they should be applied to. At apply time, the preset is read fresh from the database, so edits to a preset are always reflected when the cue is next applied. Each preset's effects are created as `FxInstance`s tagged with the cue ID.
+
+### Ad-Hoc Effects
+
+Effects that were manually applied (not from a preset) are stored as full effect definitions in the `cue_ad_hoc_effects` table. At apply time, these are converted directly to `FxInstance`s tagged with the cue ID.
+
+### Preset Delete Blocking
+
+A preset cannot be deleted if any cue references it via `cue_preset_applications`. The preset detail API includes `cueUsageCount` (number of cue preset application rows referencing the preset) and `cannotDeleteReason` when deletion is blocked.
+
+### From-State Capture
+
+The "create from current state" operation captures the live FX engine state:
+
+1. Effects with a non-null `presetId` are grouped by preset, collecting their targets into `CuePresetApplication` rows.
+2. Effects with a null `presetId` are stored as individual `CueAdHocEffect` rows with all effect fields captured.
+
+### Related Files
+
+| File | Cue-related content |
+|------|-------------------|
+| `fx/FxInstance.kt` | `cueId` field |
+| `fx/FxEngine.kt` | `cueId` preservation in `updateEffect()` |
+| `models/cues.kt` | `DaoCues`, `DaoCuePresetApplications`, `DaoCueAdHocEffects` tables |
+| `routes/projectCues.kt` | Cue CRUD, apply, from-state endpoints |
+| `routes/projectFxPresets.kt` | Preset delete blocking, `cueUsageCount` |
+
+See `docs/cues-engineering.md` for full cue system documentation.
+
 ## Future Considerations
 
 1. **Effect Stacking**: Multiple effects on same property with priority/mixing

@@ -165,7 +165,11 @@ internal fun Route.routeApiRestProjects(state: State) {
                 project.runLoopScriptId = null
                 project.initialSceneId = null
 
-                // Delete associated scenes and scripts
+                // Delete associated cues (children first due to FK), scenes, and scripts
+                project.cues.forEach { cue ->
+                    deleteCueChildren(cue)
+                    cue.delete()
+                }
                 project.scenes.forEach { it.delete() }
                 project.scripts.forEach { it.delete() }
                 project.delete()
@@ -201,10 +205,11 @@ internal fun Route.routeApiRestProjects(state: State) {
             }
         }
 
-        // Script, Scene, and Preset endpoints are defined in separate files
+        // Script, Scene, Preset, and Cue endpoints are defined in separate files
         routeApiRestProjectScripts(state)
         routeApiRestProjectScenes(state)
         routeApiRestProjectFxPresets(state)
+        routeApiRestProjectCues(state)
 
         // POST /current/create-initial-scene - Create initial scene template (script + scene)
         post<CreateInitialSceneResource> {
@@ -399,6 +404,59 @@ internal fun Route.routeApiRestProjects(state: State) {
                     sceneIdMapping[sourceScene.id.value] = newScene.id.value
                 }
 
+                // Clone all FX presets, maintaining ID mapping
+                val presetIdMapping = mutableMapOf<Int, Int>() // old ID -> new ID
+                sourceProject.fxPresets.forEach { sourcePreset ->
+                    val newPreset = DaoFxPreset.new {
+                        name = sourcePreset.name
+                        description = sourcePreset.description
+                        fixtureType = sourcePreset.fixtureType
+                        project = newProject
+                        effects = sourcePreset.effects
+                    }
+                    presetIdMapping[sourcePreset.id.value] = newPreset.id.value
+                }
+
+                // Clone all cues, remapping preset IDs in preset applications
+                var cuesCloned = 0
+                sourceProject.cues.forEach { sourceCue ->
+                    val newCue = DaoCue.new {
+                        name = sourceCue.name
+                        project = newProject
+                        palette = sourceCue.palette
+                    }
+                    // Clone preset applications with remapped preset IDs
+                    for (app in sourceCue.presetApplications) {
+                        val newPresetId = presetIdMapping[app.preset.id.value] ?: continue
+                        val newPreset = DaoFxPreset.findById(newPresetId) ?: continue
+                        DaoCuePresetApplication.new {
+                            cue = newCue
+                            preset = newPreset
+                            targets = app.targets
+                        }
+                    }
+                    // Clone ad-hoc effects
+                    for (effect in sourceCue.adHocEffects) {
+                        DaoCueAdHocEffect.new {
+                            cue = newCue
+                            targetType = effect.targetType
+                            targetKey = effect.targetKey
+                            effectType = effect.effectType
+                            category = effect.category
+                            propertyName = effect.propertyName
+                            beatDivision = effect.beatDivision
+                            blendMode = effect.blendMode
+                            distribution = effect.distribution
+                            phaseOffset = effect.phaseOffset
+                            elementMode = effect.elementMode
+                            elementFilter = effect.elementFilter
+                            stepTiming = effect.stepTiming
+                            parameters = effect.parameters
+                        }
+                    }
+                    cuesCloned++
+                }
+
                 // Update project FK references to point to cloned entities
                 sourceProject.loadFixturesScriptId?.let { oldId ->
                     newProject.loadFixturesScriptId = scriptIdMapping[oldId]
@@ -417,6 +475,8 @@ internal fun Route.routeApiRestProjects(state: State) {
                     project = newProject.toDetailDto(),
                     scriptsCloned = scriptIdMapping.size,
                     scenesCloned = sceneIdMapping.size,
+                    presetsCloned = presetIdMapping.size,
+                    cuesCloned = cuesCloned,
                     message = "Project cloned successfully"
                 ) to null
             }
@@ -481,7 +541,9 @@ data class ProjectDetailDto(
     val runLoopDelayMs: Long,
     val scriptCount: Int,
     val sceneCount: Int,
-    val chaseCount: Int
+    val chaseCount: Int,
+    val fxPresetCount: Int,
+    val cueCount: Int
 )
 
 @Serializable
@@ -521,6 +583,8 @@ data class CloneProjectResponse(
     val project: ProjectDetailDto,
     val scriptsCloned: Int,
     val scenesCloned: Int,
+    val presetsCloned: Int,
+    val cuesCloned: Int,
     val message: String
 )
 
@@ -552,7 +616,9 @@ private fun DaoProject.toDetailDto() = ProjectDetailDto(
     runLoopDelayMs = runLoopDelayMs,
     scriptCount = scripts.count().toInt(),
     sceneCount = scenes.filter { it.mode == Mode.SCENE }.count(),
-    chaseCount = scenes.filter { it.mode == Mode.CHASE }.count()
+    chaseCount = scenes.filter { it.mode == Mode.CHASE }.count(),
+    fxPresetCount = fxPresets.count().toInt(),
+    cueCount = cues.count().toInt()
 )
 
 // Template for new projects

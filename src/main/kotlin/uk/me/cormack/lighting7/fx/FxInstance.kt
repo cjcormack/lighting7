@@ -135,6 +135,9 @@ class FxInstance(
     /** If this effect was applied as part of a preset, the preset ID. Null otherwise. */
     var presetId: Int? = null
 
+    /** If this effect was applied as part of a cue, the cue ID. Null otherwise. */
+    var cueId: Int? = null
+
     /** Whether this effect is currently running */
     var isRunning: Boolean = true
 
