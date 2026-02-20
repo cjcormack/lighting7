@@ -391,12 +391,17 @@ private fun applyGroupEffect(
     group: FixtureGroup<*>,
     request: AddGroupFxRequest
 ): Long {
-    val effect = createEffectFromTypeAndParams(request.effectType, request.parameters)
+    val engine = state.show.fxEngine
+    val effect = createEffectFromTypeAndParams(
+        request.effectType,
+        request.parameters,
+        paletteSupplier = engine::getPalette,
+        paletteVersionSupplier = { engine.paletteVersion },
+    )
     val timing = FxTiming(request.beatDivision)
     val blendMode = BlendMode.valueOf(request.blendMode)
     val distribution = DistributionStrategy.fromName(request.distribution)
     val elementMode = ElementMode.valueOf(request.elementMode)
-    val engine = state.show.fxEngine
 
     // Validate property support (direct or via elements)
     if (!groupSupportsProperty(group, request.propertyName)) {
