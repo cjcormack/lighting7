@@ -198,7 +198,8 @@ data class FxStateOutMessage(
     val bpm: Double,
     val isClockRunning: Boolean,
     val activeEffects: List<FxEffectState>,
-    val palette: List<String> = emptyList()
+    val palette: List<String> = emptyList(),
+    val stackPalettes: Map<Int, List<String>> = emptyMap()
 ) : OutMessage()
 
 @Serializable
@@ -240,6 +241,12 @@ data class RemovePaletteColourInMessage(val index: Int) : InMessage()
 @SerialName("paletteChanged")
 data class PaletteChangedOutMessage(
     val palette: List<String>
+) : OutMessage()
+
+@Serializable
+@SerialName("stackPalettesChanged")
+data class StackPalettesChangedOutMessage(
+    val stackPalettes: Map<Int, List<String>>
 ) : OutMessage()
 
 // Group-related messages
@@ -445,6 +452,17 @@ fun Application.configureSockets(state: State) {
                 }
                 .launchIn(this)
 
+            // Subscribe to stack palette changes
+            val stackPaletteJob = state.show.fxEngine.stackPaletteFlow
+                .onEach { stackPalettes ->
+                    sendSerialized<OutMessage>(StackPalettesChangedOutMessage(
+                        stackPalettes = stackPalettes.mapValues { (_, colours) ->
+                            colours.map { it.toSerializedString() }
+                        }
+                    ))
+                }
+                .launchIn(this)
+
             // Flag to send a beatSync on the next beat boundary (set on requestBeatSync)
             val sendNextBeat = AtomicBoolean(true)
 
@@ -617,6 +635,7 @@ fun Application.configureSockets(state: State) {
                 connections -= thisConnection
                 fxStateJob.cancel()
                 paletteJob.cancel()
+                stackPaletteJob.cancel()
                 beatSyncJob.cancel()
                 bpmChangeJob.cancel()
                 projectChangeJob.cancel()
@@ -643,7 +662,10 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
         bpm = state.show.fxEngine.masterClock.bpm.value,
         isClockRunning = state.show.fxEngine.masterClock.isRunning.value,
         activeEffects = effectStates,
-        palette = state.show.fxEngine.getPalette().map { it.toSerializedString() }
+        palette = state.show.fxEngine.getPalette().map { it.toSerializedString() },
+        stackPalettes = state.show.fxEngine.getAllStackPalettes().mapValues { (_, colours) ->
+            colours.map { it.toSerializedString() }
+        }
     )
 }
 

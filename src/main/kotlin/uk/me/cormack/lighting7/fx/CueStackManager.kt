@@ -112,8 +112,8 @@ class CueStackManager(
         val useCrossfade = fadeDurationMs > 0 && outgoingEffects.isNotEmpty() && scope != null
 
         if (!useCrossfade) {
-            // Snap-cut: remove old effects immediately
-            fxEngine.removeEffectsForCueStack(stackId)
+            // Snap-cut: remove old effects but keep the stack palette (it carries over between cues)
+            fxEngine.removeEffectsForCueStackKeepPalette(stackId)
         }
         // If crossfading, we leave old effects in place — they'll be faded out below
 

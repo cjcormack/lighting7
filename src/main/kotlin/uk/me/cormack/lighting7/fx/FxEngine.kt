@@ -113,6 +113,15 @@ class FxEngine(
         _paletteFlow.tryEmit(getPalette())
     }
 
+    private val _stackPaletteFlow = MutableSharedFlow<Map<Int, List<ExtendedColour>>>(replay = 1, extraBufferCapacity = 1)
+
+    /** Flow of stack palette updates for WebSocket broadcasting */
+    val stackPaletteFlow: SharedFlow<Map<Int, List<ExtendedColour>>> = _stackPaletteFlow.asSharedFlow()
+
+    private fun emitStackPaletteUpdate() {
+        _stackPaletteFlow.tryEmit(getAllStackPalettes())
+    }
+
     // --- Per-Cue Palettes ---
 
     private data class CuePaletteEntry(
@@ -142,31 +151,50 @@ class FxEngine(
 
     fun setStackPalette(stackId: Int, colours: List<ExtendedColour>) {
         stackPalettes[stackId] = CuePaletteEntry(colours, stackPaletteVersionCounter.incrementAndGet())
+        emitStackPaletteUpdate()
     }
 
     fun getStackPalette(stackId: Int): List<ExtendedColour>? = stackPalettes[stackId]?.colours
+
+    /** Get a snapshot of all active stack palettes keyed by stack ID. */
+    fun getAllStackPalettes(): Map<Int, List<ExtendedColour>> =
+        stackPalettes.mapValues { (_, entry) -> entry.colours }
 
     fun getStackPaletteVersion(stackId: Int): Long = stackPalettes[stackId]?.version ?: 0L
 
     fun removeStackPalette(stackId: Int) {
         stackPalettes.remove(stackId)
+        emitStackPaletteUpdate()
     }
 
     /**
-     * Remove all effects that belong to a specific cue stack.
+     * Remove all effects that belong to a specific cue stack, preserving the stack palette.
+     * Used during cue transitions within a stack where the palette should carry over.
      *
      * @param stackId The cue stack ID whose effects should be removed
      * @return Number of effects removed
      */
-    fun removeEffectsForCueStack(stackId: Int): Int {
+    fun removeEffectsForCueStackKeepPalette(stackId: Int): Int {
         val toRemove = activeEffects.values.filter { it.cueStackId == stackId }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             resetUncoveredProperties(toRemove)
             emitStateUpdate()
         }
-        removeStackPalette(stackId)
         return toRemove.size
+    }
+
+    /**
+     * Remove all effects that belong to a specific cue stack and clean up its palette.
+     * Used when fully deactivating a stack.
+     *
+     * @param stackId The cue stack ID whose effects should be removed
+     * @return Number of effects removed
+     */
+    fun removeEffectsForCueStack(stackId: Int): Int {
+        val count = removeEffectsForCueStackKeepPalette(stackId)
+        removeStackPalette(stackId)
+        return count
     }
 
     /**
