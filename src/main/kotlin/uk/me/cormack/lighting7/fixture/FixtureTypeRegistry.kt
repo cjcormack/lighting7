@@ -27,19 +27,17 @@ object FixtureTypeRegistry {
      * Mode subclasses are discovered automatically via [KClass.sealedSubclasses].
      */
     private val fixtureClasses: List<KClass<out Fixture>> = listOf(
-        HexFixture::class,
-        WhexFixture::class,
-        FusionSpotFixture::class,
+        Fusion100SpotMkIIFixture::class,
         HazerFixture::class,
-        LaserworldCS100Fixture::class,
+        HexFixture::class,
+        LaserworldCS1000RGBMk3Fixture::class,
         LedLightbar12PixelFixture::class,
         LightstripFixture::class,
-        QuadBarFixture::class,
-        QuadMoverBarFixture::class,
-        ScantasticFixture::class,
+        Scantastic4Fixture::class,
         SlenderBeamBarQuadFixture::class,
         StarClusterFixture::class,
         UVFixture::class,
+        WhexFixture::class,
     )
 
     data class FixtureTypeInfo(
