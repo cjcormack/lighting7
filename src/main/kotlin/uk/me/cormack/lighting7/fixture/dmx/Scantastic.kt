@@ -8,7 +8,7 @@ import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 
-@FixtureType("scantastic")
+@FixtureType("scantastic-old")
 class ScantasticFixture (
     universe: Universe,
     key: String,
