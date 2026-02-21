@@ -212,6 +212,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectFxPresets(state)
         routeApiRestProjectCues(state)
         routeApiRestProjectCueStacks(state)
+        routeApiRestProjectCueSlots(state)
 
         // POST /current/create-initial-scene - Create initial scene template (script + scene)
         post<CreateInitialSceneResource> {
