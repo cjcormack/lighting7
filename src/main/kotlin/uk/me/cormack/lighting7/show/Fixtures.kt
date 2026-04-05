@@ -21,6 +21,7 @@ interface FixturesChangeListener {
     fun cueListChanged()
     fun cueStackListChanged()
     fun cueSlotListChanged()
+    fun patchListChanged()
     fun trackChanged(isPlaying: Boolean, artist: String, name: String)
 }
 
@@ -283,6 +284,12 @@ class Fixtures {
     fun cueSlotListChanged() {
         changeListeners.forEach {
             it.cueSlotListChanged()
+        }
+    }
+
+    fun patchListChanged() {
+        changeListeners.forEach {
+            it.patchListChanged()
         }
     }
 

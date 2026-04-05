@@ -15,6 +15,7 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingList
+import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -76,20 +77,27 @@ internal fun Route.routeApiRestProjects(state: State) {
         routingPost {
             val request = call.receive<CreateProjectRequest>()
             val project = transaction(state.database) {
+                val projectMode = request.mode?.let {
+                    try { ProjectMode.valueOf(it) } catch (_: Exception) { ProjectMode.SCRIPT_BASED }
+                } ?: ProjectMode.SCRIPT_BASED
+
                 val newProject = DaoProject.new {
                     name = request.name
                     description = request.description
+                    mode = projectMode
                     isCurrent = false
                 }
 
-                // Create template load-fixtures script
-                val loadFixturesScript = DaoScript.new {
-                    name = "load-fixtures"
-                    script = LOAD_FIXTURES_TEMPLATE
-                    project = newProject
-                    settings = ScriptSettingList(emptyList())
+                // Create template load-fixtures script (for script-based mode)
+                if (projectMode == ProjectMode.SCRIPT_BASED) {
+                    val loadFixturesScript = DaoScript.new {
+                        name = "load-fixtures"
+                        script = LOAD_FIXTURES_TEMPLATE
+                        project = newProject
+                        settings = ScriptSettingList(emptyList())
+                    }
+                    newProject.loadFixturesScriptId = loadFixturesScript.id.value
                 }
-                newProject.loadFixturesScriptId = loadFixturesScript.id.value
 
                 newProject.toDetailDto()
             }
@@ -99,13 +107,55 @@ internal fun Route.routeApiRestProjects(state: State) {
         // PUT /{id} - Update project
         put<ProjectIdResource> { resource ->
             val request = call.receive<UpdateProjectRequest>()
-            val project = transaction(state.database) {
+            val (project, modeChanged) = transaction(state.database) {
                 val project = DaoProject.findById(resource.id)
-                    ?: return@transaction null
+                    ?: return@transaction null to false
 
                 request.name?.let { project.name = it }
                 request.description?.let { project.description = it }
                 request.runLoopDelayMs?.let { project.runLoopDelayMs = it }
+
+                // Handle mode change with migration
+                var modeChanged = false
+                request.mode?.let { modeStr ->
+                    val newMode = try { ProjectMode.valueOf(modeStr) } catch (_: Exception) { null }
+                    if (newMode != null && newMode != project.mode) {
+                        val oldMode = project.mode
+                        project.mode = newMode
+
+                        // Perform migration
+                        when {
+                            oldMode == ProjectMode.SCRIPT_BASED && newMode == ProjectMode.DB_BASED -> {
+                                // Import runtime fixtures into DB (if project is active)
+                                if (project.isCurrent) {
+                                    uk.me.cormack.lighting7.show.FixtureImporter.importFromRuntime(
+                                        project.id.value, state.show.fixtures, state.database
+                                    )
+                                }
+                            }
+                            oldMode == ProjectMode.DB_BASED && newMode == ProjectMode.SCRIPT_BASED -> {
+                                // Generate load-fixtures script from DB patches
+                                val scriptText = uk.me.cormack.lighting7.show.ScriptGenerator
+                                    .generateLoadFixturesScript(project.id.value, state.database)
+
+                                // Find or create load-fixtures script
+                                val existingScript = project.loadFixturesScriptId?.let { DaoScript.findById(it) }
+                                if (existingScript != null) {
+                                    existingScript.script = scriptText
+                                } else {
+                                    val newScript = DaoScript.new {
+                                        name = "load-fixtures"
+                                        script = scriptText
+                                        this.project = project
+                                        settings = ScriptSettingList(emptyList())
+                                    }
+                                    project.loadFixturesScriptId = newScript.id.value
+                                }
+                            }
+                        }
+                        modeChanged = true
+                    }
+                }
 
                 // Update FK references if provided (use ID directly)
                 if (request.loadFixturesScriptId != null && request.loadFixturesScriptId > 0) {
@@ -139,10 +189,25 @@ internal fun Route.routeApiRestProjects(state: State) {
                 if (request.trackChangedScriptId == 0) project.trackChangedScriptId = null
                 if (request.runLoopScriptId == 0) project.runLoopScriptId = null
 
-                project.toDetailDto()
+                project.toDetailDto() to modeChanged
             }
 
             if (project != null) {
+                // If mode changed and project is current, reload fixtures from new mode
+                if (modeChanged) {
+                    val mode = ProjectMode.valueOf(project.mode)
+                    val isCurrent = transaction(state.database) {
+                        DaoProject.findById(resource.id)?.isCurrent == true
+                    }
+                    if (isCurrent) {
+                        when (mode) {
+                            ProjectMode.SCRIPT_BASED -> state.show.evalScriptByName(state.show.loadFixturesScriptName)
+                            ProjectMode.DB_BASED -> DbFixtureLoader.loadFixtures(
+                                resource.id, state.show.fixtures, state.database
+                            )
+                        }
+                    }
+                }
                 call.respond(project)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
@@ -213,6 +278,9 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectCues(state)
         routeApiRestProjectCueStacks(state)
         routeApiRestProjectCueSlots(state)
+        routeApiRestProjectPatches(state)
+        routeApiRestProjectUniverseConfigs(state)
+        routeApiRestProjectPatchGroups(state)
 
         // POST /current/create-initial-scene - Create initial scene template (script + scene)
         post<CreateInitialSceneResource> {
@@ -547,7 +615,8 @@ data class ProjectListDto(
     val id: Int,
     val name: String,
     val description: String?,
-    val isCurrent: Boolean
+    val isCurrent: Boolean,
+    val mode: String,
 )
 
 @Serializable
@@ -556,6 +625,7 @@ data class ProjectDetailDto(
     val name: String,
     val description: String?,
     val isCurrent: Boolean,
+    val mode: String,
     val loadFixturesScriptId: Int?,
     val loadFixturesScriptName: String?,
     val initialSceneId: Int?,
@@ -576,13 +646,15 @@ data class ProjectDetailDto(
 @Serializable
 data class CreateProjectRequest(
     val name: String,
-    val description: String? = null
+    val description: String? = null,
+    val mode: String? = null,
 )
 
 @Serializable
 data class UpdateProjectRequest(
     val name: String? = null,
     val description: String? = null,
+    val mode: String? = null,
     val loadFixturesScriptId: Int? = null,
     val initialSceneId: Int? = null,
     val trackChangedScriptId: Int? = null,
@@ -625,7 +697,8 @@ private fun DaoProject.toListDto() = ProjectListDto(
     id = id.value,
     name = name,
     description = description,
-    isCurrent = isCurrent
+    isCurrent = isCurrent,
+    mode = mode.name,
 )
 
 private fun DaoProject.toDetailDto() = ProjectDetailDto(
@@ -633,6 +706,7 @@ private fun DaoProject.toDetailDto() = ProjectDetailDto(
     name = name,
     description = description,
     isCurrent = isCurrent,
+    mode = mode.name,
     loadFixturesScriptId = loadFixturesScriptId,
     loadFixturesScriptName = loadFixturesScriptId?.let { DaoScript.findById(it)?.name },
     initialSceneId = initialSceneId,
@@ -655,7 +729,7 @@ private const val LOAD_FIXTURES_TEMPLATE = """// Register your fixtures here
 // Example:
 //
 // fixtures.register {
-//     val universe = Universe(0, 1)
+//     val universe = Universe(0, 0)
 //     addController(ArtNetController(universe, "192.168.1.100"))
 //
 //     // Simple RGB fixture

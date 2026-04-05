@@ -59,6 +59,102 @@ object FixtureTypeRegistry {
         fixtureClasses.flatMap { klass -> discoverTypes(klass) }
     }
 
+    /**
+     * Map from typeKey to concrete KClass, lazily computed.
+     * Used for instantiation by typeKey (DB-based mode).
+     */
+    private val typeKeyToClass: Map<String, KClass<out Fixture>> by lazy {
+        fixtureClasses.flatMap { klass -> collectConcreteClasses(klass) }
+            .mapNotNull { klass ->
+                val annotation = klass.findAnnotation<FixtureType>() ?: return@mapNotNull null
+                annotation.typeKey to klass
+            }
+            .toMap()
+    }
+
+    /**
+     * Recursively collect concrete fixture classes, expanding sealed class hierarchies.
+     */
+    private fun collectConcreteClasses(klass: KClass<out Fixture>): List<KClass<out Fixture>> {
+        val subclasses = klass.sealedSubclasses
+        return if (subclasses.isNotEmpty()) {
+            subclasses.flatMap { collectConcreteClasses(it) }
+        } else {
+            listOf(klass)
+        }
+    }
+
+    /**
+     * Instantiate a fixture by its typeKey with real parameters.
+     * Used by DbFixtureLoader to create fixtures from DB records.
+     *
+     * @throws IllegalArgumentException if the typeKey is unknown or instantiation fails
+     */
+    fun instantiateByTypeKey(
+        typeKey: String,
+        universe: Universe,
+        key: String,
+        fixtureName: String,
+        firstChannel: Int,
+    ): DmxFixture {
+        val klass = typeKeyToClass[typeKey]
+            ?: throw IllegalArgumentException("Unknown fixture type key: $typeKey")
+
+        val constructor = klass.primaryConstructor
+            ?: throw IllegalArgumentException("No primary constructor for fixture type: $typeKey")
+
+        return try {
+            constructor.callBy(
+                constructor.parameters
+                    .filter { !it.isOptional }
+                    .associateWith { param ->
+                        when (param.type.classifier) {
+                            Universe::class -> universe
+                            String::class -> when (param.name) {
+                                "key" -> key
+                                "fixtureName" -> fixtureName
+                                else -> key // fallback
+                            }
+                            Int::class -> when (param.name) {
+                                "firstChannel" -> firstChannel
+                                else -> firstChannel // fallback
+                            }
+                            else -> throw IllegalArgumentException(
+                                "Unexpected parameter type ${param.type} for fixture type: $typeKey"
+                            )
+                        }
+                    }
+            ) as? DmxFixture ?: throw IllegalArgumentException("Fixture type $typeKey is not a DmxFixture")
+        } catch (e: IllegalArgumentException) {
+            throw e
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Failed to instantiate fixture type $typeKey: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Get the channel count for a fixture type by its typeKey.
+     */
+    fun channelCountForTypeKey(typeKey: String): Int? {
+        return allTypes.find { it.typeKey == typeKey }?.channelCount
+    }
+
+    /**
+     * Reverse-lookup the typeKey for a fixture class.
+     * Used by FixtureImporter when migrating from script-based to DB-based mode.
+     */
+    fun typeKeyForClass(klass: KClass<*>): String? {
+        return klass.findAnnotation<FixtureType>()?.typeKey
+    }
+
+    /**
+     * Get the simple class name for a given typeKey.
+     * Used by ScriptGenerator to produce readable fixture class references.
+     */
+    fun classNameForTypeKey(typeKey: String): String? {
+        return typeKeyToClass[typeKey]?.simpleName
+    }
+
     /** Dummy universe used for introspection — no real DMX connection needed. */
     private val dummyUniverse = Universe(0, 0)
 
@@ -129,13 +225,16 @@ object FixtureTypeRegistry {
         val properties = instance?.generatePropertyDescriptors() ?: emptyList()
         val elementGroupProperties = instance?.generateElementGroupPropertyDescriptors()
 
+        // Channel count: prefer mode info (multi-mode fixtures), fall back to instance
+        val channelCount = modeInfo?.channelCount ?: instance?.channelCount
+
         return listOf(
             FixtureTypeInfo(
                 typeKey = annotation.typeKey,
                 manufacturer = annotation.manufacturer,
                 model = annotation.model,
                 modeName = modeInfo?.modeName,
-                channelCount = modeInfo?.channelCount,
+                channelCount = channelCount,
                 capabilities = capabilities,
                 properties = properties,
                 elementGroupProperties = elementGroupProperties,

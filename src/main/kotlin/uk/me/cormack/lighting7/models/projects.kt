@@ -5,6 +5,11 @@ import org.jetbrains.exposed.dao.IntEntityClass
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.IntIdTable
 
+enum class ProjectMode {
+    SCRIPT_BASED,
+    DB_BASED,
+}
+
 /**
  * Projects table - the base columns are defined here.
  * FK references to scripts/scenes are added after those tables are defined
@@ -15,6 +20,7 @@ object DaoProjects: IntIdTable("projects") {
     val description = varchar("description", 255).nullable()
     val isCurrent = bool("is_current").default(false)
     val runLoopDelayMs = long("run_loop_delay_ms").default(100L)
+    val mode = enumerationByName("mode", 20, ProjectMode::class).default(ProjectMode.SCRIPT_BASED)
 
     // FK references - these are initialized lazily after DaoScripts/DaoScenes are defined
     // The columns will be created via SchemaUtils.createMissingTablesAndColumns()
@@ -31,6 +37,7 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     var description by DaoProjects.description
     var isCurrent by DaoProjects.isCurrent
     var runLoopDelayMs by DaoProjects.runLoopDelayMs
+    var mode by DaoProjects.mode
 
     // Manual FK handling since we can't use reference() due to circular dependency
     var loadFixturesScriptId by DaoProjects.loadFixturesScriptId
@@ -56,4 +63,7 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     val fxPresets by DaoFxPreset referrersOn DaoFxPresets.project
     val cues by DaoCue referrersOn DaoCues.project
     val cueStacks by DaoCueStack referrersOn DaoCueStacks.project
+    val universeConfigs by DaoUniverseConfig referrersOn DaoUniverseConfigs.project
+    val fixturePatches by DaoFixturePatch referrersOn DaoFixturePatches.project
+    val fixtureGroups by DaoFixtureGroup referrersOn DaoFixtureGroups.project
 }

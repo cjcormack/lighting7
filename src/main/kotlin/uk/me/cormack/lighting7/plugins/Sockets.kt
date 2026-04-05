@@ -109,6 +109,10 @@ data object CueStackListChangedOutMessage: OutMessage()
 data object CueSlotListChangedOutMessage: OutMessage()
 
 @Serializable
+@SerialName("patchListChanged")
+data object PatchListChangedOutMessage: OutMessage()
+
+@Serializable
 @SerialName("trackChanged")
 data class TrackChangedOutMessage(
     val isPlaying: Boolean,
@@ -414,6 +418,12 @@ fun Application.configureSockets(state: State) {
                 override fun cueSlotListChanged() {
                     launch {
                         sendSerialized<OutMessage>(CueSlotListChangedOutMessage)
+                    }
+                }
+
+                override fun patchListChanged() {
+                    launch {
+                        sendSerialized<OutMessage>(PatchListChangedOutMessage)
                     }
                 }
 

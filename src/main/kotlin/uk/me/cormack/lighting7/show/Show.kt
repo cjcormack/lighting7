@@ -60,7 +60,10 @@ class Show(
 
     fun start() {
         try {
-            evalScriptByName(loadFixturesScriptName)
+            when (project.mode) {
+                ProjectMode.SCRIPT_BASED -> evalScriptByName(loadFixturesScriptName)
+                ProjectMode.DB_BASED -> DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database)
+            }
             if (initialSceneName != null) {
                 runScene(initialSceneName)
             }
