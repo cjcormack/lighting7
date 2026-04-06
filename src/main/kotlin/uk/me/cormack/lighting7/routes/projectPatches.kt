@@ -37,7 +37,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
         call.respond(patches)
     }
 
-    // POST /{projectId}/patches - Create one or more patches (batch)
+    // POST /{projectId}/patches - Create a single patch
     post<ProjectPatchesResource> { resource ->
         val project = state.resolveProject(resource.projectId)
         if (project == null) {
@@ -65,18 +65,16 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             return@post
         }
 
-        val count = request.count.coerceAtLeast(1)
-
         // Validate channels fit
-        val lastChannel = request.startChannel + (channelCount * count) - 1
+        val lastChannel = request.startChannel + channelCount - 1
         if (lastChannel > 512) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(
-                "Fixtures would extend to channel $lastChannel (max 512). Max start channel: ${512 - (channelCount * count) + 1}"
+                "Fixture extends to channel $lastChannel (max 512). Max start channel: ${512 - channelCount + 1}"
             ))
             return@post
         }
 
-        val patches = transaction(state.database) {
+        val result = transaction(state.database) {
             // Find or create universe config
             val universeConfig = DaoUniverseConfig.find {
                 (DaoUniverseConfigs.project eq project.id) and
@@ -90,81 +88,63 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 this.address = request.address
             }
 
-            // Check for channel overlaps
-            val existingPatches = DaoFixturePatch.find {
+            // Check for channel overlap
+            val overlap = DaoFixturePatch.find {
                 DaoFixturePatches.universeConfig eq universeConfig.id
-            }.toList()
-
-            for (i in 0 until count) {
-                val startCh = request.startChannel + (channelCount * i)
-                val endCh = startCh + channelCount - 1
-                val overlap = existingPatches.find { existing ->
-                    val existingType = FixtureTypeRegistry.allTypes.find { it.typeKey == existing.fixtureTypeKey }
-                    val existingChannelCount = existingType?.channelCount ?: 1
-                    val existingEnd = existing.startChannel + existingChannelCount - 1
-                    startCh <= existingEnd && endCh >= existing.startChannel
-                }
-                if (overlap != null) {
-                    return@transaction Pair<List<FixturePatchDto>?, String?>(
-                        null, "Channel overlap with fixture '${overlap.displayName}' (${overlap.key})"
-                    )
-                }
+            }.firstOrNull { existing ->
+                val existingType = FixtureTypeRegistry.allTypes.find { it.typeKey == existing.fixtureTypeKey }
+                val existingChannelCount = existingType?.channelCount ?: 1
+                val existingEnd = existing.startChannel + existingChannelCount - 1
+                request.startChannel <= existingEnd && lastChannel >= existing.startChannel
+            }
+            if (overlap != null) {
+                return@transaction Pair<FixturePatchDto?, String?>(
+                    null, "Channel overlap with fixture '${overlap.displayName}' (${overlap.key})"
+                )
             }
 
             // Check key uniqueness
-            val existingKeys = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
-                .map { it.key }.toSet()
+            val existingKey = DaoFixturePatch.find {
+                (DaoFixturePatches.project eq project.id) and (DaoFixturePatches.key eq request.key)
+            }.firstOrNull()
+            if (existingKey != null) {
+                return@transaction Pair<FixturePatchDto?, String?>(null, "Duplicate key: ${request.key}")
+            }
 
             val maxSortOrder = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
                 .maxOfOrNull { it.sortOrder } ?: -1
 
-            // Resolve group if specified
-            val group = request.groupName?.takeIf { it.isNotBlank() }?.let {
-                findOrCreateGroup(project, it)
+            val patch = DaoFixturePatch.new {
+                this.project = project
+                this.universeConfig = universeConfig
+                this.fixtureTypeKey = request.fixtureTypeKey
+                this.key = request.key
+                this.displayName = request.name
+                this.startChannel = request.startChannel
+                this.sortOrder = maxSortOrder + 1
             }
 
-            val createdPatches = mutableListOf<DaoFixturePatch>()
-            for (i in 0 until count) {
-                val key = if (count == 1) request.keyPrefix else "${request.keyPrefix}-${i + 1}"
-                val name = if (count == 1) request.namePrefix else "${request.namePrefix} ${i + 1}"
-
-                if (key in existingKeys) {
-                    return@transaction Pair<List<FixturePatchDto>?, String?>(null, "Duplicate key: $key")
-                }
-
-                val patch = DaoFixturePatch.new {
-                    this.project = project
-                    this.universeConfig = universeConfig
-                    this.fixtureTypeKey = request.fixtureTypeKey
-                    this.key = key
-                    this.displayName = name
-                    this.startChannel = request.startChannel + (channelCount * i)
-                    this.sortOrder = maxSortOrder + 1 + i
-                }
-
-                if (group != null) {
-                    assignPatchToGroup(patch, group)
-                }
-
-                createdPatches.add(patch)
+            // Assign to group if specified
+            request.groupName?.takeIf { it.isNotBlank() }?.let { groupName ->
+                val group = findOrCreateGroup(project, groupName)
+                assignPatchToGroup(patch, group)
             }
 
-            Pair<List<FixturePatchDto>?, String?>(createdPatches.map { it.toDto() }, null)
+            Pair<FixturePatchDto?, String?>(patch.toDto(), null)
         }
 
-        val (createdPatches, error) = patches
+        val (patchDto, error) = result
         if (error != null) {
             call.respond(HttpStatusCode.Conflict, ErrorResponse(error))
             return@post
         }
 
-        // If project is current, reload fixtures
         if (state.isCurrentProject(project)) {
             DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database)
         }
         state.show.fixtures.patchListChanged()
 
-        call.respond(HttpStatusCode.Created, createdPatches!!)
+        call.respond(HttpStatusCode.Created, patchDto!!)
     }
 
     // PUT /{projectId}/patches/{patchId} - Update a patch
@@ -318,10 +298,9 @@ data class FixturePatchGroupRef(
 data class CreatePatchRequest(
     val universe: Int,
     val fixtureTypeKey: String,
-    val count: Int = 1,
+    val key: String,
+    val name: String,
     val startChannel: Int,
-    val keyPrefix: String,
-    val namePrefix: String,
     val address: String? = null,
     val groupName: String? = null,
 )
