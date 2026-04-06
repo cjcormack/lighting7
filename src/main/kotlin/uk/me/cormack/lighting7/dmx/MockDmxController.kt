@@ -8,9 +8,13 @@ class MockDmxController(
     override val universe: Universe = Universe(0, 0)
 ) : DmxController {
     private val values = mutableMapOf<Int, UByte>()
+    private val _parkedChannels = mutableMapOf<Int, UByte>()
 
     override val currentValues: Map<Int, UByte>
         get() = values.toMap()
+
+    override val parkedChannels: Map<Int, UByte>
+        get() = _parkedChannels.toMap()
 
     override fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>) {
         valuesToSet.forEach { (channel, change) ->
@@ -26,12 +30,27 @@ class MockDmxController(
         values[channelNo] = channelValue
     }
 
-    override fun getValue(channelNo: Int): UByte = values[channelNo] ?: 0u
+    override fun getValue(channelNo: Int): UByte {
+        return _parkedChannels[channelNo] ?: values[channelNo] ?: 0u
+    }
+
+    override fun parkChannel(channelNo: Int, value: UByte) {
+        _parkedChannels[channelNo] = value
+    }
+
+    override fun unparkChannel(channelNo: Int) {
+        _parkedChannels.remove(channelNo)
+    }
+
+    override fun unparkAll() {
+        _parkedChannels.clear()
+    }
 
     /**
      * Reset all channels to 0.
      */
     fun reset() {
         values.clear()
+        _parkedChannels.clear()
     }
 }

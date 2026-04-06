@@ -20,6 +20,9 @@ class ArtNetController(override val universe: Universe, val address: String? = n
 
     override val currentValues = ConcurrentHashMap<Int, UByte>(512)
 
+    private val _parkedChannels = ConcurrentHashMap<Int, UByte>()
+    override val parkedChannels: Map<Int, UByte> get() = _parkedChannels
+
     private var previousSentDmxData = ByteArray(512)
 
     private val listeners = ArrayList<ChannelChangeListener>()
@@ -113,6 +116,22 @@ class ArtNetController(override val universe: Universe, val address: String? = n
 
     fun unregisterListener(listener: ChannelChangeListener) {
         listeners.remove(listener)
+    }
+
+    override fun parkChannel(channelNo: Int, value: UByte) {
+        if (channelNo < 1 || channelNo > 512) return
+        _parkedChannels[channelNo] = value
+        runBlocking { transmissionNeeded.send(Unit) }
+    }
+
+    override fun unparkChannel(channelNo: Int) {
+        _parkedChannels.remove(channelNo)
+        runBlocking { transmissionNeeded.send(Unit) }
+    }
+
+    override fun unparkAll() {
+        _parkedChannels.clear()
+        runBlocking { transmissionNeeded.send(Unit) }
     }
 
     fun close() {
@@ -234,11 +253,13 @@ class ArtNetController(override val universe: Universe, val address: String? = n
         val dmxData = ByteArray(512)
 
         currentValues.forEach { (channelNo, channelValue) ->
-            val byteValue = channelValue.toByte()
+            // Apply park override: parked channels always output their parked value
+            val outputValue = _parkedChannels[channelNo] ?: channelValue
+            val byteValue = outputValue.toByte()
             dmxData[channelNo - 1] = byteValue
 
             if (previousSentDmxData[channelNo - 1] != byteValue) {
-                changes[channelNo] = channelValue
+                changes[channelNo] = outputValue
             }
         }
         previousSentDmxData = dmxData

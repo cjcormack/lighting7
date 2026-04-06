@@ -8,6 +8,7 @@ import kotlinx.coroutines.selects.select
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.fx.FxEngine
@@ -44,6 +45,7 @@ class Show(
     val fixtures = Fixtures()
     val fxEngine = FxEngine(fixtures, MasterClock())
     val cueStackManager = CueStackManager(fxEngine)
+    val parkManager = ParkManager(state.database, project.id.value)
     private val scripts: MutableMap<String, Script> = mutableMapOf()
     private val scriptsLock = ReentrantLock()
 
@@ -64,6 +66,11 @@ class Show(
                 ProjectMode.SCRIPT_BASED -> evalScriptByName(loadFixturesScriptName)
                 ProjectMode.DB_BASED -> DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database)
             }
+
+            // Load and apply parked channels after fixtures/controllers are registered
+            parkManager.loadFromDatabase()
+            parkManager.applyToControllers(fixtures.controllers)
+
             if (initialSceneName != null) {
                 runScene(initialSceneName)
             }

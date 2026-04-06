@@ -15,6 +15,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.dmx.DmxController
+import uk.me.cormack.lighting7.dmx.ParkedChannel
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.trait.*
@@ -141,6 +142,44 @@ data class ChannelMappingEntry(
 @SerialName("channelMappingState")
 data class ChannelMappingStateOutMessage(
     val mappings: Map<Int, Map<Int, ChannelMappingEntry>>
+) : OutMessage()
+
+// Park-related messages
+
+@Serializable
+@SerialName("parkState")
+data object ParkStateInMessage : InMessage()
+
+@Serializable
+@SerialName("parkChannel")
+data class ParkChannelInMessage(
+    val universe: Int,
+    val channel: Int,
+    val value: UByte,
+) : InMessage()
+
+@Serializable
+@SerialName("unparkChannel")
+data class UnparkChannelInMessage(
+    val universe: Int,
+    val channel: Int,
+) : InMessage()
+
+@Serializable
+@SerialName("unparkAll")
+data object UnparkAllInMessage : InMessage()
+
+@Serializable
+data class ParkedChannelState(
+    val universe: Int,
+    val channel: Int,
+    val value: UByte,
+)
+
+@Serializable
+@SerialName("parkState")
+data class ParkStateOutMessage(
+    val channels: List<ParkedChannelState>
 ) : OutMessage()
 
 // FX-related messages
@@ -440,6 +479,15 @@ fun Application.configureSockets(state: State) {
                 sendSerialized<OutMessage>(buildChannelMappingMessage(state))
             }
 
+            // Subscribe to park state changes
+            val parkStateJob = state.show.parkManager.parkStateFlow
+                .onEach { parkedChannels ->
+                    sendSerialized<OutMessage>(ParkStateOutMessage(
+                        channels = parkedChannels.map { ParkedChannelState(it.universe, it.channel, it.value) }
+                    ))
+                }
+                .launchIn(this)
+
             // Subscribe to FX state changes
             val fxStateJob = state.show.fxEngine.fxStateFlow
                 .onEach { update ->
@@ -553,6 +601,26 @@ fun Application.configureSockets(state: State) {
                             val controller = state.show.fixtures.controller(Universe(0, message.universe))
                             controller.setValue(message.id, message.level, message.fadeTime)
                         }
+
+                        // Park-related message handlers
+                        is ParkStateInMessage -> {
+                            sendSerialized<OutMessage>(buildParkStateMessage(state))
+                        }
+                        is ParkChannelInMessage -> {
+                            state.show.parkManager.park(message.universe, message.channel, message.value)
+                            val controller = state.show.fixtures.controller(Universe(0, message.universe))
+                            controller.parkChannel(message.channel, message.value)
+                        }
+                        is UnparkChannelInMessage -> {
+                            state.show.parkManager.unpark(message.universe, message.channel)
+                            val controller = state.show.fixtures.controller(Universe(0, message.universe))
+                            controller.unparkChannel(message.channel)
+                        }
+                        is UnparkAllInMessage -> {
+                            state.show.parkManager.unparkAll()
+                            state.show.fixtures.controllers.forEach { it.unparkAll() }
+                        }
+
                         is UniversesStateInMessage -> {
                             val universes = state.show.fixtures.controllers.map(DmxController::universe).map(Universe::universe)
                                 .sortedBy { it }
@@ -653,6 +721,7 @@ fun Application.configureSockets(state: State) {
                 }
             } finally {
                 connections -= thisConnection
+                parkStateJob.cancel()
                 fxStateJob.cancel()
                 paletteJob.cancel()
                 stackPaletteJob.cancel()
@@ -701,6 +770,13 @@ private fun buildChannelMappingMessage(state: State): ChannelMappingStateOutMess
             }
         }
     return ChannelMappingStateOutMessage(mappings)
+}
+
+private fun buildParkStateMessage(state: State): ParkStateOutMessage {
+    val parked = state.show.parkManager.getAllParked()
+    return ParkStateOutMessage(
+        channels = parked.map { ParkedChannelState(it.universe, it.channel, it.value) }
+    )
 }
 
 private fun buildGroupsStateMessage(state: State): GroupsStateOutMessage {

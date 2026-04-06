@@ -266,7 +266,7 @@ sealed class SlenderBeamBarQuadFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode1Ch =
             Mode1Ch(this, transaction)
 
-        @FixtureProperty("Show mode preset", category = PropertyCategory.SETTING)
+        @FixtureProperty("Show mode preset", category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
         val showMode = DmxFixtureSetting(transaction, universe, firstChannel, ShowMode.entries.toTypedArray())
     }
 
