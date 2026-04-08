@@ -111,20 +111,37 @@ Lighting scripts use embedded Kotlin via `LightingScript` base class:
 Tempo-synchronized effects for continuous animations without complex scripts:
 - **MasterClock** - Global BPM reference (20-300 BPM), emits 24 ticks/beat
 - **FxEngine** - Processes active effects, applies to fixtures via transactions
+- **FxRegistry** - Unified registry for all effect types (built-in and script-defined)
 - **FxTargetable** - Common interface for Fixture and FixtureGroup (enables unified FX targeting)
 - **FxTargetRef** - Reference type distinguishing fixture vs group targets
 - **BeatDivision** - Timing constants (QUARTER, HALF, WHOLE, ONE_BAR, etc.)
 - **BlendMode** - How effects combine: OVERRIDE, ADDITIVE, MULTIPLY, MAX, MIN
 
-Effect types:
-- **Dimmer**: SineWave, Pulse, RampUp/Down, Triangle, Strobe, Flicker, Breathe
+Effect interfaces:
+- **Effect** - Pure phase-based: `(phase, context) → FxOutput`
+- **StatefulEffect** - Tick-based with internal state: `(tick, deltaMs, context) → FxOutput` (e.g., CandleFlicker)
+- **CompositeEffect** - Multi-output: `(phase, context) → Map<FxOutputType, FxOutput>` (e.g., LightningStrike)
+
+Built-in effect types:
+- **Dimmer**: SineWave, Pulse, RampUp/Down, Triangle, Strobe, Flicker, Breathe, CandleFlicker
 - **Colour**: ColourCycle, RainbowCycle, ColourStrobe, ColourPulse, ColourFade
 - **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition
+- **Composite**: LightningStrike (dimmer + colour)
 
 Scripts can apply effects using extension functions:
 ```kotlin
 fixture.applyDimmerFx(fxEngine, SineWave(), FxTiming(BeatDivision.HALF))
 fixture.applyColourFx(fxEngine, RainbowCycle(), FxTiming(BeatDivision.ONE_BAR))
+```
+
+Scripts can also register custom effects that appear in the library API:
+```kotlin
+registerEffect(EffectRegistration(
+    id = "my-effect", name = "My Effect",
+    category = "dimmer", outputType = FxOutputType.SLIDER,
+    compatibleProperties = listOf("dimmer"),
+    factory = { params, _, _ -> MyCustomEffect(params) },
+))
 ```
 
 ### Fixture Groups
@@ -288,12 +305,30 @@ sealed class MyFixture(...) : DmxFixture(...), MultiModeFixtureFamily<MyFixture.
 **Example:** `SlenderBeamBarQuadFixture` - 4-head LED bar with 5 modes (1/6/12/14/27 channel)
 
 ### Writing a Lighting Script
-Scripts extend `LightingScript` and have access to:
-- `fixtures` - Registry of all fixtures
-- `controller` - DMX controller
-- `show` - Show management
-- `fxEngine` - FX system with `masterClock`, `bpm`, `setBpm()`, `tapTempo()`
-- Coroutine scope for async operations
+
+Three script types with focused API surfaces (controlled by `ScriptType` enum, stored per-script in DB):
+
+**`FX_APPLICATION`** — apply effects to fixtures (most common):
+```kotlin
+val wash = fixture<HexFixture>("front-wash-1")
+wash.fx {
+    dimmer(SineWave(), BeatDivision.HALF)
+    colour(ColourCycle(), BeatDivision.ONE_BAR)
+}
+setBpm(128.0)
+```
+
+**`FX_DEFINITION`** — define custom effect types:
+```kotlin
+registerEffect(EffectRegistration(
+    id = "my-effect", name = "My Effect",
+    category = "dimmer", outputType = FxOutputType.SLIDER,
+    compatibleProperties = listOf("dimmer"),
+    factory = { params, _, _ -> CandleFlicker(baseLevel = 180u) },
+))
+```
+
+**`GENERAL`** (`LightingScript`) — full-power scripts with DMX, fixtures, FX, scenes, coroutines. Used for `loadFixtures` and legacy scripts.
 
 ### Modifying REST API
 Add routes in `routes/` package using Ktor Resources for type-safe routing.

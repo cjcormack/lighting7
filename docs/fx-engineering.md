@@ -128,6 +128,267 @@ Effects that produce pan/tilt values for moving heads.
 | `RandomPosition` | Random movement | `panCenter`, `tiltCenter`, `panRange`, `tiltRange` |
 | `StaticPosition` | No movement | `pan`, `tilt` |
 
+### Stateful Effects (`StatefulEffect`)
+
+Stateful effects maintain internal state that evolves over time, rather than being pure
+functions of phase. They receive tick-level timing (`ClockTick` + `deltaMs`) instead of
+a 0-1 phase value.
+
+| Effect | Description | Parameters |
+|--------|-------------|------------|
+| `CandleFlicker` | Organic candle/fire flicker via random walk | `baseLevel`, `min`, `max`, `smoothing` |
+
+Stateful effects implement the `StatefulEffect` interface:
+- `initialize()` — called once when added to the engine, resets state
+- `calculateStateful(tick, deltaMs, context)` — called each tick instead of `calculate()`
+- `calculate(phase, context)` — fallback that returns a neutral value
+
+The FxEngine detects `StatefulEffect` instances and routes to `calculateStateful()`
+automatically in all 4 processing paths (fixture, multi-element, group, flat element).
+
+### Composite Effects (`CompositeEffect`)
+
+Composite effects produce outputs for multiple property types simultaneously,
+enabling coordinated multi-property animations from a single effect.
+
+| Effect | Description | Output Types | Parameters |
+|--------|-------------|--------------|------------|
+| `LightningStrike` | Flash + colour shift | SLIDER + COLOUR | `maxBrightness`, `minBrightness`, `flashColour`, `decayColour`, `ambientColour` |
+
+Composite effects implement the `CompositeEffect` interface:
+- `outputTypes: Set<FxOutputType>` — declares all output types produced
+- `calculateComposite(phase, context)` — returns `Map<FxOutputType, FxOutput>`
+- Secondary outputs are routed to targets in `FxInstance.compositeTargets`
+
+## Effect Registry
+
+All effects (built-in and user-defined) are registered in a unified `FxRegistry`.
+
+### Architecture
+
+```
+FxRegistry
+├── register(EffectRegistration)     ← Built-in effects at startup
+├── register(EffectRegistration)     ← User effects from fx_definitions table
+├── createEffect(type, params, ...)  → Effect instance
+├── getLibrary()                     → List<EffectTypeInfo> (for API)
+├── getRegistration(type)            → EffectRegistration? (lookup)
+└── unregister(id)                   ← Cleanup on delete
+```
+
+### EffectRegistration
+
+Each registered effect provides:
+- `id` — canonical name (e.g., "SineWave")
+- `aliases` — alternative names for lookup (e.g., "sine_wave", "sine")
+- `name` — human-readable display name
+- `category` — UI category ("dimmer", "colour", "position", "composite", "controls")
+- `outputType` — primary output type
+- `effectMode` — `STANDARD`, `STATEFUL`, or `COMPOSITE`
+- `parameters` — schema for the API/UI
+- `compatibleProperties` — which fixture properties this can target
+- `source` — `BUILT_IN` or `USER`
+- `script` — the calculate body (Kotlin script source)
+- `factory` — creates an `Effect` from string parameters + palette suppliers
+
+Lookup is case-insensitive with spaces and underscores stripped.
+
+## FX Definitions
+
+### Data Model
+
+All effects — both built-in and user-created — are defined with the same structure.
+The metadata is stored separately from the calculation logic:
+
+```
+fx_definitions table:
+├── effect_id         — canonical ID (e.g., "SineWave")
+├── name              — display name (e.g., "Sine Wave")
+├── category          — "dimmer", "colour", "position", "composite", "controls"
+├── output_type       — SLIDER, COLOUR, or POSITION
+├── effect_mode       — STANDARD, STATEFUL, or COMPOSITE
+├── parameters        — JSON schema [{name, type, defaultValue, description}]
+├── compatible_properties — JSON array of property names
+├── script            — the calculate() body only
+├── is_builtin        — true for shipped effects (read-only in UI)
+├── project_id        — null for built-ins, set for user effects
+└── default_step_timing
+```
+
+**Built-in effects** are stored as `.fx.kts` files in the repository under
+`src/main/resources/fx/`. Each file contains YAML frontmatter for metadata followed
+by the calculate body. They are loaded at startup, compiled, and registered in the
+FxRegistry. They appear in the FX Library UI as read-only, and their scripts serve
+as real working examples for users writing custom effects.
+
+**User effects** are stored in the `fx_definitions` database table and managed via
+the FX Library UI. They are compiled and registered on save/startup.
+
+### Script Model
+
+Scripts contain **only the calculation logic** — the body of `calculate()`,
+`calculateStateful()`, or `calculateComposite()`. All metadata (name, category,
+parameters, etc.) is stored in the database/registration and managed via the UI.
+
+**Parameter access** uses a typed accessor object (`TypedParams`) that pre-parses
+string parameters according to the schema:
+
+```kotlin
+// TypedParams methods:
+params.ubyte("min")          → UByte (default from schema)
+params.int("count")          → Int
+params.double("fadeRatio")   → Double
+params.boolean("pingPong")   → Boolean
+params.colour("baseColor")   → ExtendedColour (resolves palette refs like "P1")
+params.colourList("colours") → List<ExtendedColour>
+params.easingCurve("curve")  → EasingCurve
+params.string("name")        → String
+```
+
+### Built-in Effect File Format (.fx.kts)
+
+Built-in effects are stored as `.fx.kts` files under `src/main/resources/fx/`,
+organized by category:
+
+```
+src/main/resources/fx/
+├── dimmer/
+│   ├── SineWave.fx.kts
+│   ├── RampUp.fx.kts
+│   ├── CandleFlicker.fx.kts    (STATEFUL)
+│   └── ...
+├── colour/
+│   ├── ColourCycle.fx.kts
+│   ├── RainbowCycle.fx.kts
+│   └── ...
+├── position/
+│   ├── Circle.fx.kts
+│   └── ...
+└── composite/
+    └── LightningStrike.fx.kts  (COMPOSITE)
+```
+
+Each file uses YAML frontmatter in a block comment, followed by the script body:
+
+```kotlin
+/*---
+id: SineWave
+name: Sine Wave
+category: dimmer
+outputType: SLIDER
+effectMode: STANDARD
+defaultStepTiming: false
+compatibleProperties: [dimmer, uv]
+parameters:
+  - name: min
+    type: ubyte
+    default: "0"
+    description: Minimum value
+  - name: max
+    type: ubyte
+    default: "255"
+    description: Maximum value
+---*/
+
+val min = params.ubyte("min")
+val max = params.ubyte("max")
+val sine = (Math.sin(phase * 2 * Math.PI) + 1.0) / 2.0
+val value = (min.toInt() + (max.toInt() - min.toInt()) * sine)
+    .toInt().coerceIn(0, 255).toUByte()
+FxOutput.Slider(value)
+```
+
+At startup, `FxFileLoader` scans the resource directory, parses each file's
+frontmatter into metadata and script body, compiles the script, and registers
+the effect in the FxRegistry with `source = BUILT_IN`.
+
+### Three Script Base Classes
+
+Each `effectMode` has a dedicated base class with focused provided properties:
+
+#### FxCalcScript (STANDARD)
+
+For pure effects that are a function of phase:
+
+```kotlin
+// Provided: phase (Double), context (EffectContext), params (TypedParams)
+// Return: FxOutput (last expression)
+
+val min = params.ubyte("min")
+val max = params.ubyte("max")
+val sine = (Math.sin(phase * 2 * Math.PI) + 1.0) / 2.0
+val value = (min.toInt() + (max.toInt() - min.toInt()) * sine)
+    .toInt().coerceIn(0, 255).toUByte()
+FxOutput.Slider(value)
+```
+
+#### FxStatefulCalcScript (STATEFUL)
+
+For effects that maintain state across ticks (e.g., CandleFlicker):
+
+```kotlin
+// Provided: tick (ClockTick), deltaMs (Long), context (EffectContext),
+//           params (TypedParams), state (MutableMap<String, Any>)
+// Return: FxOutput (last expression)
+
+val baseLevel = params.ubyte("baseLevel").toDouble()
+val smoothing = params.double("smoothing")
+val currentLevel = state.getOrPut("level") { baseLevel } as Double
+val target = state.getOrPut("target") { baseLevel } as Double
+
+// Update target periodically
+val ticksSince = (state.getOrPut("ticks") { 0 } as Int) + 1
+state["ticks"] = ticksSince
+if (ticksSince > 3) {
+    state["target"] = baseLevel + (Math.random() - 0.5) * 80
+    state["ticks"] = 0
+}
+
+val newLevel = currentLevel + (target - currentLevel) * (1.0 - smoothing)
+state["level"] = newLevel
+FxOutput.Slider(newLevel.toInt().coerceIn(0, 255).toUByte())
+```
+
+#### FxCompositeCalcScript (COMPOSITE)
+
+For effects that produce multiple output types simultaneously:
+
+```kotlin
+// Provided: phase (Double), context (EffectContext), params (TypedParams)
+// Return: Map<FxOutputType, FxOutput> (last expression)
+
+val intensity = if (phase < 0.1) 255 else ((1.0 - phase) * 255).toInt()
+mapOf(
+    FxOutputType.SLIDER to FxOutput.Slider(intensity.coerceIn(0, 255).toUByte()),
+    FxOutputType.COLOUR to FxOutput.Colour(
+        blendExtendedColours(params.colour("flashColour"), params.colour("decayColour"), phase)
+    ),
+)
+```
+
+### ScriptEffectAdapter
+
+`ScriptEffectAdapter` bridges compiled scripts to the `Effect`/`StatefulEffect`/
+`CompositeEffect` interfaces. It:
+
+1. Compiles the script body using the appropriate base class
+2. Caches compiled results by content hash
+3. On `calculate()`: creates `TypedParams` from raw params + schema, evaluates script
+4. For stateful: maintains a `MutableMap<String, Any>` per instance
+5. For composite: evaluates and returns the output map
+
+### FX Definitions REST API
+
+```
+GET    /api/rest/fx/library                → List all available effects
+GET    /api/rest/fx/definitions/{id}       → Full definition including script
+POST   /api/rest/fx/definitions            → Create new definition
+PUT    /api/rest/fx/definitions/{id}       → Update (recompiles on save)
+DELETE /api/rest/fx/definitions/{id}       → Delete (non-builtin only)
+POST   /api/rest/fx/definitions/{id}/compile → Compile check
+POST   /api/rest/fx/definitions/{id}/run   → Compile and register (live test)
+```
+
 ## Blend Modes
 
 How effect output combines with fixture's base value:
@@ -297,49 +558,55 @@ interface FxTargetable {
 }
 ```
 
-## Script Integration
+## Script Types
 
-### Available in Scripts
+Two script types provide focused API surfaces for different tasks:
 
-Scripts have access to:
-- `fxEngine` - The FX engine instance
-- `masterClock` - Quick access to clock
-- `bpm` - Current BPM value
-- `setBpm(bpm)` - Set tempo
-- `tapTempo()` - Tap for tempo
+| Type | Base Class | Purpose |
+|------|-----------|---------|
+| `GENERAL` | `LightingScript` | Full-power: DMX, fixtures, FX, scenes, coroutines |
+| `FX_APPLICATION` | `FxApplicationScript` | Apply effects to fixtures/groups (implicit engine) |
 
-### Extension Functions
+FX effect definitions are **not** a script type — they are managed as `fx_definitions`
+with dedicated calculate-only script base classes (`FxCalcScript`, `FxStatefulCalcScript`,
+`FxCompositeCalcScript`). See [FX Definitions](#fx-definitions) above.
+
+### FX_APPLICATION Scripts
+
+Apply effects with implicit `fxEngine` — no need to pass the engine to every call.
 
 ```kotlin
-// Apply to fixtures via traits
-fixture.applyDimmerFx(fxEngine, SineWave(), FxTiming(BeatDivision.HALF))
-fixture.applyColourFx(fxEngine, RainbowCycle(), FxTiming(BeatDivision.ONE_BAR))
-fixture.applyPositionFx(fxEngine, Circle(), FxTiming(BeatDivision.TWO_BARS))
+val wash = fixture<HexFixture>("front-wash-1")
+val movers = group<MovingHead>("movers")
 
-// DSL builder
+wash.fx {
+    dimmer(SineWave(), BeatDivision.HALF)
+    colour(ColourCycle(), BeatDivision.ONE_BAR)
+}
+
+movers.fx {
+    dimmer(Pulse(), BeatDivision.QUARTER, distribution = DistributionStrategy.CENTER_OUT)
+    colour(RainbowCycle(), BeatDivision.TWO_BAR, distribution = DistributionStrategy.LINEAR)
+}
+
+setBpm(128.0)
+```
+
+### GENERAL Scripts (LightingScript)
+
+Full-power scripts with explicit `fxEngine` parameter:
+
+```kotlin
+fixture.applyDimmerFx(fxEngine, SineWave(), FxTiming(BeatDivision.HALF))
 fixture.fx(fxEngine) {
     dimmer(Pulse(), BeatDivision.QUARTER)
     colour(ColourCycle.PRIMARY, BeatDivision.WHOLE)
 }
-
-// Clear effects
 fixture.clearFx(fxEngine)
-```
 
-### Chase Example (Group-Level Targeting)
-
-```kotlin
-// Chase effect across fixture group - single FxInstance with distribution
+// Group with distribution
 val group = fixtures.group<HexFixture>("front-wash")
-val effectId = group.applyDimmerFx(
-    fxEngine,
-    Pulse(min = 0u, max = 255u),
-    timing = FxTiming(BeatDivision.QUARTER),
-    distribution = DistributionStrategy.LINEAR  // Auto phase offsets
-)
-
-// Query effects for this group
-val activeEffects = fxEngine.getEffectsForGroup("front-wash")
+group.applyDimmerFx(fxEngine, Pulse(), distribution = DistributionStrategy.LINEAR)
 ```
 
 ## Group Effect Processing
@@ -575,8 +842,14 @@ The `beatSync` message enables the frontend to synchronize a local beat visualiz
 | `dmx/TickerState.kt` | Curve-aware interpolation |
 | `fx/MasterClock.kt` | Global tempo management |
 | `fx/BeatDivision.kt` | Timing constants |
-| `fx/Effect.kt` | Effect interface and FxOutput types |
-| `fx/FxInstance.kt` | Running effect state, distributionStrategy, ElementMode, stepTiming |
+| `fx/Effect.kt` | Effect, StatefulEffect, CompositeEffect interfaces, FxOutput types |
+| `fx/FxRegistry.kt` | Unified effect registry, EffectRegistration, ParameterInfo, EffectTypeInfo |
+| `fx/FxFileLoader.kt` | Loads and parses .fx.kts files from resources |
+| `fx/TypedParams.kt` | Typed parameter accessor for FX scripts |
+| `fx/ScriptEffectAdapter.kt` | Bridges compiled FX scripts to Effect interfaces |
+| `fx/FxScriptCompiler.kt` | Compiles and caches FX calculate scripts |
+| `fx/EffectParamUtils.kt` | Parameter parsing utilities (parseExtendedColour, toUByteParam, etc.) |
+| `fx/FxInstance.kt` | Running effect state, distributionStrategy, ElementMode, compositeTargets |
 | `fx/FxTarget.kt` | Fixture/group property targeting, FxTargetRef |
 | `fx/FxTargetable.kt` | Common interface for Fixture and FixtureGroup |
 | `fx/FxEngine.kt` | Effect processing loop, group expansion |
@@ -586,12 +859,19 @@ The `beatSync` message enables the frontend to synchronize a local beat visualiz
 | `fx/effects/DimmerEffects.kt` | Slider effect implementations |
 | `fx/effects/ColourEffects.kt` | Color effect implementations |
 | `fx/effects/PositionEffects.kt` | Position effect implementations |
+| `fx/effects/CompositeEffects.kt` | Composite effect implementations (LightningStrike) |
 | `fixture/trait/WithPosition.kt` | Position trait for moving heads |
 | `fixture/trait/WithDimmer.kt` | Dimmer trait |
 | `fixture/trait/WithColour.kt` | Colour trait |
 | `fixture/trait/WithUv.kt` | UV trait |
 | `fixture/group/GroupExtensions.kt` | Group property extensions |
+| `scripts/ScriptType.kt` | Script type enum (GENERAL, FX_APPLICATION) |
+| `scripts/scriptDef.kt` | LightingScript base class (GENERAL scripts) |
+| `scripts/fxCalcScriptDef.kt` | FxCalcScript, FxStatefulCalcScript, FxCompositeCalcScript base classes |
+| `scripts/fxApplicationScriptDef.kt` | FxApplicationScript base class (effect application) |
+| `models/fxDefinitions.kt` | Exposed DAO for fx_definitions table |
 | `routes/lightFx.kt` | FX REST API endpoints |
+| `routes/fxDefinitions.kt` | FX definitions CRUD API endpoints |
 | `routes/lightGroups.kt` | Group REST API endpoints |
 | `plugins/Sockets.kt` | WebSocket message handlers |
 
@@ -651,9 +931,9 @@ See `docs/cues-engineering.md` for full cue system documentation.
 
 ## Future Considerations
 
-1. **Effect Stacking**: Multiple effects on same property with priority/mixing
-2. **Effect Presets**: Saved effect configurations
-3. **MIDI Clock Sync**: Accept external MIDI clock as tempo source
-4. **Beat Detection**: Auto-detect BPM from audio input
-5. **Effect Modulation**: Effects that modulate other effects' parameters
-6. **Custom Distribution Functions**: User-defined distribution curves via scripts
+1. **MIDI Clock Sync**: Accept external MIDI clock as tempo source
+2. **Beat Detection**: Auto-detect BPM from audio input
+3. **Effect Modulation**: Effects that modulate other effects' parameters
+4. **Custom Distribution Functions**: User-defined distribution curves via scripts
+5. **Scene/Chase Retirement**: Replace remaining scene/chase functionality with FX cues and script-based show running
+6. **Show Running Scripts**: FX_APPLICATION scripts for cue-triggered show automation (making FX Cues and Stacks more powerful without increasing UX complexity)

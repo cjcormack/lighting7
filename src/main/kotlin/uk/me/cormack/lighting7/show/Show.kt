@@ -10,15 +10,13 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fx.CueStackManager
-import uk.me.cormack.lighting7.fx.FxEngine
-import uk.me.cormack.lighting7.fx.MasterClock
+import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.grpc.*
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.scriptSettings.IntValue
 import uk.me.cormack.lighting7.scriptSettings.ScriptSetting
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingValue
-import uk.me.cormack.lighting7.scripts.LightingScript
+import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
 import java.security.MessageDigest
@@ -43,6 +41,17 @@ class Show(
     val runLoopDelay: Long,
 ) {
     val fixtures = Fixtures()
+    val fxScriptCompiler = FxScriptCompiler()
+    val fxRegistry = FxRegistry().apply {
+        // Load built-in effects from .fx.kts resource files
+        val fileLoader = FxFileLoader(fxScriptCompiler)
+        val loaded = fileLoader.loadBuiltInEffects(this)
+        if (loaded == 0) {
+            // Fallback to hardcoded registrations if no .fx.kts files found
+            println("FxFileLoader loaded 0 effects, falling back to registerBuiltInEffects()")
+            registerBuiltInEffects()
+        }
+    }
     val fxEngine = FxEngine(fixtures, MasterClock())
     val cueStackManager = CueStackManager(fxEngine)
     val parkManager = ParkManager(state.database, project.id.value)
@@ -166,12 +175,12 @@ class Show(
         }
     }
 
-    fun script(scriptName: String, literalScript: String, settings: List<ScriptSetting<*>>): Script {
-        val scriptKey = "$scriptName-${literalScript.cacheKey()}"
+    fun script(scriptName: String, literalScript: String, settings: List<ScriptSetting<*>>, scriptType: ScriptType = ScriptType.GENERAL): Script {
+        val scriptKey = "$scriptName-$scriptType-${literalScript.cacheKey()}"
 
         return scriptsLock.run {
             scripts.getOrPut(scriptKey) {
-                Script(this@Show, scriptName, literalScript, settings)
+                Script(this@Show, scriptName, literalScript, settings, scriptType)
             }
         }
     }
@@ -188,6 +197,8 @@ class Show(
         val scriptBody: String,
         val scriptSettings: List<ScriptSetting<*>>,
         val sceneSettingsValues: Map<String, ScriptSettingValue>,
+        val scriptType: ScriptType = ScriptType.GENERAL,
+        val scriptId: Int? = null,
     )
 
     fun runScene(id: Int): ScriptResult {
@@ -216,21 +227,24 @@ class Show(
                 scene.script.name,
                 scene.script.script,
                 scene.script.settings?.list.orEmpty(),
-                scene.settingsValues.orEmpty()
+                scene.settingsValues.orEmpty(),
+                scene.script.scriptType,
+                scene.script.id.value,
             )
 
             Pair(scene, scriptData)
         }
 
-        val (_, scriptName, scriptBody, scriptSettings, sceneSettingsValues) = scriptData
+        val (_, scriptName, scriptBody, scriptSettings, sceneSettingsValues, scriptType, dbScriptId) = scriptData
 
-        val script = script(scriptName, scriptBody, scriptSettings)
+        val script = script(scriptName, scriptBody, scriptSettings, scriptType)
         val scriptRunner = ScriptRunner(
             this,
             script,
             scene,
             sceneIsActive = fixtures.isSceneActive(id),
             settingsValues = sceneSettingsValues,
+            scriptId = dbScriptId,
         )
 
         return scriptRunner
@@ -272,24 +286,25 @@ class Show(
             }.firstOrNull()
         } ?: return null
 
-        val script = script(scriptName, scriptData.script, scriptData.settings?.list.orEmpty())
+        val script = script(scriptName, scriptData.script, scriptData.settings?.list.orEmpty(), scriptData.scriptType)
 
         val scriptRunner = ScriptRunner(
             this,
             script,
             step = step,
+            scriptId = scriptData.id.value,
         )
 
         return scriptRunner.result()
     }
 
-    fun compileLiteralScript(literalScript: String, scriptSettings: List<ScriptSetting<*>>): ScriptResult {
-        return script("", literalScript, scriptSettings).compileStatus
+    fun compileLiteralScript(literalScript: String, scriptSettings: List<ScriptSetting<*>>, scriptType: ScriptType = ScriptType.GENERAL): ScriptResult {
+        return script("", literalScript, scriptSettings, scriptType).compileStatus
     }
 
-    fun runLiteralScript(literalScript: String, scriptSettings: List<ScriptSetting<*>>, scriptName: String = "", step: Int = 0): ScriptResult {
-        val script = script(scriptName, literalScript, scriptSettings)
-        val scriptRunner = ScriptRunner(this, script, step = step)
+    fun runLiteralScript(literalScript: String, scriptSettings: List<ScriptSetting<*>>, scriptName: String = "", step: Int = 0, scriptType: ScriptType = ScriptType.GENERAL, scriptId: Int? = null): ScriptResult {
+        val script = script(scriptName, literalScript, scriptSettings, scriptType)
+        val scriptRunner = ScriptRunner(this, script, step = step, scriptId = scriptId)
 
         return scriptRunner.result()
     }
@@ -320,18 +335,50 @@ class Show(
         val scriptName: String,
         val literalScript: String,
         val settings: List<ScriptSetting<*>>,
+        val scriptType: ScriptType = ScriptType.GENERAL,
     ) {
         val compiledResult: ResultWithDiagnostics<CompiledScript>
         val compileStatus: ScriptResult
 
         init {
-            val expandedScript = """
-                |runBlocking {
-                |${literalScript}
-                |}
-            """.trimMargin("|")
+            // GENERAL scripts get wrapped in runBlocking for coroutine support.
+            // FX scripts run as-is — they configure effects, not orchestrate coroutines.
+            val expandedScript = when (scriptType) {
+                ScriptType.GENERAL -> """
+                    |runBlocking {
+                    |${literalScript}
+                    |}
+                """.trimMargin("|")
+                ScriptType.FX_DEFINITION, ScriptType.FX_APPLICATION -> literalScript
+                // FX_CALC types: wrap in lambda (same as FxScriptCompiler)
+                ScriptType.FX_CALC -> """
+                    |val calculateFn: (Double, uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams) -> uk.me.cormack.lighting7.fx.FxOutput = { phase, context, params ->
+                    |${literalScript}
+                    |}
+                    |calculateFn
+                """.trimMargin("|")
+                ScriptType.FX_CALC_STATEFUL -> """
+                    |val calculateFn: (uk.me.cormack.lighting7.fx.MasterClock.ClockTick, Long, uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams, MutableMap<String, Any>) -> uk.me.cormack.lighting7.fx.FxOutput = { tick, deltaMs, context, params, state ->
+                    |${literalScript}
+                    |}
+                    |calculateFn
+                """.trimMargin("|")
+                ScriptType.FX_CALC_COMPOSITE -> """
+                    |val calculateFn: (Double, uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams) -> Map<uk.me.cormack.lighting7.fx.FxOutputType, uk.me.cormack.lighting7.fx.FxOutput> = { phase, context, params ->
+                    |${literalScript}
+                    |}
+                    |calculateFn
+                """.trimMargin("|")
+            }
 
-            val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<LightingScript>()
+            val compilationConfiguration = when (scriptType) {
+                ScriptType.GENERAL -> createJvmCompilationConfigurationFromTemplate<LightingScript>()
+                ScriptType.FX_DEFINITION -> createJvmCompilationConfigurationFromTemplate<FxDefinitionScript>()
+                ScriptType.FX_APPLICATION -> createJvmCompilationConfigurationFromTemplate<FxApplicationScript>()
+                ScriptType.FX_CALC -> createJvmCompilationConfigurationFromTemplate<FxCalcScript>()
+                ScriptType.FX_CALC_STATEFUL -> createJvmCompilationConfigurationFromTemplate<FxStatefulCalcScript>()
+                ScriptType.FX_CALC_COMPOSITE -> createJvmCompilationConfigurationFromTemplate<FxCompositeCalcScript>()
+            }
 
             val (compiledResult, compileStatus) = runBlocking {
                 val compiledResult = BasicJvmScriptingHost().compiler(expandedScript.toScriptSource(), compilationConfiguration)
@@ -350,7 +397,8 @@ class Show(
         val scene: DaoScene? = null,
         step: Int = 0,
         sceneIsActive: Boolean = false,
-        settingsValues: Map<String, ScriptSettingValue> = emptyMap()
+        settingsValues: Map<String, ScriptSettingValue> = emptyMap(),
+        scriptId: Int? = null,
     ) {
         var result: ScriptResult? = null
         val job: Job
@@ -369,16 +417,9 @@ class Show(
             val compiledResult = script.compiledResult
             val compiledScript = compiledResult.valueOrThrow()
 
-            val transaction = ControllerTransaction(show.fixtures.controllers)
-            val fixturesWithTransaction = show.fixtures.withTransaction(transaction)
-
             val settings = script.settings.associate {
                 (it.defaultValue as IntValue).int.toUInt()
                 it.name to (settingsValues[it.name] ?: it.defaultValue)
-            }
-
-            if (scene != null && scene.mode == Mode.CHASE) {
-                show.fixtures.recordChaseStart(scene.id.value)
             }
 
             val currentTrack = show.currentTrackLock.read {
@@ -386,41 +427,109 @@ class Show(
             }
 
             job = CoroutineScope(show.runnerPool).launch {
-                val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
-                    providedProperties(Pair("show", show))
-                    providedProperties(Pair("fixtures", fixturesWithTransaction))
-                    providedProperties(Pair("fxEngine", show.fxEngine))
-                    providedProperties(Pair("scriptName", script.scriptName))
-                    providedProperties(Pair("step", step))
-                    providedProperties(Pair("sceneName", scene?.name ?: ""))
-                    providedProperties(Pair("sceneIsActive", sceneIsActive))
-                    providedProperties(Pair("settings", settings))
-                    providedProperties(Pair("coroutineScope", this@launch))
-                    providedProperties(Pair("currentTrack", currentTrack))
-                })
+                when (script.scriptType) {
+                    ScriptType.GENERAL -> {
+                        // Full-power: DMX transaction, all properties, scene recording
+                        val transaction = ControllerTransaction(show.fixtures.controllers)
+                        val fixturesWithTransaction = show.fixtures.withTransaction(transaction)
 
-                val actualChannelChanges = transaction.apply()
+                        if (scene != null && scene.mode == Mode.CHASE) {
+                            show.fixtures.recordChaseStart(scene.id.value)
+                        }
 
-                val channelChanges = if (fixturesWithTransaction.customChangedChannels != null) {
-                    fixturesWithTransaction.customChangedChannels
-                } else {
-                    actualChannelChanges
-                }
+                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                            providedProperties(Pair("show", show))
+                            providedProperties(Pair("fixtures", fixturesWithTransaction))
+                            providedProperties(Pair("fxEngine", show.fxEngine))
+                            providedProperties(Pair("scriptName", script.scriptName))
+                            providedProperties(Pair("step", step))
+                            providedProperties(Pair("sceneName", scene?.name ?: ""))
+                            providedProperties(Pair("sceneIsActive", sceneIsActive))
+                            providedProperties(Pair("settings", settings))
+                            providedProperties(Pair("coroutineScope", this@launch))
+                            providedProperties(Pair("currentTrack", currentTrack))
+                        })
 
-                if (scene != null) {
-                    when (scene.mode) {
-                        Mode.SCENE -> {
-                            if (channelChanges != null) {
-                                show.fixtures.recordScene(scene.id.value, channelChanges)
+                        val actualChannelChanges = transaction.apply()
+
+                        val channelChanges = if (fixturesWithTransaction.customChangedChannels != null) {
+                            fixturesWithTransaction.customChangedChannels
+                        } else {
+                            actualChannelChanges
+                        }
+
+                        if (scene != null) {
+                            when (scene.mode) {
+                                Mode.SCENE -> {
+                                    if (channelChanges != null) {
+                                        show.fixtures.recordScene(scene.id.value, channelChanges)
+                                    }
+                                }
+                                Mode.CHASE -> {
+                                    show.fixtures.recordChaseStop(scene.id.value)
+                                }
                             }
                         }
-                        Mode.CHASE -> {
-                            show.fixtures.recordChaseStop(scene.id.value)
-                        }
+
+                        result = ScriptResult(compiledResult, runResult, channelChanges)
+                    }
+
+                    ScriptType.FX_DEFINITION -> {
+                        // Minimal: just show, scriptName, settings, scriptId
+                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                            providedProperties(Pair("show", show))
+                            providedProperties(Pair("scriptName", script.scriptName))
+                            providedProperties(Pair("settings", settings))
+                            providedProperties(Pair("scriptId", scriptId))
+                        })
+
+                        result = ScriptResult(compiledResult, runResult, null)
+                    }
+
+                    ScriptType.FX_APPLICATION -> {
+                        // FX engine + fixtures, no DMX transaction
+                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                            providedProperties(Pair("show", show))
+                            providedProperties(Pair("fxEngine", show.fxEngine))
+                            providedProperties(Pair("scriptName", script.scriptName))
+                            providedProperties(Pair("step", step))
+                            providedProperties(Pair("settings", settings))
+                            providedProperties(Pair("currentTrack", currentTrack))
+                        })
+
+                        result = ScriptResult(compiledResult, runResult, null)
+                    }
+
+                    ScriptType.FX_CALC -> {
+                        // Evaluate with dummy values to test the lambda extraction
+                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                            providedProperties(Pair("phase", 0.5))
+                            providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
+                            providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))
+                        })
+                        result = ScriptResult(compiledResult, runResult, null)
+                    }
+
+                    ScriptType.FX_CALC_STATEFUL -> {
+                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                            providedProperties(Pair("tick", uk.me.cormack.lighting7.fx.MasterClock.ClockTick(0L, 0L, 0, 0.0, 0L)))
+                            providedProperties(Pair("deltaMs", 0L))
+                            providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
+                            providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))
+                            providedProperties(Pair("state", mutableMapOf<String, Any>()))
+                        })
+                        result = ScriptResult(compiledResult, runResult, null)
+                    }
+
+                    ScriptType.FX_CALC_COMPOSITE -> {
+                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                            providedProperties(Pair("phase", 0.5))
+                            providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
+                            providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))
+                        })
+                        result = ScriptResult(compiledResult, runResult, null)
                     }
                 }
-
-                result = ScriptResult(compiledResult, runResult, channelChanges)
             }
 
             if (scene != null) {

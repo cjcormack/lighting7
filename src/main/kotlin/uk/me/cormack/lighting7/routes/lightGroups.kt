@@ -394,7 +394,7 @@ private fun applyGroupEffect(
     request: AddGroupFxRequest
 ): Long {
     val engine = state.show.fxEngine
-    val effect = createEffectFromTypeAndParams(
+    val effect = state.show.fxRegistry.createEffect(
         request.effectType,
         request.parameters,
         paletteSupplier = engine::getPalette,

@@ -11,13 +11,10 @@ import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.effects.*
 import uk.me.cormack.lighting7.state.State
-import java.awt.Color
 
 /**
  * REST API routes for FX (effects) control.
@@ -123,7 +120,7 @@ internal fun Route.routeApiRestFx(state: State) {
                 val newEffect = if (request.effectType != null || request.parameters != null) {
                     val effectType = request.effectType ?: existing.effect.name.replace(" ", "")
                     val params = request.parameters ?: existing.effect.parameters
-                    createEffectFromTypeAndParams(
+                    state.show.fxRegistry.createEffect(
                         effectType, params,
                         paletteSupplier = engine::getPalette,
                         paletteVersionSupplier = { engine.paletteVersion },
@@ -181,7 +178,7 @@ internal fun Route.routeApiRestFx(state: State) {
 
         // Effect library - list available effect types
         get<EffectLibrary> {
-            call.respond(effectLibrary)
+            call.respond(state.show.fxRegistry.getLibrary())
         }
     }
 }
@@ -312,22 +309,6 @@ data class EffectDto(
     val cueId: Int? = null,
 )
 
-@Serializable
-data class EffectTypeInfo(
-    val name: String,
-    val category: String,
-    val outputType: String,
-    val parameters: List<ParameterInfo>,
-    val compatibleProperties: List<String>
-)
-
-@Serializable
-data class ParameterInfo(
-    val name: String,
-    val type: String,
-    val defaultValue: String,
-    val description: String = ""
-)
 
 // Helper functions
 
@@ -393,7 +374,7 @@ private fun createTargetFromRequest(request: AddEffectRequest, state: State): Fx
 
 private fun createEffectFromRequest(request: AddEffectRequest, state: State): Effect {
     val engine = state.show.fxEngine
-    return createEffectFromTypeAndParams(
+    return state.show.fxRegistry.createEffect(
         request.effectType,
         request.parameters,
         paletteSupplier = engine::getPalette,
@@ -401,412 +382,7 @@ private fun createEffectFromRequest(request: AddEffectRequest, state: State): Ef
     )
 }
 
-private fun String.toUByteOrNull(): UByte? = toIntOrNull()?.coerceIn(0, 255)?.toUByte()
-
-internal fun parseColor(colorString: String): Color {
-    return parseExtendedColour(colorString).color
-}
-
-/**
- * Parse a colour string into an [ExtendedColour].
- *
- * Supported formats:
- * - Named colours: "red", "green", "blue", "yellow", "cyan", "magenta", "orange", "pink", "white", "black"
- * - Hex: "#FF0000", "FF0000", "#F00"
- * - Extended: "#ff0000;w128;a64;uv200" (semicolons separate optional W/A/UV channels)
- */
-internal fun parseExtendedColour(colorString: String): ExtendedColour {
-    // Split on semicolons to separate RGB from extended channels
-    val parts = colorString.split(";")
-    val rgbPart = parts[0].trim()
-
-    val baseColor = when (rgbPart.lowercase()) {
-        "red" -> Color.RED
-        "green" -> Color.GREEN
-        "blue" -> Color.BLUE
-        "yellow" -> Color.YELLOW
-        "cyan" -> Color.CYAN
-        "magenta" -> Color.MAGENTA
-        "orange" -> Color.ORANGE
-        "pink" -> Color.PINK
-        "white" -> Color.WHITE
-        "black" -> Color.BLACK
-        else -> {
-            // Try parsing as hex (e.g., "#FF0000", "FF0000", "#F00")
-            val hex = rgbPart.removePrefix("#")
-            when (hex.length) {
-                6 -> Color(hex.toInt(16))
-                3 -> {
-                    val r = hex.substring(0, 1).toInt(16)
-                    val g = hex.substring(1, 2).toInt(16)
-                    val b = hex.substring(2, 3).toInt(16)
-                    Color(r * 17, g * 17, b * 17)
-                }
-                else -> Color.WHITE
-            }
-        }
-    }
-
-    // Parse extended channels from remaining parts (e.g., "w128", "a64", "uv200")
-    var white: UByte = 0u
-    var amber: UByte = 0u
-    var uv: UByte = 0u
-
-    for (i in 1 until parts.size) {
-        val part = parts[i].trim().lowercase()
-        when {
-            part.startsWith("uv") -> uv = part.removePrefix("uv").toIntOrNull()?.coerceIn(0, 255)?.toUByte() ?: 0u
-            part.startsWith("w") -> white = part.removePrefix("w").toIntOrNull()?.coerceIn(0, 255)?.toUByte() ?: 0u
-            part.startsWith("a") -> amber = part.removePrefix("a").toIntOrNull()?.coerceIn(0, 255)?.toUByte() ?: 0u
-        }
-    }
-
-    return ExtendedColour(baseColor, white, amber, uv)
-}
-
-private fun String.toEasingCurveOrNull(): EasingCurve? = try {
-    EasingCurve.valueOf(this.uppercase())
-} catch (_: IllegalArgumentException) {
-    null
-}
-
-/**
- * Shared effect creation function used by both fixture and group FX routes.
- * Supports the union of all effect types and aliases.
- *
- * @param paletteSupplier Optional supplier for the current palette colours. When provided
- *   and a colour effect's parameters contain palette references (e.g., "P1", "P2"),
- *   a palette-aware wrapper is returned that resolves colours at calculate-time.
- * @param paletteVersionSupplier Optional supplier for the palette version counter,
- *   used by palette-aware wrappers to cache resolved colours.
- */
-internal fun createEffectFromTypeAndParams(
-    effectType: String,
-    params: Map<String, String>,
-    paletteSupplier: (() -> List<ExtendedColour>)? = null,
-    paletteVersionSupplier: (() -> Long)? = null,
-): Effect {
-    val usePalette = paletteSupplier != null && paletteVersionSupplier != null
-
-    return when (effectType.lowercase().replace(" ", "")) {
-        // Dimmer effects
-        "sinewave", "sine_wave", "sine" -> SineWave(
-            min = params["min"]?.toUByteOrNull() ?: 0u,
-            max = params["max"]?.toUByteOrNull() ?: 255u
-        )
-        "rampup", "ramp_up" -> RampUp(
-            min = params["min"]?.toUByteOrNull() ?: 0u,
-            max = params["max"]?.toUByteOrNull() ?: 255u,
-            curve = params["curve"]?.toEasingCurveOrNull() ?: EasingCurve.LINEAR
-        )
-        "rampdown", "ramp_down" -> RampDown(
-            min = params["min"]?.toUByteOrNull() ?: 0u,
-            max = params["max"]?.toUByteOrNull() ?: 255u,
-            curve = params["curve"]?.toEasingCurveOrNull() ?: EasingCurve.LINEAR
-        )
-        "triangle" -> Triangle(
-            min = params["min"]?.toUByteOrNull() ?: 0u,
-            max = params["max"]?.toUByteOrNull() ?: 255u,
-            curve = params["curve"]?.toEasingCurveOrNull() ?: EasingCurve.LINEAR
-        )
-        "pulse" -> Pulse(
-            min = params["min"]?.toUByteOrNull() ?: 0u,
-            max = params["max"]?.toUByteOrNull() ?: 255u,
-            attackRatio = params["attackRatio"]?.toDoubleOrNull() ?: 0.1,
-            holdRatio = params["holdRatio"]?.toDoubleOrNull() ?: 0.3,
-            curve = params["curve"]?.toEasingCurveOrNull() ?: EasingCurve.QUAD_OUT
-        )
-        "squarewave", "square_wave", "square" -> SquareWave(
-            min = params["min"]?.toUByteOrNull() ?: 0u,
-            max = params["max"]?.toUByteOrNull() ?: 255u,
-            dutyCycle = params["dutyCycle"]?.toDoubleOrNull() ?: 0.5
-        )
-        "strobe" -> Strobe(
-            offValue = params["offValue"]?.toUByteOrNull() ?: 0u,
-            onValue = params["onValue"]?.toUByteOrNull() ?: 255u,
-            onRatio = params["onRatio"]?.toDoubleOrNull() ?: 0.1
-        )
-        "flicker" -> Flicker(
-            min = params["min"]?.toUByteOrNull() ?: 100u,
-            max = params["max"]?.toUByteOrNull() ?: 255u
-        )
-        "breathe" -> Breathe(
-            min = params["min"]?.toUByteOrNull() ?: 0u,
-            max = params["max"]?.toUByteOrNull() ?: 255u
-        )
-        "staticvalue", "static_value" -> StaticValue(
-            value = params["value"]?.toUByteOrNull() ?: 255u
-        )
-
-        // Colour effects
-        "colourcycle", "colour_cycle", "colorcycle", "color_cycle" -> {
-            val colourStrings = params["colours"]?.split(",")?.map { it.trim() } ?: listOf("P1", "P2", "P3")
-            val fadeRatio = params["fadeRatio"]?.toDoubleOrNull() ?: 0.5
-            if (usePalette) {
-                PaletteColourCycle(colourStrings, fadeRatio, paletteSupplier!!, paletteVersionSupplier!!)
-            } else {
-                ColourCycle(colours = colourStrings.map { parseExtendedColour(it) }, fadeRatio = fadeRatio)
-            }
-        }
-        "rainbowcycle", "rainbow_cycle", "rainbow" -> RainbowCycle(
-            saturation = params["saturation"]?.toFloatOrNull() ?: 1.0f,
-            brightness = params["brightness"]?.toFloatOrNull() ?: 1.0f
-        )
-        "colourstrobe", "colour_strobe", "colorstrobe", "color_strobe" -> {
-            val onColourStr = params["onColour"] ?: "P1"
-            val offColourStr = params["offColour"] ?: "black"
-            val onRatio = params["onRatio"]?.toDoubleOrNull() ?: 0.1
-            if (usePalette) {
-                PaletteColourStrobe(onColourStr, offColourStr, onRatio, paletteSupplier!!, paletteVersionSupplier!!)
-            } else {
-                ColourStrobe(
-                    onColour = parseExtendedColour(onColourStr),
-                    offColour = parseExtendedColour(offColourStr),
-                    onRatio = onRatio
-                )
-            }
-        }
-        "colourpulse", "colour_pulse", "colorpulse", "color_pulse" -> {
-            val colourAStr = params["colourA"] ?: "black"
-            val colourBStr = params["colourB"] ?: "P1"
-            if (usePalette) {
-                PaletteColourPulse(colourAStr, colourBStr, paletteSupplier!!, paletteVersionSupplier!!)
-            } else {
-                ColourPulse(
-                    colourA = parseExtendedColour(colourAStr),
-                    colourB = parseExtendedColour(colourBStr)
-                )
-            }
-        }
-        "colourfade", "colour_fade", "colorfade", "color_fade" -> {
-            val fromColourStr = params["fromColour"] ?: "P1"
-            val toColourStr = params["toColour"] ?: "P2"
-            val pingPong = params["pingPong"]?.toBooleanStrictOrNull() ?: true
-            if (usePalette) {
-                PaletteColourFade(fromColourStr, toColourStr, pingPong, paletteSupplier!!, paletteVersionSupplier!!)
-            } else {
-                ColourFade(
-                    fromColour = parseExtendedColour(fromColourStr),
-                    toColour = parseExtendedColour(toColourStr),
-                    pingPong = pingPong
-                )
-            }
-        }
-        "colourflicker", "colour_flicker", "colorflicker", "color_flicker" -> {
-            val baseColourStr = params["baseColour"] ?: "P1"
-            val variation = params["variation"]?.toIntOrNull() ?: 50
-            if (usePalette) {
-                PaletteColourFlicker(baseColourStr, variation, paletteSupplier!!, paletteVersionSupplier!!)
-            } else {
-                ColourFlicker(
-                    baseColour = parseExtendedColour(baseColourStr),
-                    variation = variation
-                )
-            }
-        }
-        "staticcolour", "static_colour", "staticcolor", "static_color" -> {
-            val colourStr = params["colour"] ?: "P1"
-            if (usePalette) {
-                PaletteStaticColour(colourStr, paletteSupplier!!, paletteVersionSupplier!!)
-            } else {
-                StaticColour(colour = parseExtendedColour(colourStr))
-            }
-        }
-
-        // Position effects
-        "circle" -> Circle(
-            panCenter = params["panCenter"]?.toUByteOrNull() ?: 128u,
-            tiltCenter = params["tiltCenter"]?.toUByteOrNull() ?: 128u,
-            panRadius = params["panRadius"]?.toUByteOrNull() ?: 64u,
-            tiltRadius = params["tiltRadius"]?.toUByteOrNull() ?: 64u
-        )
-        "figure8", "figure_8" -> Figure8(
-            panCenter = params["panCenter"]?.toUByteOrNull() ?: 128u,
-            tiltCenter = params["tiltCenter"]?.toUByteOrNull() ?: 128u,
-            panRadius = params["panRadius"]?.toUByteOrNull() ?: 64u,
-            tiltRadius = params["tiltRadius"]?.toUByteOrNull() ?: 32u
-        )
-        "sweep" -> Sweep(
-            startPan = params["startPan"]?.toUByteOrNull() ?: 64u,
-            startTilt = params["startTilt"]?.toUByteOrNull() ?: 128u,
-            endPan = params["endPan"]?.toUByteOrNull() ?: 192u,
-            endTilt = params["endTilt"]?.toUByteOrNull() ?: 128u,
-            curve = params["curve"]?.toEasingCurveOrNull() ?: EasingCurve.SINE_IN_OUT,
-            pingPong = params["pingPong"]?.toBooleanStrictOrNull() ?: true
-        )
-        "pansweep", "pan_sweep" -> PanSweep(
-            startPan = params["startPan"]?.toUByteOrNull() ?: 64u,
-            endPan = params["endPan"]?.toUByteOrNull() ?: 192u,
-            tilt = params["tilt"]?.toUByteOrNull() ?: 128u,
-            curve = params["curve"]?.toEasingCurveOrNull() ?: EasingCurve.SINE_IN_OUT,
-            pingPong = params["pingPong"]?.toBooleanStrictOrNull() ?: true
-        )
-        "tiltsweep", "tilt_sweep" -> TiltSweep(
-            startTilt = params["startTilt"]?.toUByteOrNull() ?: 64u,
-            endTilt = params["endTilt"]?.toUByteOrNull() ?: 192u,
-            pan = params["pan"]?.toUByteOrNull() ?: 128u,
-            curve = params["curve"]?.toEasingCurveOrNull() ?: EasingCurve.SINE_IN_OUT,
-            pingPong = params["pingPong"]?.toBooleanStrictOrNull() ?: true
-        )
-        "randomposition", "random_position" -> RandomPosition(
-            panCenter = params["panCenter"]?.toUByteOrNull() ?: 128u,
-            tiltCenter = params["tiltCenter"]?.toUByteOrNull() ?: 128u,
-            panRange = params["panRange"]?.toUByteOrNull() ?: 64u,
-            tiltRange = params["tiltRange"]?.toUByteOrNull() ?: 64u
-        )
-        "staticposition", "static_position" -> StaticPosition(
-            pan = params["pan"]?.toUByteOrNull() ?: 128u,
-            tilt = params["tilt"]?.toUByteOrNull() ?: 128u
-        )
-
-        // Setting effects
-        "staticsetting", "static_setting" -> StaticSetting(
-            level = params["level"]?.toUByteOrNull() ?: 0u
-        )
-
-        else -> throw IllegalArgumentException("Unknown effect type: $effectType")
-    }
-}
-
-// Effect library - available effects and their parameters
-private val dimmerProperties = listOf("dimmer", "uv")
-private val controlsSliderProperties = listOf("slider")
-private val colourProperties = listOf("rgbColour")
-private val positionProperties = listOf("position")
-private val settingProperties = listOf("setting")
-
-internal val effectLibrary = listOf(
-    // Dimmer effects
-    EffectTypeInfo("SineWave", "dimmer", "SLIDER", listOf(
-        ParameterInfo("min", "ubyte", "0", "Minimum value"),
-        ParameterInfo("max", "ubyte", "255", "Maximum value")
-    ), dimmerProperties),
-    EffectTypeInfo("RampUp", "dimmer", "SLIDER", listOf(
-        ParameterInfo("min", "ubyte", "0", "Minimum value"),
-        ParameterInfo("max", "ubyte", "255", "Maximum value"),
-        ParameterInfo("curve", "easingCurve", "LINEAR", "Easing curve")
-    ), dimmerProperties),
-    EffectTypeInfo("RampDown", "dimmer", "SLIDER", listOf(
-        ParameterInfo("min", "ubyte", "0", "Minimum value"),
-        ParameterInfo("max", "ubyte", "255", "Maximum value"),
-        ParameterInfo("curve", "easingCurve", "LINEAR", "Easing curve")
-    ), dimmerProperties),
-    EffectTypeInfo("Triangle", "dimmer", "SLIDER", listOf(
-        ParameterInfo("min", "ubyte", "0", "Minimum value"),
-        ParameterInfo("max", "ubyte", "255", "Maximum value"),
-        ParameterInfo("curve", "easingCurve", "LINEAR", "Easing curve")
-    ), dimmerProperties),
-    EffectTypeInfo("Pulse", "dimmer", "SLIDER", listOf(
-        ParameterInfo("min", "ubyte", "0", "Minimum value"),
-        ParameterInfo("max", "ubyte", "255", "Maximum value"),
-        ParameterInfo("attackRatio", "double", "0.1", "Attack portion of cycle"),
-        ParameterInfo("holdRatio", "double", "0.3", "Hold portion of cycle"),
-        ParameterInfo("curve", "easingCurve", "QUAD_OUT", "Easing curve")
-    ), dimmerProperties),
-    EffectTypeInfo("SquareWave", "dimmer", "SLIDER", listOf(
-        ParameterInfo("min", "ubyte", "0", "Minimum value"),
-        ParameterInfo("max", "ubyte", "255", "Maximum value"),
-        ParameterInfo("dutyCycle", "double", "0.5", "On time ratio")
-    ), dimmerProperties),
-    EffectTypeInfo("Strobe", "dimmer", "SLIDER", listOf(
-        ParameterInfo("offValue", "ubyte", "0", "Value when off"),
-        ParameterInfo("onValue", "ubyte", "255", "Value when on"),
-        ParameterInfo("onRatio", "double", "0.1", "On time ratio")
-    ), dimmerProperties),
-    EffectTypeInfo("Flicker", "dimmer", "SLIDER", listOf(
-        ParameterInfo("min", "ubyte", "100", "Minimum value"),
-        ParameterInfo("max", "ubyte", "255", "Maximum value")
-    ), dimmerProperties),
-    EffectTypeInfo("Breathe", "dimmer", "SLIDER", listOf(
-        ParameterInfo("min", "ubyte", "0", "Minimum value"),
-        ParameterInfo("max", "ubyte", "255", "Maximum value")
-    ), dimmerProperties),
-    EffectTypeInfo("StaticValue", "dimmer", "SLIDER", listOf(
-        ParameterInfo("value", "ubyte", "255", "Fixed value")
-    ), dimmerProperties),
-
-    // Colour effects
-    EffectTypeInfo("ColourCycle", "colour", "COLOUR", listOf(
-        ParameterInfo("colours", "colourList", "P1,P2,P3", "Comma-separated colours"),
-        ParameterInfo("fadeRatio", "double", "0.5", "Crossfade ratio")
-    ), colourProperties),
-    EffectTypeInfo("RainbowCycle", "colour", "COLOUR", listOf(
-        ParameterInfo("saturation", "float", "1.0", "Colour saturation"),
-        ParameterInfo("brightness", "float", "1.0", "Colour brightness")
-    ), colourProperties),
-    EffectTypeInfo("ColourStrobe", "colour", "COLOUR", listOf(
-        ParameterInfo("onColour", "colour", "P1", "Flash colour"),
-        ParameterInfo("offColour", "colour", "black", "Off colour"),
-        ParameterInfo("onRatio", "double", "0.1", "On time ratio")
-    ), colourProperties),
-    EffectTypeInfo("ColourPulse", "colour", "COLOUR", listOf(
-        ParameterInfo("colourA", "colour", "black", "First colour"),
-        ParameterInfo("colourB", "colour", "P1", "Second colour")
-    ), colourProperties),
-    EffectTypeInfo("ColourFade", "colour", "COLOUR", listOf(
-        ParameterInfo("fromColour", "colour", "P1", "Starting colour"),
-        ParameterInfo("toColour", "colour", "P2", "Ending colour"),
-        ParameterInfo("pingPong", "boolean", "true", "Fade back to start")
-    ), colourProperties),
-    EffectTypeInfo("ColourFlicker", "colour", "COLOUR", listOf(
-        ParameterInfo("baseColour", "colour", "P1", "Base colour"),
-        ParameterInfo("variation", "int", "50", "Maximum RGB variation")
-    ), colourProperties),
-    EffectTypeInfo("StaticColour", "colour", "COLOUR", listOf(
-        ParameterInfo("colour", "colour", "P1", "Fixed colour")
-    ), colourProperties),
-
-    // Position effects
-    EffectTypeInfo("Circle", "position", "POSITION", listOf(
-        ParameterInfo("panCenter", "ubyte", "128", "Pan center position"),
-        ParameterInfo("tiltCenter", "ubyte", "128", "Tilt center position"),
-        ParameterInfo("panRadius", "ubyte", "64", "Pan radius"),
-        ParameterInfo("tiltRadius", "ubyte", "64", "Tilt radius")
-    ), positionProperties),
-    EffectTypeInfo("Figure8", "position", "POSITION", listOf(
-        ParameterInfo("panCenter", "ubyte", "128", "Pan center position"),
-        ParameterInfo("tiltCenter", "ubyte", "128", "Tilt center position"),
-        ParameterInfo("panRadius", "ubyte", "64", "Pan radius"),
-        ParameterInfo("tiltRadius", "ubyte", "32", "Tilt radius")
-    ), positionProperties),
-    EffectTypeInfo("Sweep", "position", "POSITION", listOf(
-        ParameterInfo("startPan", "ubyte", "64", "Start pan position"),
-        ParameterInfo("startTilt", "ubyte", "128", "Start tilt position"),
-        ParameterInfo("endPan", "ubyte", "192", "End pan position"),
-        ParameterInfo("endTilt", "ubyte", "128", "End tilt position"),
-        ParameterInfo("curve", "easingCurve", "SINE_IN_OUT", "Easing curve"),
-        ParameterInfo("pingPong", "boolean", "true", "Return to start")
-    ), positionProperties),
-    EffectTypeInfo("PanSweep", "position", "POSITION", listOf(
-        ParameterInfo("startPan", "ubyte", "64", "Start pan position"),
-        ParameterInfo("endPan", "ubyte", "192", "End pan position"),
-        ParameterInfo("tilt", "ubyte", "128", "Fixed tilt position"),
-        ParameterInfo("curve", "easingCurve", "SINE_IN_OUT", "Easing curve"),
-        ParameterInfo("pingPong", "boolean", "true", "Return to start")
-    ), positionProperties),
-    EffectTypeInfo("TiltSweep", "position", "POSITION", listOf(
-        ParameterInfo("startTilt", "ubyte", "64", "Start tilt position"),
-        ParameterInfo("endTilt", "ubyte", "192", "End tilt position"),
-        ParameterInfo("pan", "ubyte", "128", "Fixed pan position"),
-        ParameterInfo("curve", "easingCurve", "SINE_IN_OUT", "Easing curve"),
-        ParameterInfo("pingPong", "boolean", "true", "Return to start")
-    ), positionProperties),
-    EffectTypeInfo("RandomPosition", "position", "POSITION", listOf(
-        ParameterInfo("panCenter", "ubyte", "128", "Pan center position"),
-        ParameterInfo("tiltCenter", "ubyte", "128", "Tilt center position"),
-        ParameterInfo("panRange", "ubyte", "64", "Pan range"),
-        ParameterInfo("tiltRange", "ubyte", "64", "Tilt range")
-    ), positionProperties),
-    EffectTypeInfo("StaticPosition", "position", "POSITION", listOf(
-        ParameterInfo("pan", "ubyte", "128", "Fixed pan position"),
-        ParameterInfo("tilt", "ubyte", "128", "Fixed tilt position")
-    ), positionProperties),
-
-    // Controls effects (settings and non-dimmer sliders)
-    EffectTypeInfo("StaticValue", "controls", "SLIDER", listOf(
-        ParameterInfo("value", "ubyte", "255", "Fixed value")
-    ), controlsSliderProperties),
-    EffectTypeInfo("StaticSetting", "controls", "SLIDER", listOf(
-        ParameterInfo("level", "ubyte", "0", "DMX level for the setting")
-    ), settingProperties)
-)
+// Effect creation, parse helpers, and the effect library have moved to the fx package:
+// - fx/EffectParamUtils.kt (parseExtendedColour, parseColor, toUByteParam, toEasingCurveParam)
+// - fx/FxRegistry.kt (FxRegistry.createEffect replaces createEffectFromTypeAndParams)
+// - fx/BuiltInEffects.kt (registerBuiltInEffects replaces effectLibrary)

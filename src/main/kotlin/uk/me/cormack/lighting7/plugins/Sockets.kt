@@ -22,7 +22,7 @@ import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.models.DaoScene
-import uk.me.cormack.lighting7.routes.parseExtendedColour
+import uk.me.cormack.lighting7.fx.parseExtendedColour
 import uk.me.cormack.lighting7.routes.SceneDetails
 import uk.me.cormack.lighting7.routes.details
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingValue

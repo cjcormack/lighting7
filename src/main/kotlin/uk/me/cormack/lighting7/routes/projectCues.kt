@@ -866,7 +866,7 @@ internal fun createInstanceFromPresetForCue(
     cueId: Int,
 ): FxInstance {
     val engine = state.show.fxEngine
-    val effect = createEffectFromTypeAndParams(
+    val effect = state.show.fxRegistry.createEffect(
         presetEffect.effectType,
         presetEffect.parameters,
         paletteSupplier = { engine.getCuePalette(cueId) ?: engine.getPalette() },

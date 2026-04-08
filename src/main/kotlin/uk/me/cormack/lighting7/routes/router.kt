@@ -19,6 +19,7 @@ fun Application.configureRouting(state: State) {
             routeApiRestProjects(state)
             routeApiRestLightsFixtures(state)
             routeApiRestFx(state)
+            routeApiRestFxDefinitions(state)
             routeApiRestGroups(state)
             routeApiRestAiChat(state)
         }

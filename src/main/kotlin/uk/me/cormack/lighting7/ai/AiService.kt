@@ -8,7 +8,6 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.detectCapabilities
-import uk.me.cormack.lighting7.routes.effectLibrary
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -259,7 +258,7 @@ class AiService(
 
         // Effect library summary
         sb.appendLine("## Effect Library (for create_fx_preset)")
-        for (effect in effectLibrary) {
+        for (effect in state.show.fxRegistry.getLibrary()) {
             val params = effect.parameters.joinToString(", ") { "${it.name}:${it.type}=${it.defaultValue}" }
             sb.appendLine("- **${effect.name}** (category=${effect.category}, output=${effect.outputType}) params: $params")
         }

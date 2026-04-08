@@ -205,6 +205,15 @@ class FxInstance(
     var elementFilter: ElementFilter = ElementFilter.ALL
 
     /**
+     * Additional targets for [CompositeEffect]s that produce multiple output types.
+     *
+     * Maps each secondary [FxOutputType] to its [FxTarget]. The primary output type
+     * uses the main [target] field. When null, the effect is treated as a single-output
+     * effect even if it implements [CompositeEffect].
+     */
+    var compositeTargets: Map<FxOutputType, FxTarget>? = null
+
+    /**
      * Whether this effect targets a group (vs individual fixture).
      */
     val isGroupEffect: Boolean get() = target.isGroupTarget

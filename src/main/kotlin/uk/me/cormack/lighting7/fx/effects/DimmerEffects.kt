@@ -1,10 +1,7 @@
 package uk.me.cormack.lighting7.fx.effects
 
 import uk.me.cormack.lighting7.dmx.EasingCurve
-import uk.me.cormack.lighting7.fx.Effect
-import uk.me.cormack.lighting7.fx.EffectContext
-import uk.me.cormack.lighting7.fx.FxOutput
-import uk.me.cormack.lighting7.fx.FxOutputType
+import uk.me.cormack.lighting7.fx.*
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -319,5 +316,70 @@ data class StaticSetting(
 
     override fun calculate(phase: Double, context: EffectContext): FxOutput {
         return FxOutput.Slider(level)
+    }
+}
+
+/**
+ * Candle/fire flicker effect using stateful random walk.
+ *
+ * Unlike [Flicker] which is deterministic from phase, this effect maintains
+ * internal state that drifts organically over time, producing more natural
+ * candle-like flickering with smooth transitions and occasional dips.
+ *
+ * @param baseLevel The average brightness level (default 180)
+ * @param min Minimum value floor (default 100)
+ * @param max Maximum value ceiling (default 230)
+ * @param smoothing Smoothing factor — higher values give slower, smoother drift (default 0.85)
+ */
+class CandleFlicker(
+    val baseLevel: UByte = 180u,
+    val min: UByte = 100u,
+    val max: UByte = 230u,
+    smoothing: Double = 0.85,
+) : StatefulEffect {
+    /** Smoothing factor, clamped to [0.0, 0.99] to prevent full lock or instability */
+    val smoothing: Double = smoothing.coerceIn(0.0, 0.99)
+    override val name = "Candle Flicker"
+    override val outputType = FxOutputType.SLIDER
+    override val parameters get() = mapOf(
+        "baseLevel" to baseLevel.toString(),
+        "min" to min.toString(),
+        "max" to max.toString(),
+        "smoothing" to smoothing.toString(),
+    )
+
+    private var currentLevel = baseLevel.toDouble()
+    private var target = baseLevel.toDouble()
+    private var ticksSinceTargetChange = 0
+
+    override fun initialize() {
+        currentLevel = baseLevel.toDouble()
+        target = baseLevel.toDouble()
+        ticksSinceTargetChange = 0
+    }
+
+    override fun calculateStateful(
+        tick: MasterClock.ClockTick,
+        deltaMs: Long,
+        context: EffectContext,
+    ): FxOutput {
+        ticksSinceTargetChange++
+
+        // Periodically pick a new target using deterministic pseudo-random from tick number
+        // Change target every ~3-8 ticks for organic feel
+        val changeThreshold = 3 + ((sin(tick.tickNumber * 0.37) + 1.0) * 2.5).toInt()
+        if (ticksSinceTargetChange >= changeThreshold) {
+            ticksSinceTargetChange = 0
+            // Pseudo-random target biased toward baseLevel
+            val noise = sin(tick.tickNumber * 127.0) * kotlin.math.cos(tick.tickNumber * 311.0)
+            val range = max.toInt() - min.toInt()
+            target = baseLevel.toDouble() + noise * range * 0.4
+        }
+
+        // Smooth toward target
+        currentLevel = currentLevel * smoothing + target * (1.0 - smoothing)
+
+        val value = currentLevel.toInt().coerceIn(min.toInt(), max.toInt()).toUByte()
+        return FxOutput.Slider(value)
     }
 }

@@ -66,7 +66,7 @@ class State(val config: ApplicationConfig) {
                 DaoProjects, DaoScripts, DaoScenes, DaoFxPresets, DaoCueStacks, DaoCues,
                 DaoCuePresetApplications, DaoCueAdHocEffects, DaoAiConversations, DaoCueSlots,
                 DaoUniverseConfigs, DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
-                DaoParkedChannels,
+                DaoParkedChannels, DaoFxDefinitions,
             )
 
             // Migration: drop old unique index on (project_id, name) since we now use (project_id, fixture_type, name)

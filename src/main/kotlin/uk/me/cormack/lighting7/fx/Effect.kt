@@ -1,6 +1,5 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.routes.parseExtendedColour
 import java.awt.Color
 
 /**
@@ -45,6 +44,18 @@ data class EffectContext(
         /** Default context for a single fixture (no distribution). */
         val SINGLE = EffectContext(groupSize = 1, memberIndex = 0)
     }
+}
+
+/**
+ * Determines how an effect's script is evaluated and what provided properties it receives.
+ */
+enum class EffectMode {
+    /** Pure function of phase: receives (phase, context, params) → FxOutput */
+    STANDARD,
+    /** Maintains state across ticks: receives (tick, deltaMs, context, params, state) → FxOutput */
+    STATEFUL,
+    /** Produces multiple output types: receives (phase, context, params) → Map<FxOutputType, FxOutput> */
+    COMPOSITE,
 }
 
 /**
@@ -107,6 +118,114 @@ interface Effect {
      * @return The calculated output value
      */
     fun calculate(phase: Double, context: EffectContext = EffectContext.SINGLE): FxOutput
+}
+
+/**
+ * A stateful effect that receives tick-level timing instead of just a phase.
+ *
+ * Unlike [Effect], which is a pure function of phase, stateful effects can maintain
+ * internal state that evolves over time. This enables non-periodic effects like
+ * candle flicker, organic drift, or effects that accumulate state.
+ *
+ * The FX engine detects this interface and calls [calculateStateful] instead of
+ * [calculate] during processing.
+ *
+ * Example:
+ * ```
+ * class CandleFlicker(...) : StatefulEffect {
+ *     private var currentLevel = 180.0
+ *
+ *     override fun calculateStateful(tick, deltaMs, context): FxOutput {
+ *         currentLevel += (Random.nextGaussian() * 15)
+ *         return FxOutput.Slider(currentLevel.coerceIn(100.0, 220.0).toUByte())
+ *     }
+ * }
+ * ```
+ */
+interface StatefulEffect : Effect {
+    /**
+     * Called once when the effect is first added to the engine.
+     * Use this to set up initial state.
+     */
+    fun initialize() {}
+
+    /**
+     * Calculate the output value using tick-level timing.
+     *
+     * @param tick The current clock tick with beat position and timestamp
+     * @param deltaMs Milliseconds since the last tick (0 on first tick)
+     * @param context Information about the distribution group (size, member index)
+     * @return The calculated output value
+     */
+    fun calculateStateful(
+        tick: MasterClock.ClockTick,
+        deltaMs: Long,
+        context: EffectContext = EffectContext.SINGLE,
+    ): FxOutput
+
+    /**
+     * Fallback for code that calls [calculate] directly.
+     * Returns a neutral value for the output type since stateful effects
+     * require tick information to produce meaningful output.
+     */
+    override fun calculate(phase: Double, context: EffectContext): FxOutput {
+        return when (outputType) {
+            FxOutputType.SLIDER -> FxOutput.Slider(0u)
+            FxOutputType.COLOUR -> FxOutput.Colour(ExtendedColour.BLACK)
+            FxOutputType.POSITION -> FxOutput.Position(128u, 128u)
+        }
+    }
+}
+
+/**
+ * A composite effect that produces outputs for multiple property types simultaneously.
+ *
+ * Unlike [Effect], which targets a single output type, composite effects can coordinate
+ * multiple properties together (e.g., a lightning strike that controls dimmer + colour).
+ *
+ * The [outputType] should be set to the primary output type. The [outputTypes] set
+ * declares all output types this effect can produce.
+ *
+ * When applied via the FX engine, each output type is routed to its corresponding
+ * [FxTarget] stored in [FxInstance.compositeTargets].
+ *
+ * Example:
+ * ```
+ * class LightningStrike : CompositeEffect {
+ *     override val outputTypes = setOf(FxOutputType.SLIDER, FxOutputType.COLOUR)
+ *
+ *     override fun calculateComposite(phase: Double, context: EffectContext): Map<FxOutputType, FxOutput> {
+ *         val intensity = if (phase < 0.1) 255 else (255 * (1.0 - phase)).toInt()
+ *         return mapOf(
+ *             FxOutputType.SLIDER to FxOutput.Slider(intensity.toUByte()),
+ *             FxOutputType.COLOUR to FxOutput.Colour(blendExtendedColours(white, blue, phase))
+ *         )
+ *     }
+ * }
+ * ```
+ */
+interface CompositeEffect : Effect {
+    /** All output types this effect produces. */
+    val outputTypes: Set<FxOutputType>
+
+    /**
+     * Calculate outputs for all target property types.
+     *
+     * @param phase Position in the effect cycle, from 0.0 (start) to 1.0 (end)
+     * @param context Information about the distribution group (size, member index)
+     * @return Map of output type to calculated value
+     */
+    fun calculateComposite(
+        phase: Double,
+        context: EffectContext = EffectContext.SINGLE,
+    ): Map<FxOutputType, FxOutput>
+
+    /**
+     * Default implementation returns the primary output type from the composite map.
+     */
+    override fun calculate(phase: Double, context: EffectContext): FxOutput =
+        calculateComposite(phase, context)[outputType]
+            ?: error("CompositeEffect did not produce output for primary type $outputType")
 }
 
 /** Serialize a Color to a hex string (e.g., "#ff0000") */

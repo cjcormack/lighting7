@@ -26,21 +26,21 @@ fun main(argv: Array<String>) {
 
 fun Application.module() {
     val state = State(environment.config)
+
+    // Initialize the show before configuring routes.
+    // This compiles FX scripts and starts the show, which can be slow.
+    // Doing it here ensures the server doesn't accept HTTP requests until ready.
+    val show = state.initializeShow()
+    show.start()
+
     configureHTTP()
     configureSockets(state)
     configureRouting(state)
 
-    launch {
-        // Initialize the show through the project manager
-        // This finds or migrates the current project from the database
-        val show = state.initializeShow()
-        show.start()
-
-        GlobalScope.launch {
-            val port = 50051
-            val server = TrackServer(port, state.show)
-            server.start()
-            server.blockUntilShutdown()
-        }
+    GlobalScope.launch {
+        val port = 50051
+        val server = TrackServer(port, state.show)
+        server.start()
+        server.blockUntilShutdown()
     }
 }

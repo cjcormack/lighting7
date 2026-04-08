@@ -1,0 +1,37 @@
+# Built-in FX effect definitions
+# Each line is a path relative to the fx/ resource directory
+
+# Dimmer effects
+dimmer/SineWave.fx.kts
+dimmer/RampUp.fx.kts
+dimmer/RampDown.fx.kts
+dimmer/Triangle.fx.kts
+dimmer/Pulse.fx.kts
+dimmer/SquareWave.fx.kts
+dimmer/Strobe.fx.kts
+dimmer/Flicker.fx.kts
+dimmer/Breathe.fx.kts
+dimmer/CandleFlicker.fx.kts
+dimmer/StaticValue.fx.kts
+dimmer/StaticSetting.fx.kts
+
+# Colour effects
+colour/ColourCycle.fx.kts
+colour/RainbowCycle.fx.kts
+colour/ColourStrobe.fx.kts
+colour/ColourPulse.fx.kts
+colour/ColourFade.fx.kts
+colour/ColourFlicker.fx.kts
+colour/StaticColour.fx.kts
+
+# Position effects
+position/Circle.fx.kts
+position/Figure8.fx.kts
+position/Sweep.fx.kts
+position/PanSweep.fx.kts
+position/TiltSweep.fx.kts
+position/RandomPosition.fx.kts
+position/StaticPosition.fx.kts
+
+# Composite effects
+composite/LightningStrike.fx.kts

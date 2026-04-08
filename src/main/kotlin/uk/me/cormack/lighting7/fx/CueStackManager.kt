@@ -405,7 +405,7 @@ class CueStackManager(
         stackId: Int,
     ): FxInstance {
         val engine = state.show.fxEngine
-        val effect = createEffectFromTypeAndParams(
+        val effect = state.show.fxRegistry.createEffect(
             presetEffect.effectType,
             presetEffect.parameters,
             paletteSupplier = { engine.getStackPalette(stackId) ?: engine.getPalette() },

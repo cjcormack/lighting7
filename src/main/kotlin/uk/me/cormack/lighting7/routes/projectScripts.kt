@@ -19,6 +19,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.scriptSettings.ScriptSetting
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingList
+import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.show.ScriptResult
 import uk.me.cormack.lighting7.state.State
 import kotlin.script.experimental.api.ResultValue
@@ -67,6 +68,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
                 script = newScript.script
                 this.project = project
                 settings = ScriptSettingList(newScript.settings.orEmpty())
+                scriptType = try { ScriptType.valueOf(newScript.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
             }.toScriptDetails(isCurrentProject = true) // Only current project can create
         }
         call.respond(HttpStatusCode.Created, scriptDetails)
@@ -129,6 +131,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
             script.name = newScriptData.name
             script.script = newScriptData.script
             script.settings = ScriptSettingList(newScriptData.settings.orEmpty())
+            script.scriptType = try { ScriptType.valueOf(newScriptData.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
             script.toScriptDetails(isCurrentProject = true) // Only current project can update
         }
 
@@ -216,7 +219,8 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
         val literal = call.receive<ScriptLiteral>()
         var response: CompileResult? = null
         GlobalScope.launch {
-            response = state.show.compileLiteralScript(literal.script, literal.settings.orEmpty()).toCompileResult()
+            val scriptType = try { ScriptType.valueOf(literal.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
+            response = state.show.compileLiteralScript(literal.script, literal.settings.orEmpty(), scriptType).toCompileResult()
         }.join()
         call.respond(checkNotNull(response))
     }
@@ -240,7 +244,8 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
         val literal = call.receive<ScriptLiteral>()
         var response: RunResult? = null
         GlobalScope.launch {
-            response = state.show.runLiteralScript(literal.script, literal.settings.orEmpty()).toRunResult()
+            val scriptType = try { ScriptType.valueOf(literal.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
+            response = state.show.runLiteralScript(literal.script, literal.settings.orEmpty(), scriptType = scriptType, scriptId = literal.scriptId).toRunResult()
         }.join()
         call.respond(checkNotNull(response))
     }
@@ -328,10 +333,10 @@ data class CopyScriptResource(val parent: ProjectScriptsResource, val scriptId: 
 
 // DTOs
 @Serializable
-data class ScriptLiteral(val script: String, val settings: List<ScriptSetting<*>>? = null)
+data class ScriptLiteral(val script: String, val settings: List<ScriptSetting<*>>? = null, val scriptType: String = "GENERAL", val scriptId: Int? = null)
 
 @Serializable
-data class NewScript(val name: String, val script: String, val settings: List<ScriptSetting<*>>?)
+data class NewScript(val name: String, val script: String, val settings: List<ScriptSetting<*>>?, val scriptType: String = "GENERAL")
 
 @Serializable
 data class ScriptDetails(
@@ -339,6 +344,7 @@ data class ScriptDetails(
     val name: String,
     val script: String,
     val settings: List<ScriptSetting<*>>,
+    val scriptType: String = "GENERAL",
     val sceneNames: List<String>,
     val chaseNames: List<String>,
     val usedByProperties: List<String>,
@@ -366,7 +372,8 @@ data class CompileResult(val success: Boolean, val messages: List<ScriptRunMessa
 data class ScriptSummaryDto(
     val id: Int,
     val name: String,
-    val settingsCount: Int
+    val settingsCount: Int,
+    val scriptType: String = "GENERAL",
 )
 
 @Serializable
@@ -428,6 +435,7 @@ internal fun DaoScript.toScriptDetails(isCurrentProject: Boolean): ScriptDetails
         name = this.name,
         script = this.script,
         settings = this.settings?.list.orEmpty(),
+        scriptType = this.scriptType.name,
         sceneNames = sceneNames,
         chaseNames = chaseNames,
         usedByProperties = usedByProperties,

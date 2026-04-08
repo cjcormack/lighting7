@@ -7,12 +7,14 @@ import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.IntIdTable
 import org.jetbrains.exposed.sql.json.json
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingList
+import uk.me.cormack.lighting7.scripts.ScriptType
 
 object DaoScripts : IntIdTable("scripts") {
     val name = varchar("name", 255)
     val script = text("script")
     val project = reference("project_id", DaoProjects)
     val settings = json<ScriptSettingList>("settings", Json).nullable()
+    val scriptType = enumerationByName<ScriptType>("script_type", 50).default(ScriptType.GENERAL)
 
     init {
         uniqueIndex(project, name)
@@ -26,6 +28,7 @@ class DaoScript(id: EntityID<Int>) : IntEntity(id) {
     var script by DaoScripts.script
     var project by DaoProject referencedOn DaoScripts.project
     var settings by DaoScripts.settings
+    var scriptType by DaoScripts.scriptType
 
     val scenes by DaoScene referrersOn DaoScenes.script
 }

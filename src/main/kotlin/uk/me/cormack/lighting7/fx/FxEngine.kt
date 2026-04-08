@@ -39,6 +39,7 @@ class FxEngine(
 ) {
     private val nextEffectId = AtomicLong(0)
     private val activeEffects = ConcurrentHashMap<Long, FxInstance>()
+    @Volatile private var lastTickMs: Long = 0L
 
     private var processingJob: Job? = null
 
@@ -264,6 +265,9 @@ class FxEngine(
         val id = nextEffectId.incrementAndGet()
         effect.id = id
         effect.startedAtMs = System.currentTimeMillis()
+        if (effect.effect is StatefulEffect) {
+            (effect.effect as StatefulEffect).initialize()
+        }
         activeEffects[id] = effect
         emitStateUpdate()
         return id
@@ -501,6 +505,9 @@ class FxEngine(
     private fun processTick(tick: MasterClock.ClockTick) {
         if (activeEffects.isEmpty()) return
 
+        val deltaMs = if (lastTickMs > 0) tick.timestampMs - lastTickMs else 0L
+        lastTickMs = tick.timestampMs
+
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
 
@@ -516,9 +523,9 @@ class FxEngine(
 
             try {
                 if (effect.isGroupEffect) {
-                    processGroupEffect(tick, effect, fixturesWithTx)
+                    processGroupEffect(tick, effect, fixturesWithTx, deltaMs)
                 } else {
-                    processFixtureEffect(tick, effect, fixturesWithTx)
+                    processFixtureEffect(tick, effect, fixturesWithTx, deltaMs)
                 }
             } catch (e: Exception) {
                 // Log but don't crash the engine
@@ -527,6 +534,47 @@ class FxEngine(
         }
 
         transaction.apply()
+    }
+
+    /**
+     * Calculate the output for an effect, handling stateless, stateful, and composite effects.
+     *
+     * For [CompositeEffect]s with [FxInstance.compositeTargets], this also applies
+     * secondary outputs to their respective targets. The primary output is returned
+     * for the caller to apply to the primary target as usual.
+     */
+    private fun calculateEffectOutput(
+        effect: FxInstance,
+        tick: MasterClock.ClockTick,
+        deltaMs: Long,
+        phase: Double,
+        context: EffectContext,
+        fixturesWithTx: Fixtures.FixturesWithTransaction? = null,
+        fixtureKey: String? = null,
+    ): FxOutput {
+        // Composite effects produce multiple outputs
+        if (effect.effect is CompositeEffect && effect.compositeTargets != null) {
+            val outputs = (effect.effect as CompositeEffect).calculateComposite(phase, context)
+            // Apply secondary outputs to their targets
+            val secondaryTargets = effect.compositeTargets!!
+            for ((outputType, target) in secondaryTargets) {
+                val output = outputs[outputType]?.scaled(effect.intensityMultiplier) ?: continue
+                if (fixturesWithTx != null && fixtureKey != null) {
+                    target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
+                }
+            }
+            // Return the primary output
+            val primaryOutput = outputs[effect.effect.outputType] ?: effect.effect.calculate(phase, context)
+            return primaryOutput.scaled(effect.intensityMultiplier)
+        }
+
+        // Stateful effects
+        val raw = if (effect.effect is StatefulEffect) {
+            (effect.effect as StatefulEffect).calculateStateful(tick, deltaMs, context)
+        } else {
+            effect.effect.calculate(phase, context)
+        }
+        return raw.scaled(effect.intensityMultiplier)
     }
 
     /**
@@ -543,12 +591,21 @@ class FxEngine(
             if (!effect.isRunning) continue
 
             val keys = resolveEffectFixtureKeys(effect)
+
+            // Collect all targets: primary + composite secondary targets
+            val targets = buildList {
+                add(effect.target)
+                effect.compositeTargets?.values?.let { addAll(it) }
+            }
+
             for (key in keys) {
-                if (seen.add(PropertyKey(key, effect.target.propertyName))) {
-                    try {
-                        effect.target.applyNeutralValue(fixturesWithTx, key)
-                    } catch (e: Exception) {
-                        // Non-fatal — the effect application will also handle missing fixtures
+                for (target in targets) {
+                    if (seen.add(PropertyKey(key, target.propertyName))) {
+                        try {
+                            target.applyNeutralValue(fixturesWithTx, key)
+                        } catch (e: Exception) {
+                            // Non-fatal — the effect application will also handle missing fixtures
+                        }
                     }
                 }
             }
@@ -565,7 +622,8 @@ class FxEngine(
     private fun processFixtureEffect(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
-        fixturesWithTx: Fixtures.FixturesWithTransaction
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        deltaMs: Long = 0L,
     ) {
         val fixtureKey = effect.target.targetKey
         val fixture = try {
@@ -579,14 +637,13 @@ class FxEngine(
         if (effect.target.fixtureHasProperty(fixture)) {
             // Direct application to the parent fixture
             val effectPhase = effect.calculatePhase(tick, masterClock)
-            val output = effect.effect.calculate(effectPhase, EffectContext.SINGLE)
-                .scaled(effect.intensityMultiplier)
+            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE, fixturesWithTx, fixtureKey)
             effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
         } else if (fixture is MultiElementFixture<*>) {
             // Parent doesn't have the property — check if elements do
             val elements = fixture.elements
             if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
-                processMultiElementEffect(tick, effect, fixturesWithTx, elements)
+                processMultiElementEffect(tick, effect, fixturesWithTx, elements, deltaMs)
             }
         }
         // If neither parent nor elements have the property, silently skip
@@ -602,7 +659,8 @@ class FxEngine(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
-        elements: List<uk.me.cormack.lighting7.fixture.group.FixtureElement<*>>
+        elements: List<uk.me.cormack.lighting7.fixture.group.FixtureElement<*>>,
+        deltaMs: Long = 0L,
     ) {
         val filter = effect.elementFilter
         val elementCount = elements.size
@@ -633,8 +691,7 @@ class FxEngine(
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = effect.effect.calculate(memberPhase, context)
-                .scaled(effect.intensityMultiplier)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, element.elementKey)
             effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
         }
     }
@@ -655,7 +712,8 @@ class FxEngine(
     private fun processGroupEffect(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
-        fixturesWithTx: Fixtures.FixturesWithTransaction
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        deltaMs: Long = 0L,
     ) {
         val groupName = effect.target.targetKey
         val group = try {
@@ -682,8 +740,7 @@ class FxEngine(
                 )
                 val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
                 val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-                val output = effect.effect.calculate(memberPhase, context)
-                    .scaled(effect.intensityMultiplier)
+                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, member.key)
                 effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
             }
             return
@@ -703,13 +760,13 @@ class FxEngine(
                     } catch (_: Exception) { continue }
 
                     if (parentFixture is MultiElementFixture<*>) {
-                        processMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements)
+                        processMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements, deltaMs)
                     }
                 }
             }
             ElementMode.FLAT -> {
                 // Collect all elements across all fixtures into one flat list
-                processGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers)
+                processGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers, deltaMs)
             }
         }
     }
@@ -725,7 +782,8 @@ class FxEngine(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
-        allMembers: List<uk.me.cormack.lighting7.fixture.group.GroupMember<*>>
+        allMembers: List<uk.me.cormack.lighting7.fixture.group.GroupMember<*>>,
+        deltaMs: Long = 0L,
     ) {
         val filter = effect.elementFilter
 
@@ -773,8 +831,7 @@ class FxEngine(
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = effect.effect.calculate(memberPhase, context)
-                .scaled(effect.intensityMultiplier)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, flatElement.elementKey)
             effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
         }
     }
@@ -837,8 +894,15 @@ class FxEngine(
 
         val affectedProperties = mutableSetOf<AffectedProperty>()
         for (removed in removedEffects) {
+            // Collect all targets: primary + composite secondary targets
+            val targets = buildList {
+                add(removed.target)
+                removed.compositeTargets?.values?.let { addAll(it) }
+            }
             for (key in resolveEffectFixtureKeys(removed)) {
-                affectedProperties.add(AffectedProperty(key, removed.target))
+                for (target in targets) {
+                    affectedProperties.add(AffectedProperty(key, target))
+                }
             }
         }
 
