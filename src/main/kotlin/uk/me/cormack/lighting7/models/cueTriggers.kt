@@ -10,16 +10,15 @@ import org.jetbrains.exposed.dao.id.IntIdTable
 
 /**
  * When the trigger fires relative to the cue lifecycle.
+ * Timing (delay, interval, randomisation) is expressed via the timing fields,
+ * not the type — so ACTIVATION with delayMs set replaces the old DELAYED type,
+ * and ACTIVATION with intervalMs set replaces the old RECURRING type.
  */
 enum class TriggerType {
-    /** Fires immediately when the cue is activated */
+    /** Fires when the cue is activated (optionally delayed/recurring via timing fields) */
     ACTIVATION,
     /** Fires when the cue is deactivated (cleanup) */
     DEACTIVATION,
-    /** Fires after a delay from activation */
-    DELAYED,
-    /** Fires repeatedly at an interval (with optional randomisation) */
-    RECURRING,
 }
 
 // ─── DTO ────────────────────────────────────────────────────────────────

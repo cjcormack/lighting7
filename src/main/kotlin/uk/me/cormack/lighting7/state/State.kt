@@ -85,6 +85,9 @@ class State(val config: ApplicationConfig) {
 
             // Migration: convert APPLY_PRESET triggers to preset applications with timing
             migrateApplyPresetTriggers()
+
+            // Migration: collapse DELAYED/RECURRING trigger types into ACTIVATION with timing fields
+            migrateTriggerTypes()
         }
 
         return database
@@ -107,12 +110,13 @@ class State(val config: ApplicationConfig) {
  * Safe to run repeatedly — checks for the old columns before doing anything.
  */
 private fun Transaction.migrateApplyPresetTriggers() {
-    // Check if the old action_type column still exists
-    val hasActionType = try {
-        exec("SELECT action_type FROM cue_triggers LIMIT 0")
-        true
-    } catch (_: Exception) {
-        false
+    // Check if the old action_type column still exists via information_schema
+    var hasActionType = false
+    exec(
+        """SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'cue_triggers' AND column_name = 'action_type'"""
+    ) { rs ->
+        hasActionType = rs.next()
     }
 
     if (!hasActionType) return // already migrated
@@ -146,8 +150,14 @@ private fun Transaction.migrateApplyPresetTriggers() {
     }
 
     for (row in rows) {
-        if (row.presetId == null) continue // invalid, skip
-        if (row.triggerType == "DEACTIVATION") continue // drop — paradoxical for effects
+        if (row.presetId == null) {
+            logger.warn("Skipping APPLY_PRESET trigger id=${row.id} for cue=${row.cueId}: presetId is NULL")
+            continue
+        }
+        if (row.triggerType == "DEACTIVATION") {
+            logger.warn("Dropping APPLY_PRESET trigger id=${row.id} for cue=${row.cueId}: DEACTIVATION type is paradoxical for effects")
+            continue
+        }
 
         // Map trigger timing to preset application timing fields
         val delayMs: Long? = when (row.triggerType) {
@@ -163,7 +173,8 @@ private fun Transaction.migrateApplyPresetTriggers() {
             else -> null
         }
 
-        val targetsJson = row.targets ?: "[]"
+        // Escape single quotes in JSON to prevent SQL breakage
+        val targetsJson = (row.targets ?: "[]").replace("'", "''")
 
         exec(
             """INSERT INTO cue_preset_applications (cue_id, preset_id, targets, delay_ms, interval_ms, random_window_ms, sort_order)
@@ -187,4 +198,15 @@ private fun Transaction.migrateApplyPresetTriggers() {
     exec("DELETE FROM cue_triggers WHERE script_id IS NULL")
 
     logger.info("APPLY_PRESET trigger migration complete")
+}
+
+/**
+ * One-time migration: collapse DELAYED and RECURRING trigger types into ACTIVATION.
+ * The timing fields (delayMs, intervalMs, randomWindowMs) are already populated,
+ * so we just need to update the type enum value.
+ *
+ * Safe to run repeatedly — only updates rows that still have the old type values.
+ */
+private fun Transaction.migrateTriggerTypes() {
+    exec("UPDATE cue_triggers SET trigger_type = 'ACTIVATION' WHERE trigger_type IN ('DELAYED', 'RECURRING')")
 }

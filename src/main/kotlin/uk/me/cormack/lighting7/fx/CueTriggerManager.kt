@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.TogglePresetTarget
 import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
@@ -10,6 +11,8 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
+
+private val logger = LoggerFactory.getLogger("CueTriggerManager")
 
 /**
  * Manages the runtime lifecycle of cue triggers and timed effects.
@@ -113,39 +116,25 @@ class CueTriggerManager(
         for (trigger in triggers) {
             when (trigger.triggerType) {
                 "ACTIVATION" -> {
-                    try {
-                        executeScriptTrigger(trigger.scriptId, cueId, cueStackId, effectIds)
-                    } catch (e: Exception) {
-                        System.err.println("CueTriggerManager: Error executing ACTIVATION script trigger for cue $cueId: ${e.message}")
+                    // Check if this trigger has timing (delay/recurring)
+                    val hasTiming = (trigger.intervalMs != null && trigger.intervalMs > 0)
+                            || (trigger.delayMs != null && trigger.delayMs > 0)
+                    if (hasTiming) {
+                        val job = launchTimedAction(trigger.delayMs, trigger.intervalMs, trigger.randomWindowMs, scope) {
+                            executeScriptTrigger(trigger.scriptId, cueId, cueStackId, effectIds)
+                        }
+                        if (job != null) jobs.add(job)
+                    } else {
+                        // Immediate activation
+                        try {
+                            executeScriptTrigger(trigger.scriptId, cueId, cueStackId, effectIds)
+                        } catch (e: Exception) {
+                            logger.error("Error executing ACTIVATION script trigger for cue $cueId", e)
+                        }
                     }
                 }
                 "DEACTIVATION" -> {
                     // Stored above, no action now
-                }
-                "DELAYED" -> {
-                    val delayMs = trigger.delayMs ?: continue
-                    jobs.add(scope.launch {
-                        delay(delayMs)
-                        try {
-                            executeScriptTrigger(trigger.scriptId, cueId, cueStackId, effectIds)
-                        } catch (e: Exception) {
-                            System.err.println("CueTriggerManager: Error executing DELAYED script trigger for cue $cueId: ${e.message}")
-                        }
-                    })
-                }
-                "RECURRING" -> {
-                    val intervalMs = trigger.intervalMs ?: continue
-                    jobs.add(scope.launch {
-                        while (isActive) {
-                            val actualInterval = computeRandomisedInterval(intervalMs, trigger.randomWindowMs)
-                            delay(actualInterval)
-                            try {
-                                executeScriptTrigger(trigger.scriptId, cueId, cueStackId, effectIds)
-                            } catch (e: Exception) {
-                                System.err.println("CueTriggerManager: Error executing RECURRING script trigger for cue $cueId: ${e.message}")
-                            }
-                        }
-                    })
                 }
             }
         }
@@ -169,7 +158,7 @@ class CueTriggerManager(
             try {
                 executeScriptTrigger(trigger.scriptId, cueId, cueToStack[cueId], mutableListOf())
             } catch (e: Exception) {
-                System.err.println("CueTriggerManager: Error executing DEACTIVATION script trigger for cue $cueId: ${e.message}")
+                logger.error("Error executing DEACTIVATION script trigger for cue $cueId", e)
             }
         }
 
@@ -219,7 +208,7 @@ class CueTriggerManager(
                         val actualInterval = computeRandomisedInterval(intervalMs, randomWindowMs)
                         delay(actualInterval)
                         try { action() } catch (e: Exception) {
-                            System.err.println("CueTriggerManager: Error in recurring timed action: ${e.message}")
+                            logger.error("Error in recurring timed action", e)
                         }
                     }
                 }
@@ -229,7 +218,7 @@ class CueTriggerManager(
                 scope.launch {
                     delay(delayMs)
                     try { action() } catch (e: Exception) {
-                        System.err.println("CueTriggerManager: Error in delayed timed action: ${e.message}")
+                        logger.error("Error in delayed timed action", e)
                     }
                 }
             }

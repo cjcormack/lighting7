@@ -751,9 +751,19 @@ internal fun createCueChildren(
     }
     for (trigger in triggers) {
         val script = DaoScript.findById(trigger.scriptId) ?: continue
+        // Normalize legacy trigger types: DELAYED/RECURRING → ACTIVATION with timing fields
+        val normalizedType = when (trigger.triggerType) {
+            "DELAYED" -> TriggerType.ACTIVATION
+            "RECURRING" -> TriggerType.ACTIVATION
+            else -> try {
+                TriggerType.valueOf(trigger.triggerType)
+            } catch (_: IllegalArgumentException) {
+                throw IllegalArgumentException("Unknown trigger type: '${trigger.triggerType}'. Valid types: ${TriggerType.entries.joinToString()}")
+            }
+        }
         DaoCueTrigger.new {
             this.cue = cue
-            this.triggerType = TriggerType.valueOf(trigger.triggerType)
+            this.triggerType = normalizedType
             this.delayMs = trigger.delayMs
             this.intervalMs = trigger.intervalMs
             this.randomWindowMs = trigger.randomWindowMs
