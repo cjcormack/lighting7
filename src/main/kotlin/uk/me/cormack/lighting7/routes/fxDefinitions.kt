@@ -73,6 +73,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
                 isBuiltin = false
                 project = currentProject
                 defaultStepTiming = request.defaultStepTiming
+                timingSource = try { TimingSource.valueOf(request.timingSource) } catch (_: Exception) { TimingSource.BEAT }
             }
         }
 
@@ -118,6 +119,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             request.compatibleProperties?.let { def.compatibleProperties = it }
             request.script?.let { def.script = it }
             request.defaultStepTiming?.let { def.defaultStepTiming = it }
+            request.timingSource?.let { def.timingSource = try { TimingSource.valueOf(it) } catch (_: Exception) { TimingSource.BEAT } }
 
             def
         }
@@ -227,6 +229,7 @@ private fun registerUserEffect(state: State, definition: DaoFxDefinition): Regis
         val compatibleProperties: List<String>,
         val category: String,
         val defaultStepTiming: Boolean,
+        val timingSource: TimingSource,
         val dbId: Int,
     )
 
@@ -241,6 +244,7 @@ private fun registerUserEffect(state: State, definition: DaoFxDefinition): Regis
             compatibleProperties = definition.compatibleProperties,
             category = definition.category,
             defaultStepTiming = definition.defaultStepTiming,
+            timingSource = definition.timingSource,
             dbId = definition.id.value,
         )
     }
@@ -273,6 +277,7 @@ private fun registerUserEffect(state: State, definition: DaoFxDefinition): Regis
         sourceDefinitionId = snap.dbId,
         script = snap.script,
         defaultStepTiming = snap.defaultStepTiming,
+        timingSource = snap.timingSource,
         factory = factory,
     ))
 
@@ -294,6 +299,7 @@ data class FxDefinitionDto(
     val script: String,
     val isBuiltin: Boolean,
     val defaultStepTiming: Boolean,
+    val timingSource: String = "BEAT",
 )
 
 @Serializable
@@ -307,6 +313,7 @@ data class CreateFxDefinitionRequest(
     val compatibleProperties: List<String> = emptyList(),
     val script: String,
     val defaultStepTiming: Boolean = false,
+    val timingSource: String = "BEAT",
 )
 
 @Serializable
@@ -320,6 +327,7 @@ data class UpdateFxDefinitionRequest(
     val compatibleProperties: List<String>? = null,
     val script: String? = null,
     val defaultStepTiming: Boolean? = null,
+    val timingSource: String? = null,
 )
 
 @Serializable
@@ -354,4 +362,5 @@ internal fun DaoFxDefinition.toDto(): FxDefinitionDto = FxDefinitionDto(
     script = this.script,
     isBuiltin = this.isBuiltin,
     defaultStepTiming = this.defaultStepTiming,
+    timingSource = this.timingSource.name,
 )

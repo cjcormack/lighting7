@@ -47,6 +47,21 @@ data class EffectContext(
 }
 
 /**
+ * Determines the timing source for an effect.
+ *
+ * BEAT effects are synchronized to the Master Clock's BPM-based ticks (24 per beat).
+ * WALL_CLOCK effects run on a fixed-interval timer independent of BPM, suitable for
+ * ambient/atmospheric effects (candle flicker, fluorescent flicker, etc.) that should
+ * not be tied to the musical beat grid.
+ */
+enum class TimingSource {
+    /** Synchronized to the Master Clock's BPM-based ticks */
+    BEAT,
+    /** Fixed-interval wall-clock timer (independent of BPM) */
+    WALL_CLOCK,
+}
+
+/**
  * Determines how an effect's script is evaluated and what provided properties it receives.
  */
 enum class EffectMode {

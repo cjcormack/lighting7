@@ -72,7 +72,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     sortOrder = newCue.sortOrder ?: stack.cues.count().toInt()
                 }
             }
-            createCueChildren(cue, newCue.presetApplications, newCue.adHocEffects)
+            createCueChildren(cue, newCue.presetApplications, newCue.adHocEffects, newCue.triggers)
             cue.toCueDetails(isCurrentProject = true)
         }
         state.show.fixtures.cueListChanged()
@@ -133,7 +133,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
             // Replace children: delete existing, create new
             deleteCueChildren(cue)
-            createCueChildren(cue, updatedData.presetApplications, updatedData.adHocEffects)
+            createCueChildren(cue, updatedData.presetApplications, updatedData.adHocEffects, updatedData.triggers)
 
             cue.toCueDetails(isCurrentProject = true)
         }
@@ -225,6 +225,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     cue = newCue
                     preset = app.preset
                     targets = app.targets
+                    delayMs = app.delayMs
+                    intervalMs = app.intervalMs
+                    randomWindowMs = app.randomWindowMs
+                    sortOrder = app.sortOrder
                 }
             }
             for (effect in sourceCue.adHocEffects) {
@@ -243,6 +247,22 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     elementFilter = effect.elementFilter
                     stepTiming = effect.stepTiming
                     parameters = effect.parameters
+                    delayMs = effect.delayMs
+                    intervalMs = effect.intervalMs
+                    randomWindowMs = effect.randomWindowMs
+                    sortOrder = effect.sortOrder
+                }
+            }
+
+            for (trigger in sourceCue.triggers) {
+                DaoCueTrigger.new {
+                    cue = newCue
+                    triggerType = trigger.triggerType
+                    delayMs = trigger.delayMs
+                    intervalMs = trigger.intervalMs
+                    randomWindowMs = trigger.randomWindowMs
+                    script = trigger.script
+                    sortOrder = trigger.sortOrder
                 }
             }
 
@@ -297,13 +317,27 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 cueName = cue.name,
                 palette = cue.palette,
                 updateGlobalPalette = cue.updateGlobalPalette,
-                presetApplications = cue.presetApplications.map { app ->
+                presetApplications = cue.presetApplications.sortedBy { it.sortOrder }.map { app ->
                     CuePresetApplicationDto(
                         presetId = app.preset.id.value,
                         targets = app.targets,
+                        delayMs = app.delayMs,
+                        intervalMs = app.intervalMs,
+                        randomWindowMs = app.randomWindowMs,
+                        sortOrder = app.sortOrder,
                     )
                 },
-                adHocEffects = cue.adHocEffects.map { it.toDto() },
+                adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+                triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
+                    CueTriggerDto(
+                        triggerType = trigger.triggerType.name,
+                        delayMs = trigger.delayMs,
+                        intervalMs = trigger.intervalMs,
+                        randomWindowMs = trigger.randomWindowMs,
+                        scriptId = trigger.script.id.value,
+                        sortOrder = trigger.sortOrder,
+                    )
+                },
             )
             Pair(cueData, stackId)
         }
@@ -328,7 +362,36 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     cueName = stackResult.cueName,
                 ))
             } else {
+                // Deactivate old triggers/timed effects for this cue before re-applying
+                state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
+
                 val result = applyCue(state, cueData, replaceAll = replaceAll)
+
+                // Activate timed effects (delayed/recurring presets and ad-hoc effects)
+                val timedPresets = cueData.presetApplications.filter { it.delayMs != null || it.intervalMs != null }
+                val timedAdHoc = cueData.adHocEffects.filter { it.delayMs != null || it.intervalMs != null }
+                if (timedPresets.isNotEmpty() || timedAdHoc.isNotEmpty()) {
+                    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+                    state.cueTriggerManager.activateTimedEffectsForCue(
+                        cueId = resource.cueId,
+                        cueStackId = null,
+                        timedPresets = timedPresets,
+                        timedAdHocEffects = timedAdHoc,
+                        scope = kotlinx.coroutines.GlobalScope,
+                    )
+                }
+
+                // Activate script triggers after effects are applied
+                if (cueData.triggers.isNotEmpty()) {
+                    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+                    state.cueTriggerManager.activateTriggersForCue(
+                        cueId = resource.cueId,
+                        cueStackId = null,
+                        triggers = cueData.triggers,
+                        scope = kotlinx.coroutines.GlobalScope,
+                    )
+                }
+
                 call.respond(result)
             }
         } catch (e: Exception) {
@@ -359,9 +422,11 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         val manager = state.show.cueStackManager
         if (cueStackId != null && manager.isStackActive(cueStackId)) {
             // Cue is in an active stack — deactivate the entire stack
-            val removedCount = manager.deactivateStack(cueStackId)
+            // (CueStackManager integration handles trigger deactivation)
+            val removedCount = manager.deactivateStack(cueStackId, state)
             call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
         } else {
+            state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
             val removedCount = state.show.fxEngine.removeEffectsForCue(resource.cueId)
             call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
         }
@@ -430,6 +495,7 @@ data class NewCue(
     val palette: List<String> = emptyList(),
     val presetApplications: List<CuePresetApplicationDto> = emptyList(),
     val adHocEffects: List<CueAdHocEffectDto> = emptyList(),
+    val triggers: List<CueTriggerDto> = emptyList(),
     val updateGlobalPalette: Boolean = false,
     val cueStackId: Int? = null,
     val sortOrder: Int? = null,
@@ -446,6 +512,7 @@ data class CueDetails(
     val palette: List<String>,
     val presetApplications: List<CuePresetApplicationDetail>,
     val adHocEffects: List<CueAdHocEffectDto>,
+    val triggers: List<CueTriggerDetailDto> = emptyList(),
     val updateGlobalPalette: Boolean = false,
     val cueStackId: Int? = null,
     val cueStackName: String? = null,
@@ -463,6 +530,10 @@ data class CuePresetApplicationDetail(
     val presetId: Int,
     val presetName: String?,
     val targets: List<CueTargetDto>,
+    val delayMs: Long? = null,
+    val intervalMs: Long? = null,
+    val randomWindowMs: Long? = null,
+    val sortOrder: Int = 0,
 )
 
 @Serializable
@@ -507,6 +578,7 @@ internal data class CueApplyData(
     val updateGlobalPalette: Boolean,
     val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
+    val triggers: List<CueTriggerDto> = emptyList(),
     val autoAdvance: Boolean = false,
     val autoAdvanceDelayMs: Long? = null,
     val fadeDurationMs: Long? = null,
@@ -586,15 +658,34 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     elementFilter = elementFilter,
     stepTiming = stepTiming,
     parameters = parameters,
+    delayMs = delayMs,
+    intervalMs = intervalMs,
+    randomWindowMs = randomWindowMs,
+    sortOrder = sortOrder,
 )
 
 /** Convert a DaoCue entity to CueDetails API response. */
 internal fun DaoCue.toCueDetails(isCurrentProject: Boolean): CueDetails {
-    val presetDetails = presetApplications.map { app ->
+    val presetDetails = presetApplications.sortedBy { it.sortOrder }.map { app ->
         CuePresetApplicationDetail(
             presetId = app.preset.id.value,
             presetName = app.preset.name,
             targets = app.targets,
+            delayMs = app.delayMs,
+            intervalMs = app.intervalMs,
+            randomWindowMs = app.randomWindowMs,
+            sortOrder = app.sortOrder,
+        )
+    }
+    val triggerDetails = this.triggers.sortedBy { it.sortOrder }.map { trigger ->
+        CueTriggerDetailDto(
+            triggerType = trigger.triggerType.name,
+            delayMs = trigger.delayMs,
+            intervalMs = trigger.intervalMs,
+            randomWindowMs = trigger.randomWindowMs,
+            scriptId = trigger.script.id.value,
+            scriptName = trigger.script.name,
+            sortOrder = trigger.sortOrder,
         )
     }
     return CueDetails(
@@ -603,6 +694,7 @@ internal fun DaoCue.toCueDetails(isCurrentProject: Boolean): CueDetails {
         palette = this.palette,
         presetApplications = presetDetails,
         adHocEffects = this.adHocEffects.map { it.toDto() },
+        triggers = triggerDetails,
         updateGlobalPalette = this.updateGlobalPalette,
         cueStackId = this.cueStack?.id?.value,
         cueStackName = this.cueStack?.name,
@@ -616,11 +708,12 @@ internal fun DaoCue.toCueDetails(isCurrentProject: Boolean): CueDetails {
     )
 }
 
-/** Create child preset application and ad-hoc effect entities for a cue. */
+/** Create child preset application, ad-hoc effect, and trigger entities for a cue. */
 internal fun createCueChildren(
     cue: DaoCue,
     presetApplications: List<CuePresetApplicationDto>,
     adHocEffects: List<CueAdHocEffectDto>,
+    triggers: List<CueTriggerDto> = emptyList(),
 ) {
     for (app in presetApplications) {
         val preset = DaoFxPreset.findById(app.presetId) ?: continue
@@ -628,6 +721,10 @@ internal fun createCueChildren(
             this.cue = cue
             this.preset = preset
             this.targets = app.targets
+            this.delayMs = app.delayMs
+            this.intervalMs = app.intervalMs
+            this.randomWindowMs = app.randomWindowMs
+            this.sortOrder = app.sortOrder
         }
     }
     for (effect in adHocEffects) {
@@ -646,14 +743,31 @@ internal fun createCueChildren(
             elementFilter = effect.elementFilter
             stepTiming = effect.stepTiming
             parameters = effect.parameters
+            delayMs = effect.delayMs
+            intervalMs = effect.intervalMs
+            randomWindowMs = effect.randomWindowMs
+            sortOrder = effect.sortOrder
+        }
+    }
+    for (trigger in triggers) {
+        val script = DaoScript.findById(trigger.scriptId) ?: continue
+        DaoCueTrigger.new {
+            this.cue = cue
+            this.triggerType = TriggerType.valueOf(trigger.triggerType)
+            this.delayMs = trigger.delayMs
+            this.intervalMs = trigger.intervalMs
+            this.randomWindowMs = trigger.randomWindowMs
+            this.script = script
+            this.sortOrder = trigger.sortOrder
         }
     }
 }
 
-/** Delete all child entities (preset applications and ad-hoc effects) for a cue. */
+/** Delete all child entities (preset applications, ad-hoc effects, and triggers) for a cue. */
 internal fun deleteCueChildren(cue: DaoCue) {
     cue.presetApplications.forEach { it.delete() }
     cue.adHocEffects.forEach { it.delete() }
+    cue.triggers.forEach { it.delete() }
 }
 
 // ─── Apply logic ────────────────────────────────────────────────────────
@@ -695,8 +809,9 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         }
     }
 
-    // 3. Apply preset effects — read each preset fresh from DB
-    for (presetApp in cueData.presetApplications) {
+    // 3. Apply immediate preset effects — read each preset fresh from DB
+    // (Timed presets with delayMs/intervalMs are handled by CueTriggerManager)
+    for (presetApp in cueData.presetApplications.filter { it.delayMs == null && it.intervalMs == null }) {
         val presetEffects = transaction(state.database) {
             DaoFxPreset.findById(presetApp.presetId)?.effects
         } ?: continue // Skip if preset was deleted
@@ -718,8 +833,9 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         }
     }
 
-    // 4. Apply ad-hoc effects
-    for (adHoc in cueData.adHocEffects) {
+    // 4. Apply immediate ad-hoc effects
+    // (Timed ad-hoc effects with delayMs/intervalMs are handled by CueTriggerManager)
+    for (adHoc in cueData.adHocEffects.filter { it.delayMs == null && it.intervalMs == null }) {
         val target = TogglePresetTarget(type = adHoc.targetType, key = adHoc.targetKey)
         val presetEffectDto = FxPresetEffectDto(
             effectType = adHoc.effectType,
@@ -894,12 +1010,17 @@ internal fun createInstanceFromPresetForCue(
         ElementFilter.ALL
     }
 
+    // Propagate timing source from the effect's registration
+    val registration = state.show.fxRegistry.getRegistration(presetEffect.effectType)
+    val timingSource = registration?.timingSource ?: uk.me.cormack.lighting7.fx.TimingSource.BEAT
+
     return FxInstance(effect, fxTarget, timing, blendMode).apply {
         this.presetId = presetId
         phaseOffset = presetEffect.phaseOffset
         distributionStrategy = distribution
         this.elementMode = elementMode
         this.elementFilter = elementFilter
+        this.timingSource = timingSource
         presetEffect.stepTiming?.let { this.stepTiming = it }
     }
 }

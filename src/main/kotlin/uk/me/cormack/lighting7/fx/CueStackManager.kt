@@ -85,13 +85,27 @@ class CueStackManager(
                 cueName = cue.name,
                 palette = cue.palette,
                 updateGlobalPalette = cue.updateGlobalPalette,
-                presetApplications = cue.presetApplications.map { app ->
+                presetApplications = cue.presetApplications.sortedBy { it.sortOrder }.map { app ->
                     CuePresetApplicationDto(
                         presetId = app.preset.id.value,
                         targets = app.targets,
+                        delayMs = app.delayMs,
+                        intervalMs = app.intervalMs,
+                        randomWindowMs = app.randomWindowMs,
+                        sortOrder = app.sortOrder,
                     )
                 },
-                adHocEffects = cue.adHocEffects.map { it.toDto() },
+                adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+                triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
+                    CueTriggerDto(
+                        triggerType = trigger.triggerType.name,
+                        delayMs = trigger.delayMs,
+                        intervalMs = trigger.intervalMs,
+                        randomWindowMs = trigger.randomWindowMs,
+                        scriptId = trigger.script.id.value,
+                        sortOrder = trigger.sortOrder,
+                    )
+                },
                 autoAdvance = cue.autoAdvance,
                 autoAdvanceDelayMs = cue.autoAdvanceDelayMs,
                 fadeDurationMs = cue.fadeDurationMs,
@@ -105,6 +119,11 @@ class CueStackManager(
         val existingState = activeStacks[stackId]
         existingState?.crossfadeJob?.cancel()
         existingState?.autoAdvanceJob?.cancel()
+
+        // Deactivate triggers for the outgoing cue (stop recurring triggers, etc.)
+        existingState?.activeCueId?.let { oldCueId ->
+            state.cueTriggerManager.deactivateTriggersForCue(oldCueId)
+        }
 
         // 1. Snapshot outgoing effects (before removing) for crossfade
         val outgoingEffects = fxEngine.getActiveEffects().filter { it.cueStackId == stackId }
@@ -136,8 +155,16 @@ class CueStackManager(
         var effectCount = 0
         val newEffectIds = mutableListOf<Long>()
 
-        // Apply preset effects
-        for (presetApp in cueData.presetApplications) {
+        // Split preset applications into immediate and timed
+        val (immediatePresets, timedPresets) = cueData.presetApplications.partition {
+            it.delayMs == null && it.intervalMs == null
+        }
+        val (immediateAdHoc, timedAdHoc) = cueData.adHocEffects.partition {
+            it.delayMs == null && it.intervalMs == null
+        }
+
+        // Apply immediate preset effects
+        for (presetApp in immediatePresets) {
             val presetEffects = transaction(state.database) {
                 DaoFxPreset.findById(presetApp.presetId)?.effects
             } ?: continue
@@ -163,8 +190,8 @@ class CueStackManager(
             }
         }
 
-        // Apply ad-hoc effects
-        for (adHoc in cueData.adHocEffects) {
+        // Apply immediate ad-hoc effects
+        for (adHoc in immediateAdHoc) {
             val target = TogglePresetTarget(type = adHoc.targetType, key = adHoc.targetKey)
             val presetEffectDto = FxPresetEffectDto(
                 effectType = adHoc.effectType,
@@ -215,7 +242,28 @@ class CueStackManager(
             }
         }
 
-        // 6. Start auto-advance timer if configured
+        // 6. Activate timed effects (delayed/recurring presets and ad-hoc effects)
+        if ((timedPresets.isNotEmpty() || timedAdHoc.isNotEmpty()) && scope != null) {
+            state.cueTriggerManager.activateTimedEffectsForCue(
+                cueId = cueData.cueId,
+                cueStackId = stackId,
+                timedPresets = timedPresets,
+                timedAdHocEffects = timedAdHoc,
+                scope = scope,
+            )
+        }
+
+        // 7. Activate script triggers for the new cue
+        if (cueData.triggers.isNotEmpty() && scope != null) {
+            state.cueTriggerManager.activateTriggersForCue(
+                cueId = cueData.cueId,
+                cueStackId = stackId,
+                triggers = cueData.triggers,
+                scope = scope,
+            )
+        }
+
+        // 7. Start auto-advance timer if configured
         if (cueData.autoAdvance && cueData.autoAdvanceDelayMs != null && scope != null) {
             val delayMs = cueData.autoAdvanceDelayMs
             activeStacks[stackId]?.autoAdvanceJob = scope.launch {
@@ -364,10 +412,14 @@ class CueStackManager(
      *
      * @return Number of effects removed
      */
-    fun deactivateStack(stackId: Int): Int {
-        val state = activeStacks.remove(stackId)
-        state?.autoAdvanceJob?.cancel()
-        state?.crossfadeJob?.cancel()
+    fun deactivateStack(stackId: Int, appState: State? = null): Int {
+        val stackState = activeStacks.remove(stackId)
+        stackState?.autoAdvanceJob?.cancel()
+        stackState?.crossfadeJob?.cancel()
+
+        // Deactivate triggers for the active cue in this stack
+        appState?.cueTriggerManager?.deactivateTriggersForStack(stackId)
+
         return fxEngine.removeEffectsForCueStack(stackId)
     }
 
@@ -433,12 +485,17 @@ class CueStackManager(
             ElementFilter.ALL
         }
 
+        // Propagate timing source from the effect's registration
+        val registration = state.show.fxRegistry.getRegistration(presetEffect.effectType)
+        val timingSource = registration?.timingSource ?: TimingSource.BEAT
+
         return FxInstance(effect, fxTarget, timing, blendMode).apply {
             this.presetId = presetId
             phaseOffset = presetEffect.phaseOffset
             distributionStrategy = distribution
             this.elementMode = elementMode
             this.elementFilter = elementFilter
+            this.timingSource = timingSource
             presetEffect.stepTiming?.let { this.stepTiming = it }
         }
     }

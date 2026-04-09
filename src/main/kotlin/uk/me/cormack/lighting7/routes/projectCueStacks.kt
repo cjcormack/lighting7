@@ -152,7 +152,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             if (stack.project.id != project.id) return@transaction false
 
             // Deactivate if running
-            state.show.cueStackManager.deactivateStack(resource.stackId)
+            state.show.cueStackManager.deactivateStack(resource.stackId, state)
 
             if (keepCues) {
                 // Detach cues from stack (make standalone)
@@ -327,7 +327,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             return@post
         }
 
-        val removedCount = state.show.cueStackManager.deactivateStack(resource.parent.stackId)
+        val removedCount = state.show.cueStackManager.deactivateStack(resource.parent.stackId, state)
         call.respond(CueStackDeactivateResponse(stackId = resource.parent.stackId, removedCount = removedCount))
     }
 

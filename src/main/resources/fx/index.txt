@@ -12,6 +12,7 @@ dimmer/Strobe.fx.kts
 dimmer/Flicker.fx.kts
 dimmer/Breathe.fx.kts
 dimmer/CandleFlicker.fx.kts
+dimmer/FluorescentFlicker.fx.kts
 dimmer/StaticValue.fx.kts
 dimmer/StaticSetting.fx.kts
 

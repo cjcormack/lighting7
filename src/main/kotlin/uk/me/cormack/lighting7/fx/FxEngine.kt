@@ -40,8 +40,25 @@ class FxEngine(
     private val nextEffectId = AtomicLong(0)
     private val activeEffects = ConcurrentHashMap<Long, FxInstance>()
     @Volatile private var lastTickMs: Long = 0L
+    @Volatile private var lastWallClockTickMs: Long = 0L
 
     private var processingJob: Job? = null
+    private var wallClockJob: Job? = null
+
+    /**
+     * When set, newly added effects without a cueId are automatically tagged
+     * with this context. Used by [CueTriggerManager] to auto-tag effects
+     * created during FX_APPLICATION script execution.
+     *
+     * Thread-safe because FX_APPLICATION scripts run on a single-threaded runner pool.
+     */
+    @Volatile
+    var currentCueContext: CueContext? = null
+
+    companion object {
+        /** Wall-clock tick interval in milliseconds (50Hz) */
+        const val WALL_CLOCK_INTERVAL_MS = 20L
+    }
 
     private val _fxStateFlow = MutableSharedFlow<FxStateUpdate>(replay = 1, extraBufferCapacity = 1)
 
@@ -221,7 +238,8 @@ class FxEngine(
         val currentPhase: Double,
         val blendMode: BlendMode,
         val cueId: Int? = null,
-        val cueStackId: Int? = null
+        val cueStackId: Int? = null,
+        val timingSource: String = "BEAT",
     )
 
     /**
@@ -235,9 +253,18 @@ class FxEngine(
         // Emit initial palette so new WebSocket subscribers get it immediately
         emitPaletteUpdate()
 
+        // BPM-synced processing loop (24 ticks per beat)
         processingJob = scope.launch(Dispatchers.Default) {
             masterClock.tickFlow.collect { tick ->
-                processTick(tick)
+                processBeatTick(tick)
+            }
+        }
+
+        // Wall-clock processing loop (50Hz, independent of BPM)
+        wallClockJob = scope.launch(Dispatchers.Default) {
+            while (isActive) {
+                delay(WALL_CLOCK_INTERVAL_MS)
+                processWallClockTick()
             }
         }
     }
@@ -248,6 +275,8 @@ class FxEngine(
     fun stop() {
         processingJob?.cancel()
         processingJob = null
+        wallClockJob?.cancel()
+        wallClockJob = null
         masterClock.stop()
         val allEffects = activeEffects.values.toList()
         activeEffects.clear()
@@ -265,6 +294,13 @@ class FxEngine(
         val id = nextEffectId.incrementAndGet()
         effect.id = id
         effect.startedAtMs = System.currentTimeMillis()
+
+        // Auto-tag with CueContext if set and effect doesn't already have a cueId
+        currentCueContext?.let { ctx ->
+            if (effect.cueId == null) effect.cueId = ctx.cueId
+            if (effect.cueStackId == null) effect.cueStackId = ctx.cueStackId
+        }
+
         if (effect.effect is StatefulEffect) {
             (effect.effect as StatefulEffect).initialize()
         }
@@ -405,6 +441,7 @@ class FxEngine(
                 elementMode = newElementMode ?: existing.elementMode
                 elementFilter = newElementFilter ?: existing.elementFilter
                 stepTiming = newStepTiming ?: existing.stepTiming
+                timingSource = existing.timingSource
             }
         } else {
             // Only mutable fields changed - update in place
@@ -502,8 +539,14 @@ class FxEngine(
         emitStateUpdate()
     }
 
-    private fun processTick(tick: MasterClock.ClockTick) {
+    /**
+     * Process all BEAT-timed effects on a Master Clock tick.
+     */
+    private fun processBeatTick(tick: MasterClock.ClockTick) {
         if (activeEffects.isEmpty()) return
+
+        val hasBeatEffects = activeEffects.values.any { it.isRunning && it.timingSource == TimingSource.BEAT }
+        if (!hasBeatEffects) return
 
         val deltaMs = if (lastTickMs > 0) tick.timestampMs - lastTickMs else 0L
         lastTickMs = tick.timestampMs
@@ -511,15 +554,13 @@ class FxEngine(
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
 
-        // Reset all FX-controlled properties to neutral before applying effects.
-        // This prevents accumulative blend modes (MAX, ADDITIVE, etc.) from
-        // ratcheting values up/down across ticks by always blending against
-        // a clean baseline rather than the previous tick's result.
-        resetActiveProperties(fixturesWithTx)
+        // Reset properties controlled by BEAT effects to neutral before applying.
+        // This prevents accumulative blend modes from ratcheting values across ticks.
+        resetActiveProperties(fixturesWithTx, TimingSource.BEAT)
 
-        // Process each active effect
         for ((_, effect) in activeEffects) {
             if (!effect.isRunning) continue
+            if (effect.timingSource != TimingSource.BEAT) continue
 
             try {
                 if (effect.isGroupEffect) {
@@ -528,12 +569,242 @@ class FxEngine(
                     processFixtureEffect(tick, effect, fixturesWithTx, deltaMs)
                 }
             } catch (e: Exception) {
-                // Log but don't crash the engine
                 System.err.println("FX Engine error processing effect ${effect.id}: ${e.message}")
             }
         }
 
         transaction.apply()
+    }
+
+    /**
+     * Process all WALL_CLOCK-timed effects on the fixed-interval timer.
+     *
+     * Wall-clock effects use elapsed real time for phase calculation instead of
+     * beat position, making them independent of BPM. The phase calculation is
+     * handled by [FxInstance.calculateWallClockPhase] and
+     * [FxInstance.calculateWallClockPhaseForMember].
+     */
+    private fun processWallClockTick() {
+        if (activeEffects.isEmpty()) return
+
+        val hasWallClockEffects = activeEffects.values.any { it.isRunning && it.timingSource == TimingSource.WALL_CLOCK }
+        if (!hasWallClockEffects) return
+
+        val now = System.currentTimeMillis()
+        val deltaMs = if (lastWallClockTickMs > 0) now - lastWallClockTickMs else 0L
+        lastWallClockTickMs = now
+
+        // Create a synthetic ClockTick for stateful effects that need the tick parameter.
+        // The beat/phase fields are unused for wall-clock effects, but the timestampMs is used.
+        val syntheticTick = MasterClock.ClockTick(
+            tickNumber = 0,
+            beatNumber = 0,
+            tickInBeat = 0,
+            phase = 0.0,
+            timestampMs = now,
+        )
+
+        val transaction = ControllerTransaction(fixtures.controllers)
+        val fixturesWithTx = fixtures.withTransaction(transaction)
+
+        // Reset properties controlled by WALL_CLOCK effects to neutral
+        resetActiveProperties(fixturesWithTx, TimingSource.WALL_CLOCK)
+
+        for ((_, effect) in activeEffects) {
+            if (!effect.isRunning) continue
+            if (effect.timingSource != TimingSource.WALL_CLOCK) continue
+
+            try {
+                if (effect.isGroupEffect) {
+                    processWallClockGroupEffect(syntheticTick, effect, fixturesWithTx, deltaMs)
+                } else {
+                    processWallClockFixtureEffect(syntheticTick, effect, fixturesWithTx, deltaMs)
+                }
+            } catch (e: Exception) {
+                System.err.println("FX Engine error processing wall-clock effect ${effect.id}: ${e.message}")
+            }
+        }
+
+        transaction.apply()
+    }
+
+    /**
+     * Process a wall-clock fixture effect using elapsed time for phase.
+     */
+    private fun processWallClockFixtureEffect(
+        tick: MasterClock.ClockTick,
+        effect: FxInstance,
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        deltaMs: Long,
+    ) {
+        val fixtureKey = effect.target.targetKey
+        val fixture = try {
+            fixtures.untypedFixture(fixtureKey)
+        } catch (e: Exception) {
+            return
+        }
+
+        if (effect.target.fixtureHasProperty(fixture)) {
+            val effectPhase = effect.calculateWallClockPhase()
+            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE, fixturesWithTx, fixtureKey)
+            effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
+        } else if (fixture is MultiElementFixture<*>) {
+            val elements = fixture.elements
+            if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
+                processWallClockMultiElementEffect(tick, effect, fixturesWithTx, elements, deltaMs)
+            }
+        }
+    }
+
+    /**
+     * Process a wall-clock effect expanded across multi-element fixture elements.
+     */
+    private fun processWallClockMultiElementEffect(
+        tick: MasterClock.ClockTick,
+        effect: FxInstance,
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        elements: List<uk.me.cormack.lighting7.fixture.group.FixtureElement<*>>,
+        deltaMs: Long,
+    ) {
+        val filter = effect.elementFilter
+        val elementCount = elements.size
+
+        val filteredElements = if (filter == ElementFilter.ALL) {
+            elements.mapIndexed { idx, el -> idx to el }
+        } else {
+            elements.withIndex().filter { (idx, _) -> filter.includes(idx, elementCount) }
+                .map { (idx, el) -> idx to el }
+        }
+        val filteredCount = filteredElements.size
+        if (filteredCount == 0) return
+
+        for ((distributionIdx, pair) in filteredElements.withIndex()) {
+            val (_, element) = pair
+            val memberInfo = object : DistributionMemberInfo {
+                override val index: Int = distributionIdx
+                override val normalizedPosition: Double =
+                    if (filteredCount > 1) distributionIdx.toDouble() / (filteredCount - 1) else 0.5
+            }
+
+            val memberPhase = effect.calculateWallClockPhaseForMember(memberInfo, filteredCount)
+            val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
+
+            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, element.elementKey)
+            effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
+        }
+    }
+
+    /**
+     * Process a wall-clock group effect using elapsed time for phase.
+     */
+    private fun processWallClockGroupEffect(
+        tick: MasterClock.ClockTick,
+        effect: FxInstance,
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        deltaMs: Long,
+    ) {
+        val groupName = effect.target.targetKey
+        val group = try {
+            fixtures.untypedGroup(groupName)
+        } catch (e: Exception) {
+            return
+        }
+
+        val allMembers = group.allMembers
+        if (allMembers.isEmpty()) return
+
+        val firstMemberFixture = try {
+            fixtures.untypedFixture(allMembers.first().key)
+        } catch (_: Exception) { return }
+
+        if (effect.target.fixtureHasProperty(firstMemberFixture)) {
+            val groupSize = allMembers.size
+            for (member in allMembers) {
+                val memberPhase = effect.calculateWallClockPhaseForMember(member, groupSize)
+                val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
+                val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
+                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, member.key)
+                effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
+            }
+            return
+        }
+
+        // Multi-element expansion
+        if (firstMemberFixture !is MultiElementFixture<*>) return
+        val firstElements = firstMemberFixture.elements
+        if (firstElements.isEmpty() || !effect.target.fixtureHasProperty(firstElements.first())) return
+
+        when (effect.elementMode) {
+            ElementMode.PER_FIXTURE -> {
+                for (member in allMembers) {
+                    val parentFixture = try {
+                        fixtures.untypedFixture(member.key)
+                    } catch (_: Exception) { continue }
+
+                    if (parentFixture is MultiElementFixture<*>) {
+                        processWallClockMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements, deltaMs)
+                    }
+                }
+            }
+            ElementMode.FLAT -> {
+                processWallClockGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers, deltaMs)
+            }
+        }
+    }
+
+    /**
+     * Process a wall-clock group effect in FLAT element mode.
+     */
+    private fun processWallClockGroupFlatElementEffect(
+        tick: MasterClock.ClockTick,
+        effect: FxInstance,
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        allMembers: List<uk.me.cormack.lighting7.fixture.group.GroupMember<*>>,
+        deltaMs: Long,
+    ) {
+        val filter = effect.elementFilter
+
+        data class FlatElement(val elementKey: String, val globalIndex: Int)
+
+        val allFlatElements = mutableListOf<FlatElement>()
+        for (member in allMembers) {
+            val parentFixture = try {
+                fixtures.untypedFixture(member.key)
+            } catch (_: Exception) { continue }
+
+            if (parentFixture is MultiElementFixture<*>) {
+                for (element in parentFixture.elements) {
+                    allFlatElements.add(FlatElement(element.elementKey, allFlatElements.size))
+                }
+            }
+        }
+
+        if (allFlatElements.isEmpty()) return
+        val totalUnfilteredCount = allFlatElements.size
+
+        val flatElements = if (filter == ElementFilter.ALL) {
+            allFlatElements
+        } else {
+            allFlatElements.filter { filter.includes(it.globalIndex, totalUnfilteredCount) }
+        }
+        if (flatElements.isEmpty()) return
+        val filteredCount = flatElements.size
+
+        for ((distributionIdx, flatElement) in flatElements.withIndex()) {
+            val memberInfo = object : DistributionMemberInfo {
+                override val index: Int = distributionIdx
+                override val normalizedPosition: Double =
+                    if (filteredCount > 1) distributionIdx.toDouble() / (filteredCount - 1) else 0.5
+            }
+
+            val memberPhase = effect.calculateWallClockPhaseForMember(memberInfo, filteredCount)
+            val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
+
+            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, flatElement.elementKey)
+            effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
+        }
     }
 
     /**
@@ -579,16 +850,21 @@ class FxEngine(
 
     /**
      * Reset all properties that are actively controlled by running effects
-     * to their neutral values. This ensures blend modes operate against a
-     * clean baseline each tick rather than accumulating from previous ticks.
+     * of the given timing source to their neutral values. This ensures blend
+     * modes operate against a clean baseline each tick rather than accumulating
+     * from previous ticks.
+     *
+     * Partitioned by timing source so the BEAT and WALL_CLOCK tick loops
+     * don't interfere with each other's property resets.
      */
-    private fun resetActiveProperties(fixturesWithTx: Fixtures.FixturesWithTransaction) {
+    private fun resetActiveProperties(fixturesWithTx: Fixtures.FixturesWithTransaction, source: TimingSource) {
         data class PropertyKey(val fixtureKey: String, val propertyName: String)
 
         val seen = mutableSetOf<PropertyKey>()
 
         for ((_, effect) in activeEffects) {
             if (!effect.isRunning) continue
+            if (effect.timingSource != source) continue
 
             val keys = resolveEffectFixtureKeys(effect)
 
@@ -1053,7 +1329,8 @@ class FxEngine(
                 currentPhase = instance.lastPhase,
                 blendMode = instance.blendMode,
                 cueId = instance.cueId,
-                cueStackId = instance.cueStackId
+                cueStackId = instance.cueStackId,
+                timingSource = instance.timingSource.name,
             )
         }
 

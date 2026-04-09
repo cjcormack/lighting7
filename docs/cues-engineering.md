@@ -36,7 +36,11 @@ cue_preset_applications
 ├── id (auto-increment PK)
 ├── cue_id (FK → cues)
 ├── preset_id (FK → fx_presets)
-└── targets (JSON: List<CueTargetDto>)
+├── targets (JSON: List<CueTargetDto>)
+├── delay_ms (long, nullable — delayed application)
+├── interval_ms (long, nullable — recurring application)
+├── random_window_ms (long, nullable — randomisation for recurring)
+└── sort_order (int, default 0)
 
 cue_ad_hoc_effects
 ├── id (auto-increment PK)
@@ -53,7 +57,21 @@ cue_ad_hoc_effects
 ├── element_mode (varchar 50, nullable)
 ├── element_filter (varchar 50, nullable)
 ├── step_timing (boolean, nullable)
-└── parameters (JSON: Map<String, String>)
+├── parameters (JSON: Map<String, String>)
+├── delay_ms (long, nullable — delayed application)
+├── interval_ms (long, nullable — recurring application)
+├── random_window_ms (long, nullable — randomisation for recurring)
+└── sort_order (int, default 0)
+
+cue_triggers (script hooks only)
+├── id (auto-increment PK)
+├── cue_id (FK → cues)
+├── trigger_type (enum: ACTIVATION, DEACTIVATION, DELAYED, RECURRING)
+├── delay_ms (long, nullable — for DELAYED)
+├── interval_ms (long, nullable — for RECURRING)
+├── random_window_ms (long, nullable — randomisation window)
+├── script_id (FK → scripts — required)
+└── sort_order (int, default 0)
 ```
 
 ### Key Design Decisions

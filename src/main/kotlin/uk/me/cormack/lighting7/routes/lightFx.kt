@@ -79,6 +79,10 @@ internal fun Route.routeApiRestFx(state: State) {
                     instance.stepTiming = it
                 }
 
+                // Propagate timing source from the effect's registration
+                val registration = state.show.fxRegistry.getRegistration(request.effectType)
+                registration?.timingSource?.let { instance.timingSource = it }
+
                 val effectId = state.show.fxEngine.addEffect(instance)
                 call.respond(AddEffectResponse(effectId))
             } catch (e: Exception) {
@@ -307,6 +311,7 @@ data class EffectDto(
     val stepTiming: Boolean = false,
     val presetId: Int? = null,
     val cueId: Int? = null,
+    val timingSource: String = "BEAT",
 )
 
 
@@ -333,6 +338,7 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
     stepTiming = stepTiming,
     presetId = presetId,
     cueId = cueId,
+    timingSource = timingSource.name,
 )
 
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(

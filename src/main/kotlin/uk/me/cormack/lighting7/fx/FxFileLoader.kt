@@ -71,6 +71,12 @@ class FxFileLoader(
                     defaultStepTiming = metadata.defaultStepTiming,
                 )
 
+                val timingSource = try {
+                    TimingSource.valueOf(metadata.timingSource)
+                } catch (_: Exception) {
+                    TimingSource.BEAT
+                }
+
                 registry.register(EffectRegistration(
                     id = metadata.id,
                     aliases = metadata.aliases?.toSet() ?: emptySet(),
@@ -83,6 +89,7 @@ class FxFileLoader(
                     source = EffectSource.BUILT_IN,
                     script = scriptBody,
                     defaultStepTiming = metadata.defaultStepTiming,
+                    timingSource = timingSource,
                     factory = factory,
                 ))
 
@@ -133,6 +140,7 @@ class FxFileLoader(
             var outputType = "SLIDER"
             var effectMode = "STANDARD"
             var defaultStepTiming = false
+            var timingSource = "BEAT"
             var compatibleProperties = listOf<String>()
             var aliases: List<String>? = null
             val parameters = mutableListOf<FxFileParameter>()
@@ -196,6 +204,7 @@ class FxFileLoader(
                     "outputType" -> outputType = value
                     "effectMode" -> effectMode = value
                     "defaultStepTiming" -> defaultStepTiming = value.toBooleanStrictOrNull() ?: false
+                    "timingSource" -> timingSource = value
                     "compatibleProperties" -> compatibleProperties = parseYamlArray(value)
                     "aliases" -> aliases = parseYamlArray(value)
                     "parameters" -> {
@@ -223,6 +232,7 @@ class FxFileLoader(
                 outputType = outputType,
                 effectMode = effectMode,
                 defaultStepTiming = defaultStepTiming,
+                timingSource = timingSource,
                 compatibleProperties = compatibleProperties,
                 aliases = aliases,
                 parameters = parameters,
@@ -252,6 +262,7 @@ data class FxFileMetadata(
     val outputType: String = "SLIDER",
     val effectMode: String = "STANDARD",
     val defaultStepTiming: Boolean = false,
+    val timingSource: String = "BEAT",
     val compatibleProperties: List<String> = emptyList(),
     val aliases: List<String>? = null,
     val parameters: List<FxFileParameter> = emptyList(),

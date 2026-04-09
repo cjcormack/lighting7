@@ -538,12 +538,17 @@ private fun createInstanceFromPreset(
         ElementFilter.ALL
     }
 
+    // Propagate timing source from the effect's registration
+    val registration = state.show.fxRegistry.getRegistration(presetEffect.effectType)
+    val timingSource = registration?.timingSource ?: uk.me.cormack.lighting7.fx.TimingSource.BEAT
+
     return FxInstance(effect, fxTarget, timing, blendMode).apply {
         this.presetId = presetId
         phaseOffset = presetEffect.phaseOffset
         distributionStrategy = distribution
         this.elementMode = elementMode
         this.elementFilter = elementFilter
+        this.timingSource = timingSource
         presetEffect.stepTiming?.let { this.stepTiming = it }
     }
 }

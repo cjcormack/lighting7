@@ -929,11 +929,67 @@ The "create from current state" operation captures the live FX engine state:
 
 See `docs/cues-engineering.md` for full cue system documentation.
 
+## Timing Source
+
+Effects can run on one of two timing sources:
+
+| Source | Description | Tick Rate | Phase Calculation |
+|--------|-------------|-----------|-------------------|
+| `BEAT` | Synchronized to the Master Clock's BPM-based ticks | 24 ticks/beat (variable) | Based on beat position via `MasterClock.phaseForDivision()` |
+| `WALL_CLOCK` | Fixed-interval timer independent of BPM | 50Hz (20ms) | Based on elapsed wall-clock time since effect start |
+
+### When to Use WALL_CLOCK
+
+Use wall-clock timing for effects that should feel natural and not tied to music:
+- Candle/fire flicker (organic randomness)
+- Fluorescent tube flicker (intermittent failures)
+- Ambient atmospheric changes (slow drifts)
+- Any effect where beat-sync would feel unnatural
+
+### Architecture
+
+The FxEngine runs **two independent processing loops**:
+
+```
+FxEngine
+├── processBeatTick()       ← MasterClock.tickFlow (24 ticks/beat)
+│   └── Processes effects where timingSource == BEAT
+│
+└── processWallClockTick()  ← 50Hz fixed-interval coroutine
+    └── Processes effects where timingSource == WALL_CLOCK
+```
+
+Each loop resets only the properties controlled by its own effects, preventing the two timing sources from interfering with each other.
+
+### Wall-Clock Phase Calculation
+
+For STANDARD wall-clock effects, `beatDivision` is reinterpreted as cycle duration in seconds:
+
+```kotlin
+val cycleDurationMs = (beatDivision * 1000.0).toLong()
+val elapsed = System.currentTimeMillis() - startedAtMs
+val phase = (elapsed % cycleDurationMs).toDouble() / cycleDurationMs
+```
+
+For STATEFUL effects, `deltaMs` is computed from the wall-clock interval directly. These effects already use `deltaMs` rather than phase, so they work naturally.
+
+### Configuration
+
+Set `timingSource` in the `.fx.kts` frontmatter or via the FX definitions API:
+
+```kotlin
+/*---
+id: CandleFlicker
+effectMode: STATEFUL
+timingSource: WALL_CLOCK
+---*/
+```
+
+The timing source is stored on `EffectRegistration` in the `FxRegistry` and propagated to `FxInstance.timingSource` when effects are created via presets, cues, or the REST API.
+
 ## Future Considerations
 
 1. **MIDI Clock Sync**: Accept external MIDI clock as tempo source
 2. **Beat Detection**: Auto-detect BPM from audio input
 3. **Effect Modulation**: Effects that modulate other effects' parameters
 4. **Custom Distribution Functions**: User-defined distribution curves via scripts
-5. **Scene/Chase Retirement**: Replace remaining scene/chase functionality with FX cues and script-based show running
-6. **Show Running Scripts**: FX_APPLICATION scripts for cue-triggered show automation (making FX Cues and Stacks more powerful without increasing UX complexity)

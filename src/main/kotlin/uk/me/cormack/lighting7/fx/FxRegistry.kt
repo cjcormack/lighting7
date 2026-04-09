@@ -57,6 +57,8 @@ data class EffectRegistration(
     val script: String? = null,
     /** Default step-timing mode for new instances */
     val defaultStepTiming: Boolean = false,
+    /** Timing source for this effect (BEAT or WALL_CLOCK) */
+    val timingSource: TimingSource = TimingSource.BEAT,
     /** Factory to create an Effect instance from string parameters */
     val factory: EffectFactory,
 )
@@ -75,6 +77,7 @@ data class EffectTypeInfo(
     val source: String? = null,
     val sourceDefinitionId: Int? = null,
     val script: String? = null,
+    val timingSource: String = "BEAT",
 )
 
 /**
@@ -178,6 +181,7 @@ class FxRegistry {
                     source = reg.source.name,
                     sourceDefinitionId = reg.sourceDefinitionId,
                     script = reg.script,
+                    timingSource = reg.timingSource.name,
                 )
             }
     }

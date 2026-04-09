@@ -57,6 +57,7 @@ class Show(
     val parkManager = ParkManager(state.database, project.id.value)
     private val scripts: MutableMap<String, Script> = mutableMapOf()
     private val scriptsLock = ReentrantLock()
+    private val scriptingHost = BasicJvmScriptingHost()
 
     private val _trackStateFlow = MutableSharedFlow<TrackState>()
     val trackStateFlow = _trackStateFlow.asSharedFlow()
@@ -89,6 +90,9 @@ class Show(
 
         // Start the FX engine after fixtures are loaded
         fxEngine.start(GlobalScope)
+
+        // Pre-compile scripts used by cue triggers to avoid cold-start latency
+        prewarmCueScripts()
 
         if (runLoopScriptName != null && scriptExists(runLoopScriptName)) {
             GlobalScope.launch {
@@ -133,6 +137,34 @@ class Show(
     fun close() {
         stopAllScenes()
         fxEngine.stop()
+    }
+
+    /**
+     * Pre-compile all FX_APPLICATION scripts referenced by cue triggers in this project.
+     * This avoids the Kotlin compiler cold-start when a cue is first activated.
+     */
+    private fun prewarmCueScripts() {
+        try {
+            val scriptBodies = transaction(state.database) {
+                project.cues.flatMap { cue ->
+                    cue.triggers.map { trigger ->
+                        val script = trigger.script
+                        Pair("cue-trigger-${cue.id.value}", script.script)
+                    }
+                }.distinctBy { it.second } // deduplicate by script body
+            }
+
+            if (scriptBodies.isNotEmpty()) {
+                val elapsed = measureTime {
+                    for ((name, body) in scriptBodies) {
+                        script(name, body, emptyList(), ScriptType.FX_APPLICATION)
+                    }
+                }
+                println("Pre-warmed ${scriptBodies.size} cue trigger script(s) in $elapsed")
+            }
+        } catch (e: Exception) {
+            System.err.println("Failed to pre-warm cue scripts: ${e.message}")
+        }
     }
 
     private fun CoroutineScope.runShow(runLoopScriptName: String, delay: Long) {
@@ -381,7 +413,7 @@ class Show(
             }
 
             val (compiledResult, compileStatus) = runBlocking {
-                val compiledResult = BasicJvmScriptingHost().compiler(expandedScript.toScriptSource(), compilationConfiguration)
+                val compiledResult = show.scriptingHost.compiler(expandedScript.toScriptSource(), compilationConfiguration)
                 val compileStatus = ScriptResult(compiledResult)
                 Pair(compiledResult, compileStatus)
             }
@@ -437,7 +469,7 @@ class Show(
                             show.fixtures.recordChaseStart(scene.id.value)
                         }
 
-                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                        val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("show", show))
                             providedProperties(Pair("fixtures", fixturesWithTransaction))
                             providedProperties(Pair("fxEngine", show.fxEngine))
@@ -476,7 +508,7 @@ class Show(
 
                     ScriptType.FX_DEFINITION -> {
                         // Minimal: just show, scriptName, settings, scriptId
-                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                        val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("show", show))
                             providedProperties(Pair("scriptName", script.scriptName))
                             providedProperties(Pair("settings", settings))
@@ -488,7 +520,7 @@ class Show(
 
                     ScriptType.FX_APPLICATION -> {
                         // FX engine + fixtures, no DMX transaction
-                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                        val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("show", show))
                             providedProperties(Pair("fxEngine", show.fxEngine))
                             providedProperties(Pair("scriptName", script.scriptName))
@@ -502,7 +534,7 @@ class Show(
 
                     ScriptType.FX_CALC -> {
                         // Evaluate with dummy values to test the lambda extraction
-                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                        val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("phase", 0.5))
                             providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
                             providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))
@@ -511,7 +543,7 @@ class Show(
                     }
 
                     ScriptType.FX_CALC_STATEFUL -> {
-                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                        val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("tick", uk.me.cormack.lighting7.fx.MasterClock.ClockTick(0L, 0L, 0, 0.0, 0L)))
                             providedProperties(Pair("deltaMs", 0L))
                             providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
@@ -522,7 +554,7 @@ class Show(
                     }
 
                     ScriptType.FX_CALC_COMPOSITE -> {
-                        val runResult = BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration {
+                        val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("phase", 0.5))
                             providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
                             providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))

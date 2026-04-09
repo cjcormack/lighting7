@@ -237,6 +237,7 @@ data class FxEffectState(
     val blendMode: String,
     val cueId: Int? = null,
     val cueStackId: Int? = null,
+    val timingSource: String = "BEAT",
 )
 
 @Serializable
@@ -745,6 +746,7 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
             blendMode = effect.blendMode.name,
             cueId = effect.cueId,
             cueStackId = effect.cueStackId,
+            timingSource = effect.timingSource.name,
         )
     }
     return FxStateOutMessage(

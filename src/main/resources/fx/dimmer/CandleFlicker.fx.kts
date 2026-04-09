@@ -4,6 +4,7 @@ name: Candle Flicker
 category: dimmer
 outputType: SLIDER
 effectMode: STATEFUL
+timingSource: WALL_CLOCK
 compatibleProperties: [dimmer, uv]
 parameters:
   - name: baseLevel

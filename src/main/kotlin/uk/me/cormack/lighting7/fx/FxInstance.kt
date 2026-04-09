@@ -214,6 +214,16 @@ class FxInstance(
     var compositeTargets: Map<FxOutputType, FxTarget>? = null
 
     /**
+     * Timing source for this effect.
+     *
+     * BEAT effects are processed on the Master Clock's BPM-synced tick loop.
+     * WALL_CLOCK effects are processed on a separate fixed-interval loop (50Hz),
+     * independent of BPM. Suitable for ambient/atmospheric effects that should
+     * not be tied to the musical beat grid.
+     */
+    var timingSource: TimingSource = TimingSource.BEAT
+
+    /**
      * Whether this effect targets a group (vs individual fixture).
      */
     val isGroupEffect: Boolean get() = target.isGroupTarget
@@ -279,6 +289,57 @@ class FxInstance(
 
         val phase = (basePhase + phaseOffset - distributionOffset + 1.0) % 1.0
         lastPhase = phase // Store last calculated (might be last member)
+        return phase
+    }
+
+    /**
+     * Calculate the current phase for this effect using wall-clock elapsed time.
+     *
+     * For wall-clock effects, [FxTiming.beatDivision] is reinterpreted as cycle
+     * duration in seconds (e.g., 4.0 = 4 second cycle).
+     *
+     * @return Phase from 0.0 to 1.0 within the effect cycle
+     */
+    fun calculateWallClockPhase(): Double {
+        val cycleDurationMs = (timing.beatDivision * 1000.0).toLong()
+        if (cycleDurationMs <= 0) return 0.0
+        val elapsed = System.currentTimeMillis() - startedAtMs
+        val phase = ((elapsed % cycleDurationMs).toDouble() / cycleDurationMs + phaseOffset) % 1.0
+        lastPhase = phase
+        return phase
+    }
+
+    /**
+     * Calculate the wall-clock phase for a specific group member (includes distribution offset).
+     *
+     * @param memberInfo The member's distribution info
+     * @param groupSize Total number of members in the group
+     * @return Phase from 0.0 to 1.0 within the effect cycle
+     */
+    fun calculateWallClockPhaseForMember(
+        memberInfo: DistributionMemberInfo,
+        groupSize: Int
+    ): Double {
+        val effectiveDivision = if (stepTiming && groupSize > 1) {
+            timing.beatDivision * distributionStrategy.distinctSlots(groupSize)
+        } else {
+            timing.beatDivision
+        }
+        val cycleDurationMs = (effectiveDivision * 1000.0).toLong()
+        if (cycleDurationMs <= 0) return 0.0
+        val elapsed = System.currentTimeMillis() - startedAtMs
+
+        var basePhase = (elapsed % cycleDurationMs).toDouble() / cycleDurationMs
+
+        if (distributionStrategy.usesTrianglePhase && groupSize > 1) {
+            val slots = distributionStrategy.distinctSlots(groupSize)
+            val tri = if (basePhase < 0.5) basePhase * 2.0 else 2.0 * (1.0 - basePhase)
+            basePhase = tri * (slots - 1.0) / slots
+        }
+
+        val distributionOffset = distributionStrategy.calculateOffset(memberInfo, groupSize)
+        val phase = (basePhase + phaseOffset - distributionOffset + 1.0) % 1.0
+        lastPhase = phase
         return phase
     }
 

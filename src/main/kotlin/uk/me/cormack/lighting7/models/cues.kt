@@ -20,6 +20,10 @@ data class CueTargetDto(
 data class CuePresetApplicationDto(
     val presetId: Int,
     val targets: List<CueTargetDto>,
+    val delayMs: Long? = null,
+    val intervalMs: Long? = null,
+    val randomWindowMs: Long? = null,
+    val sortOrder: Int = 0,
 )
 
 @Serializable
@@ -37,6 +41,10 @@ data class CueAdHocEffectDto(
     val elementFilter: String? = null,
     val stepTiming: Boolean? = null,
     val parameters: Map<String, String> = emptyMap(),
+    val delayMs: Long? = null,
+    val intervalMs: Long? = null,
+    val randomWindowMs: Long? = null,
+    val sortOrder: Int = 0,
 )
 
 // ─── Cues table ─────────────────────────────────────────────────────────
@@ -73,6 +81,7 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var fadeCurve by DaoCues.fadeCurve
     val presetApplications by DaoCuePresetApplication referrersOn DaoCuePresetApplications.cue
     val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue
+    val triggers by DaoCueTrigger referrersOn DaoCueTriggers.cue
 }
 
 // ─── Cue Preset Applications table ─────────────────────────────────────
@@ -81,6 +90,10 @@ object DaoCuePresetApplications : IntIdTable("cue_preset_applications") {
     val cue = reference("cue_id", DaoCues)
     val preset = reference("preset_id", DaoFxPresets)
     val targets = json<List<CueTargetDto>>("targets", Json)
+    val delayMs = long("delay_ms").nullable()
+    val intervalMs = long("interval_ms").nullable()
+    val randomWindowMs = long("random_window_ms").nullable()
+    val sortOrder = integer("sort_order").default(0)
 }
 
 class DaoCuePresetApplication(id: EntityID<Int>) : IntEntity(id) {
@@ -89,6 +102,10 @@ class DaoCuePresetApplication(id: EntityID<Int>) : IntEntity(id) {
     var cue by DaoCue referencedOn DaoCuePresetApplications.cue
     var preset by DaoFxPreset referencedOn DaoCuePresetApplications.preset
     var targets by DaoCuePresetApplications.targets
+    var delayMs by DaoCuePresetApplications.delayMs
+    var intervalMs by DaoCuePresetApplications.intervalMs
+    var randomWindowMs by DaoCuePresetApplications.randomWindowMs
+    var sortOrder by DaoCuePresetApplications.sortOrder
 }
 
 // ─── Cue Ad-Hoc Effects table ──────────────────────────────────────────
@@ -108,6 +125,10 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
     val elementFilter = varchar("element_filter", 50).nullable()
     val stepTiming = bool("step_timing").nullable()
     val parameters = json<Map<String, String>>("parameters", Json)
+    val delayMs = long("delay_ms").nullable()
+    val intervalMs = long("interval_ms").nullable()
+    val randomWindowMs = long("random_window_ms").nullable()
+    val sortOrder = integer("sort_order").default(0)
 }
 
 class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
@@ -127,4 +148,8 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var elementFilter by DaoCueAdHocEffects.elementFilter
     var stepTiming by DaoCueAdHocEffects.stepTiming
     var parameters by DaoCueAdHocEffects.parameters
+    var delayMs by DaoCueAdHocEffects.delayMs
+    var intervalMs by DaoCueAdHocEffects.intervalMs
+    var randomWindowMs by DaoCueAdHocEffects.randomWindowMs
+    var sortOrder by DaoCueAdHocEffects.sortOrder
 }

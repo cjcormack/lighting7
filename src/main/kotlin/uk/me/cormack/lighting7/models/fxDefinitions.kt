@@ -9,6 +9,7 @@ import org.jetbrains.exposed.sql.json.json
 import uk.me.cormack.lighting7.fx.EffectMode
 import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.ParameterInfo
+import uk.me.cormack.lighting7.fx.TimingSource
 
 object DaoFxDefinitions : IntIdTable("fx_definitions") {
     val effectId = varchar("effect_id", 255).uniqueIndex()
@@ -22,6 +23,7 @@ object DaoFxDefinitions : IntIdTable("fx_definitions") {
     val isBuiltin = bool("is_builtin").default(false)
     val project = reference("project_id", DaoProjects).nullable()
     val defaultStepTiming = bool("default_step_timing").default(false)
+    val timingSource = enumerationByName<TimingSource>("timing_source", 20).default(TimingSource.BEAT)
 }
 
 class DaoFxDefinition(id: EntityID<Int>) : IntEntity(id) {
@@ -38,4 +40,5 @@ class DaoFxDefinition(id: EntityID<Int>) : IntEntity(id) {
     var isBuiltin by DaoFxDefinitions.isBuiltin
     var project by DaoProject optionalReferencedOn DaoFxDefinitions.project
     var defaultStepTiming by DaoFxDefinitions.defaultStepTiming
+    var timingSource by DaoFxDefinitions.timingSource
 }
