@@ -391,4 +391,4 @@ private fun createEffectFromRequest(request: AddEffectRequest, state: State): Ef
 // Effect creation, parse helpers, and the effect library have moved to the fx package:
 // - fx/EffectParamUtils.kt (parseExtendedColour, parseColor, toUByteParam, toEasingCurveParam)
 // - fx/FxRegistry.kt (FxRegistry.createEffect replaces createEffectFromTypeAndParams)
-// - fx/BuiltInEffects.kt (registerBuiltInEffects replaces effectLibrary)
+// - fx/FxFileLoader.kt (loads built-in effects from .fx.kts resource files)

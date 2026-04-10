@@ -69,5 +69,5 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     val fixtureGroups by DaoFixtureGroup referrersOn DaoFixtureGroups.project
     val parkedChannels by DaoParkedChannel referrersOn DaoParkedChannels.project
     val aiConversations by DaoAiConversation referrersOn DaoAiConversations.project
-    val fxDefinitions by DaoFxDefinition optionalReferrersOn DaoFxDefinitions.project
+    val fxDefinitions by DaoFxDefinition referrersOn DaoFxDefinitions.project
 }

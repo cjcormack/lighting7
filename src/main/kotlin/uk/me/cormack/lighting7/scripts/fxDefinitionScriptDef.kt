@@ -49,7 +49,7 @@ abstract class FxDefinitionScript(
     /**
      * Register a custom effect type that becomes available in the library API.
      *
-     * The effect is automatically tagged with [EffectSource.SCRIPT] and will be
+     * The effect is automatically tagged with [EffectSource.USER] and will be
      * cleaned up when this script is unloaded.
      */
     fun registerEffect(registration: EffectRegistration) {

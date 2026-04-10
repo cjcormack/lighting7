@@ -70,7 +70,6 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
                 parameters = request.parameters
                 compatibleProperties = request.compatibleProperties
                 script = request.script
-                isBuiltin = false
                 project = currentProject
                 defaultStepTiming = request.defaultStepTiming
                 timingSource = try { TimingSource.valueOf(request.timingSource) } catch (_: Exception) { TimingSource.BEAT }
@@ -107,8 +106,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         val request = call.receive<UpdateFxDefinitionRequest>()
 
         val definition = transaction(state.database) {
-            val def = DaoFxDefinition.findById(resource.definitionId)
-            if (def == null || def.isBuiltin) return@transaction null
+            val def = DaoFxDefinition.findById(resource.definitionId) ?: return@transaction null
 
             request.effectId?.let { def.effectId = it }
             request.name?.let { def.name = it }
@@ -125,7 +123,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         }
 
         if (definition == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("FX definition not found or is built-in"))
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("FX definition not found"))
             return@put
         }
 
@@ -146,7 +144,6 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
     delete<FxDefinitionResource> { resource ->
         val deleted = transaction(state.database) {
             val def = DaoFxDefinition.findById(resource.definitionId) ?: return@transaction false
-            if (def.isBuiltin) return@transaction false
 
             val effectId = def.effectId
             def.delete()
@@ -157,7 +154,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         }
 
         if (!deleted) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("FX definition not found or is built-in"))
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("FX definition not found"))
             return@delete
         }
         call.respond(HttpStatusCode.NoContent)
@@ -217,7 +214,7 @@ data class RegisterEffectResult(
 /**
  * Compile and register a user-created FX definition in the FxRegistry.
  */
-private fun registerUserEffect(state: State, definition: DaoFxDefinition): RegisterEffectResult {
+internal fun registerUserEffect(state: State, definition: DaoFxDefinition): RegisterEffectResult {
     // Read all fields in a single transaction
     data class DefSnapshot(
         val effectMode: EffectMode,
@@ -297,7 +294,6 @@ data class FxDefinitionDto(
     val parameters: List<ParameterInfo>,
     val compatibleProperties: List<String>,
     val script: String,
-    val isBuiltin: Boolean,
     val defaultStepTiming: Boolean,
     val timingSource: String = "BEAT",
 )
@@ -360,7 +356,6 @@ internal fun DaoFxDefinition.toDto(): FxDefinitionDto = FxDefinitionDto(
     parameters = this.parameters,
     compatibleProperties = this.compatibleProperties,
     script = this.script,
-    isBuiltin = this.isBuiltin,
     defaultStepTiming = this.defaultStepTiming,
     timingSource = this.timingSource.name,
 )

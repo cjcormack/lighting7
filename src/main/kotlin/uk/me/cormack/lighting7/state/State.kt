@@ -88,6 +88,10 @@ class State(val config: ApplicationConfig) {
 
             // Migration: collapse DELAYED/RECURRING trigger types into ACTIVATION with timing fields
             migrateTriggerTypes()
+
+            // Migration: built-in FX definitions now come from bundled .fx.kts resource files,
+            // so the is_builtin column is no longer needed and project_id should be non-nullable.
+            migrateFxDefinitionsDropBuiltin()
         }
 
         return database
@@ -209,4 +213,38 @@ private fun Transaction.migrateApplyPresetTriggers() {
  */
 private fun Transaction.migrateTriggerTypes() {
     exec("UPDATE cue_triggers SET trigger_type = 'ACTIVATION' WHERE trigger_type IN ('DELAYED', 'RECURRING')")
+}
+
+/**
+ * One-time migration: remove the is_builtin column from fx_definitions and make project_id non-nullable.
+ *
+ * Built-in effects are now loaded from bundled .fx.kts resource files at startup,
+ * so the database table only stores user-created definitions which always have a project.
+ *
+ * Safe to run repeatedly — checks for the column before doing anything.
+ */
+private fun Transaction.migrateFxDefinitionsDropBuiltin() {
+    var hasIsBuiltin = false
+    exec(
+        """SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'fx_definitions' AND column_name = 'is_builtin'"""
+    ) { rs ->
+        hasIsBuiltin = rs.next()
+    }
+
+    if (!hasIsBuiltin) return // already migrated
+
+    val logger = LoggerFactory.getLogger("State")
+    logger.info("Migrating fx_definitions: removing is_builtin column and orphaned rows...")
+
+    // Delete any rows without a project (legacy built-in definitions stored in DB)
+    exec("DELETE FROM fx_definitions WHERE project_id IS NULL")
+
+    // Make project_id non-nullable
+    exec("ALTER TABLE fx_definitions ALTER COLUMN project_id SET NOT NULL")
+
+    // Drop the is_builtin column
+    exec("ALTER TABLE fx_definitions DROP COLUMN is_builtin")
+
+    logger.info("fx_definitions migration complete")
 }

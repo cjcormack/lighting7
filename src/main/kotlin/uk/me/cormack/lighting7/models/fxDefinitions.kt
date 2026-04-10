@@ -20,8 +20,7 @@ object DaoFxDefinitions : IntIdTable("fx_definitions") {
     val parameters = json<List<ParameterInfo>>("parameters", Json).default(emptyList())
     val compatibleProperties = json<List<String>>("compatible_properties", Json).default(emptyList())
     val script = text("script")
-    val isBuiltin = bool("is_builtin").default(false)
-    val project = reference("project_id", DaoProjects).nullable()
+    val project = reference("project_id", DaoProjects)
     val defaultStepTiming = bool("default_step_timing").default(false)
     val timingSource = enumerationByName<TimingSource>("timing_source", 20).default(TimingSource.BEAT)
 }
@@ -37,8 +36,7 @@ class DaoFxDefinition(id: EntityID<Int>) : IntEntity(id) {
     var parameters by DaoFxDefinitions.parameters
     var compatibleProperties by DaoFxDefinitions.compatibleProperties
     var script by DaoFxDefinitions.script
-    var isBuiltin by DaoFxDefinitions.isBuiltin
-    var project by DaoProject optionalReferencedOn DaoFxDefinitions.project
+    var project by DaoProject referencedOn DaoFxDefinitions.project
     var defaultStepTiming by DaoFxDefinitions.defaultStepTiming
     var timingSource by DaoFxDefinitions.timingSource
 }

@@ -197,32 +197,31 @@ Lookup is case-insensitive with spaces and underscores stripped.
 
 ### Data Model
 
-All effects — both built-in and user-created — are defined with the same structure.
-The metadata is stored separately from the calculation logic:
+**Built-in effects** are stored as `.fx.kts` files in the repository under
+`src/main/resources/fx/`. Each file contains YAML frontmatter for metadata followed
+by the calculate body. They are loaded at startup, compiled, and registered in the
+FxRegistry with `EffectSource.BUILT_IN`. They appear in the FX Library UI as
+read-only, and their scripts serve as real working examples for users writing custom
+effects.
+
+**User effects** are stored in the `fx_definitions` database table and managed via
+the FX Library UI. They are compiled and registered on save and on startup. The
+table always requires a `project_id` since every user effect belongs to a project.
 
 ```
-fx_definitions table:
-├── effect_id         — canonical ID (e.g., "SineWave")
-├── name              — display name (e.g., "Sine Wave")
+fx_definitions table (user effects only):
+├── effect_id         — canonical ID (e.g., "MyCustomPulse")
+├── name              — display name (e.g., "My Custom Pulse")
 ├── category          — "dimmer", "colour", "position", "composite", "controls"
 ├── output_type       — SLIDER, COLOUR, or POSITION
 ├── effect_mode       — STANDARD, STATEFUL, or COMPOSITE
 ├── parameters        — JSON schema [{name, type, defaultValue, description}]
 ├── compatible_properties — JSON array of property names
 ├── script            — the calculate() body only
-├── is_builtin        — true for shipped effects (read-only in UI)
-├── project_id        — null for built-ins, set for user effects
-└── default_step_timing
+├── project_id        — owning project (required)
+├── default_step_timing
+└── timing_source     — BEAT or WALL_CLOCK
 ```
-
-**Built-in effects** are stored as `.fx.kts` files in the repository under
-`src/main/resources/fx/`. Each file contains YAML frontmatter for metadata followed
-by the calculate body. They are loaded at startup, compiled, and registered in the
-FxRegistry. They appear in the FX Library UI as read-only, and their scripts serve
-as real working examples for users writing custom effects.
-
-**User effects** are stored in the `fx_definitions` database table and managed via
-the FX Library UI. They are compiled and registered on save/startup.
 
 ### Script Model
 

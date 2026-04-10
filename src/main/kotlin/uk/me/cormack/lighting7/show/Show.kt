@@ -16,6 +16,7 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.scriptSettings.IntValue
 import uk.me.cormack.lighting7.scriptSettings.ScriptSetting
 import uk.me.cormack.lighting7.scriptSettings.ScriptSettingValue
+import uk.me.cormack.lighting7.routes.registerUserEffect
 import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
@@ -45,12 +46,7 @@ class Show(
     val fxRegistry = FxRegistry().apply {
         // Load built-in effects from .fx.kts resource files
         val fileLoader = FxFileLoader(fxScriptCompiler)
-        val loaded = fileLoader.loadBuiltInEffects(this)
-        if (loaded == 0) {
-            // Fallback to hardcoded registrations if no .fx.kts files found
-            println("FxFileLoader loaded 0 effects, falling back to registerBuiltInEffects()")
-            registerBuiltInEffects()
-        }
+        fileLoader.loadBuiltInEffects(this)
     }
     val fxEngine = FxEngine(fixtures, MasterClock())
     val cueStackManager = CueStackManager(fxEngine)
@@ -90,6 +86,9 @@ class Show(
 
         // Start the FX engine after fixtures are loaded
         fxEngine.start(GlobalScope)
+
+        // Load user-created FX definitions from the database into the registry
+        loadUserFxDefinitions()
 
         // Pre-compile scripts used by cue triggers to avoid cold-start latency
         prewarmCueScripts()
@@ -137,6 +136,39 @@ class Show(
     fun close() {
         stopAllScenes()
         fxEngine.stop()
+    }
+
+    /**
+     * Load user-created FX definitions from the database and register them in the FxRegistry.
+     * This restores user effects that were created via the API across application restarts.
+     */
+    private fun loadUserFxDefinitions() {
+        try {
+            val definitions = transaction(state.database) {
+                DaoFxDefinition.find { DaoFxDefinitions.project eq project.id }.toList()
+            }
+
+            if (definitions.isEmpty()) return
+
+            var loaded = 0
+            val elapsed = measureTime {
+                for (definition in definitions) {
+                    val result = registerUserEffect(state, definition)
+                    if (result.success) {
+                        loaded++
+                    } else {
+                        val effectId = transaction(state.database) { definition.effectId }
+                        System.err.println("Failed to load user FX definition '$effectId':")
+                        result.diagnostics.forEach { d ->
+                            System.err.println("  ${d.severity}: ${d.message} ${d.location ?: ""}")
+                        }
+                    }
+                }
+            }
+            println("Loaded $loaded/${definitions.size} user FX definition(s) in $elapsed")
+        } catch (e: Exception) {
+            System.err.println("Failed to load user FX definitions: ${e.message}")
+        }
     }
 
     /**

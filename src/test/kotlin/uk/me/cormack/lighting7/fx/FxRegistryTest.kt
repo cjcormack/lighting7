@@ -114,21 +114,31 @@ class FxRegistryTest {
     }
 
     @Test
-    fun `registerBuiltInEffects registers all expected effects`() {
+    fun `loadBuiltInEffects loads effects from fx kts resource files`() {
         val registry = FxRegistry()
-        registry.registerBuiltInEffects()
+        val compiler = FxScriptCompiler()
+        val loader = FxFileLoader(compiler)
+        val loaded = loader.loadBuiltInEffects(registry)
 
-        // Check we have a reasonable number of effects registered
-        assertTrue(registry.size >= 25, "Expected at least 25 effects, got ${registry.size}")
+        // Check we have a reasonable number of effects loaded
+        assertTrue(loaded >= 25, "Expected at least 25 effects loaded, got $loaded")
+        assertTrue(registry.size >= 25, "Expected at least 25 effects registered, got ${registry.size}")
 
-        // Spot-check key effects exist
+        // Spot-check key effects exist across categories
         assertNotNull(registry.getRegistration("SineWave"), "SineWave should be registered")
-        assertNotNull(registry.getRegistration("sine"), "SineWave alias 'sine' should work")
         assertNotNull(registry.getRegistration("ColourCycle"), "ColourCycle should be registered")
         assertNotNull(registry.getRegistration("Circle"), "Circle should be registered")
         assertNotNull(registry.getRegistration("StaticSetting"), "StaticSetting should be registered")
         assertNotNull(registry.getRegistration("CandleFlicker"), "CandleFlicker should be registered")
         assertNotNull(registry.getRegistration("LightningStrike"), "LightningStrike should be registered")
+
+        // Normalized lookup should work (case-insensitive, spaces/underscores stripped)
+        assertNotNull(registry.getRegistration("sinewave"), "Normalized 'sinewave' should resolve")
+        assertNotNull(registry.getRegistration("Sine Wave"), "Spaced 'Sine Wave' should resolve")
+
+        // Verify source is BUILT_IN
+        val sineWave = registry.getRegistration("SineWave")!!
+        assertEquals(EffectSource.BUILT_IN, sineWave.source)
     }
 
     @Test
