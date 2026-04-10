@@ -35,7 +35,6 @@ import kotlin.time.measureTime
 class Show(
     val state: State,
     val project: DaoProject,
-    val loadFixturesScriptName: String,
     val initialSceneName: String?,
     val runLoopScriptName: String?,
     val trackChangedScriptName: String?,
@@ -68,10 +67,7 @@ class Show(
 
     fun start() {
         try {
-            when (project.mode) {
-                ProjectMode.SCRIPT_BASED -> evalScriptByName(loadFixturesScriptName)
-                ProjectMode.DB_BASED -> DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database)
-            }
+            DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database)
 
             // Load and apply parked channels after fixtures/controllers are registered
             parkManager.loadFromDatabase()

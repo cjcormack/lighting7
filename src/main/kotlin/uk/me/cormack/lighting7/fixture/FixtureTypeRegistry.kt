@@ -141,7 +141,6 @@ object FixtureTypeRegistry {
 
     /**
      * Reverse-lookup the typeKey for a fixture class.
-     * Used by FixtureImporter when migrating from script-based to DB-based mode.
      */
     fun typeKeyForClass(klass: KClass<*>): String? {
         return klass.findAnnotation<FixtureType>()?.typeKey
@@ -149,7 +148,6 @@ object FixtureTypeRegistry {
 
     /**
      * Get the simple class name for a given typeKey.
-     * Used by ScriptGenerator to produce readable fixture class references.
      */
     fun classNameForTypeKey(typeKey: String): String? {
         return typeKeyToClass[typeKey]?.simpleName

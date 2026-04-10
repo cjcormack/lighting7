@@ -45,11 +45,6 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             return@post
         }
 
-        if (project.mode != ProjectMode.DB_BASED) {
-            call.respond(HttpStatusCode.Forbidden, ErrorResponse("Patches can only be created in DB_BASED mode"))
-            return@post
-        }
-
         val request = call.receive<CreatePatchRequest>()
 
         // Validate fixture type
@@ -155,11 +150,6 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             return@put
         }
 
-        if (project.mode != ProjectMode.DB_BASED) {
-            call.respond(HttpStatusCode.Forbidden, ErrorResponse("Patches can only be modified in DB_BASED mode"))
-            return@put
-        }
-
         val request = call.receive<UpdatePatchRequest>()
         val result = transaction(state.database) {
             val patch = DaoFixturePatch.findById(resource.patchId)
@@ -229,11 +219,6 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
         val project = state.resolveProject(resource.parent.projectId)
         if (project == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@delete
-        }
-
-        if (project.mode != ProjectMode.DB_BASED) {
-            call.respond(HttpStatusCode.Forbidden, ErrorResponse("Patches can only be deleted in DB_BASED mode"))
             return@delete
         }
 

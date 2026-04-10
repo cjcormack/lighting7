@@ -71,9 +71,8 @@ Main orchestrator class:
 ```kotlin
 class Show(
     val state: State,                    // Database connection
-    val projectName: String,             // Active project
-    val loadFixturesScriptName: String,  // Script to define fixtures
-    val initialSceneName: String,        // Scene to run on startup
+    val project: DaoProject,             // Active project
+    val initialSceneName: String?,       // Scene to run on startup
     val runLoopScriptName: String?,      // Optional continuous loop script
     val trackChangedScriptName: String?, // Optional music trigger script
     val runLoopDelay: Long,              // Loop interval in ms
@@ -440,7 +439,7 @@ object DaoScenes : IntIdTable("scenes") {
 ## Startup Sequence
 
 1. `Show.start()` called
-2. Execute `loadFixturesScriptName` to register controllers and fixtures
+2. `DbFixtureLoader.loadFixtures()` registers controllers and fixtures from DB patches
 3. Execute `initialSceneName` to set initial lighting state
 4. If `runLoopScriptName` configured, start run loop coroutine
 5. Start ping ticker for track server (every 5 seconds)

@@ -92,6 +92,9 @@ class State(val config: ApplicationConfig) {
             // Migration: built-in FX definitions now come from bundled .fx.kts resource files,
             // so the is_builtin column is no longer needed and project_id should be non-nullable.
             migrateFxDefinitionsDropBuiltin()
+
+            // Migration: drop script-based configuration mode columns from projects table
+            migrateDropScriptBasedMode()
         }
 
         return database
@@ -247,4 +250,31 @@ private fun Transaction.migrateFxDefinitionsDropBuiltin() {
     exec("ALTER TABLE fx_definitions DROP COLUMN is_builtin")
 
     logger.info("fx_definitions migration complete")
+}
+
+/**
+ * One-time migration: drop the script-based configuration mode columns from the projects table.
+ *
+ * All projects now use DB-based fixture configuration exclusively. The `mode` and
+ * `load_fixtures_script_id` columns are no longer referenced by the ORM.
+ *
+ * Safe to run repeatedly — uses DROP COLUMN IF EXISTS.
+ */
+private fun Transaction.migrateDropScriptBasedMode() {
+    var hasMode = false
+    exec(
+        """SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'projects' AND column_name = 'mode'"""
+    ) { rs ->
+        hasMode = rs.next()
+    }
+
+    if (!hasMode) return // already migrated
+
+    logger.info("Migrating projects: dropping script-based configuration mode columns...")
+
+    exec("ALTER TABLE projects DROP COLUMN IF EXISTS mode")
+    exec("ALTER TABLE projects DROP COLUMN IF EXISTS load_fixtures_script_id")
+
+    logger.info("Script-based configuration mode migration complete")
 }

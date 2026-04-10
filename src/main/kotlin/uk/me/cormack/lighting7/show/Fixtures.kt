@@ -100,8 +100,6 @@ class Fixtures {
          * Get a typed fixture group by name.
          */
         inline fun <reified T : Fixture> group(name: String): FixtureGroup<T> = baseFixtures.group<T>(name).withTransaction(transaction)
-
-        fun register(removeUnused: Boolean = true, block: FixtureRegisterer.() -> Unit) = baseFixtures.register(removeUnused, block)
     }
 
     fun withTransaction(transaction: ControllerTransaction): FixturesWithTransaction = FixturesWithTransaction(this, transaction)

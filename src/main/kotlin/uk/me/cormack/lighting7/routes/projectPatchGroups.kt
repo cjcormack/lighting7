@@ -63,11 +63,6 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
             return@put
         }
 
-        if (project.mode != ProjectMode.DB_BASED) {
-            call.respond(HttpStatusCode.Forbidden, ErrorResponse("Groups can only be modified in DB_BASED mode"))
-            return@put
-        }
-
         val request = call.receive<UpdatePatchGroupRequest>()
         val result = transaction(state.database) {
             val group = DaoFixtureGroup.findById(resource.groupId)
@@ -119,11 +114,6 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
         val project = state.resolveProject(resource.parent.projectId)
         if (project == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@delete
-        }
-
-        if (project.mode != ProjectMode.DB_BASED) {
-            call.respond(HttpStatusCode.Forbidden, ErrorResponse("Groups can only be deleted in DB_BASED mode"))
             return@delete
         }
 

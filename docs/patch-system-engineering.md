@@ -2,19 +2,12 @@
 
 ## Overview
 
-The patch system introduces a DB-based project mode as an alternative to the existing script-based fixture configuration. Projects can use either mode, and switching between them includes automatic migration (importing runtime fixtures or generating scripts).
-
-## Project Modes
-
-Each project has a `mode` column (`SCRIPT_BASED` or `DB_BASED`):
-
-- **SCRIPT_BASED** (default): Fixtures configured via Kotlin DSL `load-fixtures` scripts. Existing behavior.
-- **DB_BASED**: Fixtures configured through the UI and stored in the database. The `load-fixtures` script is not used.
+The patch system manages fixture configuration through database records. Universe controllers, fixture patches, and fixture groups are stored in the database and loaded at startup via `DbFixtureLoader`, which calls the same `Fixtures.register {}` DSL used internally. This means everything downstream (FX engine, cues, channel mapping, WebSocket) works transparently.
 
 ## Database Schema
 
 ### `universe_configs`
-Stores controller configuration for each DMX universe in a DB-based project.
+Stores controller configuration for each DMX universe.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -46,20 +39,14 @@ Unique constraint: `(project_id, key)`
 Channel count is NOT stored — it's derived at runtime from `FixtureTypeRegistry.allTypes` via the `fixture_type_key`. This prevents data drift.
 
 ### `fixture_groups` / `fixture_group_members`
-DB-stored groups for DB-based projects.
+Groups for organising fixtures with position offsets.
 
 ## Key Components
 
 ### DbFixtureLoader (`show/DbFixtureLoader.kt`)
-Reads DB tables and calls the same `Fixtures.register {}` DSL that scripts use. This means everything downstream (FX engine, cues, channel mapping, WebSocket) works identically regardless of mode.
+Reads DB tables and calls the same `Fixtures.register {}` DSL that the rest of the system uses. This means everything downstream (FX engine, cues, channel mapping, WebSocket) works identically.
 
-### FixtureImporter (`show/FixtureImporter.kt`)
-Snapshots the current runtime fixtures into DB records when switching from SCRIPT_BASED to DB_BASED. Uses `FixtureTypeRegistry.typeKeyForClass()` to reverse-lookup type keys.
-
-### ScriptGenerator (`show/ScriptGenerator.kt`)
-Generates a Kotlin DSL load-fixtures script from DB records when switching from DB_BASED to SCRIPT_BASED. Uses `FixtureTypeRegistry.classNameForTypeKey()` to resolve class names.
-
-### FixtureTypeRegistry additions
+### FixtureTypeRegistry (`fixture/FixtureTypeRegistry.kt`)
 - `instantiateByTypeKey()`: Creates real fixture instances from a type key string + parameters.
 - `typeKeyForClass()`: Reverse lookup from class to type key.
 - `classNameForTypeKey()`: Get class simple name for a type key.
@@ -71,7 +58,7 @@ All scoped under `/api/rest/project/{projectId}/`:
 
 ### Patches
 - `GET /patches` — List all patches (enriched with type info from registry)
-- `POST /patches` — Batch create (`{ universe, fixtureTypeKey, count, startChannel, keyPrefix, namePrefix, address? }`)
+- `POST /patches` — Create a single patch (`{ universe, fixtureTypeKey, startChannel, key, displayName, address? }`)
 - `PUT /patches/{id}` — Update (displayName, key, startChannel)
 - `DELETE /patches/{id}` — Delete
 
@@ -82,12 +69,15 @@ Universe configs are auto-created when a patch references a new universe number.
 - `PUT /universe-configs/{id}` — Update (address, controllerType)
 - `DELETE /universe-configs/{id}` — Delete (cascades patches)
 
-### Mode Change
-Mode is set via `PUT /project/{id}` with `{ mode: "DB_BASED" }`. Backend handles migration automatically.
+### Patch Groups
+- `GET /patch-groups` — List groups
+- `GET /patch-groups/{id}` — Group detail with ordered members
+- `PUT /patch-groups/{id}` — Update (rename, reorder members)
+- `DELETE /patch-groups/{id}` — Delete (removes memberships, fixtures stay)
 
 ## WebSocket
 
-New message type: `patchListChanged` — broadcast when patches are created, updated, or deleted.
+Message type: `patchListChanged` — broadcast when patches are created, updated, or deleted.
 
 ## Hot Reload
 

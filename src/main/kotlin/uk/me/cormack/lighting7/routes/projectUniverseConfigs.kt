@@ -41,11 +41,6 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
             return@put
         }
 
-        if (project.mode != ProjectMode.DB_BASED) {
-            call.respond(HttpStatusCode.Forbidden, ErrorResponse("Universe configs can only be modified in DB_BASED mode"))
-            return@put
-        }
-
         val request = call.receive<UpdateUniverseConfigRequest>()
         val config = transaction(state.database) {
             val config = DaoUniverseConfig.findById(resource.configId) ?: return@transaction null
@@ -77,11 +72,6 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
         val project = state.resolveProject(resource.parent.projectId)
         if (project == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@delete
-        }
-
-        if (project.mode != ProjectMode.DB_BASED) {
-            call.respond(HttpStatusCode.Forbidden, ErrorResponse("Universe configs can only be deleted in DB_BASED mode"))
             return@delete
         }
 

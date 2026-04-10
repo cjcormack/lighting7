@@ -74,20 +74,9 @@ class ProjectManager(
      * Migrate an existing project to use FK references based on config values.
      */
     private fun migrateProjectFromConfig(project: DaoProject) {
-        val loadFixturesScriptName = config.property("lighting.loadFixturesScriptName").getString()
         val initialSceneName = config.propertyOrNull("lighting.initialSceneName")?.getString()
         val trackChangedScriptName = config.propertyOrNull("lighting.trackChangedScriptName")?.getString()
         val runLoopScriptName = config.propertyOrNull("lighting.runLoop.scriptName")?.getString()
-
-        // Find and set load fixtures script
-        if (project.loadFixturesScriptId == null && loadFixturesScriptName.isNotEmpty()) {
-            val script = DaoScript.find {
-                (DaoScripts.project eq project.id) and (DaoScripts.name eq loadFixturesScriptName)
-            }.firstOrNull()
-            if (script != null) {
-                project.loadFixturesScriptId = script.id.value
-            }
-        }
 
         // Find and set initial scene
         if (project.initialSceneId == null && !initialSceneName.isNullOrEmpty()) {
@@ -170,11 +159,6 @@ class ProjectManager(
     private fun createShow(project: DaoProject): Show {
         val runLoopEnabled = config.propertyOrNull("lighting.runLoop.enabled")?.getString()?.toBoolean() ?: false
 
-        // Get script/scene names from FK references, falling back to config for compatibility
-        val loadFixturesScriptName = transaction(database) {
-            project.loadFixturesScript?.name
-        } ?: config.property("lighting.loadFixturesScriptName").getString()
-
         val initialSceneName = transaction(database) {
             project.initialScene?.name
         }
@@ -196,7 +180,6 @@ class ProjectManager(
         return Show(
             state = stateProvider(),
             project = project,
-            loadFixturesScriptName = loadFixturesScriptName,
             initialSceneName = initialSceneName,
             runLoopScriptName = runLoopScriptName,
             trackChangedScriptName = trackChangedScriptName,

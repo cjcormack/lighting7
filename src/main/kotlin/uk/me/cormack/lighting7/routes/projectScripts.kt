@@ -167,15 +167,6 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
                 return@transaction ScriptDeleteResult.NOT_FOUND
             }
 
-            // Check if used as loadFixturesScript (required, cannot delete)
-            val usedAsLoadFixtures = DaoProject.find {
-                DaoProjects.loadFixturesScriptId eq script.id.value
-            }.count() > 0
-
-            if (usedAsLoadFixtures) {
-                return@transaction ScriptDeleteResult.BLOCKED_REQUIRED_PROPERTY
-            }
-
             // Nullify optional project properties
             DaoProject.find { DaoProjects.trackChangedScriptId eq script.id.value }
                 .forEach { it.trackChangedScriptId = null }
@@ -192,10 +183,6 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
 
         when (result) {
             ScriptDeleteResult.NOT_FOUND -> call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
-            ScriptDeleteResult.BLOCKED_REQUIRED_PROPERTY -> call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Script is used as loadFixturesScript and cannot be deleted")
-            )
             ScriptDeleteResult.SUCCESS -> call.respond(HttpStatusCode.OK)
         }
     }
@@ -392,7 +379,7 @@ data class CopyScriptResponse(
 )
 
 // Enums
-private enum class ScriptDeleteResult { SUCCESS, NOT_FOUND, BLOCKED_REQUIRED_PROPERTY }
+private enum class ScriptDeleteResult { SUCCESS, NOT_FOUND }
 
 // Helper functions
 internal fun DaoScript.toScriptDetails(isCurrentProject: Boolean): ScriptDetails {
@@ -401,8 +388,6 @@ internal fun DaoScript.toScriptDetails(isCurrentProject: Boolean): ScriptDetails
     val chaseNames = allScenes.filter { it.mode == Mode.CHASE }.map { it.name }
 
     val usedByProperties = mutableListOf<String>()
-    val isLoadFixtures = DaoProject.find { DaoProjects.loadFixturesScriptId eq this@toScriptDetails.id.value }.count() > 0
-    if (isLoadFixtures) usedByProperties.add("loadFixturesScript")
     if (DaoProject.find { DaoProjects.trackChangedScriptId eq this@toScriptDetails.id.value }.count() > 0) {
         usedByProperties.add("trackChangedScript")
     }
@@ -419,10 +404,6 @@ internal fun DaoScript.toScriptDetails(isCurrentProject: Boolean): ScriptDetails
         !isCurrentProject -> {
             canDelete = false
             cannotDeleteReason = "Cannot delete scripts from a non-current project"
-        }
-        isLoadFixtures -> {
-            canDelete = false
-            cannotDeleteReason = "Script is used as loadFixturesScript (required)"
         }
         else -> {
             canDelete = true

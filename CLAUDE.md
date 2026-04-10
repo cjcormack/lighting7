@@ -199,8 +199,9 @@ val hexOnly = allHexes.flattenAs<HexFixture>() // List<HexFixture>
 **Group FX Targeting**: A single `FxInstance` targets the entire group. The `FxEngine` expands
 the effect to group members at processing time, applying distribution strategy offsets.
 
-Creating groups in registration scripts:
+Groups are created via `DbFixtureLoader` from DB patch records. Internally, the loader calls `Fixtures.register {}`:
 ```kotlin
+// Internal to DbFixtureLoader — not available in user scripts
 fixtures.register {
     val hex1 = addFixture(HexFixture(universe, "hex-1", "Hex 1", 1))
     val hex2 = addFixture(HexFixture(universe, "hex-2", "Hex 2", 13))
@@ -328,7 +329,7 @@ registerEffect(EffectRegistration(
 ))
 ```
 
-**`GENERAL`** (`LightingScript`) — full-power scripts with DMX, fixtures, FX, scenes, coroutines. Used for `loadFixtures` and legacy scripts.
+**`GENERAL`** (`LightingScript`) — full-power scripts with DMX, fixtures, FX, scenes, coroutines. Can read fixture state but cannot register fixtures (registration is handled by DbFixtureLoader from DB patches).
 
 ### Modifying REST API
 Add routes in `routes/` package using Ktor Resources for type-safe routing.
