@@ -230,12 +230,23 @@ internal fun Route.routeApiRestProjects(state: State) {
                 project.runLoopScriptId = null
                 project.initialSceneId = null
 
-                // Delete associated cues (children first due to FK), cue stacks, scenes, and scripts
+                // Delete associated records in FK-safe order
                 project.cues.forEach { cue ->
                     deleteCueChildren(cue)
                     cue.delete()
                 }
                 project.cueStacks.forEach { it.delete() }
+                project.cueSlots.forEach { it.delete() }
+                project.fxPresets.forEach { it.delete() }
+                project.fixtureGroups.forEach { group ->
+                    group.members.forEach { it.delete() }
+                    group.delete()
+                }
+                project.fixturePatches.forEach { it.delete() }
+                project.universeConfigs.forEach { it.delete() }
+                project.parkedChannels.forEach { it.delete() }
+                project.aiConversations.forEach { it.delete() }
+                project.fxDefinitions.forEach { it.delete() }
                 project.scenes.forEach { it.delete() }
                 project.scripts.forEach { it.delete() }
                 project.delete()

@@ -63,7 +63,11 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     val fxPresets by DaoFxPreset referrersOn DaoFxPresets.project
     val cues by DaoCue referrersOn DaoCues.project
     val cueStacks by DaoCueStack referrersOn DaoCueStacks.project
+    val cueSlots by DaoCueSlot referrersOn DaoCueSlots.project
     val universeConfigs by DaoUniverseConfig referrersOn DaoUniverseConfigs.project
     val fixturePatches by DaoFixturePatch referrersOn DaoFixturePatches.project
     val fixtureGroups by DaoFixtureGroup referrersOn DaoFixtureGroups.project
+    val parkedChannels by DaoParkedChannel referrersOn DaoParkedChannels.project
+    val aiConversations by DaoAiConversation referrersOn DaoAiConversations.project
+    val fxDefinitions by DaoFxDefinition optionalReferrersOn DaoFxDefinitions.project
 }
