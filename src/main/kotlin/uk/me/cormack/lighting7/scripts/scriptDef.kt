@@ -25,9 +25,6 @@ abstract class LightingScript(
     val fxEngine: FxEngine,
     val scriptName: String,
     val step: Int,
-    val sceneName: String,
-    val sceneIsActive: Boolean,
-    val settings: Map<String, String>,
     val coroutineScope: CoroutineScope,
     val currentTrack: TrackDetails?,
 ) {
@@ -46,12 +43,6 @@ abstract class LightingScript(
     fun controller(subnet: Int, universe: Int): DmxController = fixtures.controller(Universe(subnet, universe))
     inline fun <reified T: Fixture> fixture(key: String): T = fixtures.fixture(key)
     inline fun <reified T: Fixture> group(key: String): FixtureGroup<T> = fixtures.group(key)
-    fun runScene(sceneName: String) {
-        show.runScene(sceneName)
-    }
-    fun startScene(sceneName: String) {
-        show.startScene(sceneName)
-    }
 }
 
 object LightingScriptConfiguration : ScriptCompilationConfiguration(
@@ -63,7 +54,6 @@ object LightingScriptConfiguration : ScriptCompilationConfiguration(
             "uk.me.cormack.lighting7.fixture.dmx.*",
             "uk.me.cormack.lighting7.fixture.hue.*",
             "uk.me.cormack.lighting7.fixture.group.*",
-            "uk.me.cormack.lighting7.scriptSettings.*",
             "uk.me.cormack.lighting7.fx.*",
             "uk.me.cormack.lighting7.fx.effects.*",
             "java.awt.Color",

@@ -323,7 +323,6 @@ class CueTriggerManager(
             // Run as FX_APPLICATION script (lightweight, implicit engine access)
             state.show.runLiteralScript(
                 literalScript = scriptBody,
-                scriptSettings = emptyList(),
                 scriptName = "cue-trigger-$cueId",
                 scriptType = ScriptType.FX_APPLICATION,
                 scriptId = scriptId,

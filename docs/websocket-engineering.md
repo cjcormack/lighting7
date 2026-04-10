@@ -7,7 +7,7 @@ This document describes the WebSocket API for real-time communication between th
 The WebSocket API provides:
 - Real-time DMX channel value updates
 - Direct channel control from the UI
-- Scene and fixture change notifications
+- Fixture change notifications
 - Music track information
 
 ## Connection
@@ -29,7 +29,7 @@ The WebSocket API provides:
 │   │                    WebSocket Client                             │   │
 │   │                                                                 │   │
 │   │  Send: ping, channelState, channelMappingState, updateChannel   │   │
-│   │  Receive: channelState, channelMappingState, sceneChanged, etc. │   │
+│   │  Receive: channelState, channelMappingState, fxChanged, etc.    │   │
 │   └─────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────┬───────────────────────────────────────┘
                                   │ WebSocket
@@ -48,8 +48,6 @@ The WebSocket API provides:
 │   │   │  controllersChanged() ───► UniversesStateOutMessage      │  │   │
 │   │   │  fixturesChanged() ──────► FixturesChangedOutMessage     │  │   │
 │   │   │                      ────► ChannelMappingStateOutMessage │  │   │
-│   │   │  sceneListChanged() ─────► ScenesListChangedOutMessage   │  │   │
-│   │   │  sceneChanged(id) ───────► ScenesChangedOutMessage       │  │   │
 │   │   │  trackChanged() ─────────► TrackChangedOutMessage        │  │   │
 │   │   │  fxPresetListChanged() ► FxPresetListChangedOutMessage │  │   │
 │   │   │  cueListChanged() ─────► CueListChangedOutMessage      │  │   │
@@ -200,34 +198,6 @@ when fixtures change, or in response to a `channelMappingState` request.
 | fixtureName | String | Display name of the fixture |
 | description | String | Channel description (e.g., "Dimmer", "Red") |
 
-#### sceneListChanged
-
-Notification that the scene list has changed (scene added/deleted).
-
-```json
-{ "type": "sceneListChanged" }
-```
-
-Client should refresh scene list via REST API.
-
-#### sceneChanged
-
-Notification that a scene's state has changed (active status, settings).
-
-```json
-{
-    "type": "sceneChanged",
-    "data": {
-        "id": 1,
-        "mode": "SCENE",
-        "name": "Blue Wash",
-        "scriptId": 5,
-        "isActive": true,
-        "settingsValues": {}
-    }
-}
-```
-
 #### fixturesChanged
 
 Notification that fixtures have been re-registered.
@@ -369,9 +339,6 @@ ws.onmessage = (event) => {
     switch (message.type) {
         case 'channelState':
             updateChannelDisplay(message.channels);
-            break;
-        case 'sceneListChanged':
-            refreshSceneList();
             break;
         // ...
     }

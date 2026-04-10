@@ -9,7 +9,10 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import uk.me.cormack.lighting7.dmx.ChannelChange
-import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoProjects
+import uk.me.cormack.lighting7.models.DaoScript
+import uk.me.cormack.lighting7.models.DaoScripts
 import uk.me.cormack.lighting7.show.Show
 
 /**
@@ -52,7 +55,7 @@ class ProjectManager(
                 current = DaoProject.find { DaoProjects.name eq configProjectName }.firstOrNull()
 
                 if (current != null) {
-                    // Migrate: set script/scene references from config if not already set
+                    // Migrate: set script references from config if not already set
                     migrateProjectFromConfig(current)
                     current.isCurrent = true
                 } else {
@@ -74,19 +77,7 @@ class ProjectManager(
      * Migrate an existing project to use FK references based on config values.
      */
     private fun migrateProjectFromConfig(project: DaoProject) {
-        val initialSceneName = config.propertyOrNull("lighting.initialSceneName")?.getString()
         val trackChangedScriptName = config.propertyOrNull("lighting.trackChangedScriptName")?.getString()
-        val runLoopScriptName = config.propertyOrNull("lighting.runLoop.scriptName")?.getString()
-
-        // Find and set initial scene
-        if (project.initialSceneId == null && !initialSceneName.isNullOrEmpty()) {
-            val scene = DaoScene.find {
-                (DaoScenes.project eq project.id) and (DaoScenes.name eq initialSceneName)
-            }.firstOrNull()
-            if (scene != null) {
-                project.initialSceneId = scene.id.value
-            }
-        }
 
         // Find and set track changed script
         if (project.trackChangedScriptId == null && !trackChangedScriptName.isNullOrEmpty()) {
@@ -96,22 +87,6 @@ class ProjectManager(
             if (script != null) {
                 project.trackChangedScriptId = script.id.value
             }
-        }
-
-        // Find and set run loop script
-        if (project.runLoopScriptId == null && !runLoopScriptName.isNullOrEmpty()) {
-            val script = DaoScript.find {
-                (DaoScripts.project eq project.id) and (DaoScripts.name eq runLoopScriptName)
-            }.firstOrNull()
-            if (script != null) {
-                project.runLoopScriptId = script.id.value
-            }
-        }
-
-        // Set run loop delay from config
-        val runLoopDelay = config.propertyOrNull("lighting.runLoop.delayMs")?.getString()?.toLongOrNull()
-        if (runLoopDelay != null) {
-            project.runLoopDelayMs = runLoopDelay
         }
     }
 
@@ -157,45 +132,23 @@ class ProjectManager(
     }
 
     private fun createShow(project: DaoProject): Show {
-        val runLoopEnabled = config.propertyOrNull("lighting.runLoop.enabled")?.getString()?.toBoolean() ?: false
-
-        val initialSceneName = transaction(database) {
-            project.initialScene?.name
-        }
-
         val trackChangedScriptName = transaction(database) {
             project.trackChangedScript?.name
         }
 
-        val runLoopScriptName = if (runLoopEnabled) {
-            transaction(database) {
-                project.runLoopScript?.name
-            } ?: config.propertyOrNull("lighting.runLoop.scriptName")?.getString()
-        } else {
-            null
-        }
-
-        val runLoopDelay = project.runLoopDelayMs
-
         return Show(
             state = stateProvider(),
             project = project,
-            initialSceneName = initialSceneName,
-            runLoopScriptName = runLoopScriptName,
             trackChangedScriptName = trackChangedScriptName,
-            runLoopDelay = runLoopDelay
         )
     }
 
     private fun shutdownShow(show: Show) {
-        // 1. Stop all running scenes
-        show.stopAllScenes()
-
-        // 2. Clear all FX and stop the engine
+        // 1. Clear all FX and stop the engine
         show.fxEngine.clearAllEffects()
         show.fxEngine.stop()
 
-        // 3. Blackout all DMX channels
+        // 2. Blackout all DMX channels
         show.fixtures.controllers.forEach { controller ->
             val blackout = (1..512).map { channelNo ->
                 channelNo to ChannelChange(0u, fadeMs = 0)
@@ -203,12 +156,12 @@ class ProjectManager(
             controller.setValues(blackout)
         }
 
-        // 4. Clear fixtures registry (unregisters listeners, clears all state)
+        // 3. Clear fixtures registry (unregisters listeners, clears all state)
         show.fixtures.register(removeUnused = true) {
             // Empty block - just clears everything
         }
 
-        // 5. Close show (additional cleanup)
+        // 4. Close show (additional cleanup)
         show.close()
     }
 }

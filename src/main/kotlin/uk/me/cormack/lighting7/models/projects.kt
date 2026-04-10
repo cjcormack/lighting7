@@ -14,13 +14,9 @@ object DaoProjects: IntIdTable("projects") {
     val name = varchar("name", 50).uniqueIndex()
     val description = varchar("description", 255).nullable()
     val isCurrent = bool("is_current").default(false)
-    val runLoopDelayMs = long("run_loop_delay_ms").default(100L)
 
-    // FK references - these are initialized lazily after DaoScripts/DaoScenes are defined
-    // The columns will be created via SchemaUtils.createMissingTablesAndColumns()
+    // FK references - plain integer columns to avoid circular dependency issues
     val trackChangedScriptId = integer("track_changed_script_id").nullable()
-    val runLoopScriptId = integer("run_loop_script_id").nullable()
-    val initialSceneId = integer("initial_scene_id").nullable()
 }
 
 class DaoProject(id: EntityID<Int>) : IntEntity(id) {
@@ -29,25 +25,13 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     var name by DaoProjects.name
     var description by DaoProjects.description
     var isCurrent by DaoProjects.isCurrent
-    var runLoopDelayMs by DaoProjects.runLoopDelayMs
 
-    // Manual FK handling since we can't use reference() due to circular dependency
     var trackChangedScriptId by DaoProjects.trackChangedScriptId
-    var runLoopScriptId by DaoProjects.runLoopScriptId
-    var initialSceneId by DaoProjects.initialSceneId
 
-    // Convenience properties to load related entities
     val trackChangedScript: DaoScript?
         get() = trackChangedScriptId?.let { DaoScript.findById(it) }
 
-    val runLoopScript: DaoScript?
-        get() = runLoopScriptId?.let { DaoScript.findById(it) }
-
-    val initialScene: DaoScene?
-        get() = initialSceneId?.let { DaoScene.findById(it) }
-
     val scripts by DaoScript referrersOn DaoScripts.project
-    val scenes by DaoScene referrersOn DaoScenes.project
     val fxPresets by DaoFxPreset referrersOn DaoFxPresets.project
     val cues by DaoCue referrersOn DaoCues.project
     val cueStacks by DaoCueStack referrersOn DaoCueStacks.project

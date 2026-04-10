@@ -247,7 +247,7 @@ annotation class FixtureProperty(val description: String = "")
 Marks a property as controllable. The `fixtureProperties` list on `Fixture` collects these via reflection for:
 - Channel description generation
 - REST API property enumeration
-- Scene recording
+- FX engine targeting
 
 ## Transaction Pattern
 
@@ -290,7 +290,6 @@ This creates a new fixture instance with the same configuration but bound to the
 The `Fixtures` class manages:
 - Controller registration
 - Fixture registration with grouping
-- Active scene tracking
 - Change notification
 
 ### Registration
@@ -318,10 +317,6 @@ Fixtures can belong to multiple groups for batch operations:
 val frontFixtures = fixtures.fixtureGroup("front")
 frontFixtures.forEach { it.blackout() }
 ```
-
-### Scene Tracking
-
-The registry tracks which scenes are currently "active" (their channel values match the current output). When channel values change, scenes are automatically marked inactive.
 
 ## Adding a New DMX Fixture
 

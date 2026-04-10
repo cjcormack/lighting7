@@ -14,7 +14,6 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.scriptSettings.ScriptSettingList
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -96,32 +95,16 @@ internal fun Route.routeApiRestProjects(state: State) {
 
                 request.name?.let { project.name = it }
                 request.description?.let { project.description = it }
-                request.runLoopDelayMs?.let { project.runLoopDelayMs = it }
 
-                // Update FK references if provided (use ID directly)
-                if (request.initialSceneId != null && request.initialSceneId > 0) {
-                    val scene = DaoScene.findById(request.initialSceneId)
-                    if (scene != null && scene.project.id == project.id) {
-                        project.initialSceneId = scene.id.value
-                    }
-                }
                 if (request.trackChangedScriptId != null && request.trackChangedScriptId > 0) {
                     val script = DaoScript.findById(request.trackChangedScriptId)
                     if (script != null && script.project.id == project.id) {
                         project.trackChangedScriptId = script.id.value
                     }
                 }
-                if (request.runLoopScriptId != null && request.runLoopScriptId > 0) {
-                    val script = DaoScript.findById(request.runLoopScriptId)
-                    if (script != null && script.project.id == project.id) {
-                        project.runLoopScriptId = script.id.value
-                    }
-                }
 
                 // Handle clearing FK references (pass 0 to clear)
-                if (request.initialSceneId == 0) project.initialSceneId = null
                 if (request.trackChangedScriptId == 0) project.trackChangedScriptId = null
-                if (request.runLoopScriptId == 0) project.runLoopScriptId = null
 
                 project.toDetailDto()
             }
@@ -145,8 +128,6 @@ internal fun Route.routeApiRestProjects(state: State) {
 
                 // Clear FK references first to avoid constraint violations
                 project.trackChangedScriptId = null
-                project.runLoopScriptId = null
-                project.initialSceneId = null
 
                 // Delete associated records in FK-safe order
                 project.cues.forEach { cue ->
@@ -165,7 +146,6 @@ internal fun Route.routeApiRestProjects(state: State) {
                 project.parkedChannels.forEach { it.delete() }
                 project.aiConversations.forEach { it.delete() }
                 project.fxDefinitions.forEach { it.delete() }
-                project.scenes.forEach { it.delete() }
                 project.scripts.forEach { it.delete() }
                 project.delete()
 
@@ -200,9 +180,8 @@ internal fun Route.routeApiRestProjects(state: State) {
             }
         }
 
-        // Script, Scene, Preset, Cue, and Cue Stack endpoints are defined in separate files
+        // Script, Preset, Cue, and Cue Stack endpoints are defined in separate files
         routeApiRestProjectScripts(state)
-        routeApiRestProjectScenes(state)
         routeApiRestProjectFxPresets(state)
         routeApiRestProjectCues(state)
         routeApiRestProjectCueStacks(state)
@@ -210,62 +189,6 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectPatches(state)
         routeApiRestProjectUniverseConfigs(state)
         routeApiRestProjectPatchGroups(state)
-
-        // POST /current/create-initial-scene - Create initial scene template (script + scene)
-        post<CreateInitialSceneResource> {
-            val result = transaction(state.database) {
-                val project = state.projectManager.currentProject
-
-                // Check if initial scene already exists
-                if (project.initialSceneId != null) {
-                    val existingScene = DaoScene.findById(project.initialSceneId!!)
-                    if (existingScene != null) {
-                        return@transaction TemplateCreatedResponse(
-                            scriptId = existingScene.script.id.value,
-                            scriptName = existingScene.script.name,
-                            sceneId = existingScene.id.value,
-                            sceneName = existingScene.name,
-                            message = "Initial scene already exists"
-                        ) to false
-                    }
-                }
-
-                // Create the script
-                val script = DaoScript.new {
-                    name = "initial-scene"
-                    script = INITIAL_SCENE_SCRIPT_TEMPLATE
-                    this.project = project
-                    settings = ScriptSettingList(emptyList())
-                }
-
-                // Create the scene referencing the script
-                val scene = DaoScene.new {
-                    name = "Initial"
-                    this.script = script
-                    this.project = project
-                    mode = Mode.SCENE
-                    settingsValues = emptyMap()
-                }
-
-                // Update project to reference this scene
-                project.initialSceneId = scene.id.value
-
-                TemplateCreatedResponse(
-                    scriptId = script.id.value,
-                    scriptName = script.name,
-                    sceneId = scene.id.value,
-                    sceneName = scene.name,
-                    message = "Initial scene created successfully"
-                ) to true
-            }
-
-            val (response, created) = result
-            if (created) {
-                call.respond(HttpStatusCode.Created, response)
-            } else {
-                call.respond(HttpStatusCode.OK, response)
-            }
-        }
 
         // POST /current/create-track-changed-script - Create track changed script template
         post<CreateTrackChangedScriptResource> {
@@ -289,7 +212,6 @@ internal fun Route.routeApiRestProjects(state: State) {
                     name = "track-changed"
                     script = TRACK_CHANGED_SCRIPT_TEMPLATE
                     this.project = project
-                    settings = ScriptSettingList(emptyList())
                 }
 
                 // Update project to reference this script
@@ -310,50 +232,7 @@ internal fun Route.routeApiRestProjects(state: State) {
             }
         }
 
-        // POST /current/create-run-loop-script - Create run loop script template
-        post<CreateRunLoopScriptResource> {
-            val result = transaction(state.database) {
-                val project = state.projectManager.currentProject
-
-                // Check if run loop script already exists
-                if (project.runLoopScriptId != null) {
-                    val existingScript = DaoScript.findById(project.runLoopScriptId!!)
-                    if (existingScript != null) {
-                        return@transaction TemplateCreatedResponse(
-                            scriptId = existingScript.id.value,
-                            scriptName = existingScript.name,
-                            message = "Run loop script already exists"
-                        ) to false
-                    }
-                }
-
-                // Create the script
-                val script = DaoScript.new {
-                    name = "run-loop"
-                    script = RUN_LOOP_SCRIPT_TEMPLATE
-                    this.project = project
-                    settings = ScriptSettingList(emptyList())
-                }
-
-                // Update project to reference this script
-                project.runLoopScriptId = script.id.value
-
-                TemplateCreatedResponse(
-                    scriptId = script.id.value,
-                    scriptName = script.name,
-                    message = "Run loop script created successfully"
-                ) to true
-            }
-
-            val (response, created) = result
-            if (created) {
-                call.respond(HttpStatusCode.Created, response)
-            } else {
-                call.respond(HttpStatusCode.OK, response)
-            }
-        }
-
-        // POST /{id}/clone - Clone a project with all scripts and scenes
+        // POST /{id}/clone - Clone a project with all scripts
         post<CloneProjectResource> { resource ->
             val request = call.receive<CloneProjectRequest>()
 
@@ -372,7 +251,6 @@ internal fun Route.routeApiRestProjects(state: State) {
                     name = request.name
                     description = request.description ?: sourceProject.description
                     isCurrent = false
-                    runLoopDelayMs = sourceProject.runLoopDelayMs
                 }
 
                 // Clone all scripts, maintaining ID mapping
@@ -382,26 +260,8 @@ internal fun Route.routeApiRestProjects(state: State) {
                         name = sourceScript.name
                         script = sourceScript.script
                         project = newProject
-                        settings = sourceScript.settings
                     }
                     scriptIdMapping[sourceScript.id.value] = newScript.id.value
-                }
-
-                // Clone all scenes, updating script FKs
-                val sceneIdMapping = mutableMapOf<Int, Int>() // old ID -> new ID
-                sourceProject.scenes.forEach { sourceScene ->
-                    val newScriptId = scriptIdMapping[sourceScene.script.id.value]
-                    val newScript = newScriptId?.let { DaoScript.findById(it) }
-                        ?: return@transaction null to "Failed to map scene script"
-
-                    val newScene = DaoScene.new {
-                        name = sourceScene.name
-                        script = newScript
-                        project = newProject
-                        mode = sourceScene.mode
-                        settingsValues = sourceScene.settingsValues
-                    }
-                    sceneIdMapping[sourceScene.id.value] = newScene.id.value
                 }
 
                 // Clone all FX presets, maintaining ID mapping
@@ -483,17 +343,10 @@ internal fun Route.routeApiRestProjects(state: State) {
                 sourceProject.trackChangedScriptId?.let { oldId ->
                     newProject.trackChangedScriptId = scriptIdMapping[oldId]
                 }
-                sourceProject.runLoopScriptId?.let { oldId ->
-                    newProject.runLoopScriptId = scriptIdMapping[oldId]
-                }
-                sourceProject.initialSceneId?.let { oldId ->
-                    newProject.initialSceneId = sceneIdMapping[oldId]
-                }
 
                 CloneProjectResponse(
                     project = newProject.toDetailDto(),
                     scriptsCloned = scriptIdMapping.size,
-                    scenesCloned = sceneIdMapping.size,
                     presetsCloned = presetIdMapping.size,
                     cuesCloned = cuesCloned,
                     cueStacksCloned = cueStackIdMapping.size,
@@ -523,14 +376,8 @@ data class ProjectIdResource(val id: Int)
 @Resource("/{id}/set-current")
 data class SetCurrentProjectResource(val id: Int)
 
-@Resource("/current/create-initial-scene")
-class CreateInitialSceneResource
-
 @Resource("/current/create-track-changed-script")
 class CreateTrackChangedScriptResource
-
-@Resource("/current/create-run-loop-script")
-class CreateRunLoopScriptResource
 
 @Resource("/{id}/clone")
 data class CloneProjectResource(val id: Int)
@@ -550,16 +397,9 @@ data class ProjectDetailDto(
     val name: String,
     val description: String?,
     val isCurrent: Boolean,
-    val initialSceneId: Int?,
-    val initialSceneName: String?,
     val trackChangedScriptId: Int?,
     val trackChangedScriptName: String?,
-    val runLoopScriptId: Int?,
-    val runLoopScriptName: String?,
-    val runLoopDelayMs: Long,
     val scriptCount: Int,
-    val sceneCount: Int,
-    val chaseCount: Int,
     val fxPresetCount: Int,
     val cueCount: Int,
     val cueStackCount: Int,
@@ -575,18 +415,13 @@ data class CreateProjectRequest(
 data class UpdateProjectRequest(
     val name: String? = null,
     val description: String? = null,
-    val initialSceneId: Int? = null,
     val trackChangedScriptId: Int? = null,
-    val runLoopScriptId: Int? = null,
-    val runLoopDelayMs: Long? = null
 )
 
 @Serializable
 data class TemplateCreatedResponse(
     val scriptId: Int,
     val scriptName: String,
-    val sceneId: Int? = null,
-    val sceneName: String? = null,
     val message: String
 )
 
@@ -600,7 +435,6 @@ data class CloneProjectRequest(
 data class CloneProjectResponse(
     val project: ProjectDetailDto,
     val scriptsCloned: Int,
-    val scenesCloned: Int,
     val presetsCloned: Int,
     val cuesCloned: Int,
     val cueStacksCloned: Int = 0,
@@ -624,34 +458,13 @@ private fun DaoProject.toDetailDto() = ProjectDetailDto(
     name = name,
     description = description,
     isCurrent = isCurrent,
-    initialSceneId = initialSceneId,
-    initialSceneName = initialSceneId?.let { DaoScene.findById(it)?.name },
     trackChangedScriptId = trackChangedScriptId,
     trackChangedScriptName = trackChangedScriptId?.let { DaoScript.findById(it)?.name },
-    runLoopScriptId = runLoopScriptId,
-    runLoopScriptName = runLoopScriptId?.let { DaoScript.findById(it)?.name },
-    runLoopDelayMs = runLoopDelayMs,
     scriptCount = scripts.count().toInt(),
-    sceneCount = scenes.filter { it.mode == Mode.SCENE }.count(),
-    chaseCount = scenes.filter { it.mode == Mode.CHASE }.count(),
     fxPresetCount = fxPresets.count().toInt(),
     cueCount = cues.count().toInt(),
     cueStackCount = cueStacks.count().toInt(),
 )
-
-private const val INITIAL_SCENE_SCRIPT_TEMPLATE = """// Initial scene script - sets fixture states when the project loads
-// This script runs once at startup to establish baseline lighting
-// Example:
-//
-// fixtures.all<FixtureWithDimmer>().forEach { fixture ->
-//     fixture.dimmer = 0.0  // Start with all lights off
-// }
-//
-// fixtures.byKey<RgbParFixture>("par-1")?.let { par ->
-//     par.dimmer = 0.5
-//     par.colour = Colour.WARM_WHITE
-// }
-"""
 
 private const val TRACK_CHANGED_SCRIPT_TEMPLATE = """// Track changed script - runs when the music track changes
 // Use this to synchronize lighting with music playback
@@ -672,16 +485,3 @@ private const val TRACK_CHANGED_SCRIPT_TEMPLATE = """// Track changed script - r
 // }
 """
 
-private const val RUN_LOOP_SCRIPT_TEMPLATE = """// Run loop script - executes continuously during the show
-// Use this for ongoing effects or reactive lighting
-// The loop runs at the interval configured in runLoopDelayMs (default: 100ms)
-// Example:
-//
-// // Use the FX engine for tempo-synced effects
-// val bpm = fxEngine.bpm
-//
-// // Or implement custom timing logic
-// fixtures.all<FixtureWithColour>().forEach { fixture ->
-//     // Your effect logic here
-// }
-"""

@@ -15,8 +15,6 @@ interface FixturesChangeListener {
     fun channelsChanged(universe: Universe, changes: Map<Int, UByte>)
     fun controllersChanged()
     fun fixturesChanged()
-    fun sceneListChanged()
-    fun sceneChanged(id: Int)
     fun presetListChanged()
     fun cueListChanged()
     fun cueStackListChanged()
@@ -42,10 +40,6 @@ class Fixtures {
     private val channelMappings: MutableMap<String, ChannelMapping> = mutableMapOf()
 
     private fun channelMappingKey(universe: Universe, channel: Int) = "${universe.universe}:$channel"
-
-    private val activeScenesLock = ReentrantReadWriteLock()
-    private val activeScenes = mutableMapOf<Int, Map<Universe, Map<Int, UByte>>>()
-    private val activeChases = mutableMapOf<Int, Boolean>()
 
     private val changeListeners: MutableList<FixturesChangeListener> = mutableListOf()
 
@@ -220,47 +214,6 @@ class Fixtures {
             .map { it.name }
     }
 
-    fun recordScene(sceneId: Int, changeDetails: Map<Universe, Map<Int, UByte>>) {
-        activeScenesLock.write {
-            if (changeDetails.isEmpty()) {
-                activeScenes.remove(sceneId)
-            } else {
-                activeScenes[sceneId] = changeDetails
-            }
-        }
-        sceneChanged(sceneId)
-    }
-
-    fun recordChaseStart(sceneId: Int) {
-        activeScenesLock.write {
-            activeChases[sceneId] = true
-        }
-        sceneChanged(sceneId)
-    }
-
-    fun recordChaseStop(sceneId: Int) {
-        activeScenesLock.write {
-            activeChases[sceneId] = false
-        }
-        sceneChanged(sceneId)
-    }
-
-    fun isSceneActive(sceneId: Int): Boolean = activeScenesLock.read {
-        activeScenes.containsKey(sceneId) || activeChases.getOrDefault(sceneId, false)
-    }
-
-    fun sceneListChanged() {
-        changeListeners.forEach {
-            it.sceneListChanged()
-        }
-    }
-
-    fun sceneChanged(id: Int) {
-        changeListeners.forEach {
-            it.sceneChanged(id)
-        }
-    }
-
     fun presetListChanged() {
         changeListeners.forEach {
             it.presetListChanged()
@@ -371,8 +324,6 @@ class Fixtures {
                 fixtureRegister.clear()
                 groupRegister.clear()
                 channelMappings.clear()
-                activeScenes.clear()
-                activeChases.clear()
             }
 
             block(registerer)
@@ -390,27 +341,6 @@ class Fixtures {
                 registerLock.read {
                     changeListeners.forEach {
                         it.channelsChanged(controller.universe, changes)
-                    }
-                }
-                val scenesToUnset = activeScenesLock.read {
-                    activeScenes.filterValues {
-                        it[controller.universe]?.filter { (channelNo, sceneValue) ->
-                            val changeValue = changes[channelNo]
-                            if (changeValue != null) {
-                                changeValue != sceneValue
-                            } else {
-                                false
-                            }
-                        }?.isNotEmpty() ?: false
-                    }.keys
-                }
-                if (scenesToUnset.isNotEmpty()) {
-                    activeScenesLock.write {
-                        scenesToUnset.forEach {
-                            activeScenes.remove(it)
-                            println("Scene no longer set $it")
-                            sceneChanged(it)
-                        }
                     }
                 }
             }

@@ -17,8 +17,6 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.scriptSettings.ScriptSetting
-import uk.me.cormack.lighting7.scriptSettings.ScriptSettingList
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.show.ScriptResult
 import uk.me.cormack.lighting7.state.State
@@ -67,7 +65,6 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
                 name = newScript.name
                 script = newScript.script
                 this.project = project
-                settings = ScriptSettingList(newScript.settings.orEmpty())
                 scriptType = try { ScriptType.valueOf(newScript.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
             }.toScriptDetails(isCurrentProject = true) // Only current project can create
         }
@@ -130,7 +127,6 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
 
             script.name = newScriptData.name
             script.script = newScriptData.script
-            script.settings = ScriptSettingList(newScriptData.settings.orEmpty())
             script.scriptType = try { ScriptType.valueOf(newScriptData.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
             script.toScriptDetails(isCurrentProject = true) // Only current project can update
         }
@@ -170,11 +166,6 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
             // Nullify optional project properties
             DaoProject.find { DaoProjects.trackChangedScriptId eq script.id.value }
                 .forEach { it.trackChangedScriptId = null }
-            DaoProject.find { DaoProjects.runLoopScriptId eq script.id.value }
-                .forEach { it.runLoopScriptId = null }
-
-            // Cascade delete scenes
-            script.scenes.forEach { it.delete() }
 
             // Delete the script
             script.delete()
@@ -207,7 +198,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
         var response: CompileResult? = null
         GlobalScope.launch {
             val scriptType = try { ScriptType.valueOf(literal.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
-            response = state.show.compileLiteralScript(literal.script, literal.settings.orEmpty(), scriptType).toCompileResult()
+            response = state.show.compileLiteralScript(literal.script, scriptType).toCompileResult()
         }.join()
         call.respond(checkNotNull(response))
     }
@@ -232,7 +223,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
         var response: RunResult? = null
         GlobalScope.launch {
             val scriptType = try { ScriptType.valueOf(literal.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
-            response = state.show.runLiteralScript(literal.script, literal.settings.orEmpty(), scriptType = scriptType, scriptId = literal.scriptId).toRunResult()
+            response = state.show.runLiteralScript(literal.script, scriptType = scriptType, scriptId = literal.scriptId).toRunResult()
         }.join()
         call.respond(checkNotNull(response))
     }
@@ -276,7 +267,6 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
                 name = scriptName
                 script = sourceScript.script
                 project = targetProject
-                settings = sourceScript.settings
             }
 
             CopyScriptResponse(
@@ -320,20 +310,17 @@ data class CopyScriptResource(val parent: ProjectScriptsResource, val scriptId: 
 
 // DTOs
 @Serializable
-data class ScriptLiteral(val script: String, val settings: List<ScriptSetting<*>>? = null, val scriptType: String = "GENERAL", val scriptId: Int? = null)
+data class ScriptLiteral(val script: String, val scriptType: String = "GENERAL", val scriptId: Int? = null)
 
 @Serializable
-data class NewScript(val name: String, val script: String, val settings: List<ScriptSetting<*>>?, val scriptType: String = "GENERAL")
+data class NewScript(val name: String, val script: String, val scriptType: String = "GENERAL")
 
 @Serializable
 data class ScriptDetails(
     val id: Int,
     val name: String,
     val script: String,
-    val settings: List<ScriptSetting<*>>,
     val scriptType: String = "GENERAL",
-    val sceneNames: List<String>,
-    val chaseNames: List<String>,
     val usedByProperties: List<String>,
     val canEdit: Boolean,
     val cannotEditReason: String? = null,
@@ -359,7 +346,6 @@ data class CompileResult(val success: Boolean, val messages: List<ScriptRunMessa
 data class ScriptSummaryDto(
     val id: Int,
     val name: String,
-    val settingsCount: Int,
     val scriptType: String = "GENERAL",
 )
 
@@ -383,16 +369,9 @@ private enum class ScriptDeleteResult { SUCCESS, NOT_FOUND }
 
 // Helper functions
 internal fun DaoScript.toScriptDetails(isCurrentProject: Boolean): ScriptDetails {
-    val allScenes = this.scenes.toList()
-    val sceneNames = allScenes.filter { it.mode == Mode.SCENE }.map { it.name }
-    val chaseNames = allScenes.filter { it.mode == Mode.CHASE }.map { it.name }
-
     val usedByProperties = mutableListOf<String>()
     if (DaoProject.find { DaoProjects.trackChangedScriptId eq this@toScriptDetails.id.value }.count() > 0) {
         usedByProperties.add("trackChangedScript")
-    }
-    if (DaoProject.find { DaoProjects.runLoopScriptId eq this@toScriptDetails.id.value }.count() > 0) {
-        usedByProperties.add("runLoopScript")
     }
 
     val canEdit = isCurrentProject
@@ -415,10 +394,7 @@ internal fun DaoScript.toScriptDetails(isCurrentProject: Boolean): ScriptDetails
         id = this.id.value,
         name = this.name,
         script = this.script,
-        settings = this.settings?.list.orEmpty(),
         scriptType = this.scriptType.name,
-        sceneNames = sceneNames,
-        chaseNames = chaseNames,
         usedByProperties = usedByProperties,
         canEdit = canEdit,
         cannotEditReason = cannotEditReason,

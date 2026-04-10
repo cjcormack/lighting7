@@ -13,13 +13,9 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.grpc.*
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.scriptSettings.IntValue
-import uk.me.cormack.lighting7.scriptSettings.ScriptSetting
-import uk.me.cormack.lighting7.scriptSettings.ScriptSettingValue
 import uk.me.cormack.lighting7.routes.registerUserEffect
 import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.state.State
-import java.awt.Color
 import java.security.MessageDigest
 import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -35,10 +31,7 @@ import kotlin.time.measureTime
 class Show(
     val state: State,
     val project: DaoProject,
-    val initialSceneName: String?,
-    val runLoopScriptName: String?,
     val trackChangedScriptName: String?,
-    val runLoopDelay: Long,
 ) {
     val fixtures = Fixtures()
     val fxScriptCompiler = FxScriptCompiler()
@@ -59,9 +52,6 @@ class Show(
     private val runnerPool = newFixedThreadPoolContext(1, "lighting-running-pool")
     private val compilerPool = newFixedThreadPoolContext(1, "lighting-compiler-pool")
 
-    private val runningScenes: MutableMap<Int, ScriptRunner> = mutableMapOf()
-    private val runningScenesLock = ReentrantReadWriteLock()
-
     private var currentTrack: TrackDetails? = null
     private val currentTrackLock = ReentrantReadWriteLock()
 
@@ -72,10 +62,6 @@ class Show(
             // Load and apply parked channels after fixtures/controllers are registered
             parkManager.loadFromDatabase()
             parkManager.applyToControllers(fixtures.controllers)
-
-            if (initialSceneName != null) {
-                runScene(initialSceneName)
-            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -88,14 +74,6 @@ class Show(
 
         // Pre-compile scripts used by cue triggers to avoid cold-start latency
         prewarmCueScripts()
-
-        if (runLoopScriptName != null && scriptExists(runLoopScriptName)) {
-            GlobalScope.launch {
-                runShow(runLoopScriptName, runLoopDelay)
-            }
-        } else if (runLoopScriptName != null) {
-            println("Run-loop script '$runLoopScriptName' not found, skipping run loop")
-        }
 
         val pingTicker = ticker(5_000)
         GlobalScope.launch {
@@ -117,20 +95,7 @@ class Show(
         }
     }
 
-    /**
-     * Stop all running scenes.
-     */
-    fun stopAllScenes() {
-        runningScenesLock.write {
-            runningScenes.values.forEach { runner ->
-                runner.stop()
-            }
-            runningScenes.clear()
-        }
-    }
-
     fun close() {
-        stopAllScenes()
         fxEngine.stop()
     }
 
@@ -185,7 +150,7 @@ class Show(
             if (scriptBodies.isNotEmpty()) {
                 val elapsed = measureTime {
                     for ((name, body) in scriptBodies) {
-                        script(name, body, emptyList(), ScriptType.FX_APPLICATION)
+                        script(name, body, ScriptType.FX_APPLICATION)
                     }
                 }
                 println("Pre-warmed ${scriptBodies.size} cue trigger script(s) in $elapsed")
@@ -195,52 +160,12 @@ class Show(
         }
     }
 
-    private fun CoroutineScope.runShow(runLoopScriptName: String, delay: Long) {
-        var isClosed = false
-
-        val ticker = ticker(delay)
-
-        var consecutiveErrors = 0
-
-        var step = 0
-
-        launch(newSingleThreadContext("LightingShow")) {
-            while(coroutineContext.isActive && !isClosed) {
-                try {
-                    select<Unit> {
-                        ticker.onReceiveCatching {
-                            if (it.isClosed) {
-                                return@onReceiveCatching
-                            }
-
-                            evalScriptByName(runLoopScriptName, step)
-                            step++
-                        }
-                    }
-                    consecutiveErrors = 0
-                } catch (e: Exception) {
-                    if (consecutiveErrors == 0) {
-                        e.printStackTrace()
-                    }
-                    consecutiveErrors++
-
-//                    if (consecutiveErrors > 20) {
-//                        // if too many errors, we'll bail out and let this thing stop. A restart of NK is needed.
-//                        println("Too many consecutive errors")
-//                        throw e
-//                    }
-                    delay(10_000)
-                }
-            }
-        }
-    }
-
-    fun script(scriptName: String, literalScript: String, settings: List<ScriptSetting<*>>, scriptType: ScriptType = ScriptType.GENERAL): Script {
+    fun script(scriptName: String, literalScript: String, scriptType: ScriptType = ScriptType.GENERAL): Script {
         val scriptKey = "$scriptName-$scriptType-${literalScript.cacheKey()}"
 
         return scriptsLock.run {
             scripts.getOrPut(scriptKey) {
-                Script(this@Show, scriptName, literalScript, settings, scriptType)
+                Script(this@Show, scriptName, literalScript, scriptType)
             }
         }
     }
@@ -249,84 +174,6 @@ class Show(
     private fun String.cacheKey(): String {
         val md = MessageDigest.getInstance("SHA-256")
         return md.digest(this.toByteArray()).toHexString()
-    }
-
-    private data class ScriptData(
-        val sceneName: String,
-        val scriptName: String,
-        val scriptBody: String,
-        val scriptSettings: List<ScriptSetting<*>>,
-        val sceneSettingsValues: Map<String, ScriptSettingValue>,
-        val scriptType: ScriptType = ScriptType.GENERAL,
-        val scriptId: Int? = null,
-    )
-
-    fun runScene(id: Int): ScriptResult {
-        val sceneRunner = startScene(id)
-        return sceneRunner.result()
-    }
-
-    fun runScene(sceneName: String): ScriptResult {
-        val sceneId = transaction(state.database) {
-            val scene = DaoScene.find {
-                (DaoScenes.name eq sceneName) and
-                    (DaoScenes.project eq project.id)
-            }.first()
-
-            scene.id.value
-        }
-        return runScene(sceneId)
-    }
-
-    fun startScene(id: Int): ScriptRunner {
-        val (scene, scriptData) = transaction(state.database) {
-            val scene = DaoScene.findById(id) ?: throw Error("Scene not found")
-
-            val scriptData = ScriptData(
-                scene.name,
-                scene.script.name,
-                scene.script.script,
-                scene.script.settings?.list.orEmpty(),
-                scene.settingsValues.orEmpty(),
-                scene.script.scriptType,
-                scene.script.id.value,
-            )
-
-            Pair(scene, scriptData)
-        }
-
-        val (_, scriptName, scriptBody, scriptSettings, sceneSettingsValues, scriptType, dbScriptId) = scriptData
-
-        val script = script(scriptName, scriptBody, scriptSettings, scriptType)
-        val scriptRunner = ScriptRunner(
-            this,
-            script,
-            scene,
-            sceneIsActive = fixtures.isSceneActive(id),
-            settingsValues = sceneSettingsValues,
-            scriptId = dbScriptId,
-        )
-
-        return scriptRunner
-    }
-
-    fun startScene(sceneName: String): ScriptRunner {
-        val sceneId = transaction(state.database) {
-            val scene = DaoScene.find {
-                (DaoScenes.name eq sceneName) and
-                    (DaoScenes.project eq project.id)
-            }.first()
-
-            scene.id.value
-        }
-        return startScene(sceneId)
-    }
-
-    fun stopScene(id: Int) {
-        runningScenesLock.read {
-            val scriptRunner = runningScenes[id] ?: return@read
-            scriptRunner.stop()
-        }
     }
 
     fun scriptExists(scriptName: String): Boolean {
@@ -346,7 +193,7 @@ class Show(
             }.firstOrNull()
         } ?: return null
 
-        val script = script(scriptName, scriptData.script, scriptData.settings?.list.orEmpty(), scriptData.scriptType)
+        val script = script(scriptName, scriptData.script, scriptData.scriptType)
 
         val scriptRunner = ScriptRunner(
             this,
@@ -358,12 +205,12 @@ class Show(
         return scriptRunner.result()
     }
 
-    fun compileLiteralScript(literalScript: String, scriptSettings: List<ScriptSetting<*>>, scriptType: ScriptType = ScriptType.GENERAL): ScriptResult {
-        return script("", literalScript, scriptSettings, scriptType).compileStatus
+    fun compileLiteralScript(literalScript: String, scriptType: ScriptType = ScriptType.GENERAL): ScriptResult {
+        return script("", literalScript, scriptType).compileStatus
     }
 
-    fun runLiteralScript(literalScript: String, scriptSettings: List<ScriptSetting<*>>, scriptName: String = "", step: Int = 0, scriptType: ScriptType = ScriptType.GENERAL, scriptId: Int? = null): ScriptResult {
-        val script = script(scriptName, literalScript, scriptSettings, scriptType)
+    fun runLiteralScript(literalScript: String, scriptName: String = "", step: Int = 0, scriptType: ScriptType = ScriptType.GENERAL, scriptId: Int? = null): ScriptResult {
+        val script = script(scriptName, literalScript, scriptType)
         val scriptRunner = ScriptRunner(this, script, step = step, scriptId = scriptId)
 
         return scriptRunner.result()
@@ -394,7 +241,6 @@ class Show(
         val show: Show,
         val scriptName: String,
         val literalScript: String,
-        val settings: List<ScriptSetting<*>>,
         val scriptType: ScriptType = ScriptType.GENERAL,
     ) {
         val compiledResult: ResultWithDiagnostics<CompiledScript>
@@ -454,33 +300,15 @@ class Show(
     class ScriptRunner(
         val show: Show,
         script: Script,
-        val scene: DaoScene? = null,
         step: Int = 0,
-        sceneIsActive: Boolean = false,
-        settingsValues: Map<String, ScriptSettingValue> = emptyMap(),
         scriptId: Int? = null,
     ) {
         var result: ScriptResult? = null
         val job: Job
 
         init {
-            if (scene != null) {
-                show.runningScenesLock.read {
-                    val previousRunner = show.runningScenes[scene.id.value] ?: return@read
-
-                    if (previousRunner.job.isActive) {
-                        previousRunner.job.cancel()
-                    }
-                }
-            }
-
             val compiledResult = script.compiledResult
             val compiledScript = compiledResult.valueOrThrow()
-
-            val settings = script.settings.associate {
-                (it.defaultValue as IntValue).int.toUInt()
-                it.name to (settingsValues[it.name] ?: it.defaultValue)
-            }
 
             val currentTrack = show.currentTrackLock.read {
                 show.currentTrack
@@ -489,13 +317,8 @@ class Show(
             job = CoroutineScope(show.runnerPool).launch {
                 when (script.scriptType) {
                     ScriptType.GENERAL -> {
-                        // Full-power: DMX transaction, all properties, scene recording
                         val transaction = ControllerTransaction(show.fixtures.controllers)
                         val fixturesWithTransaction = show.fixtures.withTransaction(transaction)
-
-                        if (scene != null && scene.mode == Mode.CHASE) {
-                            show.fixtures.recordChaseStart(scene.id.value)
-                        }
 
                         val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("show", show))
@@ -503,9 +326,6 @@ class Show(
                             providedProperties(Pair("fxEngine", show.fxEngine))
                             providedProperties(Pair("scriptName", script.scriptName))
                             providedProperties(Pair("step", step))
-                            providedProperties(Pair("sceneName", scene?.name ?: ""))
-                            providedProperties(Pair("sceneIsActive", sceneIsActive))
-                            providedProperties(Pair("settings", settings))
                             providedProperties(Pair("coroutineScope", this@launch))
                             providedProperties(Pair("currentTrack", currentTrack))
                         })
@@ -518,28 +338,13 @@ class Show(
                             actualChannelChanges
                         }
 
-                        if (scene != null) {
-                            when (scene.mode) {
-                                Mode.SCENE -> {
-                                    if (channelChanges != null) {
-                                        show.fixtures.recordScene(scene.id.value, channelChanges)
-                                    }
-                                }
-                                Mode.CHASE -> {
-                                    show.fixtures.recordChaseStop(scene.id.value)
-                                }
-                            }
-                        }
-
                         result = ScriptResult(compiledResult, runResult, channelChanges)
                     }
 
                     ScriptType.FX_DEFINITION -> {
-                        // Minimal: just show, scriptName, settings, scriptId
                         val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("show", show))
                             providedProperties(Pair("scriptName", script.scriptName))
-                            providedProperties(Pair("settings", settings))
                             providedProperties(Pair("scriptId", scriptId))
                         })
 
@@ -547,13 +352,11 @@ class Show(
                     }
 
                     ScriptType.FX_APPLICATION -> {
-                        // FX engine + fixtures, no DMX transaction
                         val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("show", show))
                             providedProperties(Pair("fxEngine", show.fxEngine))
                             providedProperties(Pair("scriptName", script.scriptName))
                             providedProperties(Pair("step", step))
-                            providedProperties(Pair("settings", settings))
                             providedProperties(Pair("currentTrack", currentTrack))
                         })
 
@@ -561,7 +364,6 @@ class Show(
                     }
 
                     ScriptType.FX_CALC -> {
-                        // Evaluate with dummy values to test the lambda extraction
                         val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("phase", 0.5))
                             providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
@@ -589,12 +391,6 @@ class Show(
                         })
                         result = ScriptResult(compiledResult, runResult, null)
                     }
-                }
-            }
-
-            if (scene != null) {
-                show.runningScenesLock.write {
-                    show.runningScenes[scene.id.value] = this
                 }
             }
         }

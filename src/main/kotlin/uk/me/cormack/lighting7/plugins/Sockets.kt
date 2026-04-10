@@ -21,11 +21,7 @@ import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxInstance
-import uk.me.cormack.lighting7.models.DaoScene
 import uk.me.cormack.lighting7.fx.parseExtendedColour
-import uk.me.cormack.lighting7.routes.SceneDetails
-import uk.me.cormack.lighting7.routes.details
-import uk.me.cormack.lighting7.scriptSettings.ScriptSettingValue
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.state.State
 import java.util.*
@@ -81,16 +77,6 @@ data object UniversesStateInMessage : InMessage()
 @SerialName("universesState")
 data class UniversesStateOutMessage(
     val universes: List<Int>
-): OutMessage()
-
-@Serializable
-@SerialName("sceneListChanged")
-data object ScenesListChangedOutMessage: OutMessage()
-
-@Serializable
-@SerialName("sceneChanged")
-data class ScenesChangedOutMessage(
-    val data: SceneDetails,
 ): OutMessage()
 
 @Serializable
@@ -417,23 +403,6 @@ fun Application.configureSockets(state: State) {
                     launch {
                         sendSerialized<OutMessage>(FixturesChangedOutMessage)
                         sendSerialized<OutMessage>(buildChannelMappingMessage(state))
-                    }
-                }
-
-                override fun sceneListChanged() {
-                    launch {
-                        sendSerialized<OutMessage>(ScenesListChangedOutMessage)
-                    }
-                }
-
-                override fun sceneChanged(id: Int) {
-                    launch {
-                        val sceneDetails = transaction(state.database) {
-                            val scene = DaoScene.findById(id) ?: throw Error("Scene not found")
-                            scene.details(state.show, isCurrentProject = true) // WebSocket broadcasts are always for current project
-                        }
-
-                        sendSerialized<OutMessage>(ScenesChangedOutMessage(sceneDetails))
                     }
                 }
 

@@ -196,7 +196,7 @@ The second preset application has timing; triggers only contain scripts:
 
 **Before (imperative):**
 - A GENERAL script that sets UV values with `delay()` calls between state changes
-- A run-loop script that checks `stepMs % 40000 == 0` to trigger the flicker
+- Manual timing logic to trigger the flicker at the right interval
 
 **After (declarative):**
 - A STATEFUL + WALL_CLOCK FX definition (`FluorescentFlicker.fx.kts`) defining the flicker pattern

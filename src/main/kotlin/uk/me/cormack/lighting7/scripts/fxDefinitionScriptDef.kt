@@ -36,7 +36,6 @@ import kotlin.script.experimental.jvm.jvmTarget
 abstract class FxDefinitionScript(
     private val show: Show,
     val scriptName: String,
-    val settings: Map<String, String>,
     /** Database ID of this script, used to tag registered effects for the library API. */
     val scriptId: Int? = null,
 ) {

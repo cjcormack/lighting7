@@ -563,7 +563,7 @@ Two script types provide focused API surfaces for different tasks:
 
 | Type | Base Class | Purpose |
 |------|-----------|---------|
-| `GENERAL` | `LightingScript` | Full-power: DMX, fixtures, FX, scenes, coroutines |
+| `GENERAL` | `LightingScript` | Full-power: DMX, fixtures, FX, coroutines |
 | `FX_APPLICATION` | `FxApplicationScript` | Apply effects to fixtures/groups (implicit engine) |
 
 FX effect definitions are **not** a script type — they are managed as `fx_definitions`

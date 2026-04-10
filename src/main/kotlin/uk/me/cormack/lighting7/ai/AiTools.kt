@@ -162,7 +162,7 @@ class AiTools(private val state: State) {
 
         var scriptResult: uk.me.cormack.lighting7.show.ScriptResult? = null
         val job = GlobalScope.launch {
-            scriptResult = state.show.runLiteralScript(script, emptyList())
+            scriptResult = state.show.runLiteralScript(script)
         }
         job.join()
 

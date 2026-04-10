@@ -73,7 +73,7 @@ class State(val config: ApplicationConfig) {
             // but is acceptable for this development/personal project setup
             @Suppress("DEPRECATION")
             SchemaUtils.createMissingTablesAndColumns(
-                DaoProjects, DaoScripts, DaoScenes, DaoFxPresets, DaoCueStacks, DaoCues,
+                DaoProjects, DaoScripts, DaoFxPresets, DaoCueStacks, DaoCues,
                 DaoCuePresetApplications, DaoCueAdHocEffects, DaoCueTriggers,
                 DaoAiConversations, DaoCueSlots,
                 DaoUniverseConfigs, DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
@@ -95,6 +95,12 @@ class State(val config: ApplicationConfig) {
 
             // Migration: drop script-based configuration mode columns from projects table
             migrateDropScriptBasedMode()
+
+            // Migration: drop scenes table and related columns (superseded by FX engine)
+            migrateDropScenesAndChases()
+
+            // Migration: drop run loop columns from projects (superseded by FX cue system)
+            migrateDropRunLoop()
         }
 
         return database
@@ -277,4 +283,67 @@ private fun Transaction.migrateDropScriptBasedMode() {
     exec("ALTER TABLE projects DROP COLUMN IF EXISTS load_fixtures_script_id")
 
     logger.info("Script-based configuration mode migration complete")
+}
+
+/**
+ * One-time migration: drop scenes table and related columns from projects and scripts.
+ *
+ * Scenes and chases have been fully superseded by the FX engine.
+ * ScriptSettings (stored on scripts.settings) was the per-scene parameter override mechanism,
+ * also no longer needed.
+ *
+ * Safe to run repeatedly — uses IF EXISTS guards.
+ */
+private fun Transaction.migrateDropScenesAndChases() {
+    var hasScenesTable = false
+    exec(
+        """SELECT 1 FROM information_schema.tables
+           WHERE table_name = 'scenes'"""
+    ) { rs ->
+        hasScenesTable = rs.next()
+    }
+
+    if (!hasScenesTable) return // already migrated
+
+    logger.info("Migrating: dropping scenes table and related columns...")
+
+    // Clear FK reference from projects before dropping the table
+    exec("UPDATE projects SET initial_scene_id = NULL")
+
+    // Drop scenes table (CASCADE handles FK constraints from scenes to scripts/projects)
+    exec("DROP TABLE IF EXISTS scenes CASCADE")
+
+    // Drop the initial_scene_id column from projects
+    exec("ALTER TABLE projects DROP COLUMN IF EXISTS initial_scene_id")
+
+    // Drop the settings column from scripts (ScriptSettings mechanism)
+    exec("ALTER TABLE scripts DROP COLUMN IF EXISTS settings")
+
+    logger.info("Scenes, chases, and script settings migration complete")
+}
+
+/**
+ * One-time migration: drop run loop columns from projects table.
+ *
+ * The run loop mechanism has been superseded by the FX cue system.
+ *
+ * Safe to run repeatedly — uses IF EXISTS guards.
+ */
+private fun Transaction.migrateDropRunLoop() {
+    var hasRunLoopColumn = false
+    exec(
+        """SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'projects' AND column_name = 'run_loop_script_id'"""
+    ) { rs ->
+        hasRunLoopColumn = rs.next()
+    }
+
+    if (!hasRunLoopColumn) return // already migrated
+
+    logger.info("Migrating: dropping run loop columns from projects...")
+
+    exec("ALTER TABLE projects DROP COLUMN IF EXISTS run_loop_script_id")
+    exec("ALTER TABLE projects DROP COLUMN IF EXISTS run_loop_delay_ms")
+
+    logger.info("Run loop migration complete")
 }

@@ -25,7 +25,7 @@ A professional stage/event lighting control system built in Kotlin using Ktor. C
 
 1. Copy `example.local.conf` to `local.conf`
 2. Configure PostgreSQL connection settings
-3. Set project name, initial scene, and script names
+3. Set project name
 4. Configure music service credentials if needed
 
 ## Project Structure
@@ -46,11 +46,10 @@ src/main/kotlin/uk/me/cormack/lighting7/
 │   └── group/             # Group FX distribution
 ├── show/                   # Show orchestration & script runner
 ├── state/                  # Application state management
-├── models/                 # Database entities (projects, scenes, scripts)
+├── models/                 # Database entities (projects, scripts, cues, presets)
 ├── routes/                 # REST API endpoints
 ├── plugins/                # Ktor plugins (HTTP, WebSockets, Routing)
 ├── scripts/                # LightingScript DSL definition
-├── scriptSettings/         # Script configuration types
 ├── music/                  # Music service integration
 └── trackServer/            # gRPC track notification server
 ```
@@ -89,10 +88,6 @@ val level = group.dimmer.value   // null if non-uniform
 val uniform = group.dimmer.isUniform
 val all = group.dimmer.memberValues  // [200, 200, 200]
 ```
-
-### Scenes and Chases
-- **Scene** (`Mode.SCENE`): A recorded snapshot of fixture states
-- **Chase** (`Mode.CHASE`): A continuous recording/playback sequence
 
 ### Scripts
 Lighting scripts use embedded Kotlin via `LightingScript` base class:
@@ -217,7 +212,7 @@ Applying effects to groups:
 ```kotlin
 val group = fixtures.group<HexFixture>("front-wash")
 
-// Chase effect with linear distribution
+// Pulse effect with linear distribution
 val effectId = group.applyDimmerFx(fxEngine, Pulse(), distribution = DistributionStrategy.LINEAR)
 
 // Unified colour across all fixtures
@@ -253,7 +248,6 @@ group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrateg
 - `channelState` - DMX channel value updates
 - `channelMappingState` - Channel-to-fixture mapping (sent on connect and fixtures change)
 - `universesState` - Available DMX universes
-- `sceneListChanged` - Scene list modifications
 - `updateChannel` - Direct channel control
 - `trackDetails` - Music track info
 - `fxState` - Request/receive FX state (BPM, active effects)
@@ -271,7 +265,6 @@ Uses Exposed ORM with PostgreSQL. Tables auto-create on startup via `SchemaUtils
 
 Key tables:
 - `DaoProjects` - Project definitions
-- `DaoScenes` - Scene/chase configurations
 - `DaoScripts` - Lighting script source code
 
 ## Common Development Tasks
@@ -329,7 +322,7 @@ registerEffect(EffectRegistration(
 ))
 ```
 
-**`GENERAL`** (`LightingScript`) — full-power scripts with DMX, fixtures, FX, scenes, coroutines. Can read fixture state but cannot register fixtures (registration is handled by DbFixtureLoader from DB patches).
+**`GENERAL`** (`LightingScript`) — full-power scripts with DMX, fixtures, FX, coroutines. Can read fixture state but cannot register fixtures (registration is handled by DbFixtureLoader from DB patches).
 
 ### Modifying REST API
 Add routes in `routes/` package using Ktor Resources for type-safe routing.
@@ -350,8 +343,7 @@ For deeper technical details, see the docs in `docs/`:
 
 - [DMX Subsystem](docs/dmx-engineering.md) - Low-level DMX control architecture, ArtNet implementation, fading, transactions
 - [Fixture System](docs/fixtures-engineering.md) - Fixture abstractions, traits, property types, adding new fixtures
-- [Show & Scripts](docs/show-scripts-engineering.md) - Script compilation, caching, execution, run loops, scene/chase modes
-- [Scenes & Chases](docs/scenes-chases-engineering.md) - Scene recording, active tracking, chase execution
+- [Show & Scripts](docs/show-scripts-engineering.md) - Script compilation, caching, execution
 - [WebSocket Protocol](docs/websocket-engineering.md) - Real-time client communication, message types, update flow
 - [Music Sync](docs/music-sync-engineering.md) - gRPC track notifications, script triggering, player state
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes

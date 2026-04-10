@@ -48,7 +48,6 @@ abstract class FxApplicationScript(
     @PublishedApi internal val fxEngine: FxEngine,
     val scriptName: String,
     val step: Int,
-    val settings: Map<String, String>,
     val currentTrack: TrackDetails?,
 ) {
     // --- Fixture/Group Lookup ---
@@ -160,7 +159,6 @@ object FxApplicationScriptConfiguration : ScriptCompilationConfiguration(
             "uk.me.cormack.lighting7.fixture.*",
             "uk.me.cormack.lighting7.fixture.group.*",
             "uk.me.cormack.lighting7.fixture.trait.*",
-            "uk.me.cormack.lighting7.scriptSettings.*",
             "uk.me.cormack.lighting7.fx.*",
             "uk.me.cormack.lighting7.fx.effects.*",
             "uk.me.cormack.lighting7.fx.group.*",
