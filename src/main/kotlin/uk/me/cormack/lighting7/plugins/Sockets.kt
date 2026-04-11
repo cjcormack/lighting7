@@ -302,12 +302,6 @@ data class AddGroupFxInMessage(
     val phaseOffset: Double = 0.0
 ) : InMessage()
 
-@Serializable
-@SerialName("groupFxAdded")
-data class GroupFxAddedOutMessage(
-    val groupName: String,
-    val effectId: Long
-) : OutMessage()
 
 @Serializable
 @SerialName("clearGroupFx")

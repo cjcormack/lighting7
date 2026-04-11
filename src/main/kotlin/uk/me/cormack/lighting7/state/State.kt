@@ -236,7 +236,6 @@ private fun Transaction.migrateFxDefinitionsDropBuiltin() {
 
     if (!hasIsBuiltin) return // already migrated
 
-    val logger = LoggerFactory.getLogger("State")
     logger.info("Migrating fx_definitions: removing is_builtin column and orphaned rows...")
 
     // Delete any rows without a project (legacy built-in definitions stored in DB)
