@@ -96,6 +96,19 @@ data object CueSlotListChangedOutMessage: OutMessage()
 data object PatchListChangedOutMessage: OutMessage()
 
 @Serializable
+@SerialName("showSessionListChanged")
+data object ShowSessionListChangedOutMessage: OutMessage()
+
+@Serializable
+@SerialName("showSessionChanged")
+data class ShowSessionChangedOutMessage(
+    val sessionId: Int,
+    val activeEntryId: Int?,
+    val activatedStackId: Int?,
+    val activatedStackName: String?,
+): OutMessage()
+
+@Serializable
 @SerialName("fixturesChanged")
 data object FixturesChangedOutMessage: OutMessage()
 
@@ -415,6 +428,28 @@ fun Application.configureSockets(state: State) {
                 override fun patchListChanged() {
                     launch {
                         sendSerialized<OutMessage>(PatchListChangedOutMessage)
+                    }
+                }
+
+                override fun showSessionListChanged() {
+                    launch {
+                        sendSerialized<OutMessage>(ShowSessionListChangedOutMessage)
+                    }
+                }
+
+                override fun showSessionChanged(
+                    sessionId: Int,
+                    activeEntryId: Int?,
+                    activatedStackId: Int?,
+                    activatedStackName: String?,
+                ) {
+                    launch {
+                        sendSerialized<OutMessage>(ShowSessionChangedOutMessage(
+                            sessionId = sessionId,
+                            activeEntryId = activeEntryId,
+                            activatedStackId = activatedStackId,
+                            activatedStackName = activatedStackName,
+                        ))
                     }
                 }
             }

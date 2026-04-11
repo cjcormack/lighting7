@@ -176,6 +176,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectPatches(state)
         routeApiRestProjectUniverseConfigs(state)
         routeApiRestProjectPatchGroups(state)
+        routeApiRestProjectShowSessions(state)
 
         // POST /{id}/clone - Clone a project with all scripts
         post<CloneProjectResource> { resource ->

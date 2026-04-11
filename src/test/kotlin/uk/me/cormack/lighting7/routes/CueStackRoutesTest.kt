@@ -263,4 +263,94 @@ class CueStackRoutesTest {
         assertEquals(true, deserialized.cues[0].autoAdvance)
         assertEquals(false, deserialized.cues[4].autoAdvance)
     }
+
+    // ─── CueStackCueEntry with new fields ────────────────────────────────
+
+    @Test
+    fun `CueStackCueEntry with cueNumber and notes serializes correctly`() {
+        val entry = CueStackCueEntry(
+            id = 42,
+            name = "Scene 14",
+            sortOrder = 5,
+            paletteSize = 3,
+            presetCount = 2,
+            adHocEffectCount = 1,
+            cueNumber = "14A",
+            notes = "Sarah enters p34",
+            cueType = "STANDARD",
+        )
+        val serialized = json.encodeToString(entry)
+        val deserialized = json.decodeFromString<CueStackCueEntry>(serialized)
+        assertEquals("14A", deserialized.cueNumber)
+        assertEquals("Sarah enters p34", deserialized.notes)
+        assertEquals("STANDARD", deserialized.cueType)
+    }
+
+    @Test
+    fun `CueStackCueEntry MARKER type serializes correctly`() {
+        val entry = CueStackCueEntry(
+            id = 43,
+            name = "Scene 4 marker",
+            sortOrder = 6,
+            paletteSize = 0,
+            presetCount = 0,
+            adHocEffectCount = 0,
+            cueType = "MARKER",
+        )
+        val serialized = json.encodeToString(entry)
+        val deserialized = json.decodeFromString<CueStackCueEntry>(serialized)
+        assertEquals("MARKER", deserialized.cueType)
+        assertNull(deserialized.cueNumber)
+        assertNull(deserialized.notes)
+    }
+
+    @Test
+    fun `CueStackCueEntry defaults cueType to STANDARD`() {
+        val entry = CueStackCueEntry(
+            id = 1,
+            name = "Test",
+            sortOrder = 0,
+            paletteSize = 0,
+            presetCount = 0,
+            adHocEffectCount = 0,
+        )
+        assertEquals("STANDARD", entry.cueType)
+        assertNull(entry.cueNumber)
+        assertNull(entry.notes)
+    }
+
+    // ─── AddCueToStackRequest with insertByNumber ────────────────────────
+
+    @Test
+    fun `AddCueToStackRequest with insertByNumber serializes correctly`() {
+        val request = AddCueToStackRequest(cueId = 42, insertByNumber = true)
+        val serialized = json.encodeToString(request)
+        val deserialized = json.decodeFromString<AddCueToStackRequest>(serialized)
+        assertEquals(true, deserialized.insertByNumber)
+    }
+
+    @Test
+    fun `AddCueToStackRequest defaults insertByNumber to false`() {
+        val request = AddCueToStackRequest(cueId = 42)
+        assertEquals(false, request.insertByNumber)
+    }
+
+    // ─── SortByNumberResponse ────────────────────────────────────────────
+
+    @Test
+    fun `SortByNumberResponse serialization round-trips`() {
+        val response = SortByNumberResponse(
+            updatedCues = listOf(
+                CueStackCueEntry(id = 1, name = "Cue 1", sortOrder = 0, paletteSize = 0, presetCount = 0, adHocEffectCount = 0, cueNumber = "1"),
+                CueStackCueEntry(id = 2, name = "Cue 2", sortOrder = 1, paletteSize = 0, presetCount = 0, adHocEffectCount = 0, cueNumber = "2"),
+            ),
+            pinnedCount = 1,
+            nullNumberCount = 0,
+        )
+        val serialized = json.encodeToString(response)
+        val deserialized = json.decodeFromString<SortByNumberResponse>(serialized)
+        assertEquals(response, deserialized)
+        assertEquals(2, deserialized.updatedCues.size)
+        assertEquals(1, deserialized.pinnedCount)
+    }
 }

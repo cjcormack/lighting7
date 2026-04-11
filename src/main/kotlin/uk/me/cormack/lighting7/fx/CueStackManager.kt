@@ -63,6 +63,7 @@ class CueStackManager(
         stackId: Int,
         cueId: Int,
         scope: CoroutineScope? = null,
+        rejectMarkers: Boolean = false,
     ): ActivateResult {
         // Read stack and cue data from DB
         val (stackData, cueData) = transaction(state.database) {
@@ -72,6 +73,9 @@ class CueStackManager(
                 ?: throw IllegalArgumentException("Cue not found: $cueId")
             if (cue.cueStack?.id?.value != stackId) {
                 throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
+            }
+            if (rejectMarkers && cue.cueType == CueType.MARKER.name) {
+                throw IllegalArgumentException("Cannot go-to a MARKER cue")
             }
 
             val sd = StackData(
@@ -334,8 +338,9 @@ class CueStackManager(
     /**
      * Advance to the next or previous cue in a stack.
      *
+     * Only STANDARD cues are candidates for advancement — MARKERs are skipped.
      * Respects the stack's loop setting. If at the end and not looping,
-     * the stack is deactivated.
+     * stays on the current cue.
      *
      * @return The result of activating the next cue, or null if at end and not looping
      */
@@ -352,15 +357,16 @@ class CueStackManager(
             val stack = DaoCueStack.findById(stackId)
                 ?: throw IllegalArgumentException("Cue stack not found: $stackId")
 
+            // Only STANDARD cues are candidates for advancement
             val orderedCues = DaoCue.find {
-                DaoCues.cueStack eq stackId
+                (DaoCues.cueStack eq stackId) and (DaoCues.cueType eq CueType.STANDARD.name)
             }.orderBy(DaoCues.sortOrder to SortOrder.ASC)
                 .map { it.id.value }
 
             if (orderedCues.isEmpty()) return@transaction null
 
             val currentIndex = orderedCues.indexOf(currentState.activeCueId)
-            if (currentIndex == -1) return@transaction orderedCues.first() // Fallback to first
+            if (currentIndex == -1) return@transaction orderedCues.first() // Fallback to first STANDARD
 
             val nextIndex = when (direction) {
                 AdvanceDirection.FORWARD -> currentIndex + 1
@@ -376,7 +382,7 @@ class CueStackManager(
         }
 
         if (nextCueId == null) {
-            // No cues in stack
+            // No STANDARD cues in stack
             return null
         }
 
@@ -397,6 +403,8 @@ class CueStackManager(
 
     /**
      * Go to a specific cue within a stack (arbitrary jump).
+     *
+     * Returns HTTP 400 (via IllegalArgumentException) if the target cue is a MARKER.
      */
     fun goToCue(
         state: State,
@@ -404,7 +412,7 @@ class CueStackManager(
         cueId: Int,
         scope: CoroutineScope? = null,
     ): ActivateResult {
-        return activateCueInStack(state, stackId, cueId, scope)
+        return activateCueInStack(state, stackId, cueId, scope, rejectMarkers = true)
     }
 
     /**

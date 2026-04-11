@@ -47,6 +47,10 @@ data class CueAdHocEffectDto(
     val sortOrder: Int = 0,
 )
 
+// ─── Cue types ──────────────────────────────────────────────────────────
+
+enum class CueType { STANDARD, MARKER }
+
 // ─── Cues table ─────────────────────────────────────────────────────────
 
 object DaoCues : IntIdTable("cues") {
@@ -60,6 +64,9 @@ object DaoCues : IntIdTable("cues") {
     val autoAdvanceDelayMs = long("auto_advance_delay_ms").nullable()
     val fadeDurationMs = long("fade_duration_ms").nullable()
     val fadeCurve = varchar("fade_curve", 50).default("LINEAR")
+    val cueNumber = varchar("cue_number", 20).nullable()
+    val notes = text("notes").nullable()
+    val cueType = varchar("cue_type", 20).default("STANDARD")
 
     init {
         uniqueIndex(project, name)
@@ -79,6 +86,9 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var autoAdvanceDelayMs by DaoCues.autoAdvanceDelayMs
     var fadeDurationMs by DaoCues.fadeDurationMs
     var fadeCurve by DaoCues.fadeCurve
+    var cueNumber by DaoCues.cueNumber
+    var notes by DaoCues.notes
+    var cueType by DaoCues.cueType
     val presetApplications by DaoCuePresetApplication referrersOn DaoCuePresetApplications.cue
     val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue
     val triggers by DaoCueTrigger referrersOn DaoCueTriggers.cue

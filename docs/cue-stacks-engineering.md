@@ -40,14 +40,34 @@ cues (modified)
 ├── auto_advance (boolean, default false)
 ├── auto_advance_delay_ms (long, nullable)
 ├── fade_duration_ms (long, nullable)
-└── fade_curve (varchar 50, default "LINEAR")
+├── fade_curve (varchar 50, default "LINEAR")
+├── cue_number (varchar 20, nullable — free-form display label)
+├── notes (text, nullable — script reference annotation)
+└── cue_type (varchar 20, default "STANDARD" — STANDARD or MARKER)
+
+Partial unique index: (cue_stack_id, cue_number) WHERE cue_number IS NOT NULL AND cue_type = 'STANDARD'
 ```
+
+### Cue Types
+
+- **STANDARD** — Normal cue that can be activated. Participates in advance/go-to.
+- **MARKER** — Inert section divider. Invisible to `advance` and `go-to` (returns HTTP 400). Not moved by `sort-by-cue-number`.
+
+### Cue Number Classification
+
+| Class | Rule | Examples | Behaviour |
+|-------|------|----------|-----------|
+| **Participating** | First char is a digit (0–9) | "1", "1.5", "14A" | Sorted by natural sort |
+| **Pinned** | First char is non-digit | "intro", "verse" | Never moved by sort actions |
+| **Unnumbered** | `cue_number` is null | — | Appended at end in current order |
 
 ### Key Design Decisions
 
 - **Nullable FK** on `cues.cue_stack_id` preserves backward compatibility — standalone cues have `null`
 - **Sort order** as integer allows easy reordering without renumbering (gaps are fine)
 - **Per-cue fade settings** allow different transition timing for each cue in a stack; `fade_duration_ms = null` means snap-cut
+- **`cue_number` is a display label only** — `sort_order` remains the authoritative playback order
+- **MARKER cues are invisible to advance** — `advance` and `go-to` only target `STANDARD` cues
 - **Per-cue auto-advance** allows some cues to auto-advance while others wait for manual progression
 - **EasingCurve enum** (LINEAR, SINE_IN_OUT, CUBIC_IN_OUT, etc.) stored as string for extensibility
 
@@ -156,20 +176,32 @@ All endpoints under `/api/rest/project/{projectId}/cue-stacks`.
 | PUT | `/{stackId}` | Update stack settings |
 | DELETE | `/{stackId}` | Delete stack (query param `?keepCues=true` default) |
 | POST | `/{stackId}/reorder` | Reorder cues: body `{ cueIds: [3, 1, 5] }` |
-| POST | `/{stackId}/add-cue` | Add cue to stack: body `{ cueId, sortOrder? }` |
+| POST | `/{stackId}/add-cue` | Add cue to stack: body `{ cueId, sortOrder?, insertByNumber? }` |
 | POST | `/{stackId}/remove-cue` | Remove cue from stack (becomes standalone): body `{ cueId }` |
-| POST | `/{stackId}/activate` | Activate stack, optional `{ cueId }` to start at specific cue |
+| POST | `/{stackId}/activate` | Activate stack (first STANDARD cue), optional `{ cueId }` |
 | POST | `/{stackId}/deactivate` | Deactivate stack |
-| POST | `/{stackId}/advance` | Advance: body `{ direction: "FORWARD"\|"BACKWARD" }` |
-| POST | `/{stackId}/go-to` | Go to specific cue: body `{ cueId }` |
+| POST | `/{stackId}/advance` | Advance STANDARD cues only: body `{ direction: "FORWARD"\|"BACKWARD" }` |
+| POST | `/{stackId}/go-to` | Go to specific cue: body `{ cueId }` — HTTP 400 if MARKER |
+| POST | `/{stackId}/sort-by-cue-number` | Reorder by natural sort of cue_number |
+
+### `add-cue` with `insertByNumber`
+
+When `insertByNumber: true`, the cue is inserted at its natural sort position among participating cues (digit-first `cue_number`). Returns 400 if the cue has no digit-starting `cue_number`.
+
+### `sort-by-cue-number`
+
+Partitions STANDARD cues into three groups (participating, pinned, unnumbered), natural-sorts participating cues, re-slots them into their collective `sort_order` positions, and appends unnumbered cues. MARKERs and pinned cues are not moved.
+
+Response: `{ updatedCues: [...], pinnedCount, nullNumberCount }`. HTTP 400 if no participating cues.
 
 ### DTOs
 
 - `NewCueStack` — name, palette, loop
 - `CueStackDetails` — full stack with ordered cues, activeCueId, canEdit, canDelete
-- `CueStackCueEntry` — id, name, sortOrder, paletteSize, presetCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve
+- `CueStackCueEntry` — id, name, sortOrder, paletteSize, presetCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, notes, cueType
 - `CueStackActivateResponse` — stackId, cueId, cueName, effectCount
 - `CueStackDeactivateResponse` — stackId, removedCount
+- `SortByNumberResponse` — updatedCues, pinnedCount, nullNumberCount
 
 ## WebSocket
 

@@ -76,10 +76,22 @@ class State(val config: ApplicationConfig) {
                 DaoAiConversations, DaoCueSlots,
                 DaoUniverseConfigs, DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
                 DaoParkedChannels, DaoFxDefinitions,
+                DaoShowSessions, DaoShowSessionEntries,
             )
 
             // Migration: drop old unique index on (project_id, name) since we now use (project_id, fixture_type, name)
             exec("DROP INDEX IF EXISTS fx_presets_project_id_name")
+
+            // Partial unique index: cue_number must be unique per stack for STANDARD cues
+            exec("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_cue_number_per_stack
+                    ON cues (cue_stack_id, cue_number)
+                    WHERE cue_number IS NOT NULL AND cue_type = 'STANDARD'
+            """.trimIndent())
+
+            // Deferrable FK from show_sessions.active_entry_id → show_session_entries.id
+            // (circular reference: entries also reference sessions, so this FK must be deferrable)
+            migrateShowSessionActiveEntryFk()
 
             // Migration: convert APPLY_PRESET triggers to preset applications with timing
             migrateApplyPresetTriggers()
@@ -363,4 +375,42 @@ private fun Transaction.migrateDropTrackChangedScript() {
     exec("ALTER TABLE projects DROP COLUMN IF EXISTS track_changed_script_id")
 
     logger.info("Track changed script migration complete")
+}
+
+/**
+ * Adds a deferrable FK constraint from show_sessions.active_entry_id to show_session_entries.id.
+ *
+ * This is a circular reference (entries also reference sessions), so the FK must be deferrable
+ * to allow inserting a session and its entries in the same transaction.
+ *
+ * Safe to run repeatedly — checks for the constraint before adding.
+ */
+private fun Transaction.migrateShowSessionActiveEntryFk() {
+    var hasConstraint = false
+    exec(
+        """SELECT 1 FROM information_schema.table_constraints
+           WHERE table_name = 'show_sessions' AND constraint_name = 'fk_active_entry'"""
+    ) { rs ->
+        hasConstraint = rs.next()
+    }
+
+    if (hasConstraint) return // already exists
+
+    // Only add if the table exists (avoid error on first run before SchemaUtils)
+    var hasTable = false
+    exec(
+        """SELECT 1 FROM information_schema.tables
+           WHERE table_name = 'show_sessions'"""
+    ) { rs ->
+        hasTable = rs.next()
+    }
+
+    if (!hasTable) return
+
+    exec("""
+        ALTER TABLE show_sessions
+            ADD CONSTRAINT fk_active_entry
+            FOREIGN KEY (active_entry_id) REFERENCES show_session_entries(id)
+            DEFERRABLE INITIALLY DEFERRED
+    """.trimIndent())
 }
