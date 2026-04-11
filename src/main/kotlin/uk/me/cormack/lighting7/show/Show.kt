@@ -1,37 +1,28 @@
 package uk.me.cormack.lighting7.show
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.ticker
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.selects.select
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.grpc.*
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.registerUserEffect
 import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.state.State
 import java.security.MessageDigest
 import java.util.concurrent.locks.ReentrantLock
-import java.util.concurrent.locks.ReentrantReadWriteLock
-import kotlin.concurrent.read
-import kotlin.concurrent.write
 import kotlin.script.experimental.api.*
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromTemplate
 import kotlin.time.measureTime
 
-@OptIn(DelicateCoroutinesApi::class, ObsoleteCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+@OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
 class Show(
     val state: State,
     val project: DaoProject,
-    val trackChangedScriptName: String?,
 ) {
     val fixtures = Fixtures()
     val fxScriptCompiler = FxScriptCompiler()
@@ -47,13 +38,8 @@ class Show(
     private val scriptsLock = ReentrantLock()
     private val scriptingHost = BasicJvmScriptingHost()
 
-    private val _trackStateFlow = MutableSharedFlow<TrackState>()
-    val trackStateFlow = _trackStateFlow.asSharedFlow()
     private val runnerPool = newFixedThreadPoolContext(1, "lighting-running-pool")
     private val compilerPool = newFixedThreadPoolContext(1, "lighting-compiler-pool")
-
-    private var currentTrack: TrackDetails? = null
-    private val currentTrackLock = ReentrantReadWriteLock()
 
     fun start() {
         try {
@@ -74,25 +60,6 @@ class Show(
 
         // Pre-compile scripts used by cue triggers to avoid cold-start latency
         prewarmCueScripts()
-
-        val pingTicker = ticker(5_000)
-        GlobalScope.launch {
-            launch(newSingleThreadContext("TrackServerPing")) {
-                while(coroutineContext.isActive) {
-                    select<Unit> {
-                        pingTicker.onReceiveCatching {
-                            if (it.isClosed) {
-                                return@onReceiveCatching
-                            }
-
-                            _trackStateFlow.emit(trackState {
-                                playerState = PlayerState.PING
-                            })
-                        }
-                    }
-                }
-            }
-        }
     }
 
     fun close() {
@@ -216,27 +183,6 @@ class Show(
         return scriptRunner.result()
     }
 
-    fun trackChanged(newTrackDetails: TrackDetails) {
-        val trackHasChanged = currentTrackLock.write {
-            val hasChanged = currentTrack?.artist != newTrackDetails.artist || currentTrack?.title != newTrackDetails.title
-
-            currentTrack = newTrackDetails
-
-            hasChanged
-        }
-        if (trackHasChanged && trackChangedScriptName?.isNotEmpty() == true) {
-            evalScriptByName(trackChangedScriptName)
-        }
-
-        fixtures.trackChanged(newTrackDetails.playerState == PlayerState.PLAYING, newTrackDetails.artist, newTrackDetails.title)
-    }
-
-    suspend fun requestCurrentTrackDetails() {
-        _trackStateFlow.emit(trackState {
-            playerState = PlayerState.HANDSHAKE
-        })
-    }
-
     class Script(
         val show: Show,
         val scriptName: String,
@@ -310,10 +256,6 @@ class Show(
             val compiledResult = script.compiledResult
             val compiledScript = compiledResult.valueOrThrow()
 
-            val currentTrack = show.currentTrackLock.read {
-                show.currentTrack
-            }
-
             job = CoroutineScope(show.runnerPool).launch {
                 when (script.scriptType) {
                     ScriptType.GENERAL -> {
@@ -327,7 +269,6 @@ class Show(
                             providedProperties(Pair("scriptName", script.scriptName))
                             providedProperties(Pair("step", step))
                             providedProperties(Pair("coroutineScope", this@launch))
-                            providedProperties(Pair("currentTrack", currentTrack))
                         })
 
                         val actualChannelChanges = transaction.apply()
@@ -357,7 +298,6 @@ class Show(
                             providedProperties(Pair("fxEngine", show.fxEngine))
                             providedProperties(Pair("scriptName", script.scriptName))
                             providedProperties(Pair("step", step))
-                            providedProperties(Pair("currentTrack", currentTrack))
                         })
 
                         result = ScriptResult(compiledResult, runResult, null)

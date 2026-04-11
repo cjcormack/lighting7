@@ -7,7 +7,6 @@ import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.group.*
-import uk.me.cormack.lighting7.grpc.TrackDetails
 import uk.me.cormack.lighting7.show.Show
 import kotlin.script.experimental.annotations.KotlinScript
 import kotlin.script.experimental.api.*
@@ -48,7 +47,6 @@ abstract class FxApplicationScript(
     @PublishedApi internal val fxEngine: FxEngine,
     val scriptName: String,
     val step: Int,
-    val currentTrack: TrackDetails?,
 ) {
     // --- Fixture/Group Lookup ---
 

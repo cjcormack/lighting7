@@ -8,7 +8,6 @@ The WebSocket API provides:
 - Real-time DMX channel value updates
 - Direct channel control from the UI
 - Fixture change notifications
-- Music track information
 
 ## Connection
 
@@ -48,7 +47,6 @@ The WebSocket API provides:
 │   │   │  controllersChanged() ───► UniversesStateOutMessage      │  │   │
 │   │   │  fixturesChanged() ──────► FixturesChangedOutMessage     │  │   │
 │   │   │                      ────► ChannelMappingStateOutMessage │  │   │
-│   │   │  trackChanged() ─────────► TrackChangedOutMessage        │  │   │
 │   │   │  fxPresetListChanged() ► FxPresetListChangedOutMessage │  │   │
 │   │   │  cueListChanged() ─────► CueListChangedOutMessage      │  │   │
 │   │   └──────────────────────────────────────────────────────────┘  │   │
@@ -133,16 +131,6 @@ Directly set a DMX channel value.
 | level | UByte | Target value (0-255) |
 | fadeTime | Long | Fade duration in milliseconds |
 
-#### trackDetails
-
-Request current music track information.
-
-```json
-{ "type": "trackDetails" }
-```
-
-Triggers a handshake with the track server to get current track.
-
 ### Server → Client (OutMessage)
 
 #### channelState
@@ -207,19 +195,6 @@ Notification that fixtures have been re-registered.
 ```
 
 Client should refresh fixture list via REST API.
-
-#### trackChanged
-
-Music track information update.
-
-```json
-{
-    "type": "trackChanged",
-    "isPlaying": true,
-    "artist": "Artist Name",
-    "name": "Track Title"
-}
-```
 
 #### fxPresetListChanged
 

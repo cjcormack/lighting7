@@ -6,7 +6,6 @@ This document describes the show orchestration system and embedded Kotlin script
 
 The Show system orchestrates:
 - Script compilation with caching
-- Music track change handling
 - FX engine lifecycle
 - Cue trigger script pre-warming
 
@@ -18,12 +17,12 @@ Scripts are written in Kotlin and compiled at runtime using the Kotlin Scripting
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                              Show                                       │
 │                                                                         │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐  │
-│  │  Track Changed  │  │   FX Engine     │  │   Cue Trigger Scripts   │  │
-│  │    Handler      │  │   Lifecycle     │  │     (pre-warmed)        │  │
-│  └────────┬────────┘  └────────┬────────┘  └────────────┬────────────┘  │
-│           │                    │                        │               │
-│           └────────────────────┼────────────────────────┘               │
+│  ┌─────────────────┐  ┌─────────────────────────┐                       │
+│  │   FX Engine     │  │   Cue Trigger Scripts   │                       │
+│  │   Lifecycle     │  │     (pre-warmed)        │                       │
+│  └────────┬────────┘  └────────────┬────────────┘                       │
+│           │                        │                                    │
+│           └────────────────────────┘                                    │
 │                                ▼                                        │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │                        Script Cache                               │  │
@@ -71,7 +70,6 @@ Main orchestrator class:
 class Show(
     val state: State,                    // Database connection
     val project: DaoProject,             // Active project
-    val trackChangedScriptName: String?, // Optional music trigger script
 )
 ```
 
@@ -82,7 +80,6 @@ class Show(
 **Key methods:**
 - `start()`: Initialize fixtures, start FX engine, pre-warm cue scripts
 - `evalScriptByName(name)`: Execute a named script from the database
-- `trackChanged(details)`: Handle music track change
 - `compileLiteralScript(script, type)`: Compile without executing
 - `runLiteralScript(script, ...)`: Compile and execute a literal script
 
@@ -135,7 +132,7 @@ class ScriptRunner(
 
 **FX_APPLICATION:**
 1. Launch coroutine on `runnerPool`
-2. Evaluate with `show`, `fxEngine`, `scriptName`, `step`, `currentTrack`
+2. Evaluate with `show`, `fxEngine`, `scriptName`, `step`
 
 **FX_DEFINITION:**
 1. Launch coroutine on `runnerPool`
@@ -176,7 +173,6 @@ abstract class LightingScript(
     val scriptName: String,
     val step: Int,
     val coroutineScope: CoroutineScope,
-    val currentTrack: TrackDetails?,
 )
 ```
 
@@ -218,26 +214,6 @@ delay(1000)
 frontWash.rgbColour.value = Color.GREEN
 ```
 
-### Track Change Trigger
-
-When music track changes:
-```kotlin
-fun trackChanged(newTrackDetails: TrackDetails) {
-    if (trackHasChanged && trackChangedScriptName != null) {
-        evalScriptByName(trackChangedScriptName)
-    }
-    fixtures.trackChanged(isPlaying, artist, title)
-}
-```
-
-Scripts can access current track:
-```kotlin
-val track = currentTrack
-if (track != null) {
-    println("Now playing: ${track.artist} - ${track.title}")
-}
-```
-
 ## Compilation Details
 
 ### Kotlin Scripting Host
@@ -266,7 +242,6 @@ BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration 
     providedProperties(Pair("scriptName", script.scriptName))
     providedProperties(Pair("step", step))
     providedProperties(Pair("coroutineScope", this@launch))
-    providedProperties(Pair("currentTrack", currentTrack))
 })
 ```
 
@@ -275,7 +250,6 @@ BasicJvmScriptingHost().evaluator(compiledScript, ScriptEvaluationConfiguration 
 | Resource | Protection | Notes |
 |----------|------------|-------|
 | `scripts` cache | `ReentrantLock` | Serialize cache access |
-| `currentTrack` | `ReentrantReadWriteLock` | Music state |
 | Script execution | `runnerPool` | Single-threaded to avoid conflicts |
 | Compilation | `compilerPool` | Single-threaded |
 
@@ -328,4 +302,3 @@ object DaoScripts : IntIdTable("scripts") {
 4. Start the FX engine
 5. Load user-created FX definitions from database
 6. Pre-compile cue trigger scripts to avoid cold-start latency
-7. Start ping ticker for track server (every 5 seconds)

@@ -5,14 +5,11 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import uk.me.cormack.lighting7.dmx.ChannelChange
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
-import uk.me.cormack.lighting7.models.DaoScript
-import uk.me.cormack.lighting7.models.DaoScripts
 import uk.me.cormack.lighting7.show.Show
 
 /**
@@ -55,8 +52,6 @@ class ProjectManager(
                 current = DaoProject.find { DaoProjects.name eq configProjectName }.firstOrNull()
 
                 if (current != null) {
-                    // Migrate: set script references from config if not already set
-                    migrateProjectFromConfig(current)
                     current.isCurrent = true
                 } else {
                     throw IllegalStateException(
@@ -71,23 +66,6 @@ class ProjectManager(
         _currentProject = project
         _show = createShow(project)
         return _show!!
-    }
-
-    /**
-     * Migrate an existing project to use FK references based on config values.
-     */
-    private fun migrateProjectFromConfig(project: DaoProject) {
-        val trackChangedScriptName = config.propertyOrNull("lighting.trackChangedScriptName")?.getString()
-
-        // Find and set track changed script
-        if (project.trackChangedScriptId == null && !trackChangedScriptName.isNullOrEmpty()) {
-            val script = DaoScript.find {
-                (DaoScripts.project eq project.id) and (DaoScripts.name eq trackChangedScriptName)
-            }.firstOrNull()
-            if (script != null) {
-                project.trackChangedScriptId = script.id.value
-            }
-        }
     }
 
     /**
@@ -132,14 +110,9 @@ class ProjectManager(
     }
 
     private fun createShow(project: DaoProject): Show {
-        val trackChangedScriptName = transaction(database) {
-            project.trackChangedScript?.name
-        }
-
         return Show(
             state = stateProvider(),
             project = project,
-            trackChangedScriptName = trackChangedScriptName,
         )
     }
 

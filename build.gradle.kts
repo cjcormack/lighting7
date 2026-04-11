@@ -12,7 +12,6 @@ plugins {
     kotlin("jvm") version "2.1.21"
     id("io.ktor.plugin") version "3.3.3"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.1.21"
-    id("com.google.protobuf") version "0.9.6"
     id("maven-publish")
 }
 
@@ -58,7 +57,6 @@ dependencies {
     implementation("io.ktor:ktor-client-content-negotiation")
     implementation("io.ktor:ktor-client-encoding")
 
-    implementation("com.auth0:java-jwt:4.5.0")
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
 
     implementation("org.jetbrains.kotlin:kotlin-scripting-common")
@@ -66,35 +64,4 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-scripting-jvm-host")
     implementation("org.jetbrains.kotlin:kotlin-scripting-dependencies")
 
-    implementation("io.grpc:grpc-kotlin-stub:1.5.0")
-    implementation("io.grpc:grpc-stub:1.78.0")
-    implementation("io.grpc:grpc-protobuf:1.78.0")
-    implementation("com.google.protobuf:protobuf-kotlin:4.33.1")
-
-    runtimeOnly("io.grpc:grpc-netty:1.78.0")
-}
-
-protobuf {
-    protoc {
-        artifact = "com.google.protobuf:protoc:4.33.1"
-    }
-    plugins {
-        create("grpc") {
-            artifact = "io.grpc:protoc-gen-grpc-java:1.78.0"
-        }
-        create("grpckt") {
-            artifact = "io.grpc:protoc-gen-grpc-kotlin:1.5.0:jdk8@jar"
-        }
-    }
-    generateProtoTasks {
-        all().forEach {
-            it.plugins {
-                create("grpc")
-                create("grpckt")
-            }
-            it.builtins {
-                create("kotlin")
-            }
-        }
-    }
 }

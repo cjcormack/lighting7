@@ -20,7 +20,6 @@ interface FixturesChangeListener {
     fun cueStackListChanged()
     fun cueSlotListChanged()
     fun patchListChanged()
-    fun trackChanged(isPlaying: Boolean, artist: String, name: String)
 }
 
 class Fixtures {
@@ -241,12 +240,6 @@ class Fixtures {
     fun patchListChanged() {
         changeListeners.forEach {
             it.patchListChanged()
-        }
-    }
-
-    fun trackChanged(isPlaying: Boolean, artist: String, name: String) {
-        changeListeners.forEach {
-            it.trackChanged(isPlaying, artist, name)
         }
     }
 

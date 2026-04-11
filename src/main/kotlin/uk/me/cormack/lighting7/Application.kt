@@ -1,17 +1,11 @@
-@file:OptIn(DelicateCoroutinesApi::class)
-
 package uk.me.cormack.lighting7
 
 import io.ktor.server.application.*
 import io.ktor.server.netty.*
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.plugins.configureHTTP
 import uk.me.cormack.lighting7.plugins.configureSockets
 import uk.me.cormack.lighting7.routes.configureRouting
 import uk.me.cormack.lighting7.state.State
-import uk.me.cormack.lighting7.trackServer.TrackServer
 
 fun main(argv: Array<String>) {
     val args = mutableListOf("-config=application.conf")
@@ -36,11 +30,4 @@ fun Application.module() {
     configureHTTP()
     configureSockets(state)
     configureRouting(state)
-
-    GlobalScope.launch {
-        val port = 50051
-        val server = TrackServer(port, state.show)
-        server.start()
-        server.blockUntilShutdown()
-    }
 }

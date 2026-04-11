@@ -96,16 +96,6 @@ internal fun Route.routeApiRestProjects(state: State) {
                 request.name?.let { project.name = it }
                 request.description?.let { project.description = it }
 
-                if (request.trackChangedScriptId != null && request.trackChangedScriptId > 0) {
-                    val script = DaoScript.findById(request.trackChangedScriptId)
-                    if (script != null && script.project.id == project.id) {
-                        project.trackChangedScriptId = script.id.value
-                    }
-                }
-
-                // Handle clearing FK references (pass 0 to clear)
-                if (request.trackChangedScriptId == 0) project.trackChangedScriptId = null
-
                 project.toDetailDto()
             }
 
@@ -125,9 +115,6 @@ internal fun Route.routeApiRestProjects(state: State) {
                 if (project.isCurrent) {
                     return@transaction DeleteResult.IS_CURRENT
                 }
-
-                // Clear FK references first to avoid constraint violations
-                project.trackChangedScriptId = null
 
                 // Delete associated records in FK-safe order
                 project.cues.forEach { cue ->
@@ -189,48 +176,6 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectPatches(state)
         routeApiRestProjectUniverseConfigs(state)
         routeApiRestProjectPatchGroups(state)
-
-        // POST /current/create-track-changed-script - Create track changed script template
-        post<CreateTrackChangedScriptResource> {
-            val result = transaction(state.database) {
-                val project = state.projectManager.currentProject
-
-                // Check if track changed script already exists
-                if (project.trackChangedScriptId != null) {
-                    val existingScript = DaoScript.findById(project.trackChangedScriptId!!)
-                    if (existingScript != null) {
-                        return@transaction TemplateCreatedResponse(
-                            scriptId = existingScript.id.value,
-                            scriptName = existingScript.name,
-                            message = "Track changed script already exists"
-                        ) to false
-                    }
-                }
-
-                // Create the script
-                val script = DaoScript.new {
-                    name = "track-changed"
-                    script = TRACK_CHANGED_SCRIPT_TEMPLATE
-                    this.project = project
-                }
-
-                // Update project to reference this script
-                project.trackChangedScriptId = script.id.value
-
-                TemplateCreatedResponse(
-                    scriptId = script.id.value,
-                    scriptName = script.name,
-                    message = "Track changed script created successfully"
-                ) to true
-            }
-
-            val (response, created) = result
-            if (created) {
-                call.respond(HttpStatusCode.Created, response)
-            } else {
-                call.respond(HttpStatusCode.OK, response)
-            }
-        }
 
         // POST /{id}/clone - Clone a project with all scripts
         post<CloneProjectResource> { resource ->
@@ -339,11 +284,6 @@ internal fun Route.routeApiRestProjects(state: State) {
                     cuesCloned++
                 }
 
-                // Update project FK references to point to cloned entities
-                sourceProject.trackChangedScriptId?.let { oldId ->
-                    newProject.trackChangedScriptId = scriptIdMapping[oldId]
-                }
-
                 CloneProjectResponse(
                     project = newProject.toDetailDto(),
                     scriptsCloned = scriptIdMapping.size,
@@ -376,9 +316,6 @@ data class ProjectIdResource(val id: Int)
 @Resource("/{id}/set-current")
 data class SetCurrentProjectResource(val id: Int)
 
-@Resource("/current/create-track-changed-script")
-class CreateTrackChangedScriptResource
-
 @Resource("/{id}/clone")
 data class CloneProjectResource(val id: Int)
 
@@ -397,8 +334,6 @@ data class ProjectDetailDto(
     val name: String,
     val description: String?,
     val isCurrent: Boolean,
-    val trackChangedScriptId: Int?,
-    val trackChangedScriptName: String?,
     val scriptCount: Int,
     val fxPresetCount: Int,
     val cueCount: Int,
@@ -415,14 +350,6 @@ data class CreateProjectRequest(
 data class UpdateProjectRequest(
     val name: String? = null,
     val description: String? = null,
-    val trackChangedScriptId: Int? = null,
-)
-
-@Serializable
-data class TemplateCreatedResponse(
-    val scriptId: Int,
-    val scriptName: String,
-    val message: String
 )
 
 @Serializable
@@ -458,30 +385,9 @@ private fun DaoProject.toDetailDto() = ProjectDetailDto(
     name = name,
     description = description,
     isCurrent = isCurrent,
-    trackChangedScriptId = trackChangedScriptId,
-    trackChangedScriptName = trackChangedScriptId?.let { DaoScript.findById(it)?.name },
     scriptCount = scripts.count().toInt(),
     fxPresetCount = fxPresets.count().toInt(),
     cueCount = cues.count().toInt(),
     cueStackCount = cueStacks.count().toInt(),
 )
-
-private const val TRACK_CHANGED_SCRIPT_TEMPLATE = """// Track changed script - runs when the music track changes
-// Use this to synchronize lighting with music playback
-// Available context:
-//   trackName: String? - Name of the current track
-//   artistName: String? - Artist name
-//   albumName: String? - Album name
-//   artworkUrl: String? - URL to album artwork
-//   isPlaying: Boolean - Whether music is currently playing
-// Example:
-//
-// if (isPlaying) {
-//     // React to new track
-//     fixtures.all<FixtureWithDimmer>().forEach { it.dimmer = 0.8 }
-// } else {
-//     // Music paused/stopped
-//     fixtures.all<FixtureWithDimmer>().forEach { it.dimmer = 0.2 }
-// }
-"""
 

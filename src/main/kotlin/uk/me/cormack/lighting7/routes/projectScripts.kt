@@ -163,10 +163,6 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
                 return@transaction ScriptDeleteResult.NOT_FOUND
             }
 
-            // Nullify optional project properties
-            DaoProject.find { DaoProjects.trackChangedScriptId eq script.id.value }
-                .forEach { it.trackChangedScriptId = null }
-
             // Delete the script
             script.delete()
             ScriptDeleteResult.SUCCESS
@@ -369,11 +365,6 @@ private enum class ScriptDeleteResult { SUCCESS, NOT_FOUND }
 
 // Helper functions
 internal fun DaoScript.toScriptDetails(isCurrentProject: Boolean): ScriptDetails {
-    val usedByProperties = mutableListOf<String>()
-    if (DaoProject.find { DaoProjects.trackChangedScriptId eq this@toScriptDetails.id.value }.count() > 0) {
-        usedByProperties.add("trackChangedScript")
-    }
-
     val canEdit = isCurrentProject
     val cannotEditReason = if (!isCurrentProject) "Cannot edit scripts from a non-current project" else null
 
@@ -395,7 +386,7 @@ internal fun DaoScript.toScriptDetails(isCurrentProject: Boolean): ScriptDetails
         name = this.name,
         script = this.script,
         scriptType = this.scriptType.name,
-        usedByProperties = usedByProperties,
+        usedByProperties = emptyList(),
         canEdit = canEdit,
         cannotEditReason = cannotEditReason,
         canDelete = canDelete,

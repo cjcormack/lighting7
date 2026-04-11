@@ -31,4 +31,16 @@ class ProjectDtoTest {
         val fields = ProjectDetailDto::class.members.map { it.name }
         assertFalse(fields.contains("loadFixturesScriptName"), "ProjectDetailDto should not have a 'loadFixturesScriptName' field")
     }
+
+    @Test
+    fun `ProjectDetailDto does not have trackChangedScriptId field`() {
+        val fields = ProjectDetailDto::class.members.map { it.name }
+        assertFalse(fields.contains("trackChangedScriptId"), "ProjectDetailDto should not have a 'trackChangedScriptId' field")
+    }
+
+    @Test
+    fun `ProjectDetailDto does not have trackChangedScriptName field`() {
+        val fields = ProjectDetailDto::class.members.map { it.name }
+        assertFalse(fields.contains("trackChangedScriptName"), "ProjectDetailDto should not have a 'trackChangedScriptName' field")
+    }
 }

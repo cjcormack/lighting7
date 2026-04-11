@@ -58,10 +58,6 @@ data class ChannelStateOutMessage(
 ): OutMessage()
 
 @Serializable
-@SerialName("trackDetails")
-data object TrackDetailsInMessage : InMessage()
-
-@Serializable
 @SerialName("updateChannel")
 data class UpdateChannelInMessage(
     val universe: Int,
@@ -98,14 +94,6 @@ data object CueSlotListChangedOutMessage: OutMessage()
 @Serializable
 @SerialName("patchListChanged")
 data object PatchListChangedOutMessage: OutMessage()
-
-@Serializable
-@SerialName("trackChanged")
-data class TrackChangedOutMessage(
-    val isPlaying: Boolean,
-    val artist: String,
-    val name: String,
-): OutMessage()
 
 @Serializable
 @SerialName("fixturesChanged")
@@ -435,12 +423,6 @@ fun Application.configureSockets(state: State) {
                         sendSerialized<OutMessage>(PatchListChangedOutMessage)
                     }
                 }
-
-                override fun trackChanged(isPlaying: Boolean, artist: String, name: String) {
-                    launch {
-                        sendSerialized<OutMessage>(TrackChangedOutMessage(isPlaying, artist, name))
-                    }
-                }
             }
             state.show.fixtures.registerListener(listener)
 
@@ -563,9 +545,6 @@ fun Application.configureSockets(state: State) {
                             }.flatten()
 
                             sendSerialized<OutMessage>(ChannelStateOutMessage(currentValues))
-                        }
-                        is TrackDetailsInMessage -> {
-                            state.show.requestCurrentTrackDetails()
                         }
                         is UpdateChannelInMessage -> {
                             val controller = state.show.fixtures.controller(Universe(0, message.universe))

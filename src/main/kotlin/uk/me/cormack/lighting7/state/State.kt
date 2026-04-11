@@ -11,7 +11,6 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.fx.CueTriggerManager
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.music.Music
 import uk.me.cormack.lighting7.show.Show
 
 private val logger = LoggerFactory.getLogger("State")
@@ -19,7 +18,6 @@ private val logger = LoggerFactory.getLogger("State")
 class State(val config: ApplicationConfig) {
     val database = initDatabase()
     val projectManager = ProjectManager(config, database) { this }
-    val music = initMusic()
 
     /**
      * AI service for Claude-powered lighting control.
@@ -101,19 +99,14 @@ class State(val config: ApplicationConfig) {
 
             // Migration: drop run loop columns from projects (superseded by FX cue system)
             migrateDropRunLoop()
+
+            // Migration: drop track changed script column from projects (music sync removed)
+            migrateDropTrackChangedScript()
         }
 
         return database
     }
 
-    private fun initMusic(): Music {
-        return Music(
-            this,
-            config.property("music.issuer").getString(),
-            config.property("music.keyId").getString(),
-            config.property("music.secret").getString().trimIndent(),
-        )
-    }
 }
 
 /**
@@ -346,4 +339,29 @@ private fun Transaction.migrateDropRunLoop() {
     exec("ALTER TABLE projects DROP COLUMN IF EXISTS run_loop_delay_ms")
 
     logger.info("Run loop migration complete")
+}
+
+/**
+ * One-time migration: drop track_changed_script_id column from projects table.
+ *
+ * Music track synchronization has been removed.
+ *
+ * Safe to run repeatedly — uses IF EXISTS guard.
+ */
+private fun Transaction.migrateDropTrackChangedScript() {
+    var hasColumn = false
+    exec(
+        """SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'projects' AND column_name = 'track_changed_script_id'"""
+    ) { rs ->
+        hasColumn = rs.next()
+    }
+
+    if (!hasColumn) return // already migrated
+
+    logger.info("Migrating: dropping track_changed_script_id from projects...")
+
+    exec("ALTER TABLE projects DROP COLUMN IF EXISTS track_changed_script_id")
+
+    logger.info("Track changed script migration complete")
 }

@@ -15,8 +15,6 @@ object DaoProjects: IntIdTable("projects") {
     val description = varchar("description", 255).nullable()
     val isCurrent = bool("is_current").default(false)
 
-    // FK references - plain integer columns to avoid circular dependency issues
-    val trackChangedScriptId = integer("track_changed_script_id").nullable()
 }
 
 class DaoProject(id: EntityID<Int>) : IntEntity(id) {
@@ -25,11 +23,6 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     var name by DaoProjects.name
     var description by DaoProjects.description
     var isCurrent by DaoProjects.isCurrent
-
-    var trackChangedScriptId by DaoProjects.trackChangedScriptId
-
-    val trackChangedScript: DaoScript?
-        get() = trackChangedScriptId?.let { DaoScript.findById(it) }
 
     val scripts by DaoScript referrersOn DaoScripts.project
     val fxPresets by DaoFxPreset referrersOn DaoFxPresets.project

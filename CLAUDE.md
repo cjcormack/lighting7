@@ -1,13 +1,12 @@
 # Claude Code Configuration for Lighting7
 
-A professional stage/event lighting control system built in Kotlin using Ktor. Controls physical lighting fixtures through DMX (ArtNet) and Philips Hue, with music synchronization support.
+A professional stage/event lighting control system built in Kotlin using Ktor. Controls physical lighting fixtures through DMX (ArtNet) and Philips Hue.
 
 ## Tech Stack
 
 - **Kotlin 1.9.23** on JVM 17
 - **Ktor 2.3.9** (web server, WebSockets, REST API)
 - **PostgreSQL** with Exposed ORM and HikariCP
-- **gRPC/Protocol Buffers** for track notifications
 - **ArtNet4j** for DMX protocol
 - **Kotlin Scripting** for embedded lighting DSL
 
@@ -17,7 +16,7 @@ A professional stage/event lighting control system built in Kotlin using Ktor. C
 # Build
 ./gradlew build
 
-# Run (starts REST on :8413, gRPC on :50051)
+# Run (starts REST on :8413)
 ./gradlew run
 ```
 
@@ -26,7 +25,6 @@ A professional stage/event lighting control system built in Kotlin using Ktor. C
 1. Copy `example.local.conf` to `local.conf`
 2. Configure PostgreSQL connection settings
 3. Set project name
-4. Configure music service credentials if needed
 
 ## Project Structure
 
@@ -49,9 +47,7 @@ src/main/kotlin/uk/me/cormack/lighting7/
 ├── models/                 # Database entities (projects, scripts, cues, presets)
 ├── routes/                 # REST API endpoints
 ├── plugins/                # Ktor plugins (HTTP, WebSockets, Routing)
-├── scripts/                # LightingScript DSL definition
-├── music/                  # Music service integration
-└── trackServer/            # gRPC track notification server
+└── scripts/                # LightingScript DSL definition
 ```
 
 ## Key Concepts
@@ -249,7 +245,6 @@ group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrateg
 - `channelMappingState` - Channel-to-fixture mapping (sent on connect and fixtures change)
 - `universesState` - Available DMX universes
 - `updateChannel` - Direct channel control
-- `trackDetails` - Music track info
 - `fxState` - Request/receive FX state (BPM, active effects)
 - `setFxBpm` - Set tempo
 - `tapTempo` - Tap for tempo
@@ -335,7 +330,6 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 
 - **DMX Hardware**: ArtNet protocol over network
 - **Philips Hue**: HTTP API via Ktor client
-- **Music Sync**: gRPC service on port 50051
 
 ## Engineering Documentation
 
@@ -345,6 +339,5 @@ For deeper technical details, see the docs in `docs/`:
 - [Fixture System](docs/fixtures-engineering.md) - Fixture abstractions, traits, property types, adding new fixtures
 - [Show & Scripts](docs/show-scripts-engineering.md) - Script compilation, caching, execution
 - [WebSocket Protocol](docs/websocket-engineering.md) - Real-time client communication, message types, update flow
-- [Music Sync](docs/music-sync-engineering.md) - gRPC track notifications, script triggering, player state
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, multi-element fixtures

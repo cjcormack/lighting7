@@ -6,7 +6,6 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.grpc.TrackDetails
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.Show
 import kotlin.script.experimental.annotations.KotlinScript
@@ -26,7 +25,6 @@ abstract class LightingScript(
     val scriptName: String,
     val step: Int,
     val coroutineScope: CoroutineScope,
-    val currentTrack: TrackDetails?,
 ) {
     /** Access to the global master clock for tempo control */
     val masterClock: MasterClock get() = fxEngine.masterClock
