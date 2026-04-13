@@ -19,6 +19,7 @@ object DaoShowSessions : IntIdTable("show_sessions") {
     // Plain integer to avoid circular FK with DaoShowSessionEntries.
     // The deferrable FK constraint is added via manual SQL in State.kt.
     val activeEntryId = integer("active_entry_id").nullable()
+    val isActive = bool("is_active").default(false)
     val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
 }
@@ -30,6 +31,7 @@ class DaoShowSession(id: EntityID<Int>) : IntEntity(id) {
     var name by DaoShowSessions.name
     var sessionType by DaoShowSessions.sessionType
     var activeEntryId by DaoShowSessions.activeEntryId
+    var isActive by DaoShowSessions.isActive
     var createdAt by DaoShowSessions.createdAt
     var updatedAt by DaoShowSessions.updatedAt
     val entries by DaoShowSessionEntry referrersOn DaoShowSessionEntries.showSession

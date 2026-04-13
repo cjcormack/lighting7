@@ -129,17 +129,33 @@ internal fun Route.routeApiRestProjectShowSessions(state: State) {
             return@delete
         }
 
-        val found = transaction(state.database) {
-            val session = DaoShowSession.findById(resource.sessionId) ?: return@transaction false
-            if (session.project.id != project.id) return@transaction false
+        val result = transaction(state.database) {
+            val session = DaoShowSession.findById(resource.sessionId) ?: return@transaction null
+            if (session.project.id != project.id) return@transaction null
+
+            // Capture the running cue stack (if this session was active) so we can stop it
+            // outside the transaction. Clearing activeEntryId first satisfies the deferrable FK
+            // before the entries are deleted.
+            val activeCueStackId = if (session.isActive) session.runningCueStackId() else null
+            val wasActive = session.isActive
+            val sessionId = session.id.value
+            session.activeEntryId = null
+            session.isActive = false
 
             // Delete entries first (cascade would handle this, but be explicit)
             session.entries.forEach { it.delete() }
             session.delete()
-            true
+            Triple(sessionId, activeCueStackId, wasActive)
         }
 
-        if (found) {
+        if (result != null) {
+            val (sessionId, activeCueStackId, wasActive) = result
+            if (activeCueStackId != null) {
+                state.show.cueStackManager.deactivateStack(activeCueStackId, state)
+            }
+            if (wasActive) {
+                state.show.fixtures.showSessionChanged(sessionId, null, null, null, isActive = false)
+            }
             state.show.fixtures.showSessionListChanged()
             call.respond(HttpStatusCode.OK)
         } else {
@@ -359,37 +375,109 @@ internal fun Route.routeApiRestProjectShowSessions(state: State) {
                     ?: throw IllegalArgumentException("Session not found")
                 if (session.project.id != project.id) throw IllegalArgumentException("Session not found")
 
-                // Find first STACK entry
+                // If already active, short-circuit — a repeat /activate must not reset the running
+                // cue stack to its first cue, which would disrupt a live show.
+                if (session.isActive) {
+                    val currentEntryId = session.activeEntryId
+                    val currentEntry = currentEntryId?.let { DaoShowSessionEntry.findById(it) }
+                    return@transaction ActivateSessionResult(
+                        sessionId = session.id.value,
+                        activated = currentEntry?.let { entry ->
+                            val csId = entry.cueStack?.id?.value
+                            if (csId != null) ShowSessionActivateData(
+                                sessionId = session.id.value,
+                                entryId = entry.id.value,
+                                cueStackId = csId,
+                                cueStackName = entry.cueStack?.name ?: "",
+                            ) else null
+                        },
+                        deactivated = emptyList(),
+                        alreadyActive = true,
+                    )
+                }
+
+                // First STACK entry drives the cue-stack activation side effect. An empty session
+                // can still be marked active — it just won't start a stack.
                 val firstStack = session.entries
                     .filter { it.entryType == ShowSessionEntryType.STACK.name }
                     .sortedBy { it.sortOrder }
                     .firstOrNull()
-                    ?: throw IllegalArgumentException("Session has no stack entries")
 
-                val cueStackId = firstStack.cueStack?.id?.value
-                    ?: throw IllegalArgumentException("Entry has no associated cue stack")
+                // Enforce single-active-session-per-project: deactivate any siblings that are
+                // currently marked active. We collect their cueStackIds here for runtime
+                // deactivation outside this transaction (CueStackManager is not transactional).
+                val now = System.currentTimeMillis()
+                val deactivatedSiblings = DaoShowSession.find {
+                    (DaoShowSessions.project eq project.id) and
+                        (DaoShowSessions.isActive eq true) and
+                        (DaoShowSessions.id neq session.id)
+                }.map { sibling ->
+                    val siblingCueStackId = sibling.runningCueStackId()
+                    sibling.activeEntryId = null
+                    sibling.isActive = false
+                    sibling.updatedAt = now
+                    DeactivatedSiblingData(sibling.id.value, siblingCueStackId)
+                }
 
-                session.activeEntryId = firstStack.id.value
-                session.updatedAt = System.currentTimeMillis()
+                val activatedData = if (firstStack != null) {
+                    val cueStackId = firstStack.cueStack?.id?.value
+                        ?: throw IllegalArgumentException("Entry has no associated cue stack")
+                    session.activeEntryId = firstStack.id.value
+                    ShowSessionActivateData(
+                        sessionId = session.id.value,
+                        entryId = firstStack.id.value,
+                        cueStackId = cueStackId,
+                        cueStackName = firstStack.cueStack?.name ?: "",
+                    )
+                } else {
+                    // Empty session: mark active, but no entry / stack to start.
+                    session.activeEntryId = null
+                    null
+                }
+                session.isActive = true
+                session.updatedAt = now
 
-                ShowSessionActivateData(
+                ActivateSessionResult(
                     sessionId = session.id.value,
-                    entryId = firstStack.id.value,
-                    cueStackId = cueStackId,
-                    cueStackName = firstStack.cueStack?.name ?: "",
+                    activated = activatedData,
+                    deactivated = deactivatedSiblings,
+                    alreadyActive = false,
                 )
             }
 
-            activateStackAtFirstCue(state, result.cueStackId)
+            // Already-active short-circuit: skip side effects and broadcasts; only echo state.
+            if (!result.alreadyActive) {
+                // Deactivate sibling cue stacks first, then activate the target (if any).
+                for (sibling in result.deactivated) {
+                    if (sibling.cueStackId != null) {
+                        state.show.cueStackManager.deactivateStack(sibling.cueStackId, state)
+                    }
+                }
 
-            state.show.fixtures.showSessionChanged(
-                result.sessionId, result.entryId, result.cueStackId, result.cueStackName,
-            )
+                if (result.activated != null) {
+                    activateStackAtFirstCue(state, result.activated.cueStackId)
+                }
+
+                // Broadcast per-session events: deactivated siblings first, then the newly active one.
+                for (sibling in result.deactivated) {
+                    state.show.fixtures.showSessionChanged(sibling.sessionId, null, null, null, isActive = false)
+                }
+                state.show.fixtures.showSessionChanged(
+                    result.sessionId,
+                    result.activated?.entryId,
+                    result.activated?.cueStackId,
+                    result.activated?.cueStackName,
+                    isActive = true,
+                )
+                // Invalidate list caches on all clients so isActive flips propagate via refetch.
+                state.show.fixtures.showSessionListChanged()
+            }
+
             call.respond(ShowSessionActivateResponse(
                 sessionId = result.sessionId,
-                activeEntryId = result.entryId,
-                activatedStackId = result.cueStackId,
-                activatedStackName = result.cueStackName,
+                activeEntryId = result.activated?.entryId,
+                activatedStackId = result.activated?.cueStackId,
+                activatedStackName = result.activated?.cueStackName,
             ))
         } catch (e: Exception) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to activate"))
@@ -414,11 +502,14 @@ internal fun Route.routeApiRestProjectShowSessions(state: State) {
                 ?: return@transaction null
             if (session.project.id != project.id) return@transaction null
 
-            val activeEntryId = session.activeEntryId ?: return@transaction null
-            val activeEntry = DaoShowSessionEntry.findById(activeEntryId) ?: return@transaction null
-            val cueStackId = activeEntry.cueStack?.id?.value
+            // A session may have isActive=true with no running entry (empty session picked up mid-flow).
+            // Treat either condition as needing deactivation.
+            if (!session.isActive && session.activeEntryId == null) return@transaction null
+
+            val cueStackId = session.runningCueStackId()
 
             session.activeEntryId = null
+            session.isActive = false
             session.updatedAt = System.currentTimeMillis()
 
             session.id.value to cueStackId
@@ -429,7 +520,8 @@ internal fun Route.routeApiRestProjectShowSessions(state: State) {
             if (cueStackId != null) {
                 state.show.cueStackManager.deactivateStack(cueStackId, state)
             }
-            state.show.fixtures.showSessionChanged(sessionId, null, null, null)
+            state.show.fixtures.showSessionChanged(sessionId, null, null, null, isActive = false)
+            state.show.fixtures.showSessionListChanged()
             call.respond(HttpStatusCode.OK)
         } else {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("Session not found or not active"))
@@ -508,7 +600,7 @@ internal fun Route.routeApiRestProjectShowSessions(state: State) {
             activateStackAtFirstCue(state, result.cueStackId)
 
             state.show.fixtures.showSessionChanged(
-                result.sessionId, result.entryId, result.cueStackId, result.cueStackName,
+                result.sessionId, result.entryId, result.cueStackId, result.cueStackName, isActive = true,
             )
             call.respond(ShowSessionActivateResponse(
                 sessionId = result.sessionId,
@@ -578,7 +670,7 @@ internal fun Route.routeApiRestProjectShowSessions(state: State) {
             activateStackAtFirstCue(state, result.cueStackId)
 
             state.show.fixtures.showSessionChanged(
-                result.sessionId, result.entryId, result.cueStackId, result.cueStackName,
+                result.sessionId, result.entryId, result.cueStackId, result.cueStackName, isActive = true,
             )
             call.respond(ShowSessionActivateResponse(
                 sessionId = result.sessionId,
@@ -644,6 +736,7 @@ data class ShowSessionDetails(
     val name: String,
     val sessionType: String,
     val activeEntryId: Int?,
+    val isActive: Boolean,
     val entries: List<ShowSessionEntryDto>,
     val canEdit: Boolean,
     val canDelete: Boolean,
@@ -697,9 +790,10 @@ data class GoToSessionEntryRequest(
 @Serializable
 data class ShowSessionActivateResponse(
     val sessionId: Int,
-    val activeEntryId: Int,
-    val activatedStackId: Int,
-    val activatedStackName: String,
+    // Null when activating an empty session (isActive=true but no entry to run yet).
+    val activeEntryId: Int?,
+    val activatedStackId: Int?,
+    val activatedStackName: String?,
 )
 
 // ─── Internal data classes ────────────────────────────────────────────
@@ -717,6 +811,20 @@ private data class ShowSessionAdvanceData(
     val cueStackId: Int,
     val cueStackName: String,
     val previousCueStackId: Int?,
+)
+
+private data class DeactivatedSiblingData(
+    val sessionId: Int,
+    val cueStackId: Int?,
+)
+
+private data class ActivateSessionResult(
+    val sessionId: Int,
+    // Null when the session is empty — isActive is set, but no stack is started.
+    val activated: ShowSessionActivateData?,
+    val deactivated: List<DeactivatedSiblingData>,
+    // True when the session was already isActive=true — the handler skips side effects.
+    val alreadyActive: Boolean,
 )
 
 // ─── Helpers ──────────────────────────────────────────────────────────
@@ -740,6 +848,10 @@ private fun activateStackAtFirstCue(state: State, cueStackId: Int) {
 
 // ─── Entity helpers ────────────────────────────────────────────────────
 
+/** Cue stack id associated with this session's currently-active entry, or null when no entry is active or the entry has no stack. */
+private fun DaoShowSession.runningCueStackId(): Int? =
+    activeEntryId?.let { DaoShowSessionEntry.findById(it) }?.cueStack?.id?.value
+
 private fun DaoShowSession.toShowSessionDetails(isCurrentProject: Boolean): ShowSessionDetails {
     val orderedEntries = entries.sortedBy { it.sortOrder }.map { entry ->
         ShowSessionEntryDto(
@@ -756,6 +868,7 @@ private fun DaoShowSession.toShowSessionDetails(isCurrentProject: Boolean): Show
         name = name,
         sessionType = sessionType,
         activeEntryId = activeEntryId,
+        isActive = isActive,
         entries = orderedEntries,
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,

@@ -43,6 +43,7 @@ class ShowSessionRoutesTest {
             name = "Opening Night",
             sessionType = "SHOW",
             activeEntryId = 2,
+            isActive = true,
             entries = listOf(
                 ShowSessionEntryDto(id = 1, entryType = "STACK", sortOrder = 0, label = "Act 1", cueStackId = 10, cueStackName = "Act 1 Cues"),
                 ShowSessionEntryDto(id = 2, entryType = "STACK", sortOrder = 1, label = null, cueStackId = 11, cueStackName = "Act 2 Cues"),
@@ -56,6 +57,7 @@ class ShowSessionRoutesTest {
         assertEquals(details, deserialized)
         assertEquals(3, deserialized.entries.size)
         assertEquals(2, deserialized.activeEntryId)
+        assertEquals(true, deserialized.isActive)
     }
 
     @Test
@@ -65,6 +67,7 @@ class ShowSessionRoutesTest {
             name = "Empty",
             sessionType = "SHOW",
             activeEntryId = null,
+            isActive = false,
             entries = emptyList(),
             canEdit = true,
             canDelete = true,
@@ -72,6 +75,7 @@ class ShowSessionRoutesTest {
         val serialized = json.encodeToString(details)
         val deserialized = json.decodeFromString<ShowSessionDetails>(serialized)
         assertNull(deserialized.activeEntryId)
+        assertEquals(false, deserialized.isActive)
     }
 
     // ─── ShowSessionEntryDto ─────────────────────────────────────────────

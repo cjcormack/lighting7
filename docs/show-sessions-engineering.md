@@ -6,12 +6,15 @@ This document describes the Show Session system — the top-level structure for 
 
 A **Show Session** represents either a theatrical show (stacks per act) or a live band setlist (stacks per song). It provides:
 - **Ordered entries** — cue stacks and section markers in performance order
+- **Active flag** — explicit `is_active` boolean, at most one active session per project
 - **Active entry tracking** — which stack is currently active (`active_entry_id`)
 - **Session type** — `SHOW` or `SETLIST` (frontend vocabulary hint only; identical API)
 - **Navigation** — activate, advance (FORWARD/BACKWARD), go-to, deactivate
 
 Key behaviours:
-- `active_entry_id` is stored explicitly, not derived
+- `is_active` is the authoritative "which session is active" signal; `active_entry_id` is the within-session entry pointer
+- `/activate` transactionally deactivates every other `is_active=true` session in the project (and stops their cue stacks) before activating the target — enforcing one-active-per-project on the server
+- `/deactivate` and DELETE both clear `is_active` and `active_entry_id` together
 - `advance` and `go-to` only target STACK entries (MARKERs are skipped)
 - `deactivatePrevious` defaults to `true` on advance (deactivates the previous stack)
 - Activation delegates to `CueStackManager` for the actual cue stack lifecycle
@@ -27,6 +30,7 @@ show_sessions
 ├── name (varchar 255)
 ├── session_type (varchar 20, default "SHOW")
 ├── active_entry_id (integer, nullable — deferrable FK → show_session_entries)
+├── is_active (bool, default false — at most one true per project)
 ├── created_at (long, epoch millis)
 └── updated_at (long, epoch millis)
 
@@ -75,17 +79,31 @@ All endpoints under `/api/rest/project/{projectId}/show-sessions`.
 ### DTOs
 
 - `NewShowSession` — name, sessionType (default "SHOW")
-- `ShowSessionDetails` — id, name, sessionType, activeEntryId, entries, canEdit, canDelete
+- `ShowSessionDetails` — id, name, sessionType, activeEntryId, **isActive**, entries, canEdit, canDelete
 - `ShowSessionEntryDto` — id, entryType, sortOrder, label, cueStackId, cueStackName
 - `ShowSessionActivateResponse` — sessionId, activeEntryId, activatedStackId, activatedStackName
 
-### Activate/Advance Flow
+### Activate Flow
 
-1. Read session and resolve the target entry (first STACK for activate, next STACK for advance)
-2. If `deactivatePrevious` (default true), deactivate the previous entry's cue stack via `CueStackManager`
-3. Activate the new entry's cue stack — delegates to `CueStackManager.activateCueInStack` starting at the first STANDARD cue
-4. Update `active_entry_id` on the session
-5. Broadcast `showSessionChanged` WebSocket event
+0. **Deactivate siblings** — in the same transaction, find every session in the project with `is_active = true` and a different id, record their `active_entry_id`'s cue stack, and clear their `is_active` + `active_entry_id`. After the transaction commits, call `CueStackManager.deactivateStack(...)` for each recorded cue stack.
+1. Resolve the target session's first STACK entry.
+2. Set `is_active = true` and `active_entry_id = firstStack.id` on the target.
+3. Call `CueStackManager.activateCueInStack` at the target stack's first STANDARD cue.
+4. Broadcast one `showSessionChanged(isActive=false)` per deactivated sibling, then one `showSessionChanged(isActive=true)` for the target, then a `showSessionListChanged` so clients refetch.
+
+### Advance / Go-To Flow
+
+1. Read session and resolve the target entry (next STACK for advance, the requested entry for go-to).
+2. If `deactivatePrevious` (default true), deactivate the previous entry's cue stack via `CueStackManager`.
+3. Activate the new entry's cue stack — delegates to `CueStackManager.activateCueInStack` starting at the first STANDARD cue.
+4. Update `active_entry_id` on the session (`is_active` stays true).
+5. Broadcast `showSessionChanged(isActive=true)` WebSocket event.
+
+### Deactivate Flow
+
+1. Clear `is_active = false` and `active_entry_id = null` on the session.
+2. Deactivate the previously-running cue stack via `CueStackManager`.
+3. Broadcast `showSessionChanged(isActive=false)` and `showSessionListChanged`.
 
 ## WebSocket
 
@@ -103,11 +121,17 @@ Broadcast on session CRUD operations (create, update, delete, add/remove entries
   "sessionId": 1,
   "activeEntryId": 2,
   "activatedStackId": 10,
-  "activatedStackName": "Act 1 Cues"
+  "activatedStackName": "Act 1 Cues",
+  "isActive": true
 }
 ```
 
-Broadcast on any change to `active_entry_id` — activate, deactivate, advance, go-to.
+Broadcast on any change to `active_entry_id` or `is_active` — activate, deactivate, advance, go-to, DELETE (of an active session).
+
+When activating session B while session A was active, three broadcasts fire in sequence:
+1. `showSessionChanged(sessionId: A, activeEntryId: null, …, isActive: false)`
+2. `showSessionChanged(sessionId: B, activeEntryId: …, isActive: true)`
+3. `showSessionListChanged` (marker — prompts clients to refetch the list so all `isActive` flags converge)
 
 ## Implementation Files
 

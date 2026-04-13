@@ -106,6 +106,7 @@ data class ShowSessionChangedOutMessage(
     val activeEntryId: Int?,
     val activatedStackId: Int?,
     val activatedStackName: String?,
+    val isActive: Boolean,
 ): OutMessage()
 
 @Serializable
@@ -442,6 +443,7 @@ fun Application.configureSockets(state: State) {
                     activeEntryId: Int?,
                     activatedStackId: Int?,
                     activatedStackName: String?,
+                    isActive: Boolean,
                 ) {
                     launch {
                         sendSerialized<OutMessage>(ShowSessionChangedOutMessage(
@@ -449,6 +451,7 @@ fun Application.configureSockets(state: State) {
                             activeEntryId = activeEntryId,
                             activatedStackId = activatedStackId,
                             activatedStackName = activatedStackName,
+                            isActive = isActive,
                         ))
                     }
                 }

@@ -21,7 +21,7 @@ interface FixturesChangeListener {
     fun cueSlotListChanged()
     fun patchListChanged()
     fun showSessionListChanged()
-    fun showSessionChanged(sessionId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?)
+    fun showSessionChanged(sessionId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?, isActive: Boolean)
 }
 
 class Fixtures {
@@ -251,9 +251,9 @@ class Fixtures {
         }
     }
 
-    fun showSessionChanged(sessionId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?) {
+    fun showSessionChanged(sessionId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?, isActive: Boolean) {
         changeListeners.forEach {
-            it.showSessionChanged(sessionId, activeEntryId, activatedStackId, activatedStackName)
+            it.showSessionChanged(sessionId, activeEntryId, activatedStackId, activatedStackName, isActive)
         }
     }
 
