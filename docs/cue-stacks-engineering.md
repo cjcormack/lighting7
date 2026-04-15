@@ -92,9 +92,9 @@ Stored in a `ConcurrentHashMap<Int, ActiveStackState>`.
 
 | Method | Description |
 |--------|-------------|
-| `activateCueInStack(state, stackId, cueId, scope?)` | Activate a cue within a stack (handles crossfade, palette, auto-advance) |
-| `advanceStack(state, stackId, direction, scope?)` | Advance forward/backward respecting loop setting |
-| `goToCue(state, stackId, cueId, scope?)` | Jump to a specific cue |
+| `activateCueInStack(state, stackId, cueId, scope)` | Activate a cue within a stack (handles crossfade, palette, auto-advance) |
+| `advanceStack(state, stackId, direction, scope)` | Advance forward/backward respecting loop setting |
+| `goToCue(state, stackId, cueId, scope)` | Jump to a specific cue |
 | `deactivateStack(stackId)` | Remove all effects, cancel timers |
 | `getActiveCueId(stackId)` | Query active cue (or null) |
 | `getActiveStackIds()` | All active stack IDs |

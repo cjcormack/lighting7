@@ -314,7 +314,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     // Cue belongs to a stack — delegate to CueStackManager
                     // This activates the stack (if not already active) and switches to this cue
                     val stackResult = state.show.cueStackManager.activateCueInStack(
-                        state, cueStackId, resource.cueId, kotlinx.coroutines.GlobalScope
+                        state, cueStackId, resource.cueId
                     )
                     call.respond(ApplyCueResponse(
                         effectCount = stackResult.effectCount,

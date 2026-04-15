@@ -1,3 +1,4 @@
+@file:OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 package uk.me.cormack.lighting7.fx
 
 import kotlinx.coroutines.*
@@ -62,7 +63,7 @@ class CueStackManager(
         state: State,
         stackId: Int,
         cueId: Int,
-        scope: CoroutineScope? = null,
+        scope: CoroutineScope = GlobalScope,
         rejectMarkers: Boolean = false,
     ): ActivateResult {
         // Read stack and cue data from DB
@@ -132,7 +133,7 @@ class CueStackManager(
         // 1. Snapshot outgoing effects (before removing) for crossfade
         val outgoingEffects = fxEngine.getActiveEffects().filter { it.cueStackId == stackId }
         val fadeDurationMs = cueData.fadeDurationMs ?: 0L
-        val useCrossfade = fadeDurationMs > 0 && outgoingEffects.isNotEmpty() && scope != null
+        val useCrossfade = fadeDurationMs > 0 && outgoingEffects.isNotEmpty()
 
         if (!useCrossfade) {
             // Snap-cut: remove old effects but keep the stack palette (it carries over between cues)
@@ -240,14 +241,13 @@ class CueStackManager(
                 EasingCurve.LINEAR
             }
 
-            // scope is guaranteed non-null when useCrossfade is true
-            activeStacks[stackId]?.crossfadeJob = scope!!.launch {
+            activeStacks[stackId]?.crossfadeJob = scope.launch {
                 runCrossfade(outgoingIds, newEffectIds, fadeDurationMs, easingCurve)
             }
         }
 
         // 6. Activate timed effects (delayed/recurring presets and ad-hoc effects)
-        if ((timedPresets.isNotEmpty() || timedAdHoc.isNotEmpty()) && scope != null) {
+        if (timedPresets.isNotEmpty() || timedAdHoc.isNotEmpty()) {
             state.cueTriggerManager.activateTimedEffectsForCue(
                 cueId = cueData.cueId,
                 cueStackId = stackId,
@@ -258,7 +258,7 @@ class CueStackManager(
         }
 
         // 7. Activate script triggers for the new cue
-        if (cueData.triggers.isNotEmpty() && scope != null) {
+        if (cueData.triggers.isNotEmpty()) {
             state.cueTriggerManager.activateTriggersForCue(
                 cueId = cueData.cueId,
                 cueStackId = stackId,
@@ -267,8 +267,8 @@ class CueStackManager(
             )
         }
 
-        // 7. Start auto-advance timer if configured
-        if (cueData.autoAdvance && cueData.autoAdvanceDelayMs != null && scope != null) {
+        // 8. Start auto-advance timer if configured
+        if (cueData.autoAdvance && cueData.autoAdvanceDelayMs != null) {
             val delayMs = cueData.autoAdvanceDelayMs
             activeStacks[stackId]?.autoAdvanceJob = scope.launch {
                 delay(delayMs)
@@ -348,7 +348,7 @@ class CueStackManager(
         state: State,
         stackId: Int,
         direction: AdvanceDirection,
-        scope: CoroutineScope? = null,
+        scope: CoroutineScope = GlobalScope,
     ): ActivateResult? {
         val currentState = activeStacks[stackId]
             ?: throw IllegalStateException("Stack $stackId is not active")
@@ -410,7 +410,7 @@ class CueStackManager(
         state: State,
         stackId: Int,
         cueId: Int,
-        scope: CoroutineScope? = null,
+        scope: CoroutineScope = GlobalScope,
     ): ActivateResult {
         return activateCueInStack(state, stackId, cueId, scope, rejectMarkers = true)
     }
@@ -419,7 +419,6 @@ class CueStackManager(
      * Activate a cue stack at its first STANDARD cue.
      * Throws [IllegalArgumentException] if the stack has no standard cues.
      */
-    @OptIn(DelicateCoroutinesApi::class)
     fun activateAtFirstCue(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): ActivateResult {
         val firstCueId = transaction(state.database) {
             DaoCue.find {

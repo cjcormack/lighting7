@@ -1,4 +1,3 @@
-@file:OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 package uk.me.cormack.lighting7.routes
 
 import io.ktor.http.*
@@ -10,7 +9,6 @@ import io.ktor.server.resources.post
 import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.coroutines.GlobalScope
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
@@ -268,7 +266,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
 
             try {
                 val result = if (request.cueId != null) {
-                    manager.activateCueInStack(state, resource.parent.stackId, request.cueId, GlobalScope)
+                    manager.activateCueInStack(state, resource.parent.stackId, request.cueId)
                 } else {
                     manager.activateAtFirstCue(state, resource.parent.stackId)
                 }
@@ -299,7 +297,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             }
 
             try {
-                val result = state.show.cueStackManager.advanceStack(state, resource.parent.stackId, direction, GlobalScope)
+                val result = state.show.cueStackManager.advanceStack(state, resource.parent.stackId, direction)
                 if (result != null) {
                     call.respond(result.toResponse())
                 } else {
@@ -317,7 +315,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val request = call.receive<GoToCueRequest>()
 
             try {
-                val result = state.show.cueStackManager.goToCue(state, resource.parent.stackId, request.cueId, GlobalScope)
+                val result = state.show.cueStackManager.goToCue(state, resource.parent.stackId, request.cueId)
                 call.respond(result.toResponse())
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to go to cue"))
