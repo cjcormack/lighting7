@@ -1,3 +1,4 @@
+@file:OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 package uk.me.cormack.lighting7.routes
 
 import io.ktor.http.*
@@ -265,30 +266,13 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val request = try { call.receive<ActivateCueStackRequest>() } catch (_: Exception) { ActivateCueStackRequest() }
             val manager = state.show.cueStackManager
 
-            val startCueId = request.cueId ?: transaction(state.database) {
-                // Default to first STANDARD cue in stack (skip MARKERs)
-                DaoCue.find {
-                    (DaoCues.cueStack eq resource.parent.stackId) and
-                        (DaoCues.cueType eq CueType.STANDARD.name)
-                }
-                    .orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                    .firstOrNull()?.id?.value
-            }
-
-            if (startCueId == null) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Stack has no cues"))
-                return@withCurrentProject
-            }
-
             try {
-                @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-                val result = manager.activateCueInStack(state, resource.parent.stackId, startCueId, GlobalScope)
-                call.respond(CueStackActivateResponse(
-                    stackId = result.stackId,
-                    cueId = result.cueId,
-                    cueName = result.cueName,
-                    effectCount = result.effectCount,
-                ))
+                val result = if (request.cueId != null) {
+                    manager.activateCueInStack(state, resource.parent.stackId, request.cueId, GlobalScope)
+                } else {
+                    manager.activateAtFirstCue(state, resource.parent.stackId)
+                }
+                call.respond(result.toResponse())
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to activate stack"))
             }
@@ -315,15 +299,9 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             }
 
             try {
-                @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
                 val result = state.show.cueStackManager.advanceStack(state, resource.parent.stackId, direction, GlobalScope)
                 if (result != null) {
-                    call.respond(CueStackActivateResponse(
-                        stackId = result.stackId,
-                        cueId = result.cueId,
-                        cueName = result.cueName,
-                        effectCount = result.effectCount,
-                    ))
+                    call.respond(result.toResponse())
                 } else {
                     call.respond(CueStackDeactivateResponse(stackId = resource.parent.stackId, removedCount = 0))
                 }
@@ -339,14 +317,8 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val request = call.receive<GoToCueRequest>()
 
             try {
-                @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
                 val result = state.show.cueStackManager.goToCue(state, resource.parent.stackId, request.cueId, GlobalScope)
-                call.respond(CueStackActivateResponse(
-                    stackId = result.stackId,
-                    cueId = result.cueId,
-                    cueName = result.cueName,
-                    effectCount = result.effectCount,
-                ))
+                call.respond(result.toResponse())
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to go to cue"))
             }
@@ -540,6 +512,9 @@ data class CueStackActivateResponse(
     val cueName: String,
     val effectCount: Int,
 )
+
+private fun CueStackManager.ActivateResult.toResponse(): CueStackActivateResponse =
+    CueStackActivateResponse(stackId = stackId, cueId = cueId, cueName = cueName, effectCount = effectCount)
 
 @Serializable
 data class CueStackDeactivateResponse(

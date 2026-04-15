@@ -420,7 +420,7 @@ class CueStackManager(
      * Throws [IllegalArgumentException] if the stack has no standard cues.
      */
     @OptIn(DelicateCoroutinesApi::class)
-    fun activateAtFirstCue(state: State, stackId: Int, scope: CoroutineScope = GlobalScope) {
+    fun activateAtFirstCue(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): ActivateResult {
         val firstCueId = transaction(state.database) {
             DaoCue.find {
                 (DaoCues.cueStack eq stackId) and (DaoCues.cueType eq CueType.STANDARD.name)
@@ -428,7 +428,7 @@ class CueStackManager(
                 .firstOrNull()?.id?.value
         } ?: throw IllegalArgumentException("Cue stack has no standard cues")
 
-        activateCueInStack(state, stackId, firstCueId, scope)
+        return activateCueInStack(state, stackId, firstCueId, scope)
     }
 
     /**

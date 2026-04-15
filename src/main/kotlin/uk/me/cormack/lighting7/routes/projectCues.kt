@@ -1,3 +1,4 @@
+@file:OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 package uk.me.cormack.lighting7.routes
 
 import io.ktor.http.*
@@ -312,7 +313,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if (cueStackId != null) {
                     // Cue belongs to a stack — delegate to CueStackManager
                     // This activates the stack (if not already active) and switches to this cue
-                    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
                     val stackResult = state.show.cueStackManager.activateCueInStack(
                         state, cueStackId, resource.cueId, kotlinx.coroutines.GlobalScope
                     )
@@ -330,7 +330,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     val timedPresets = cueData.presetApplications.filter { it.delayMs != null || it.intervalMs != null }
                     val timedAdHoc = cueData.adHocEffects.filter { it.delayMs != null || it.intervalMs != null }
                     if (timedPresets.isNotEmpty() || timedAdHoc.isNotEmpty()) {
-                        @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
                         state.cueTriggerManager.activateTimedEffectsForCue(
                             cueId = resource.cueId,
                             cueStackId = null,
@@ -342,7 +341,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
                     // Activate script triggers after effects are applied
                     if (cueData.triggers.isNotEmpty()) {
-                        @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
                         state.cueTriggerManager.activateTriggersForCue(
                             cueId = resource.cueId,
                             cueStackId = null,
