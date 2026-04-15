@@ -416,6 +416,22 @@ class CueStackManager(
     }
 
     /**
+     * Activate a cue stack at its first STANDARD cue.
+     * Throws [IllegalArgumentException] if the stack has no standard cues.
+     */
+    @OptIn(DelicateCoroutinesApi::class)
+    fun activateAtFirstCue(state: State, stackId: Int, scope: CoroutineScope = GlobalScope) {
+        val firstCueId = transaction(state.database) {
+            DaoCue.find {
+                (DaoCues.cueStack eq stackId) and (DaoCues.cueType eq CueType.STANDARD.name)
+            }.orderBy(DaoCues.sortOrder to SortOrder.ASC)
+                .firstOrNull()?.id?.value
+        } ?: throw IllegalArgumentException("Cue stack has no standard cues")
+
+        activateCueInStack(state, stackId, firstCueId, scope)
+    }
+
+    /**
      * Deactivate a stack — remove all its effects and clean up state.
      *
      * @return Number of effects removed

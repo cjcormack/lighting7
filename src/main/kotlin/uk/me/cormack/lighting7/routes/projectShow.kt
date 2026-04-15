@@ -10,10 +10,7 @@ import io.ktor.server.resources.put
 import io.ktor.server.resources.delete
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.coroutines.GlobalScope
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
@@ -198,7 +195,7 @@ internal fun Route.routeApiRestProjectShow(state: State) {
                 }
 
                 if (!result.alreadyActive && result.activated != null) {
-                    activateStackAtFirstCue(state, result.activated.cueStackId)
+                    state.show.cueStackManager.activateAtFirstCue(state, result.activated.cueStackId)
 
                     state.show.fixtures.showChanged(
                         result.projectId,
@@ -300,7 +297,7 @@ internal fun Route.routeApiRestProjectShow(state: State) {
                     state.show.cueStackManager.deactivateStack(result.previousCueStackId, state)
                 }
 
-                activateStackAtFirstCue(state, result.cueStackId)
+                state.show.cueStackManager.activateAtFirstCue(state, result.cueStackId)
 
                 state.show.fixtures.showChanged(
                     result.projectId, result.entryId, result.cueStackId, result.cueStackName,
@@ -356,7 +353,7 @@ internal fun Route.routeApiRestProjectShow(state: State) {
                     state.show.cueStackManager.deactivateStack(result.previousCueStackId, state)
                 }
 
-                activateStackAtFirstCue(state, result.cueStackId)
+                state.show.cueStackManager.activateAtFirstCue(state, result.cueStackId)
 
                 state.show.fixtures.showChanged(
                     result.projectId, result.entryId, result.cueStackId, result.cueStackName,
@@ -490,25 +487,6 @@ private data class ActivateShowResult(
     // True when the show was already active — the handler skips side effects to avoid resetting the running stack.
     val alreadyActive: Boolean,
 )
-
-// ─── Helpers ──────────────────────────────────────────────────────────
-
-/**
- * Activate a cue stack at its first STANDARD cue.
- * Throws [IllegalArgumentException] if the stack has no standard cues.
- */
-@OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-private fun activateStackAtFirstCue(state: State, cueStackId: Int) {
-    val firstCueId = transaction(state.database) {
-        DaoCue.find {
-            (DaoCues.cueStack eq cueStackId) and
-                (DaoCues.cueType eq CueType.STANDARD.name)
-        }.orderBy(DaoCues.sortOrder to SortOrder.ASC)
-            .firstOrNull()?.id?.value
-    } ?: throw IllegalArgumentException("Cue stack has no standard cues")
-
-    state.show.cueStackManager.activateCueInStack(state, cueStackId, firstCueId, GlobalScope)
-}
 
 // ─── Entity helpers ────────────────────────────────────────────────────
 
