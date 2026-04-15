@@ -76,7 +76,7 @@ class State(val config: ApplicationConfig) {
                 DaoAiConversations, DaoCueSlots,
                 DaoUniverseConfigs, DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
                 DaoParkedChannels, DaoFxDefinitions,
-                DaoShowSessions, DaoShowSessionEntries,
+                DaoShowEntries,
             )
 
             // Migration: drop old unique index on (project_id, name) since we now use (project_id, fixture_type, name)
@@ -89,9 +89,12 @@ class State(val config: ApplicationConfig) {
                     WHERE cue_number IS NOT NULL AND cue_type = 'STANDARD'
             """.trimIndent())
 
-            // Deferrable FK from show_sessions.active_entry_id → show_session_entries.id
-            // (circular reference: entries also reference sessions, so this FK must be deferrable)
-            migrateShowSessionActiveEntryFk()
+            // Migration: merge show sessions into projects (entries now belong to project directly)
+            migrateDropShowSessions()
+
+            // Deferrable FK from projects.active_entry_id → show_entries.id
+            // (circular reference: entries also reference projects, so this FK must be deferrable)
+            migrateProjectActiveEntryFk()
 
             // Migration: convert APPLY_PRESET triggers to preset applications with timing
             migrateApplyPresetTriggers()
@@ -378,25 +381,14 @@ private fun Transaction.migrateDropTrackChangedScript() {
 }
 
 /**
- * Adds a deferrable FK constraint from show_sessions.active_entry_id to show_session_entries.id.
+ * One-time migration: drop the show_sessions and show_session_entries tables.
  *
- * This is a circular reference (entries also reference sessions), so the FK must be deferrable
- * to allow inserting a session and its entries in the same transaction.
+ * Show entries now belong directly to the project via the show_entries table.
+ * No data migration is needed.
  *
- * Safe to run repeatedly — checks for the constraint before adding.
+ * Safe to run repeatedly — uses IF EXISTS guards.
  */
-private fun Transaction.migrateShowSessionActiveEntryFk() {
-    var hasConstraint = false
-    exec(
-        """SELECT 1 FROM information_schema.table_constraints
-           WHERE table_name = 'show_sessions' AND constraint_name = 'fk_active_entry'"""
-    ) { rs ->
-        hasConstraint = rs.next()
-    }
-
-    if (hasConstraint) return // already exists
-
-    // Only add if the table exists (avoid error on first run before SchemaUtils)
+private fun Transaction.migrateDropShowSessions() {
     var hasTable = false
     exec(
         """SELECT 1 FROM information_schema.tables
@@ -405,12 +397,50 @@ private fun Transaction.migrateShowSessionActiveEntryFk() {
         hasTable = rs.next()
     }
 
+    if (!hasTable) return // already migrated
+
+    logger.info("Migrating: dropping show_sessions and show_session_entries tables...")
+
+    exec("DROP TABLE IF EXISTS show_session_entries CASCADE")
+    exec("DROP TABLE IF EXISTS show_sessions CASCADE")
+
+    logger.info("Show sessions migration complete")
+}
+
+/**
+ * Adds a deferrable FK constraint from projects.active_entry_id to show_entries.id.
+ *
+ * This is a circular reference (entries also reference projects), so the FK must be deferrable
+ * to allow updating a project and its entries in the same transaction.
+ *
+ * Safe to run repeatedly — checks for the constraint before adding.
+ */
+private fun Transaction.migrateProjectActiveEntryFk() {
+    var hasConstraint = false
+    exec(
+        """SELECT 1 FROM information_schema.table_constraints
+           WHERE table_name = 'projects' AND constraint_name = 'fk_project_active_entry'"""
+    ) { rs ->
+        hasConstraint = rs.next()
+    }
+
+    if (hasConstraint) return // already exists
+
+    // Only add if the show_entries table exists (avoid error on first run before SchemaUtils)
+    var hasTable = false
+    exec(
+        """SELECT 1 FROM information_schema.tables
+           WHERE table_name = 'show_entries'"""
+    ) { rs ->
+        hasTable = rs.next()
+    }
+
     if (!hasTable) return
 
     exec("""
-        ALTER TABLE show_sessions
-            ADD CONSTRAINT fk_active_entry
-            FOREIGN KEY (active_entry_id) REFERENCES show_session_entries(id)
+        ALTER TABLE projects
+            ADD CONSTRAINT fk_project_active_entry
+            FOREIGN KEY (active_entry_id) REFERENCES show_entries(id)
             DEFERRABLE INITIALLY DEFERRED
     """.trimIndent())
 }

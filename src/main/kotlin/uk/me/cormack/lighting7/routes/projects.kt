@@ -116,6 +116,11 @@ internal fun Route.routeApiRestProjects(state: State) {
                     return@transaction DeleteResult.IS_CURRENT
                 }
 
+                // Clear active_entry_id first to satisfy the deferrable FK
+                // before deleting show entries.
+                project.activeEntryId = null
+                project.showEntries.forEach { it.delete() }
+
                 // Delete associated records in FK-safe order
                 project.cues.forEach { cue ->
                     deleteCueChildren(cue)
@@ -176,7 +181,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectPatches(state)
         routeApiRestProjectUniverseConfigs(state)
         routeApiRestProjectPatchGroups(state)
-        routeApiRestProjectShowSessions(state)
+        routeApiRestProjectShow(state)
 
         // POST /{id}/clone - Clone a project with all scripts
         post<CloneProjectResource> { resource ->

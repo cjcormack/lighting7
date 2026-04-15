@@ -96,17 +96,16 @@ data object CueSlotListChangedOutMessage: OutMessage()
 data object PatchListChangedOutMessage: OutMessage()
 
 @Serializable
-@SerialName("showSessionListChanged")
-data object ShowSessionListChangedOutMessage: OutMessage()
+@SerialName("showEntriesChanged")
+data object ShowEntriesChangedOutMessage: OutMessage()
 
 @Serializable
-@SerialName("showSessionChanged")
-data class ShowSessionChangedOutMessage(
-    val sessionId: Int,
+@SerialName("showChanged")
+data class ShowChangedOutMessage(
+    val projectId: Int,
     val activeEntryId: Int?,
     val activatedStackId: Int?,
     val activatedStackName: String?,
-    val isActive: Boolean,
 ): OutMessage()
 
 @Serializable
@@ -432,26 +431,24 @@ fun Application.configureSockets(state: State) {
                     }
                 }
 
-                override fun showSessionListChanged() {
+                override fun showEntriesChanged() {
                     launch {
-                        sendSerialized<OutMessage>(ShowSessionListChangedOutMessage)
+                        sendSerialized<OutMessage>(ShowEntriesChangedOutMessage)
                     }
                 }
 
-                override fun showSessionChanged(
-                    sessionId: Int,
+                override fun showChanged(
+                    projectId: Int,
                     activeEntryId: Int?,
                     activatedStackId: Int?,
                     activatedStackName: String?,
-                    isActive: Boolean,
                 ) {
                     launch {
-                        sendSerialized<OutMessage>(ShowSessionChangedOutMessage(
-                            sessionId = sessionId,
+                        sendSerialized<OutMessage>(ShowChangedOutMessage(
+                            projectId = projectId,
                             activeEntryId = activeEntryId,
                             activatedStackId = activatedStackId,
                             activatedStackName = activatedStackName,
-                            isActive = isActive,
                         ))
                     }
                 }
