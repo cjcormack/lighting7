@@ -24,169 +24,137 @@ import uk.me.cormack.lighting7.state.State
 internal fun Route.routeApiRestProjectFxPresets(state: State) {
     // GET /{projectId}/fx-presets - List presets for a project
     get<ProjectFxPresetsResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
+        withProject(state, resource.projectId) { project ->
+            val isCurrentProject = state.isCurrentProject(project)
+            val presets = transaction(state.database) {
+                DaoFxPreset.find { DaoFxPresets.project eq project.id }
+                    .orderBy(DaoFxPresets.name to SortOrder.ASC)
+                    .map { it.toPresetDetails(isCurrentProject) }
+            }
+            call.respond(presets)
         }
-
-        val isCurrentProject = state.isCurrentProject(project)
-        val presets = transaction(state.database) {
-            DaoFxPreset.find { DaoFxPresets.project eq project.id }
-                .orderBy(DaoFxPresets.name to SortOrder.ASC)
-                .map { it.toPresetDetails(isCurrentProject) }
-        }
-        call.respond(presets)
     }
 
     // POST /{projectId}/fx-presets - Create new preset (current project only)
     post<ProjectFxPresetsResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
+        withCurrentProject(
+            state,
+            resource.projectId,
+            { p -> "Cannot create presets in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val newPreset = call.receive<NewFxPreset>()
+            val presetDetails = transaction(state.database) {
+                DaoFxPreset.new {
+                    name = newPreset.name
+                    description = newPreset.description
+                    fixtureType = newPreset.fixtureType
+                    this.project = project
+                    effects = newPreset.effects
+                }.toPresetDetails(isCurrentProject = true)
+            }
+            state.show.fixtures.presetListChanged()
+            call.respond(HttpStatusCode.Created, presetDetails)
         }
-
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot create presets in project '${project.name}' - only the current project can be modified")
-            )
-            return@post
-        }
-
-        val newPreset = call.receive<NewFxPreset>()
-        val presetDetails = transaction(state.database) {
-            DaoFxPreset.new {
-                name = newPreset.name
-                description = newPreset.description
-                fixtureType = newPreset.fixtureType
-                this.project = project
-                effects = newPreset.effects
-            }.toPresetDetails(isCurrentProject = true)
-        }
-        state.show.fixtures.presetListChanged()
-        call.respond(HttpStatusCode.Created, presetDetails)
     }
 
     // GET /{projectId}/fx-presets/{presetId} - Get preset details (any project)
     get<ProjectFxPresetResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
-        }
+        withProject(state, resource.parent.projectId) { project ->
+            val isCurrentProject = state.isCurrentProject(project)
+            val preset = transaction(state.database) {
+                val preset = DaoFxPreset.findById(resource.presetId)
+                    ?: return@transaction null
 
-        val isCurrentProject = state.isCurrentProject(project)
-        val preset = transaction(state.database) {
-            val preset = DaoFxPreset.findById(resource.presetId)
-                ?: return@transaction null
+                if (preset.project.id != project.id) {
+                    return@transaction null
+                }
 
-            if (preset.project.id != project.id) {
-                return@transaction null
+                preset.toPresetDetails(isCurrentProject)
             }
 
-            preset.toPresetDetails(isCurrentProject)
-        }
-
-        if (preset != null) {
-            call.respond(preset)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
+            if (preset != null) {
+                call.respond(preset)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
+            }
         }
     }
 
     // PUT /{projectId}/fx-presets/{presetId} - Update preset (current project only)
     put<ProjectFxPresetResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@put
-        }
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot modify presets in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val updatedData = call.receive<NewFxPreset>()
+            val presetDetails = transaction(state.database) {
+                val preset = DaoFxPreset.findById(resource.presetId)
+                    ?: return@transaction null
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot modify presets in project '${project.name}' - only the current project can be modified")
-            )
-            return@put
-        }
+                if (preset.project.id != project.id) {
+                    return@transaction null
+                }
 
-        val updatedData = call.receive<NewFxPreset>()
-        val presetDetails = transaction(state.database) {
-            val preset = DaoFxPreset.findById(resource.presetId)
-                ?: return@transaction null
-
-            if (preset.project.id != project.id) {
-                return@transaction null
+                preset.name = updatedData.name
+                preset.description = updatedData.description
+                preset.fixtureType = updatedData.fixtureType
+                preset.effects = updatedData.effects
+                preset.toPresetDetails(isCurrentProject = true)
             }
 
-            preset.name = updatedData.name
-            preset.description = updatedData.description
-            preset.fixtureType = updatedData.fixtureType
-            preset.effects = updatedData.effects
-            preset.toPresetDetails(isCurrentProject = true)
-        }
-
-        if (presetDetails != null) {
-            state.show.fixtures.presetListChanged()
-            call.respond(presetDetails)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
+            if (presetDetails != null) {
+                state.show.fixtures.presetListChanged()
+                call.respond(presetDetails)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
+            }
         }
     }
 
     // DELETE /{projectId}/fx-presets/{presetId} - Delete preset (current project only)
     delete<ProjectFxPresetResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@delete
-        }
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot delete presets in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val result = transaction(state.database) {
+                val preset = DaoFxPreset.findById(resource.presetId)
+                    ?: return@transaction "not_found"
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot delete presets in project '${project.name}' - only the current project can be modified")
-            )
-            return@delete
-        }
+                if (preset.project.id != project.id) {
+                    return@transaction "not_found"
+                }
 
-        val result = transaction(state.database) {
-            val preset = DaoFxPreset.findById(resource.presetId)
-                ?: return@transaction "not_found"
+                // Check if any cues reference this preset via FK
+                val referencingCues = DaoCuePresetApplication.find {
+                    DaoCuePresetApplications.preset eq preset.id
+                }.map { it.cue.name }.distinct()
 
-            if (preset.project.id != project.id) {
-                return@transaction "not_found"
+                if (referencingCues.isNotEmpty()) {
+                    return@transaction "used_by_cues:${referencingCues.joinToString(", ")}"
+                }
+
+                preset.delete()
+                "ok"
             }
 
-            // Check if any cues reference this preset via FK
-            val referencingCues = DaoCuePresetApplication.find {
-                DaoCuePresetApplications.preset eq preset.id
-            }.map { it.cue.name }.distinct()
-
-            if (referencingCues.isNotEmpty()) {
-                return@transaction "used_by_cues:${referencingCues.joinToString(", ")}"
-            }
-
-            preset.delete()
-            "ok"
-        }
-
-        when {
-            result == "ok" -> {
-                state.show.fixtures.presetListChanged()
-                call.respond(HttpStatusCode.OK)
-            }
-            result.startsWith("used_by_cues:") -> {
-                val cueNames = result.removePrefix("used_by_cues:")
-                call.respond(
-                    HttpStatusCode.Conflict,
-                    ErrorResponse("Cannot delete preset - it is referenced by cues: $cueNames")
-                )
-            }
-            else -> {
-                call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
+            when {
+                result == "ok" -> {
+                    state.show.fixtures.presetListChanged()
+                    call.respond(HttpStatusCode.OK)
+                }
+                result.startsWith("used_by_cues:") -> {
+                    val cueNames = result.removePrefix("used_by_cues:")
+                    call.respond(
+                        HttpStatusCode.Conflict,
+                        ErrorResponse("Cannot delete preset - it is referenced by cues: $cueNames")
+                    )
+                }
+                else -> {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
+                }
             }
         }
     }
@@ -257,35 +225,31 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
 
     // POST /{projectId}/fx-presets/{presetId}/toggle - Toggle preset on/off for targets
     post<ToggleFxPresetResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<TogglePresetRequest>()
+            if (request.targets.isEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("At least one target is required"))
+                return@withProject
+            }
 
-        val request = call.receive<TogglePresetRequest>()
-        if (request.targets.isEmpty()) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse("At least one target is required"))
-            return@post
-        }
+            val preset = transaction(state.database) {
+                val p = DaoFxPreset.findById(resource.presetId) ?: return@transaction null
+                if (p.project.id != project.id) return@transaction null
+                p.effects
+            }
+            if (preset == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
+                return@withProject
+            }
 
-        val preset = transaction(state.database) {
-            val p = DaoFxPreset.findById(resource.presetId) ?: return@transaction null
-            if (p.project.id != project.id) return@transaction null
-            p.effects
-        }
-        if (preset == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
-            return@post
-        }
-
-        try {
-            val result = togglePresetOnTargets(state, resource.presetId, preset, request.targets, request.beatDivision)
-            call.respond(result)
-        } catch (e: IllegalStateException) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
-        } catch (e: Exception) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to toggle preset"))
+            try {
+                val result = togglePresetOnTargets(state, resource.presetId, preset, request.targets, request.beatDivision)
+                call.respond(result)
+            } catch (e: IllegalStateException) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to toggle preset"))
+            }
         }
     }
 }

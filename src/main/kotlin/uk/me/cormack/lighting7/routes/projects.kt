@@ -41,6 +41,55 @@ internal fun State.isCurrentProject(project: DaoProject): Boolean {
     }
 }
 
+/**
+ * Resolve [projectIdStr] and run [block] with the resolved project. If no project matches,
+ * responds with 404 and skips the block. The block can use plain `return` to early-exit
+ * the enclosing route handler.
+ */
+internal suspend inline fun RoutingContext.withProject(
+    state: State,
+    projectIdStr: String,
+    block: (DaoProject) -> Unit,
+) {
+    val project = state.resolveProject(projectIdStr)
+    if (project == null) {
+        call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
+        return
+    }
+    block(project)
+}
+
+/**
+ * Resolve [projectIdStr] and verify it is the current project before running [block].
+ * Responds with 404 if the project is not found, or 409 with [conflictMessage] if it is
+ * not the current project. The block can use plain `return` to early-exit the enclosing
+ * route handler.
+ */
+internal suspend inline fun RoutingContext.withCurrentProject(
+    state: State,
+    projectIdStr: String,
+    conflictMessage: String = "Cannot modify - not current project",
+    block: (DaoProject) -> Unit,
+) {
+    withCurrentProject(state, projectIdStr, { conflictMessage }, block)
+}
+
+/** Overload that derives the 409 message from the resolved project (e.g. interpolating `project.name`). */
+internal suspend inline fun RoutingContext.withCurrentProject(
+    state: State,
+    projectIdStr: String,
+    crossinline conflictMessage: (DaoProject) -> String,
+    block: (DaoProject) -> Unit,
+) {
+    withProject(state, projectIdStr) { project ->
+        if (!state.isCurrentProject(project)) {
+            call.respond(HttpStatusCode.Conflict, ErrorResponse(conflictMessage(project)))
+            return@withProject
+        }
+        block(project)
+    }
+}
+
 internal fun Route.routeApiRestProjects(state: State) {
     route("/project") {
         // GET /list - List all projects

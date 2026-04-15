@@ -21,440 +21,355 @@ import uk.me.cormack.lighting7.state.State
 internal fun Route.routeApiRestProjectShow(state: State) {
     // GET /{projectId}/show - Get the show state (entries + active entry)
     get<ProjectShowResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
+        withProject(state, resource.projectId) { project ->
+            val isCurrentProject = state.isCurrentProject(project)
+            val details = transaction(state.database) {
+                project.toShowDetails(isCurrentProject)
+            }
+            call.respond(details)
         }
-
-        val isCurrentProject = state.isCurrentProject(project)
-        val details = transaction(state.database) {
-            project.toShowDetails(isCurrentProject)
-        }
-        call.respond(details)
     }
 
     // POST /{projectId}/show/add-stack - Add cue stack entry
     post<ShowAddStackResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<AddStackToShowRequest>()
+            val result = transaction(state.database) {
+                val stack = DaoCueStack.findById(request.cueStackId)
+                    ?: return@transaction "Cue stack not found" to null
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot modify - not current project"))
-            return@post
-        }
+                val sortOrder = request.sortOrder ?: ((project.showEntries.maxOfOrNull { it.sortOrder } ?: -1) + 1)
 
-        val request = call.receive<AddStackToShowRequest>()
-        val result = transaction(state.database) {
-            val stack = DaoCueStack.findById(request.cueStackId)
-                ?: return@transaction "Cue stack not found" to null
+                DaoShowEntry.new {
+                    this.project = project
+                    cueStack = stack
+                    entryType = ShowEntryType.STACK.name
+                    this.sortOrder = sortOrder
+                    label = request.label
+                }
 
-            val sortOrder = request.sortOrder ?: ((project.showEntries.maxOfOrNull { it.sortOrder } ?: -1) + 1)
-
-            DaoShowEntry.new {
-                this.project = project
-                cueStack = stack
-                entryType = ShowEntryType.STACK.name
-                this.sortOrder = sortOrder
-                label = request.label
+                null to project.toShowDetails(isCurrentProject = true)
             }
 
-            null to project.toShowDetails(isCurrentProject = true)
-        }
-
-        val (error, details) = result
-        if (error != null) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
-        } else {
-            state.show.fixtures.showEntriesChanged()
-            call.respond(HttpStatusCode.Created, details!!)
+            val (error, details) = result
+            if (error != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
+            } else {
+                state.show.fixtures.showEntriesChanged()
+                call.respond(HttpStatusCode.Created, details!!)
+            }
         }
     }
 
     // POST /{projectId}/show/add-marker - Add marker entry
     post<ShowAddMarkerResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<AddMarkerToShowRequest>()
+            val details = transaction(state.database) {
+                val sortOrder = request.sortOrder ?: ((project.showEntries.maxOfOrNull { it.sortOrder } ?: -1) + 1)
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot modify - not current project"))
-            return@post
-        }
+                DaoShowEntry.new {
+                    this.project = project
+                    entryType = ShowEntryType.MARKER.name
+                    this.sortOrder = sortOrder
+                    label = request.label
+                }
 
-        val request = call.receive<AddMarkerToShowRequest>()
-        val details = transaction(state.database) {
-            val sortOrder = request.sortOrder ?: ((project.showEntries.maxOfOrNull { it.sortOrder } ?: -1) + 1)
-
-            DaoShowEntry.new {
-                this.project = project
-                entryType = ShowEntryType.MARKER.name
-                this.sortOrder = sortOrder
-                label = request.label
+                project.toShowDetails(isCurrentProject = true)
             }
 
-            project.toShowDetails(isCurrentProject = true)
+            state.show.fixtures.showEntriesChanged()
+            call.respond(HttpStatusCode.Created, details)
         }
-
-        state.show.fixtures.showEntriesChanged()
-        call.respond(HttpStatusCode.Created, details)
     }
 
     // PUT /{projectId}/show/entries/{entryId} - Update entry
     put<ShowEntryResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@put
-        }
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<UpdateShowEntryRequest>()
+            val details = transaction(state.database) {
+                val entry = DaoShowEntry.findById(resource.entryId)
+                    ?: return@transaction null
+                if (entry.project.id != project.id) return@transaction null
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot modify - not current project"))
-            return@put
-        }
+                request.label?.let { entry.label = it }
+                request.sortOrder?.let { entry.sortOrder = it }
 
-        val request = call.receive<UpdateShowEntryRequest>()
-        val details = transaction(state.database) {
-            val entry = DaoShowEntry.findById(resource.entryId)
-                ?: return@transaction null
-            if (entry.project.id != project.id) return@transaction null
+                project.toShowDetails(isCurrentProject = true)
+            }
 
-            request.label?.let { entry.label = it }
-            request.sortOrder?.let { entry.sortOrder = it }
-
-            project.toShowDetails(isCurrentProject = true)
-        }
-
-        if (details != null) {
-            state.show.fixtures.showEntriesChanged()
-            call.respond(details)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Entry not found"))
+            if (details != null) {
+                state.show.fixtures.showEntriesChanged()
+                call.respond(details)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Entry not found"))
+            }
         }
     }
 
     // DELETE /{projectId}/show/entries/{entryId} - Remove entry
     delete<ShowEntryResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@delete
-        }
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val found = transaction(state.database) {
+                val entry = DaoShowEntry.findById(resource.entryId)
+                    ?: return@transaction false
+                if (entry.project.id != project.id) return@transaction false
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot modify - not current project"))
-            return@delete
-        }
+                // Clear project.activeEntryId if this was the active entry
+                if (project.activeEntryId == entry.id.value) {
+                    project.activeEntryId = null
+                }
 
-        val found = transaction(state.database) {
-            val entry = DaoShowEntry.findById(resource.entryId)
-                ?: return@transaction false
-            if (entry.project.id != project.id) return@transaction false
-
-            // Clear project.activeEntryId if this was the active entry
-            if (project.activeEntryId == entry.id.value) {
-                project.activeEntryId = null
+                entry.delete()
+                true
             }
 
-            entry.delete()
-            true
-        }
-
-        if (found) {
-            state.show.fixtures.showEntriesChanged()
-            call.respond(HttpStatusCode.OK)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Entry not found"))
+            if (found) {
+                state.show.fixtures.showEntriesChanged()
+                call.respond(HttpStatusCode.OK)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Entry not found"))
+            }
         }
     }
 
     // POST /{projectId}/show/reorder - Reorder entries
     post<ShowReorderResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
-
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot modify - not current project"))
-            return@post
-        }
-
-        val request = call.receive<ReorderEntriesRequest>()
-        transaction(state.database) {
-            for ((index, entryId) in request.entryIds.withIndex()) {
-                val entry = DaoShowEntry.findById(entryId) ?: continue
-                if (entry.project.id == project.id) {
-                    entry.sortOrder = index
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<ReorderEntriesRequest>()
+            transaction(state.database) {
+                for ((index, entryId) in request.entryIds.withIndex()) {
+                    val entry = DaoShowEntry.findById(entryId) ?: continue
+                    if (entry.project.id == project.id) {
+                        entry.sortOrder = index
+                    }
                 }
             }
+            state.show.fixtures.showEntriesChanged()
+            call.respond(HttpStatusCode.OK)
         }
-        state.show.fixtures.showEntriesChanged()
-        call.respond(HttpStatusCode.OK)
     }
 
     // POST /{projectId}/show/activate - Activate first STACK entry
     post<ShowActivateResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.projectId, "Cannot activate - not current project") { project ->
+            try {
+                val result = transaction(state.database) {
+                    // If already active, short-circuit — a repeat /activate must not reset the running
+                    // cue stack to its first cue, which would disrupt a live show.
+                    val currentEntryId = project.activeEntryId
+                    if (currentEntryId != null) {
+                        val currentEntry = DaoShowEntry.findById(currentEntryId)
+                        return@transaction ActivateShowResult(
+                            projectId = project.id.value,
+                            activated = currentEntry?.let { entry ->
+                                val csId = entry.cueStack?.id?.value
+                                if (csId != null) ShowActivateData(
+                                    projectId = project.id.value,
+                                    entryId = entry.id.value,
+                                    cueStackId = csId,
+                                    cueStackName = entry.cueStack?.name ?: "",
+                                ) else null
+                            },
+                            alreadyActive = true,
+                        )
+                    }
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot activate - not current project"))
-            return@post
-        }
+                    val firstStack = project.showEntries
+                        .filter { it.entryType == ShowEntryType.STACK.name }
+                        .sortedBy { it.sortOrder }
+                        .firstOrNull()
+                        ?: throw IllegalArgumentException("Show has no stack entries to activate")
 
-        try {
-            val result = transaction(state.database) {
-                // If already active, short-circuit — a repeat /activate must not reset the running
-                // cue stack to its first cue, which would disrupt a live show.
-                val currentEntryId = project.activeEntryId
-                if (currentEntryId != null) {
-                    val currentEntry = DaoShowEntry.findById(currentEntryId)
-                    return@transaction ActivateShowResult(
+                    val cueStackId = firstStack.cueStack?.id?.value
+                        ?: throw IllegalArgumentException("Entry has no associated cue stack")
+                    project.activeEntryId = firstStack.id.value
+
+                    ActivateShowResult(
                         projectId = project.id.value,
-                        activated = currentEntry?.let { entry ->
-                            val csId = entry.cueStack?.id?.value
-                            if (csId != null) ShowActivateData(
-                                projectId = project.id.value,
-                                entryId = entry.id.value,
-                                cueStackId = csId,
-                                cueStackName = entry.cueStack?.name ?: "",
-                            ) else null
-                        },
-                        alreadyActive = true,
+                        activated = ShowActivateData(
+                            projectId = project.id.value,
+                            entryId = firstStack.id.value,
+                            cueStackId = cueStackId,
+                            cueStackName = firstStack.cueStack?.name ?: "",
+                        ),
+                        alreadyActive = false,
                     )
                 }
 
-                val firstStack = project.showEntries
-                    .filter { it.entryType == ShowEntryType.STACK.name }
-                    .sortedBy { it.sortOrder }
-                    .firstOrNull()
-                    ?: throw IllegalArgumentException("Show has no stack entries to activate")
+                if (!result.alreadyActive && result.activated != null) {
+                    activateStackAtFirstCue(state, result.activated.cueStackId)
 
-                val cueStackId = firstStack.cueStack?.id?.value
-                    ?: throw IllegalArgumentException("Entry has no associated cue stack")
-                project.activeEntryId = firstStack.id.value
+                    state.show.fixtures.showChanged(
+                        result.projectId,
+                        result.activated.entryId,
+                        result.activated.cueStackId,
+                        result.activated.cueStackName,
+                    )
+                }
 
-                ActivateShowResult(
-                    projectId = project.id.value,
-                    activated = ShowActivateData(
-                        projectId = project.id.value,
-                        entryId = firstStack.id.value,
-                        cueStackId = cueStackId,
-                        cueStackName = firstStack.cueStack?.name ?: "",
-                    ),
-                    alreadyActive = false,
-                )
+                call.respond(ShowActivateResponse(
+                    projectId = result.projectId,
+                    activeEntryId = result.activated?.entryId,
+                    activatedStackId = result.activated?.cueStackId,
+                    activatedStackName = result.activated?.cueStackName,
+                ))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to activate"))
             }
-
-            if (!result.alreadyActive && result.activated != null) {
-                activateStackAtFirstCue(state, result.activated.cueStackId)
-
-                state.show.fixtures.showChanged(
-                    result.projectId,
-                    result.activated.entryId,
-                    result.activated.cueStackId,
-                    result.activated.cueStackName,
-                )
-            }
-
-            call.respond(ShowActivateResponse(
-                projectId = result.projectId,
-                activeEntryId = result.activated?.entryId,
-                activatedStackId = result.activated?.cueStackId,
-                activatedStackName = result.activated?.cueStackName,
-            ))
-        } catch (e: Exception) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to activate"))
         }
     }
 
     // POST /{projectId}/show/deactivate - Deactivate active entry's stack
     post<ShowDeactivateResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.projectId, "Cannot deactivate - not current project") { project ->
+            val result = transaction(state.database) {
+                if (project.activeEntryId == null) return@transaction null
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot deactivate - not current project"))
-            return@post
-        }
+                val cueStackId = project.runningCueStackId()
 
-        val result = transaction(state.database) {
-            if (project.activeEntryId == null) return@transaction null
+                project.activeEntryId = null
 
-            val cueStackId = project.runningCueStackId()
-
-            project.activeEntryId = null
-
-            project.id.value to cueStackId
-        }
-
-        if (result != null) {
-            val (projectId, cueStackId) = result
-            if (cueStackId != null) {
-                state.show.cueStackManager.deactivateStack(cueStackId, state)
+                project.id.value to cueStackId
             }
-            state.show.fixtures.showChanged(projectId, null, null, null)
-            call.respond(HttpStatusCode.OK)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Show not active"))
+
+            if (result != null) {
+                val (projectId, cueStackId) = result
+                if (cueStackId != null) {
+                    state.show.cueStackManager.deactivateStack(cueStackId, state)
+                }
+                state.show.fixtures.showChanged(projectId, null, null, null)
+                call.respond(HttpStatusCode.OK)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Show not active"))
+            }
         }
     }
 
     // POST /{projectId}/show/advance - Advance to next/prev STACK entry
     post<ShowAdvanceResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.projectId, "Cannot advance - not current project") { project ->
+            val request = call.receive<AdvanceShowRequest>()
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot advance - not current project"))
-            return@post
-        }
+            try {
+                val result = transaction(state.database) {
+                    val currentEntryId = project.activeEntryId
+                        ?: throw IllegalStateException("Show has no active entry")
 
-        val request = call.receive<AdvanceShowRequest>()
+                    // Get STACK entries only (skip MARKERs)
+                    val stackEntries = project.showEntries
+                        .filter { it.entryType == ShowEntryType.STACK.name }
+                        .sortedBy { it.sortOrder }
 
-        try {
-            val result = transaction(state.database) {
-                val currentEntryId = project.activeEntryId
-                    ?: throw IllegalStateException("Show has no active entry")
+                    if (stackEntries.isEmpty()) throw IllegalArgumentException("Show has no stack entries")
 
-                // Get STACK entries only (skip MARKERs)
-                val stackEntries = project.showEntries
-                    .filter { it.entryType == ShowEntryType.STACK.name }
-                    .sortedBy { it.sortOrder }
+                    val currentIndex = stackEntries.indexOfFirst { it.id.value == currentEntryId }
+                    if (currentIndex == -1) throw IllegalStateException("Active entry is not a stack entry")
 
-                if (stackEntries.isEmpty()) throw IllegalArgumentException("Show has no stack entries")
+                    val nextIndex = when (request.direction.uppercase()) {
+                        "FORWARD" -> currentIndex + 1
+                        "BACKWARD" -> currentIndex - 1
+                        else -> throw IllegalArgumentException("Invalid direction: ${request.direction}")
+                    }
 
-                val currentIndex = stackEntries.indexOfFirst { it.id.value == currentEntryId }
-                if (currentIndex == -1) throw IllegalStateException("Active entry is not a stack entry")
+                    if (nextIndex !in stackEntries.indices) {
+                        throw IllegalArgumentException("Cannot advance ${request.direction} — at boundary")
+                    }
 
-                val nextIndex = when (request.direction.uppercase()) {
-                    "FORWARD" -> currentIndex + 1
-                    "BACKWARD" -> currentIndex - 1
-                    else -> throw IllegalArgumentException("Invalid direction: ${request.direction}")
+                    val nextEntry = stackEntries[nextIndex]
+                    val previousCueStackId = if (request.deactivatePrevious != false) {
+                        DaoShowEntry.findById(currentEntryId)?.cueStack?.id?.value
+                    } else null
+
+                    val cueStackId = nextEntry.cueStack?.id?.value
+                        ?: throw IllegalArgumentException("Next entry has no associated cue stack")
+
+                    project.activeEntryId = nextEntry.id.value
+
+                    ShowAdvanceData(
+                        projectId = project.id.value,
+                        entryId = nextEntry.id.value,
+                        cueStackId = cueStackId,
+                        cueStackName = nextEntry.cueStack?.name ?: "",
+                        previousCueStackId = previousCueStackId,
+                    )
                 }
 
-                if (nextIndex !in stackEntries.indices) {
-                    throw IllegalArgumentException("Cannot advance ${request.direction} — at boundary")
+                // Deactivate previous stack if requested
+                if (result.previousCueStackId != null) {
+                    state.show.cueStackManager.deactivateStack(result.previousCueStackId, state)
                 }
 
-                val nextEntry = stackEntries[nextIndex]
-                val previousCueStackId = if (request.deactivatePrevious != false) {
-                    DaoShowEntry.findById(currentEntryId)?.cueStack?.id?.value
-                } else null
+                activateStackAtFirstCue(state, result.cueStackId)
 
-                val cueStackId = nextEntry.cueStack?.id?.value
-                    ?: throw IllegalArgumentException("Next entry has no associated cue stack")
-
-                project.activeEntryId = nextEntry.id.value
-
-                ShowAdvanceData(
-                    projectId = project.id.value,
-                    entryId = nextEntry.id.value,
-                    cueStackId = cueStackId,
-                    cueStackName = nextEntry.cueStack?.name ?: "",
-                    previousCueStackId = previousCueStackId,
+                state.show.fixtures.showChanged(
+                    result.projectId, result.entryId, result.cueStackId, result.cueStackName,
                 )
+                call.respond(ShowActivateResponse(
+                    projectId = result.projectId,
+                    activeEntryId = result.entryId,
+                    activatedStackId = result.cueStackId,
+                    activatedStackName = result.cueStackName,
+                ))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to advance"))
             }
-
-            // Deactivate previous stack if requested
-            if (result.previousCueStackId != null) {
-                state.show.cueStackManager.deactivateStack(result.previousCueStackId, state)
-            }
-
-            activateStackAtFirstCue(state, result.cueStackId)
-
-            state.show.fixtures.showChanged(
-                result.projectId, result.entryId, result.cueStackId, result.cueStackName,
-            )
-            call.respond(ShowActivateResponse(
-                projectId = result.projectId,
-                activeEntryId = result.entryId,
-                activatedStackId = result.cueStackId,
-                activatedStackName = result.cueStackName,
-            ))
-        } catch (e: Exception) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to advance"))
         }
     }
 
     // POST /{projectId}/show/go-to - Go to specific entry
     post<ShowGoToResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.projectId, "Cannot go-to - not current project") { project ->
+            val request = call.receive<GoToShowEntryRequest>()
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot go-to - not current project"))
-            return@post
-        }
+            try {
+                val result = transaction(state.database) {
+                    val entry = DaoShowEntry.findById(request.entryId)
+                        ?: throw IllegalArgumentException("Entry not found")
+                    if (entry.project.id != project.id) throw IllegalArgumentException("Entry not in show")
 
-        val request = call.receive<GoToShowEntryRequest>()
+                    if (entry.entryType == ShowEntryType.MARKER.name) {
+                        throw IllegalArgumentException("Cannot go-to a MARKER entry")
+                    }
 
-        try {
-            val result = transaction(state.database) {
-                val entry = DaoShowEntry.findById(request.entryId)
-                    ?: throw IllegalArgumentException("Entry not found")
-                if (entry.project.id != project.id) throw IllegalArgumentException("Entry not in show")
+                    val cueStackId = entry.cueStack?.id?.value
+                        ?: throw IllegalArgumentException("Entry has no associated cue stack")
 
-                if (entry.entryType == ShowEntryType.MARKER.name) {
-                    throw IllegalArgumentException("Cannot go-to a MARKER entry")
+                    // Deactivate current stack if active
+                    val previousCueStackId = project.activeEntryId?.let { activeId ->
+                        DaoShowEntry.findById(activeId)?.cueStack?.id?.value
+                    }
+
+                    project.activeEntryId = entry.id.value
+
+                    ShowAdvanceData(
+                        projectId = project.id.value,
+                        entryId = entry.id.value,
+                        cueStackId = cueStackId,
+                        cueStackName = entry.cueStack?.name ?: "",
+                        previousCueStackId = previousCueStackId,
+                    )
                 }
 
-                val cueStackId = entry.cueStack?.id?.value
-                    ?: throw IllegalArgumentException("Entry has no associated cue stack")
-
-                // Deactivate current stack if active
-                val previousCueStackId = project.activeEntryId?.let { activeId ->
-                    DaoShowEntry.findById(activeId)?.cueStack?.id?.value
+                // Deactivate previous stack
+                if (result.previousCueStackId != null) {
+                    state.show.cueStackManager.deactivateStack(result.previousCueStackId, state)
                 }
 
-                project.activeEntryId = entry.id.value
+                activateStackAtFirstCue(state, result.cueStackId)
 
-                ShowAdvanceData(
-                    projectId = project.id.value,
-                    entryId = entry.id.value,
-                    cueStackId = cueStackId,
-                    cueStackName = entry.cueStack?.name ?: "",
-                    previousCueStackId = previousCueStackId,
+                state.show.fixtures.showChanged(
+                    result.projectId, result.entryId, result.cueStackId, result.cueStackName,
                 )
+                call.respond(ShowActivateResponse(
+                    projectId = result.projectId,
+                    activeEntryId = result.entryId,
+                    activatedStackId = result.cueStackId,
+                    activatedStackName = result.cueStackName,
+                ))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to go to entry"))
             }
-
-            // Deactivate previous stack
-            if (result.previousCueStackId != null) {
-                state.show.cueStackManager.deactivateStack(result.previousCueStackId, state)
-            }
-
-            activateStackAtFirstCue(state, result.cueStackId)
-
-            state.show.fixtures.showChanged(
-                result.projectId, result.entryId, result.cueStackId, result.cueStackName,
-            )
-            call.respond(ShowActivateResponse(
-                projectId = result.projectId,
-                activeEntryId = result.entryId,
-                activatedStackId = result.cueStackId,
-                activatedStackName = result.cueStackName,
-            ))
-        } catch (e: Exception) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to go to entry"))
         }
     }
 }

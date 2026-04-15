@@ -21,516 +21,412 @@ import uk.me.cormack.lighting7.state.State
 internal fun Route.routeApiRestProjectCueStacks(state: State) {
     // GET /{projectId}/cue-stacks - List all stacks with ordered cues + active cue info
     get<ProjectCueStacksResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
+        withProject(state, resource.projectId) { project ->
+            val isCurrentProject = state.isCurrentProject(project)
+            val manager = state.show.cueStackManager
+            val stacks = transaction(state.database) {
+                DaoCueStack.find { DaoCueStacks.project eq project.id }
+                    .orderBy(DaoCueStacks.name to SortOrder.ASC)
+                    .map { it.toCueStackDetails(isCurrentProject, manager) }
+            }
+            call.respond(stacks)
         }
-
-        val isCurrentProject = state.isCurrentProject(project)
-        val manager = state.show.cueStackManager
-        val stacks = transaction(state.database) {
-            DaoCueStack.find { DaoCueStacks.project eq project.id }
-                .orderBy(DaoCueStacks.name to SortOrder.ASC)
-                .map { it.toCueStackDetails(isCurrentProject, manager) }
-        }
-        call.respond(stacks)
     }
 
     // POST /{projectId}/cue-stacks - Create stack
     post<ProjectCueStacksResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
-
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot create cue stacks in project '${project.name}' - only the current project can be modified")
-            )
-            return@post
-        }
-
-        val input = call.receive<NewCueStack>()
-        val manager = state.show.cueStackManager
-        val details = transaction(state.database) {
-            val stack = DaoCueStack.new {
-                name = input.name
-                this.project = project
-                palette = input.palette
-                loop = input.loop
+        withCurrentProject(
+            state,
+            resource.projectId,
+            { p -> "Cannot create cue stacks in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val input = call.receive<NewCueStack>()
+            val manager = state.show.cueStackManager
+            val details = transaction(state.database) {
+                val stack = DaoCueStack.new {
+                    name = input.name
+                    this.project = project
+                    palette = input.palette
+                    loop = input.loop
+                }
+                stack.toCueStackDetails(isCurrentProject = true, manager)
             }
-            stack.toCueStackDetails(isCurrentProject = true, manager)
+            state.show.fixtures.cueStackListChanged()
+            call.respond(HttpStatusCode.Created, details)
         }
-        state.show.fixtures.cueStackListChanged()
-        call.respond(HttpStatusCode.Created, details)
     }
 
     // GET /{projectId}/cue-stacks/{stackId} - Get stack details
     get<ProjectCueStackResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
-        }
+        withProject(state, resource.parent.projectId) { project ->
+            val isCurrentProject = state.isCurrentProject(project)
+            val manager = state.show.cueStackManager
+            val details = transaction(state.database) {
+                val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction null
+                if (stack.project.id != project.id) return@transaction null
+                stack.toCueStackDetails(isCurrentProject, manager)
+            }
 
-        val isCurrentProject = state.isCurrentProject(project)
-        val manager = state.show.cueStackManager
-        val details = transaction(state.database) {
-            val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction null
-            if (stack.project.id != project.id) return@transaction null
-            stack.toCueStackDetails(isCurrentProject, manager)
-        }
-
-        if (details != null) {
-            call.respond(details)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
+            if (details != null) {
+                call.respond(details)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
+            }
         }
     }
 
     // PUT /{projectId}/cue-stacks/{stackId} - Update stack settings
     put<ProjectCueStackResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@put
-        }
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot modify cue stacks in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val input = call.receive<NewCueStack>()
+            val manager = state.show.cueStackManager
+            val details = transaction(state.database) {
+                val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction null
+                if (stack.project.id != project.id) return@transaction null
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot modify cue stacks in project '${project.name}' - only the current project can be modified")
-            )
-            return@put
-        }
+                stack.name = input.name
+                stack.palette = input.palette
+                stack.loop = input.loop
 
-        val input = call.receive<NewCueStack>()
-        val manager = state.show.cueStackManager
-        val details = transaction(state.database) {
-            val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction null
-            if (stack.project.id != project.id) return@transaction null
+                stack.toCueStackDetails(isCurrentProject = true, manager)
+            }
 
-            stack.name = input.name
-            stack.palette = input.palette
-            stack.loop = input.loop
-
-            stack.toCueStackDetails(isCurrentProject = true, manager)
-        }
-
-        if (details != null) {
-            state.show.fixtures.cueStackListChanged()
-            call.respond(details)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
+            if (details != null) {
+                state.show.fixtures.cueStackListChanged()
+                call.respond(details)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
+            }
         }
     }
 
     // DELETE /{projectId}/cue-stacks/{stackId} - Delete stack
     // Query param: keepCues=true (default) or false
     delete<ProjectCueStackResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@delete
-        }
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot delete cue stacks in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val keepCues = call.request.queryParameters["keepCues"]?.toBoolean() ?: true
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot delete cue stacks in project '${project.name}' - only the current project can be modified")
-            )
-            return@delete
-        }
+            val found = transaction(state.database) {
+                val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction false
+                if (stack.project.id != project.id) return@transaction false
 
-        val keepCues = call.request.queryParameters["keepCues"]?.toBoolean() ?: true
+                // Deactivate if running
+                state.show.cueStackManager.deactivateStack(resource.stackId, state)
 
-        val found = transaction(state.database) {
-            val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction false
-            if (stack.project.id != project.id) return@transaction false
-
-            // Deactivate if running
-            state.show.cueStackManager.deactivateStack(resource.stackId, state)
-
-            if (keepCues) {
-                // Detach cues from stack (make standalone)
-                stack.cues.forEach { cue ->
-                    cue.cueStack = null
-                    cue.sortOrder = 0
+                if (keepCues) {
+                    // Detach cues from stack (make standalone)
+                    stack.cues.forEach { cue ->
+                        cue.cueStack = null
+                        cue.sortOrder = 0
+                    }
+                } else {
+                    // Delete cues and their children
+                    stack.cues.forEach { cue ->
+                        deleteCueChildren(cue)
+                        cue.delete()
+                    }
                 }
-            } else {
-                // Delete cues and their children
-                stack.cues.forEach { cue ->
-                    deleteCueChildren(cue)
-                    cue.delete()
-                }
+
+                stack.delete()
+                true
             }
 
-            stack.delete()
-            true
-        }
-
-        if (found) {
-            state.show.fixtures.cueStackListChanged()
-            state.show.fixtures.cueListChanged()
-            call.respond(HttpStatusCode.OK)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
+            if (found) {
+                state.show.fixtures.cueStackListChanged()
+                state.show.fixtures.cueListChanged()
+                call.respond(HttpStatusCode.OK)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
+            }
         }
     }
 
     // POST /{projectId}/cue-stacks/{stackId}/reorder - Reorder cues
     post<CueStackReorderResource> { resource ->
-        val project = state.resolveProject(resource.parent.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
-
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot modify - not current project"))
-            return@post
-        }
-
-        val request = call.receive<ReorderCuesRequest>()
-        transaction(state.database) {
-            for ((index, cueId) in request.cueIds.withIndex()) {
-                val cue = DaoCue.findById(cueId) ?: continue
-                if (cue.cueStack?.id?.value == resource.parent.stackId) {
-                    cue.sortOrder = index
+        withCurrentProject(state, resource.parent.parent.projectId) { _ ->
+            val request = call.receive<ReorderCuesRequest>()
+            transaction(state.database) {
+                for ((index, cueId) in request.cueIds.withIndex()) {
+                    val cue = DaoCue.findById(cueId) ?: continue
+                    if (cue.cueStack?.id?.value == resource.parent.stackId) {
+                        cue.sortOrder = index
+                    }
                 }
             }
+            state.show.fixtures.cueStackListChanged()
+            call.respond(HttpStatusCode.OK)
         }
-        state.show.fixtures.cueStackListChanged()
-        call.respond(HttpStatusCode.OK)
     }
 
     // POST /{projectId}/cue-stacks/{stackId}/add-cue - Add/move cue to stack
     post<CueStackAddCueResource> { resource ->
-        val project = state.resolveProject(resource.parent.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.parent.projectId) { project ->
+            val request = call.receive<AddCueToStackRequest>()
+            val manager = state.show.cueStackManager
+            val result = transaction(state.database) {
+                val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction "Stack not found" to null
+                val cue = DaoCue.findById(request.cueId) ?: return@transaction "Cue not found" to null
+                if (cue.project.id != project.id) return@transaction "Cue does not belong to project" to null
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot modify - not current project"))
-            return@post
-        }
+                if (request.insertByNumber) {
+                    val cueNum = cue.cueNumber
+                    if (cueNum == null || cueNum.isEmpty() || !cueNum[0].isDigit()) {
+                        return@transaction "insertByNumber requires a cue_number starting with a digit" to null
+                    }
 
-        val request = call.receive<AddCueToStackRequest>()
-        val manager = state.show.cueStackManager
-        val result = transaction(state.database) {
-            val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction "Stack not found" to null
-            val cue = DaoCue.findById(request.cueId) ?: return@transaction "Cue not found" to null
-            if (cue.project.id != project.id) return@transaction "Cue does not belong to project" to null
+                    // Get existing STANDARD cues in this stack, ordered by sort_order
+                    val existingCues = DaoCue.find {
+                        (DaoCues.cueStack eq stack.id) and (DaoCues.cueType eq CueType.STANDARD.name)
+                    }.orderBy(DaoCues.sortOrder to SortOrder.ASC)
+                        .filter { it.id.value != cue.id.value }
+                        .toList()
 
-            if (request.insertByNumber) {
-                val cueNum = cue.cueNumber
-                if (cueNum == null || cueNum.isEmpty() || !cueNum[0].isDigit()) {
-                    return@transaction "insertByNumber requires a cue_number starting with a digit" to null
-                }
+                    // Find participating cues (digit-first cue_number)
+                    val participating = existingCues.filter { c ->
+                        val num = c.cueNumber
+                        num != null && num.isNotEmpty() && num[0].isDigit()
+                    }
 
-                // Get existing STANDARD cues in this stack, ordered by sort_order
-                val existingCues = DaoCue.find {
-                    (DaoCues.cueStack eq stack.id) and (DaoCues.cueType eq CueType.STANDARD.name)
-                }.orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                    .filter { it.id.value != cue.id.value }
-                    .toList()
+                    // Find insertion point: after last participating cue that sorts before new cue
+                    val insertAfter = participating.lastOrNull { c ->
+                        naturalCompare(c.cueNumber!!, cueNum) < 0
+                    }
 
-                // Find participating cues (digit-first cue_number)
-                val participating = existingCues.filter { c ->
-                    val num = c.cueNumber
-                    num != null && num.isNotEmpty() && num[0].isDigit()
-                }
+                    val insertSortOrder = if (insertAfter != null) {
+                        insertAfter.sortOrder + 1
+                    } else if (participating.isNotEmpty()) {
+                        // Insert before all participating cues
+                        participating.first().sortOrder
+                    } else {
+                        // No participating cues — append at end
+                        (existingCues.maxOfOrNull { it.sortOrder } ?: -1) + 1
+                    }
 
-                // Find insertion point: after last participating cue that sorts before new cue
-                val insertAfter = participating.lastOrNull { c ->
-                    naturalCompare(c.cueNumber!!, cueNum) < 0
-                }
+                    // Shift subsequent cues
+                    existingCues.filter { it.sortOrder >= insertSortOrder }
+                        .forEach { it.sortOrder = it.sortOrder + 1 }
 
-                val insertSortOrder = if (insertAfter != null) {
-                    insertAfter.sortOrder + 1
-                } else if (participating.isNotEmpty()) {
-                    // Insert before all participating cues
-                    participating.first().sortOrder
+                    cue.cueStack = stack
+                    cue.sortOrder = insertSortOrder
                 } else {
-                    // No participating cues — append at end
-                    (existingCues.maxOfOrNull { it.sortOrder } ?: -1) + 1
+                    cue.cueStack = stack
+                    cue.sortOrder = request.sortOrder ?: stack.cues.count().toInt()
                 }
 
-                // Shift subsequent cues
-                existingCues.filter { it.sortOrder >= insertSortOrder }
-                    .forEach { it.sortOrder = it.sortOrder + 1 }
-
-                cue.cueStack = stack
-                cue.sortOrder = insertSortOrder
-            } else {
-                cue.cueStack = stack
-                cue.sortOrder = request.sortOrder ?: stack.cues.count().toInt()
+                val details = stack.toCueStackDetails(isCurrentProject = true, manager)
+                null to details
             }
 
-            val details = stack.toCueStackDetails(isCurrentProject = true, manager)
-            null to details
-        }
-
-        val (error, details) = result
-        if (error != null) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
-        } else {
-            state.show.fixtures.cueStackListChanged()
-            state.show.fixtures.cueListChanged()
-            call.respond(details!!)
+            val (error, details) = result
+            if (error != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
+            } else {
+                state.show.fixtures.cueStackListChanged()
+                state.show.fixtures.cueListChanged()
+                call.respond(details!!)
+            }
         }
     }
 
     // POST /{projectId}/cue-stacks/{stackId}/remove-cue - Remove cue from stack (becomes standalone)
     post<CueStackRemoveCueResource> { resource ->
-        val project = state.resolveProject(resource.parent.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.parent.projectId) { _ ->
+            val request = call.receive<RemoveCueFromStackRequest>()
+            val result = transaction(state.database) {
+                val cue = DaoCue.findById(request.cueId) ?: return@transaction "Cue not found"
+                if (cue.cueStack?.id?.value != resource.parent.stackId) return@transaction "Cue is not in this stack"
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot modify - not current project"))
-            return@post
-        }
+                cue.cueStack = null
+                cue.sortOrder = 0
+                null
+            }
 
-        val request = call.receive<RemoveCueFromStackRequest>()
-        val result = transaction(state.database) {
-            val cue = DaoCue.findById(request.cueId) ?: return@transaction "Cue not found"
-            if (cue.cueStack?.id?.value != resource.parent.stackId) return@transaction "Cue is not in this stack"
-
-            cue.cueStack = null
-            cue.sortOrder = 0
-            null
-        }
-
-        if (result != null) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(result))
-        } else {
-            state.show.fixtures.cueStackListChanged()
-            state.show.fixtures.cueListChanged()
-            call.respond(HttpStatusCode.OK)
+            if (result != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(result))
+            } else {
+                state.show.fixtures.cueStackListChanged()
+                state.show.fixtures.cueListChanged()
+                call.respond(HttpStatusCode.OK)
+            }
         }
     }
 
     // POST /{projectId}/cue-stacks/{stackId}/activate - Activate stack
     post<CueStackActivateResource> { resource ->
-        val project = state.resolveProject(resource.parent.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.parent.projectId, "Cannot activate - not current project") { _ ->
+            val request = try { call.receive<ActivateCueStackRequest>() } catch (_: Exception) { ActivateCueStackRequest() }
+            val manager = state.show.cueStackManager
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot activate - not current project"))
-            return@post
-        }
-
-        val request = try { call.receive<ActivateCueStackRequest>() } catch (_: Exception) { ActivateCueStackRequest() }
-        val manager = state.show.cueStackManager
-
-        val startCueId = request.cueId ?: transaction(state.database) {
-            // Default to first STANDARD cue in stack (skip MARKERs)
-            DaoCue.find {
-                (DaoCues.cueStack eq resource.parent.stackId) and
-                    (DaoCues.cueType eq CueType.STANDARD.name)
+            val startCueId = request.cueId ?: transaction(state.database) {
+                // Default to first STANDARD cue in stack (skip MARKERs)
+                DaoCue.find {
+                    (DaoCues.cueStack eq resource.parent.stackId) and
+                        (DaoCues.cueType eq CueType.STANDARD.name)
+                }
+                    .orderBy(DaoCues.sortOrder to SortOrder.ASC)
+                    .firstOrNull()?.id?.value
             }
-                .orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                .firstOrNull()?.id?.value
-        }
 
-        if (startCueId == null) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse("Stack has no cues"))
-            return@post
-        }
+            if (startCueId == null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Stack has no cues"))
+                return@withCurrentProject
+            }
 
-        try {
-            @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-            val result = manager.activateCueInStack(state, resource.parent.stackId, startCueId, GlobalScope)
-            call.respond(CueStackActivateResponse(
-                stackId = result.stackId,
-                cueId = result.cueId,
-                cueName = result.cueName,
-                effectCount = result.effectCount,
-            ))
-        } catch (e: Exception) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to activate stack"))
-        }
-    }
-
-    // POST /{projectId}/cue-stacks/{stackId}/deactivate - Deactivate stack
-    post<CueStackDeactivateResource> { resource ->
-        val project = state.resolveProject(resource.parent.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
-
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot deactivate - not current project"))
-            return@post
-        }
-
-        val removedCount = state.show.cueStackManager.deactivateStack(resource.parent.stackId, state)
-        call.respond(CueStackDeactivateResponse(stackId = resource.parent.stackId, removedCount = removedCount))
-    }
-
-    // POST /{projectId}/cue-stacks/{stackId}/advance - Advance forward/backward
-    post<CueStackAdvanceResource> { resource ->
-        val project = state.resolveProject(resource.parent.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
-
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot advance - not current project"))
-            return@post
-        }
-
-        val request = call.receive<AdvanceCueStackRequest>()
-        val direction = try {
-            CueStackManager.AdvanceDirection.valueOf(request.direction.uppercase())
-        } catch (_: Exception) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid direction: ${request.direction}"))
-            return@post
-        }
-
-        try {
-            @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-            val result = state.show.cueStackManager.advanceStack(state, resource.parent.stackId, direction, GlobalScope)
-            if (result != null) {
+            try {
+                @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+                val result = manager.activateCueInStack(state, resource.parent.stackId, startCueId, GlobalScope)
                 call.respond(CueStackActivateResponse(
                     stackId = result.stackId,
                     cueId = result.cueId,
                     cueName = result.cueName,
                     effectCount = result.effectCount,
                 ))
-            } else {
-                call.respond(CueStackDeactivateResponse(stackId = resource.parent.stackId, removedCount = 0))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to activate stack"))
             }
-        } catch (e: Exception) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to advance stack"))
+        }
+    }
+
+    // POST /{projectId}/cue-stacks/{stackId}/deactivate - Deactivate stack
+    post<CueStackDeactivateResource> { resource ->
+        withCurrentProject(state, resource.parent.parent.projectId, "Cannot deactivate - not current project") { _ ->
+            val removedCount = state.show.cueStackManager.deactivateStack(resource.parent.stackId, state)
+            call.respond(CueStackDeactivateResponse(stackId = resource.parent.stackId, removedCount = removedCount))
+        }
+    }
+
+    // POST /{projectId}/cue-stacks/{stackId}/advance - Advance forward/backward
+    post<CueStackAdvanceResource> { resource ->
+        withCurrentProject(state, resource.parent.parent.projectId, "Cannot advance - not current project") { _ ->
+            val request = call.receive<AdvanceCueStackRequest>()
+            val direction = try {
+                CueStackManager.AdvanceDirection.valueOf(request.direction.uppercase())
+            } catch (_: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid direction: ${request.direction}"))
+                return@withCurrentProject
+            }
+
+            try {
+                @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+                val result = state.show.cueStackManager.advanceStack(state, resource.parent.stackId, direction, GlobalScope)
+                if (result != null) {
+                    call.respond(CueStackActivateResponse(
+                        stackId = result.stackId,
+                        cueId = result.cueId,
+                        cueName = result.cueName,
+                        effectCount = result.effectCount,
+                    ))
+                } else {
+                    call.respond(CueStackDeactivateResponse(stackId = resource.parent.stackId, removedCount = 0))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to advance stack"))
+            }
         }
     }
 
     // POST /{projectId}/cue-stacks/{stackId}/go-to - Go to specific cue
     post<CueStackGoToResource> { resource ->
-        val project = state.resolveProject(resource.parent.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.parent.projectId, "Cannot go-to - not current project") { _ ->
+            val request = call.receive<GoToCueRequest>()
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot go-to - not current project"))
-            return@post
-        }
-
-        val request = call.receive<GoToCueRequest>()
-
-        try {
-            @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-            val result = state.show.cueStackManager.goToCue(state, resource.parent.stackId, request.cueId, GlobalScope)
-            call.respond(CueStackActivateResponse(
-                stackId = result.stackId,
-                cueId = result.cueId,
-                cueName = result.cueName,
-                effectCount = result.effectCount,
-            ))
-        } catch (e: Exception) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to go to cue"))
+            try {
+                @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+                val result = state.show.cueStackManager.goToCue(state, resource.parent.stackId, request.cueId, GlobalScope)
+                call.respond(CueStackActivateResponse(
+                    stackId = result.stackId,
+                    cueId = result.cueId,
+                    cueName = result.cueName,
+                    effectCount = result.effectCount,
+                ))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to go to cue"))
+            }
         }
     }
 
     // POST /{projectId}/cue-stacks/{stackId}/sort-by-cue-number - Reorder by natural sort
     post<CueStackSortByNumberResource> { resource ->
-        val project = state.resolveProject(resource.parent.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.parent.projectId) { project ->
+            val manager = state.show.cueStackManager
+            val result = transaction(state.database) {
+                val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction null
+                if (stack.project.id != project.id) return@transaction null
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot modify - not current project"))
-            return@post
-        }
+                // Get all cues in the stack ordered by sort_order
+                val allCues = DaoCue.find { DaoCues.cueStack eq stack.id }
+                    .orderBy(DaoCues.sortOrder to SortOrder.ASC)
+                    .toList()
 
-        val manager = state.show.cueStackManager
-        val result = transaction(state.database) {
-            val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction null
-            if (stack.project.id != project.id) return@transaction null
+                // Partition STANDARD cues only — MARKERs are not considered
+                val standardCues = allCues.filter { it.cueType == CueType.STANDARD.name }
 
-            // Get all cues in the stack ordered by sort_order
-            val allCues = DaoCue.find { DaoCues.cueStack eq stack.id }
-                .orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                .toList()
+                // Three-group partition of STANDARD cues
+                val participating = standardCues.filter { c ->
+                    val num = c.cueNumber
+                    !num.isNullOrEmpty() && num[0].isDigit()
+                }
+                val pinned = standardCues.filter { c ->
+                    val num = c.cueNumber
+                    !num.isNullOrEmpty() && !num[0].isDigit()
+                }
+                val unnumbered = standardCues.filter { it.cueNumber.isNullOrEmpty() }
 
-            // Partition STANDARD cues only — MARKERs are not considered
-            val standardCues = allCues.filter { it.cueType == CueType.STANDARD.name }
+                if (participating.isEmpty()) {
+                    return@transaction SortByNumberResult(
+                        error = "No participating cues to sort (need cue numbers starting with a digit)",
+                        response = null,
+                    )
+                }
 
-            // Three-group partition of STANDARD cues
-            val participating = standardCues.filter { c ->
-                val num = c.cueNumber
-                !num.isNullOrEmpty() && num[0].isDigit()
-            }
-            val pinned = standardCues.filter { c ->
-                val num = c.cueNumber
-                !num.isNullOrEmpty() && !num[0].isDigit()
-            }
-            val unnumbered = standardCues.filter { it.cueNumber.isNullOrEmpty() }
+                // Sort participating by natural sort
+                val sortedParticipating = participating.sortedWith(
+                    compareBy(CueNumberComparator) { it.cueNumber!! }
+                )
 
-            if (participating.isEmpty()) {
-                return@transaction SortByNumberResult(
-                    error = "No participating cues to sort (need cue numbers starting with a digit)",
-                    response = null,
+                // Collect the sort_order positions that participating cues currently occupy
+                val participatingPositions = participating.map { it.sortOrder }.sorted()
+
+                // Assign sorted participating cues to those positions
+                sortedParticipating.forEachIndexed { index, cue ->
+                    cue.sortOrder = participatingPositions[index]
+                }
+
+                // Append unnumbered after all others (find the max sort_order)
+                val maxSortOrder = allCues.maxOfOrNull { it.sortOrder } ?: 0
+                unnumbered.forEachIndexed { index, cue ->
+                    cue.sortOrder = maxSortOrder + 1 + index
+                }
+
+                // Build response with updated stack details
+                val details = stack.toCueStackDetails(isCurrentProject = true, manager)
+
+                SortByNumberResult(
+                    error = null,
+                    response = SortByNumberResponse(
+                        updatedCues = details.cues,
+                        pinnedCount = pinned.size,
+                        nullNumberCount = unnumbered.size,
+                    ),
                 )
             }
 
-            // Sort participating by natural sort
-            val sortedParticipating = participating.sortedWith(
-                compareBy(CueNumberComparator) { it.cueNumber!! }
-            )
-
-            // Collect the sort_order positions that participating cues currently occupy
-            val participatingPositions = participating.map { it.sortOrder }.sorted()
-
-            // Assign sorted participating cues to those positions
-            sortedParticipating.forEachIndexed { index, cue ->
-                cue.sortOrder = participatingPositions[index]
+            if (result == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
+            } else if (result.error != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.error))
+            } else {
+                state.show.fixtures.cueStackListChanged()
+                call.respond(result.response!!)
             }
-
-            // Append unnumbered after all others (find the max sort_order)
-            val maxSortOrder = allCues.maxOfOrNull { it.sortOrder } ?: 0
-            unnumbered.forEachIndexed { index, cue ->
-                cue.sortOrder = maxSortOrder + 1 + index
-            }
-
-            // Build response with updated stack details
-            val details = stack.toCueStackDetails(isCurrentProject = true, manager)
-
-            SortByNumberResult(
-                error = null,
-                response = SortByNumberResponse(
-                    updatedCues = details.cues,
-                    pinnedCount = pinned.size,
-                    nullNumberCount = unnumbered.size,
-                ),
-            )
-        }
-
-        if (result == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
-        } else if (result.error != null) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.error))
-        } else {
-            state.show.fixtures.cueStackListChanged()
-            call.respond(result.response!!)
         }
     }
 }

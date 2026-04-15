@@ -28,200 +28,152 @@ import kotlin.script.experimental.api.valueOrNull
 internal fun Route.routeApiRestProjectScripts(state: State) {
     // GET /{projectId}/scripts - List scripts for a project
     get<ProjectScriptsResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
+        withProject(state, resource.projectId) { project ->
+            val isCurrentProject = state.isCurrentProject(project)
+            val scripts = transaction(state.database) {
+                project.scripts
+                    .orderBy(DaoScripts.name to SortOrder.ASC)
+                    .map { it.toScriptDetails(isCurrentProject) }
+            }
+            call.respond(scripts)
         }
-
-        val isCurrentProject = state.isCurrentProject(project)
-        val scripts = transaction(state.database) {
-            project.scripts
-                .orderBy(DaoScripts.name to SortOrder.ASC)
-                .map { it.toScriptDetails(isCurrentProject) }
-        }
-        call.respond(scripts)
     }
 
     // POST /{projectId}/scripts - Create new script (current project only)
     post<ProjectScriptsResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
+        withCurrentProject(
+            state,
+            resource.projectId,
+            { p -> "Cannot create scripts in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val newScript = call.receive<NewScript>()
+            val scriptDetails = transaction(state.database) {
+                DaoScript.new {
+                    name = newScript.name
+                    script = newScript.script
+                    this.project = project
+                    scriptType = try { ScriptType.valueOf(newScript.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
+                }.toScriptDetails(isCurrentProject = true) // Only current project can create
+            }
+            call.respond(HttpStatusCode.Created, scriptDetails)
         }
-
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot create scripts in project '${project.name}' - only the current project can be modified")
-            )
-            return@post
-        }
-
-        val newScript = call.receive<NewScript>()
-        val scriptDetails = transaction(state.database) {
-            DaoScript.new {
-                name = newScript.name
-                script = newScript.script
-                this.project = project
-                scriptType = try { ScriptType.valueOf(newScript.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
-            }.toScriptDetails(isCurrentProject = true) // Only current project can create
-        }
-        call.respond(HttpStatusCode.Created, scriptDetails)
     }
 
     // GET /{projectId}/scripts/{scriptId} - Get script details (any project)
     get<ProjectScriptResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
-        }
+        withProject(state, resource.parent.projectId) { project ->
+            val isCurrentProject = state.isCurrentProject(project)
+            val script = transaction(state.database) {
+                val script = DaoScript.findById(resource.scriptId)
+                    ?: return@transaction null
 
-        val isCurrentProject = state.isCurrentProject(project)
-        val script = transaction(state.database) {
-            val script = DaoScript.findById(resource.scriptId)
-                ?: return@transaction null
+                // Verify script belongs to this project
+                if (script.project.id != project.id) {
+                    return@transaction null
+                }
 
-            // Verify script belongs to this project
-            if (script.project.id != project.id) {
-                return@transaction null
+                script.toScriptDetails(isCurrentProject)
             }
 
-            script.toScriptDetails(isCurrentProject)
-        }
-
-        if (script != null) {
-            call.respond(script)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
+            if (script != null) {
+                call.respond(script)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
+            }
         }
     }
 
     // PUT /{projectId}/scripts/{scriptId} - Update script (current project only)
     put<ProjectScriptResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@put
-        }
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot modify scripts in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val newScriptData = call.receive<NewScript>()
+            val scriptDetails = transaction(state.database) {
+                val script = DaoScript.findById(resource.scriptId)
+                    ?: return@transaction null
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot modify scripts in project '${project.name}' - only the current project can be modified")
-            )
-            return@put
-        }
+                // Verify script belongs to this project
+                if (script.project.id != project.id) {
+                    return@transaction null
+                }
 
-        val newScriptData = call.receive<NewScript>()
-        val scriptDetails = transaction(state.database) {
-            val script = DaoScript.findById(resource.scriptId)
-                ?: return@transaction null
-
-            // Verify script belongs to this project
-            if (script.project.id != project.id) {
-                return@transaction null
+                script.name = newScriptData.name
+                script.script = newScriptData.script
+                script.scriptType = try { ScriptType.valueOf(newScriptData.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
+                script.toScriptDetails(isCurrentProject = true) // Only current project can update
             }
 
-            script.name = newScriptData.name
-            script.script = newScriptData.script
-            script.scriptType = try { ScriptType.valueOf(newScriptData.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
-            script.toScriptDetails(isCurrentProject = true) // Only current project can update
-        }
-
-        if (scriptDetails != null) {
-            call.respond(scriptDetails)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
+            if (scriptDetails != null) {
+                call.respond(scriptDetails)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
+            }
         }
     }
 
     // DELETE /{projectId}/scripts/{scriptId} - Delete script (current project only)
     delete<ProjectScriptResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@delete
-        }
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot delete scripts in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val result = transaction(state.database) {
+                val script = DaoScript.findById(resource.scriptId)
+                    ?: return@transaction ScriptDeleteResult.NOT_FOUND
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot delete scripts in project '${project.name}' - only the current project can be modified")
-            )
-            return@delete
-        }
+                // Verify script belongs to this project
+                if (script.project.id != project.id) {
+                    return@transaction ScriptDeleteResult.NOT_FOUND
+                }
 
-        val result = transaction(state.database) {
-            val script = DaoScript.findById(resource.scriptId)
-                ?: return@transaction ScriptDeleteResult.NOT_FOUND
-
-            // Verify script belongs to this project
-            if (script.project.id != project.id) {
-                return@transaction ScriptDeleteResult.NOT_FOUND
+                // Delete the script
+                script.delete()
+                ScriptDeleteResult.SUCCESS
             }
 
-            // Delete the script
-            script.delete()
-            ScriptDeleteResult.SUCCESS
-        }
-
-        when (result) {
-            ScriptDeleteResult.NOT_FOUND -> call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
-            ScriptDeleteResult.SUCCESS -> call.respond(HttpStatusCode.OK)
+            when (result) {
+                ScriptDeleteResult.NOT_FOUND -> call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
+                ScriptDeleteResult.SUCCESS -> call.respond(HttpStatusCode.OK)
+            }
         }
     }
 
     // POST /{projectId}/scripts/compile - Compile literal script (current project only)
     post<ProjectScriptCompileResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot compile scripts for project '${p.name}' - only the current project can be used" },
+        ) { _ ->
+            val literal = call.receive<ScriptLiteral>()
+            var response: CompileResult? = null
+            GlobalScope.launch {
+                val scriptType = try { ScriptType.valueOf(literal.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
+                response = state.show.compileLiteralScript(literal.script, scriptType).toCompileResult()
+            }.join()
+            call.respond(checkNotNull(response))
         }
-
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot compile scripts for project '${project.name}' - only the current project can be used")
-            )
-            return@post
-        }
-
-        val literal = call.receive<ScriptLiteral>()
-        var response: CompileResult? = null
-        GlobalScope.launch {
-            val scriptType = try { ScriptType.valueOf(literal.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
-            response = state.show.compileLiteralScript(literal.script, scriptType).toCompileResult()
-        }.join()
-        call.respond(checkNotNull(response))
     }
 
     // POST /{projectId}/scripts/run - Run literal script (current project only)
     post<ProjectScriptRunResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot run scripts for project '${p.name}' - only the current project can be used" },
+        ) { _ ->
+            val literal = call.receive<ScriptLiteral>()
+            var response: RunResult? = null
+            GlobalScope.launch {
+                val scriptType = try { ScriptType.valueOf(literal.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
+                response = state.show.runLiteralScript(literal.script, scriptType = scriptType, scriptId = literal.scriptId).toRunResult()
+            }.join()
+            call.respond(checkNotNull(response))
         }
-
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot run scripts for project '${project.name}' - only the current project can be used")
-            )
-            return@post
-        }
-
-        val literal = call.receive<ScriptLiteral>()
-        var response: RunResult? = null
-        GlobalScope.launch {
-            val scriptType = try { ScriptType.valueOf(literal.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
-            response = state.show.runLiteralScript(literal.script, scriptType = scriptType, scriptId = literal.scriptId).toRunResult()
-        }.join()
-        call.respond(checkNotNull(response))
     }
 
     // POST /{projectId}/scripts/{scriptId}/copy - Copy a script to another project

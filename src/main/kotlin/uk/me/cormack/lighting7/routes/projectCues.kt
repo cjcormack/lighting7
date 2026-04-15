@@ -24,157 +24,125 @@ import uk.me.cormack.lighting7.state.State
 internal fun Route.routeApiRestProjectCues(state: State) {
     // GET /{projectId}/cues - List cues for a project
     get<ProjectCuesResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
+        withProject(state, resource.projectId) { project ->
+            val isCurrentProject = state.isCurrentProject(project)
+            val cues = transaction(state.database) {
+                DaoCue.find { DaoCues.project eq project.id }
+                    .orderBy(DaoCues.name to SortOrder.ASC)
+                    .map { it.toCueDetails(isCurrentProject) }
+            }
+            call.respond(cues)
         }
-
-        val isCurrentProject = state.isCurrentProject(project)
-        val cues = transaction(state.database) {
-            DaoCue.find { DaoCues.project eq project.id }
-                .orderBy(DaoCues.name to SortOrder.ASC)
-                .map { it.toCueDetails(isCurrentProject) }
-        }
-        call.respond(cues)
     }
 
     // POST /{projectId}/cues - Create new cue (current project only)
     post<ProjectCuesResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
-
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot create cues in project '${project.name}' - only the current project can be modified")
-            )
-            return@post
-        }
-
-        val newCue = call.receive<NewCue>()
-        val cueDetails = transaction(state.database) {
-            val stack = newCue.cueStackId?.let { DaoCueStack.findById(it) }
-            val cue = DaoCue.new {
-                name = newCue.name
-                this.project = project
-                palette = newCue.palette
-                updateGlobalPalette = newCue.updateGlobalPalette
-                autoAdvance = newCue.autoAdvance
-                autoAdvanceDelayMs = newCue.autoAdvanceDelayMs
-                fadeDurationMs = newCue.fadeDurationMs
-                fadeCurve = newCue.fadeCurve
-                if (stack != null) {
-                    cueStack = stack
-                    sortOrder = newCue.sortOrder ?: stack.cues.count().toInt()
+        withCurrentProject(
+            state,
+            resource.projectId,
+            { p -> "Cannot create cues in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val newCue = call.receive<NewCue>()
+            val cueDetails = transaction(state.database) {
+                val stack = newCue.cueStackId?.let { DaoCueStack.findById(it) }
+                val cue = DaoCue.new {
+                    name = newCue.name
+                    this.project = project
+                    palette = newCue.palette
+                    updateGlobalPalette = newCue.updateGlobalPalette
+                    autoAdvance = newCue.autoAdvance
+                    autoAdvanceDelayMs = newCue.autoAdvanceDelayMs
+                    fadeDurationMs = newCue.fadeDurationMs
+                    fadeCurve = newCue.fadeCurve
+                    if (stack != null) {
+                        cueStack = stack
+                        sortOrder = newCue.sortOrder ?: stack.cues.count().toInt()
+                    }
                 }
+                createCueChildren(cue, newCue.presetApplications, newCue.adHocEffects, newCue.triggers)
+                cue.toCueDetails(isCurrentProject = true)
             }
-            createCueChildren(cue, newCue.presetApplications, newCue.adHocEffects, newCue.triggers)
-            cue.toCueDetails(isCurrentProject = true)
+            state.show.fixtures.cueListChanged()
+            if (newCue.cueStackId != null) state.show.fixtures.cueStackListChanged()
+            call.respond(HttpStatusCode.Created, cueDetails)
         }
-        state.show.fixtures.cueListChanged()
-        if (newCue.cueStackId != null) state.show.fixtures.cueStackListChanged()
-        call.respond(HttpStatusCode.Created, cueDetails)
     }
 
     // GET /{projectId}/cues/{cueId} - Get cue details (any project)
     get<ProjectCueResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
-        }
+        withProject(state, resource.parent.projectId) { project ->
+            val isCurrentProject = state.isCurrentProject(project)
+            val cue = transaction(state.database) {
+                val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
+                if (cue.project.id != project.id) return@transaction null
+                cue.toCueDetails(isCurrentProject)
+            }
 
-        val isCurrentProject = state.isCurrentProject(project)
-        val cue = transaction(state.database) {
-            val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
-            if (cue.project.id != project.id) return@transaction null
-            cue.toCueDetails(isCurrentProject)
-        }
-
-        if (cue != null) {
-            call.respond(cue)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+            if (cue != null) {
+                call.respond(cue)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+            }
         }
     }
 
     // PUT /{projectId}/cues/{cueId} - Update cue (current project only)
     put<ProjectCueResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@put
-        }
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot modify cues in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val updatedData = call.receive<NewCue>()
+            val cueDetails = transaction(state.database) {
+                val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
+                if (cue.project.id != project.id) return@transaction null
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot modify cues in project '${project.name}' - only the current project can be modified")
-            )
-            return@put
-        }
+                cue.name = updatedData.name
+                cue.palette = updatedData.palette
+                cue.updateGlobalPalette = updatedData.updateGlobalPalette
+                cue.autoAdvance = updatedData.autoAdvance
+                cue.autoAdvanceDelayMs = updatedData.autoAdvanceDelayMs
+                cue.fadeDurationMs = updatedData.fadeDurationMs
+                cue.fadeCurve = updatedData.fadeCurve
 
-        val updatedData = call.receive<NewCue>()
-        val cueDetails = transaction(state.database) {
-            val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
-            if (cue.project.id != project.id) return@transaction null
+                // Replace children: delete existing, create new
+                deleteCueChildren(cue)
+                createCueChildren(cue, updatedData.presetApplications, updatedData.adHocEffects, updatedData.triggers)
 
-            cue.name = updatedData.name
-            cue.palette = updatedData.palette
-            cue.updateGlobalPalette = updatedData.updateGlobalPalette
-            cue.autoAdvance = updatedData.autoAdvance
-            cue.autoAdvanceDelayMs = updatedData.autoAdvanceDelayMs
-            cue.fadeDurationMs = updatedData.fadeDurationMs
-            cue.fadeCurve = updatedData.fadeCurve
+                cue.toCueDetails(isCurrentProject = true)
+            }
 
-            // Replace children: delete existing, create new
-            deleteCueChildren(cue)
-            createCueChildren(cue, updatedData.presetApplications, updatedData.adHocEffects, updatedData.triggers)
-
-            cue.toCueDetails(isCurrentProject = true)
-        }
-
-        if (cueDetails != null) {
-            state.show.fixtures.cueListChanged()
-            call.respond(cueDetails)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+            if (cueDetails != null) {
+                state.show.fixtures.cueListChanged()
+                call.respond(cueDetails)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+            }
         }
     }
 
     // DELETE /{projectId}/cues/{cueId} - Delete cue (current project only)
     delete<ProjectCueResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@delete
-        }
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot delete cues in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val found = transaction(state.database) {
+                val cue = DaoCue.findById(resource.cueId) ?: return@transaction false
+                if (cue.project.id != project.id) return@transaction false
+                deleteCueChildren(cue)
+                cue.delete()
+                true
+            }
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot delete cues in project '${project.name}' - only the current project can be modified")
-            )
-            return@delete
-        }
-
-        val found = transaction(state.database) {
-            val cue = DaoCue.findById(resource.cueId) ?: return@transaction false
-            if (cue.project.id != project.id) return@transaction false
-            deleteCueChildren(cue)
-            cue.delete()
-            true
-        }
-
-        if (found) {
-            state.show.fixtures.cueListChanged()
-            call.respond(HttpStatusCode.OK)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+            if (found) {
+                state.show.fixtures.cueListChanged()
+                call.respond(HttpStatusCode.OK)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+            }
         }
     }
 
@@ -291,181 +259,157 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
     // POST /{projectId}/cues/{cueId}/apply - Apply a cue (current project only)
     post<ApplyCueResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot apply cues from project '${p.name}' - only the current project's cues can be applied" },
+        ) { project ->
+            val replaceAll = call.request.queryParameters["replaceAll"]?.toBoolean() ?: false
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot apply cues from project '${project.name}' - only the current project's cues can be applied")
-            )
-            return@post
-        }
-
-        val replaceAll = call.request.queryParameters["replaceAll"]?.toBoolean() ?: false
-
-        // Read cue data and check stack membership
-        val cueInfo = transaction(state.database) {
-            val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
-            if (cue.project.id != project.id) return@transaction null
-            val stackId = cue.cueStack?.id?.value
-            val cueData = CueApplyData(
-                cueId = cue.id.value,
-                cueName = cue.name,
-                palette = cue.palette,
-                updateGlobalPalette = cue.updateGlobalPalette,
-                presetApplications = cue.presetApplications.sortedBy { it.sortOrder }.map { app ->
-                    CuePresetApplicationDto(
-                        presetId = app.preset.id.value,
-                        targets = app.targets,
-                        delayMs = app.delayMs,
-                        intervalMs = app.intervalMs,
-                        randomWindowMs = app.randomWindowMs,
-                        sortOrder = app.sortOrder,
-                    )
-                },
-                adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
-                triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
-                    CueTriggerDto(
-                        triggerType = trigger.triggerType.name,
-                        delayMs = trigger.delayMs,
-                        intervalMs = trigger.intervalMs,
-                        randomWindowMs = trigger.randomWindowMs,
-                        scriptId = trigger.script.id.value,
-                        sortOrder = trigger.sortOrder,
-                    )
-                },
-            )
-            Pair(cueData, stackId)
-        }
-
-        if (cueInfo == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
-            return@post
-        }
-
-        val (cueData, cueStackId) = cueInfo
-
-        try {
-            if (cueStackId != null) {
-                // Cue belongs to a stack — delegate to CueStackManager
-                // This activates the stack (if not already active) and switches to this cue
-                @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-                val stackResult = state.show.cueStackManager.activateCueInStack(
-                    state, cueStackId, resource.cueId, kotlinx.coroutines.GlobalScope
+            // Read cue data and check stack membership
+            val cueInfo = transaction(state.database) {
+                val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
+                if (cue.project.id != project.id) return@transaction null
+                val stackId = cue.cueStack?.id?.value
+                val cueData = CueApplyData(
+                    cueId = cue.id.value,
+                    cueName = cue.name,
+                    palette = cue.palette,
+                    updateGlobalPalette = cue.updateGlobalPalette,
+                    presetApplications = cue.presetApplications.sortedBy { it.sortOrder }.map { app ->
+                        CuePresetApplicationDto(
+                            presetId = app.preset.id.value,
+                            targets = app.targets,
+                            delayMs = app.delayMs,
+                            intervalMs = app.intervalMs,
+                            randomWindowMs = app.randomWindowMs,
+                            sortOrder = app.sortOrder,
+                        )
+                    },
+                    adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+                    triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
+                        CueTriggerDto(
+                            triggerType = trigger.triggerType.name,
+                            delayMs = trigger.delayMs,
+                            intervalMs = trigger.intervalMs,
+                            randomWindowMs = trigger.randomWindowMs,
+                            scriptId = trigger.script.id.value,
+                            sortOrder = trigger.sortOrder,
+                        )
+                    },
                 )
-                call.respond(ApplyCueResponse(
-                    effectCount = stackResult.effectCount,
-                    cueName = stackResult.cueName,
-                ))
-            } else {
-                // Deactivate old triggers/timed effects for this cue before re-applying
-                state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
-
-                val result = applyCue(state, cueData, replaceAll = replaceAll)
-
-                // Activate timed effects (delayed/recurring presets and ad-hoc effects)
-                val timedPresets = cueData.presetApplications.filter { it.delayMs != null || it.intervalMs != null }
-                val timedAdHoc = cueData.adHocEffects.filter { it.delayMs != null || it.intervalMs != null }
-                if (timedPresets.isNotEmpty() || timedAdHoc.isNotEmpty()) {
-                    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-                    state.cueTriggerManager.activateTimedEffectsForCue(
-                        cueId = resource.cueId,
-                        cueStackId = null,
-                        timedPresets = timedPresets,
-                        timedAdHocEffects = timedAdHoc,
-                        scope = kotlinx.coroutines.GlobalScope,
-                    )
-                }
-
-                // Activate script triggers after effects are applied
-                if (cueData.triggers.isNotEmpty()) {
-                    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-                    state.cueTriggerManager.activateTriggersForCue(
-                        cueId = resource.cueId,
-                        cueStackId = null,
-                        triggers = cueData.triggers,
-                        scope = kotlinx.coroutines.GlobalScope,
-                    )
-                }
-
-                call.respond(result)
+                Pair(cueData, stackId)
             }
-        } catch (e: Exception) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to apply cue"))
+
+            if (cueInfo == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+                return@withCurrentProject
+            }
+
+            val (cueData, cueStackId) = cueInfo
+
+            try {
+                if (cueStackId != null) {
+                    // Cue belongs to a stack — delegate to CueStackManager
+                    // This activates the stack (if not already active) and switches to this cue
+                    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+                    val stackResult = state.show.cueStackManager.activateCueInStack(
+                        state, cueStackId, resource.cueId, kotlinx.coroutines.GlobalScope
+                    )
+                    call.respond(ApplyCueResponse(
+                        effectCount = stackResult.effectCount,
+                        cueName = stackResult.cueName,
+                    ))
+                } else {
+                    // Deactivate old triggers/timed effects for this cue before re-applying
+                    state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
+
+                    val result = applyCue(state, cueData, replaceAll = replaceAll)
+
+                    // Activate timed effects (delayed/recurring presets and ad-hoc effects)
+                    val timedPresets = cueData.presetApplications.filter { it.delayMs != null || it.intervalMs != null }
+                    val timedAdHoc = cueData.adHocEffects.filter { it.delayMs != null || it.intervalMs != null }
+                    if (timedPresets.isNotEmpty() || timedAdHoc.isNotEmpty()) {
+                        @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+                        state.cueTriggerManager.activateTimedEffectsForCue(
+                            cueId = resource.cueId,
+                            cueStackId = null,
+                            timedPresets = timedPresets,
+                            timedAdHocEffects = timedAdHoc,
+                            scope = kotlinx.coroutines.GlobalScope,
+                        )
+                    }
+
+                    // Activate script triggers after effects are applied
+                    if (cueData.triggers.isNotEmpty()) {
+                        @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+                        state.cueTriggerManager.activateTriggersForCue(
+                            cueId = resource.cueId,
+                            cueStackId = null,
+                            triggers = cueData.triggers,
+                            scope = kotlinx.coroutines.GlobalScope,
+                        )
+                    }
+
+                    call.respond(result)
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to apply cue"))
+            }
         }
     }
 
     // POST /{projectId}/cues/{cueId}/stop - Stop a running cue (remove its effects)
     post<StopCueResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
-
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot stop cues from project '${project.name}' - only the current project's cues can be stopped")
-            )
-            return@post
-        }
-
-        // Check if this cue belongs to an active stack
-        val cueStackId = transaction(state.database) {
-            DaoCue.findById(resource.cueId)?.cueStack?.id?.value
-        }
-        val manager = state.show.cueStackManager
-        if (cueStackId != null && manager.isStackActive(cueStackId)) {
-            // Cue is in an active stack — deactivate the entire stack
-            // (CueStackManager integration handles trigger deactivation)
-            val removedCount = manager.deactivateStack(cueStackId, state)
-            call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
-        } else {
-            state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
-            val removedCount = state.show.fxEngine.removeEffectsForCue(resource.cueId)
-            call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot stop cues from project '${p.name}' - only the current project's cues can be stopped" },
+        ) { _ ->
+            // Check if this cue belongs to an active stack
+            val cueStackId = transaction(state.database) {
+                DaoCue.findById(resource.cueId)?.cueStack?.id?.value
+            }
+            val manager = state.show.cueStackManager
+            if (cueStackId != null && manager.isStackActive(cueStackId)) {
+                // Cue is in an active stack — deactivate the entire stack
+                // (CueStackManager integration handles trigger deactivation)
+                val removedCount = manager.deactivateStack(cueStackId, state)
+                call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
+            } else {
+                state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
+                val removedCount = state.show.fxEngine.removeEffectsForCue(resource.cueId)
+                call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
+            }
         }
     }
 
     // GET /{projectId}/cues/current-state - Get current palette and active effects without creating a cue
     get<CueCurrentStateResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
-        }
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot read state for project '${p.name}' - only the current project is supported" },
+        ) { _ ->
+            val captured = captureCurrentState(state)
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot read state for project '${project.name}' - only the current project is supported")
-            )
-            return@get
-        }
-
-        val captured = captureCurrentState(state)
-
-        // Resolve preset names from DB
-        val presetDetails = transaction(state.database) {
-            captured.presetApplications.map { app ->
-                CuePresetApplicationDetail(
-                    presetId = app.presetId,
-                    presetName = DaoFxPreset.findById(app.presetId)?.name,
-                    targets = app.targets,
-                )
+            // Resolve preset names from DB
+            val presetDetails = transaction(state.database) {
+                captured.presetApplications.map { app ->
+                    CuePresetApplicationDetail(
+                        presetId = app.presetId,
+                        presetName = DaoFxPreset.findById(app.presetId)?.name,
+                        targets = app.targets,
+                    )
+                }
             }
-        }
 
-        call.respond(CueCurrentStateResponse(
-            palette = captured.palette,
-            presetApplications = presetDetails,
-            adHocEffects = captured.adHocEffects,
-        ))
+            call.respond(CueCurrentStateResponse(
+                palette = captured.palette,
+                presetApplications = presetDetails,
+                adHocEffects = captured.adHocEffects,
+            ))
+        }
     }
 }
 

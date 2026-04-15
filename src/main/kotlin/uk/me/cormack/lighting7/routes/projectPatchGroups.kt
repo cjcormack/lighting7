@@ -20,123 +20,107 @@ import uk.me.cormack.lighting7.state.State
 internal fun Route.routeApiRestProjectPatchGroups(state: State) {
     // GET /{projectId}/patch-groups - List groups
     get<ProjectPatchGroupsResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
+        withProject(state, resource.projectId) { project ->
+            val groups = transaction(state.database) {
+                DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }
+                    .orderBy(DaoFixtureGroups.name to SortOrder.ASC)
+                    .map { it.toSummaryDto() }
+            }
+            call.respond(groups)
         }
-
-        val groups = transaction(state.database) {
-            DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }
-                .orderBy(DaoFixtureGroups.name to SortOrder.ASC)
-                .map { it.toSummaryDto() }
-        }
-        call.respond(groups)
     }
 
     // GET /{projectId}/patch-groups/{groupId} - Group detail with ordered members
     get<ProjectPatchGroupResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
-        }
+        withProject(state, resource.parent.projectId) { project ->
+            val group = transaction(state.database) {
+                val group = DaoFixtureGroup.findById(resource.groupId) ?: return@transaction null
+                if (group.project.id != project.id) return@transaction null
+                group.toDetailDto()
+            }
 
-        val group = transaction(state.database) {
-            val group = DaoFixtureGroup.findById(resource.groupId) ?: return@transaction null
-            if (group.project.id != project.id) return@transaction null
-            group.toDetailDto()
+            if (group == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Group not found"))
+                return@withProject
+            }
+            call.respond(group)
         }
-
-        if (group == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Group not found"))
-            return@get
-        }
-        call.respond(group)
     }
 
     // PUT /{projectId}/patch-groups/{groupId} - Update group (rename, reorder members)
     put<ProjectPatchGroupResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@put
-        }
-
-        val request = call.receive<UpdatePatchGroupRequest>()
-        val result = transaction(state.database) {
-            val group = DaoFixtureGroup.findById(resource.groupId)
-                ?: return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group not found")
-            if (group.project.id != project.id) {
-                return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group not found")
-            }
-
-            // Rename
-            request.name?.let { newName ->
-                val existing = DaoFixtureGroup.find {
-                    (DaoFixtureGroups.project eq project.id) and (DaoFixtureGroups.name eq newName)
-                }.firstOrNull()
-                if (existing != null && existing.id != group.id) {
-                    return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group name '$newName' already exists")
+        withProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<UpdatePatchGroupRequest>()
+            val result = transaction(state.database) {
+                val group = DaoFixtureGroup.findById(resource.groupId)
+                    ?: return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group not found")
+                if (group.project.id != project.id) {
+                    return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group not found")
                 }
-                group.name = newName
-            }
 
-            // Reorder members (list of patch IDs in desired order)
-            request.memberOrder?.let { orderedPatchIds ->
-                val members = group.members.associateBy { it.fixturePatch.id.value }
-                orderedPatchIds.forEachIndexed { index, patchId ->
-                    members[patchId]?.let { it.sortOrder = index }
+                // Rename
+                request.name?.let { newName ->
+                    val existing = DaoFixtureGroup.find {
+                        (DaoFixtureGroups.project eq project.id) and (DaoFixtureGroups.name eq newName)
+                    }.firstOrNull()
+                    if (existing != null && existing.id != group.id) {
+                        return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group name '$newName' already exists")
+                    }
+                    group.name = newName
                 }
+
+                // Reorder members (list of patch IDs in desired order)
+                request.memberOrder?.let { orderedPatchIds ->
+                    val members = group.members.associateBy { it.fixturePatch.id.value }
+                    orderedPatchIds.forEachIndexed { index, patchId ->
+                        members[patchId]?.let { it.sortOrder = index }
+                    }
+                }
+
+                Pair<PatchGroupDetailDto?, String?>(group.toDetailDto(), null)
             }
 
-            Pair<PatchGroupDetailDto?, String?>(group.toDetailDto(), null)
-        }
+            val (groupDto, error) = result
+            if (error != null) {
+                val code = if (error == "Group not found") HttpStatusCode.NotFound else HttpStatusCode.Conflict
+                call.respond(code, ErrorResponse(error))
+                return@withProject
+            }
 
-        val (groupDto, error) = result
-        if (error != null) {
-            val code = if (error == "Group not found") HttpStatusCode.NotFound else HttpStatusCode.Conflict
-            call.respond(code, ErrorResponse(error))
-            return@put
-        }
+            // Reload fixtures if project is current (group order affects runtime)
+            if (state.isCurrentProject(project)) {
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database)
+            }
+            state.show.fixtures.patchListChanged()
 
-        // Reload fixtures if project is current (group order affects runtime)
-        if (state.isCurrentProject(project)) {
-            DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database)
+            call.respond(groupDto!!)
         }
-        state.show.fixtures.patchListChanged()
-
-        call.respond(groupDto!!)
     }
 
     // DELETE /{projectId}/patch-groups/{groupId} - Delete group (removes members from group)
     delete<ProjectPatchGroupResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@delete
-        }
+        withProject(state, resource.parent.projectId) { project ->
+            val deleted = transaction(state.database) {
+                val group = DaoFixtureGroup.findById(resource.groupId) ?: return@transaction false
+                if (group.project.id != project.id) return@transaction false
+                // Remove all memberships (fixtures stay, just unlinked from group)
+                group.members.forEach { it.delete() }
+                group.delete()
+                true
+            }
 
-        val deleted = transaction(state.database) {
-            val group = DaoFixtureGroup.findById(resource.groupId) ?: return@transaction false
-            if (group.project.id != project.id) return@transaction false
-            // Remove all memberships (fixtures stay, just unlinked from group)
-            group.members.forEach { it.delete() }
-            group.delete()
-            true
-        }
+            if (!deleted) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Group not found"))
+                return@withProject
+            }
 
-        if (!deleted) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Group not found"))
-            return@delete
-        }
+            if (state.isCurrentProject(project)) {
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database)
+            }
+            state.show.fixtures.patchListChanged()
 
-        if (state.isCurrentProject(project)) {
-            DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database)
+            call.respond(HttpStatusCode.NoContent)
         }
-        state.show.fixtures.patchListChanged()
-
-        call.respond(HttpStatusCode.NoContent)
     }
 }
 

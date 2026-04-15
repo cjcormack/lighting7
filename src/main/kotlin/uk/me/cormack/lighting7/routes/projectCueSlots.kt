@@ -17,168 +17,138 @@ import uk.me.cormack.lighting7.state.State
 internal fun Route.routeApiRestProjectCueSlots(state: State) {
     // GET /{projectId}/cue-slots - List all slot assignments for a project
     get<ProjectCueSlotsResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@get
+        withProject(state, resource.projectId) { project ->
+            val slots = transaction(state.database) {
+                DaoCueSlot.find { DaoCueSlots.project eq project.id }
+                    .map { it.toDetails() }
+            }
+            call.respond(slots)
         }
-
-        val slots = transaction(state.database) {
-            DaoCueSlot.find { DaoCueSlots.project eq project.id }
-                .map { it.toDetails() }
-        }
-        call.respond(slots)
     }
 
     // POST /{projectId}/cue-slots - Assign a cue or cue stack to a slot (upsert)
     post<ProjectCueSlotsResource> { resource ->
-        val project = state.resolveProject(resource.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(
+            state,
+            resource.projectId,
+            { p -> "Cannot modify cue slots in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val input = call.receive<AssignCueSlotRequest>()
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(
-                HttpStatusCode.Conflict,
-                ErrorResponse("Cannot modify cue slots in project '${project.name}' - only the current project can be modified")
-            )
-            return@post
-        }
-
-        val input = call.receive<AssignCueSlotRequest>()
-
-        // Validate exactly one reference is provided
-        if ((input.cueId == null) == (input.cueStackId == null)) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse("Exactly one of cueId or cueStackId must be provided"))
-            return@post
-        }
-
-        val details = transaction(state.database) {
-            // Validate referenced item exists
-            if (input.cueId != null) {
-                val cue = DaoCue.findById(input.cueId)
-                if (cue == null || cue.project.id != project.id) {
-                    return@transaction null to "Cue not found in this project"
-                }
-            }
-            if (input.cueStackId != null) {
-                val stack = DaoCueStack.findById(input.cueStackId)
-                if (stack == null || stack.project.id != project.id) {
-                    return@transaction null to "Cue stack not found in this project"
-                }
+            // Validate exactly one reference is provided
+            if ((input.cueId == null) == (input.cueStackId == null)) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Exactly one of cueId or cueStackId must be provided"))
+                return@withCurrentProject
             }
 
-            // Upsert: find existing slot at this position or create new
-            val existing = DaoCueSlot.find {
-                (DaoCueSlots.project eq project.id) and
-                (DaoCueSlots.page eq input.page) and
-                (DaoCueSlots.slotIndex eq input.slotIndex)
-            }.firstOrNull()
+            val details = transaction(state.database) {
+                // Validate referenced item exists
+                if (input.cueId != null) {
+                    val cue = DaoCue.findById(input.cueId)
+                    if (cue == null || cue.project.id != project.id) {
+                        return@transaction null to "Cue not found in this project"
+                    }
+                }
+                if (input.cueStackId != null) {
+                    val stack = DaoCueStack.findById(input.cueStackId)
+                    if (stack == null || stack.project.id != project.id) {
+                        return@transaction null to "Cue stack not found in this project"
+                    }
+                }
 
-            val slot = if (existing != null) {
-                existing.cue = input.cueId?.let { DaoCue.findById(it) }
-                existing.cueStack = input.cueStackId?.let { DaoCueStack.findById(it) }
-                existing
+                // Upsert: find existing slot at this position or create new
+                val existing = DaoCueSlot.find {
+                    (DaoCueSlots.project eq project.id) and
+                    (DaoCueSlots.page eq input.page) and
+                    (DaoCueSlots.slotIndex eq input.slotIndex)
+                }.firstOrNull()
+
+                val slot = if (existing != null) {
+                    existing.cue = input.cueId?.let { DaoCue.findById(it) }
+                    existing.cueStack = input.cueStackId?.let { DaoCueStack.findById(it) }
+                    existing
+                } else {
+                    DaoCueSlot.new {
+                        this.project = project
+                        page = input.page
+                        slotIndex = input.slotIndex
+                        cue = input.cueId?.let { DaoCue.findById(it) }
+                        cueStack = input.cueStackId?.let { DaoCueStack.findById(it) }
+                    }
+                }
+
+                slot.toDetails() to null
+            }
+
+            val (result, error) = details
+            if (error != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
             } else {
-                DaoCueSlot.new {
-                    this.project = project
-                    page = input.page
-                    slotIndex = input.slotIndex
-                    cue = input.cueId?.let { DaoCue.findById(it) }
-                    cueStack = input.cueStackId?.let { DaoCueStack.findById(it) }
-                }
+                state.show.fixtures.cueSlotListChanged()
+                call.respond(if (result != null) HttpStatusCode.OK else HttpStatusCode.Created, result!!)
             }
-
-            slot.toDetails() to null
-        }
-
-        val (result, error) = details
-        if (error != null) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
-        } else {
-            state.show.fixtures.cueSlotListChanged()
-            call.respond(if (result != null) HttpStatusCode.OK else HttpStatusCode.Created, result!!)
         }
     }
 
     // POST /{projectId}/cue-slots/swap - Swap two slot positions
     post<ProjectCueSlotSwapResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@post
-        }
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val input = call.receive<SwapCueSlotsRequest>()
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot modify - not current project"))
-            return@post
-        }
+            transaction(state.database) {
+                val fromSlot = DaoCueSlot.find {
+                    (DaoCueSlots.project eq project.id) and
+                    (DaoCueSlots.page eq input.fromPage) and
+                    (DaoCueSlots.slotIndex eq input.fromSlotIndex)
+                }.firstOrNull()
 
-        val input = call.receive<SwapCueSlotsRequest>()
+                val toSlot = DaoCueSlot.find {
+                    (DaoCueSlots.project eq project.id) and
+                    (DaoCueSlots.page eq input.toPage) and
+                    (DaoCueSlots.slotIndex eq input.toSlotIndex)
+                }.firstOrNull()
 
-        transaction(state.database) {
-            val fromSlot = DaoCueSlot.find {
-                (DaoCueSlots.project eq project.id) and
-                (DaoCueSlots.page eq input.fromPage) and
-                (DaoCueSlots.slotIndex eq input.fromSlotIndex)
-            }.firstOrNull()
-
-            val toSlot = DaoCueSlot.find {
-                (DaoCueSlots.project eq project.id) and
-                (DaoCueSlots.page eq input.toPage) and
-                (DaoCueSlots.slotIndex eq input.toSlotIndex)
-            }.firstOrNull()
-
-            if (fromSlot != null && toSlot != null) {
-                // Swap: exchange page and slotIndex
-                val tmpPage = fromSlot.page
-                val tmpIndex = fromSlot.slotIndex
-                fromSlot.page = toSlot.page
-                fromSlot.slotIndex = toSlot.slotIndex
-                toSlot.page = tmpPage
-                toSlot.slotIndex = tmpIndex
-            } else if (fromSlot != null) {
-                // Move: from occupied to empty
-                fromSlot.page = input.toPage
-                fromSlot.slotIndex = input.toSlotIndex
-            } else if (toSlot != null) {
-                // Move: to occupied, from empty (reverse)
-                toSlot.page = input.fromPage
-                toSlot.slotIndex = input.fromSlotIndex
+                if (fromSlot != null && toSlot != null) {
+                    // Swap: exchange page and slotIndex
+                    val tmpPage = fromSlot.page
+                    val tmpIndex = fromSlot.slotIndex
+                    fromSlot.page = toSlot.page
+                    fromSlot.slotIndex = toSlot.slotIndex
+                    toSlot.page = tmpPage
+                    toSlot.slotIndex = tmpIndex
+                } else if (fromSlot != null) {
+                    // Move: from occupied to empty
+                    fromSlot.page = input.toPage
+                    fromSlot.slotIndex = input.toSlotIndex
+                } else if (toSlot != null) {
+                    // Move: to occupied, from empty (reverse)
+                    toSlot.page = input.fromPage
+                    toSlot.slotIndex = input.fromSlotIndex
+                }
+                // Both empty: no-op
             }
-            // Both empty: no-op
-        }
 
-        state.show.fixtures.cueSlotListChanged()
-        call.respond(HttpStatusCode.OK)
+            state.show.fixtures.cueSlotListChanged()
+            call.respond(HttpStatusCode.OK)
+        }
     }
 
     // DELETE /{projectId}/cue-slots/{slotId} - Clear a slot
     delete<ProjectCueSlotResource> { resource ->
-        val project = state.resolveProject(resource.parent.projectId)
-        if (project == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
-            return@delete
-        }
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val found = transaction(state.database) {
+                val slot = DaoCueSlot.findById(resource.slotId) ?: return@transaction false
+                if (slot.project.id != project.id) return@transaction false
+                slot.delete()
+                true
+            }
 
-        if (!state.isCurrentProject(project)) {
-            call.respond(HttpStatusCode.Conflict, ErrorResponse("Cannot modify - not current project"))
-            return@delete
-        }
-
-        val found = transaction(state.database) {
-            val slot = DaoCueSlot.findById(resource.slotId) ?: return@transaction false
-            if (slot.project.id != project.id) return@transaction false
-            slot.delete()
-            true
-        }
-
-        if (found) {
-            state.show.fixtures.cueSlotListChanged()
-            call.respond(HttpStatusCode.OK)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue slot not found"))
+            if (found) {
+                state.show.fixtures.cueSlotListChanged()
+                call.respond(HttpStatusCode.OK)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue slot not found"))
+            }
         }
     }
 }
