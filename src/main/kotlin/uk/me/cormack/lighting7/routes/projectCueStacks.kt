@@ -270,6 +270,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 } else {
                     manager.activateAtFirstCue(state, resource.parent.stackId)
                 }
+                state.show.fixtures.cueStackListChanged()
                 call.respond(result.toResponse())
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to activate stack"))
@@ -281,6 +282,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
     post<CueStackDeactivateResource> { resource ->
         withCurrentProject(state, resource.parent.parent.projectId, "Cannot deactivate - not current project") { _ ->
             val removedCount = state.show.cueStackManager.deactivateStack(resource.parent.stackId, state)
+            state.show.fixtures.cueStackListChanged()
             call.respond(CueStackDeactivateResponse(stackId = resource.parent.stackId, removedCount = removedCount))
         }
     }
@@ -298,6 +300,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
 
             try {
                 val result = state.show.cueStackManager.advanceStack(state, resource.parent.stackId, direction)
+                state.show.fixtures.cueStackListChanged()
                 if (result != null) {
                     call.respond(result.toResponse())
                 } else {
@@ -316,6 +319,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
 
             try {
                 val result = state.show.cueStackManager.goToCue(state, resource.parent.stackId, request.cueId)
+                state.show.fixtures.cueStackListChanged()
                 call.respond(result.toResponse())
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to go to cue"))
