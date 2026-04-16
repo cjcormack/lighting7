@@ -6,11 +6,13 @@ import io.ktor.resources.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
+import io.ktor.server.resources.patch
 import io.ktor.server.resources.post
 import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.*
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -55,6 +57,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     autoAdvanceDelayMs = newCue.autoAdvanceDelayMs
                     fadeDurationMs = newCue.fadeDurationMs
                     fadeCurve = newCue.fadeCurve
+                    cueNumber = newCue.cueNumber
+                    notes = newCue.notes
                     if (stack != null) {
                         cueStack = stack
                         sortOrder = newCue.sortOrder ?: stack.cues.count().toInt()
@@ -106,6 +110,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 cue.autoAdvanceDelayMs = updatedData.autoAdvanceDelayMs
                 cue.fadeDurationMs = updatedData.fadeDurationMs
                 cue.fadeCurve = updatedData.fadeCurve
+                cue.cueNumber = updatedData.cueNumber
+                cue.notes = updatedData.notes
 
                 // Replace children: delete existing, create new
                 deleteCueChildren(cue)
@@ -116,6 +122,72 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
             if (cueDetails != null) {
                 state.show.fixtures.cueListChanged()
+                call.respond(cueDetails)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+            }
+        }
+    }
+
+    // PATCH /{projectId}/cues/{cueId} - Partial update of cue fields (current project only)
+    // Only fields present in the JSON body are updated; absent fields are left unchanged.
+    // Children arrays (presetApplications, adHocEffects, triggers) are replaced wholesale when present.
+    patch<ProjectCueResource> { resource ->
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot modify cues in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val body = call.receive<JsonObject>()
+            val cueDetails = transaction(state.database) {
+                val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
+                if (cue.project.id != project.id) return@transaction null
+
+                // Scalar fields
+                if ("name" in body) cue.name = body["name"]!!.jsonPrimitive.content
+                if ("cueNumber" in body) cue.cueNumber = body["cueNumber"].nullableString()
+                if ("fadeDurationMs" in body) cue.fadeDurationMs = body["fadeDurationMs"].nullableLong()
+                if ("fadeCurve" in body) cue.fadeCurve = body["fadeCurve"]!!.jsonPrimitive.content
+                if ("notes" in body) cue.notes = body["notes"].nullableString()
+                if ("autoAdvance" in body) cue.autoAdvance = body["autoAdvance"]!!.jsonPrimitive.boolean
+                if ("autoAdvanceDelayMs" in body) cue.autoAdvanceDelayMs = body["autoAdvanceDelayMs"].nullableLong()
+
+                // Children arrays — replace wholesale when present
+                val hasPresets = "presetApplications" in body
+                val hasEffects = "adHocEffects" in body
+                val hasTriggers = "triggers" in body
+
+                if (hasPresets || hasEffects || hasTriggers) {
+                    val json = Json { ignoreUnknownKeys = true }
+                    val presets = if (hasPresets)
+                        json.decodeFromJsonElement<List<CuePresetApplicationDto>>(body["presetApplications"]!!)
+                    else null
+                    val effects = if (hasEffects)
+                        json.decodeFromJsonElement<List<CueAdHocEffectDto>>(body["adHocEffects"]!!)
+                    else null
+                    val triggers = if (hasTriggers)
+                        json.decodeFromJsonElement<List<CueTriggerDto>>(body["triggers"]!!)
+                    else null
+
+                    // Delete only the children being replaced
+                    if (hasPresets) cue.presetApplications.forEach { it.delete() }
+                    if (hasEffects) cue.adHocEffects.forEach { it.delete() }
+                    if (hasTriggers) cue.triggers.forEach { it.delete() }
+
+                    createCueChildren(
+                        cue,
+                        presets ?: emptyList(),
+                        effects ?: emptyList(),
+                        triggers ?: emptyList(),
+                    )
+                }
+
+                cue.toCueDetails(isCurrentProject = true)
+            }
+
+            if (cueDetails != null) {
+                state.show.fixtures.cueListChanged()
+                if (cueDetails.cueStackId != null) state.show.fixtures.cueStackListChanged()
                 call.respond(cueDetails)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
@@ -445,6 +517,8 @@ data class NewCue(
     val autoAdvanceDelayMs: Long? = null,
     val fadeDurationMs: Long? = null,
     val fadeCurve: String = "LINEAR",
+    val cueNumber: String? = null,
+    val notes: String? = null,
 )
 
 @Serializable
@@ -910,6 +984,14 @@ internal fun createFixtureTargetForCue(
         }
     }
 }
+
+/** Extract a nullable String from a JsonElement (null / JsonNull → null). */
+private fun kotlinx.serialization.json.JsonElement?.nullableString(): String? =
+    if (this == null || this is JsonNull) null else jsonPrimitive.content
+
+/** Extract a nullable Long from a JsonElement (null / JsonNull → null). */
+private fun kotlinx.serialization.json.JsonElement?.nullableLong(): Long? =
+    if (this == null || this is JsonNull) null else jsonPrimitive.long
 
 /**
  * Infer effect category from property name for from-state capture.
