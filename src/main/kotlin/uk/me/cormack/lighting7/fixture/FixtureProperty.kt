@@ -6,7 +6,10 @@ package uk.me.cormack.lighting7.fixture
 enum class PropertyCategory {
     DIMMER,
     COLOUR,
-    POSITION,
+    PAN,
+    TILT,
+    PAN_FINE,
+    TILT_FINE,
     UV,
     STROBE,
     AMBER,

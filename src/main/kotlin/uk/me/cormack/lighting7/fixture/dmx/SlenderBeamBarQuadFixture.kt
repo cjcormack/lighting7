@@ -188,10 +188,10 @@ sealed class SlenderBeamBarQuadFixture(
         private val headFirstChannel: Int
     ) : Head(elementIndex, headTransaction), WithPosition {
 
-        @FixtureProperty("Head pan 0-540", category = PropertyCategory.POSITION)
+        @FixtureProperty("Head pan 0-540", category = PropertyCategory.PAN)
         override val pan = DmxSlider(headTransaction, universe, headFirstChannel)
 
-        @FixtureProperty("Head tilt 0-270", category = PropertyCategory.POSITION)
+        @FixtureProperty("Head tilt 0-270", category = PropertyCategory.TILT)
         override val tilt = DmxSlider(headTransaction, universe, headFirstChannel + 1)
 
         @FixtureProperty("Head colour preset", category = PropertyCategory.COLOUR)
@@ -212,16 +212,16 @@ sealed class SlenderBeamBarQuadFixture(
         private val headFirstChannel: Int
     ) : Head(elementIndex, headTransaction), WithPosition {
 
-        @FixtureProperty("Head pan 0-540", category = PropertyCategory.POSITION)
+        @FixtureProperty("Head pan 0-540", category = PropertyCategory.PAN)
         override val pan = DmxSlider(headTransaction, universe, headFirstChannel)
 
-        @FixtureProperty("Head pan fine", category = PropertyCategory.POSITION)
+        @FixtureProperty("Head pan fine", category = PropertyCategory.PAN_FINE)
         val panFine = DmxSlider(headTransaction, universe, headFirstChannel + 1)
 
-        @FixtureProperty("Head tilt 0-270", category = PropertyCategory.POSITION)
+        @FixtureProperty("Head tilt 0-270", category = PropertyCategory.TILT)
         override val tilt = DmxSlider(headTransaction, universe, headFirstChannel + 2)
 
-        @FixtureProperty("Head tilt fine", category = PropertyCategory.POSITION)
+        @FixtureProperty("Head tilt fine", category = PropertyCategory.TILT_FINE)
         val tiltFine = DmxSlider(headTransaction, universe, headFirstChannel + 3)
 
         @FixtureProperty("Head pan/tilt speed (fast to slow)", category = PropertyCategory.SPEED)

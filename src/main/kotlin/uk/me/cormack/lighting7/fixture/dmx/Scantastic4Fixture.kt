@@ -127,10 +127,10 @@ sealed class Scantastic4Fixture(
             DmxSlider(headTransaction, universe, headFirstChannel)
         } else null
 
-        @FixtureProperty("Scanner pan 0-180", category = PropertyCategory.POSITION)
+        @FixtureProperty("Scanner pan 0-180", category = PropertyCategory.PAN)
         override val pan = DmxSlider(headTransaction, universe, if (hasColour) headFirstChannel + 1 else headFirstChannel)
 
-        @FixtureProperty("Scanner tilt 0-90", category = PropertyCategory.POSITION)
+        @FixtureProperty("Scanner tilt 0-90", category = PropertyCategory.TILT)
         override val tilt = DmxSlider(headTransaction, universe, if (hasColour) headFirstChannel + 2 else headFirstChannel + 1)
 
         override fun withTransaction(transaction: ControllerTransaction): ScannerHead =

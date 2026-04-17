@@ -86,10 +86,10 @@ class LaserworldCS1000RGBMk3Fixture(
     @FixtureProperty("Rotation Y-axis", category = PropertyCategory.OTHER)
     val rotationY = DmxSlider(transaction, universe, firstChannel + 4)
 
-    @FixtureProperty("Offset X-axis", category = PropertyCategory.POSITION)
+    @FixtureProperty("Offset X-axis", category = PropertyCategory.PAN)
     val offsetX = DmxSlider(transaction, universe, firstChannel + 5)
 
-    @FixtureProperty("Offset Y-axis", category = PropertyCategory.POSITION)
+    @FixtureProperty("Offset Y-axis", category = PropertyCategory.TILT)
     val offsetY = DmxSlider(transaction, universe, firstChannel + 6)
 
     @FixtureProperty("Size X", category = PropertyCategory.OTHER)
