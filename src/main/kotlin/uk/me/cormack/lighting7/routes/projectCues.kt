@@ -46,6 +46,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot create cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val newCue = call.receive<NewCue>()
+            val validatedCueType = try {
+                CueType.valueOf(newCue.cueType).name
+            } catch (_: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid cueType: '${newCue.cueType}'. Valid values: ${CueType.entries.joinToString()}"))
+                return@withCurrentProject
+            }
             val cueDetails = transaction(state.database) {
                 val stack = newCue.cueStackId?.let { DaoCueStack.findById(it) }
                 val cue = DaoCue.new {
@@ -59,6 +65,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     fadeCurve = newCue.fadeCurve
                     cueNumber = newCue.cueNumber
                     notes = newCue.notes
+                    cueType = validatedCueType
                     if (stack != null) {
                         cueStack = stack
                         sortOrder = newCue.sortOrder ?: stack.cues.count().toInt()
@@ -519,6 +526,7 @@ data class NewCue(
     val fadeCurve: String = "LINEAR",
     val cueNumber: String? = null,
     val notes: String? = null,
+    val cueType: String = "STANDARD",
 )
 
 @Serializable
