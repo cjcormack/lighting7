@@ -17,20 +17,21 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: 0 — not started.
+**Phase**: 0 — spec drafted; code work not started.
 
-**Most recent session**: Planning v2 (2026-04-17). Added Phase 0 Layering Foundation after exploring current composition pipeline; resolved data-model open questions via layer model. No code changes yet.
+**Most recent session**: Planning v3 (2026-04-17). Prior-art survey across ETC EOS, grandMA2/3, Hog 4, MagicQ, Avolites; resolved five remaining design questions; drafted [docs/lighting-composition-model.md](lighting-composition-model.md) as the canonical spec; trimmed Phase 0 in this doc to point at it. No code changes yet.
 
 **Next actions** (for the session that picks this up):
-1. Read [Phase 0 — Layering Foundation](#phase-0--layering-foundation).
-2. Draft `docs/lighting-composition-model.md` — the canonical spec the refactor targets. Discuss with user before coding.
-3. Update this document's Status block at end of session.
+1. Read [docs/lighting-composition-model.md](lighting-composition-model.md) in full.
+2. Read [Phase 0 — Layering Foundation](#phase-0--layering-foundation) for scope and file list.
+3. Begin Phase 0 code work — start with `PropertyCategory` composition defaults and `FxInstance` priority ordering (small, independent, well-scoped).
+4. Update this document's Status block at end of session.
 
 **Per-phase tracker:**
 
 | Phase | Summary | Status |
 |-------|---------|--------|
-| 0 | Layering foundation: formalise channel composition (parking, effects, property assignments, direct writes, fades) into a documented, explicit pipeline | Not started |
+| 0 | Layering foundation: make the composition model explicit in code (priority-ordered effects, reset-to-layer-below, `PropertyCategory` composition rules, stomp plumbing) | Spec drafted; code not started |
 | 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | Not started |
 | 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | Not started |
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Not started |
@@ -63,13 +64,20 @@ Confirmed with the user 2026-04-17:
 - **Not running in production yet.** No rollback shims, no read-compat wrappers, no feature flags required. Migrations can be lossy / iterative.
 - **Layering foundation is a prerequisite.** Phase 0 formalises channel composition before we add property assignments as a new layer.
 
-### Data-model decisions (resolved via the layering model)
+### Composition model — canonical spec
 
-- **`value` is stored property-level, not channel-level.** Colour as hex, dimmer as 0–255 or 0–1 depending on the property's canonical form, settings as enum string, pan/tilt as their native unit. The composition resolver expands property → channels at apply time. Reason: the cue stores the operator's intent (a colour, a setting) not a pre-resolved channel mapping; fixture patch changes don't invalidate the cue.
-- **Property assignments live in Layer 3** (see composition model below). Effects blend over them per each effect's own blend mode. OVERRIDE replaces the assignment; ADDITIVE adds to it; MAX / MIN bound it. This is the answer to "base vs effects": the existing blend-mode machinery is the answer, applied between layers rather than only within layer 2.
-- **Group vs member specificity**: we record the operator's choice (group row or fixture row) as-is. At resolve time the fixture/member-level assignment wins over a group-level assignment for the same property. Reason: operators set group-level "all these lights are red", then override individual fixtures; the specificity rule matches that mental model.
-- **Direct writes while a cue is open for edit** are **routed into the cue's property assignments** via `cueEdit.setChannel`, which upserts a Layer 3 row for the target. In **Live** mode the server also performs the transient channel write for instant feedback; in **Blind** mode the persistence happens without any stage-side write. Outside of edit mode, direct writes remain as today (Layer 4, ephemeral under effects).
-- **Dirty state / discard**: no soft-edit buffer. Edits auto-persist. User can trigger the previous saved state via cue re-trigger or via explicit `cueEdit.clearAssignment`. Undo is out of scope.
+The layer stack, per-category composition rules, crossfade behaviour, direct-write semantics, stomp flag, and cue-edit session semantics are specified in **[docs/lighting-composition-model.md](lighting-composition-model.md)**. That document is the source of truth; the plan references it rather than restating the rules.
+
+Locked design decisions from the 2026-04-17 prior-art survey (detailed in the spec):
+
+- **`value` is stored property-level**, not channel-level (hex colours, 0–255 sliders, enum strings, native pan/tilt units). The composition resolver expands property → channels at apply time using the fixture's patch.
+- **Per-category composition rules** (HTP for `DIMMER` / `UV` / `STROBE`, LTP for everything else) are declared on `PropertyCategory`, with per-property fixture override via `@FixtureProperty(composition = ...)`. Cues don't pick their own blend mode; it's a property intrinsic.
+- **Group vs member specificity**: fixture-level assignments win over group-level for the same property. Operators set "all these lights are red" at the group, then override individual fixtures.
+- **Direct writes during cue edit** route into the cue's Layer 3 assignments via `cueEdit.setChannel`. In Live mode the server also performs the transient stage write for instant feedback; Blind persists only.
+- **Snapshot-on-beginEdit + `cueEdit.discardChanges`** replaces the earlier "no soft-edit buffer" decision. Edits still auto-persist; the snapshot is a session-lifetime undo to the pre-edit baseline. This is our adaptation of the universal programmer / Update / Release pattern across pro consoles.
+- **Effect reset-to-neutral fix lands in Phase 0**: effects reset to the layer below (Layer 3 value, else Layer 4 direct write, else Layer 5 baseline), not to hardcoded zero. Fixes the "direct writes clobbered under running effects" bug.
+- **Layer 4 direct-write stickiness**: direct writes persist until a new cue covers the channel, `clearAssignment` is called, or a fresh `updateChannel` lands.
+- **Stomp flag** on cues (default `false`): when a stomping cue applies, the FX engine removes ad-hoc effects owned by *other* cue IDs that target properties covered by this cue's Layer 3. Data-model support lands in Phase 0; authoring UX deferred.
 
 ## Target experience
 
@@ -89,68 +97,54 @@ Leaving edit mode deactivates the cue or hands back to stack playback (in Live m
 
 ## Phase 0 — Layering Foundation
 
-**Goal**: define a formal, documented channel-composition model and refactor the backend pipeline to match it. No user-visible feature changes; existing UIs keep working. This unblocks every later phase.
+**Goal**: make the channel-composition model documented in [docs/lighting-composition-model.md](lighting-composition-model.md) explicit in code. No user-visible feature changes; existing UIs keep working. This unblocks every later phase.
 
 ### Entry criteria
-- None.
+- [docs/lighting-composition-model.md](lighting-composition-model.md) exists and is reviewed (the spec is the precondition; it's already drafted alongside this plan).
 
 ### Exit criteria
-- `docs/lighting-composition-model.md` exists and is reviewed — the canonical spec for channel output composition.
-- `FxEngine` / `ControllerTransaction` / `ArtNetController` refactored so the layer pipeline is explicit in code (named layers, ordered composition, single documented output site).
-- Parking is reframed as "Layer 1" in code and docs (the implementation may still short-circuit at transmit time as an optimisation, but it's documented as a layer).
-- Multi-effect-per-property has a defined rule (see below).
-- Direct writes have a defined interaction with effects and property assignments.
-- `dmx-engineering.md`, `fx-engineering.md`, `cues-engineering.md` updated to reference the composition model instead of describing ad-hoc rules.
-
-### Proposed composition model (for the doc)
-
-Channel output is computed per frame as the top-most non-empty contribution from an ordered stack of layers. A per-channel output is a single byte; a per-property "intent" is the richer input that resolves to channels.
-
-**Layers, top to bottom:**
-
-1. **Parking** — absolute override. If a channel is parked, transmit the parked value; no other layer contributes. Unchanged from today (`ParkManager`); reframed in docs as Layer 1.
-2. **Effects** — FxEngine's composed output of all active `FxInstance`s targeting this channel, each scaled by its cue/stack fade envelope (`intensityMultiplier`). Effects are ordered by priority (see multi-effect rule below); within each effect, `blendMode` describes how the effect's output combines with **the accumulated output of lower layers + prior effects**.
-3. **Property Assignments** — deterministic property-level state contributed by active cues. Resolved per-channel by (a) expanding target → fixtures (group → members, with member rows overriding group rows), (b) expanding property → channels using the fixture's patch, (c) resolving per-cue precedence by cue stack ordering + standalone cues (last-applied-wins within the layer, matching today's cue model). Static property assignments always use `OVERRIDE` within this layer.
-4. **Direct Live Writes** — transient writes from `updateChannel` that aren't currently scoped to a cue-edit session. Visible when no higher layer is writing to the channel. Today's behaviour preserved: they're overwritten by effects on the next tick.
-5. **Default / baseline** — 0 (blackout) unless fixture profile specifies otherwise.
-
-**Multi-effect-per-property rule** (to replace today's undefined last-wins): effects targeting the same channel compose in priority order, with each effect's `blendMode` applied against the accumulated value. Priority = (a) stack position for cue-stack cues, (b) creation order for standalone / manual effects. Equal priorities fall back to creation order. Document this explicitly.
-
-**Direct write + cue edit interaction**: when `EditorContext` on the client is `kind: 'cue'`, the client sends `cueEdit.setChannel` instead of `updateChannel`. The server upserts a Layer 3 property assignment (resolved from channel → property) AND performs the same transient channel write for instant feedback. On the next frame, Layer 3 naturally wins over transient Layer 4 writes, so the value sticks.
-
-**Crossfade envelopes**: continue to implement as `intensityMultiplier` on `FxInstance`, applied inside Layer 2 composition. Property assignments also need fade behaviour — suggestion: track per-cue fade weight and apply as an output multiplier on Layer 3 contributions during transitions. Decide concretely in Phase 0 design.
-
-**Palette**: not a layer. It's a lookup table referenced by effect scripts (and, once added, by property assignments for "use palette colour P2"). Unchanged.
+- `FxEngine` / `ControllerTransaction` / `ArtNetController` refactored so the layer pipeline is explicit in code — named layers, ordered composition, single documented output site. Matches the model in the spec doc.
+- `PropertyCategory` carries a `defaultComposition: CompositionRule` per enum value, per the spec's HTP/LTP table.
+- `@FixtureProperty(composition = CompositionRule)` annotation parameter exists and overrides the category default when set (unused by any current fixture; Phase 1+ uses it if needed).
+- `FxInstance` has a `priority: Int` field; effect iteration is a sorted pass (priority → cue-stack position → creation time).
+- The reset-to-neutral pass resets to the layer below (Layer 3 → Layer 4 → Layer 5), not hardcoded zero. Direct writes are sticky under running effects.
+- Parking is pre-composition-aware: a parked channel skips Layer 2 work rather than being overwritten at transmit time (still overridden at transmit time as a defence-in-depth — both paths agree).
+- Cue model carries `stomp: Boolean` (default `false`); the engine honours it when a stomping cue applies.
+- `dmx-engineering.md`, `fx-engineering.md`, `cues-engineering.md` each link to [docs/lighting-composition-model.md](lighting-composition-model.md) where they currently describe ad-hoc rules.
 
 ### Phase 0 work
 
-Repo: `/Users/chris/Development/Personal/lighting7`.
+Repo: `/Users/chris/Development/Personal/lighting7`. No frontend changes in Phase 0.
 
-- **Write `docs/lighting-composition-model.md`** first. Include the layer stack, precedence rules, direct-write semantics, fade behaviour, palette role, parked-channel semantics, and how groups / element modes expand at resolve time. Review with user before touching code.
-- **Refactor output pipeline** so layers are explicit:
-  - Introduce a `Layer` abstraction (or at minimum named composition steps) in `FxEngine.processBeatTick()` / `ControllerTransaction.apply()`. Today the reset-to-neutral pass + per-effect apply is the implicit Layer 2; make it explicit so Layer 3 (empty for now) slots in cleanly.
-  - Define priority ordering for `FxInstance`s (add a field or derive from existing tags). Replace today's `ConcurrentHashMap` iteration with a sorted pass.
-  - Keep `ParkManager`'s transmit-time override as-is but document it as Layer 1; add a matching pre-composition skip so parked channels don't waste work in Layer 2.
-- **Don't add property assignments in this phase.** Layer 3 is reserved and empty. Phase 1 fills it.
-- **Tests**: unit tests for the composition pipeline covering every layer interaction (parked + effect, effect + effect at same priority, effect + effect at different priorities, direct write below effect, direct write above baseline). Existing effect/parking tests should continue to pass.
-
-No frontend changes in Phase 0.
+- **Declare composition rules on `PropertyCategory`** (per the spec's table): `DIMMER`, `UV`, `STROBE` default `HTP`; all others default `LTP`. Add a `CompositionRule` enum (`HTP`, `LTP`) alongside `PropertyCategory`.
+- **Extend `@FixtureProperty` annotation** with `composition: CompositionRule = CompositionRule.UNSET` (or nullable). The resolver uses the annotation value when set, else falls back to the category default.
+- **Refactor output pipeline so layers are explicit** in `FxEngine.processBeatTick()` and `ControllerTransaction.apply()`. Named composition steps; Layer 3 resolution hook present but returns empty (Phase 1 fills it). Parking consulted pre-composition to skip Layer 2 work for parked channels.
+- **Add `priority: Int` field to `FxInstance`** and replace the `ConcurrentHashMap` iteration with a sorted pass (priority ascending → stable tie-break). Default priority = 0 for manual effects; cue-stack cues get derived priorities from their stack position.
+- **Fix reset-to-neutral** in `FxEngine`: target = Layer 3 composed value if any, else Layer 4 sticky direct write if any, else Layer 5 baseline. Remove the hardcoded-zero path.
+- **Add `stomp: Boolean` to the cue model** (DB column + DTO) with a Phase 0 resolver that, on cue apply, removes ad-hoc effects owned by other cue IDs whose targets overlap this cue's property assignments. Layer 3 assignments don't exist until Phase 1, so in Phase 0 this resolver sees an empty set and is a no-op — but the plumbing lands now so Phase 1 doesn't have to re-touch the cue model.
+- **Layer 3 resolver scaffolding**: empty input, real output. Accepts an (empty) list of property assignments and emits per-channel values via the category's composition rule, applying fade weights. Unit-tested with synthetic inputs; Phase 1 wires it to real data.
+- **Tests**: unit tests covering every layer interaction from the spec's Worked Examples — parked + effect, direct write below effect, HTP across two contributors, LTP with fade, cue-edit session discard (with Phase 1's data stubbed). Layer 3 resolver tested with synthetic inputs end-to-end including the HTP / LTP / `moveInDark` rules. Existing effect and parking tests must continue to pass unchanged.
 
 ### Files touched in Phase 0
 
-- `src/main/kotlin/uk/me/cormack/lighting7/fx/FxEngine.kt` (composition pipeline; lines around 545–1200).
-- `src/main/kotlin/uk/me/cormack/lighting7/fx/FxTarget.kt` (blend mode application; lines 196–317).
-- `src/main/kotlin/uk/me/cormack/lighting7/dmx/ArtNetController.kt` (parking override at line 257; reframe, don't necessarily move).
-- `src/main/kotlin/uk/me/cormack/lighting7/dmx/ParkManager.kt`.
-- **New**: `docs/lighting-composition-model.md`.
-- Updates: `docs/dmx-engineering.md`, `docs/fx-engineering.md`, `docs/cues-engineering.md` — cross-reference the new model.
+- `src/main/kotlin/uk/me/cormack/lighting7/fixture/FixtureProperty.kt` (add `CompositionRule` enum; `defaultComposition` on each `PropertyCategory` value; `composition` param on `@FixtureProperty`).
+- `src/main/kotlin/uk/me/cormack/lighting7/fx/FxEngine.kt` (explicit layer pipeline, sorted effect iteration, reset-to-layer-below, stomp handling).
+- `src/main/kotlin/uk/me/cormack/lighting7/fx/FxInstance.kt` — or wherever `FxInstance` lives (add `priority` field).
+- `src/main/kotlin/uk/me/cormack/lighting7/fx/FxTarget.kt` (blend-mode application; confirm it composes over the new reset target).
+- `src/main/kotlin/uk/me/cormack/lighting7/dmx/ArtNetController.kt` (keep transmit-time parking override; confirm no change needed).
+- `src/main/kotlin/uk/me/cormack/lighting7/dmx/ParkManager.kt` (expose a pre-composition query so FxEngine can skip parked channels).
+- `src/main/kotlin/uk/me/cormack/lighting7/models/cues.kt` (add `stomp` column / field on the cue table).
+- New: `src/main/kotlin/uk/me/cormack/lighting7/fx/Layer3Resolver.kt` (scaffolding; empty assignments in Phase 0, real data in Phase 1).
+- Updates: `docs/dmx-engineering.md`, `docs/fx-engineering.md`, `docs/cues-engineering.md` — cross-reference [docs/lighting-composition-model.md](lighting-composition-model.md).
 
 ### Phase 0 verification
 
-- New unit tests for each layer interaction pass.
+- New unit tests for every layer interaction from the spec's Worked Examples pass.
 - Existing tests pass unchanged.
-- Run the backend + frontend manually. Confirm no user-visible behaviour change in fixture/group modals, cue apply, busking, and program playback.
-- Verify parked channels still win over effects. Verify two effects on the same property now compose deterministically by priority (previously last-wins).
+- Run the backend + frontend manually. Confirm no user-visible behaviour change in fixture/group modals, cue apply, busking, and program playback. One *intended* behaviour change: direct channel writes now persist visibly under running effects instead of being reset to zero on the next tick — verify this improvement and note it in the phase's changelog.
+- Verify parked channels still win over effects.
+- Verify two effects on the same property compose deterministically by priority (previously last-wins).
+- Verify a cue with `stomp: true` applied via API removes another cue's ad-hoc effects targeting the same fixtures (even though the stomping cue has no Layer 3 assignments yet — use its effect targets as the overlap set for Phase 0 test scaffolding).
 
 ---
 
@@ -360,7 +354,7 @@ Flag these to the user before implementing.
 2. **Default mode per surface**: Cues page defaults to Live (rehearsal context). Should Program view default to Blind when the parent stack is active in a running show — i.e. protect live performance by default? Suggested yes, but depends on how "show is running" is signalled. Related: should the default be a user preference sticky across sessions?
 3. **Auto-advance pause (Live mode only)**: should opening a cue for edit in Live mode pause the parent stack's auto-advance? Strongly suggested yes. Blind mode should never touch auto-advance.
 4. **Session ownership of `cueEdit.*`**: with multi-client connections, should the server reject `cueEdit.setChannel` from clients that didn't send `beginEdit`? Default to yes (session-scoped) unless looser semantics preferred. Also: can two clients edit the same cue simultaneously (one Live, one Blind)? Probably reject the second `beginEdit` for the same `cueId`.
-5. **Layer 3 fade behaviour during cue crossfades**: property assignments need a crossfade path matching effects' `intensityMultiplier`. Is weighted blend between outgoing/incoming cue's property values acceptable, or do we want value-level interpolation (e.g. colour-space-aware) for specific property types? Phase 0 design question.
+5. ~~**Layer 3 fade behaviour during cue crossfades**~~ — **Resolved 2026-04-17**. Per-category rules: sliders linear, colour RGB-linear, settings snap at 50% fade progress, position with `moveInDark` pre-applies during outgoing fade-out when outgoing intensity is 0 at end. Specified in [docs/lighting-composition-model.md](lighting-composition-model.md).
 6. **Phase 2 effects-overlay preview affordance** — how prominent? Just a badge, or a "show base only" toggle? Most relevant in Live mode; less important in Blind.
 7. **Blind→Live "apply to stage" safety**: toggling Blind→Live mid-session pushes the cue's current state to the stage. Is that safe to do unconditionally, or should it require confirmation ("this will override the live output")?
 
