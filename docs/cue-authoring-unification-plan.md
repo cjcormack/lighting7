@@ -54,7 +54,7 @@ Underneath both: an **implicit and inconsistent composition model**. Parking is 
 
 Confirmed with the user 2026-04-17:
 
-- **Live edit**: opening a cue for edit activates it on stage; direct-manipulation changes apply live AND persist into the cue.
+- **Edit mode is live by default, with a blind option**: opening a cue for edit activates it on stage and applies direct-manipulation changes live AND into the cue. The editor exposes a toggle (**Live** / **Blind**) — in Blind mode the stage is untouched and changes persist to the cue only. Toggling mid-session transitions gracefully: Live→Blind stops the cue on stage but keeps editing; Blind→Live applies the cue's current contents to the stage. Default mode may vary by surface (e.g. Program view during a live show may default to Blind — see Open Questions).
 - **First-class property assignments**: new backend child collection `CuePropertyAssignment`. Migrate existing `StaticValue` / `StaticSetting` ad-hoc effects into it.
 - **Scope**: all views (Cues, Presets, Program) in phases; shared primitive first.
 - **Presets stay** as reusable effect/state bundles. Preset editor rebuilt on the same surface.
@@ -68,14 +68,14 @@ Confirmed with the user 2026-04-17:
 - **`value` is stored property-level, not channel-level.** Colour as hex, dimmer as 0–255 or 0–1 depending on the property's canonical form, settings as enum string, pan/tilt as their native unit. The composition resolver expands property → channels at apply time. Reason: the cue stores the operator's intent (a colour, a setting) not a pre-resolved channel mapping; fixture patch changes don't invalidate the cue.
 - **Property assignments live in Layer 3** (see composition model below). Effects blend over them per each effect's own blend mode. OVERRIDE replaces the assignment; ADDITIVE adds to it; MAX / MIN bound it. This is the answer to "base vs effects": the existing blend-mode machinery is the answer, applied between layers rather than only within layer 2.
 - **Group vs member specificity**: we record the operator's choice (group row or fixture row) as-is. At resolve time the fixture/member-level assignment wins over a group-level assignment for the same property. Reason: operators set group-level "all these lights are red", then override individual fixtures; the specificity rule matches that mental model.
-- **Direct writes while a cue is open for edit** are **routed into the cue's property assignments** via `cueEdit.setChannel`, which upserts a Layer 3 row for the target. Outside of edit mode, direct writes remain as today (Layer 4, ephemeral under effects).
+- **Direct writes while a cue is open for edit** are **routed into the cue's property assignments** via `cueEdit.setChannel`, which upserts a Layer 3 row for the target. In **Live** mode the server also performs the transient channel write for instant feedback; in **Blind** mode the persistence happens without any stage-side write. Outside of edit mode, direct writes remain as today (Layer 4, ephemeral under effects).
 - **Dirty state / discard**: no soft-edit buffer. Edits auto-persist. User can trigger the previous saved state via cue re-trigger or via explicit `cueEdit.clearAssignment`. Undo is out of scope.
 
 ## Target experience
 
 Opening a cue enters **Cue Edit mode**:
 
-- Cue activates on stage.
+- A **Live / Blind** toggle sits in the editor header. Live (default in most surfaces) activates the cue on stage and reflects edits there in real time; Blind leaves the stage untouched and persists edits to the cue silently. Toggling mid-session transitions cleanly (see Decisions).
 - Main surface = a fixture/group list styled like today's `Fixtures` and `Groups` pages. Each compact card shows the cue's contribution (colour swatch, dimmer range bar, mixed-state indicators) derived from the cue's `propertyAssignments`.
 - Selecting a card opens the existing `FixtureContent` / `GroupPropertiesSection`, bound to an `EditorContext` so its writes go into the cue. All existing property primitives (colour picker, sliders, pan/tilt, setting dropdowns, per-head overrides) work unchanged.
 - Per-target tabs: **Properties** (default) | **Effects** | **Presets**.
@@ -83,7 +83,7 @@ Opening a cue enters **Cue Edit mode**:
 - Metadata (name, number, fade, notes, auto-advance, stack) in a collapsible header.
 - Triggers (script hooks) in a separate side panel.
 
-Leaving edit mode deactivates the cue or hands back to stack playback. Reopening reproduces the exact stage shape because fixture state is stored directly.
+Leaving edit mode deactivates the cue or hands back to stack playback (in Live mode); in Blind mode, close is a no-op on stage. Reopening reproduces the exact stage shape because fixture state is stored directly.
 
 ---
 
@@ -179,13 +179,15 @@ No frontend changes in Phase 0.
   - `captureCurrentState()` returns property assignments by walking active Layer 3 contributions. Effects remain as effect records — no heuristic classification needed now that the layers are explicit.
   - **New endpoint** `POST /project/{projectId}/cues/{cueId}/snapshot-from-live` — wraps `captureCurrentState` + internal PATCH.
 - **Cue Edit socket messages** (see `docs/websocket-engineering.md` pattern):
-  - `cueEdit.beginEdit { cueId }` / `cueEdit.endEdit { cueId }` — session tracks active cue-edit.
-  - `cueEdit.setChannel { cueId, universe, id, level }` — resolves channel → fixture/property via patch, upserts a property assignment in that property's canonical form, AND performs the transient channel write for instant feedback.
-  - `cueEdit.setProperty { cueId, targetType, targetKey, propertyName, value }` — explicit property-level form for colour, settings, etc. where channel-resolution would lose fidelity.
+  - `cueEdit.beginEdit { cueId, mode: 'live' | 'blind' }` — session tracks the active cue-edit and its mode. In `live` the server applies the cue on stage on begin; in `blind` it doesn't.
+  - `cueEdit.endEdit { cueId }` — in `live` mode stops the cue (or hands back to the stack); in `blind` mode a no-op on stage.
+  - `cueEdit.setMode { cueId, mode }` — mid-session transition. `live → blind` stops the cue on stage, keeps the session open. `blind → live` applies the cue's current persisted state to the stage.
+  - `cueEdit.setChannel { cueId, universe, id, level }` — resolves channel → fixture/property via patch, upserts a property assignment in that property's canonical form. In `live` mode also performs the transient channel write for instant feedback; in `blind` mode persists only.
+  - `cueEdit.setProperty { cueId, targetType, targetKey, propertyName, value }` — explicit property-level form for colour, settings, etc. Same live/blind split as `setChannel`.
   - `cueEdit.setPalette { cueId, palette }`.
   - `cueEdit.addPresetApplication { cueId, presetId, targets, timing? }`.
-  - `cueEdit.addAdHocEffect { cueId, ... }`.
-  - `cueEdit.clearAssignment { cueId, targetKey, propertyName }`.
+  - `cueEdit.addAdHocEffect { cueId, ... }` — in `live` mode also spawns the effect immediately; in `blind` mode persists only.
+  - `cueEdit.clearAssignment { cueId, targetKey, propertyName }` — in `live` mode also clears the live contribution for that channel/property.
   - Explicit messages per write (no implicit capture) — less magic, easier to debug.
 - **Migration**: convert `StaticValue` / `StaticSetting` rows in `cue_ad_hoc_effects` into `cue_property_assignments`; delete originals. Lossy / inexact conversions are OK (not in production).
 - **Tests**: migration correctness, PATCH round-trip, `applyCue()` layer-3 integration (uses Phase 0 pipeline), `cueEdit.setChannel` upserts + live-write, group-vs-member specificity resolution.
@@ -195,7 +197,7 @@ No frontend changes in Phase 0.
 Repo: `/Users/chris/Development/Personal/lighting-react`.
 
 - **New folder** `src/components/lighting-editor/`:
-  - `EditorContext.tsx` — React context `{ kind: 'live' | 'cue' | 'preset', id?: number }`. Default `kind: 'live'`.
+  - `EditorContext.tsx` — React context `{ kind: 'live' | 'cue' | 'preset', id?: number, mode?: 'live' | 'blind' }`. Default `kind: 'live'`; `mode` only applies when `kind === 'cue'` (presets always persist without stage-writes). The Phase 2 `CueEditor` sets `mode` on the context based on its toggle.
   - `routing.ts` — hook wrappers: `useRoutedUpdateChannel()`, `useRoutedSetProperty()`, `useRoutedApplyPreset()`, `useRoutedAddAdHocEffect()`, `useRoutedUpdatePalette()`. Each dispatches based on context.
 - **Wire callers**: swap direct uses of `useUpdateChannelMutation`, palette mutations, etc. inside `FixtureContent`, `PropertyVisualizers`, `GroupPropertyVisualizers`, `ColourPickerPopover`, `CompactFixtureCard` to the routed hooks. Byte-for-byte parity when `kind: 'live'`.
 - **Types**: extend `CueInput` / `Cue` in `src/api/cuesApi.ts` with `propertyAssignments: CuePropertyAssignment[]`; mirror in `src/store/cues.ts`. Add snapshot endpoint. Add `cueEdit.*` message types.
@@ -241,12 +243,13 @@ Frontend:
 ### Work
 
 - **New** `src/components/cues/CueEditor.tsx`:
-  - Header: metadata + palette bar (lift `CuePaletteEditor` from `CueForm.tsx:397-430` into shared).
+  - Header: metadata + palette bar (lift `CuePaletteEditor` from `CueForm.tsx:397-430` into shared) + **Live / Blind** toggle with clear visual state (e.g. a pill / segmented control; red or amber accent when Blind so the operator never forgets which mode they're in).
   - Main area: segmented control (`Groups` / `Fixtures`), grid of `CompactFixtureCard`-style cards. Each card driven by the cue's `propertyAssignments` via `GroupPropertyVisualizers`.
-  - Detail pane: selected card opens `FixtureContent` / `GroupPropertiesSection`, wrapped in `<EditorContext.Provider value={{ kind: 'cue', id }}>`.
+  - Detail pane: selected card opens `FixtureContent` / `GroupPropertiesSection`, wrapped in `<EditorContext.Provider value={{ kind: 'cue', id, mode }}>` where `mode` reflects the header toggle.
   - Per-target tabs: **Properties** / **Effects** / **Presets**.
   - Triggers panel as collapsible aside, reuses `CueTriggerEditor`.
-  - Lifecycle: on mount → `POST /cues/{id}/apply` + `cueEdit.beginEdit`; on unmount → `cueEdit.endEdit` + `/stop` (or hand-back to stack playback).
+  - Lifecycle: on mount → `cueEdit.beginEdit { cueId, mode }` (Live also fires `POST /cues/{id}/apply`); on unmount → `cueEdit.endEdit`; on toggle → `cueEdit.setMode { mode }`.
+  - Default mode = `live` for `Cues.tsx`; Program view may default differently — see Open Questions.
 - **Effects-overlay preview**: when effects are running on the cue being edited and obscuring a property the user is trying to see, show a subtle indicator on the property pad (e.g. "Effect active — showing base value"). Full solo-layer preview is a stretch goal. Add this affordance in Phase 2 design; revisit if users struggle.
 - `src/routes/Cues.tsx` — swap sheet contents for `CueEditor`.
 - `src/routes/ProgramPage.tsx` — wide-viewport inline panel mounts `CueEditor` (rough; Phase 4 polishes).
@@ -256,12 +259,15 @@ Frontend:
 
 Use `preview_*` MCP tools against running frontend + backend.
 
-- Open a cue from `Cues.tsx` → cue activates on stage.
+- Open a cue from `Cues.tsx` in **Live** mode → cue activates on stage.
 - Groups mode: pick a group, change colour → stage updates; close editor; reopen → cue persists change.
 - Fixtures mode: open a multi-head fixture, set per-head overrides → overrides persist.
 - Effects tab: add a beat-synced ad-hoc effect → runs on stage, saved.
 - Presets tab: quick-apply → preset application saved.
 - Close editor; trigger cue normally → identical stage output.
+- Open a *different* cue in **Blind** mode (from the same session, stage still showing the previous live cue): change its colour and intensity → stage is unchanged; close; re-trigger that cue normally → reproduces the blind-edited state.
+- Toggle Live → Blind mid-session: stage stops showing the cue; further edits don't affect stage.
+- Toggle Blind → Live mid-session: stage shows the cue's current persisted state; subsequent edits appear live.
 - Lint, typecheck, build pass.
 
 ---
@@ -350,12 +356,13 @@ Backend:
 
 Flag these to the user before implementing.
 
-1. **Stack mid-fade**: if a cue is opened for edit while another cue in the same stack is mid-fade, what's the correct behaviour? Snap-to-target then enter edit is proposed but not confirmed.
-2. **Mid-show safety**: live edit mode is the default, but should there be a stack-state guard that warns when editing a cue currently running in a live-show context?
-3. **Auto-advance pause**: should opening a cue for edit pause the parent stack's auto-advance? Strongly suggested yes but not confirmed.
-4. **Session ownership of `cueEdit.*`**: with multi-client connections, should the server reject `cueEdit.setChannel` from clients that didn't send `beginEdit`? Default to yes (session-scoped) unless looser semantics preferred.
+1. **Stack mid-fade (Live mode only)**: if a cue is opened for edit in Live mode while another cue in the same stack is mid-fade, what's the correct behaviour? Snap-to-target then enter edit is proposed but not confirmed. (Blind mode is safe — no stage interaction.)
+2. **Default mode per surface**: Cues page defaults to Live (rehearsal context). Should Program view default to Blind when the parent stack is active in a running show — i.e. protect live performance by default? Suggested yes, but depends on how "show is running" is signalled. Related: should the default be a user preference sticky across sessions?
+3. **Auto-advance pause (Live mode only)**: should opening a cue for edit in Live mode pause the parent stack's auto-advance? Strongly suggested yes. Blind mode should never touch auto-advance.
+4. **Session ownership of `cueEdit.*`**: with multi-client connections, should the server reject `cueEdit.setChannel` from clients that didn't send `beginEdit`? Default to yes (session-scoped) unless looser semantics preferred. Also: can two clients edit the same cue simultaneously (one Live, one Blind)? Probably reject the second `beginEdit` for the same `cueId`.
 5. **Layer 3 fade behaviour during cue crossfades**: property assignments need a crossfade path matching effects' `intensityMultiplier`. Is weighted blend between outgoing/incoming cue's property values acceptable, or do we want value-level interpolation (e.g. colour-space-aware) for specific property types? Phase 0 design question.
-6. **Phase 2 effects-overlay preview affordance** — how prominent? Just a badge, or a "show base only" toggle?
+6. **Phase 2 effects-overlay preview affordance** — how prominent? Just a badge, or a "show base only" toggle? Most relevant in Live mode; less important in Blind.
+7. **Blind→Live "apply to stage" safety**: toggling Blind→Live mid-session pushes the cue's current state to the stage. Is that safe to do unconditionally, or should it require confirmation ("this will override the live output")?
 
 ## Handover checklist (end of every session)
 
