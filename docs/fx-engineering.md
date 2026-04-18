@@ -2,6 +2,14 @@
 
 This document describes the effects subsystem for tempo-synchronized lighting effects.
 
+> **See also**: [lighting-composition-model.md](lighting-composition-model.md) for the
+> layered composition model. Effects are **Layer 2**: they sit above property assignments
+> (Layer 3) and direct writes (Layer 4), and below parking (Layer 1). The per-tick reset-to-
+> neutral pass resets each property to the **layer below** (via `LayerResolver`), not to
+> hardcoded zero, so direct writes and cue state remain visible under running effects. Effect
+> iteration is a sorted pass (priority ascending, id-ascending tie-break) rather than
+> undefined map iteration, making multi-effect composition on the same property deterministic.
+
 ## Overview
 
 The FX system provides:

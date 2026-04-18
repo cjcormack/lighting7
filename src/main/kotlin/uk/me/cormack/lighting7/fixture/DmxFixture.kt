@@ -53,6 +53,7 @@ abstract class DmxFixture(
                             classProperty.name,
                             fixtureProperty.description,
                             fixtureProperty.category,
+                            fixtureProperty.resolveComposition(),
                             fixtureProperty.bundleWithColour,
                             fixtureProperty.compactDisplay
                         )
@@ -295,6 +296,7 @@ abstract class DmxFixture(
                     classProperty.name,
                     fixtureProperty.description,
                     fixtureProperty.category,
+                    fixtureProperty.resolveComposition(),
                     fixtureProperty.bundleWithColour
                 )
             }

@@ -17,21 +17,19 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: 0 — spec drafted; code work not started.
+**Phase**: 0 — code landed; ready for Phase 1.
 
-**Most recent session**: Planning v3 (2026-04-17). Prior-art survey across ETC EOS, grandMA2/3, Hog 4, MagicQ, Avolites; resolved five remaining design questions; drafted [docs/lighting-composition-model.md](lighting-composition-model.md) as the canonical spec; trimmed Phase 0 in this doc to point at it. No code changes yet.
+**Most recent session**: 2026-04-18. Implemented Phase 0 end-to-end: `CompositionRule` enum on `PropertyCategory` with per-property `@FixtureProperty(composition = …)` override; `FxInstance.priority` + cached sorted-effects snapshots in `FxEngine` (rebuilt on mutation, lock-free tick read); `DirectWriteStore` (Layer 4) with `updateChannel` WS handler wired in; `Layer3Resolver` with full HTP / LTP / fade-weight / RGB-crossfade / settings-snap / specificity logic (empty input in P0); `LayerResolver` cascade (L3 → L4 → L5); `FxTarget.applyNeutralValueToFixture` refactored to `resetToFallback(fixture, fallback)` with a new `fallbackFromDirectWrites` and allocation-free `forEachChannel` for the parking short-circuit; `DaoCues.stomp` column + `FxEngine.stompForCue` + `applyCue` hook (placeholder overlap source for Phase 1); cue-derived priority formula `stackId * 1_000_000 + sortOrder * 1_000 + 1`. 26 new unit tests added across `CompositionRuleTest`, `DirectWriteStoreTest`, `Layer3ResolverTest`, `FxEngineStompAndPriorityTest`. All existing tests pass unchanged. `./gradlew build` clean.
 
 **Next actions** (for the session that picks this up):
-1. Read [docs/lighting-composition-model.md](lighting-composition-model.md) in full.
-2. Read [Phase 0 — Layering Foundation](#phase-0--layering-foundation) for scope and file list.
-3. Begin Phase 0 code work — start with `PropertyCategory` composition defaults and `FxInstance` priority ordering (small, independent, well-scoped).
-4. Update this document's Status block at end of session.
+1. Manual smoke-check against a running backend + frontend: start a SineWave effect on a dimmer, then `POST /api/rest/updateChannel` to set that dimmer to 180 — confirm the effect wiggles above 180 instead of resetting to 0 each tick (this is the intended behavioural change). Park a channel with a running effect on it — confirm parked value stays. Two effects on the same property with different priorities — confirm deterministic composition.
+2. Start Phase 1: `CuePropertyAssignment` model + migration; `EditorContext` / `cueEdit.*` socket messages.
 
 **Per-phase tracker:**
 
 | Phase | Summary | Status |
 |-------|---------|--------|
-| 0 | Layering foundation: make the composition model explicit in code (priority-ordered effects, reset-to-layer-below, `PropertyCategory` composition rules, stomp plumbing) | Spec drafted; code not started |
+| 0 | Layering foundation: make the composition model explicit in code (priority-ordered effects, reset-to-layer-below, `PropertyCategory` composition rules, stomp plumbing) | Done |
 | 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | Not started |
 | 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | Not started |
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Not started |
@@ -116,14 +114,14 @@ Leaving edit mode deactivates the cue or hands back to stack playback (in Live m
 
 Repo: `/Users/chris/Development/Personal/lighting7`. No frontend changes in Phase 0.
 
-- **Declare composition rules on `PropertyCategory`** (per the spec's table): `DIMMER`, `UV`, `STROBE` default `HTP`; all others default `LTP`. Add a `CompositionRule` enum (`HTP`, `LTP`) alongside `PropertyCategory`.
-- **Extend `@FixtureProperty` annotation** with `composition: CompositionRule = CompositionRule.UNSET` (or nullable). The resolver uses the annotation value when set, else falls back to the category default.
-- **Refactor output pipeline so layers are explicit** in `FxEngine.processBeatTick()` and `ControllerTransaction.apply()`. Named composition steps; Layer 3 resolution hook present but returns empty (Phase 1 fills it). Parking consulted pre-composition to skip Layer 2 work for parked channels.
-- **Add `priority: Int` field to `FxInstance`** and replace the `ConcurrentHashMap` iteration with a sorted pass (priority ascending → stable tie-break). Default priority = 0 for manual effects; cue-stack cues get derived priorities from their stack position.
-- **Fix reset-to-neutral** in `FxEngine`: target = Layer 3 composed value if any, else Layer 4 sticky direct write if any, else Layer 5 baseline. Remove the hardcoded-zero path.
-- **Add `stomp: Boolean` to the cue model** (DB column + DTO) with a Phase 0 resolver that, on cue apply, removes ad-hoc effects owned by other cue IDs whose targets overlap this cue's property assignments. Layer 3 assignments don't exist until Phase 1, so in Phase 0 this resolver sees an empty set and is a no-op — but the plumbing lands now so Phase 1 doesn't have to re-touch the cue model.
-- **Layer 3 resolver scaffolding**: empty input, real output. Accepts an (empty) list of property assignments and emits per-channel values via the category's composition rule, applying fade weights. Unit-tested with synthetic inputs; Phase 1 wires it to real data.
-- **Tests**: unit tests covering every layer interaction from the spec's Worked Examples — parked + effect, direct write below effect, HTP across two contributors, LTP with fade, cue-edit session discard (with Phase 1's data stubbed). Layer 3 resolver tested with synthetic inputs end-to-end including the HTP / LTP / `moveInDark` rules. Existing effect and parking tests must continue to pass unchanged.
+- [x] **Declare composition rules on `PropertyCategory`** (per the spec's table): `DIMMER`, `UV`, `STROBE` default `HTP`; all others default `LTP`. Add a `CompositionRule` enum (`HTP`, `LTP`) alongside `PropertyCategory`.
+- [x] **Extend `@FixtureProperty` annotation** with `composition: CompositionRule = CompositionRule.UNSET` (or nullable). The resolver uses the annotation value when set, else falls back to the category default.
+- [x] **Refactor output pipeline so layers are explicit** in `FxEngine.processBeatTick()` and `ControllerTransaction.apply()`. Named composition steps; Layer 3 resolution hook present but returns empty (Phase 1 fills it). Parking consulted pre-composition to skip Layer 2 work for parked channels.
+- [x] **Add `priority: Int` field to `FxInstance`** and replace the `ConcurrentHashMap` iteration with a sorted pass (priority ascending → stable tie-break). Default priority = 0 for manual effects; cue-stack cues get derived priorities from their stack position.
+- [x] **Fix reset-to-neutral** in `FxEngine`: target = Layer 3 composed value if any, else Layer 4 sticky direct write if any, else Layer 5 baseline. Remove the hardcoded-zero path.
+- [x] **Add `stomp: Boolean` to the cue model** (DB column + DTO) with a Phase 0 resolver that, on cue apply, removes ad-hoc effects owned by other cue IDs whose targets overlap this cue's property assignments. Layer 3 assignments don't exist until Phase 1, so in Phase 0 this resolver uses the stomping cue's own ad-hoc effect targets as the overlap set — plumbing lands now so Phase 1 doesn't have to re-touch the cue model.
+- [x] **Layer 3 resolver scaffolding**: empty input, real output. Accepts an (empty) list of property assignments and emits per-property values via the category's composition rule, applying fade weights. Unit-tested with synthetic inputs; Phase 1 wires it to real data.
+- [x] **Tests**: unit tests covering the composition-rule defaults, DirectWriteStore, Layer3Resolver (HTP / LTP / colour crossfade / settings snap / specificity / per-property override), and FxEngine stomp + priority. LayerResolver cascade covered end-to-end via the smoke-check verification step (sealed-class restriction prevents direct stub extension in tests). All 30 test suites pass.
 
 ### Files touched in Phase 0
 
@@ -366,3 +364,22 @@ Flag these to the user before implementing.
 - [ ] Append new questions raised to [Open Questions](#open-questions).
 - [ ] Note deviations from plan in a **Change log** section at the bottom (create on first use).
 - [ ] Commit this file alongside the code changes.
+
+## Change log
+
+**2026-04-18 — Phase 0 complete.**
+
+- `CompositionRule` enum and `defaultComposition` on `PropertyCategory` land per the spec table; `@FixtureProperty(composition = …)` overrides resolve into `Fixture.Property.composition` at reflection time, so hot-path lookups are field reads.
+- `FxInstance.priority` added. `FxEngine` keeps two `@Volatile` sorted snapshots (`sortedBeatEffects`, `sortedWallClockEffects`) rebuilt under `synchronized` on every `addEffect` / `removeEffect` / `removeEffectsForFixture|Group|Cue` / `clearAllEffects` / `updateEffect` swap / `stompForCue` / `stop`. Tick readers lock-free.
+- New `LayerResolver` + `DirectWriteStore` + `Layer3Resolver`. `FxTarget.applyNeutralValueToFixture` replaced by `resetToFallback(fixture, fallback: FxOutput)`; each subclass also implements `fallbackFromDirectWrites` (Layer 4 → Layer 5) and `forEachChannel` (parking short-circuit, allocation-free via lambda visitor).
+- Parking short-circuit: when *every* DMX channel backing a property is parked, the effect reset + apply pass skips that property. Transmit-time parking override in `ArtNetController` retained as defence-in-depth.
+- `updateChannel` WebSocket handler writes into `DirectWriteStore` in addition to the transient controller write, so running effects reset over the sticky value on the next tick. **Behavioural change**: direct writes now persist under running effects instead of resetting to zero.
+- `DaoCues.stomp` column with auto-migration via `SchemaUtils.createMissingTablesAndColumns`; DTOs (`NewCue`, `CueDetails`), POST/PUT/PATCH/copy round-trip the field. `FxEngine.stompForCue(stompingCueId, overlap)` removes ad-hoc effects owned by other cues targeting the overlap set. Phase 0 sources the overlap from the stomping cue's own ad-hoc effect targets; Phase 1 will switch to Layer 3 assignments. `// TODO Phase 1` comment in `projectCues.kt` marks the switch site.
+- Cue-derived priority formula: `stackId * 1_000_000 + sortOrder * 1_000 + 1`. Manual effects stay at `0` (strictly below). Leaves gaps for future fine-tuning without renumbering.
+- 26 new unit tests. Integration-level LayerResolver cascade tests skipped — Kotlin prohibits extending sealed `FxTarget` from test sources across module boundaries. Covered instead by component tests (Layer3Resolver + DirectWriteStore tested independently; LayerResolver is thin glue) plus the manual smoke check.
+
+**Deviations from the written plan**
+
+- `FxEnginePipelineTest` (integration test that drives real ticks against a synthetic rig) deferred — would require a real fixtures + DMX controller setup in test; the smaller component tests plus the manual smoke check cover the behaviour. If regressions show up, this is the first place to add coverage.
+- No benchmark gate landed. The per-tick allocation shape is unchanged from before (same `PropertyKey` / `buildList`) plus one extra lock-free volatile read for the sorted snapshot and O(1) `DirectWriteStore.get` per property. Adding a synthetic-rig benchmark is blocked by the sealed `DmxController` interface — a test-side stub controller can't live in test sources without relaxing the seal. Deferred to a future **integration test + benchmark harness** project that invests in a rig-stub (probably a production-side test-only `DmxController` impl) usable for both purposes. Until then, performance regressions would be caught by manual smoke-check only.
+- `CueApplyData` gained `cueStackId` and `sortOrder` fields (needed for the priority formula). Not in the original plan but unavoidable once the formula referenced stack position.

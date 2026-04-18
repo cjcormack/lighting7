@@ -66,6 +66,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     cueNumber = newCue.cueNumber
                     notes = newCue.notes
                     cueType = validatedCueType
+                    stomp = newCue.stomp
                     if (stack != null) {
                         cueStack = stack
                         sortOrder = newCue.sortOrder ?: stack.cues.count().toInt()
@@ -119,6 +120,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 cue.fadeCurve = updatedData.fadeCurve
                 cue.cueNumber = updatedData.cueNumber
                 cue.notes = updatedData.notes
+                cue.stomp = updatedData.stomp
 
                 // Replace children: delete existing, create new
                 deleteCueChildren(cue)
@@ -158,6 +160,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if ("notes" in body) cue.notes = body["notes"].nullableString()
                 if ("autoAdvance" in body) cue.autoAdvance = body["autoAdvance"]!!.jsonPrimitive.boolean
                 if ("autoAdvanceDelayMs" in body) cue.autoAdvanceDelayMs = body["autoAdvanceDelayMs"].nullableLong()
+                if ("stomp" in body) cue.stomp = body["stomp"]!!.jsonPrimitive.boolean
 
                 // Children arrays — replace wholesale when present
                 val hasPresets = "presetApplications" in body
@@ -265,6 +268,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 autoAdvanceDelayMs = sourceCue.autoAdvanceDelayMs
                 fadeDurationMs = sourceCue.fadeDurationMs
                 fadeCurve = sourceCue.fadeCurve
+                stomp = sourceCue.stomp
             }
 
             // Copy child entities
@@ -377,6 +381,9 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                             sortOrder = trigger.sortOrder,
                         )
                     },
+                    stomp = cue.stomp,
+                    cueStackId = stackId,
+                    sortOrder = cue.sortOrder,
                 )
                 Pair(cueData, stackId)
             }
@@ -527,6 +534,7 @@ data class NewCue(
     val cueNumber: String? = null,
     val notes: String? = null,
     val cueType: String = "STANDARD",
+    val stomp: Boolean = false,
 )
 
 @Serializable
@@ -545,6 +553,7 @@ data class CueDetails(
     val autoAdvanceDelayMs: Long? = null,
     val fadeDurationMs: Long? = null,
     val fadeCurve: String = "LINEAR",
+    val stomp: Boolean = false,
     val canEdit: Boolean,
     val canDelete: Boolean,
 )
@@ -607,6 +616,9 @@ internal data class CueApplyData(
     val autoAdvanceDelayMs: Long? = null,
     val fadeDurationMs: Long? = null,
     val fadeCurve: String = "LINEAR",
+    val stomp: Boolean = false,
+    val cueStackId: Int? = null,
+    val sortOrder: Int = 0,
 )
 
 // ─── State capture ──────────────────────────────────────────────────────
@@ -727,6 +739,7 @@ internal fun DaoCue.toCueDetails(isCurrentProject: Boolean): CueDetails {
         autoAdvanceDelayMs = this.autoAdvanceDelayMs,
         fadeDurationMs = this.fadeDurationMs,
         fadeCurve = this.fadeCurve,
+        stomp = this.stomp,
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
     )
@@ -834,6 +847,15 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         engine.removeCuePalette(cueData.cueId)
     }
 
+    // TODO Phase 1: derive overlap from Layer 3 property assignments instead of ad-hoc effect targets.
+    if (cueData.stomp) {
+        val overlap = cueData.adHocEffects.mapNotNull { ad ->
+            val propName = ad.propertyName ?: return@mapNotNull null
+            FxEngine.PropertyKey(ad.targetKey, propName)
+        }.toSet()
+        engine.stompForCue(cueData.cueId, overlap)
+    }
+
     // 2. Set per-cue palette (isolated from global palette)
     if (cueData.palette.isNotEmpty()) {
         val colours = cueData.palette.map { parseExtendedColour(it) }
@@ -861,6 +883,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
                     presetEffect, fxTarget, presetApp.presetId, state, cueData.cueId
                 )
                 instance.cueId = cueData.cueId
+                instance.priority = cueDerivedPriority(cueData)
                 engine.addEffect(instance)
                 effectCount++
             }
@@ -892,12 +915,20 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             presetEffectDto, fxTarget, null, state, cueData.cueId
         )
         instance.cueId = cueData.cueId
+        instance.priority = cueDerivedPriority(cueData)
         engine.addEffect(instance)
         effectCount++
     }
 
     return ApplyCueResponse(effectCount = effectCount, cueName = cueData.cueName)
 }
+
+/**
+ * Derived priority for a cue-owned effect. `+1` keeps manual effects (priority 0) strictly
+ * below; the magnitude gaps leave room for per-effect fine-tuning without renumbering.
+ */
+internal fun cueDerivedPriority(cueData: CueApplyData): Int =
+    (cueData.cueStackId ?: 0) * 1_000_000 + cueData.sortOrder * 1_000 + 1
 
 // ─── Target resolution helpers ──────────────────────────────────────────
 

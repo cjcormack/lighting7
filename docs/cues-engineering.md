@@ -2,6 +2,12 @@
 
 This document describes the Cue system — named snapshots that bundle a colour palette with FX preset applications and ad-hoc effects.
 
+> **See also**: [lighting-composition-model.md](lighting-composition-model.md). Cues contribute
+> at **Layer 3** (property assignments, when Phase 1 lands) and own the ad-hoc effects they
+> spawn at **Layer 2**. Cue-owned effects receive a derived priority so composition across
+> restarts and reapplies is deterministic. The `stomp` flag (see below) removes other cues'
+> ad-hoc effects when a stomping cue applies and overlaps their targets.
+
 ## Overview
 
 A **Cue** is a named, project-scoped entity that captures a complete lighting look:
@@ -177,6 +183,26 @@ The `FxInstance` class has a `cueId: Int?` field (alongside `presetId`). When a 
 - The apply logic to identify and remove effects from a specific cue (not all cues)
 - The stop endpoint to remove only the target cue's effects
 - Active cue tracking in the frontend (derived from effect cueIds in WebSocket state)
+
+### Priority
+
+Cue-owned `FxInstance`s receive a derived `priority` at apply time via `cueDerivedPriority`
+in [`projectCues.kt`](../src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt):
+`stackId * 1_000_000 + sortOrder * 1_000 + 1`. Manual (uncued) effects keep priority `0`.
+
+The engine iterates effects in priority-ascending order, id-ascending tie-break. Higher
+priority composes later, so under non-OVERRIDE blend modes a later-positioned cue dominates
+earlier cues on the same property. See
+[lighting-composition-model.md](lighting-composition-model.md) §"Layer 2".
+
+### Stomp
+
+`DaoCues.stomp: Boolean` (default false) — when a stomping cue applies, the engine calls
+`FxEngine.stompForCue(stompingCueId, overlap)` to remove ad-hoc effects owned by *other*
+cues that target the overlap set. Phase 0 derives the overlap from the stomping cue's own
+ad-hoc effect targets; Phase 1 will switch to Layer 3 property assignments once they land.
+Manual effects and effects owned by the stomping cue itself are never stomped. See
+[lighting-composition-model.md](lighting-composition-model.md) §"Stomp".
 
 ## Active Cue Tracking
 

@@ -2,6 +2,10 @@
 
 This document describes the low-level DMX control architecture in Lighting7.
 
+> **See also**: [lighting-composition-model.md](lighting-composition-model.md) for the
+> layered composition model (parking → effects → property assignments → direct writes →
+> baseline) that sits above this transport layer. Parking is Layer 1 in that model.
+
 ## Overview
 
 The DMX subsystem provides an abstraction layer for controlling DMX512 lighting fixtures over ArtNet protocol. It handles:
@@ -266,6 +270,18 @@ The `getValue()` method returns the pending value (what will be after `apply()`)
 | Transmission throttle | 25ms | Max 40 packets/second |
 | Refresh interval | 1000ms | Only if `needsRefresh=true` |
 | ArtNet protocol | UDP | Unreliable, hence optional refresh |
+
+## Parking
+
+Parked channels are held at a fixed value by [`ParkManager`](../src/main/kotlin/uk/me/cormack/lighting7/dmx/ParkManager.kt)
+and re-applied at transmit time in `ArtNetController.sendCurrentValues()` so they survive
+regardless of what composition above produces. Conceptually parking is **Layer 1** — the
+highest-priority layer — in the composition model; the transmit-time override is a
+defence-in-depth implementation of that rule. See
+[lighting-composition-model.md](lighting-composition-model.md) §"Layer 1".
+
+The FX engine also consults `ParkManager.isParked` during effect reset to skip reset work for
+fully-parked properties (an optimization; the transmit-time override would handle it anyway).
 
 ## Thread Safety
 

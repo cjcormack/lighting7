@@ -31,9 +31,18 @@ class Show(
         val fileLoader = FxFileLoader(fxScriptCompiler)
         fileLoader.loadBuiltInEffects(this)
     }
-    val fxEngine = FxEngine(fixtures, MasterClock())
-    val cueStackManager = CueStackManager(fxEngine)
+    val directWriteStore = DirectWriteStore()
+    val layer3Resolver = Layer3Resolver()
+    val layerResolver = LayerResolver(layer3Resolver, directWriteStore)
     val parkManager = ParkManager(state.database, project.id.value)
+    val fxEngine = FxEngine(
+        fixtures = fixtures,
+        masterClock = MasterClock(),
+        directWriteStore = directWriteStore,
+        layerResolver = layerResolver,
+        parkManager = parkManager,
+    )
+    val cueStackManager = CueStackManager(fxEngine)
     private val scripts: MutableMap<String, Script> = mutableMapOf()
     private val scriptsLock = ReentrantLock()
     private val scriptingHost = BasicJvmScriptingHost()

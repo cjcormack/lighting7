@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fx
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
@@ -35,12 +36,53 @@ import java.awt.Color
  */
 class FxEngine(
     private val fixtures: Fixtures,
-    val masterClock: MasterClock
+    val masterClock: MasterClock,
+    /**
+     * Layer 4 sticky direct-write store. Read during effect reset so that manual `updateChannel`
+     * writes remain visible under running effects. Defaults to a fresh empty store for tests;
+     * the real show wires in the per-project store from [uk.me.cormack.lighting7.show.Show].
+     */
+    val directWriteStore: DirectWriteStore = DirectWriteStore(),
+    /**
+     * Layer 3 composition resolver. Resolves per-cue property assignments to the composed
+     * value that sits below effects. Phase 0: always empty input. Phase 1 wires real data.
+     */
+    val layerResolver: LayerResolver = LayerResolver(Layer3Resolver(), directWriteStore),
+    /**
+     * Layer 1 park query. If non-null, the engine skips effect reset / apply for channels
+     * that are parked. The parked value is still re-applied at transmit time in
+     * [uk.me.cormack.lighting7.dmx.ArtNetController] as defence-in-depth.
+     */
+    private val parkManager: ParkManager? = null,
 ) {
     private val nextEffectId = AtomicLong(0)
     private val activeEffects = ConcurrentHashMap<Long, FxInstance>()
+
+    // Read lock-free by the hot tick loops; rebuilt under [effectSnapshotLock] on mutation.
+    private val effectSnapshotLock = Any()
+    private val sortedEffectsComparator = compareBy<FxInstance>({ it.priority }, { it.id })
+    @Volatile private var sortedBeatEffects: List<FxInstance> = emptyList()
+    @Volatile private var sortedWallClockEffects: List<FxInstance> = emptyList()
+
     @Volatile private var lastTickMs: Long = 0L
     @Volatile private var lastWallClockTickMs: Long = 0L
+
+    private fun rebuildSortedSnapshots() {
+        synchronized(effectSnapshotLock) {
+            val beat = ArrayList<FxInstance>(activeEffects.size)
+            val wall = ArrayList<FxInstance>()
+            for (effect in activeEffects.values) {
+                when (effect.timingSource) {
+                    TimingSource.BEAT -> beat.add(effect)
+                    TimingSource.WALL_CLOCK -> wall.add(effect)
+                }
+            }
+            beat.sortWith(sortedEffectsComparator)
+            wall.sortWith(sortedEffectsComparator)
+            sortedBeatEffects = beat
+            sortedWallClockEffects = wall
+        }
+    }
 
     private var processingJob: Job? = null
     private var wallClockJob: Job? = null
@@ -280,6 +322,7 @@ class FxEngine(
         masterClock.stop()
         val allEffects = activeEffects.values.toList()
         activeEffects.clear()
+        rebuildSortedSnapshots()
         resetUncoveredProperties(allEffects)
         emitStateUpdate()
     }
@@ -305,6 +348,7 @@ class FxEngine(
             (effect.effect as StatefulEffect).initialize()
         }
         activeEffects[id] = effect
+        rebuildSortedSnapshots()
         emitStateUpdate()
         return id
     }
@@ -318,6 +362,7 @@ class FxEngine(
     fun removeEffect(effectId: Long): Boolean {
         val removed = activeEffects.remove(effectId)
         if (removed != null) {
+            rebuildSortedSnapshots()
             resetUncoveredProperties(listOf(removed))
             emitStateUpdate()
         }
@@ -432,6 +477,7 @@ class FxEngine(
                 presetId = existing.presetId
                 cueId = existing.cueId
                 cueStackId = existing.cueStackId
+                priority = existing.priority
                 startedAtMs = existing.startedAtMs
                 startedAtBeat = existing.startedAtBeat
                 isRunning = existing.isRunning
@@ -455,6 +501,7 @@ class FxEngine(
 
         if (needsSwap) {
             activeEffects[effectId] = updated
+            rebuildSortedSnapshots()
         }
         emitStateUpdate()
         return updated
@@ -488,6 +535,7 @@ class FxEngine(
         }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
+            rebuildSortedSnapshots()
             resetUncoveredProperties(toRemove)
             emitStateUpdate()
         }
@@ -506,6 +554,7 @@ class FxEngine(
         }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
+            rebuildSortedSnapshots()
             resetUncoveredProperties(toRemove)
             emitStateUpdate()
         }
@@ -518,10 +567,44 @@ class FxEngine(
      * @param cueId The cue ID whose effects should be removed
      * @return Number of effects removed
      */
+    /**
+     * Identifies a single (fixture, property) pair for stomp overlap checks.
+     *
+     * Phase 0 builds these from the stomping cue's own ad-hoc effect targets because Layer 3
+     * assignments don't exist yet. Phase 1 switches the overlap source to the cue's property
+     * assignments. The shape is stable across the transition.
+     */
+    data class PropertyKey(val targetKey: String, val propertyName: String)
+
+    /**
+     * Remove ad-hoc effects owned by *other* cues that target properties in the [overlap]
+     * set. Effects owned by the stomping cue itself are not stomped — they co-exist with its
+     * Layer 3 assertions. Manual (uncued) effects are not stomped either.
+     *
+     * @param stompingCueId the cue whose apply triggered the stomp.
+     * @param overlap the set of (targetKey, propertyName) pairs the stomping cue covers.
+     * @return number of effects removed.
+     */
+    fun stompForCue(stompingCueId: Int, overlap: Set<PropertyKey>): Int {
+        if (overlap.isEmpty()) return 0
+        val toRemove = activeEffects.values.filter { effect ->
+            val owner = effect.cueId ?: return@filter false
+            if (owner == stompingCueId) return@filter false
+            PropertyKey(effect.target.targetKey, effect.target.propertyName) in overlap
+        }
+        if (toRemove.isEmpty()) return 0
+        for (effect in toRemove) activeEffects.remove(effect.id)
+        rebuildSortedSnapshots()
+        resetUncoveredProperties(toRemove)
+        emitStateUpdate()
+        return toRemove.size
+    }
+
     fun removeEffectsForCue(cueId: Int): Int {
         val toRemove = activeEffects.values.filter { it.cueId == cueId }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
+            rebuildSortedSnapshots()
             resetUncoveredProperties(toRemove)
             emitStateUpdate()
         }
@@ -535,6 +618,7 @@ class FxEngine(
     fun clearAllEffects() {
         val allEffects = activeEffects.values.toList()
         activeEffects.clear()
+        rebuildSortedSnapshots()
         resetUncoveredProperties(allEffects)
         emitStateUpdate()
     }
@@ -543,10 +627,10 @@ class FxEngine(
      * Process all BEAT-timed effects on a Master Clock tick.
      */
     private fun processBeatTick(tick: MasterClock.ClockTick) {
-        if (activeEffects.isEmpty()) return
-
-        val hasBeatEffects = activeEffects.values.any { it.isRunning && it.timingSource == TimingSource.BEAT }
-        if (!hasBeatEffects) return
+        // Snapshot read is lock-free (volatile). If empty, nothing to do.
+        val beatEffects = sortedBeatEffects
+        if (beatEffects.isEmpty()) return
+        if (beatEffects.none { it.isRunning }) return
 
         val deltaMs = if (lastTickMs > 0) tick.timestampMs - lastTickMs else 0L
         lastTickMs = tick.timestampMs
@@ -554,13 +638,15 @@ class FxEngine(
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
 
-        // Reset properties controlled by BEAT effects to neutral before applying.
-        // This prevents accumulative blend modes from ratcheting values across ticks.
-        resetActiveProperties(fixturesWithTx, TimingSource.BEAT)
+        // Reset properties controlled by BEAT effects to the layer below (Layer 3 → Layer 4 →
+        // Layer 5 baseline) before applying. This prevents accumulative blend modes from
+        // ratcheting across ticks and keeps direct writes + cue state visible under effects.
+        resetActiveProperties(fixturesWithTx, beatEffects)
 
-        for ((_, effect) in activeEffects) {
+        // Iterate in priority-ascending order. Under non-OVERRIDE blend modes, higher-priority
+        // effects compose on top and dominate.
+        for (effect in beatEffects) {
             if (!effect.isRunning) continue
-            if (effect.timingSource != TimingSource.BEAT) continue
 
             try {
                 if (effect.isGroupEffect) {
@@ -585,10 +671,9 @@ class FxEngine(
      * [FxInstance.calculateWallClockPhaseForMember].
      */
     private fun processWallClockTick() {
-        if (activeEffects.isEmpty()) return
-
-        val hasWallClockEffects = activeEffects.values.any { it.isRunning && it.timingSource == TimingSource.WALL_CLOCK }
-        if (!hasWallClockEffects) return
+        val wallClockEffects = sortedWallClockEffects
+        if (wallClockEffects.isEmpty()) return
+        if (wallClockEffects.none { it.isRunning }) return
 
         val now = System.currentTimeMillis()
         val deltaMs = if (lastWallClockTickMs > 0) now - lastWallClockTickMs else 0L
@@ -607,12 +692,11 @@ class FxEngine(
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
 
-        // Reset properties controlled by WALL_CLOCK effects to neutral
-        resetActiveProperties(fixturesWithTx, TimingSource.WALL_CLOCK)
+        // Reset properties controlled by WALL_CLOCK effects to the layer below.
+        resetActiveProperties(fixturesWithTx, wallClockEffects)
 
-        for ((_, effect) in activeEffects) {
+        for (effect in wallClockEffects) {
             if (!effect.isRunning) continue
-            if (effect.timingSource != TimingSource.WALL_CLOCK) continue
 
             try {
                 if (effect.isGroupEffect) {
@@ -849,22 +933,27 @@ class FxEngine(
     }
 
     /**
-     * Reset all properties that are actively controlled by running effects
-     * of the given timing source to their neutral values. This ensures blend
-     * modes operate against a clean baseline each tick rather than accumulating
-     * from previous ticks.
+     * Reset properties controlled by running effects to the layer below (Layer 3 → Layer 4 →
+     * Layer 5 baseline). This ensures blend modes operate against the correct baseline each
+     * tick rather than accumulating from previous ticks — and crucially that direct
+     * `updateChannel` writes (Layer 4) remain visible under running effects instead of being
+     * clobbered to zero.
      *
-     * Partitioned by timing source so the BEAT and WALL_CLOCK tick loops
-     * don't interfere with each other's property resets.
+     * Layer 1 (parking) short-circuits: a fully-parked property skips the reset entirely
+     * because the parked value wins at transmit time regardless. The caller passes a
+     * pre-sorted effect list (priority-ascending, id-ascending tie-break); ordering only
+     * matters downstream for effect composition, not for the reset pass.
      */
-    private fun resetActiveProperties(fixturesWithTx: Fixtures.FixturesWithTransaction, source: TimingSource) {
+    private fun resetActiveProperties(
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        effects: List<FxInstance>,
+    ) {
         data class PropertyKey(val fixtureKey: String, val propertyName: String)
 
         val seen = mutableSetOf<PropertyKey>()
 
-        for ((_, effect) in activeEffects) {
+        for (effect in effects) {
             if (!effect.isRunning) continue
-            if (effect.timingSource != source) continue
 
             val keys = resolveEffectFixtureKeys(effect)
 
@@ -876,16 +965,34 @@ class FxEngine(
 
             for (key in keys) {
                 for (target in targets) {
-                    if (seen.add(PropertyKey(key, target.propertyName))) {
-                        try {
-                            target.applyNeutralValue(fixturesWithTx, key)
-                        } catch (e: Exception) {
-                            // Non-fatal — the effect application will also handle missing fixtures
-                        }
+                    if (!seen.add(PropertyKey(key, target.propertyName))) continue
+                    try {
+                        val fixture = fixturesWithTx.untypedGroupableFixture(key)
+                        if (allChannelsParked(target, fixture)) continue
+                        val fallback = layerResolver.fallbackFor(target, fixture, key)
+                        target.resetToFallback(fixture, fallback)
+                    } catch (_: Exception) {
+                        // Non-fatal — the effect application will also handle missing fixtures
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Is every DMX channel backing [target] on [fixture] parked?
+     *
+     * When true, the caller can skip reset work entirely because [ArtNetController] will
+     * overwrite the value at transmit time with the parked value regardless. Partial parking
+     * (rare) is treated as "not all parked" — the channels that aren't parked still need their
+     * reset path to run.
+     */
+    private fun allChannelsParked(
+        target: FxTarget,
+        fixture: uk.me.cormack.lighting7.fixture.GroupableFixture,
+    ): Boolean {
+        val pm = parkManager ?: return false
+        return target.isPropertyFullyParked(fixture, pm)
     }
 
     /**
@@ -1194,7 +1301,10 @@ class FxEngine(
 
         for (affected in uncovered) {
             try {
-                affected.target.applyNeutralValue(fixturesWithTx, affected.fixtureKey)
+                val fixture = fixturesWithTx.untypedGroupableFixture(affected.fixtureKey)
+                if (allChannelsParked(affected.target, fixture)) continue
+                val fallback = layerResolver.fallbackFor(affected.target, fixture, affected.fixtureKey)
+                affected.target.resetToFallback(fixture, fallback)
             } catch (e: Exception) {
                 System.err.println("FX Engine: Failed to reset ${affected.target.propertyName} on '${affected.fixtureKey}': ${e.message}")
             }

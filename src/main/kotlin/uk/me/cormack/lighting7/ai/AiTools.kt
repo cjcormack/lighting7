@@ -473,6 +473,9 @@ class AiTools(private val state: State) {
                         parameters = effect.parameters,
                     )
                 },
+                stomp = cue.stomp,
+                cueStackId = cue.cueStack?.id?.value,
+                sortOrder = cue.sortOrder,
             )
         } ?: return errorResult("Cue not found: $cueId")
 

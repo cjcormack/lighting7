@@ -67,6 +67,13 @@ object DaoCues : IntIdTable("cues") {
     val cueNumber = varchar("cue_number", 20).nullable()
     val notes = text("notes").nullable()
     val cueType = varchar("cue_type", 20).default("STANDARD")
+    /**
+     * When true, applying this cue removes ad-hoc effects owned by *other* cues that target
+     * properties covered by this cue's Layer 3 assignments. Mirrors grandMA3's `Stomp`. Phase 0
+     * lands the column and resolver hook; Phase 1 wires real Layer 3 data in as the overlap
+     * source. See `docs/lighting-composition-model.md` §"Stomp".
+     */
+    val stomp = bool("stomp").default(false)
 
     init {
         uniqueIndex(project, name)
@@ -89,6 +96,7 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var cueNumber by DaoCues.cueNumber
     var notes by DaoCues.notes
     var cueType by DaoCues.cueType
+    var stomp by DaoCues.stomp
     val presetApplications by DaoCuePresetApplication referrersOn DaoCuePresetApplications.cue
     val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue
     val triggers by DaoCueTrigger referrersOn DaoCueTriggers.cue

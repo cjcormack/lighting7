@@ -141,6 +141,17 @@ class FxInstance(
     /** If this effect belongs to a cue stack, the stack ID. Null otherwise. */
     var cueStackId: Int? = null
 
+    /**
+     * Composition priority. Effects with lower priority compose first; higher priority effects
+     * blend on top, making them dominant under non-OVERRIDE blend modes. Ties break on [id]
+     * (monotonic, so insertion order is the stable tie-break).
+     *
+     * Manual / ad-hoc effects default to 0. Cue-owned effects receive a derived priority from
+     * their cue's stack position so cue playback is deterministic across app restarts.
+     */
+    @Volatile
+    var priority: Int = 0
+
     /** Whether this effect is currently running */
     var isRunning: Boolean = true
 

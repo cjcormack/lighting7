@@ -115,6 +115,9 @@ class CueStackManager(
                 autoAdvanceDelayMs = cue.autoAdvanceDelayMs,
                 fadeDurationMs = cue.fadeDurationMs,
                 fadeCurve = cue.fadeCurve,
+                stomp = cue.stomp,
+                cueStackId = cue.cueStack?.id?.value,
+                sortOrder = cue.sortOrder,
             )
 
             sd to cd

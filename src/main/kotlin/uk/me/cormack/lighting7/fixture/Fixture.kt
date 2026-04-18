@@ -21,6 +21,7 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
         val name: String,
         val description: String,
         val category: PropertyCategory,
+        val composition: CompositionRule,
         val bundleWithColour: Boolean,
         val compactDisplay: CompactDisplayRole = CompactDisplayRole.NONE,
     )
@@ -36,6 +37,7 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
                 classProperty.name,
                 fixtureProperty.description,
                 fixtureProperty.category,
+                fixtureProperty.resolveComposition(),
                 fixtureProperty.bundleWithColour,
                 fixtureProperty.compactDisplay
             )

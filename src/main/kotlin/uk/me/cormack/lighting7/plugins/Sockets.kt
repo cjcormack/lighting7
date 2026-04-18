@@ -578,6 +578,7 @@ fun Application.configureSockets(state: State) {
                         is UpdateChannelInMessage -> {
                             val controller = state.show.fixtures.controller(Universe(0, message.universe))
                             controller.setValue(message.id, message.level, message.fadeTime)
+                            state.show.directWriteStore.put(message.universe, message.id, message.level)
                         }
 
                         // Park-related message handlers
