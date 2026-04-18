@@ -6,7 +6,7 @@ Related:
 - Strategic plan for adopting this model: [cue-authoring-unification-plan.md](cue-authoring-unification-plan.md).
 - Effect engine details: [fx-engineering.md](fx-engineering.md).
 - DMX transport and parking: [dmx-engineering.md](dmx-engineering.md).
-- Prior-art survey that drove these decisions: see the planning notes at `~/.claude/plans/we-re-taking-a-look-sunny-flask.md` (move to `docs/research/` if we want a permanent home later).
+- Prior-art survey that drove these decisions: [research/composition-model-prior-art.md](research/composition-model-prior-art.md).
 
 ## Overview
 
