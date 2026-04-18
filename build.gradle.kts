@@ -7,11 +7,13 @@ val exposed_version: String by project
 val hikaricp_version: String by project
 
 plugins {
-    // Kotlin 2.1.21: Newer versions cause kotlin-compiler-server to return empty responses
-    // from the completion and highlight endpoints. Do not upgrade until that is resolved.
-    kotlin("jvm") version "2.1.21"
+    // Kotlin 2.2.x is required by ktmidi-jvm-desktop's transitive stdlib. Upgrading from
+    // 2.1.21 to 2.2.21 may regress kotlin-compiler-server (empty responses from completion
+    // / highlight endpoints); user accepted that short-term risk in exchange for a clean
+    // compile path against ktmidi and a Java 22+ toolchain.
+    kotlin("jvm") version "2.2.21"
     id("io.ktor.plugin") version "3.3.3"
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.1.21"
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.2.21"
     id("maven-publish")
 }
 
@@ -19,7 +21,10 @@ group = "uk.me.cormack"
 version = "0.0.1"
 
 kotlin {
-    jvmToolchain(17)
+    // Kotlin 2.2.21 supports up to JVM target 24. ktmidi-jvm-desktop (LibreMidiAccess)
+    // uses the Java 22+ Foreign Function & Memory API, so we need ≥ 22. Target 24 (= non-LTS)
+    // compiles and the app runs happily on the LTS JDK 25.
+    jvmToolchain(24)
 }
 
 application {
@@ -50,6 +55,11 @@ dependencies {
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
     implementation("ch.bildspur:artnet4j:0.6.2")
+
+    // MIDI control-surface transport (Phase 0 of control-surface-plan.md).
+    // ktmidi-jvm-desktop brings LibreMidiAccess (native libremidi via Panama FFM).
+    implementation("dev.atsushieno:ktmidi-jvm:0.11.2")
+    implementation("dev.atsushieno:ktmidi-jvm-desktop:0.11.2")
 
     implementation("io.ktor:ktor-client-core")
     implementation("io.ktor:ktor-client-cio")

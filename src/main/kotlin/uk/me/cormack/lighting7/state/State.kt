@@ -8,8 +8,12 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
 import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.fx.CueTriggerManager
+import uk.me.cormack.lighting7.midi.LibreMidiAccessSource
+import uk.me.cormack.lighting7.midi.MidiDeviceRegistry
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.Show
 
@@ -41,11 +45,26 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
+     * Control-surface MIDI device registry (Phase 0 of control-surface-plan.md).
+     * Polls connected MIDI ports on a 1 Hz interval, pairs them into device handles, and
+     * auto-opens a [uk.me.cormack.lighting7.midi.KtMidiController] for each. Nothing in
+     * the app consumes this yet; Phase 1+ will wire binding and routing on top.
+     */
+    val midiRegistry: MidiDeviceRegistry by lazy {
+        MidiDeviceRegistry(LibreMidiAccessSource())
+    }
+
+    /**
      * Initialize the show through the project manager.
      * This finds (or migrates) the current project from the database and creates the Show.
      * Must be called explicitly after State construction.
      */
-    fun initializeShow(): Show = projectManager.initialize()
+    @OptIn(DelicateCoroutinesApi::class)
+    fun initializeShow(): Show {
+        val show = projectManager.initialize()
+        midiRegistry.start(GlobalScope)
+        return show
+    }
 
     private fun initDatabase(): Database {
         val url = config.property("postgres.url").getString()

@@ -265,7 +265,7 @@ val evens = group.everyNth(2, offset = 0)
 val tagged = group.withTags("inner", "front")
 
 // Transform
-val reversed = group.reversed()
+val reversed = group.reverseOrder()
 val (leftSplit, rightSplit) = group.splitAt(0.5)
 
 // Type narrowing
@@ -430,7 +430,7 @@ headGroup.fixtures.forEach { head ->
 // Use group filtering operations
 val leftHeads = quadBar.elementsGroup.leftHalf()
 val everyOther = quadBar.elementsGroup.everyNth(2)
-val reversed = quadBar.elementsGroup.reversed()
+val reversed = quadBar.elementsGroup.reverseOrder()
 
 // Filter by element tags (automatically set as "element" and "element-N")
 val head1Only = quadBar.elementsGroup.withTags("element-1")

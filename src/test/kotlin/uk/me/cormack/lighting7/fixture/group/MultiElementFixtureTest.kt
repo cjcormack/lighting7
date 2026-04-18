@@ -213,7 +213,7 @@ class MultiElementFixtureTest {
             testUniverse, "quad-bar", "Quad Bar", 1
         )
 
-        val reversed = fixture.elementsGroup.reversed()
+        val reversed = fixture.elementsGroup.reverseOrder()
 
         assertEquals(4, reversed.size)
         assertEquals(fixture.elements[3].elementKey, reversed[0].key)

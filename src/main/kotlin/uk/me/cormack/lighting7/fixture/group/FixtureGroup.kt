@@ -211,8 +211,13 @@ class FixtureGroup<T : GroupableFixture>(
      * The resulting group will have members in reverse order with
      * normalized positions inverted. This operates on all members
      * including those from sub-groups (flattening the hierarchy).
+     *
+     * Named [reverseOrder] (not `reversed`) to avoid colliding with the `java.util.List.reversed()`
+     * method that JDK 21 added; `FixtureGroup` implements [List] by delegation, and Kotlin
+     * resolution on JDK 21+ targets otherwise picks the inherited Java method / stdlib
+     * extension instead of this member.
      */
-    fun reversed(): FixtureGroup<T> {
+    fun reverseOrder(): FixtureGroup<T> {
         val reversedMembers = allMembers.reversed().mapIndexed { newIdx, member ->
             member.copy(
                 index = newIdx,

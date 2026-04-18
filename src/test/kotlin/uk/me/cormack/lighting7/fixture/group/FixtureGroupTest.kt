@@ -121,7 +121,7 @@ class FixtureGroupTest {
     @Test
     fun `reversed inverts order and positions`() {
         val group = createTestGroup(4)
-        val reversed = group.reversed()
+        val reversed = group.reverseOrder()
 
         assertEquals(4, reversed.size)
 
@@ -680,7 +680,7 @@ class FixtureGroupTest {
             addGroup(subGroup)
         }
 
-        val reversed = parentGroup.reversed()
+        val reversed = parentGroup.reverseOrder()
 
         assertEquals(2, reversed.size)
         assertEquals("test-1", reversed.fixtures[0].key)

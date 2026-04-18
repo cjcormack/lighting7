@@ -22,19 +22,23 @@ Related:
 
 ## Status
 
-**Phase**: Pre-0 — plan drafted, no code yet.
+**Phase**: 0 complete. Phase 1 next.
 
-**Most recent session**: 2026-04-18. Plan authored after cue-authoring Phase 0 landed. Decisions gathered from the user (see below). Research doc `research/control-surface-prior-art.md` moved into the repo. **Revision (same session)**: device profiles switched from JSON-in-DB to Kotlin classes discovered by a registry, mirroring `FixtureTypeRegistry` — consistent with how fixtures are defined.
+**Most recent session**: 2026-04-18. Phase 0 transport foundation landed. `ktmidi-jvm` + `ktmidi-jvm-desktop` 0.11.2 added as dependencies; Kotlin bumped 2.1.21 → 2.2.21 and JVM toolchain bumped 17 → 24 (ktmidi's Panama FFM path needs Java 22+). `MidiController` / `KtMidiController` / `MidiDeviceRegistry` / `MidiInputEvent` parser / `MidiFeedbackMessage` with conflation + delta suppression all wired and unit-tested (26 new tests, 399 total passing). `State.midiRegistry` starts the polling loop after `show.start()`. See Change log below for two downstream effects: hot-plug via polling (libremidi has no native state-change events), and `FixtureGroup.reversed()` → `reverseOrder()` rename (JDK 21+ added `List.reversed()` which collides with the member on Kotlin 2.2+).
 
 **Next actions** (for the session that picks this up):
-1. Start Phase 0: bring in `ktmidi` with the `libremidi` backend as a dependency; build a trivial enumerate-devices-and-print-events spike against the X-Touch Compact in Standard mode. Validate hot-plug detection on macOS (the platform most likely to expose device-enumeration bugs).
-2. Once the spike works, sketch `MidiController` as a parallel to `ArtNetController` in `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
+1. Start Phase 1: author `@ControlSurfaceType` annotation + `ControlSurfaceDevice` base class with DSL (`motorFader`, `fader`, `encoder`, `button`, `bank`).
+2. Write `ControlSurfaceRegistry` modelled on [FixtureTypeRegistry.kt](../src/main/kotlin/uk/me/cormack/lighting7/fixture/FixtureTypeRegistry.kt).
+3. Implement the X-Touch Compact Standard-mode profile class.
+4. Add `DeviceMatcher` that subscribes to `MidiDeviceRegistry.events` and pairs `handle.displayKey` / vendor / product against `@ControlSurfaceType` entries.
+5. Add `GET /api/rest/controlSurfaceTypes` route.
+6. Manually validate on the X-Touch Compact: `ConsoleEchoListener` already works end-to-end (Phase 0 verification); re-run once profiles are wired.
 
 **Per-phase tracker:**
 
 | Phase | Summary | Status |
 |-------|---------|--------|
-| 0 | Transport foundation: ktmidi setup, `MidiController`, per-device coroutines, input/output channels, rate limiting, delta-tracked feedback, hot-plug detection | Not started |
+| 0 | Transport foundation: ktmidi setup, `MidiController`, per-device coroutines, input/output channels, rate limiting, delta-tracked feedback, hot-plug detection | **Complete** |
 | 1 | Device profile model: Kotlin `ControlSurfaceDevice` classes + `@ControlSurfaceType` annotation + `ControlSurfaceRegistry`, X-Touch Compact profile class | Not started |
 | 2 | Mapping model + MIDI Learn: `ControlSurfaceBinding` table, `BindingTarget` sealed types, REST/WS routes, MIDI Learn session | Not started |
 | 3 | Inbound routing: fader → Layer 4 writes, buttons → GO/Back/Pause/FireCue/Flash/Blackout/Grand Master, app-side banks | Not started |
@@ -153,16 +157,19 @@ Confirmed with the user 2026-04-18:
 
 ### Phase 0 work
 
-- [ ] Add `ktmidi` + `libremidi` backend to `build.gradle.kts`. Configure jpackage native-lib bundling per platform.
-- [ ] `MidiController.kt` (sealed interface) + `KtMidiController.kt` (the implementation). Model the concurrency on `ArtNetController`:
-  - Single dedicated thread per device for I/O (named `MidiThread-{vendor}-{product}-{port}`).
-  - Conflated `Channel<MidiFeedbackMessage>` per `(controlId)` for outbound. Select-loop merges all per-control channels into the transmission thread.
-  - Input events flow into a shared `MutableSharedFlow<MidiInputEvent>` on the controller (consumers subscribe; no backpressure at this layer — downstream handles it).
-- [ ] `MidiInputEvent` sealed types: `NoteOn(channel, note, velocity)`, `NoteOff(channel, note, velocity)`, `ControlChange(channel, cc, value)`, `PitchBend(channel, value14bit)`, `SysEx(bytes)`. Normalise velocities and values as `UByte` / `UShort` (14-bit).
-- [ ] `MidiFeedbackMessage` mirrors inbound structure for outbound.
-- [ ] `MidiDeviceRegistry` backed by ktmidi's device-changed events. Emits `DeviceConnected(port)` / `DeviceDisconnected(port)` as a `SharedFlow`.
-- [ ] `ConsoleEchoListener` integration test app (main function in `src/test/kotlin/...`) for manual validation.
-- [ ] Unit tests with a synthetic in-memory MIDI transport (ktmidi provides one for testing).
+- [x] Add `ktmidi-jvm` + `ktmidi-jvm-desktop` (0.11.2) to `build.gradle.kts`. Bumped Kotlin 2.1.21 → 2.2.21 and toolchain 17 → 24 (ktmidi's Panama FFM path needs Java 22+). No extra jpackage config needed — the Ktor plugin's existing distribution tasks bundle transitive native resources.
+- [x] `MidiController.kt` (sealed interface) + `KtMidiController.kt` (implementation). Matches `ArtNetController`'s shape: dedicated single-thread context per device (`MidiThread-${handle.displayKey}`); per-`MidiControlKey` conflated `Channel<MidiFeedbackMessage>`; `select` loop in the thread merges a shared wake signal with a ~60 Hz ticker; delta suppression against `lastSentBytes` before calling `MidiSendTarget.send`.
+  - Input events flow into a `MutableSharedFlow<MidiInputEvent>` (buffer 256, `DROP_OLDEST`). Consumers subscribe freely; no backpressure at this layer.
+  - Test seams: `MidiSendTarget` / `MidiInputSource` / `MidiAccessSource` interfaces let unit tests drive the pipeline without loading the native libremidi binary.
+- [x] `MidiInputEvent` sealed hierarchy: `NoteOn(channel, note, velocity: UByte)`, `NoteOff`, `ControlChange(channel, cc, value: UByte)`, `PitchBend(channel, value: UShort /*0..16383*/)`, `SysEx(bytes)`. `MidiMessageParser` handles channel-voice decode, running status, multi-packet SysEx accumulation, and swallows system real-time / system common interleaves.
+- [x] `MidiFeedbackMessage` mirrors inbound structure for outbound; each exposes `controlKey: MidiControlKey` (for conflation) and `encode(): ByteArray`.
+- [x] `MidiDeviceRegistry` with 1 Hz poll diff (libremidi has no native device-changed events — see Change log 2026-04-18). Emits `DeviceConnected(handle)` / `DeviceDisconnected(handle)` on a `SharedFlow<DeviceEvent>`; maintains a `StateFlow<List<MidiDeviceHandle>>`; auto-opens controllers on connect when `autoOpen` is true.
+- [x] `ConsoleEchoListener.kt` integration test app under `src/test/kotlin/uk/me/cormack/lighting7/midi/` — subscribes to connect events, prints every inbound event, echoes `NoteOn` / `ControlChange` back for LED validation.
+- [x] Unit tests covering parser round-trips, feedback conflation + delta suppression, device registry diff cycles. 26 new tests; all pass alongside the pre-existing suite (399 total).
+
+### Phase 0 wiring
+
+`State.midiRegistry` (lazy, in [State.kt](../src/main/kotlin/uk/me/cormack/lighting7/state/State.kt)) holds the registry; `State.initializeShow()` calls `midiRegistry.start(GlobalScope)` after `show.start()`. Nothing in the app consumes registry output yet — Phase 1+ picks up the `ConsoleEchoListener` baton.
 
 ### Phase 0 files
 
@@ -524,3 +531,9 @@ Flag these to the user before implementing.
 ## Change log
 
 **2026-04-18 (same session as drafting)** — Device profile format changed from JSON-in-DB to Kotlin classes discovered by `ControlSurfaceRegistry`, mirroring `FixtureTypeRegistry` and the `@FixtureType` annotation pattern. Rationale: consistency with fixture definitions. Cascade edits across Phase 1 (removed `DaoDeviceProfile`, JSON resource seeds, and `deviceProfile` REST routes; replaced with `@ControlSurfaceType` annotation + DSL-based device class + registry + `controlSurfaceTypes` route). Binding table now references `device_type_key: String` instead of a DB profile FK.
+
+**2026-04-18 (Phase 0 implementation)** — Three deviations from the plan, all captured here so the next session doesn't re-litigate them:
+
+1. **Hot-plug via polling instead of native events.** The plan said "ktmidi's device-changed events drive a `DeviceRegistry`". ktmidi's upstream docs (`canDetectStateChanges = false`) are explicit that none of its desktop backends — `LibreMidiAccess`, `RtMidiAccess`, `JvmMidiAccess` — expose device-added/removed callbacks. `MidiDeviceRegistry` now diffs `MidiAccess.inputs ∪ MidiAccess.outputs` on a 1 Hz timer and emits the same `Connected` / `Disconnected` events on its `SharedFlow`. Public contract unchanged; implementation is just polled. If a future backend grows real state-change events, the poll loop can be replaced without touching downstream consumers.
+2. **Kotlin bumped 2.1.21 → 2.2.21; JVM toolchain 17 → 24.** The `ktmidi-jvm-desktop` module targets JVM 22 bytecode (uses `java.lang.foreign.Arena`, Panama FFM). Kotlin 2.1.21's max `jvmTarget` was 23; ktmidi transitively pulled in kotlin-stdlib 2.2.x which caused subtle type-resolution regressions against the 2.1.21 compiler. User accepted the short-term risk of kotlin-compiler-server regressions in exchange for a clean compile path — see the comment on the `plugins { }` block in `build.gradle.kts`. Toolchain 24 (non-LTS) emits bytecode runnable on JDK 25 (LTS).
+3. **`FixtureGroup.reversed()` → `FixtureGroup.reverseOrder()`.** Collateral fallout of the toolchain bump. `FixtureGroup<T>` implements `List<GroupMember<T>>` by delegation. JDK 21 added `reversed()` to `java.util.List` with incompatible return type, so Kotlin 2.2 on JVM 21+ targets can no longer resolve `group.reversed()` to the member (which returned `FixtureGroup<T>`) — it picks the inherited Java method instead (returning a `SequencedCollection<GroupMember<T>>`). Renaming to `reverseOrder()` is the minimum-blast-radius fix; two tests and two docs snippets updated. Public API break noted; pre-production, acceptable.
