@@ -12,6 +12,7 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.fx.CueTriggerManager
+import uk.me.cormack.lighting7.midi.DeviceMatcher
 import uk.me.cormack.lighting7.midi.LibreMidiAccessSource
 import uk.me.cormack.lighting7.midi.MidiDeviceRegistry
 import uk.me.cormack.lighting7.models.*
@@ -47,11 +48,19 @@ class State(val config: ApplicationConfig) {
     /**
      * Control-surface MIDI device registry (Phase 0 of control-surface-plan.md).
      * Polls connected MIDI ports on a 1 Hz interval, pairs them into device handles, and
-     * auto-opens a [uk.me.cormack.lighting7.midi.KtMidiController] for each. Nothing in
-     * the app consumes this yet; Phase 1+ will wire binding and routing on top.
+     * auto-opens a [uk.me.cormack.lighting7.midi.KtMidiController] for each.
      */
     val midiRegistry: MidiDeviceRegistry by lazy {
         MidiDeviceRegistry(LibreMidiAccessSource())
+    }
+
+    /**
+     * Control-surface device matcher (Phase 1). Subscribes to [midiRegistry] events,
+     * matches each connected handle against [uk.me.cormack.lighting7.midi.ControlSurfaceRegistry],
+     * and exposes attach / detach / unmatched events for Phase 2+ consumers.
+     */
+    val deviceMatcher: DeviceMatcher by lazy {
+        DeviceMatcher(midiRegistry)
     }
 
     /**
@@ -63,6 +72,7 @@ class State(val config: ApplicationConfig) {
     fun initializeShow(): Show {
         val show = projectManager.initialize()
         midiRegistry.start(GlobalScope)
+        deviceMatcher.start(GlobalScope)
         return show
     }
 

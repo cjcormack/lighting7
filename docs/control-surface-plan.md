@@ -22,24 +22,24 @@ Related:
 
 ## Status
 
-**Phase**: 0 complete. Phase 1 next.
+**Phase**: 1 complete. Phase 2 next.
 
-**Most recent session**: 2026-04-18. Phase 0 transport foundation landed. `ktmidi-jvm` + `ktmidi-jvm-desktop` 0.11.2 added as dependencies; Kotlin bumped 2.1.21 → 2.2.21 and JVM toolchain bumped 17 → 24 (ktmidi's Panama FFM path needs Java 22+). `MidiController` / `KtMidiController` / `MidiDeviceRegistry` / `MidiInputEvent` parser / `MidiFeedbackMessage` with conflation + delta suppression all wired and unit-tested (26 new tests, 399 total passing). `State.midiRegistry` starts the polling loop after `show.start()`. See Change log below for two downstream effects: hot-plug via polling (libremidi has no native state-change events), and `FixtureGroup.reversed()` → `reverseOrder()` rename (JDK 21+ added `List.reversed()` which collides with the member on Kotlin 2.2+).
+**Most recent session**: 2026-04-18. Phase 1 device profiles landed. `@ControlSurfaceType` annotation + `ControlSurfaceDevice` base class with DSL (`motorFader`, `fader`, `encoder`, `button`, `bank`) + `ControlDescriptor` sealed hierarchy + `ControlSurfaceRegistry` with fail-fast duplicate-`typeKey` / duplicate-`controlId` validation + `DeviceMatcher` subscribing to `MidiDeviceRegistry.events`. X-Touch Compact Standard-mode profile (`XTouchCompactStandard`) contributes 66 controls (9 motor faders, 16 encoders, 39 buttons, 2 bank buttons) + 2 banks. `GET /api/rest/controlSurfaceTypes` returns the full profile JSON via a discriminated-union `ControlDescriptorDto` hierarchy. `State.deviceMatcher` starts alongside `midiRegistry` after `show.start()`. 19 new tests (12 registry, 5 matcher, 2 integration), 418 total passing. No deviations from the approved plan.
 
 **Next actions** (for the session that picks this up):
-1. Start Phase 1: author `@ControlSurfaceType` annotation + `ControlSurfaceDevice` base class with DSL (`motorFader`, `fader`, `encoder`, `button`, `bank`).
-2. Write `ControlSurfaceRegistry` modelled on [FixtureTypeRegistry.kt](../src/main/kotlin/uk/me/cormack/lighting7/fixture/FixtureTypeRegistry.kt).
-3. Implement the X-Touch Compact Standard-mode profile class.
-4. Add `DeviceMatcher` that subscribes to `MidiDeviceRegistry.events` and pairs `handle.displayKey` / vendor / product against `@ControlSurfaceType` entries.
-5. Add `GET /api/rest/controlSurfaceTypes` route.
-6. Manually validate on the X-Touch Compact: `ConsoleEchoListener` already works end-to-end (Phase 0 verification); re-run once profiles are wired.
+1. Start Phase 2: introduce the `DaoControlSurfaceBinding` table (project-scoped, `(device_type_key, control_id, bank)` keyed).
+2. Design the `BindingTarget` sealed hierarchy (`FixtureProperty`, `GroupProperty`, `CueStackGo/Back/Pause`, `FireCue`, `Flash`, `Blackout`, `GrandMasterToggle`, `SetBank`) with `@Serializable` discriminator.
+3. Build `ControlSurfaceBindingService` with in-memory cache keyed by `(projectId, deviceTypeKey, controlId, bank)`.
+4. Implement `MidiLearnSessionManager` — subscribe to `DeviceMatcher.events` → consume Phase 0's `MidiController.input` flow via `registry.controllerFor(handle.displayKey)`; time-out sessions at 30 s.
+5. Add CRUD routes `/api/rest/projects/{id}/surfaceBindings` and WebSocket `surfaceLearn.*` handlers.
+6. Manually validate on the X-Touch Compact: confirm `GET /api/rest/controlSurfaceTypes` returns the profile; confirm `DeviceMatcher.events` fires `DeviceAttached(x-touch-compact-standard)` on hot-plug.
 
 **Per-phase tracker:**
 
 | Phase | Summary | Status |
 |-------|---------|--------|
 | 0 | Transport foundation: ktmidi setup, `MidiController`, per-device coroutines, input/output channels, rate limiting, delta-tracked feedback, hot-plug detection | **Complete** |
-| 1 | Device profile model: Kotlin `ControlSurfaceDevice` classes + `@ControlSurfaceType` annotation + `ControlSurfaceRegistry`, X-Touch Compact profile class | Not started |
+| 1 | Device profile model: Kotlin `ControlSurfaceDevice` classes + `@ControlSurfaceType` annotation + `ControlSurfaceRegistry`, X-Touch Compact profile class | **Complete** |
 | 2 | Mapping model + MIDI Learn: `ControlSurfaceBinding` table, `BindingTarget` sealed types, REST/WS routes, MIDI Learn session | Not started |
 | 3 | Inbound routing: fader → Layer 4 writes, buttons → GO/Back/Pause/FireCue/Flash/Blackout/Grand Master, app-side banks | Not started |
 | 4 | Feedback & reconciliation: motor drive, LED feedback, touch suppression, soft takeover, initial sync, device-side A/B layer coordination | Not started |
@@ -229,14 +229,14 @@ Confirmed with the user 2026-04-18:
 
 ### Phase 1 work
 
-- [ ] `ControlSurfaceType.kt` — annotation.
-- [ ] `ControlSurfaceDevice.kt` — base class plus the DSL builder functions (`motorFader`, `fader`, `encoder`, `button`, `bank`).
-- [ ] `ControlDescriptor.kt` — sealed hierarchy.
-- [ ] `ControlSurfaceRegistry.kt` — manual list + lazy maps, modelled on [FixtureTypeRegistry.kt](../src/main/kotlin/uk/me/cormack/lighting7/fixture/FixtureTypeRegistry.kt).
-- [ ] `devices/XTouchCompactStandard.kt` — first concrete device.
-- [ ] `DeviceMatcher.kt` — watches the Phase 0 `DeviceRegistry`, matches via `@ControlSurfaceType`, emits `DeviceAttached`.
-- [ ] `routes/controlSurfaceTypes.kt` — `GET` endpoint.
-- [ ] Tests.
+- [x] `ControlSurfaceType.kt` — annotation (`typeKey`, `vendor`, `product`, `portPattern`).
+- [x] `ControlSurfaceDevice.kt` — base class plus the DSL builder functions (`motorFader`, `fader`, `encoder`, `button`, `bank`).
+- [x] `ControlDescriptor.kt` — sealed hierarchy (`FaderDescriptor`, `EncoderDescriptor`, `ButtonDescriptor`, `BankButtonDescriptor`) plus `BankDefinition` + enums `LedFeedback` / `FaderResolution` / `EncoderRingStyle`.
+- [x] `ControlSurfaceRegistry.kt` — manual list + lazy maps, fail-fast validation on duplicate `typeKey` AND duplicate `controlId` within a device (stricter than [FixtureTypeRegistry.kt](../src/main/kotlin/uk/me/cormack/lighting7/fixture/FixtureTypeRegistry.kt) which silently last-writes-wins). `buildFromClasses` helper exposed internal for tests.
+- [x] `devices/XTouchCompactStandard.kt` — 9 motor faders + 16 encoders with push & ring + 39 buttons + A/B layer banks.
+- [x] `DeviceMatcher.kt` — subscribes to `MidiDeviceRegistry.events`, matches via `@ControlSurfaceType`, emits `DeviceAttached` / `DeviceDetached` / `UnmatchedDeviceConnected`. Attached instances surfaced via `StateFlow<Map<String, Attached>>`.
+- [x] `routes/controlSurfaceTypes.kt` — `GET /api/rest/controlSurfaceTypes`. Discriminated-union `ControlDescriptorDto` with `@SerialName` tags for each descriptor subtype.
+- [x] Tests — `ControlSurfaceRegistryTest` (14) + `DeviceMatcherTest` (5). Covers: descriptor counts, field wiring, regex portPattern fallback, duplicate-typeKey fail-fast, duplicate-controlId fail-fast, missing-annotation fail-fast, attach/detach/unmatched event flow, live `tick()` integration through a fake access source.
 
 ### Phase 1 files
 
@@ -531,6 +531,11 @@ Flag these to the user before implementing.
 ## Change log
 
 **2026-04-18 (same session as drafting)** — Device profile format changed from JSON-in-DB to Kotlin classes discovered by `ControlSurfaceRegistry`, mirroring `FixtureTypeRegistry` and the `@FixtureType` annotation pattern. Rationale: consistency with fixture definitions. Cascade edits across Phase 1 (removed `DaoDeviceProfile`, JSON resource seeds, and `deviceProfile` REST routes; replaced with `@ControlSurfaceType` annotation + DSL-based device class + registry + `controlSurfaceTypes` route). Binding table now references `device_type_key: String` instead of a DB profile FK.
+
+**2026-04-18 (Phase 1 implementation)** — Two small design choices worth noting:
+
+1. **`ControlSurfaceRegistry` fail-fast is strictly stricter than `FixtureTypeRegistry`.** `FixtureTypeRegistry` uses `.toMap()` which silently last-writes-wins on duplicate `typeKey`. For surfaces, duplicate typeKeys would break persisted bindings (bindings reference typeKeys as a stable contract — see Open Question 9), so `ControlSurfaceRegistry.buildFromClasses` throws `IllegalStateException` on duplicate typeKey *and* on duplicate `controlId` within a single device class. The logic is extracted into `internal fun buildFromClasses(classes)` so tests can exercise validation paths without mutating the live class list.
+2. **`DeviceMatcher` surfaces unmatched devices as events, not silence.** The plan said "find a matching `@ControlSurfaceType` by vendor/product/portPattern and emit `DeviceAttached`". In practice the matcher also emits `UnmatchedDeviceConnected` for devices that don't match any profile — Phase 2's MIDI Learn flow needs this signal to offer the "bind this unknown device" path in the UI. Keeping the event on the Phase 1 matcher (rather than inferring it from `MidiDeviceRegistry.events` + `attached.value` in Phase 2) keeps the consumer API symmetric: every inbound `Connected` yields exactly one `SurfaceEvent` of some kind.
 
 **2026-04-18 (Phase 0 implementation)** — Three deviations from the plan, all captured here so the next session doesn't re-litigate them:
 

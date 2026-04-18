@@ -22,6 +22,7 @@ fun Application.configureRouting(state: State) {
             routeApiRestFxDefinitions(state)
             routeApiRestGroups(state)
             routeApiRestAiChat(state)
+            routeApiRestControlSurfaceTypes(state)
         }
 
         routeKotlinCompilerServer(state)
