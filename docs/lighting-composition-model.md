@@ -144,22 +144,25 @@ Operators edit cues through an active editing session, managed by `cueEdit.*` so
 
 ### Lifecycle
 
-- `cueEdit.beginEdit { cueId, mode }` — server snapshots the cue's Layer 3 property assignments (the pre-edit baseline) and stores it for the session. In Live mode the cue is also activated on stage. In Blind mode the stage is untouched.
-- `cueEdit.setChannel / setProperty / setPalette / addPresetApplication / addAdHocEffect / clearAssignment` — edits auto-persist into the cue. In Live mode the server also performs the transient stage-side write for instant feedback. In Blind mode edits persist without any stage effect.
-- `cueEdit.discardChanges { cueId }` — restores the cue's Layer 3 property assignments from the session-start snapshot. In Live mode the stage reflects the restored state on the next composition pass. Equivalent in spirit to EOS `Release` / grandMA `Clear`.
-- `cueEdit.setMode { cueId, mode }` — transitions mid-session. Live → Blind stops the cue on stage but keeps the session open. Blind → Live applies the cue's currently-persisted state to the stage.
-- `cueEdit.endEdit { cueId }` — closes the session. In Live mode, stops the cue or hands control back to the stack. In Blind mode, is a stage no-op. The snapshot is dropped.
+- `cueEdit.beginEdit { cueId, mode }` — server snapshots the cue's Layer 3 property assignments (the pre-edit baseline) and stores it for the session. In Live mode the cue is activated on stage for the session (if not already active). In Blind mode the session does not toggle stage activation.
+- `cueEdit.setChannel / setProperty / setPalette / addPresetApplication / addAdHocEffect / clearAssignment` — edits auto-persist into the cue. In Live mode the server also performs the transient stage-side write for instant feedback. In Blind mode there is no transient write, but edits still propagate to stage naturally via Layer 3 re-composition if the cue is already active via the playback stack (see below).
+- `cueEdit.discardChanges { cueId }` — restores the cue's Layer 3 property assignments from the session-start snapshot. Stage reflects the restored state on the next composition pass if the cue is active (in either mode). Equivalent in spirit to EOS `Release` / grandMA `Clear`.
+- `cueEdit.setMode { cueId, mode }` — transitions mid-session. Live → Blind drops the session-owned stage activation but keeps the session open; if the cue is also active via the stack it remains on stage. Blind → Live activates the cue on stage for the session if it is not already active.
+- `cueEdit.endEdit { cueId }` — closes the session. In Live mode, drops the session-owned stage activation (the cue stays on stage if the stack is also running it). In Blind mode, is a stage no-op. The snapshot is dropped.
 
 ### Live vs Blind
 
-- **Live** (default on the Cues page): the cue is active on stage and edits reflect in real time. What you see is what you save.
-- **Blind**: the stage is untouched; edits persist to the cue only. Useful when editing cues during a running show without disturbing the current look.
+The modes differ in whether the edit session itself activates the cue on stage. They do **not** differ in whether edits to an *already-active* cue are visible — those always are, because Layer 3 re-composes each frame.
+
+- **Live** (default on the Cues page): starting an edit activates the cue on stage. Edits reflect in real time. What you see is what you save.
+- **Blind**: starting an edit does not activate the cue. Two cases:
+  - *Cue is not active via the stack*: edits persist silently and become visible when the cue is next fired. Useful for preparing an upcoming cue while a different look is on stage.
+  - *Cue is already active via the stack* (the common case during a running show): edits persist and are visible on stage on the next composition pass, because the cue's Layer 3 contribution recomposes with the new values. This lets the operator tweak the current live look without any separate "live override" flow, while edits to *other* inactive cues in the same session remain invisible until fired.
 
 ## Divergences from industry consoles
 
 For readers familiar with EOS, grandMA, Hog, MagicQ, or Avolites:
 
-- **Stricter Blind**: our Blind never writes to stage. Pro consoles let some active-target edits through (EOS updates active subs / effects immediately even when the operator is editing in Blind). We prioritise the simpler mental model.
 - **No Update command**: auto-persist with snapshot-based discard replaces the traditional buffer + commit flow (EOS `Update`, grandMA `Store /merge`). Operators coming from pro consoles will briefly look for one — `discardChanges` is the escape hatch.
 - **No HTP/LTP toggle on cues**: the composition rule is a property-category intrinsic, not a per-cue choice. We do not need the EOS / Hog "this cuelist is HTP for intensity" switch because the category already declares it.
 - **No "programmer" layer above playbacks**: direct writes are Layer 4, *below* playbacks' Layer 3. Pro consoles place the programmer above playbacks. For us, direct writes are sticky but not supreme. During cue authoring, `cueEdit.setChannel` routes writes into Layer 3, which yields the effective operator behaviour — edits stick, win over effects, and persist on re-trigger.
