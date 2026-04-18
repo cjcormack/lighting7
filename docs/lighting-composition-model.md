@@ -113,6 +113,8 @@ Layer 4 writes are **sticky** — they persist until explicitly released. Effect
 
 Interaction with cue-edit sessions: when a client holds an active `cueEdit` session, `updateChannel` is replaced by `cueEdit.setChannel`, which routes the write into the cue's Layer 3 property assignments rather than Layer 4. See [Cue edit sessions](#cue-edit-sessions) below.
 
+**Control surfaces write Layer 4** the same way the web UI does. A surface fader bound to `group.dimmer` routes through the same `DirectWriteStore` that `updateChannel` uses; during a cue-edit session it routes into Layer 3 via `cueEdit.*` just like the frontend. Surfaces are not a separate layer — they are another client of the existing routing. Flash buttons write an ephemeral Layer 4 entry on press and clear it on release. Blackout and Grand Master are applied at transmit time (alongside parking), not as composition layers. See [control-surface-plan.md](control-surface-plan.md).
+
 ## Layer 5 — Baseline / defaults
 
 Per-fixture baseline values: typically 0 (blackout) for intensity-like channels, 127 (centred) for pan/tilt where the fixture profile specifies. The "rest state" seen when no other layer contributes.

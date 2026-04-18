@@ -17,11 +17,13 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: 0 — code landed; ready for Phase 1.
+**Phase**: 0 — code landed. **Paused** pending control-surface v1 (Phases 0–5 of [control-surface-plan.md](control-surface-plan.md)).
 
 **Most recent session**: 2026-04-18. Implemented Phase 0 end-to-end: `CompositionRule` enum on `PropertyCategory` with per-property `@FixtureProperty(composition = …)` override; `FxInstance.priority` + cached sorted-effects snapshots in `FxEngine` (rebuilt on mutation, lock-free tick read); `DirectWriteStore` (Layer 4) with `updateChannel` WS handler wired in; `Layer3Resolver` with full HTP / LTP / fade-weight / RGB-crossfade / settings-snap / specificity logic (empty input in P0); `LayerResolver` cascade (L3 → L4 → L5); `FxTarget.applyNeutralValueToFixture` refactored to `resetToFallback(fixture, fallback)` with a new `fallbackFromDirectWrites` and allocation-free `forEachChannel` for the parking short-circuit; `DaoCues.stomp` column + `FxEngine.stompForCue` + `applyCue` hook (placeholder overlap source for Phase 1); cue-derived priority formula `stackId * 1_000_000 + sortOrder * 1_000 + 1`. 26 new unit tests added across `CompositionRuleTest`, `DirectWriteStoreTest`, `Layer3ResolverTest`, `FxEngineStompAndPriorityTest`. All existing tests pass unchanged. `./gradlew build` clean.
 
-**Next actions** (for the session that picks this up):
+**Paused 2026-04-18** — control-surface v1 is running ahead of this plan's Phase 1 because its EditorContext/composition-model touchpoints are co-designed with cue authoring. See [control-surface-plan.md](control-surface-plan.md). Phase 6 of that plan (cueEdit integration) depends on Phase 1 of **this** plan landing, so we'll resume here after surface Phase 5, then loop back for surface Phase 6 — or bundle the two together.
+
+**Next actions** (for the session that picks this up, after surface v1):
 1. Manual smoke-check against a running backend + frontend: start a SineWave effect on a dimmer, then `POST /api/rest/updateChannel` to set that dimmer to 180 — confirm the effect wiggles above 180 instead of resetting to 0 each tick (this is the intended behavioural change). Park a channel with a running effect on it — confirm parked value stays. Two effects on the same property with different priorities — confirm deterministic composition.
 2. Start Phase 1: `CuePropertyAssignment` model + migration; `EditorContext` / `cueEdit.*` socket messages.
 
