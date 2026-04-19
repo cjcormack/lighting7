@@ -398,39 +398,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val cueInfo = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
-                val stackId = cue.cueStack?.id?.value
-                val cueData = CueApplyData(
-                    cueId = cue.id.value,
-                    cueName = cue.name,
-                    palette = cue.palette,
-                    updateGlobalPalette = cue.updateGlobalPalette,
-                    presetApplications = cue.presetApplications.sortedBy { it.sortOrder }.map { app ->
-                        CuePresetApplicationDto(
-                            presetId = app.preset.id.value,
-                            targets = app.targets,
-                            delayMs = app.delayMs,
-                            intervalMs = app.intervalMs,
-                            randomWindowMs = app.randomWindowMs,
-                            sortOrder = app.sortOrder,
-                        )
-                    },
-                    adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
-                    propertyAssignments = cue.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
-                    triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
-                        CueTriggerDto(
-                            triggerType = trigger.triggerType.name,
-                            delayMs = trigger.delayMs,
-                            intervalMs = trigger.intervalMs,
-                            randomWindowMs = trigger.randomWindowMs,
-                            scriptId = trigger.script.id.value,
-                            sortOrder = trigger.sortOrder,
-                        )
-                    },
-                    stomp = cue.stomp,
-                    cueStackId = stackId,
-                    sortOrder = cue.sortOrder,
-                )
-                Pair(cueData, stackId)
+                val cueData = buildCueApplyData(cue)
+                Pair(cueData, cueData.cueStackId)
             }
 
             if (cueInfo == null) {
@@ -513,6 +482,45 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         }
     }
 
+    // POST /{projectId}/cues/{cueId}/snapshot-from-live - Capture live state into the cue (current project only)
+    post<SnapshotFromLiveResource> { resource ->
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot snapshot cues from project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val captured = captureCurrentState(state)
+
+            val cueDetails = transaction(state.database) {
+                val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
+                if (cue.project.id != project.id) return@transaction null
+
+                // Wholesale replace children with the captured live state. Same semantics as
+                // PATCH'ing all four arrays at once.
+                cue.presetApplications.forEach { it.delete() }
+                cue.adHocEffects.forEach { it.delete() }
+                cue.propertyAssignments.forEach { it.delete() }
+                // Palette: replace the cue's stored palette with the captured one.
+                cue.palette = captured.palette
+                createCueChildren(
+                    cue,
+                    presetApplications = captured.presetApplications,
+                    adHocEffects = captured.adHocEffects,
+                    propertyAssignments = captured.propertyAssignments,
+                    triggers = emptyList(),
+                )
+                cue.toCueDetails(isCurrentProject = true)
+            }
+
+            if (cueDetails != null) {
+                state.show.fixtures.cueListChanged()
+                call.respond(cueDetails)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+            }
+        }
+    }
+
     // GET /{projectId}/cues/current-state - Get current palette and active effects without creating a cue
     get<CueCurrentStateResource> { resource ->
         withCurrentProject(
@@ -557,6 +565,9 @@ data class ApplyCueResource(val parent: ProjectCuesResource, val cueId: Int)
 
 @Resource("/{cueId}/stop")
 data class StopCueResource(val parent: ProjectCuesResource, val cueId: Int)
+
+@Resource("/{cueId}/snapshot-from-live")
+data class SnapshotFromLiveResource(val parent: ProjectCuesResource, val cueId: Int)
 
 @Resource("/current-state")
 data class CueCurrentStateResource(val parent: ProjectCuesResource)
@@ -675,9 +686,15 @@ private data class CapturedState(
     val palette: List<String>,
     val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
+    val propertyAssignments: List<CuePropertyAssignmentDto>,
 )
 
-/** Capture the current palette and active effects from the FX engine. */
+/**
+ * Capture the current palette, active effects, and active Layer 3 property assignments from
+ * the FX engine. Property assignments are read from [uk.me.cormack.lighting7.fx.LayerResolver.currentLayer3State]
+ * — which already holds the fully-resolved-and-composed values from all active cues — and
+ * emitted one row per (targetKey, propertyName) via [Layer3Resolver.PropertyValue.serialize].
+ */
 private fun captureCurrentState(state: State): CapturedState {
     val currentPalette = state.show.fxEngine.getPalette().map { it.toSerializedString() }
     val activeEffects = state.show.fxEngine.getActiveEffects()
@@ -718,14 +735,69 @@ private fun captureCurrentState(state: State): CapturedState {
         CuePresetApplicationDto(presetId = presetId, targets = targets)
     }
 
+    // Layer 3 state → property assignment rows. Key.targetKey is always a fixture key here
+    // (buildLayer3AssignmentsForCue expands groups to member rows before publishing), so the
+    // captured snapshot is fixture-scoped — "flatten live" rather than "preserve group shape".
+    // That's deliberate: the operator can re-grouping by hand when they paste into a cue, and
+    // the machinery has no way to know which group a live fixture-level contribution came from.
+    val layer3Snapshot = state.show.fxEngine.layerResolver.currentLayer3State
+    val propertyAssignments = layer3Snapshot.entries
+        .sortedWith(compareBy({ it.key.targetKey }, { it.key.propertyName }))
+        .mapIndexed { index, (key, value) ->
+            CuePropertyAssignmentDto(
+                targetType = "fixture",
+                targetKey = key.targetKey,
+                propertyName = key.propertyName,
+                value = value.serialize(),
+                sortOrder = index,
+            )
+        }
+
     return CapturedState(
         palette = currentPalette,
         presetApplications = presetAppDtos,
         adHocEffects = adHocEffects,
+        propertyAssignments = propertyAssignments,
     )
 }
 
 // ─── Entity helpers ─────────────────────────────────────────────────────
+
+/**
+ * Build a [CueApplyData] snapshot from a [DaoCue] entity. Must be called inside an Exposed
+ * transaction — dereferences the cue's child collections eagerly.
+ */
+internal fun buildCueApplyData(cue: DaoCue): CueApplyData = CueApplyData(
+    cueId = cue.id.value,
+    cueName = cue.name,
+    palette = cue.palette,
+    updateGlobalPalette = cue.updateGlobalPalette,
+    presetApplications = cue.presetApplications.sortedBy { it.sortOrder }.map { app ->
+        CuePresetApplicationDto(
+            presetId = app.preset.id.value,
+            targets = app.targets,
+            delayMs = app.delayMs,
+            intervalMs = app.intervalMs,
+            randomWindowMs = app.randomWindowMs,
+            sortOrder = app.sortOrder,
+        )
+    },
+    adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+    propertyAssignments = cue.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
+    triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
+        CueTriggerDto(
+            triggerType = trigger.triggerType.name,
+            delayMs = trigger.delayMs,
+            intervalMs = trigger.intervalMs,
+            randomWindowMs = trigger.randomWindowMs,
+            scriptId = trigger.script.id.value,
+            sortOrder = trigger.sortOrder,
+        )
+    },
+    stomp = cue.stomp,
+    cueStackId = cue.cueStack?.id?.value,
+    sortOrder = cue.sortOrder,
+)
 
 /** Convert a DaoCuePropertyAssignment entity to its DTO form. */
 internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(

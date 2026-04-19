@@ -244,4 +244,54 @@ class Layer3ResolverTest {
     fun `parseAssignmentValue - slider rejects non-numeric`() {
         assertNull(Layer3Resolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "nope"))
     }
+
+    // ─── PropertyValue.serialize round-trip ───────────────────────────────
+
+    @Test
+    fun `serialize round-trip - slider`() {
+        val original = Layer3Resolver.PropertyValue.Slider(180u)
+        val parsed = Layer3Resolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", original.serialize())
+        assertEquals(original, parsed)
+    }
+
+    @Test
+    fun `serialize round-trip - setting`() {
+        val original = Layer3Resolver.PropertyValue.Setting(64u)
+        val parsed = Layer3Resolver.parseAssignmentValue(PropertyCategory.SETTING, "mode", original.serialize())
+        assertEquals(original, parsed)
+    }
+
+    @Test
+    fun `serialize round-trip - plain colour`() {
+        val original = Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(255, 128, 64)))
+        val parsed = Layer3Resolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", original.serialize())
+        assertEquals(original, parsed)
+    }
+
+    @Test
+    fun `serialize round-trip - extended colour with white amber and uv`() {
+        val original = Layer3Resolver.PropertyValue.Colour(
+            ExtendedColour(Color(10, 20, 30), white = 40u, amber = 50u, uv = 60u)
+        )
+        val parsed = Layer3Resolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", original.serialize())
+        assertEquals(original, parsed)
+    }
+
+    @Test
+    fun `serialize round-trip - position`() {
+        val original = Layer3Resolver.PropertyValue.Position(pan = 100u, tilt = 200u)
+        val parsed = Layer3Resolver.parseAssignmentValue(PropertyCategory.PAN, "position", original.serialize())
+        assertEquals(original, parsed)
+    }
+
+    @Test
+    fun `serialize slider produces decimal string without u suffix`() {
+        assertEquals("0", Layer3Resolver.PropertyValue.Slider(0u).serialize())
+        assertEquals("255", Layer3Resolver.PropertyValue.Slider(255u).serialize())
+    }
+
+    @Test
+    fun `serialize position emits pan-comma-tilt`() {
+        assertEquals("128,200", Layer3Resolver.PropertyValue.Position(128u, 200u).serialize())
+    }
 }

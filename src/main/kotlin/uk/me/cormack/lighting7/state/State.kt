@@ -255,6 +255,17 @@ class State(val config: ApplicationConfig) {
 
             // Migration: drop track changed script column from projects (music sync removed)
             migrateDropTrackChangedScript()
+
+            // Migration: convert legacy StaticValue / StaticSetting ad-hoc effects into
+            // first-class CuePropertyAssignment rows (Layer 3). Idempotent — becomes a no-op
+            // once the rows are gone.
+            val summary = LegacyStaticEffectMigration.run(this)
+            if (summary.converted > 0 || summary.skipped > 0) {
+                logger.info(
+                    "LegacyStaticEffectMigration: converted {} row(s), skipped {} row(s)",
+                    summary.converted, summary.skipped,
+                )
+            }
         }
 
         return database

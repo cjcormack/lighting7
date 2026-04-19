@@ -59,6 +59,27 @@ class Layer3Resolver {
         data class Colour(val value: ExtendedColour) : PropertyValue()
         data class Position(val pan: UByte, val tilt: UByte) : PropertyValue()
         data class Setting(val channelValue: UByte) : PropertyValue()
+
+        /**
+         * Inverse of [parseAssignmentValue] — emits the canonical string form that round-trips
+         * back through the parser. Used by `snapshot-from-live` to serialise live Layer 3
+         * state into [uk.me.cormack.lighting7.models.CuePropertyAssignmentDto] rows.
+         *
+         * Format:
+         * - [Slider] / [Setting]: unsigned decimal `"0".."255"`.
+         * - [Colour]: [ExtendedColour.toSerializedString] (`"#rrggbb"` + optional `w` / `a` / `uv` tags).
+         * - [Position]: `"pan,tilt"` (each `"0".."255"`).
+         *
+         * Round-trip invariant: `parseAssignmentValue(category, name, v.serialize()) == v` for
+         * every [PropertyValue] instance, provided (category, name) matches what produced it.
+         * See `Layer3ResolverTest`.
+         */
+        fun serialize(): String = when (this) {
+            is Slider -> value.toInt().toString()
+            is Setting -> channelValue.toInt().toString()
+            is Colour -> value.toSerializedString()
+            is Position -> "${pan.toInt()},${tilt.toInt()}"
+        }
     }
 
     companion object {

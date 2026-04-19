@@ -733,6 +733,10 @@ fun Application.configureSockets(state: State) {
                 }
                 .launchIn(this)
 
+            // Per-connection cueEdit session. At most one open edit at a time per connection;
+            // cleared on disconnect so a client crash doesn't leave a cue stuck in Live mode.
+            val cueEditSessionRef = java.util.concurrent.atomic.AtomicReference<CueEditSessionState?>(null)
+
             // Scopes Learn capture broadcasts to the session's originating client, so two
             // `/surfaces` tabs don't see phantom captures from each other's sessions.
             val ownedLearnSessions: MutableSet<String> = Collections.synchronizedSet(LinkedHashSet<String>())
@@ -1025,6 +1029,59 @@ fun Application.configureSockets(state: State) {
                             state.show.globalScalerState.setGrandMaster(message.enabled)
                         }
 
+                        // Cue-edit session messages — per-connection session held in
+                        // [cueEditSessionRef]. See [CueEditSessionHandler] for semantics.
+                        is CueEditBeginEditInMessage -> {
+                            sendSerialized<OutMessage>(
+                                CueEditSessionHandler.beginEdit(state, cueEditSessionRef, message.cueId, message.mode)
+                            )
+                        }
+                        is CueEditEndEditInMessage -> {
+                            sendSerialized<OutMessage>(
+                                CueEditSessionHandler.endEdit(state, cueEditSessionRef, message.cueId)
+                            )
+                        }
+                        is CueEditSetChannelInMessage -> {
+                            sendSerialized<OutMessage>(
+                                CueEditSessionHandler.setChannel(
+                                    state, cueEditSessionRef, message.cueId,
+                                    message.universe, message.channel, message.level,
+                                )
+                            )
+                        }
+                        is CueEditSetPropertyInMessage -> {
+                            sendSerialized<OutMessage>(
+                                CueEditSessionHandler.setProperty(
+                                    state, cueEditSessionRef, message.cueId,
+                                    message.targetType, message.targetKey,
+                                    message.propertyName, message.value,
+                                )
+                            )
+                        }
+                        is CueEditDiscardChangesInMessage -> {
+                            sendSerialized<OutMessage>(
+                                CueEditSessionHandler.discardChanges(state, cueEditSessionRef, message.cueId)
+                            )
+                        }
+                        is CueEditSetModeInMessage,
+                        is CueEditSetPaletteInMessage,
+                        is CueEditAddPresetApplicationInMessage,
+                        is CueEditAddAdHocEffectInMessage,
+                        is CueEditClearAssignmentInMessage -> {
+                            val cueId = when (message) {
+                                is CueEditSetModeInMessage -> message.cueId
+                                is CueEditSetPaletteInMessage -> message.cueId
+                                is CueEditAddPresetApplicationInMessage -> message.cueId
+                                is CueEditAddAdHocEffectInMessage -> message.cueId
+                                is CueEditClearAssignmentInMessage -> message.cueId
+                                else -> null
+                            }
+                            sendSerialized<OutMessage>(CueEditErrorOutMessage(
+                                cueId = cueId,
+                                message = "cueEdit message not yet implemented — pending follow-up session",
+                            ))
+                        }
+
                         null -> TODO()
                     }
                 }
@@ -1045,6 +1102,7 @@ fun Application.configureSockets(state: State) {
                 devicesStateJob.cancel()
                 ownedLearnSessions.toList().forEach { state.midiLearnSessionManager.cancel(it) }
                 ownedLearnSessions.clear()
+                CueEditSessionHandler.endSessionOnDisconnect(state, cueEditSessionRef)
                 currentFixtures.unregisterListener(listener)
             }
         }
