@@ -188,6 +188,8 @@ internal fun Route.routeApiRestProjects(state: State) {
                 project.aiConversations.forEach { it.delete() }
                 project.fxDefinitions.forEach { it.delete() }
                 project.scripts.forEach { it.delete() }
+                project.controlSurfaceBindings.forEach { it.delete() }
+                state.controlSurfaceBindingService.invalidate(project.id.value)
                 project.delete()
 
                 DeleteResult.SUCCESS
@@ -231,6 +233,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectUniverseConfigs(state)
         routeApiRestProjectPatchGroups(state)
         routeApiRestProjectShow(state)
+        routeApiRestProjectSurfaceBindings(state)
 
         // POST /{id}/clone - Clone a project with all scripts
         post<CloneProjectResource> { resource ->

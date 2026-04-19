@@ -138,20 +138,4 @@ class DeviceMatcherTest {
         val fakeAccess = FakeMidiAccess()
         val registry = MidiDeviceRegistry(fakeAccess, autoOpen = false)
     }
-
-    private class FakeMidiAccess : MidiAccessSource {
-        override val name = "Fake"
-        val inputs = CopyOnWriteArrayList<MidiDevicePort>()
-        val outputs = CopyOnWriteArrayList<MidiDevicePort>()
-
-        override fun enumerateInputs(): List<MidiDevicePort> = inputs.toList()
-        override fun enumerateOutputs(): List<MidiDevicePort> = outputs.toList()
-
-        override suspend fun openInput(portId: String): MidiInputSource = object : MidiInputSource {
-            override fun setListener(listener: (ByteArray, Int, Int) -> Unit) {}
-            override fun close() {}
-        }
-
-        override suspend fun openOutput(portId: String): MidiSendTarget = MidiSendTarget { }
-    }
 }

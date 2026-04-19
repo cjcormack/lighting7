@@ -22,17 +22,18 @@ Related:
 
 ## Status
 
-**Phase**: 1 complete. Phase 2 next.
+**Phase**: 2 complete. Phase 3 next.
 
-**Most recent session**: 2026-04-18. Phase 1 device profiles landed. `@ControlSurfaceType` annotation + `ControlSurfaceDevice` base class with DSL (`motorFader`, `fader`, `encoder`, `button`, `bank`) + `ControlDescriptor` sealed hierarchy + `ControlSurfaceRegistry` with fail-fast duplicate-`typeKey` / duplicate-`controlId` validation + `DeviceMatcher` subscribing to `MidiDeviceRegistry.events`. X-Touch Compact Standard-mode profile (`XTouchCompactStandard`) contributes 66 controls (9 motor faders, 16 encoders, 39 buttons, 2 bank buttons) + 2 banks. `GET /api/rest/controlSurfaceTypes` returns the full profile JSON via a discriminated-union `ControlDescriptorDto` hierarchy. `State.deviceMatcher` starts alongside `midiRegistry` after `show.start()`. 19 new tests (12 registry, 5 matcher, 2 integration), 418 total passing. No deviations from the approved plan.
+**Most recent session**: 2026-04-19. Phase 2 mapping model + MIDI Learn landed.
+`DaoControlSurfaceBindings` table (project-scoped, `(device_type_key, control_id, bank)` unique slot, `bank` nullable) + `BindingTarget` sealed hierarchy (`FixtureProperty` / `GroupProperty` / `CueStackGo` / `CueStackBack` / `CueStackPause` / `FireCue` / `Flash` / `Blackout` / `GrandMasterToggle` / `SetBank`) serialized as a discriminated JSON union with `type` discriminator. `ControlSurfaceBindingService` keeps a per-project in-memory cache and exposes `resolve(projectId, deviceTypeKey, controlId, activeBank)` with bank-specific > bank-agnostic precedence. `MidiLearnSessionManager` subscribes to `DeviceMatcher.events`, collects from each attached controller's `input` flow via `MidiDeviceRegistry.controllerFor`, filters with a capturable-event predicate (fader moves with value > 0, button / encoder presses, never bank buttons), and times out pending sessions after 30 s. CRUD REST at `/api/rest/project/{projectId}/surfaceBindings` (GET/POST/GET/PATCH/DELETE) with shape validation against `ControlSurfaceRegistry` + slot-conflict 409s. WebSocket messages `surfaceLearn.begin` / `surfaceLearn.cancel` / `surfaceLearn.commit` on the input side, `surfaceLearn.started` / `surfaceLearn.captured` / `surfaceLearn.committed` / `surfaceLearn.cancelled` / `surfaceLearn.error` / `surfaceBindingsChanged` on the output side; per-connection `ownedLearnSessions` scopes capture broadcasts to the originating client. State wiring: `State.controlSurfaceBindingService` and `State.midiLearnSessionManager` with `start(GlobalScope)` in `initializeShow()`; schema adds `DaoControlSurfaceBindings` to `SchemaUtils.createMissingTablesAndColumns`; project-delete cascades to bindings and invalidates the cache. 25 new tests (9 serialization, 6 resolver precedence, 10 learn session state machine), 443 total passing.
 
 **Next actions** (for the session that picks this up):
-1. Start Phase 2: introduce the `DaoControlSurfaceBinding` table (project-scoped, `(device_type_key, control_id, bank)` keyed).
-2. Design the `BindingTarget` sealed hierarchy (`FixtureProperty`, `GroupProperty`, `CueStackGo/Back/Pause`, `FireCue`, `Flash`, `Blackout`, `GrandMasterToggle`, `SetBank`) with `@Serializable` discriminator.
-3. Build `ControlSurfaceBindingService` with in-memory cache keyed by `(projectId, deviceTypeKey, controlId, bank)`.
-4. Implement `MidiLearnSessionManager` — subscribe to `DeviceMatcher.events` → consume Phase 0's `MidiController.input` flow via `registry.controllerFor(handle.displayKey)`; time-out sessions at 30 s.
-5. Add CRUD routes `/api/rest/projects/{id}/surfaceBindings` and WebSocket `surfaceLearn.*` handlers.
-6. Manually validate on the X-Touch Compact: confirm `GET /api/rest/controlSurfaceTypes` returns the profile; confirm `DeviceMatcher.events` fires `DeviceAttached(x-touch-compact-standard)` on hot-plug.
+1. Start Phase 3: `SurfaceInputRouter` that subscribes to each attached controller's `input` flow and dispatches to the existing composition layers.
+2. Add `ActiveBankState` service (in-memory, per-device); wire WS `surfaceBank.set { deviceTypeKey, bank }`.
+3. Extend `DirectWriteStore` with a property-level API so `(fixture, property, value)` fans out to channels via the patch.
+4. Add transmit-time global scalers (`Blackout`, `GrandMasterToggle`) behind a `TransmitModifier` hook in `ArtNetController`, analogous to the `ParkManager` path.
+5. Wire `FlashStateTracker` for per-binding saved-value restoration on release.
+6. Manually validate on the X-Touch Compact: run the REST + WS Learn flow end to end (begin → move fader → captured → commit → `GET /surfaceBindings` shows the row) before touching Phase 3 routing.
 
 **Per-phase tracker:**
 
@@ -40,7 +41,7 @@ Related:
 |-------|---------|--------|
 | 0 | Transport foundation: ktmidi setup, `MidiController`, per-device coroutines, input/output channels, rate limiting, delta-tracked feedback, hot-plug detection | **Complete** |
 | 1 | Device profile model: Kotlin `ControlSurfaceDevice` classes + `@ControlSurfaceType` annotation + `ControlSurfaceRegistry`, X-Touch Compact profile class | **Complete** |
-| 2 | Mapping model + MIDI Learn: `ControlSurfaceBinding` table, `BindingTarget` sealed types, REST/WS routes, MIDI Learn session | Not started |
+| 2 | Mapping model + MIDI Learn: `ControlSurfaceBinding` table, `BindingTarget` sealed types, REST/WS routes, MIDI Learn session | **Complete** |
 | 3 | Inbound routing: fader → Layer 4 writes, buttons → GO/Back/Pause/FireCue/Flash/Blackout/Grand Master, app-side banks | Not started |
 | 4 | Feedback & reconciliation: motor drive, LED feedback, touch suppression, soft takeover, initial sync, device-side A/B layer coordination | Not started |
 | 5 | Frontend `/surfaces` route: device list, binding matrix, MIDI Learn mode, bank management, binding badges on existing views | Not started |
@@ -284,13 +285,13 @@ Confirmed with the user 2026-04-18:
 
 ### Phase 2 work
 
-- [ ] `DaoControlSurfaceBinding` table + DTO + migration (auto via `SchemaUtils`).
-- [ ] `BindingTarget` sealed class hierarchy with JSON serializers.
-- [ ] `ControlSurfaceBindingService` — persistence + in-memory cache keyed by `(projectId, deviceTypeKey, controlId, bank)`.
-- [ ] `MidiLearnSessionManager` — owns session state, subscribes to `DeviceMatcher`'s input stream, applies a "captureable" filter (button press vs first non-zero fader movement), times out sessions after 30 s.
-- [ ] Routes in `src/main/kotlin/uk/me/cormack/lighting7/routes/projectSurfaceBindings.kt`.
-- [ ] WebSocket handlers in `plugins/Sockets.kt` (or wherever the pattern lives).
-- [ ] Tests.
+- [x] `DaoControlSurfaceBindings` table ([models/surfaceBindings.kt](../src/main/kotlin/uk/me/cormack/lighting7/models/surfaceBindings.kt)) + referrer on `DaoProject.controlSurfaceBindings` + schema registration + project-delete cascade. `bank` column is nullable so a binding can be declared global (resolves under any active bank).
+- [x] `BindingTarget` sealed class with `@SerialName` discriminator + `BindingTargetJson` (classDiscriminator = "type"). `Flash` carries `target: BindingTarget` but `init {}` rejects anything other than `FixtureProperty` / `GroupProperty` and asserts `max in 0..255` — Open Question 7's enum-property exclusion is deferred to Phase 3 at the resolver level.
+- [x] `ControlSurfaceBindingService` — per-project lock, `ensureLoaded` lazy DB hydrate, `resolve` with bank-specific-wins-over-global precedence. `FieldUpdate<T>` sealed two-state sentinel distinguishes "no change" from "set to null" for nullable fields in `update()`. `changes: SharedFlow<BindingChange>` is consumed by `Sockets.kt` for `surfaceBindingsChanged` broadcasts.
+- [x] `MidiLearnSessionManager` — subscribes to `DeviceMatcher.events`, on each `DeviceAttached` launches a collector that reads `MidiController.input` via `MidiDeviceRegistry.controllerFor`. "Captureable" predicate: CC with value > 0 for faders; CC (any value) for encoder turns; NoteOn with velocity > 0 for encoder push + buttons; bank buttons explicitly never capture. Clock is injected so tests can drive `expireDueSessions` deterministically. `offerInput` is an internal test hook that bypasses the coroutine pipeline.
+- [x] Routes in [projectSurfaceBindings.kt](../src/main/kotlin/uk/me/cormack/lighting7/routes/projectSurfaceBindings.kt). `PATCH` uses boolean `*Present` flags because kotlinx.serialization can't distinguish JSON omission from JSON-null without custom serializers.
+- [x] WebSocket handlers in [plugins/Sockets.kt](../src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt). Per-connection `ownedLearnSessions: MutableSet<String>` scopes learn-event broadcasts to the originating client so two simultaneous `/surfaces` users don't race over Captured events.
+- [x] Tests (25): `BindingTargetSerializationTest` (9) covers round-trips + discriminator shape + Flash validation; `ControlSurfaceBindingResolverTest` (6) uses `seedCacheForTest` to skip DB and exercises bank precedence; `MidiLearnSessionManagerTest` (10) covers state machine transitions + capturable filter + manual-clock timeouts. 418 → 443 passing.
 
 ### Phase 2 files
 
@@ -299,7 +300,12 @@ Confirmed with the user 2026-04-18:
 - New: `src/main/kotlin/uk/me/cormack/lighting7/midi/ControlSurfaceBindingService.kt`
 - New: `src/main/kotlin/uk/me/cormack/lighting7/midi/MidiLearnSessionManager.kt`
 - New: `src/main/kotlin/uk/me/cormack/lighting7/routes/projectSurfaceBindings.kt`
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt`
+- New tests: `src/test/kotlin/uk/me/cormack/lighting7/midi/BindingTargetSerializationTest.kt`, `ControlSurfaceBindingResolverTest.kt`, `MidiLearnSessionManagerTest.kt`, `FakeDatabase.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt` (messages + handlers + subscriptions)
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/state/State.kt` (service + session-manager wiring + schema)
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/models/projects.kt` (`controlSurfaceBindings` referrer)
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/routes/projects.kt` (route mount + delete cascade)
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/routes/router.kt` — no change (route mounted via `routeApiRestProjectSurfaceBindings` inside `routeApiRestProjects`)
 
 ### Phase 2 verification
 
@@ -529,6 +535,12 @@ Flag these to the user before implementing.
 - [ ] Commit this file alongside the code changes.
 
 ## Change log
+
+**2026-04-19 (Phase 2 implementation)** — Three design choices worth noting:
+
+1. **Payload serialized as text, not `json<T>`.** `DaoControlSurfaceBindings.targetPayload` is a `text` column encoded/decoded via `BindingTargetJson.encodeToString / decodeFromString` rather than Exposed's `json<T>()` helper. Reason: future `BindingTarget` variants can be added without touching any schema, and `BindingTargetJson.ignoreUnknownKeys = true` gives downgrade compatibility if an old build reads a DB written by a newer one. The resolver also carries a small `targetType` mirror column for list-view queries that don't need to parse the JSON.
+2. **Per-connection `ownedLearnSessions` over global broadcast.** Learn-captured events are hot — multiple `/surfaces` clients could be listening at once. Broadcasting to all would create phantom capture hits in one tab when another tab's session captures. A per-connection `MutableSet<String>` filter on the learn-events flow keeps capture scoped to the originator. Binding-change broadcasts (`surfaceBindingsChanged`) go to all clients by design so UIs stay in sync.
+3. **`FieldUpdate<T>` sealed sentinel over overloads.** The `PATCH` route needs to support nullable field updates, e.g. "clear takeoverPolicy" vs "don't touch takeoverPolicy". Overloading the service method got combinatorially messy quickly; a `FieldUpdate.NoChange` / `FieldUpdate.Set(value)` sentinel keeps the single-method surface readable and prevents silent drops of a `null` when the caller intended to clear the column. The REST layer bridges with `*Present` boolean flags because kotlinx.serialization without custom serializers can't distinguish omission from explicit null.
 
 **2026-04-18 (same session as drafting)** — Device profile format changed from JSON-in-DB to Kotlin classes discovered by `ControlSurfaceRegistry`, mirroring `FixtureTypeRegistry` and the `@FixtureType` annotation pattern. Rationale: consistency with fixture definitions. Cascade edits across Phase 1 (removed `DaoDeviceProfile`, JSON resource seeds, and `deviceProfile` REST routes; replaced with `@ControlSurfaceType` annotation + DSL-based device class + registry + `controlSurfaceTypes` route). Binding table now references `device_type_key: String` instead of a DB profile FK.
 

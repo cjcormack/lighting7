@@ -12,9 +12,11 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.fx.CueTriggerManager
+import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.DeviceMatcher
 import uk.me.cormack.lighting7.midi.LibreMidiAccessSource
 import uk.me.cormack.lighting7.midi.MidiDeviceRegistry
+import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.Show
 
@@ -64,6 +66,25 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
+     * Control-surface binding persistence + cache. Owns the in-memory resolver keyed by
+     * `(projectId, deviceTypeKey, controlId, bank)`.
+     */
+    val controlSurfaceBindingService: ControlSurfaceBindingService by lazy {
+        ControlSurfaceBindingService(database)
+    }
+
+    /**
+     * MIDI Learn session coordinator. Subscribes to [deviceMatcher] attach events and routes
+     * inbound controller events into pending learn sessions.
+     */
+    val midiLearnSessionManager: MidiLearnSessionManager by lazy {
+        MidiLearnSessionManager(
+            deviceMatcher = deviceMatcher,
+            controllerLookup = midiRegistry::controllerFor,
+        )
+    }
+
+    /**
      * Initialize the show through the project manager.
      * This finds (or migrates) the current project from the database and creates the Show.
      * Must be called explicitly after State construction.
@@ -73,6 +94,7 @@ class State(val config: ApplicationConfig) {
         val show = projectManager.initialize()
         midiRegistry.start(GlobalScope)
         deviceMatcher.start(GlobalScope)
+        midiLearnSessionManager.start(GlobalScope)
         return show
     }
 
@@ -106,6 +128,7 @@ class State(val config: ApplicationConfig) {
                 DaoUniverseConfigs, DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
                 DaoParkedChannels, DaoFxDefinitions,
                 DaoShowEntries,
+                DaoControlSurfaceBindings,
             )
 
             // Migration: drop old unique index on (project_id, name) since we now use (project_id, fixture_type, name)
