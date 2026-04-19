@@ -36,6 +36,8 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 | 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | Not started |
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Not started |
 | 4 | Program view inline editor + "Grab live state" snapshot action | Not started |
+| 5 | **FX pipeline integration harness**: rig stub + end-to-end tests covering the Phase-0 layer cascade with real Layer-3 data, unlocking a reusable benchmark + integration test suite | Not started |
+| 6 | **Persisted-reference validation for cue assignments**: dead-reference diagnostic for `CuePropertyAssignment` rows (fixture rename / removal), paralleling control-surface Phase 7 | Not started |
 
 ---
 
@@ -316,6 +318,158 @@ Use `preview_*` MCP tools against running frontend + backend.
 - From Program view, select a cue, "Grab live state" → cue contents replaced.
 - Re-trigger cue → reproduces the look.
 - Inline-edit Q / name / fade from row → saves.
+
+---
+
+## Phase 5 — FX pipeline integration harness
+
+**Goal**: pay off the two test-infrastructure deferrals from Phase 0 — a rig stub that lets
+us drive real `FxEngine` ticks against a synthetic `DmxController` in test sources, and a
+benchmark harness for the per-tick allocation shape. With Phase 1 in place, integration
+tests can finally exercise the full Layer 2 → 3 → 4 → 5 cascade end-to-end.
+
+**Motivating review finding** (2026-04-19): Phase 0's change log flagged two deferred items
+(*`FxEnginePipelineTest`*, *benchmark gate*) both blocked on the same missing piece — a test-
+sources-accessible `DmxController` stub. The sealed interface can't be extended from test
+sources across the main/test module boundary. Phase 0 worked around this with component-
+level tests (Layer3Resolver + DirectWriteStore tested in isolation, LayerResolver as thin
+glue) plus manual smoke-check. That coverage is adequate but leaves us without automated
+detection of any Phase-1 regression that only shows up when the full pipeline runs.
+
+### Entry criteria
+- Phase 1 exit criteria met. Real `CuePropertyAssignment` rows flow into Layer 3.
+
+### Exit criteria
+- A `DmxController` test-stub is available to test sources. Options:
+  - (preferred) relax `sealed interface DmxController` to `interface DmxController` with a
+    comment documenting that concrete implementations are kept to the `dmx/` package by
+    convention — same move the MIDI layer made in Phase 4 for `MidiController`
+  - or: add a production-side `TestableDmxController` subclass marked `@InternalForTests`
+- `FxEnginePipelineTest` exists, driving real beat and wall-clock ticks against the stub,
+  covering every Worked Example from [lighting-composition-model.md](lighting-composition-model.md#worked-examples).
+- Benchmark harness in `src/test/kotlin/.../fx/FxEngineBenchmark.kt` measures per-tick
+  allocation shape. Initial pass establishes a baseline; subsequent runs detect regressions.
+- CI gates on the benchmark's baseline within a tolerance (e.g. ±20%). Failing baseline
+  fails the build.
+- All prior tests continue to pass.
+
+### Phase 5 design
+
+**Stub controller:** implements `DmxController`, records every `setValue(s)` call, exposes
+helpers to assert "fixture F's dimmer channel had value V at tick T". No real network I/O;
+`TickerState` fades work in-memory against the stub's `currentValues` map.
+
+**Integration test shape** — one test per Worked Example in the composition-model doc:
+
+- Example 1: parked + effect → output matches park
+- Example 2: direct write + additive effect → effect wiggles over sticky value
+- Example 3: two HTP dimmer cues → max with fade weights
+- Example 4: two LTP colour cues with crossfade → RGB-linear interpolation
+- Example 5: cue edit session with discard → snapshot restored
+
+Plus a regression test for the deferred smoke-check steps in the Phase 0 change log
+(SineWave + updateChannel=180, two effects on one property with priorities, park+effect).
+
+**Benchmark harness:** exercises a synthetic rig (4 universes × 64 fixtures × 8 channels)
+at 50 Hz wall-clock + 120 Hz beat for 60 s, reporting allocation bytes/tick and p50/p99
+tick duration. Uses Kotlin's `measureTime` and the JVM's allocation counters via `java.lang.management`.
+
+### Phase 5 work
+
+- [ ] Decide stub approach (relax seal vs `@InternalForTests`) — confirm with the user
+- [ ] Land the stub under `src/test/kotlin/.../dmx/TestDmxController.kt`
+- [ ] `FxEnginePipelineTest` with one test per Worked Example
+- [ ] `FxEngineBenchmark` with baseline capture and regression gate
+- [ ] Update Phase 0 Change log's "deviations from plan" section: cross off the deferred
+  items
+- [ ] Wire the benchmark into CI (decide: pass/fail on absolute numbers, or track-only?)
+
+### Phase 5 files
+
+- New: `src/test/kotlin/uk/me/cormack/lighting7/dmx/TestDmxController.kt`
+- New: `src/test/kotlin/uk/me/cormack/lighting7/fx/FxEnginePipelineTest.kt`
+- New: `src/test/kotlin/uk/me/cormack/lighting7/fx/FxEngineBenchmark.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/DmxController.kt` (if we relax
+  the seal)
+
+### Phase 5 verification
+
+- `./gradlew test` runs the pipeline test suite to green
+- Benchmark run produces a baseline report; a deliberately-regressed commit (e.g. an
+  extra per-tick `mutableListOf`) fails the regression gate
+- No production behaviour change
+
+### Phase 5 open questions
+
+- **Relax the `DmxController` seal or add a test-only subclass?** Relaxing matches the MIDI
+  precedent and is the simpler path, but it does weaken the production contract slightly.
+  Recommend: relax with a comment, consistent with MIDI.
+- **CI regression gate semantics?** Track-only (report, don't fail) vs fail-on-regression.
+  Recommend: fail-on-regression with ±20% tolerance after one week of baseline collection.
+
+---
+
+## Phase 6 — Persisted-reference validation for cue assignments
+
+**Goal**: apply the same dead-reference diagnostic to `CuePropertyAssignment` rows that
+control-surface Phase 7 applies to surface bindings. When a fixture is renamed or a property
+removed, cue assignments referencing the old shape are flagged in the UI rather than
+silently failing at apply time.
+
+**Motivating review finding** (2026-04-19): cue assignments store `(target_type, target_key,
+property_name)` — the same persisted-fixture-reference shape that causes silent-failure
+risk in MIDI bindings. Today cue apply doesn't fail catastrophically on a missing fixture
+(Layer3Resolver emits nothing for the missing pair, and the stage just doesn't show that
+property) but the cue editor gives no hint that an assignment is dead. This phase gives
+operators visibility.
+
+**Dependency:** factor out a shared `PersistedFixtureReferenceValidator` that both this
+phase and control-surface Phase 7 use. Decision on whether to pre-abstract: see
+control-surface Phase 7's open question. This plan assumes a common validator exists by
+the time Phase 6 lands.
+
+### Entry criteria
+- Phase 1 exit criteria met — real cue assignment data exists.
+- Control-surface Phase 7 has landed, OR we decide to ship the validator here first and
+  have control-surface Phase 7 consume it.
+
+### Exit criteria
+- `AssignmentHealth` sealed class mirrors `BindingHealth` from control-surface Phase 7
+  (MissingFixture, MissingGroup, MissingProperty).
+- `GET /api/rest/projects/{projectId}/cues/{cueId}` includes `health` on each
+  `propertyAssignments` row.
+- `CueEditor` UI renders dead assignments with a visible marker + "Rebind" quick-action.
+- Cue apply logs a rate-limited warn on dead assignments.
+- Tests: rename a fixture → reopen cue → dead markers appear; rebind → markers clear.
+
+### Phase 6 work
+
+- [ ] Shared `PersistedFixtureReferenceValidator` lifted into a common package, consumed
+  by both `ControlSurfaceBindingService` and cue assignment validation
+- [ ] `AssignmentHealth` evaluation in `applyCue` and in the cue detail REST response
+- [ ] `CueEditor` renders dead-assignment markers; quick-rebind action
+- [ ] Rate-limited warn log at apply time
+- [ ] Tests covering the health transitions
+
+### Phase 6 files
+
+Backend:
+- New or Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/Layer3Resolver.kt` (optional — log
+  when resolution encounters a dead key)
+
+Frontend:
+- Updated: `src/api/cuesApi.ts` types
+- Updated: `src/components/cues/CueEditor.tsx` rendering + quick-rebind
+
+### Phase 6 verification
+
+- Rename a fixture in a patch → open a cue that referenced the old key → dead markers
+  visible within one WS round-trip
+- Click "Rebind" on a dead assignment → bind sheet opens pre-populated; commit →
+  marker clears
+- Backend logs a rate-limited warning on `applyCue` when a dead assignment is encountered
 
 ---
 

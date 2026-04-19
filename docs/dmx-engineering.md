@@ -89,12 +89,14 @@ ArtNet addressing uses subnet + universe to identify up to 256 universes. Each u
 
 ```kotlin
 data class ChannelChange(
-    val newValue: UByte,  // Target value (0-255)
-    val fadeMs: Long      // Fade duration in milliseconds
+    val newValue: UByte,          // Target value (0-255)
+    val fadeMs: Long,             // Fade duration in milliseconds
+    val curve: EasingCurve        // Interpolation curve (default LINEAR)
 )
 ```
 
-Represents a channel value change request. If `fadeMs > 0`, the value transitions smoothly over time.
+Represents a channel value change request. If `fadeMs > 0`, the value transitions smoothly
+over time, interpolated by the chosen [easing curve](#easing-curves).
 
 ### DmxController (Interface)
 
@@ -102,15 +104,29 @@ Represents a channel value change request. If `fadeMs > 0`, the value transition
 sealed interface DmxController {
     val universe: Universe
     val currentValues: Map<Int, UByte>
+    val parkedChannels: Map<Int, UByte>
 
     fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>)
     fun setValue(channelNo: Int, channelChange: ChannelChange)
     fun setValue(channelNo: Int, channelValue: UByte, fadeMs: Long = 0)
     fun getValue(channelNo: Int): UByte
+
+    // Parking (Layer 1)
+    fun park(channelNo: Int, value: UByte)
+    fun unpark(channelNo: Int)
+    fun isParked(channelNo: Int): Boolean
+
+    // Transmit-time modifiers (Blackout / Grand Master / future)
+    fun addTransmitModifier(modifier: TransmitModifier)
+    fun removeTransmitModifier(modifier: TransmitModifier)
+
+    // Wake the transmission thread immediately instead of waiting for the next 25 ms tick
+    fun requestTransmit()
 }
 ```
 
-Sealed interface allowing for multiple implementations (currently only ArtNet).
+Sealed interface allowing for multiple implementations (currently `ArtNetController` +
+`MockDmxController` for tests).
 
 ## ArtNetController
 
@@ -198,16 +214,17 @@ class TickerState(
 **Fade calculation:**
 - Tick interval: 10ms (`fadeTickMs`)
 - Number of steps: `fadeMs / fadeTickMs` (minimum 1)
-- Step value: `(targetValue - startValue) / numberOfSteps`
+- Per-tick normalized position `t = stepIndex / numberOfSteps` is remapped by the
+  [easing curve](#easing-curves) before interpolation
 
 **Value interpolation:**
-- Uses `floor()` for increasing values
-- Uses `ceil()` for decreasing values
-- Ensures smooth monotonic transitions
+- `interpolatedValue = lerp(startValue, targetValue, curve(t))`
+- Uses `floor()` for increasing values, `ceil()` for decreasing values, to ensure monotonic
+  transitions even under curve remapping
 
 **Fade interruption:**
 - New value request cancels existing fade
-- Fade resumes from current interpolated position
+- Fade resumes from current interpolated position, not from the original start value
 
 ### Transmission Optimization
 
@@ -224,7 +241,60 @@ interface ChannelChangeListener {
 }
 ```
 
-Listeners receive only changed channels after each transmission. Used by WebSocket layer to push updates to connected clients.
+Listeners receive only changed channels after each transmission — the controller compares
+the post-modifier, post-park transmit buffer against `previousSentDmxData` and fires the
+callback with the delta map. This is the **single observation point** for
+"something changed on the wire", and it's used by:
+
+- The WebSocket layer to push `channelState` updates to connected clients
+- [`SurfaceFeedbackPublisher`](midi-control-surface-engineering.md) to drive motor faders
+  and encoder rings in response to composition changes
+
+Because every layer (parking, effects, cues, direct writes, transmit modifiers) converges
+at this listener, observers never need to know *how* a value got to the wire — only that it
+did.
+
+**Threading**: called on the transmission thread. Listeners must be thread-safe and fast.
+
+## Transmit Modifiers
+
+Transmit modifiers are a post-composition, pre-wire transform hook:
+
+```kotlin
+fun interface TransmitModifier {
+    fun modify(universe: Universe, channel: Int, value: UByte): UByte
+}
+```
+
+Registered via `DmxController.addTransmitModifier(modifier)` and applied inside
+`sendCurrentValues()` **after** parking has been resolved. Order of application:
+
+```
+for each channel:
+    value = parkedChannels[channel] ?: currentValues[channel]
+    if not parked:
+        for modifier in transmitModifiers:
+            value = modifier.modify(universe, channel, value)
+    transmit(value)
+```
+
+**Key invariants:**
+
+- Modifiers do **not** see parked channels — parking is an unconditional override
+- Modifiers run in registration order (`CopyOnWriteArrayList` — snapshot iteration, no
+  per-frame allocation)
+- Modifiers are hot-path code: they must be fast and thread-safe
+
+**Current users:**
+
+- [`GlobalScalerState`](midi-control-surface-engineering.md) — Blackout and Grand Master
+  are `TransmitModifier`s that zero intensity-category channels (DIMMER / UV / STROBE)
+  when enabled. Toggling calls `requestTransmit()` so the change is visible within the
+  next frame rather than up to 25 ms later.
+
+This pattern generalises: any feature that needs to transform DMX values at transmit
+time without being part of the composition layers (parking is the other canonical
+example) can be a `TransmitModifier`.
 
 ## ControllerTransaction
 
@@ -262,6 +332,21 @@ Each universe maintains:
 
 The `getValue()` method returns the pending value (what will be after `apply()`), not the actual current hardware value. This enables read-after-write consistency within a transaction.
 
+### Blocking commit caveat
+
+`ArtNetController.setValues()` (called by `transaction.apply()`) uses `runBlocking` internally
+to wait for every per-channel coroutine to acknowledge the update before returning. This
+guarantees immediate read-after-write consistency — a subsequent `getValue()` on the same
+channel returns the committed value — but it means the *caller* thread blocks until every
+channel coroutine has processed its payload.
+
+In practice channel coroutines are very fast (they queue into a conflated channel and return)
+so stalls are rare. However, as more writers arrive (FX tick at 50 Hz beat + 50 Hz wall-clock,
+MIDI surface at up to 60 Hz, WebSocket clients), the aggregate blocking cost on the common
+writer threads is something to watch. A suspend-based `setValues()` that returns a
+`Deferred<Unit>` is a possible future improvement — tracked as Phase 8 of
+[control-surface-plan.md](control-surface-plan.md#phase-8--non-blocking-setvalues).
+
 ## Timing Characteristics
 
 | Parameter | Value | Notes |
@@ -297,17 +382,39 @@ The transmission thread tracks consecutive errors:
 - Subsequent errors: Suppressed (25ms backoff)
 - After 20 consecutive errors: Controller shuts down, requires restart
 
+## Easing Curves
+
+Fades interpolate via a pluggable `EasingCurve` enum (one `curve(t)` call per tick,
+mapping a linear `[0, 1]` position into an eased position):
+
+| Curve | Description |
+|---|---|
+| `LINEAR` | Constant rate (the default) |
+| `SINE_IN` / `SINE_OUT` / `SINE_IN_OUT` | Sine-based ease |
+| `QUAD_IN` / `QUAD_OUT` / `QUAD_IN_OUT` | Quadratic ease |
+| `CUBIC_IN` / `CUBIC_OUT` / `CUBIC_IN_OUT` | Cubic ease |
+| `STEP` | Jump at `t = 1.0` |
+| `STEP_HALF` | Jump at `t = 0.5` |
+
+Defined in `dmx/EasingCurve.kt`. Used by `TickerState` for DMX fades and by cue crossfades
+when the property category is a slider (see
+[lighting-composition-model.md §Crossfade](lighting-composition-model.md#crossfade-behaviour)).
+
 ## File Reference
 
 | File | Purpose |
 |------|---------|
 | `DmxController.kt` | Sealed interface definition |
 | `ArtNetController.kt` | ArtNet implementation with coroutine architecture |
+| `MockDmxController.kt` | In-memory fake for tests; `getEffectiveValue()` for asserting modifier chain |
 | `Universe.kt` | Universe addressing data class |
-| `ChannelChange.kt` | Value change request data class |
-| `ChannelChangeListener.kt` | Observer interface for value changes |
+| `ChannelChange.kt` | Value change request data class (with easing curve) |
+| `ChannelChangeListener.kt` | Observer interface for value changes (delta-only) |
 | `ControllerTransaction.kt` | Multi-universe batching |
-| `TickerState.kt` | Fade interpolation state machine |
+| `TickerState.kt` | Fade interpolation state machine (curve-aware) |
+| `EasingCurve.kt` | Easing curve implementations |
+| `TransmitModifier.kt` | Post-composition, pre-wire transform hook |
+| `ParkManager.kt` | Layer 1 parking: persistence + in-memory state + WS broadcast |
 
 ## Dependencies
 

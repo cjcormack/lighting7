@@ -411,10 +411,45 @@ How effect output combines with fixture's base value:
 ### Property Reset
 
 Before processing effects each tick, the engine resets all FX-controlled properties to
-their neutral value (0 for sliders, black for colours, center for positions). This prevents
-blend modes like `MAX` and `ADDITIVE` from accumulating across ticks — without the reset,
-a `MAX` blend would read the previous tick's result as the base value, causing values to
-ratchet upward and never decrease.
+the value of **the layer below** (not to a hardcoded neutral). This is a core invariant of
+the composition model — see
+[lighting-composition-model.md §Layer 2](lighting-composition-model.md#layer-2--effects).
+
+The fallback is resolved by `LayerResolver.fallbackFor(target, fixture, key)`, which
+consults:
+
+1. **Layer 3** — `Layer3Resolver`'s composed cue property assignment for this target, if
+   any. (Empty in Phase 0; populated in Phase 1.)
+2. **Layer 4** — `DirectWriteStore.get(universe, channel)` for sticky direct writes.
+3. **Layer 5** — fixture baseline (0 for sliders, black for colour, 128 for pan/tilt).
+
+Consequences:
+
+- Direct writes (`updateChannel`, MIDI surface faders at Layer 4) persist visibly under
+  running effects rather than resetting to zero on every tick. This is the user-visible
+  behavioural change delivered by Phase 0.
+- `MAX` and `ADDITIVE` blend modes do not ratchet upward across ticks — the reset clears
+  the accumulator before each effect iteration.
+- Parked channels are skipped entirely by the reset + apply pass (`ParkManager.isParked`
+  check), both as an optimisation and because the transmit-time parking override would
+  discard the composition result anyway.
+
+### Effect iteration order
+
+Effects are iterated in sorted order (`priority` ascending, `id` ascending as a stable
+tie-break) rather than from a `ConcurrentHashMap`. Multi-effect composition on the same
+property is therefore **deterministic** — previously the effective "last-wins" ordering was
+undefined.
+
+Priority assignment:
+
+- Manual effects: `priority = 0`
+- Cue-owned effects: `priority = stackId * 1_000_000 + sortOrder * 1_000 + 1`
+  (leaves gaps for future fine-tuning without renumbering)
+
+Sorted snapshots are cached in `@Volatile` fields (`sortedBeatEffects`, `sortedWallClockEffects`)
+and rebuilt under a `synchronized` block on every mutation. The tick readers are therefore
+lock-free.
 
 ### Phase Calculation
 
@@ -968,6 +1003,28 @@ FxEngine
 
 Each loop resets only the properties controlled by its own effects, preventing the two timing sources from interfering with each other.
 
+### Beat ↔ Wall-Clock interaction
+
+Because each loop owns its own sorted-snapshot of effects and its own reset pass, effects
+on **different** properties don't interact across timing sources. Two interesting cases
+on the **same** property:
+
+1. **Beat and wall-clock effects on the same property** — both loops reset to the
+   layer below (via `LayerResolver`) before applying their effects. Each loop sees the
+   other loop's effect output as Layer 2 accumulator state *within its own tick*, but
+   because reset always goes back to L3/L4/L5, the two loops don't compound indefinitely.
+   The effective behaviour is that the last-run loop for a given frame wins for OVERRIDE,
+   and ADDITIVE/MAX compose naturally.
+2. **Frame alignment** — the beat loop fires on `MasterClock.tickFlow`, the wall-clock loop
+   fires on a 20 ms ticker. There is no explicit synchronisation. Both loops write into
+   the same `ControllerTransaction` instance? **No** — each loop creates its own
+   transaction and applies independently. This means two independent frames per ~20 ms,
+   not one combined frame. The ArtNet throttle (25 ms) will coalesce rapid sequential
+   transmits to a single network packet in most cases.
+
+**Rule of thumb**: mixing BEAT and WALL_CLOCK effects on the same property is supported
+but not recommended — use one timing source per property to keep the result predictable.
+
 ### Wall-Clock Phase Calculation
 
 For STANDARD wall-clock effects, `beatDivision` is reinterpreted as cycle duration in seconds:
@@ -1000,3 +1057,7 @@ The timing source is stored on `EffectRegistration` in the `FxRegistry` and prop
 2. **Beat Detection**: Auto-detect BPM from audio input
 3. **Effect Modulation**: Effects that modulate other effects' parameters
 4. **Custom Distribution Functions**: User-defined distribution curves via scripts
+5. **Unified single-transaction per frame**: beat + wall-clock loops currently each create
+   their own `ControllerTransaction`. A shared frame-scoped transaction would reduce
+   duplicate transmissions when both loops target the same universe in the same ~20 ms
+   window. Tracked in [control-surface-plan.md](control-surface-plan.md#phase-8--non-blocking-setvalues).

@@ -48,6 +48,9 @@ Build: TypeScript clean across the frontend (`tsc --noEmit` passes), `vite build
 | 4 | Feedback & reconciliation: motor drive, LED feedback, touch suppression, soft takeover, initial sync, device-side A/B layer coordination | **Complete** |
 | 5 | Frontend `/surfaces` route: device list, binding matrix, MIDI Learn mode, bank management, binding badges on existing views | **Complete** |
 | 6 | cueEdit integration (depends on cue-authoring Phase 1): fader writes route through `cueEdit.*` when a session is active; surfaces participate in EditorContext | Not started |
+| 7 | **Binding validation & dead-binding diagnostics**: load-time validation that `FixtureProperty` / `GroupProperty` bindings still resolve against the current patch; surface dead bindings in `/surfaces` | Not started |
+| 8 | **Non-blocking `setValues` on `DmxController`**: remove the `runBlocking` inside `ArtNetController.setValues`; move to suspend / `Deferred`-based commit; unify beat + wall-clock frame transaction | Not started |
+| 9 | **Per-project `GlobalScalerState` scoping**: blackout / Grand Master per project rather than per show instance; preserve state across project switches | Not started |
 
 ---
 
@@ -541,6 +544,307 @@ Frontend (`lighting-react`):
 - Open a cue for edit in Live mode → move a bound fader → cue's Layer 3 dimmer updates → stage shows the new value → close editor → re-trigger cue → reproduces the edit.
 - Same in Blind → stage is unchanged during the edit; re-trigger after close reproduces.
 - Feedback motor: while a session is open, motor follows the cue's Layer 3 value, not the composed live value (which might differ if other effects run).
+
+---
+
+## Phase 7 — Binding validation & dead-binding diagnostics
+
+**Goal**: make "bindings silently stop working" impossible. When a fixture is renamed or a
+property no longer exists, the binding is flagged in the UI instead of quietly failing at
+dispatch time.
+
+**Motivating review finding** (2026-04-19): `PropertyChannelResolver` walks a fixture's
+`@FixtureProperty` list reflectively at dispatch time. If a fixture type is refactored — a
+property renamed, a fixture replaced with a different mode, a patch row deleted — bindings
+that reference the old shape silently return empty `ChannelWrite` lists. No log, no warning,
+no UI indication. Operators discover it mid-show when a fader does nothing.
+
+Scope is MIDI-specific but the pattern generalises: any persisted `(fixtureKey, propertyName)`
+pair has the same failure mode. This phase addresses the MIDI side; a future cross-cutting
+"persisted fixture reference" validator could fold in cues and presets (Open question below).
+
+### Entry criteria
+- Phase 5 complete. Phase 6 not required — binding validation is independent.
+
+### Exit criteria
+- At project load and on every `fixturesChanged` event, `ControlSurfaceBindingService`
+  resolves each binding's target against the current patch and tags it with a
+  `BindingHealth` status.
+- `BindingHealth` exposed via REST (`GET /api/rest/projects/{projectId}/surface-bindings`
+  returns a `health` field per row) and WebSocket (`surfaceBindingsChanged` carries the
+  health status).
+- `/surfaces` UI shows dead bindings with a distinct marker (red outline + tooltip
+  explaining why). Dead bindings are not silently dropped — the operator has to choose to
+  delete or rebind.
+- Diagnostic log on project load: `N of M surface bindings resolved cleanly; K dead`
+  listing each dead binding with the missing fixture / property / group name.
+- Tests: binding survives fixture rename with a dead marker; rebinding clears the marker;
+  a new fixture matching the old key revives the binding (health transitions dead → ok).
+
+### Phase 7 design
+
+**`BindingHealth` ADT:**
+
+```kotlin
+sealed class BindingHealth {
+    data object Ok : BindingHealth()
+    data class MissingFixture(val fixtureKey: String) : BindingHealth()
+    data class MissingGroup(val groupName: String) : BindingHealth()
+    data class MissingProperty(val targetKey: String, val propertyName: String) : BindingHealth()
+    data class UnresolvableChannels(val reason: String) : BindingHealth()
+}
+```
+
+**Validation pass:**
+- `FixtureProperty(fixtureKey, propertyName)` → `Fixtures.untypedFixture(fixtureKey)` exists
+  AND `fixture.fixtureProperty(propertyName) != null` AND
+  `PropertyChannelResolver.resolveFixtureProperty(fixture, propertyName, 127u)` returns
+  non-empty
+- `GroupProperty(groupName, propertyName)` → group exists AND members exist AND at least one
+  member can resolve the property
+- `CueStackGo`/`Back`/`Pause` / `FireCue` → stack / cue exists in the project
+- `SetBank(deviceTypeKey, bank)` → profile exists AND bank id is declared on the profile
+- `Flash(target, max)` → recurse on `target`
+- `Blackout` / `GrandMasterToggle` → always `Ok`
+
+**Integration:**
+- New field `BindingService.Entry.health: BindingHealth` computed on cache rebuild
+- Cache rebuild triggered by `fixturesChanged`, `patchListChanged`, `cueListChanged`,
+  `cueStackListChanged` listeners
+- Dispatch path in `SurfaceInputRouter` can short-circuit dead bindings with a warn-level
+  log (rate-limited) instead of the current silent-drop
+- Frontend: `BindingMatrix` row gets a `health` prop; dead rows render with an outline,
+  tooltip explaining the failure, and a "Rebind" quick-action
+
+### Phase 7 work
+
+- [ ] `BindingHealth.kt` with the sealed class
+- [ ] `BindingHealthEvaluator` pure function: `(BindingTarget, Fixtures, CueStackManager, ControlSurfaceRegistry) → BindingHealth`
+- [ ] Wire into `ControlSurfaceBindingService` cache rebuild
+- [ ] Add `fixturesChanged` / `patchListChanged` / `cueListChanged` / `cueStackListChanged`
+  subscriptions so the cache re-validates
+- [ ] Extend REST response types and `surfaceBindingsChanged` payload with `health`
+- [ ] Router warn-log on dead dispatch (with throttle — don't flood logs if a surface is
+  wiggling a dead binding)
+- [ ] Frontend `BindingMatrix` dead-binding rendering + quick-rebind action
+- [ ] Tests: 6+ covering the health ADT, each transition, and the cache-rebuild trigger set
+
+### Phase 7 files
+
+Backend:
+- New: `src/main/kotlin/uk/me/cormack/lighting7/midi/BindingHealth.kt`
+- New: `src/main/kotlin/uk/me/cormack/lighting7/midi/BindingHealthEvaluator.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/midi/ControlSurfaceBindingService.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt` (throttled
+  warn-log)
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt` (payload field)
+
+Frontend:
+- Updated: `src/api/surfacesApi.ts` (types), `src/components/surfaces/BindingMatrix.tsx`
+  (rendering), `src/routes/Surfaces.tsx` (counts in header)
+
+### Phase 7 verification
+
+- Rename a fixture in a patch → existing bindings transition to `MissingFixture`, UI marks
+  them dead within one WS round-trip
+- Click "Rebind" on a dead row → opens the create-binding sheet pre-filled with the control
+  context; commit → health returns `Ok`
+- Restart the backend with dead bindings → startup log enumerates them; `/surfaces` loads
+  with the markers pre-applied
+- Tests pass; `./gradlew test` clean
+
+### Phase 7 open question
+
+**Cross-cutting validator?** Cues (`CuePropertyAssignment` in cue-authoring Phase 1) will
+have the same dead-reference problem. Worth factoring out a shared
+`PersistedFixtureReferenceValidator` that both subsystems call? Proposal: defer until
+cue-authoring Phase 1 exposes the concrete data shape, then refactor both callers onto a
+common validator if the shapes align. Don't pre-abstract.
+
+---
+
+## Phase 8 — Non-blocking `setValues`
+
+**Goal**: remove the per-commit `runBlocking` from `ArtNetController.setValues()` and
+unify the beat / wall-clock `FxEngine` loops onto a single frame transaction. Reduces the
+blocking cost on hot writer paths (FX ticks, MIDI surface, WebSocket) and eliminates
+double-transmits when beat + wall-clock effects target the same universe in a ~20 ms
+window.
+
+**Motivating review finding** (2026-04-19): Every `transaction.apply()` today calls
+`ArtNetController.setValues()`, which uses `runBlocking { … }` internally to wait for
+every per-channel coroutine to acknowledge before returning. Individual acks are fast, but
+three hot writer paths — beat tick (up to 24 × 300 / 60 ≈ 120 Hz), wall-clock tick (50 Hz),
+MIDI surface input (up to 60 Hz) — plus bursty WebSocket writes, converge on the same
+blocking primitive. The coupling is currently tolerable but is a latent scaling ceiling.
+
+Related: the two `FxEngine` loops (beat + wall-clock) each construct their own
+`ControllerTransaction` and apply independently, producing two ArtNet packets within a
+~20 ms window whenever both timing sources target the same universe. The 25 ms transmit
+throttle coalesces most of this, but not all.
+
+### Entry criteria
+- Phase 5 complete. Independent of Phase 6/7.
+
+### Exit criteria
+- `DmxController.setValues(…): Deferred<Unit>` (or suspend) — callers can `await()` only
+  when they need read-after-write consistency.
+- `ControllerTransaction.apply()` suspend variant that awaits all universes' commits in
+  parallel; the blocking `apply()` stays as a convenience wrapper.
+- `FxEngine` constructs **one transaction per frame** shared between beat and wall-clock
+  processing where they run within the same tick window; independent transactions when
+  the windows don't overlap.
+- No regression in fade-in / fade-out timing, no regression in cue-apply latency.
+- Micro-benchmark (new, in test sources) shows measurable improvement on a synthetic
+  "burst of 512 channel writes across 4 universes" workload.
+- Existing tests pass.
+
+### Phase 8 design
+
+**Two-step:**
+
+1. **Add suspend `setValuesSuspend`** alongside the blocking `setValues`. Internally,
+   `setValuesSuspend` sends each channel update and awaits its ack channel without
+   `runBlocking`. The blocking path delegates to `runBlocking { setValuesSuspend(…) }`
+   (no behaviour change for existing callers).
+
+2. **Unify the two FxEngine loops' frame transaction** — introduce a
+   `FrameTransaction` abstraction scoped to a tick-pair. Beat and wall-clock processing
+   share one `ControllerTransaction` if their tick times are within a configurable fuzz
+   window (default 10 ms); otherwise they operate independently. Requires coordination
+   between the two loops — likely via a shared `AtomicReference<FrameTransaction?>` +
+   short mutex around the open-close edge.
+
+**Fallback:** if step 2 adds more complexity than it saves, ship step 1 and document the
+double-transmit as acceptable given the 25 ms throttle coalesces most of it.
+
+### Phase 8 work
+
+- [ ] `ArtNetController.setValuesSuspend(values): Deferred<Unit>` — non-blocking variant
+- [ ] Blocking `setValues` reimplemented as `runBlocking { setValuesSuspend(values).await() }`
+- [ ] `ControllerTransaction.applySuspend()` — parallel await across universes
+- [ ] Refactor `FxEngine.processBeatTick` and `processWallClockTick` to call the suspend
+  variant
+- [ ] Explore frame-transaction unification; accept or defer based on complexity
+- [ ] Benchmark harness in `src/test/kotlin/.../dmx/BenchmarkSetValues.kt` (blocked on a
+  test-side `DmxController` stub — the sealed interface is relaxed to an interface in the
+  MIDI layer; do the same for `DmxController` if needed, or add a test-only production
+  subclass)
+- [ ] Smoke-check: start a script that adds and removes 100 effects per second. Confirm
+  no visible DMX stutter, no coroutine leak (jmap / thread dump clean).
+
+### Phase 8 files
+
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/DmxController.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/ArtNetController.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/MockDmxController.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/ControllerTransaction.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/FxEngine.kt`
+- Updated: `docs/dmx-engineering.md`, `docs/fx-engineering.md` — remove the blocking
+  caveat once step 1 lands.
+
+### Phase 8 verification
+
+- All existing tests pass.
+- Run an FX-heavy script (a `GENERAL` script adding 50 effects in parallel) — coroutine
+  thread dump shows no long-held waiters on `runBlocking`.
+- Ramp a MIDI fader at full 60 Hz while a beat-synced Pulse runs on the same property —
+  no dropped frames on stage; WS `channelState` updates match.
+
+### Phase 8 open question
+
+- Do we need read-after-write consistency in every current caller? If a few call sites can
+  fire-and-forget (log a stale read, move on), they should migrate to the suspend path
+  without `await()`. Audit during implementation.
+
+---
+
+## Phase 9 — Per-project `GlobalScalerState`
+
+**Goal**: preserve Blackout and Grand Master state across project switches by scoping
+`GlobalScalerState` to the project rather than the `Show` instance.
+
+**Motivating review finding** (2026-04-19): `GlobalScalerState` is currently attached to
+the active `Show`. `ProjectManager.switchProject` destroys the current `Show` and
+constructs a new one, resetting the scaler to its defaults (blackout=false,
+grandMaster=true). For an operator who has just hit Blackout and switches projects, this
+is a surprise — the stage comes back up mid-switch. It also means state doesn't persist
+across restarts.
+
+v1 designed it this way deliberately (open questions 2 and 3 in Decisions above were
+conservative), but Phase 5 of the frontend now surfaces blackout / grandmaster as
+prominent header toggles, making the inconsistency more visible.
+
+### Entry criteria
+- Phase 5 complete. Independent of Phase 6/7/8.
+
+### Exit criteria
+- `GlobalScalerState` lifecycle is bound to the project, not the show instance.
+- Blackout and Grand Master state survives project switches within a session.
+- (Optional — see open question) State persists across backend restarts via a small DB row
+  per project.
+- `surfaceScaler.state` WS message reflects the new project's state on switch.
+- Full resync re-fires on project switch so motor / LED feedback catches up.
+- Tests: toggle blackout, switch project, switch back → state is preserved; restart backend
+  → state restored (if persistence is in scope).
+
+### Phase 9 design
+
+Two options:
+
+**A. Project-scoped instance, ephemeral state.** Move `GlobalScalerState` construction up
+one level (from `Show` to `Project` or to `State.projectState`). State dies on project
+delete but survives show re-creation within the same project.
+
+**B. Project-scoped instance, persisted state.** As A, plus a single-row DB table
+`project_scaler_state(project_id, blackout, grand_master)` that the service loads at
+project activation and updates on every toggle. Trade-off: DB writes on every operator
+toggle — small rows, infrequent, should be fine.
+
+**Recommendation:** ship A first; add persistence only if operator feedback asks for it.
+
+**Implementation notes:**
+
+- `attach()` / `detach()` still follows the show lifecycle for DMX controller wiring
+  (controllers belong to the show), but the `MutableStateFlow<Boolean>` state is owned by
+  a project-level holder.
+- On `ProjectManager.switchProject`, detach the old controllers, construct a new attach
+  against the new show's controllers, but reuse the existing scaler-state holder if
+  projectId matches; otherwise load from DB (option B) or init fresh (option A).
+
+### Phase 9 work
+
+- [ ] Refactor `GlobalScalerState` into two pieces: `GlobalScalerStateHolder`
+  (project-scoped `MutableStateFlow`s) and `GlobalScalerTransmitModifier` (show-scoped
+  `TransmitModifier` that reads from the holder)
+- [ ] Update `State.kt` wiring — holder moves up, modifier stays in `Show`
+- [ ] `ProjectManager.switchProject` hook: load / persist scaler state per project
+- [ ] (Option B) migration: `project_scaler_state` table via Exposed `SchemaUtils`
+- [ ] Tests: toggle → switch project → switch back → state preserved; concurrent project
+  switches during pending toggle don't lose the toggle
+- [ ] Update `docs/midi-control-surface-engineering.md` §Known limitations to remove the
+  per-show caveat
+
+### Phase 9 files
+
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/midi/GlobalScalerState.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/state/State.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/show/Show.kt`
+- (Option B) New: migration in `src/main/kotlin/uk/me/cormack/lighting7/models/`
+
+### Phase 9 verification
+
+- Toggle Blackout → switch to Project B → switch back to A → Blackout still on.
+- (Option B) Toggle Blackout → restart backend → state restored.
+- Motor / LED feedback reflects the persisted state on project switch.
+- Tests pass.
+
+### Phase 9 open question
+
+- **Persistence: in or out of scope for this phase?** Proposal: option A (ephemeral
+  per-session) in Phase 9; option B (DB-persisted) deferred to a Phase 9.1 if operators ask
+  for it. Rationale: preserving across session-restart is a behaviour change, worth a
+  separate user confirmation.
 
 ---
 
