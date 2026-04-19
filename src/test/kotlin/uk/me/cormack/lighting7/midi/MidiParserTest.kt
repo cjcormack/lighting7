@@ -120,6 +120,12 @@ class MidiParserTest {
     fun `program change and aftertouch consume the right number of data bytes`() {
         // 0xC0 program change (1 byte) followed by a note-on, all on the same parse.
         val events = parse(0xC0, 0x05, 0x90, 0x3C, 0x40)
-        assertEquals(listOf(MidiInputEvent.NoteOn(0, 60, 64u)), events)
+        assertEquals(
+            listOf<MidiInputEvent>(
+                MidiInputEvent.ProgramChange(channel = 0, program = 5),
+                MidiInputEvent.NoteOn(0, 60, 64u),
+            ),
+            events,
+        )
     }
 }

@@ -91,10 +91,10 @@ class MidiLearnSessionManagerTest {
             deviceTypeKey = "x-touch-compact-standard",
         ))
 
-        // Button 1 is note 8 per XTouchCompactStandard profile.
+        // Button 1 is note 16 per XTouchCompactStandard profile (Layer A TX).
         mgr.offerInput(
             "x-touch-compact-standard",
-            MidiInputEvent.NoteOn(channel = 0, note = 8, velocity = 127u),
+            MidiInputEvent.NoteOn(channel = 0, note = 16, velocity = 127u),
         )
 
         val after = mgr.get(session.sessionId)
@@ -109,10 +109,10 @@ class MidiLearnSessionManagerTest {
             deviceTypeKey = "x-touch-compact-standard",
         ))
 
-        // Layer A bank button = note 84
+        // Layer A bank = Program Change 0 — must not capture.
         mgr.offerInput(
             "x-touch-compact-standard",
-            MidiInputEvent.NoteOn(channel = 0, note = 84, velocity = 127u),
+            MidiInputEvent.ProgramChange(channel = 0, program = 0),
         )
 
         val pending = mgr.sessions.value.values.single()

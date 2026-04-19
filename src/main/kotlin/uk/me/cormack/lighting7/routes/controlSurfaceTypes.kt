@@ -38,6 +38,7 @@ sealed class ControlDescriptorDto {
         val hasMotor: Boolean,
         val motorCc: Int?,
         val touchNote: Int?,
+        val touchCc: Int?,
         val resolution: String,
     ) : ControlDescriptorDto()
 
@@ -69,7 +70,8 @@ sealed class ControlDescriptorDto {
     data class BankButton(
         override val controlId: String,
         override val label: String,
-        val note: Int,
+        val note: Int?,
+        val programChange: Int?,
         val channel: Int,
         val bankId: String,
     ) : ControlDescriptorDto()
@@ -95,6 +97,7 @@ private fun ControlDescriptor.toDto(): ControlDescriptorDto = when (this) {
         hasMotor = hasMotor,
         motorCc = motorCc,
         touchNote = touchNote,
+        touchCc = touchCc,
         resolution = resolution.name,
     )
     is EncoderDescriptor -> ControlDescriptorDto.Encoder(
@@ -118,6 +121,7 @@ private fun ControlDescriptor.toDto(): ControlDescriptorDto = when (this) {
         controlId = controlId,
         label = label,
         note = note,
+        programChange = programChange,
         channel = channel,
         bankId = bankId,
     )

@@ -163,7 +163,7 @@ class SurfaceFeedbackPublisherTest {
             yield()
             val on = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.NoteOnFeedback>()
             assertTrue(on.isNotEmpty(), "Expected NoteOn feedback on blackout enable, got ${h.recordingController.feedback}")
-            assertEquals(8, on.first().note)  // btn-1 = note 8
+            assertEquals(16, on.first().note)  // btn-1 = note 16
 
             h.recordingController.feedback.clear()
             h.scaler.setBlackout(false)
@@ -301,7 +301,7 @@ class SurfaceFeedbackPublisherTest {
             yield()
             val on = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.NoteOnFeedback>()
             assertNotNull(on.firstOrNull())
-            assertEquals(8, on.first().note)  // btn-1 = note 8
+            assertEquals(16, on.first().note)  // btn-1 = note 16
         } finally {
             h.publisher.stop()
             scope.cancel()

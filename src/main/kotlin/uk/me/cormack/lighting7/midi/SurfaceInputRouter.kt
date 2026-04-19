@@ -243,19 +243,38 @@ class SurfaceInputRouter(
         when (event) {
             is MidiInputEvent.ControlChange -> {
                 for (control in profile.controls) {
-                    val (cc, channel) = when (control) {
-                        is FaderDescriptor -> control.cc to control.channel
-                        is EncoderDescriptor -> control.cc to control.channel
-                        else -> continue
-                    }
-                    if (cc == event.cc && channel == event.channel) {
-                        return ResolvedInput.Continuous(control.controlId, event.value)
+                    when (control) {
+                        is FaderDescriptor -> {
+                            if (control.cc == event.cc && control.channel == event.channel) {
+                                return ResolvedInput.Continuous(control.controlId, event.value)
+                            }
+                            if (control.touchCc != null && control.touchCc == event.cc && control.channel == event.channel) {
+                                return ResolvedInput.Touch(control.controlId, down = event.value.toInt() > 0)
+                            }
+                        }
+                        is EncoderDescriptor -> {
+                            if (control.cc == event.cc && control.channel == event.channel) {
+                                return ResolvedInput.Continuous(control.controlId, event.value)
+                            }
+                        }
+                        else -> Unit
                     }
                 }
             }
             // NoteOn(velocity=0) is the running-status-friendly form of NoteOff per MIDI spec.
             is MidiInputEvent.NoteOn -> return matchNoteEvent(profile, event.channel, event.note, pressed = event.velocity.toInt() > 0)
             is MidiInputEvent.NoteOff -> return matchNoteEvent(profile, event.channel, event.note, pressed = false)
+            is MidiInputEvent.ProgramChange -> {
+                for (control in profile.controls) {
+                    if (control is BankButtonDescriptor &&
+                        control.programChange != null &&
+                        control.programChange == event.program &&
+                        control.channel == event.channel
+                    ) {
+                        return ResolvedInput.BankButton(control.bankId, pressed = true)
+                    }
+                }
+            }
             is MidiInputEvent.PitchBend -> Unit  // No descriptor maps PitchBend in v1.
             is MidiInputEvent.SysEx -> Unit
         }
@@ -283,7 +302,7 @@ class SurfaceInputRouter(
                         return ResolvedInput.Touch(control.controlId, down = pressed)
                 is BankButtonDescriptor ->
                     // Bank buttons switch on press only; the release event is swallowed.
-                    if (control.note == note && control.channel == channel)
+                    if (control.note != null && control.note == note && control.channel == channel)
                         return if (pressed) ResolvedInput.BankButton(control.bankId, pressed = true) else null
             }
         }

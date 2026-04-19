@@ -11,6 +11,7 @@ sealed class MidiInputEvent {
     data class NoteOn(val channel: Int, val note: Int, val velocity: UByte) : MidiInputEvent()
     data class NoteOff(val channel: Int, val note: Int, val velocity: UByte) : MidiInputEvent()
     data class ControlChange(val channel: Int, val cc: Int, val value: UByte) : MidiInputEvent()
+    data class ProgramChange(val channel: Int, val program: Int) : MidiInputEvent()
     data class PitchBend(val channel: Int, val value: UShort) : MidiInputEvent()
     data class SysEx(val bytes: ByteArray) : MidiInputEvent() {
         override fun equals(other: Any?): Boolean {
@@ -130,8 +131,13 @@ class MidiMessageParser {
                     start + 2
                 }
             }
-            0xC0 -> { // Program Change — 1 data byte, ignored.
-                if (end - start < 1) end else start + 1
+            0xC0 -> { // Program Change — 1 data byte.
+                if (end - start < 1) end
+                else {
+                    val program = bytes[start].toInt() and 0x7F
+                    emit(MidiInputEvent.ProgramChange(channel, program))
+                    start + 1
+                }
             }
             0xD0 -> { // Channel Aftertouch — 1 data byte, ignored.
                 if (end - start < 1) end else start + 1

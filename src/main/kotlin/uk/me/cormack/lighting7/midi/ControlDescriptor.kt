@@ -36,8 +36,11 @@ sealed class ControlDescriptor {
 
 /**
  * A linear fader. When [hasMotor] is true, outbound feedback drives the motor via
- * [motorCc]; if the control is touch-sensitive, [touchNote] fires on touch-on / touch-off
- * so feedback can suspend while the user holds the fader.
+ * [motorCc]; if the control is touch-sensitive, either [touchNote] (NoteOn/Off) or
+ * [touchCc] (ControlChange — value > 0 means down) fires on touch-on / touch-off so
+ * feedback can suspend while the user holds the fader. Devices use one or the other,
+ * not both (Mackie Control uses notes; Behringer X-Touch Compact Standard uses CC).
+ * Leave both null for faders without touch sensing.
  */
 data class FaderDescriptor(
     override val controlId: String,
@@ -47,8 +50,15 @@ data class FaderDescriptor(
     val hasMotor: Boolean = false,
     val motorCc: Int? = null,
     val touchNote: Int? = null,
+    val touchCc: Int? = null,
     val resolution: FaderResolution = FaderResolution.SEVEN_BIT,
-) : ControlDescriptor()
+) : ControlDescriptor() {
+    init {
+        require(touchNote == null || touchCc == null) {
+            "FaderDescriptor '$controlId' sets both touchNote and touchCc; pick one"
+        }
+    }
+}
 
 /**
  * A rotary encoder. May have a surrounding LED ring ([ringCc] + [ringStyle]) and / or a
@@ -82,14 +92,25 @@ data class ButtonDescriptor(
  * A device-side bank-switch button. Press emits a synthetic bank-change targeting
  * [bankId]. Kept distinct from [ButtonDescriptor] so the registry and UI can treat
  * bank buttons specially — they're not bindable to arbitrary targets.
+ *
+ * The device may signal the switch via either a NoteOn on [note] or a Program Change
+ * matching [programChange] (X-Touch Compact uses the latter for its A/B Layer button).
+ * Exactly one of the two must be set.
  */
 data class BankButtonDescriptor(
     override val controlId: String,
     override val label: String,
-    val note: Int,
+    val note: Int? = null,
+    val programChange: Int? = null,
     val channel: Int = 0,
     val bankId: String,
-) : ControlDescriptor()
+) : ControlDescriptor() {
+    init {
+        require((note == null) != (programChange == null)) {
+            "BankButtonDescriptor '$controlId' must set exactly one of note / programChange"
+        }
+    }
+}
 
 /**
  * Declares an app-side bank. The matching physical bank button (if any) is declared

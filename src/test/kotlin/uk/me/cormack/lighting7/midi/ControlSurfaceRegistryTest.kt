@@ -36,30 +36,47 @@ class ControlSurfaceRegistryTest {
     }
 
     @Test
-    fun `x-touch fader 1 is motorised with touch note 101 and cc 1`() {
+    fun `x-touch fader 1 is motorised with touch cc 101 and cc 1`() {
         val info = ControlSurfaceRegistry.allTypes.single { it.typeKey == "x-touch-compact-standard" }
         val fader = info.controls.filterIsInstance<FaderDescriptor>().single { it.controlId == "fader-1" }
         assertTrue(fader.hasMotor)
         assertEquals(1, fader.cc)
         assertEquals(1, fader.motorCc)
-        assertEquals(101, fader.touchNote)
+        assertNull(fader.touchNote)
+        assertEquals(101, fader.touchCc)
     }
 
     @Test
-    fun `x-touch encoder 1 has ring cc 48, push note 32`() {
+    fun `x-touch encoder 1 and 9 match Behringer Layer A defaults`() {
         val info = ControlSurfaceRegistry.allTypes.single { it.typeKey == "x-touch-compact-standard" }
-        val enc = info.controls.filterIsInstance<EncoderDescriptor>().single { it.controlId == "enc-1" }
-        assertEquals(16, enc.cc)
-        assertEquals(48, enc.ringCc)
-        assertEquals(32, enc.pushNote)
+        val enc1 = info.controls.filterIsInstance<EncoderDescriptor>().single { it.controlId == "enc-1" }
+        // Top-row encoder 1: Turn CC 10, push Note 0, ring CC 26.
+        assertEquals(10, enc1.cc)
+        assertEquals(26, enc1.ringCc)
+        assertEquals(0, enc1.pushNote)
+
+        val enc9 = info.controls.filterIsInstance<EncoderDescriptor>().single { it.controlId == "enc-9" }
+        // Right-block encoder 9: Turn CC 18, push Note 8, ring CC 34.
+        assertEquals(18, enc9.cc)
+        assertEquals(34, enc9.ringCc)
+        assertEquals(8, enc9.pushNote)
     }
 
     @Test
-    fun `x-touch bank buttons target layer-a and layer-b`() {
+    fun `x-touch buttons span Layer A TX notes 16 to 54`() {
         val info = ControlSurfaceRegistry.allTypes.single { it.typeKey == "x-touch-compact-standard" }
-        val banks = info.controls.filterIsInstance<BankButtonDescriptor>().sortedBy { it.note }
+        val buttons = info.controls.filterIsInstance<ButtonDescriptor>().sortedBy { it.note }
+        assertEquals(16, buttons.first().note)
+        assertEquals(16 + 38, buttons.last().note)
+    }
+
+    @Test
+    fun `x-touch bank buttons use program change 0 and 1`() {
+        val info = ControlSurfaceRegistry.allTypes.single { it.typeKey == "x-touch-compact-standard" }
+        val banks = info.controls.filterIsInstance<BankButtonDescriptor>().sortedBy { it.programChange }
         assertEquals(listOf("layer-a", "layer-b"), banks.map { it.bankId })
-        assertEquals(listOf(84, 85), banks.map { it.note })
+        assertEquals(listOf(0, 1), banks.map { it.programChange })
+        assertTrue(banks.all { it.note == null })
     }
 
     @Test

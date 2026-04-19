@@ -245,7 +245,9 @@ class MidiLearnSessionManager(
     /**
      * Extract a stable `controlId` from an inbound [MidiInputEvent] by consulting the device
      * profile registered under [deviceTypeKey]. Returns null if the event is not "captureable"
-     * (e.g. a CC with value 0 on a fader that still sits at rest, an unknown CC / note).
+     * (e.g. a CC with value 0 on a fader that still sits at rest, an unknown CC / note,
+     * a Program Change — no descriptor type captures those, since bank buttons are
+     * deliberately not user-bindable).
      */
     private fun extractCapturableControlId(deviceTypeKey: String, event: MidiInputEvent): String? {
         val profile = try {

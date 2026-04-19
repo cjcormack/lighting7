@@ -29,11 +29,16 @@ abstract class ControlSurfaceDevice {
     val controls: List<ControlDescriptor> get() = _controls
     val banks: List<BankDefinition> get() = _banks
 
-    /** Declare a motorised fader. [motorCc] defaults to [cc] since most motor faders echo their own CC. */
+    /**
+     * Declare a motorised fader. [motorCc] defaults to [cc] since most motor faders echo
+     * their own CC. Touch sensing is optional; pass either [touchNote] (Mackie-style NoteOn)
+     * or [touchCc] (X-Touch Compact style CC) — not both.
+     */
     protected fun motorFader(
         id: String,
         cc: Int,
         touchNote: Int? = null,
+        touchCc: Int? = null,
         motorCc: Int? = cc,
         channel: Int = 0,
         label: String = id,
@@ -47,6 +52,7 @@ abstract class ControlSurfaceDevice {
             hasMotor = true,
             motorCc = motorCc,
             touchNote = touchNote,
+            touchCc = touchCc,
             resolution = resolution,
         )
     }
@@ -113,12 +119,15 @@ abstract class ControlSurfaceDevice {
 
     /**
      * Declare an app-side bank together with the device-side button that switches to it.
-     * Emits both a [BankDefinition] and a [BankButtonDescriptor] with controlId = `"bank-$id"`.
+     * The device may signal the switch via either a NoteOn on [inputNote] or a Program
+     * Change matching [inputProgramChange] — pass exactly one. Emits both a
+     * [BankDefinition] and a [BankButtonDescriptor] with controlId = `"bank-$id"`.
      */
     protected fun bank(
         id: String,
-        inputNote: Int,
         name: String,
+        inputNote: Int? = null,
+        inputProgramChange: Int? = null,
         channel: Int = 0,
     ) {
         _banks += BankDefinition(id = id, name = name)
@@ -126,6 +135,7 @@ abstract class ControlSurfaceDevice {
             controlId = "bank-$id",
             label = name,
             note = inputNote,
+            programChange = inputProgramChange,
             channel = channel,
             bankId = id,
         )

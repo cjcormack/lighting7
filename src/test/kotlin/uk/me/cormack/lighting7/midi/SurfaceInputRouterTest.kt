@@ -89,9 +89,9 @@ class SurfaceInputRouterTest {
     @Test
     fun `button press dispatches cueStackGo`() {
         val actions = RecordingActions()
-        // btn-1 = note 8 on X-Touch Compact Standard.
+        // btn-1 = note 16 on X-Touch Compact Standard Layer A.
         val router = buildRouter(actions, listOf(binding(1, "btn-1", BindingTarget.CueStackGo(stackId = 7))))
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 8, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
         assertEquals(listOf<RecordedCall>(RecordedCall.CueStackGo(7)), actions.calls.toList())
     }
 
@@ -99,8 +99,8 @@ class SurfaceInputRouterTest {
     fun `button release on non-Flash is a no-op`() {
         val actions = RecordingActions()
         val router = buildRouter(actions, listOf(binding(1, "btn-1", BindingTarget.CueStackGo(7))))
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 8, velocity = 127u))
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 8, velocity = 0u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 16, velocity = 0u))
         // Only the press recorded an action.
         assertEquals(1, actions.calls.size)
     }
@@ -115,14 +115,14 @@ class SurfaceInputRouterTest {
         )
         val router = buildRouter(actions, listOf(binding(1, "btn-2", flash)), flashTracker = flashTracker)
 
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 9, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
         assertTrue(flashTracker.isActive(1))
         assertEquals(
             listOf<RecordedCall>(RecordedCall.FlashFixturePress("hex-1", "dimmer", 255u)),
             actions.calls.toList(),
         )
 
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 9, velocity = 0u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 17, velocity = 0u))
         assertEquals(
             listOf<RecordedCall>(
                 RecordedCall.FlashFixturePress("hex-1", "dimmer", 255u),
@@ -139,8 +139,8 @@ class SurfaceInputRouterTest {
         val flash = BindingTarget.Flash(BindingTarget.FixtureProperty("hex-1", "dimmer"), max = 200)
         val router = buildRouter(actions, listOf(binding(1, "btn-2", flash)))
 
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 9, velocity = 127u))
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 9, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
         assertEquals(1, actions.calls.size)
     }
 
@@ -150,8 +150,8 @@ class SurfaceInputRouterTest {
         val actions = RecordingActions()
         val router = buildRouter(actions, emptyList(), bankState)
 
-        // X-Touch layer-a button = note 84.
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 84, velocity = 127u))
+        // X-Touch layer-a button = Program Change 0.
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ProgramChange(channel = 0, program = 0))
         assertEquals("layer-a", bankState.bankFor(deviceTypeKey))
         assertTrue(actions.calls.isEmpty())
     }
@@ -182,7 +182,7 @@ class SurfaceInputRouterTest {
     fun `Blackout target toggles global scaler via actions`() {
         val actions = RecordingActions()
         val router = buildRouter(actions, listOf(binding(1, "btn-3", BindingTarget.Blackout)))
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 10, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
         assertEquals(listOf<RecordedCall>(RecordedCall.ToggleBlackout), actions.calls.toList())
     }
 
@@ -195,19 +195,19 @@ class SurfaceInputRouterTest {
             listOf(binding(1, "btn-4", BindingTarget.SetBank(deviceTypeKey, "layer-a"))),
             bankState,
         )
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 11, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 19, velocity = 127u))
         assertEquals("layer-a", bankState.bankFor(deviceTypeKey))
     }
 
     @Test
     fun `encoder CC dispatches same as fader for FixtureProperty`() {
         val actions = RecordingActions()
-        // enc-1 = CC 16 on X-Touch.
+        // enc-1 = CC 10 on X-Touch Compact Layer A.
         val router = buildRouter(
             actions,
             listOf(binding(1, "enc-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))),
         )
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 16, value = 80u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 80u))
         assertEquals(listOf<RecordedCall>(RecordedCall.WriteFixture("hex-1", "dimmer", 80u)), actions.calls.toList())
     }
 
@@ -227,9 +227,9 @@ class SurfaceInputRouterTest {
             actions = actions,
             feedbackHooks = feedback,
         )
-        // fader-1 touch note is 101 on X-Touch Standard.
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 101, velocity = 127u), displayKey = "dev-a")
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 101, velocity = 0u), displayKey = "dev-a")
+        // fader-1 touch is CC 101 on X-Touch Compact Standard (Layer A).
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 101, value = 127u), displayKey = "dev-a")
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 101, value = 0u), displayKey = "dev-a")
         assertEquals(
             listOf<RecordingFeedbackHooks.Call>(
                 RecordingFeedbackHooks.Call.Touch("dev-a", "fader-1", true),
@@ -271,8 +271,8 @@ class SurfaceInputRouterTest {
         val flash = BindingTarget.Flash(BindingTarget.FixtureProperty("hex-1", "dimmer"), max = 255)
         val router = buildRouter(actions, listOf(binding(1, "btn-2", flash)), flashTracker = flashTracker)
 
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 9, velocity = 127u))
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 9, velocity = 0u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 0u))
         assertEquals(2, actions.calls.size)
         assertEquals(RecordedCall.FlashFixtureRelease("hex-1", "dimmer"), actions.calls.last())
         assertFalse(flashTracker.isActive(1))
