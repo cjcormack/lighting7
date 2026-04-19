@@ -13,6 +13,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
+import org.jetbrains.exposed.dao.with
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -32,6 +33,14 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val cues = transaction(state.database) {
                 DaoCue.find { DaoCues.project eq project.id }
                     .orderBy(DaoCues.name to SortOrder.ASC)
+                    .with(
+                        DaoCue::presetApplications,
+                        DaoCue::adHocEffects,
+                        DaoCue::triggers,
+                        DaoCue::cueStack,
+                        DaoCuePresetApplication::preset,
+                        DaoCueTrigger::script,
+                    )
                     .map { it.toCueDetails(isCurrentProject) }
             }
             call.respond(cues)
