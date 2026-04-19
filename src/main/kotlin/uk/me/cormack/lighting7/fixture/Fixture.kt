@@ -44,6 +44,10 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
         }
     }.flatten()
 
+    /** Look up a declared property by its reflection name; null if no such annotated property. */
+    fun fixtureProperty(name: String): Property? =
+        fixtureProperties.firstOrNull { it.name == name }
+
     open fun blackout() {
         if (this is WithDimmer) {
             this.dimmer.value = 0u

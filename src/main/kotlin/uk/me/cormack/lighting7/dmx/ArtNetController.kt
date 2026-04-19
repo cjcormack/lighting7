@@ -23,6 +23,8 @@ class ArtNetController(override val universe: Universe, val address: String? = n
     private val _parkedChannels = ConcurrentHashMap<Int, UByte>()
     override val parkedChannels: Map<Int, UByte> get() = _parkedChannels
 
+    private val transmitModifiers = java.util.concurrent.CopyOnWriteArrayList<TransmitModifier>()
+
     private var previousSentDmxData = ByteArray(512)
 
     private val listeners = ArrayList<ChannelChangeListener>()
@@ -131,6 +133,20 @@ class ArtNetController(override val universe: Universe, val address: String? = n
 
     override fun unparkAll() {
         _parkedChannels.clear()
+        runBlocking { transmissionNeeded.send(Unit) }
+    }
+
+    override fun addTransmitModifier(modifier: TransmitModifier) {
+        if (!transmitModifiers.contains(modifier)) {
+            transmitModifiers.add(modifier)
+        }
+    }
+
+    override fun removeTransmitModifier(modifier: TransmitModifier) {
+        transmitModifiers.remove(modifier)
+    }
+
+    override fun requestTransmit() {
         runBlocking { transmissionNeeded.send(Unit) }
     }
 
@@ -253,8 +269,17 @@ class ArtNetController(override val universe: Universe, val address: String? = n
         val dmxData = ByteArray(512)
 
         currentValues.forEach { (channelNo, channelValue) ->
-            // Apply park override: parked channels always output their parked value
-            val outputValue = _parkedChannels[channelNo] ?: channelValue
+            // Apply park override: parked channels always output their parked value.
+            // Modifiers iterate on the CopyOnWriteArrayList directly — its iterators snapshot
+            // internally without allocating a fresh list per frame.
+            val parked = _parkedChannels[channelNo]
+            val outputValue = if (parked != null) {
+                parked
+            } else {
+                var v = channelValue
+                for (mod in transmitModifiers) v = mod.modify(universe, channelNo, v)
+                v
+            }
             val byteValue = outputValue.toByte()
             dmxData[channelNo - 1] = byteValue
 

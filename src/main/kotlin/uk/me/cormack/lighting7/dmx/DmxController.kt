@@ -31,4 +31,25 @@ sealed interface DmxController {
      * Remove all parked channels.
      */
     fun unparkAll()
+
+    /**
+     * Register a [TransmitModifier] that will transform channel values at transmit time.
+     * Modifiers are applied in registration order, after park resolution.
+     *
+     * No-op if the modifier is already registered.
+     */
+    fun addTransmitModifier(modifier: TransmitModifier)
+
+    /**
+     * Remove a previously-registered [TransmitModifier]. No-op if not registered.
+     */
+    fun removeTransmitModifier(modifier: TransmitModifier)
+
+    /**
+     * Notify the controller that a transmit modifier's internal state has changed and an
+     * immediate re-transmission is needed so the UI / hardware sees the scaled output.
+     * Without this hook, modifiers like Blackout would only take effect on the next
+     * periodic transmit tick (up to 25 ms delay).
+     */
+    fun requestTransmit()
 }

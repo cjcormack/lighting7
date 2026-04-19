@@ -1,8 +1,11 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class DirectWriteStoreTest {
 
@@ -58,6 +61,48 @@ class DirectWriteStoreTest {
         val store = DirectWriteStore()
         store.put(universe = 32767, channel = 512, value = 255u)
         assertEquals(255u.toUByte(), store.get(32767, 512))
+    }
+
+    @Test
+    fun `putProperty fans out to slider channel with 7-bit scaling`() {
+        val store = DirectWriteStore()
+        val hex = HexFixture(Universe(0, 0), "hex-1", "Hex 1", firstChannel = 1)
+        val writes = store.putProperty(hex, "dimmer", midiValue7Bit = 127u)
+        assertEquals(1, writes.size)
+        assertEquals(255u.toUByte(), store.get(0, 1))
+        assertEquals(255u.toUByte(), writes.single().value)
+    }
+
+    @Test
+    fun `putProperty for rgbColour writes all three channels`() {
+        val store = DirectWriteStore()
+        val hex = HexFixture(Universe(0, 0), "hex-1", "Hex 1", firstChannel = 1)
+        val writes = store.putProperty(hex, "rgbColour", midiValue7Bit = 64u)
+        assertEquals(3, writes.size)
+        assertEquals(writes.map { it.channel }.sorted(), listOf(2, 3, 4))
+        // All three channels have the same stored value.
+        assertEquals(store.get(0, 2), store.get(0, 3))
+        assertEquals(store.get(0, 3), store.get(0, 4))
+    }
+
+    @Test
+    fun `putProperty for unknown property stores nothing`() {
+        val store = DirectWriteStore()
+        val hex = HexFixture(Universe(0, 0), "hex-1", "Hex 1", firstChannel = 1)
+        val writes = store.putProperty(hex, "bogus", 50u)
+        assertTrue(writes.isEmpty())
+        assertEquals(0, store.size)
+    }
+
+    @Test
+    fun `clearProperty wipes every backing channel`() {
+        val store = DirectWriteStore()
+        val hex = HexFixture(Universe(0, 0), "hex-1", "Hex 1", firstChannel = 1)
+        store.putProperty(hex, "rgbColour", 127u)
+        assertEquals(3, store.size)
+        val cleared = store.clearProperty(hex, "rgbColour")
+        assertEquals(3, cleared.size)
+        assertEquals(0, store.size)
     }
 
     @Test

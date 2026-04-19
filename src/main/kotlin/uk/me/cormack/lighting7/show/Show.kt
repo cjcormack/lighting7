@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fx.*
+import uk.me.cormack.lighting7.midi.GlobalScalerState
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.registerUserEffect
 import uk.me.cormack.lighting7.scripts.*
@@ -43,6 +44,13 @@ class Show(
         parkManager = parkManager,
     )
     val cueStackManager = CueStackManager(fxEngine)
+
+    /**
+     * Global transmit-time scalers (Blackout, Grand Master) — Phase 3 of
+     * [docs/control-surface-plan.md]. Attached to every registered DMX controller on
+     * show start so toggles take effect immediately without a show-wide restart.
+     */
+    val globalScalerState = GlobalScalerState(fixtures)
     private val scripts: MutableMap<String, Script> = mutableMapOf()
     private val scriptsLock = ReentrantLock()
     private val scriptingHost = BasicJvmScriptingHost()
@@ -61,6 +69,10 @@ class Show(
             e.printStackTrace()
         }
 
+        // Attach the global scaler to every controller so Blackout / Grand Master toggles
+        // from a control surface propagate at transmit time.
+        globalScalerState.attach()
+
         // Start the FX engine after fixtures are loaded
         fxEngine.start(GlobalScope)
 
@@ -72,6 +84,7 @@ class Show(
     }
 
     fun close() {
+        globalScalerState.detach()
         fxEngine.stop()
     }
 

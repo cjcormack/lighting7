@@ -5,6 +5,7 @@ import io.ktor.serialization.kotlinx.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
@@ -409,6 +410,53 @@ data class SurfaceBindingsChangedOutMessage(
     val bindingId: Int? = null,
 ) : OutMessage()
 
+// Control-surface Phase 3: active-bank + global-scaler state.
+
+@Serializable
+@SerialName("surfaceBank.set")
+data class SurfaceBankSetInMessage(
+    val deviceTypeKey: String,
+    val bank: String?,
+) : InMessage()
+
+@Serializable
+@SerialName("surfaceBank.state")
+data object SurfaceBankStateInMessage : InMessage()
+
+@Serializable
+@SerialName("surfaceBank.state")
+data class SurfaceBankStateOutMessage(
+    /** `deviceTypeKey` → active bank id (null values elided). */
+    val activeBanks: Map<String, String>,
+) : OutMessage()
+
+@Serializable
+@SerialName("surfaceBank.changed")
+data class SurfaceBankChangedOutMessage(
+    val deviceTypeKey: String,
+    val previousBank: String?,
+    val newBank: String?,
+) : OutMessage()
+
+@Serializable
+@SerialName("surfaceScaler.state")
+data object SurfaceScalerStateInMessage : InMessage()
+
+@Serializable
+@SerialName("surfaceScaler.state")
+data class SurfaceScalerStateOutMessage(
+    val blackoutEnabled: Boolean,
+    val grandMasterEnabled: Boolean,
+) : OutMessage()
+
+@Serializable
+@SerialName("surfaceScaler.setBlackout")
+data class SurfaceScalerSetBlackoutInMessage(val enabled: Boolean) : InMessage()
+
+@Serializable
+@SerialName("surfaceScaler.setGrandMaster")
+data class SurfaceScalerSetGrandMasterInMessage(val enabled: Boolean) : InMessage()
+
 // Project-related messages
 
 @Serializable
@@ -693,6 +741,26 @@ fun Application.configureSockets(state: State) {
                 }
                 .launchIn(this)
 
+            val bankChangeJob = state.activeBankState.changes
+                .onEach { change ->
+                    sendSerialized<OutMessage>(
+                        SurfaceBankChangedOutMessage(
+                            deviceTypeKey = change.deviceTypeKey,
+                            previousBank = change.previousBank,
+                            newBank = change.newBank,
+                        )
+                    )
+                }
+                .launchIn(this)
+
+            val scalerStateJob = combine(
+                state.show.globalScalerState.blackoutEnabled,
+                state.show.globalScalerState.grandMasterEnabled,
+            ) { blackout, grandMaster -> SurfaceScalerStateOutMessage(blackout, grandMaster) }
+                .drop(1)
+                .onEach { sendSerialized<OutMessage>(it) }
+                .launchIn(this)
+
             try {
                 for (frame in incoming) {
                     when (val message = converter?.deserialize<InMessage>(frame)) {
@@ -857,6 +925,27 @@ fun Application.configureSockets(state: State) {
                             sendSerialized(reply)
                         }
 
+                        is SurfaceBankSetInMessage -> {
+                            state.activeBankState.setBank(message.deviceTypeKey, message.bank)
+                        }
+                        is SurfaceBankStateInMessage -> {
+                            sendSerialized<OutMessage>(SurfaceBankStateOutMessage(state.activeBankState.active.value))
+                        }
+                        is SurfaceScalerStateInMessage -> {
+                            sendSerialized<OutMessage>(
+                                SurfaceScalerStateOutMessage(
+                                    blackoutEnabled = state.show.globalScalerState.blackoutEnabled.value,
+                                    grandMasterEnabled = state.show.globalScalerState.grandMasterEnabled.value,
+                                )
+                            )
+                        }
+                        is SurfaceScalerSetBlackoutInMessage -> {
+                            state.show.globalScalerState.setBlackout(message.enabled)
+                        }
+                        is SurfaceScalerSetGrandMasterInMessage -> {
+                            state.show.globalScalerState.setGrandMaster(message.enabled)
+                        }
+
                         null -> TODO()
                     }
                 }
@@ -871,6 +960,8 @@ fun Application.configureSockets(state: State) {
                 projectChangeJob.cancel()
                 learnEventsJob.cancel()
                 bindingChangeJob.cancel()
+                bankChangeJob.cancel()
+                scalerStateJob.cancel()
                 ownedLearnSessions.toList().forEach { state.midiLearnSessionManager.cancel(it) }
                 ownedLearnSessions.clear()
                 currentFixtures.unregisterListener(listener)

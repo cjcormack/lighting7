@@ -12,11 +12,15 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.fx.CueTriggerManager
+import uk.me.cormack.lighting7.midi.ActiveBankState
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
+import uk.me.cormack.lighting7.midi.DefaultSurfaceActions
 import uk.me.cormack.lighting7.midi.DeviceMatcher
+import uk.me.cormack.lighting7.midi.FlashStateTracker
 import uk.me.cormack.lighting7.midi.LibreMidiAccessSource
 import uk.me.cormack.lighting7.midi.MidiDeviceRegistry
 import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
+import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.Show
 
@@ -85,6 +89,35 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
+     * Active bank per device type (Phase 3). Ephemeral in-memory map mutated by the router
+     * on device-side bank buttons and by WS `surfaceBank.set`.
+     */
+    val activeBankState: ActiveBankState by lazy { ActiveBankState() }
+
+    /**
+     * Per-binding flash press tracker (Phase 3). Keyed by `bindingId`; a press that's
+     * already active is ignored so MIDI retriggers don't double-apply.
+     */
+    val flashStateTracker: FlashStateTracker by lazy { FlashStateTracker() }
+
+    /**
+     * Central dispatch for inbound surface events (Phase 3). Subscribes to
+     * [deviceMatcher] attach events and per-controller input flows, resolves bindings
+     * via [controlSurfaceBindingService], and calls through to [DefaultSurfaceActions].
+     */
+    val surfaceInputRouter: SurfaceInputRouter by lazy {
+        SurfaceInputRouter(
+            deviceMatcher = deviceMatcher,
+            controllerLookup = midiRegistry::controllerFor,
+            bindingService = controlSurfaceBindingService,
+            bankState = activeBankState,
+            flashTracker = flashStateTracker,
+            projectIdProvider = { projectManager.currentProject.id.value },
+            actions = DefaultSurfaceActions(this),
+        )
+    }
+
+    /**
      * Initialize the show through the project manager.
      * This finds (or migrates) the current project from the database and creates the Show.
      * Must be called explicitly after State construction.
@@ -95,6 +128,7 @@ class State(val config: ApplicationConfig) {
         midiRegistry.start(GlobalScope)
         deviceMatcher.start(GlobalScope)
         midiLearnSessionManager.start(GlobalScope)
+        surfaceInputRouter.start(GlobalScope)
         return show
     }
 

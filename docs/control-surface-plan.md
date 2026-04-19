@@ -22,18 +22,14 @@ Related:
 
 ## Status
 
-**Phase**: 2 complete. Phase 3 next.
+**Phase**: 3 complete. Phase 4 next.
 
-**Most recent session**: 2026-04-19. Phase 2 mapping model + MIDI Learn landed.
-`DaoControlSurfaceBindings` table (project-scoped, `(device_type_key, control_id, bank)` unique slot, `bank` nullable) + `BindingTarget` sealed hierarchy (`FixtureProperty` / `GroupProperty` / `CueStackGo` / `CueStackBack` / `CueStackPause` / `FireCue` / `Flash` / `Blackout` / `GrandMasterToggle` / `SetBank`) serialized as a discriminated JSON union with `type` discriminator. `ControlSurfaceBindingService` keeps a per-project in-memory cache and exposes `resolve(projectId, deviceTypeKey, controlId, activeBank)` with bank-specific > bank-agnostic precedence. `MidiLearnSessionManager` subscribes to `DeviceMatcher.events`, collects from each attached controller's `input` flow via `MidiDeviceRegistry.controllerFor`, filters with a capturable-event predicate (fader moves with value > 0, button / encoder presses, never bank buttons), and times out pending sessions after 30 s. CRUD REST at `/api/rest/project/{projectId}/surfaceBindings` (GET/POST/GET/PATCH/DELETE) with shape validation against `ControlSurfaceRegistry` + slot-conflict 409s. WebSocket messages `surfaceLearn.begin` / `surfaceLearn.cancel` / `surfaceLearn.commit` on the input side, `surfaceLearn.started` / `surfaceLearn.captured` / `surfaceLearn.committed` / `surfaceLearn.cancelled` / `surfaceLearn.error` / `surfaceBindingsChanged` on the output side; per-connection `ownedLearnSessions` scopes capture broadcasts to the originating client. State wiring: `State.controlSurfaceBindingService` and `State.midiLearnSessionManager` with `start(GlobalScope)` in `initializeShow()`; schema adds `DaoControlSurfaceBindings` to `SchemaUtils.createMissingTablesAndColumns`; project-delete cascades to bindings and invalidates the cache. 25 new tests (9 serialization, 6 resolver precedence, 10 learn session state machine), 443 total passing.
+**Most recent session**: 2026-04-19. Phase 3 inbound routing landed.
+`SurfaceInputRouter` subscribes to `DeviceMatcher.events`, attaches a per-controller input collector via `MidiDeviceRegistry.controllerFor`, and routes each `MidiInputEvent` through a three-step pipeline: match against the device profile's `ControlDescriptor` list (Fader/Encoder CC, Button note, Encoder push note, Fader touch note, BankButton), resolve against `ControlSurfaceBindingService` using `(deviceTypeKey, controlId, activeBank)`, dispatch by `BindingTarget` variant. Bank buttons short-circuit the binding lookup — they call `ActiveBankState.setBank(deviceTypeKey, bankId)` directly since `BankButtonDescriptor` is intentionally not user-bindable. `ActiveBankState` holds an ephemeral `deviceTypeKey → bank` map + `changes: SharedFlow<BankChange>` for WS broadcast + a `ConcurrentHashMap` fast-lookup on the hot path; `FlashStateTracker` is a lock-free `Set<Int>` of currently-held binding IDs so overlapping presses don't clobber each other's release semantics. Continuous events (`FixtureProperty` / `GroupProperty`) flow through `DefaultSurfaceActions`, which calls `DirectWriteStore.putProperty(fixture, propertyName, midi7Bit)` — a new API that uses `PropertyChannelResolver` to walk the fixture's `@FixtureProperty` list, match on `DmxSlider` / `DmxColour` / `DmxFixtureSetting`, and emit scaled `ChannelWrite` records. Sliders scale to each channel's native `min..max`; Colour fans the same 7-bit-scaled value to R/G/B; Settings skip silently (Open Question 7 — enum bindings are button-only). `DefaultSurfaceActions` then pushes the writes through `controller.setValue(channel, value, 0)` for immediate output. Flash press stores the max at Layer 4 (clamped by the slider's own `max`); release clears those entries and writes zero through the controller so the composition resolver takes over on the next tick. Button targets `CueStackGo` / `Back` / `Pause` / `FireCue` dispatch to `CueStackManager`; GO auto-activates an inactive stack at its first cue; Pause cancels the auto-advance timer (new `pauseAutoAdvance(stackId)` method); FireCue looks up the stack FK on the cue via a new `fireCue(state, cueId, scope)` method. Global scalers landed as `TransmitModifier` — a new interface in `dmx/TransmitModifier.kt` that `ArtNetController` applies after park resolution; `GlobalScalerState` implements it and classifies intensity channels (DIMMER / UV / STROBE) by walking fixtures on `fixturesChanged`, keyed as packed `(universe << 20) | channel` longs in an `AtomicReference<Set<Long>>`. Blackout and Grand Master are independent toggles — when either kills output, intensity channels output 0; everything else passes through. Toggle methods call `controller.requestTransmit()` on every attached controller so the change propagates within the next transmission tick, not up to 25 ms later. New WS messages: `surfaceBank.set` / `surfaceBank.state` on input; `surfaceBank.changed` / `surfaceBank.state` / `surfaceScaler.state` on both; `surfaceScaler.setBlackout` / `surfaceScaler.setGrandMaster` on input. Connection handler subscribes to `activeBankState.changes` and both scaler `StateFlow`s, broadcasts to the connection on each transition. State wiring: lazy `State.activeBankState`, `State.flashStateTracker`, `State.surfaceInputRouter` (constructed with `DefaultSurfaceActions(state)` that re-resolves `state.show.*` on every call so project switches don't leak stale references); `Show.globalScalerState.attach()` called in `Show.start()` after fixture load; `start()` / `detach()` symmetry through `Show.close()`; `surfaceInputRouter.start(GlobalScope)` in `initializeShow()`. 45 new tests (9 PropertyChannelResolver, 7 ActiveBankState, 4 FlashStateTracker, 6 GlobalScalerState, 13 SurfaceInputRouter, 4 new DirectWriteStore + 2 kotlin.coroutines-style refactor), **488 total passing**.
 
 **Next actions** (for the session that picks this up):
-1. Start Phase 3: `SurfaceInputRouter` that subscribes to each attached controller's `input` flow and dispatches to the existing composition layers.
-2. Add `ActiveBankState` service (in-memory, per-device); wire WS `surfaceBank.set { deviceTypeKey, bank }`.
-3. Extend `DirectWriteStore` with a property-level API so `(fixture, property, value)` fans out to channels via the patch.
-4. Add transmit-time global scalers (`Blackout`, `GrandMasterToggle`) behind a `TransmitModifier` hook in `ArtNetController`, analogous to the `ParkManager` path.
-5. Wire `FlashStateTracker` for per-binding saved-value restoration on release.
-6. Manually validate on the X-Touch Compact: run the REST + WS Learn flow end to end (begin → move fader → captured → commit → `GET /surfaceBindings` shows the row) before touching Phase 3 routing.
+1. Manually validate on the X-Touch Compact: bind a fader → `front-wash.dimmer` via the REST + WS Learn flow, move the fader, confirm stage + sticky Layer 4. Bind a button to `CueStackGo`, confirm stack advances. Bind a button to `Blackout`, confirm intensity channels zero out at transmit time while colour stays.
+2. Start Phase 4 (Feedback & Reconciliation): `SurfaceFeedbackPublisher` that observes the composition model and drives motor positions / LED rings / button LEDs; touch suppression on bound fader touch notes; soft-takeover state machine for non-motor faders; initial sync on device attach and bank change.
 
 **Per-phase tracker:**
 
@@ -42,7 +38,7 @@ Related:
 | 0 | Transport foundation: ktmidi setup, `MidiController`, per-device coroutines, input/output channels, rate limiting, delta-tracked feedback, hot-plug detection | **Complete** |
 | 1 | Device profile model: Kotlin `ControlSurfaceDevice` classes + `@ControlSurfaceType` annotation + `ControlSurfaceRegistry`, X-Touch Compact profile class | **Complete** |
 | 2 | Mapping model + MIDI Learn: `ControlSurfaceBinding` table, `BindingTarget` sealed types, REST/WS routes, MIDI Learn session | **Complete** |
-| 3 | Inbound routing: fader → Layer 4 writes, buttons → GO/Back/Pause/FireCue/Flash/Blackout/Grand Master, app-side banks | Not started |
+| 3 | Inbound routing: fader → Layer 4 writes, buttons → GO/Back/Pause/FireCue/Flash/Blackout/Grand Master, app-side banks | **Complete** |
 | 4 | Feedback & reconciliation: motor drive, LED feedback, touch suppression, soft takeover, initial sync, device-side A/B layer coordination | Not started |
 | 5 | Frontend `/surfaces` route: device list, binding matrix, MIDI Learn mode, bank management, binding badges on existing views | Not started |
 | 6 | cueEdit integration (depends on cue-authoring Phase 1): fader writes route through `cueEdit.*` when a session is active; surfaces participate in EditorContext | Not started |
@@ -342,21 +338,37 @@ Confirmed with the user 2026-04-18:
 
 ### Phase 3 work
 
-- [ ] `SurfaceInputRouter.kt` — central dispatch. Subscribes to input stream from `DeviceMatcher`.
-- [ ] `ActiveBankState` service — in-memory per-device map. WS message `surfaceBank.set { deviceTypeKey, bank }` to drive it from the frontend.
-- [ ] `FlashStateTracker` — per-binding saved-value registry for release restoration.
-- [ ] Extend `DirectWriteStore` to support property-level writes (currently it's channel-level). Add a convenience layer that expands `(fixture, property, value)` to channel writes via the fixture patch.
-- [ ] Blackout + GrandMaster global scalers: add a `TransmitModifier` hook in the transmit pipeline that `ArtNetController.sendCurrentValues()` consults before output. Parking already sits here; add this alongside.
-- [ ] Tests.
+- [x] [`SurfaceInputRouter.kt`](../src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt) — subscribes to `DeviceMatcher.events`; per-device collectors launched via `MidiDeviceRegistry.controllerFor`; event → descriptor match walks profile's `controls` list in O(n); dispatches via `SurfaceActions` port interface.
+- [x] [`SurfaceActions.kt`](../src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceActions.kt) — port interface + `DefaultSurfaceActions` that resolves deps through `state.show` on every call (project-switch safe). Split from the router file so tests can inject a recording fake.
+- [x] [`ActiveBankState.kt`](../src/main/kotlin/uk/me/cormack/lighting7/midi/ActiveBankState.kt) — `ConcurrentHashMap` fast-lookup + `StateFlow<Map<String, String?>>` snapshot + `SharedFlow<BankChange>` for WS broadcast.
+- [x] [`FlashStateTracker.kt`](../src/main/kotlin/uk/me/cormack/lighting7/midi/FlashStateTracker.kt) — lock-free `Set<BindingKey>` of currently-held bindings; `pressed()` returns false on retrigger so MIDI repeats don't double-fire.
+- [x] [`PropertyChannelResolver.kt`](../src/main/kotlin/uk/me/cormack/lighting7/midi/PropertyChannelResolver.kt) — fixture/property → channel writes. Handles `DmxSlider` (single channel, scaled within `min..max`), `DmxColour` (3 channels), `DmxFixtureSetting` (silently skipped per Open Question 7). Exposes `scale7BitToDmx` / `scaleWithinRange` for external use.
+- [x] [`DirectWriteStore.kt`](../src/main/kotlin/uk/me/cormack/lighting7/fx/DirectWriteStore.kt) — added `putProperty(fixture, propertyName, midi7Bit)` / `clearProperty(fixture, propertyName)` + group variants. Builds on the existing channel-level `put` / `clear` via `PropertyChannelResolver`.
+- [x] Global scalers: [`dmx/TransmitModifier.kt`](../src/main/kotlin/uk/me/cormack/lighting7/dmx/TransmitModifier.kt) interface + `ArtNetController` / `MockDmxController` changes to apply modifiers after park resolution; `DmxController.requestTransmit()` gives scalers a push-to-transmit hook so toggles propagate immediately. `GlobalScalerState` implements the interface and classifies intensity channels at `fixturesChanged` time.
+- [x] `CueStackManager` additions: [`pauseAutoAdvance(stackId)`](../src/main/kotlin/uk/me/cormack/lighting7/fx/CueStackManager.kt) cancels the active auto-advance job; [`fireCue(state, cueId, scope)`](../src/main/kotlin/uk/me/cormack/lighting7/fx/CueStackManager.kt) looks up the stack FK from DB then delegates to `activateCueInStack`.
+- [x] WS messages: `surfaceBank.set` / `surfaceBank.state` / `surfaceBank.changed` + `surfaceScaler.state` / `surfaceScaler.setBlackout` / `surfaceScaler.setGrandMaster`. Handlers installed in `Sockets.kt`; subscription jobs for bank + scaler changes cleaned up in the finally block.
+- [x] Show / State wiring: `Show.globalScalerState` lazy, `attach()` in `Show.start()` after fixture load, `detach()` in `Show.close()`. `State.activeBankState` / `State.flashStateTracker` / `State.surfaceInputRouter` lazy; `surfaceInputRouter.start(GlobalScope)` added to `initializeShow()`.
+- [x] Tests — 45 new. `PropertyChannelResolverTest` (9), `ActiveBankStateTest` (7), `FlashStateTrackerTest` (4), `GlobalScalerStateTest` (6), `SurfaceInputRouterTest` (13, with a recording `RecordingActions` fake), `DirectWriteStoreTest` (+4 property-level). 443 → 488 passing.
 
 ### Phase 3 files
 
+- New: `src/main/kotlin/uk/me/cormack/lighting7/dmx/TransmitModifier.kt`
 - New: `src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt`
+- New: `src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceActions.kt`
 - New: `src/main/kotlin/uk/me/cormack/lighting7/midi/ActiveBankState.kt`
 - New: `src/main/kotlin/uk/me/cormack/lighting7/midi/FlashStateTracker.kt`
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/ArtNetController.kt` (transmit modifiers).
+- New: `src/main/kotlin/uk/me/cormack/lighting7/midi/PropertyChannelResolver.kt`
+- New: `src/main/kotlin/uk/me/cormack/lighting7/midi/GlobalScalerState.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/ArtNetController.kt` (transmit modifiers + `requestTransmit`).
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/DmxController.kt` (interface additions).
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/MockDmxController.kt` (mirror implementation + `getEffectiveValue` / `transmitRequests` for tests).
 - Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/DirectWriteStore.kt` (property-level API).
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt` (bank-switch WS handler).
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/CueStackManager.kt` (`pauseAutoAdvance` + `fireCue`).
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/show/Show.kt` (`globalScalerState` + attach/detach).
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/state/State.kt` (service wiring + start).
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt` (bank + scaler WS messages, handlers, subscriptions).
+- New tests: `src/test/kotlin/uk/me/cormack/lighting7/midi/{PropertyChannelResolverTest,ActiveBankStateTest,FlashStateTrackerTest,GlobalScalerStateTest,SurfaceInputRouterTest}.kt`
+- Updated tests: `src/test/kotlin/uk/me/cormack/lighting7/fx/DirectWriteStoreTest.kt` (+4 property-level tests).
 
 ### Phase 3 verification
 
@@ -535,6 +547,13 @@ Flag these to the user before implementing.
 - [ ] Commit this file alongside the code changes.
 
 ## Change log
+
+**2026-04-19 (Phase 3 implementation)** — Four design choices worth noting:
+
+1. **`SurfaceActions` as a port, not inline State access.** The obvious implementation is for `SurfaceInputRouter` to take `State` directly and call `state.show.cueStackManager.*` everywhere. Extracting an interface instead made testing drastically simpler (`RecordingActions` in `SurfaceInputRouterTest` records calls without needing a real show, database, or DMX controller) and the production impl is still a thin single-class file. `DefaultSurfaceActions` resolves `fixtures` / `directWriteStore` / `cueStackManager` / `globalScalerState` through `state.show` **on every call**, not once at construction — otherwise `ProjectManager.switchProject` would leak stale references into the router that was built against the old show.
+2. **`TransmitModifier` alongside `ParkManager`, not a wholesale rewrite.** The plan said "analogous to the `ParkManager` path", but parks are a hard-coded built-in on the controller. The cleanest add was a new interface + modifier list that runs **after** park resolution (park still wins — matches console convention where park is the physical-override layer). This keeps Blackout / Grand Master as just another layered transform without special-casing them in `sendCurrentValues()`. Also: `GlobalScalerState` is the only initial implementor, but feedback-side effect sidechains in Phase 4 can reuse the same hook.
+3. **Intensity classification keyed by packed `(universe << 20) | channel` longs.** First draft used a `Set<Pair<Int, Int>>` which allocates a `Pair` on every `modify()` lookup. The ArtNet transmit loop fires on every frame for every channel, so on a 4-universe rig that's 4×512 = 2048 map lookups/frame at 40 Hz. Packing into a `Long` is allocation-free and the existing `DirectWriteStore` already uses the same encoding — consistency win.
+4. **Flash press stores channel writes at the slider's native `max`, not the raw `target.max`.** If a fixture's dimmer has `max = 200u` (say, a DmxSlider declared `max = 200u` to cap a too-hot lamp), a Flash with `max = 255` should still respect the lamp's cap. `DefaultSurfaceActions.buildFlashWrites` does `minOf(target.max, sliderMax)` to honour both. For Colour properties (where there's no per-property cap), the raw `target.max` passes through unmodified.
 
 **2026-04-19 (Phase 2 implementation)** — Three design choices worth noting:
 

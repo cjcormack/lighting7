@@ -455,6 +455,45 @@ class CueStackManager(
     fun getActiveCueId(stackId: Int): Int? = activeStacks[stackId]?.activeCueId
 
     /**
+     * Cancel the auto-advance timer on the given stack without otherwise disturbing its
+     * state. Used by surface `CueStackPause` bindings — a press stops the stack from
+     * rolling forward automatically; the operator can then drive it manually with GO / Back.
+     *
+     * Returns true if the stack had an active auto-advance timer that was cancelled.
+     * Calling this on a stack without auto-advance, or on an inactive stack, is a no-op
+     * (returns false).
+     */
+    fun pauseAutoAdvance(stackId: Int): Boolean {
+        val state = activeStacks[stackId] ?: return false
+        val job = state.autoAdvanceJob ?: return false
+        if (!job.isActive) return false
+        job.cancel()
+        state.autoAdvanceJob = null
+        return true
+    }
+
+    /**
+     * Fire a specific cue without requiring the caller to know its stack id. Looks up the
+     * cue's `cueStack` FK in the DB, then delegates to [activateCueInStack].
+     *
+     * Throws [IllegalArgumentException] if the cue doesn't exist or isn't attached to a
+     * stack.
+     */
+    fun fireCue(
+        state: State,
+        cueId: Int,
+        scope: CoroutineScope = GlobalScope,
+    ): ActivateResult {
+        val stackId = transaction(state.database) {
+            val cue = DaoCue.findById(cueId)
+                ?: throw IllegalArgumentException("Cue not found: $cueId")
+            cue.cueStack?.id?.value
+                ?: throw IllegalArgumentException("Cue $cueId is not attached to a stack")
+        }
+        return activateCueInStack(state, stackId, cueId, scope)
+    }
+
+    /**
      * Get all currently active stack IDs.
      */
     fun getActiveStackIds(): Set<Int> = activeStacks.keys.toSet()
