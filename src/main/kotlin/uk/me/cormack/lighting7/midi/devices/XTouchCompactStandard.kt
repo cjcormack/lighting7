@@ -12,10 +12,13 @@ import uk.me.cormack.lighting7.midi.LedFeedback
  * Layer A MIDI map (source: Behringer X-Touch Compact Quick Start Guide, pages 19–21):
  *   - **Faders** — 9 motorised 100 mm faders (8 channel + master). Move values on CC 1..9,
  *     touch on CC 101..109 (velocity >0 = touch, 0 = release). Motor feedback echoes CC 1..9.
- *   - **Encoders (top row, 1..8)** — Turn value on CC 10..17, push switch on notes 0..7,
- *     LED ring remote-value CC 26..33.
+ *   - **Encoders (top row, 1..8)** — Turn value on CC 10..17, push switch on notes 0..7.
+ *     LED ring remote-value echoes the turn CC (10..17) — Layer A uses symmetric TX/RX CCs
+ *     per encoder; the Quick Start Guide pages 19–21 list CC 26..33 against the ring label,
+ *     but hardware testing shows the firmware's ring RX is the turn CC. Matches the Behringer
+ *     XTouch Compact factory-defaults chart published on the gear4music download page.
  *   - **Encoders (right-side block, 9..16)** — Turn value on CC 18..25, push switch on notes
- *     8..15, LED ring remote-value CC 34..41.
+ *     8..15. LED ring RX is likewise the turn CC (18..25).
  *   - **Buttons** — 39 illuminated buttons laid out as upper/mid/lower rows above the faders,
  *     select row beneath the faders, and a right-side transport/function area. Layer A TX
  *     notes are 16..54 (8 + 8 + 8 + 9 + 6). The Quick Start Guide's page-22 "RX MIDI DATA"
@@ -46,10 +49,11 @@ class XTouchCompactStandard : ControlSurfaceDevice() {
         }
         // Encoders 1–8: top horizontal row above the button block.
         repeat(8) { i ->
+            val turnCc = 10 + i
             encoder(
                 id = "enc-${i + 1}",
-                cc = 10 + i,
-                ringCc = 26 + i,
+                cc = turnCc,
+                ringCc = turnCc,
                 pushNote = 0 + i,
                 pushLed = LedFeedback.ON_OFF,
                 label = "Encoder ${i + 1}",
@@ -57,10 +61,11 @@ class XTouchCompactStandard : ControlSurfaceDevice() {
         }
         // Encoders 9–16: right-side 2×4 block above the master fader.
         repeat(8) { i ->
+            val turnCc = 18 + i
             encoder(
                 id = "enc-${i + 9}",
-                cc = 18 + i,
-                ringCc = 34 + i,
+                cc = turnCc,
+                ringCc = turnCc,
                 pushNote = 8 + i,
                 pushLed = LedFeedback.ON_OFF,
                 label = "Encoder ${i + 9}",

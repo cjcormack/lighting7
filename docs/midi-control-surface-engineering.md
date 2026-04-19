@@ -185,11 +185,11 @@ class XTouchCompactStandard : ControlSurfaceDevice() {
         }
         // Encoders 1–8: top horizontal row above the button block.
         repeat(8) { i ->
-            encoder(id = "enc-${i + 1}", cc = 10 + i, ringCc = 26 + i, pushNote = 0 + i, …)
+            encoder(id = "enc-${i + 1}", cc = 10 + i, ringCc = 10 + i, pushNote = 0 + i, …)
         }
         // Encoders 9–16: right-side 2×4 block above the master fader.
         repeat(8) { i ->
-            encoder(id = "enc-${i + 9}", cc = 18 + i, ringCc = 34 + i, pushNote = 8 + i, …)
+            encoder(id = "enc-${i + 9}", cc = 18 + i, ringCc = 18 + i, pushNote = 8 + i, …)
         }
         repeat(39) { i ->
             button(id = "btn-${i + 1}", note = 16 + i, ledFeedback = LedFeedback.ON_OFF, …)

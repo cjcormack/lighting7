@@ -147,6 +147,40 @@ class SurfaceFeedbackPublisherTest {
     }
 
     @Test
+    fun `channel change drives feedback to fader AND encoder bound to same target`() = runBlocking {
+        // Regression test for the cross-control feedback bug: fader-1 and enc-1 both bound
+        // to hex-1.dimmer. When the channel changes, BOTH controls must receive feedback —
+        // motor CC for the fader, ring CC for the encoder.
+        val h = Harness(listOf(
+            binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer")),
+            binding(2, "enc-1", BindingTarget.FixtureProperty("hex-1", "dimmer")),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            h.recordingController.feedback.clear()
+
+            h.controller.setValue(1, 200u, 0)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(1 to 200u.toUByte()))
+            yield()
+
+            val cc = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()
+            val faderFeedback = cc.filter { it.cc == 1 }   // fader-1 motor CC
+            val ringFeedback = cc.filter { it.cc == 10 }   // enc-1 ring CC (same as turn CC on Layer A)
+            assertTrue(faderFeedback.isNotEmpty(), "Expected motor feedback for fader-1, got ${h.recordingController.feedback}")
+            assertTrue(ringFeedback.isNotEmpty(), "Expected ring feedback for enc-1, got ${h.recordingController.feedback}")
+            val expected = PropertyChannelResolver.scaleDmxTo7Bit(200u)
+            assertEquals(expected, faderFeedback.last().value)
+            assertEquals(expected, ringFeedback.last().value)
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun `LED feedback fires on blackout toggle`() = runBlocking {
         val h = Harness(listOf(
             binding(10, "btn-1", BindingTarget.Blackout),

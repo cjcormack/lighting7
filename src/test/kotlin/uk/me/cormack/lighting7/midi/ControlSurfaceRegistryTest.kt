@@ -50,15 +50,15 @@ class ControlSurfaceRegistryTest {
     fun `x-touch encoder 1 and 9 match Behringer Layer A defaults`() {
         val info = ControlSurfaceRegistry.allTypes.single { it.typeKey == "x-touch-compact-standard" }
         val enc1 = info.controls.filterIsInstance<EncoderDescriptor>().single { it.controlId == "enc-1" }
-        // Top-row encoder 1: Turn CC 10, push Note 0, ring CC 26.
+        // Top-row encoder 1: Turn CC 10, push Note 0. Ring RX echoes the turn CC on Layer A.
         assertEquals(10, enc1.cc)
-        assertEquals(26, enc1.ringCc)
+        assertEquals(10, enc1.ringCc)
         assertEquals(0, enc1.pushNote)
 
         val enc9 = info.controls.filterIsInstance<EncoderDescriptor>().single { it.controlId == "enc-9" }
-        // Right-block encoder 9: Turn CC 18, push Note 8, ring CC 34.
+        // Right-block encoder 9: Turn CC 18, push Note 8. Ring RX echoes the turn CC.
         assertEquals(18, enc9.cc)
-        assertEquals(34, enc9.ringCc)
+        assertEquals(18, enc9.ringCc)
         assertEquals(8, enc9.pushNote)
     }
 
