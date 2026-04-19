@@ -6,6 +6,7 @@ import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
@@ -472,6 +473,31 @@ data class SurfacePickupChangedOutMessage(
     val target: Int?,
 ) : OutMessage()
 
+// Phase 5: enumerate attached MIDI devices (both profile-matched and unmatched raw ports).
+
+@Serializable
+data class SurfaceDeviceInfo(
+    val displayKey: String,
+    val displayName: String,
+    /** Null when the device did not match any `@ControlSurfaceType`. */
+    val typeKey: String?,
+    val isMatched: Boolean,
+    val hasInputPort: Boolean,
+    val hasOutputPort: Boolean,
+    /** Convenience mirror of `activeBankState` for the device's `typeKey`, or null. */
+    val activeBank: String?,
+)
+
+@Serializable
+@SerialName("surfaceDevices.state")
+data object SurfaceDevicesStateInMessage : InMessage()
+
+@Serializable
+@SerialName("surfaceDevices.state")
+data class SurfaceDevicesStateOutMessage(
+    val devices: List<SurfaceDeviceInfo>,
+) : OutMessage()
+
 // Project-related messages
 
 @Serializable
@@ -789,6 +815,22 @@ fun Application.configureSockets(state: State) {
                 }
                 .launchIn(this)
 
+            // Push the full device list whenever the set of connected ports or matched
+            // profiles changes, or when an active bank flips. `distinctUntilChanged` drops
+            // no-op emits — e.g. `setBank` calls that land on the already-active bank, or
+            // `attached` mutations that don't change the resulting snapshot.
+            val devicesStateJob = combine(
+                state.midiRegistry.devices,
+                state.deviceMatcher.attached,
+                state.activeBankState.active,
+            ) { devices, attached, banks ->
+                buildSurfaceDevicesStateMessage(devices, attached, banks)
+            }
+                .distinctUntilChanged()
+                .drop(1)
+                .onEach { sendSerialized<OutMessage>(it) }
+                .launchIn(this)
+
             try {
                 for (frame in incoming) {
                     when (val message = converter?.deserialize<InMessage>(frame)) {
@@ -959,6 +1001,15 @@ fun Application.configureSockets(state: State) {
                         is SurfaceBankStateInMessage -> {
                             sendSerialized<OutMessage>(SurfaceBankStateOutMessage(state.activeBankState.active.value))
                         }
+                        is SurfaceDevicesStateInMessage -> {
+                            sendSerialized<OutMessage>(
+                                buildSurfaceDevicesStateMessage(
+                                    state.midiRegistry.devices.value,
+                                    state.deviceMatcher.attached.value,
+                                    state.activeBankState.active.value,
+                                )
+                            )
+                        }
                         is SurfaceScalerStateInMessage -> {
                             sendSerialized<OutMessage>(
                                 SurfaceScalerStateOutMessage(
@@ -991,6 +1042,7 @@ fun Application.configureSockets(state: State) {
                 bankChangeJob.cancel()
                 scalerStateJob.cancel()
                 pickupChangeJob.cancel()
+                devicesStateJob.cancel()
                 ownedLearnSessions.toList().forEach { state.midiLearnSessionManager.cancel(it) }
                 ownedLearnSessions.clear()
                 currentFixtures.unregisterListener(listener)
@@ -1043,6 +1095,26 @@ private fun buildParkStateMessage(state: State): ParkStateOutMessage {
     return ParkStateOutMessage(
         channels = parked.map { ParkedChannelState(it.universe, it.channel, it.value) }
     )
+}
+
+private fun buildSurfaceDevicesStateMessage(
+    devices: List<uk.me.cormack.lighting7.midi.MidiDeviceHandle>,
+    attached: Map<String, uk.me.cormack.lighting7.midi.DeviceMatcher.Attached>,
+    banks: Map<String, String>,
+): SurfaceDevicesStateOutMessage {
+    val infos = devices.map { handle ->
+        val match = attached[handle.displayKey]
+        SurfaceDeviceInfo(
+            displayKey = handle.displayKey,
+            displayName = handle.displayName,
+            typeKey = match?.typeKey,
+            isMatched = match != null,
+            hasInputPort = handle.inputPort != null,
+            hasOutputPort = handle.outputPort != null,
+            activeBank = match?.typeKey?.let(banks::get),
+        )
+    }
+    return SurfaceDevicesStateOutMessage(devices = infos)
 }
 
 private fun handleSurfaceLearnCommit(state: State, message: SurfaceLearnCommitInMessage): OutMessage {
