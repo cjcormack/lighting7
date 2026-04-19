@@ -29,6 +29,9 @@ class KtMidiController internal constructor(
     private val inputSource: MidiInputSource?,
     private val transmitIntervalMs: Long = DEFAULT_TRANSMIT_INTERVAL_MS,
     parentScope: CoroutineScope = GlobalScope,
+    // Invoked once when the transmission loop gives up; registry uses this to surface a
+    // Disconnected event when libremidi's enumeration still lists a physically-gone device.
+    private val onTransmissionGaveUp: (() -> Unit)? = null,
 ) : MidiController {
 
     companion object {
@@ -106,6 +109,7 @@ class KtMidiController internal constructor(
                     if (consecutiveErrors == 1) t.printStackTrace()
                     if (consecutiveErrors > 20) {
                         System.err.println("KtMidiController[${handle.displayKey}] giving up after $consecutiveErrors consecutive errors")
+                        onTransmissionGaveUp?.invoke()
                         break
                     }
                     delay(transmitIntervalMs)

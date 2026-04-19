@@ -25,6 +25,7 @@ import uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher
 import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.Show
+import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
 
 private val logger = LoggerFactory.getLogger("State")
 
@@ -58,8 +59,11 @@ class State(val config: ApplicationConfig) {
      * Polls connected MIDI ports on a 1 Hz interval, pairs them into device handles, and
      * auto-opens a [uk.me.cormack.lighting7.midi.KtMidiController] for each.
      */
+    // Rebuilds of LibreMidiAccess are driven by CoreMIDI4J notifications rather than a timer —
+    // periodic recreation leaks observers into libremidi's shared Arena and eventually breaks
+    // input on open controllers. See registerCoreMidiChangeListener().
     val midiRegistry: MidiDeviceRegistry by lazy {
-        MidiDeviceRegistry(LibreMidiAccessSource())
+        MidiDeviceRegistry(access = LibreMidiAccessSource())
     }
 
     /**
@@ -152,6 +156,7 @@ class State(val config: ApplicationConfig) {
         midiLearnSessionManager.start(GlobalScope)
         surfaceFeedbackPublisher.start(GlobalScope)
         surfaceInputRouter.start(GlobalScope)
+        registerCoreMidiChangeListener()
         // Re-attach the feedback publisher to the new show's fixture listener on project
         // switch so motor / LED drive follows the composition model of the active project.
         GlobalScope.launch {
@@ -160,6 +165,23 @@ class State(val config: ApplicationConfig) {
             }
         }
         return show
+    }
+
+    // CoreMIDI4J pushes midiSystemUpdated callbacks on macOS plug/unplug. We turn each one
+    // into a single access-source rebuild on GlobalScope (the callback runs on a CoreMIDI
+    // thread). On non-macOS the native dylib won't load and this is a no-op.
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun registerCoreMidiChangeListener() {
+        try {
+            if (!CoreMidiDeviceProvider.isLibraryLoaded()) return
+            CoreMidiDeviceProvider.addNotificationListener {
+                GlobalScope.launch {
+                    runCatching { midiRegistry.rescan(LibreMidiAccessSource()) }
+                }
+            }
+        } catch (t: Throwable) {
+            logger.debug("CoreMIDI4J notification listener unavailable: {}", t.message)
+        }
     }
 
     private fun initDatabase(): Database {

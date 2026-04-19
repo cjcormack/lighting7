@@ -60,6 +60,11 @@ dependencies {
     // ktmidi-jvm-desktop brings LibreMidiAccess (native libremidi via Panama FFM).
     implementation("dev.atsushieno:ktmidi-jvm:0.11.2")
     implementation("dev.atsushieno:ktmidi-jvm-desktop:0.11.2")
+    // CoreMIDI4J — javax.sound.midi service provider for macOS that uses CoreMIDI directly
+    // with proper hot-plug notifications. Built-in JVM sound API and libremidi both cache
+    // the port list and miss disconnects; CoreMIDI4J registers notification callbacks and
+    // reflects device changes live.
+    implementation("uk.co.xfactory-librarians:coremidi4j:1.6")
 
     implementation("io.ktor:ktor-client-core")
     implementation("io.ktor:ktor-client-cio")

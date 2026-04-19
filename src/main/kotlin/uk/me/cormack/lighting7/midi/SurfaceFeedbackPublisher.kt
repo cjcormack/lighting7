@@ -462,6 +462,15 @@ class SurfaceFeedbackPublisher(
             is EncoderDescriptor -> control.channel to (control.ringCc ?: return)
             else -> return
         }
+        if (logger.isDebugEnabled) {
+            val pc = entry.primaryChannel
+            val dmx = runCatching { currentFixtures?.controller(pc.universe)?.getValue(pc.channel) }.getOrNull()
+            logger.debug(
+                "surface-out: control={} dmxCh={} dmx={} min={} max={} -> value7Bit={} cc={}",
+                entry.control.controlId, pc.channel, dmx?.toInt(), pc.min.toInt(), pc.max.toInt(),
+                value7Bit.toInt(), cc,
+            )
+        }
         controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(channel, cc, value7Bit))
     }
 

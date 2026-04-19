@@ -151,6 +151,10 @@ class SurfaceInputRouter(
         binding: ControlSurfaceBindingService.ResolvedBinding,
         value7Bit: UByte,
     ) {
+        logger.debug(
+            "surface-in: binding={} control={} value7Bit={} target={}",
+            binding.id, binding.controlId, value7Bit.toInt(), binding.target::class.simpleName,
+        )
         when (val target = binding.target) {
             is BindingTarget.FixtureProperty -> actions.writeFixtureProperty(
                 target.fixtureKey, target.propertyName, value7Bit,
