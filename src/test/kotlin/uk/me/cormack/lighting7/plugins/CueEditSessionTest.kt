@@ -101,16 +101,53 @@ class CueEditSessionTest {
     }
 
     @Test
-    fun `stub messages deserialise without error`() {
-        val setMode = json.decodeFromString<InMessage>(
-            """{"type":"cueEdit.setMode","cueId":1,"mode":"blind"}"""
-        )
-        assertIs<CueEditSetModeInMessage>(setMode)
+    fun `setMode deserialises with cueId and mode`() {
+        val raw = """{"type":"cueEdit.setMode","cueId":4,"mode":"LIVE"}"""
+        val decoded = assertIs<CueEditSetModeInMessage>(json.decodeFromString<InMessage>(raw))
+        assertEquals(4, decoded.cueId)
+        assertEquals("LIVE", decoded.mode)
+    }
 
-        val clearAssignment = json.decodeFromString<InMessage>(
-            """{"type":"cueEdit.clearAssignment","cueId":1,"targetType":"fixture","targetKey":"h-1","propertyName":"dimmer"}"""
+    @Test
+    fun `clearAssignment deserialises with target + propertyName`() {
+        val raw = """{
+            "type":"cueEdit.clearAssignment",
+            "cueId":11,
+            "targetType":"fixture",
+            "targetKey":"hex-1",
+            "propertyName":"dimmer"
+        }"""
+        val decoded = assertIs<CueEditClearAssignmentInMessage>(json.decodeFromString<InMessage>(raw))
+        assertEquals(11, decoded.cueId)
+        assertEquals("fixture", decoded.targetType)
+        assertEquals("hex-1", decoded.targetKey)
+        assertEquals("dimmer", decoded.propertyName)
+    }
+
+    @Test
+    fun `remaining stub messages still deserialise without error`() {
+        val setPalette = json.decodeFromString<InMessage>(
+            """{"type":"cueEdit.setPalette","cueId":1,"palette":["#ff0000","#00ff00"]}"""
         )
-        assertIs<CueEditClearAssignmentInMessage>(clearAssignment)
+        assertIs<CueEditSetPaletteInMessage>(setPalette)
+
+        val addPreset = json.decodeFromString<InMessage>(
+            """{"type":"cueEdit.addPresetApplication","cueId":1}"""
+        )
+        assertIs<CueEditAddPresetApplicationInMessage>(addPreset)
+    }
+
+    @Test
+    fun `assignmentCleared serialises with discriminator`() {
+        val out = CueEditAssignmentClearedOutMessage(
+            cueId = 7,
+            targetType = "fixture",
+            targetKey = "hex-1",
+            propertyName = "dimmer",
+        )
+        val encoded = json.encodeToString<OutMessage>(out)
+        val decoded = assertIs<CueEditAssignmentClearedOutMessage>(json.decodeFromString<OutMessage>(encoded))
+        assertEquals(out, decoded)
     }
 
     // ── Outbound messages serialise to expected shape ──────────────────────

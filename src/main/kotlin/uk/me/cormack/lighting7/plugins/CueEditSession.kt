@@ -128,6 +128,15 @@ data class CueEditAssignmentChangedOutMessage(
 data class CueEditChangesDiscardedOutMessage(val cueId: Int) : OutMessage()
 
 @Serializable
+@SerialName("cueEdit.assignmentCleared")
+data class CueEditAssignmentClearedOutMessage(
+    val cueId: Int,
+    val targetType: String,
+    val targetKey: String,
+    val propertyName: String,
+) : OutMessage()
+
+@Serializable
 @SerialName("cueEdit.error")
 data class CueEditErrorOutMessage(
     val cueId: Int?,
@@ -194,6 +203,107 @@ object CueEditSessionHandler {
         }
 
         return CueEditSessionStartedOutMessage(cueId, mode.name)
+    }
+
+    /**
+     * Mid-session transition between Live and Blind. The snapshot is preserved — [discardChanges]
+     * always reverts to the state captured at the original [beginEdit], regardless of how many
+     * [setMode] flips happened in between.
+     *
+     * - `LIVE → BLIND`: stop the cue on stage (same semantics as [endEdit] in Live mode), but
+     *   keep the session open so further edits still route to the cue.
+     * - `BLIND → LIVE`: apply the cue's current persisted state to the stage — same path as
+     *   [beginEdit]'s Live branch. Stack cues still reject (no CueStackManager integration yet).
+     * - Same-mode call: no-op success; returns [CueEditSessionStartedOutMessage] to confirm.
+     */
+    fun setMode(
+        state: State,
+        sessionRef: AtomicReference<CueEditSessionState?>,
+        cueId: Int,
+        modeStr: String,
+    ): OutMessage {
+        val newMode = CueEditMode.parseOrNull(modeStr)
+            ?: return CueEditErrorOutMessage(cueId, "Unknown mode '$modeStr'")
+
+        val session = sessionRef.get()
+        if (session == null || session.cueId != cueId) {
+            return CueEditErrorOutMessage(cueId, "No active cueEdit session for this cue")
+        }
+        if (session.mode == newMode) {
+            return CueEditSessionStartedOutMessage(cueId, newMode.name)
+        }
+
+        when (newMode) {
+            CueEditMode.BLIND -> {
+                // LIVE → BLIND: release the cue from stage but keep the session open.
+                state.cueTriggerManager.deactivateTriggersForCue(cueId)
+                state.show.fxEngine.removeEffectsForCue(cueId)
+            }
+            CueEditMode.LIVE -> {
+                // BLIND → LIVE: apply the cue's current persisted state to the stage. Fresh
+                // read inside a transaction so any edits made during the Blind pass take effect.
+                val applyData = transaction(state.database) {
+                    val cue = DaoCue.findById(cueId) ?: return@transaction null
+                    if (cue.project.id != state.projectManager.currentProject.id) return@transaction null
+                    buildCueApplyData(cue)
+                } ?: return CueEditErrorOutMessage(cueId, "Cue not found in current project")
+
+                if (applyData.cueStackId != null) {
+                    return CueEditErrorOutMessage(
+                        cueId,
+                        "Live edit of stack cues not supported yet — keep the session Blind or edit via the stack",
+                    )
+                }
+                try {
+                    applyCue(state, applyData, replaceAll = false)
+                } catch (e: Exception) {
+                    logger.warn("cueEdit.setMode applyCue failed for cue {}: {}", cueId, e.message)
+                    return CueEditErrorOutMessage(cueId, "Failed to apply cue: ${e.message}")
+                }
+            }
+        }
+
+        sessionRef.set(session.copy(mode = newMode))
+        return CueEditSessionStartedOutMessage(cueId, newMode.name)
+    }
+
+    /**
+     * Delete one property assignment from the open cue. Matches by
+     * `(targetType, targetKey, propertyName)`; silently succeeds if no row matches (idempotent).
+     * In `LIVE` mode, republishes Layer 3 so the channel releases to the layer below.
+     */
+    fun clearAssignment(
+        state: State,
+        sessionRef: AtomicReference<CueEditSessionState?>,
+        cueId: Int,
+        targetType: String,
+        targetKey: String,
+        propertyName: String,
+    ): OutMessage {
+        val session = sessionRef.get()
+        if (session == null || session.cueId != cueId) {
+            return CueEditErrorOutMessage(cueId, "No active cueEdit session for this cue")
+        }
+
+        val applyData = try {
+            transaction(state.database) {
+                val cue = DaoCue.findById(cueId) ?: error("Cue not found")
+                val row = cue.propertyAssignments.firstOrNull {
+                    it.targetType == targetType &&
+                        it.targetKey == targetKey &&
+                        it.propertyName == propertyName
+                }
+                row?.delete()
+                if (session.mode == CueEditMode.LIVE) buildCueApplyData(cue) else null
+            }
+        } catch (e: Exception) {
+            return CueEditErrorOutMessage(cueId, "Clear failed: ${e.message}")
+        }
+
+        if (applyData != null) republishLayer3(state, cueId, applyData)
+
+        state.show.fixtures.cueListChanged()
+        return CueEditAssignmentClearedOutMessage(cueId, targetType, targetKey, propertyName)
     }
 
     /**

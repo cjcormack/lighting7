@@ -1063,17 +1063,28 @@ fun Application.configureSockets(state: State) {
                                 CueEditSessionHandler.discardChanges(state, cueEditSessionRef, message.cueId)
                             )
                         }
-                        is CueEditSetModeInMessage,
+                        is CueEditSetModeInMessage -> {
+                            sendSerialized<OutMessage>(
+                                CueEditSessionHandler.setMode(
+                                    state, cueEditSessionRef, message.cueId, message.mode,
+                                )
+                            )
+                        }
+                        is CueEditClearAssignmentInMessage -> {
+                            sendSerialized<OutMessage>(
+                                CueEditSessionHandler.clearAssignment(
+                                    state, cueEditSessionRef, message.cueId,
+                                    message.targetType, message.targetKey, message.propertyName,
+                                )
+                            )
+                        }
                         is CueEditSetPaletteInMessage,
                         is CueEditAddPresetApplicationInMessage,
-                        is CueEditAddAdHocEffectInMessage,
-                        is CueEditClearAssignmentInMessage -> {
+                        is CueEditAddAdHocEffectInMessage -> {
                             val cueId = when (message) {
-                                is CueEditSetModeInMessage -> message.cueId
                                 is CueEditSetPaletteInMessage -> message.cueId
                                 is CueEditAddPresetApplicationInMessage -> message.cueId
                                 is CueEditAddAdHocEffectInMessage -> message.cueId
-                                is CueEditClearAssignmentInMessage -> message.cueId
                                 else -> null
                             }
                             sendSerialized<OutMessage>(CueEditErrorOutMessage(
