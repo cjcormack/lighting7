@@ -79,6 +79,10 @@ class KtMidiController internal constructor(
         pendingSignal.trySend(Unit)
     }
 
+    override fun invalidateFeedbackCache(key: MidiControlKey) {
+        lastSentBytes.remove(key)
+    }
+
     override fun close() {
         if (closed) return
         closed = true

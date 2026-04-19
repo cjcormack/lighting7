@@ -129,6 +129,7 @@ class SurfaceInputRouter(
             is ResolvedInput.ButtonRelease -> {
                 val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
                 dispatchButtonRelease(binding)
+                feedbackHooks?.onButtonRelease(displayKey, match.controlId)
             }
             is ResolvedInput.Touch -> {
                 feedbackHooks?.onTouch(displayKey, match.controlId, match.down)

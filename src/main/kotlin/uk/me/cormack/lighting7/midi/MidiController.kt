@@ -27,6 +27,14 @@ interface MidiController {
      */
     fun sendFeedback(message: MidiFeedbackMessage)
 
+    /**
+     * Forget the last-sent bytes for [key], so the next [sendFeedback] targeting the same key
+     * always transmits even if its bytes match what we previously sent. Used to force-reassert
+     * state after device-side local handling may have overwritten it (e.g. X-Touch Compact
+     * buttons in Momentary LED mode clearing the LED on physical release).
+     */
+    fun invalidateFeedbackCache(key: MidiControlKey)
+
     fun close()
 }
 

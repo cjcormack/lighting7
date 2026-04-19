@@ -40,6 +40,14 @@ interface SurfaceFeedbackHooks {
         controlId: String,
         value7Bit: UByte,
     ): Boolean
+
+    /**
+     * Notify that a button has just been released. Publisher re-asserts the button's LED to
+     * its logical state, bypassing delta suppression, to work around surfaces (notably the
+     * X-Touch Compact in Momentary mode) that locally drive the LED off on release even when
+     * we've already told them to keep it on. No-op default — only the real publisher cares.
+     */
+    fun onButtonRelease(displayKey: String, controlId: String) {}
 }
 
 /**
@@ -215,6 +223,30 @@ class SurfaceFeedbackPublisher(
             // Motor catch-up: whatever the logical value is now, drive to it.
             resyncControl(displayKey, controlId)
         }
+    }
+
+    override fun onButtonRelease(displayKey: String, controlId: String) {
+        val entry = index.get().ledsByDisplay[displayKey]?.firstOrNull {
+            it.control.controlId == controlId
+        } ?: run {
+            logger.debug("onButtonRelease: no LED entry for {}/{}", displayKey, controlId)
+            return
+        }
+        val controller = controllerLookup(displayKey) ?: return
+        val on = when (val target = entry.binding.target) {
+            is BindingTarget.Flash -> flashTracker.isActive(entry.binding.id)
+            is BindingTarget.Blackout -> globalScalerStateProvider().blackoutEnabled.value
+            is BindingTarget.GrandMasterToggle -> globalScalerStateProvider().grandMasterEnabled.value
+            else -> {
+                logger.debug("onButtonRelease: unexpected target {} for led entry", target::class.simpleName)
+                return
+            }
+        }
+        logger.debug("onButtonRelease: reasserting LED {}/{} note={} on={}", displayKey, controlId, entry.control.note, on)
+        controller.invalidateFeedbackCache(
+            MidiControlKey(entry.control.channel, MidiControlKey.Type.NOTE, entry.control.note)
+        )
+        sendLed(entry, on)
     }
 
     override fun acceptInboundFader(

@@ -37,8 +37,10 @@ class SurfaceFeedbackPublisherTest {
 
     private class RecordingController(override val handle: MidiDeviceHandle) : MidiController {
         val feedback = CopyOnWriteArrayList<MidiFeedbackMessage>()
+        val invalidations = CopyOnWriteArrayList<MidiControlKey>()
         override val input = kotlinx.coroutines.flow.MutableSharedFlow<MidiInputEvent>()
         override fun sendFeedback(message: MidiFeedbackMessage) { feedback += message }
+        override fun invalidateFeedbackCache(key: MidiControlKey) { invalidations += key }
         override fun close() {}
     }
 
@@ -170,6 +172,69 @@ class SurfaceFeedbackPublisherTest {
             yield()
             val off = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.NoteOffFeedback>()
             assertTrue(off.isNotEmpty())
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `physical press and release on Blackout binding reasserts LED after release`() = runBlocking {
+        val h = Harness(listOf(
+            binding(10, "btn-1", BindingTarget.Blackout),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            h.recordingController.feedback.clear()
+            h.recordingController.invalidations.clear()
+
+            val scalerActions = object : SurfaceActions {
+                override fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte) {}
+                override fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte) {}
+                override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {}
+                override fun flashGroupPropertyPress(groupName: String, propertyName: String, max: UByte) {}
+                override fun flashFixturePropertyRelease(fixtureKey: String, propertyName: String) {}
+                override fun flashGroupPropertyRelease(groupName: String, propertyName: String) {}
+                override fun cueStackGo(stackId: Int) {}
+                override fun cueStackBack(stackId: Int) {}
+                override fun cueStackPause(stackId: Int) {}
+                override fun fireCue(cueId: Int) {}
+                override fun toggleBlackout(): Boolean = h.scaler.toggleBlackout()
+                override fun toggleGrandMaster(): Boolean = h.scaler.toggleGrandMaster()
+            }
+            val router = SurfaceInputRouter(
+                deviceMatcher = h.matcher,
+                controllerLookup = { key -> if (key == "x-touch-compact") h.recordingController else null },
+                bindingService = h.bindingService,
+                bankState = h.bankState,
+                flashTracker = h.flashTracker,
+                projectIdProvider = { projectId },
+                actions = scalerActions,
+                feedbackHooks = h.publisher,
+            )
+
+            // Press toggles blackout on; the combine-flow path sends NoteOn via sendLed.
+            router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u), displayKey = "x-touch-compact")
+            yield()
+            assertTrue(h.scaler.blackoutEnabled.value, "Blackout should toggle to true after press")
+            assertTrue(h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.NoteOnFeedback>().isNotEmpty(),
+                "Expected NoteOn LED feedback after press, got ${h.recordingController.feedback}")
+
+            // Release: the Momentary-mode workaround must invalidate delta cache and re-queue
+            // NoteOn so the state lands again after the device clobbered its own LED.
+            h.recordingController.feedback.clear()
+            router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 16, velocity = 0u), displayKey = "x-touch-compact")
+            yield()
+            assertTrue(h.scaler.blackoutEnabled.value, "Blackout should remain true across release")
+            assertTrue(h.recordingController.feedback.any {
+                it is MidiFeedbackMessage.NoteOnFeedback && it.note == 16 && it.velocity == 127u.toUByte()
+            }, "Expected re-asserted NoteOn LED feedback after release, got ${h.recordingController.feedback}")
+            assertTrue(h.recordingController.invalidations.any {
+                it == MidiControlKey(0, MidiControlKey.Type.NOTE, 16)
+            }, "Expected delta cache invalidation for btn-1 note on release, got ${h.recordingController.invalidations}")
         } finally {
             h.publisher.stop()
             scope.cancel()

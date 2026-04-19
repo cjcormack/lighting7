@@ -18,10 +18,13 @@ import uk.me.cormack.lighting7.midi.LedFeedback
  *     8..15, LED ring remote-value CC 34..41.
  *   - **Buttons** — 39 illuminated buttons laid out as upper/mid/lower rows above the faders,
  *     select row beneath the faders, and a right-side transport/function area. Layer A TX
- *     notes are 16..54 (8 + 8 + 8 + 9 + 6). Note: the firmware's LED-remote-control notes on
- *     page 22 (RX notes 0..38) differ from the Layer A TX notes — LED feedback parity is
- *     tracked separately; this profile's [note] values drive input routing correctly for
- *     Layer A button presses.
+ *     notes are 16..54 (8 + 8 + 8 + 9 + 6). The Quick Start Guide's page-22 "RX MIDI DATA"
+ *     table lists a different, layer-independent LED-remote-control range (notes 0..38), but
+ *     hardware testing shows the firmware also accepts Layer A TX notes for LED feedback
+ *     (sending NoteOn note=16 lights btn-1 in Layer A), so a single [note] field suffices
+ *     for both input routing and LED output in this profile. Note: the factory Layer A preset
+ *     configures button LEDs as Momentary (LED follows physical press), so the publisher has
+ *     to re-assert LED state on button release — see [SurfaceFeedbackPublisher.onButtonRelease].
  *   - **Layer A / B** — the device-side layer switch emits **Program Change** (value 0 = A,
  *     1 = B) — *not* a NoteOn.
  */
