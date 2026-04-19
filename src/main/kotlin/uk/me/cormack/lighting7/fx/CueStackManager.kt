@@ -132,6 +132,9 @@ class CueStackManager(
         // Deactivate triggers for the outgoing cue (stop recurring triggers, etc.)
         existingState?.activeCueId?.let { oldCueId ->
             state.cueTriggerManager.deactivateTriggersForCue(oldCueId)
+            // Drop the outgoing cue's Layer 3 contributions. Phase 1b will honour crossfade
+            // fade-weight here instead of snapping.
+            fxEngine.removeCueAssignments(oldCueId)
         }
 
         // 1. Snapshot outgoing effects (before removing) for crossfade
@@ -228,6 +231,19 @@ class CueStackManager(
             val id = fxEngine.addEffect(instance)
             newEffectIds.add(id)
             effectCount++
+        }
+
+        // Apply Layer 3 property assignments for the incoming cue. Stomp, if requested, also
+        // runs off the new assignments so HTP/LTP and stomp overlap agree.
+        val layer3Assignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData)
+        if (layer3Assignments.isNotEmpty()) {
+            fxEngine.setCueAssignments(cueData.cueId, layer3Assignments)
+        } else {
+            fxEngine.removeCueAssignments(cueData.cueId)
+        }
+        if (cueData.stomp) {
+            val overlap = buildStompOverlapFromAssignments(state.show.fixtures, cueData)
+            fxEngine.stompForCue(cueData.cueId, overlap)
         }
 
         // 4. Update active state
@@ -443,6 +459,10 @@ class CueStackManager(
         val stackState = activeStacks.remove(stackId)
         stackState?.autoAdvanceJob?.cancel()
         stackState?.crossfadeJob?.cancel()
+
+        // `removeEffectsForCueStack` below wipes effects but not Layer 3 — clear the active
+        // cue's assignments here so an assignment-only cue doesn't leave stale state behind.
+        stackState?.activeCueId?.let { fxEngine.removeCueAssignments(it) }
 
         // Deactivate triggers for the active cue in this stack
         appState?.cueTriggerManager?.deactivateTriggersForStack(stackId)

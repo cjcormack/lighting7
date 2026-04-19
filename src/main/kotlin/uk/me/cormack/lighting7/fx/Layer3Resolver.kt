@@ -61,6 +61,48 @@ class Layer3Resolver {
         data class Setting(val channelValue: UByte) : PropertyValue()
     }
 
+    companion object {
+        /**
+         * Parse the canonical string form of a [CuePropertyAssignment][uk.me.cormack.lighting7.models.CuePropertyAssignmentDto]
+         * value into a typed [PropertyValue].
+         *
+         * Dispatch uses [propertyName] first (to pick up the synthetic "position" property,
+         * which has no dedicated [PropertyCategory] entry) and falls back to [category]:
+         *
+         * - `propertyName == "position"` (case-insensitive): `"pan,tilt"` (each `0..255`) →
+         *   [PropertyValue.Position]. This matches the `createFixtureTargetForCue` special case.
+         * - [PropertyCategory.COLOUR]: hex / named / extended string consumed by
+         *   [parseExtendedColour] → [PropertyValue.Colour].
+         * - [PropertyCategory.SETTING] / [PropertyCategory.OTHER]: `"0".."255"` → [PropertyValue.Setting].
+         * - Every other category (intensity-like and axis sliders): `"0".."255"` →
+         *   [PropertyValue.Slider].
+         *
+         * Returns `null` if the string doesn't parse for the given category — the caller should
+         * log at warn and skip the assignment, never throw.
+         */
+        fun parseAssignmentValue(
+            category: PropertyCategory,
+            propertyName: String,
+            value: String,
+        ): PropertyValue? {
+            val trimmed = value.trim()
+            if (propertyName.equals("position", ignoreCase = true)) {
+                val parts = trimmed.split(",")
+                if (parts.size != 2) return null
+                val pan = parts[0].trim().toUByteParam() ?: return null
+                val tilt = parts[1].trim().toUByteParam() ?: return null
+                return PropertyValue.Position(pan, tilt)
+            }
+            return when (category) {
+                PropertyCategory.COLOUR -> runCatching { PropertyValue.Colour(parseExtendedColour(trimmed)) }.getOrNull()
+                PropertyCategory.SETTING, PropertyCategory.OTHER ->
+                    trimmed.toUByteParam()?.let { PropertyValue.Setting(it) }
+                else ->
+                    trimmed.toUByteParam()?.let { PropertyValue.Slider(it) }
+            }
+        }
+    }
+
     /**
      * Resolve a flat list of assignments to a per-(targetKey, propertyName) composed value.
      *

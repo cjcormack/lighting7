@@ -204,6 +204,64 @@ class FxEngine(
         cuePalettes.remove(cueId)
     }
 
+    // --- Per-Cue Layer 3 Assignments ---
+    //
+    // Tracks the property assignments contributed by each currently-active cue. All writes go
+    // through [cueAssignmentsLock] so the "mutate map + republish flat snapshot" step is atomic
+    // — concurrent apply/stop calls must not publish a stale view. Tick-loop reads go through
+    // [LayerResolver.fallbackFor]'s `@Volatile` snapshot and stay lock-free.
+    //
+    // The map is plain [HashMap] because every access is already serialised by the lock; a
+    // [ConcurrentHashMap] would add internal striping we don't need.
+
+    private val cueAssignments = HashMap<Int, List<Layer3Resolver.Assignment>>()
+    private val cueAssignmentsLock = Any()
+
+    /**
+     * Replace the Layer 3 assignments contributed by [cueId]. An empty list removes the cue's
+     * contribution (equivalent to [removeCueAssignments]).
+     */
+    fun setCueAssignments(cueId: Int, assignments: List<Layer3Resolver.Assignment>) {
+        synchronized(cueAssignmentsLock) {
+            val changed = if (assignments.isEmpty()) {
+                cueAssignments.remove(cueId) != null
+            } else {
+                cueAssignments[cueId] = assignments
+                true
+            }
+            if (changed) republishLayer3Assignments()
+        }
+    }
+
+    /** Drop all Layer 3 contributions from [cueId]. */
+    fun removeCueAssignments(cueId: Int) {
+        synchronized(cueAssignmentsLock) {
+            if (cueAssignments.remove(cueId) != null) {
+                republishLayer3Assignments()
+            }
+        }
+    }
+
+    /** Drop every cue's Layer 3 contribution — used by [stop] / [clearAllEffects] callers. */
+    fun clearAllCueAssignments() {
+        synchronized(cueAssignmentsLock) {
+            if (cueAssignments.isEmpty()) return
+            cueAssignments.clear()
+            republishLayer3Assignments()
+        }
+    }
+
+    /** Callers hold [cueAssignmentsLock]. */
+    private fun republishLayer3Assignments() {
+        if (cueAssignments.isEmpty()) {
+            layerResolver.applyAssignments(emptyList())
+        } else {
+            val flat = ArrayList<Layer3Resolver.Assignment>()
+            for (list in cueAssignments.values) flat.addAll(list)
+            layerResolver.applyAssignments(flat)
+        }
+    }
+
     // --- Per-Stack Palettes ---
 
     private val stackPalettes = ConcurrentHashMap<Int, CuePaletteEntry>()
@@ -323,6 +381,7 @@ class FxEngine(
         val allEffects = activeEffects.values.toList()
         activeEffects.clear()
         rebuildSortedSnapshots()
+        clearAllCueAssignments()
         resetUncoveredProperties(allEffects)
         emitStateUpdate()
     }
@@ -609,6 +668,7 @@ class FxEngine(
             emitStateUpdate()
         }
         removeCuePalette(cueId)
+        removeCueAssignments(cueId)
         return toRemove.size
     }
 
@@ -619,6 +679,7 @@ class FxEngine(
         val allEffects = activeEffects.values.toList()
         activeEffects.clear()
         rebuildSortedSnapshots()
+        clearAllCueAssignments()
         resetUncoveredProperties(allEffects)
         emitStateUpdate()
     }

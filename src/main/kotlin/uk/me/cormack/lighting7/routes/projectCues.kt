@@ -17,13 +17,18 @@ import org.jetbrains.exposed.dao.with
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
+
+private val logger = LoggerFactory.getLogger("projectCues")
 
 internal fun Route.routeApiRestProjectCues(state: State) {
     // GET /{projectId}/cues - List cues for a project
@@ -915,12 +920,18 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         engine.removeCuePalette(cueData.cueId)
     }
 
-    // TODO Phase 1: derive overlap from Layer 3 property assignments instead of ad-hoc effect targets.
+    // Publish Layer 3 before applying effects so the effect reset pass sees the cue's baseline
+    // instead of Layer 5 zero.
+    val layer3Assignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData)
+    if (layer3Assignments.isNotEmpty()) {
+        engine.setCueAssignments(cueData.cueId, layer3Assignments)
+    } else {
+        // Re-applying a cue that lost its assignments must clear any stale state.
+        engine.removeCueAssignments(cueData.cueId)
+    }
+
     if (cueData.stomp) {
-        val overlap = cueData.adHocEffects.mapNotNull { ad ->
-            val propName = ad.propertyName ?: return@mapNotNull null
-            FxEngine.PropertyKey(ad.targetKey, propName)
-        }.toSet()
+        val overlap = buildStompOverlapFromAssignments(state.show.fixtures, cueData)
         engine.stompForCue(cueData.cueId, overlap)
     }
 
@@ -997,6 +1008,152 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
  */
 internal fun cueDerivedPriority(cueData: CueApplyData): Int =
     (cueData.cueStackId ?: 0) * 1_000_000 + cueData.sortOrder * 1_000 + 1
+
+/**
+ * Build the stomp overlap set from a cue's property assignments. Group targets are expanded
+ * to member keys so the resolver can filter ad-hoc effects owned by other cues that target
+ * individual fixtures within the same group.
+ */
+internal fun buildStompOverlapFromAssignments(
+    fixtures: uk.me.cormack.lighting7.show.Fixtures,
+    cueData: CueApplyData,
+): Set<FxEngine.PropertyKey> {
+    if (cueData.propertyAssignments.isEmpty()) return emptySet()
+    val out = HashSet<FxEngine.PropertyKey>()
+    for (assignment in cueData.propertyAssignments) {
+        val canonical = canonicalPropertyName(assignment.propertyName)
+        if (assignment.targetType == "group") {
+            out.add(FxEngine.PropertyKey(assignment.targetKey, canonical))
+            val members = try {
+                fixtures.untypedGroup(assignment.targetKey).fixtures
+            } catch (_: IllegalStateException) { emptyList() }
+            for (member in members) {
+                if (member is Fixture) out.add(FxEngine.PropertyKey(member.key, canonical))
+            }
+        } else {
+            out.add(FxEngine.PropertyKey(assignment.targetKey, canonical))
+        }
+    }
+    return out
+}
+
+/**
+ * Canonicalise the `propertyName` on a [CuePropertyAssignmentDto] to the name used by the
+ * matching [FxTarget] — `LayerResolver` looks up Layer 3 state using `target.propertyName`, so
+ * aliases like `"colour"` / `"color"` must normalise to `rgbColour`.
+ */
+private fun canonicalPropertyName(propertyName: String): String =
+    when (propertyName.lowercase()) {
+        "colour", "color", "rgbcolour" -> "rgbColour"
+        else -> propertyName
+    }
+
+/**
+ * Fixture property lookup used when building Layer 3 assignments. Returns the resolved
+ * category / composition override for [propertyName] on [fixture], or null if the name is
+ * not a known annotated property.
+ *
+ * Handles the synthetic aliases the target-resolution code already understands:
+ * `"position"` (paired PAN+TILT), `"colour"` / `"color"` / `"rgbColour"` (RGB+W/A/UV bundle).
+ * For these names [fixture] is consulted only to verify the capability exists.
+ */
+private fun fixtureCategoryFor(
+    fixture: Fixture,
+    propertyName: String,
+): Pair<PropertyCategory, CompositionRule>? {
+    val canonical = canonicalPropertyName(propertyName)
+    if (canonical.equals("position", ignoreCase = true)) {
+        // Synthetic compound of PAN + TILT. Composition defaults to the PAN category's rule;
+        // any override on the pan property is honoured.
+        val panProp = fixture.fixtureProperty("pan")
+        return panProp?.let { it.category to it.composition } ?: (PropertyCategory.PAN to CompositionRule.UNSET)
+    }
+    val prop = fixture.fixtureProperty(canonical) ?: return null
+    return prop.category to prop.composition
+}
+
+/**
+ * Build the flat [Layer3Resolver.Assignment] list for a single cue's [propertyAssignments],
+ * expanding group targets to per-member rows while also emitting the group-level row so the
+ * specificity rule in [Layer3Resolver] has the chance to fire when a fixture-level assignment
+ * overrides a group assignment within the same cue.
+ *
+ * Assignments whose fixture, group, or property cannot be resolved are logged at warn and
+ * skipped — missing data must not break cue apply.
+ */
+internal fun buildLayer3AssignmentsForCue(
+    fixtures: uk.me.cormack.lighting7.show.Fixtures,
+    cueData: CueApplyData,
+): List<Layer3Resolver.Assignment> {
+    if (cueData.propertyAssignments.isEmpty()) return emptyList()
+    val priority = cueDerivedPriority(cueData)
+    val out = ArrayList<Layer3Resolver.Assignment>(cueData.propertyAssignments.size * 2)
+
+    for (assignment in cueData.propertyAssignments) {
+        val canonical = canonicalPropertyName(assignment.propertyName)
+
+        // Resolve a reference fixture for category lookup and, for groups, the member keys.
+        val memberKeys: List<String>
+        val referenceFixture: Fixture
+        if (assignment.targetType == "group") {
+            val group = try {
+                fixtures.untypedGroup(assignment.targetKey)
+            } catch (_: IllegalStateException) {
+                logger.warn("cue {}: group '{}' missing — skipping assignment for {}", cueData.cueId, assignment.targetKey, assignment.propertyName)
+                continue
+            }
+            val members = group.fixtures.filterIsInstance<Fixture>()
+            if (members.isEmpty()) {
+                logger.warn("cue {}: group '{}' has no Fixture members — skipping assignment", cueData.cueId, assignment.targetKey)
+                continue
+            }
+            memberKeys = members.map { it.key }
+            referenceFixture = members.first()
+        } else {
+            referenceFixture = try {
+                fixtures.untypedFixture(assignment.targetKey)
+            } catch (_: IllegalStateException) {
+                logger.warn("cue {}: fixture '{}' missing — skipping assignment for {}", cueData.cueId, assignment.targetKey, assignment.propertyName)
+                continue
+            }
+            memberKeys = emptyList()
+        }
+
+        val (category, override) = fixtureCategoryFor(referenceFixture, canonical) ?: run {
+            logger.warn("cue {}: property '{}' not found on '{}' — skipping", cueData.cueId, assignment.propertyName, assignment.targetKey)
+            continue
+        }
+
+        val parsed = Layer3Resolver.parseAssignmentValue(category, canonical, assignment.value) ?: run {
+            logger.warn("cue {}: invalid value '{}' for {}.{} — skipping", cueData.cueId, assignment.value, assignment.targetKey, assignment.propertyName)
+            continue
+        }
+
+        // TODO Phase 1b: fadeWeight from CueStackManager crossfade progress instead of 1.0.
+        fun row(key: String, isGroup: Boolean) = Layer3Resolver.Assignment(
+            cueId = cueData.cueId,
+            priority = priority,
+            fadeWeight = 1.0,
+            targetKey = key,
+            targetIsGroup = isGroup,
+            propertyName = canonical,
+            category = category,
+            compositionOverride = override,
+            value = parsed,
+        )
+
+        if (assignment.targetType == "group") {
+            // Keep the group-level row so a later fixture-level override in the same flat list
+            // can win via the specificity rule — [Layer3Resolver.applySpecificity] filters
+            // group-flagged rows out when any fixture-level row exists for the same key.
+            out.add(row(assignment.targetKey, isGroup = true))
+            for (memberKey in memberKeys) out.add(row(memberKey, isGroup = false))
+        } else {
+            out.add(row(assignment.targetKey, isGroup = false))
+        }
+    }
+    return out
+}
 
 // ─── Target resolution helpers ──────────────────────────────────────────
 

@@ -6,6 +6,7 @@ import java.awt.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class Layer3ResolverTest {
@@ -180,5 +181,67 @@ class Layer3ResolverTest {
         val v = result[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         // Single HTP contributor: max(200 * 0.2) = 40.
         assertEquals(40u.toUByte(), v.value)
+    }
+
+    // ─── parseAssignmentValue ─────────────────────────────────────────────
+
+    @Test
+    fun `parseAssignmentValue - slider from numeric string`() {
+        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "180")
+        assertEquals(Layer3Resolver.PropertyValue.Slider(180u.toUByte()), v)
+    }
+
+    @Test
+    fun `parseAssignmentValue - slider clamps out of range`() {
+        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.UV, "uv", "999")
+        assertEquals(Layer3Resolver.PropertyValue.Slider(255u.toUByte()), v)
+        val neg = Layer3Resolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "-10")
+        assertEquals(Layer3Resolver.PropertyValue.Slider(0u.toUByte()), neg)
+    }
+
+    @Test
+    fun `parseAssignmentValue - setting category produces Setting value`() {
+        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.SETTING, "mode", "64")
+        assertEquals(Layer3Resolver.PropertyValue.Setting(64u.toUByte()), v)
+    }
+
+    @Test
+    fun `parseAssignmentValue - OTHER category produces Setting value`() {
+        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.OTHER, "misc", "32")
+        assertEquals(Layer3Resolver.PropertyValue.Setting(32u.toUByte()), v)
+    }
+
+    @Test
+    fun `parseAssignmentValue - colour from hex`() {
+        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", "#FF0000")
+        assertIs<Layer3Resolver.PropertyValue.Colour>(v)
+        assertEquals(Color.RED, v.value.color)
+    }
+
+    @Test
+    fun `parseAssignmentValue - colour from named value with extended channels`() {
+        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", "red;w32;uv16")
+        assertIs<Layer3Resolver.PropertyValue.Colour>(v)
+        assertEquals(Color.RED, v.value.color)
+        assertEquals(32u.toUByte(), v.value.white)
+        assertEquals(16u.toUByte(), v.value.uv)
+    }
+
+    @Test
+    fun `parseAssignmentValue - position from pan-comma-tilt`() {
+        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.PAN, "position", "100,200")
+        assertEquals(Layer3Resolver.PropertyValue.Position(100u.toUByte(), 200u.toUByte()), v)
+    }
+
+    @Test
+    fun `parseAssignmentValue - position rejects malformed pair`() {
+        assertNull(Layer3Resolver.parseAssignmentValue(PropertyCategory.PAN, "position", "100"))
+        assertNull(Layer3Resolver.parseAssignmentValue(PropertyCategory.PAN, "position", "abc,def"))
+        assertNull(Layer3Resolver.parseAssignmentValue(PropertyCategory.PAN, "position", "1,2,3"))
+    }
+
+    @Test
+    fun `parseAssignmentValue - slider rejects non-numeric`() {
+        assertNull(Layer3Resolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "nope"))
     }
 }
