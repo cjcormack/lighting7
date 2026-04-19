@@ -36,6 +36,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     .with(
                         DaoCue::presetApplications,
                         DaoCue::adHocEffects,
+                        DaoCue::propertyAssignments,
                         DaoCue::triggers,
                         DaoCue::cueStack,
                         DaoCuePresetApplication::preset,
