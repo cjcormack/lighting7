@@ -26,6 +26,21 @@ data class CuePresetApplicationDto(
     val sortOrder: Int = 0,
 )
 
+/**
+ * Layer 3 property assignment — operator-authored "this cue asserts property X = value" record.
+ * See `docs/lighting-composition-model.md` §"Layer 3" for semantics (specificity, composition,
+ * crossfade) and `uk.me.cormack.lighting7.fx.Layer3Resolver` for the canonical value parser.
+ */
+@Serializable
+data class CuePropertyAssignmentDto(
+    val targetType: String,
+    val targetKey: String,
+    val propertyName: String,
+    val value: String,
+    val fadeDurationMs: Long? = null,
+    val sortOrder: Int = 0,
+)
+
 @Serializable
 data class CueAdHocEffectDto(
     val targetType: String,
@@ -99,6 +114,7 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var stomp by DaoCues.stomp
     val presetApplications by DaoCuePresetApplication referrersOn DaoCuePresetApplications.cue
     val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue
+    val propertyAssignments by DaoCuePropertyAssignment referrersOn DaoCuePropertyAssignments.cue
     val triggers by DaoCueTrigger referrersOn DaoCueTriggers.cue
 }
 
@@ -170,4 +186,28 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var intervalMs by DaoCueAdHocEffects.intervalMs
     var randomWindowMs by DaoCueAdHocEffects.randomWindowMs
     var sortOrder by DaoCueAdHocEffects.sortOrder
+}
+
+// ─── Cue Property Assignments table ────────────────────────────────────
+
+object DaoCuePropertyAssignments : IntIdTable("cue_property_assignments") {
+    val cue = reference("cue_id", DaoCues)
+    val targetType = varchar("target_type", 50)
+    val targetKey = varchar("target_key", 255)
+    val propertyName = varchar("property_name", 255)
+    val value = text("value")
+    val fadeDurationMs = long("fade_duration_ms").nullable()
+    val sortOrder = integer("sort_order").default(0)
+}
+
+class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
+    companion object : IntEntityClass<DaoCuePropertyAssignment>(DaoCuePropertyAssignments)
+
+    var cue by DaoCue referencedOn DaoCuePropertyAssignments.cue
+    var targetType by DaoCuePropertyAssignments.targetType
+    var targetKey by DaoCuePropertyAssignments.targetKey
+    var propertyName by DaoCuePropertyAssignments.propertyName
+    var value by DaoCuePropertyAssignments.value
+    var fadeDurationMs by DaoCuePropertyAssignments.fadeDurationMs
+    var sortOrder by DaoCuePropertyAssignments.sortOrder
 }

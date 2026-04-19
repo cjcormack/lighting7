@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CuePresetApplicationDto
+import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -123,6 +124,48 @@ class CueRoutesTest {
         assertEquals(dto, deserialized)
     }
 
+    // ─── CuePropertyAssignmentDto ────────────────────────────────────────
+
+    @Test
+    fun `CuePropertyAssignmentDto serialization round-trips with all fields`() {
+        val dto = CuePropertyAssignmentDto(
+            targetType = "group",
+            targetKey = "front-wash",
+            propertyName = "dimmer",
+            value = "200",
+            fadeDurationMs = 1500L,
+            sortOrder = 2,
+        )
+        val serialized = json.encodeToString(dto)
+        val deserialized = json.decodeFromString<CuePropertyAssignmentDto>(serialized)
+        assertEquals(dto, deserialized)
+    }
+
+    @Test
+    fun `CuePropertyAssignmentDto defaults nullable and optional fields correctly`() {
+        val dto = CuePropertyAssignmentDto(
+            targetType = "fixture",
+            targetKey = "hex-1",
+            propertyName = "colour",
+            value = "#00ff00",
+        )
+        assertNull(dto.fadeDurationMs)
+        assertEquals(0, dto.sortOrder)
+    }
+
+    @Test
+    fun `CuePropertyAssignmentDto supports colour, position, and setting value forms`() {
+        val colour = CuePropertyAssignmentDto("fixture", "hex-1", "colour", "#ff8800;w64;amber128;uv0")
+        val position = CuePropertyAssignmentDto("fixture", "mover-1", "position", "128,200")
+        val setting = CuePropertyAssignmentDto("fixture", "par-1", "gobo", "128")
+
+        for (dto in listOf(colour, position, setting)) {
+            val serialized = json.encodeToString(dto)
+            val deserialized = json.decodeFromString<CuePropertyAssignmentDto>(serialized)
+            assertEquals(dto, deserialized)
+        }
+    }
+
     // ─── NewCue ──────────────────────────────────────────────────────────
 
     @Test
@@ -162,6 +205,22 @@ class CueRoutesTest {
         assertEquals(emptyList(), newCue.palette)
         assertEquals(emptyList(), newCue.presetApplications)
         assertEquals(emptyList(), newCue.adHocEffects)
+        assertEquals(emptyList(), newCue.propertyAssignments)
+    }
+
+    @Test
+    fun `NewCue round-trips propertyAssignments alongside other collections`() {
+        val newCue = NewCue(
+            name = "With Assignments",
+            propertyAssignments = listOf(
+                CuePropertyAssignmentDto("group", "front-wash", "dimmer", "180"),
+                CuePropertyAssignmentDto("fixture", "hex-1", "colour", "#00ffaa"),
+            ),
+        )
+        val serialized = json.encodeToString(newCue)
+        val deserialized = json.decodeFromString<NewCue>(serialized)
+        assertEquals(newCue, deserialized)
+        assertEquals(2, deserialized.propertyAssignments.size)
     }
 
     // ─── CueDetails ─────────────────────────────────────────────────────

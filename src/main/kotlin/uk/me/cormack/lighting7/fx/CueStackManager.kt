@@ -101,6 +101,7 @@ class CueStackManager(
                     )
                 },
                 adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+                propertyAssignments = cue.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
                 triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
                     CueTriggerDto(
                         triggerType = trigger.triggerType.name,

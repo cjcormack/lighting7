@@ -17,22 +17,30 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: 0 — code landed. **Paused** pending control-surface v1 (Phases 0–5 of [control-surface-plan.md](control-surface-plan.md)).
+**Phase**: 1 — in flight. Backend DB + DTO + route round-trip landed 2026-04-19. Layer-3 integration, cueEdit sockets, legacy-effect migration, and frontend routing still pending.
 
-**Most recent session**: 2026-04-18. Implemented Phase 0 end-to-end: `CompositionRule` enum on `PropertyCategory` with per-property `@FixtureProperty(composition = …)` override; `FxInstance.priority` + cached sorted-effects snapshots in `FxEngine` (rebuilt on mutation, lock-free tick read); `DirectWriteStore` (Layer 4) with `updateChannel` WS handler wired in; `Layer3Resolver` with full HTP / LTP / fade-weight / RGB-crossfade / settings-snap / specificity logic (empty input in P0); `LayerResolver` cascade (L3 → L4 → L5); `FxTarget.applyNeutralValueToFixture` refactored to `resetToFallback(fixture, fallback)` with a new `fallbackFromDirectWrites` and allocation-free `forEachChannel` for the parking short-circuit; `DaoCues.stomp` column + `FxEngine.stompForCue` + `applyCue` hook (placeholder overlap source for Phase 1); cue-derived priority formula `stackId * 1_000_000 + sortOrder * 1_000 + 1`. 26 new unit tests added across `CompositionRuleTest`, `DirectWriteStoreTest`, `Layer3ResolverTest`, `FxEngineStompAndPriorityTest`. All existing tests pass unchanged. `./gradlew build` clean.
+**Most recent session**: 2026-04-19. Started Phase 1 backend foundation: `CuePropertyAssignmentDto` + `DaoCuePropertyAssignments` table + `DaoCuePropertyAssignment` DAO in `models/cues.kt`; registered with `SchemaUtils.createMissingTablesAndColumns` in `State.kt`; extended `NewCue` / `CueDetails` / `CueApplyData` with `propertyAssignments`; wired round-trip through POST / PUT / PATCH / GET / copy in `routes/projectCues.kt` and `CueStackManager`; extended `createCueChildren` / `deleteCueChildren` helpers; added 4 new DTO-serialization tests in `CueRoutesTest`. Column carries an optional per-assignment `fade_duration_ms` override (UX for that deferred, plan §Phase 1). Build clean; full test suite passes.
 
-**Paused 2026-04-18** — control-surface v1 is running ahead of this plan's Phase 1 because its EditorContext/composition-model touchpoints are co-designed with cue authoring. See [control-surface-plan.md](control-surface-plan.md). Phase 6 of that plan (cueEdit integration) depends on Phase 1 of **this** plan landing, so we'll resume here after surface Phase 5, then loop back for surface Phase 6 — or bundle the two together.
+**Prior session**: 2026-04-18. Phase 0 complete — see 2026-04-18 change log entry below.
 
-**Next actions** (for the session that picks this up, after surface v1):
-1. Manual smoke-check against a running backend + frontend: start a SineWave effect on a dimmer, then `POST /api/rest/updateChannel` to set that dimmer to 180 — confirm the effect wiggles above 180 instead of resetting to 0 each tick (this is the intended behavioural change). Park a channel with a running effect on it — confirm parked value stays. Two effects on the same property with different priorities — confirm deterministic composition.
-2. Start Phase 1: `CuePropertyAssignment` model + migration; `EditorContext` / `cueEdit.*` socket messages.
+**Paused 2026-04-18** — control-surface v1 is running ahead of this plan's Phase 1 because its EditorContext/composition-model touchpoints are co-designed with cue authoring. See [control-surface-plan.md](control-surface-plan.md). Phase 6 of that plan (cueEdit integration) depends on Phase 1 of **this** plan landing, so we'll resume here after surface Phase 5, then loop back for surface Phase 6 — or bundle the two together. **Control-surface Phase 5 complete as of 2026-04-19**, so Phase 1 here is unblocked.
+
+**Next actions**:
+1. Wire `applyCue()` to feed Layer 3 via `layerResolver.applyAssignments(...)`. Needs a registry on `FxEngine` (or adjacent) of "currently-active cues' assignments" so a flat list can be assembled each time a cue applies/stops; group assignments expand to members using the project's patch. Fade weight = 1.0 for now — crossfade-weight integration with `CueStackManager` is a follow-up.
+2. Switch the stomp overlap in `projectCues.kt` (`// TODO Phase 1` line) from ad-hoc effect targets to the cue's property assignments.
+3. Migrate existing `StaticValue` / `StaticSetting` rows in `cue_ad_hoc_effects` into `cue_property_assignments`; delete originals. Lossy OK (not in production).
+4. Add `cueEdit.*` socket messages (`beginEdit`, `endEdit`, `setMode`, `setChannel`, `setProperty`, `setPalette`, `addPresetApplication`, `addAdHocEffect`, `clearAssignment`, `discardChanges`) with session tracking + snapshot-on-begin.
+5. `POST /cues/{cueId}/snapshot-from-live` endpoint.
+6. Integration test: PATCH round-trip through an in-memory HTTP harness (or extend the existing DTO tests with a DB round-trip test once a DB test-harness exists — check how control-surface Phase 5 handled this).
+7. Frontend (lighting-react): `EditorContext` + routed hooks; extend `cuesApi.ts` / `cues.ts` store types with `propertyAssignments`; add `cueEdit.*` message types.
+8. Smoke-check from Phase 0 that's still pending: SineWave + `updateChannel=180`, park+effect, two-effects-same-property priority determinism (see Phase 0 "Next actions" below).
 
 **Per-phase tracker:**
 
 | Phase | Summary | Status |
 |-------|---------|--------|
 | 0 | Layering foundation: make the composition model explicit in code (priority-ordered effects, reset-to-layer-below, `PropertyCategory` composition rules, stomp plumbing) | Done |
-| 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | Not started |
+| 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | In flight (backend DB + DTO + routes done) |
 | 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | Not started |
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Not started |
 | 4 | Program view inline editor + "Grab live state" snapshot action | Not started |
@@ -522,6 +530,22 @@ Flag these to the user before implementing.
 - [ ] Commit this file alongside the code changes.
 
 ## Change log
+
+**2026-04-19 — Phase 1 backend foundation landed.**
+
+- `CuePropertyAssignmentDto` + `DaoCuePropertyAssignments` table + `DaoCuePropertyAssignment` DAO added to `src/main/kotlin/uk/me/cormack/lighting7/models/cues.kt`. Columns: `id`, `cue_id` (FK), `target_type`, `target_key`, `property_name`, `value` (text; canonical property-level string form), `fade_duration_ms` (nullable per-assignment override — carried now so a later UX phase doesn't touch the model), `sort_order`.
+- Table registered with `SchemaUtils.createMissingTablesAndColumns` in `State.kt` — auto-creates on first startup, no explicit migration needed.
+- `NewCue` / `CueDetails` / `CueApplyData` all round-trip `propertyAssignments`. POST, PUT, PATCH (partial, presence-of-key semantics), GET, and `copy` all handle the collection. `createCueChildren` / `deleteCueChildren` helpers extended. `CueStackManager.activateCueInStack` reads assignments into `CueApplyData`.
+- New `DaoCuePropertyAssignment.toDto()` extension mirrors the adhoc-effect one.
+- 4 new DTO-serialization tests in `CueRoutesTest`: round-trip with all fields, defaults, three value forms (colour / position / setting), and `NewCue` with assignments plus other collections. `./gradlew build` clean; full suite green.
+
+**Deviations from the written plan**
+
+- Value format left as a single `value: String` field in the DTO per plan — canonical per-type parsing (Slider `"0".."255"`, Colour extended-colour string, Position `"pan,tilt"`, Setting `"0".."255"`) happens at Layer 3 resolver entry, not at DTO boundary. This keeps the DB schema simple and lets us revisit typed values later if needed.
+- `applyCue()` Layer 3 integration deferred to the next session. It needs a registry of "currently-active cues' assignments" on `FxEngine` (or adjacent) so the flat `layerResolver.applyAssignments(...)` input can be reassembled on cue apply/stop. The scaffolding is already in place in Phase 0 (`LayerResolver.applyAssignments` + `clearAssignments`); this session landed the data shape, next session wires it.
+- Stomp overlap still uses ad-hoc effect targets (Phase 0 placeholder). The `// TODO Phase 1` marker in `projectCues.kt` remains.
+- Legacy `StaticValue` / `StaticSetting` migration deferred — need to inspect current production data shape and confirm the mapping before running it. Not running in production, so safe to defer.
+- Frontend work, cueEdit socket messages, and snapshot-from-live endpoint not touched this session.
 
 **2026-04-18 — Phase 0 complete.**
 

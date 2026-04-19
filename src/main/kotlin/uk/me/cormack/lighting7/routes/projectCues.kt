@@ -72,7 +72,13 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                         sortOrder = newCue.sortOrder ?: stack.cues.count().toInt()
                     }
                 }
-                createCueChildren(cue, newCue.presetApplications, newCue.adHocEffects, newCue.triggers)
+                createCueChildren(
+                    cue,
+                    newCue.presetApplications,
+                    newCue.adHocEffects,
+                    newCue.propertyAssignments,
+                    newCue.triggers,
+                )
                 cue.toCueDetails(isCurrentProject = true)
             }
             state.show.fixtures.cueListChanged()
@@ -124,7 +130,13 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
                 // Replace children: delete existing, create new
                 deleteCueChildren(cue)
-                createCueChildren(cue, updatedData.presetApplications, updatedData.adHocEffects, updatedData.triggers)
+                createCueChildren(
+                    cue,
+                    updatedData.presetApplications,
+                    updatedData.adHocEffects,
+                    updatedData.propertyAssignments,
+                    updatedData.triggers,
+                )
 
                 cue.toCueDetails(isCurrentProject = true)
             }
@@ -165,15 +177,19 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 // Children arrays — replace wholesale when present
                 val hasPresets = "presetApplications" in body
                 val hasEffects = "adHocEffects" in body
+                val hasAssignments = "propertyAssignments" in body
                 val hasTriggers = "triggers" in body
 
-                if (hasPresets || hasEffects || hasTriggers) {
+                if (hasPresets || hasEffects || hasAssignments || hasTriggers) {
                     val json = Json { ignoreUnknownKeys = true }
                     val presets = if (hasPresets)
                         json.decodeFromJsonElement<List<CuePresetApplicationDto>>(body["presetApplications"]!!)
                     else null
                     val effects = if (hasEffects)
                         json.decodeFromJsonElement<List<CueAdHocEffectDto>>(body["adHocEffects"]!!)
+                    else null
+                    val assignments = if (hasAssignments)
+                        json.decodeFromJsonElement<List<CuePropertyAssignmentDto>>(body["propertyAssignments"]!!)
                     else null
                     val triggers = if (hasTriggers)
                         json.decodeFromJsonElement<List<CueTriggerDto>>(body["triggers"]!!)
@@ -182,12 +198,14 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     // Delete only the children being replaced
                     if (hasPresets) cue.presetApplications.forEach { it.delete() }
                     if (hasEffects) cue.adHocEffects.forEach { it.delete() }
+                    if (hasAssignments) cue.propertyAssignments.forEach { it.delete() }
                     if (hasTriggers) cue.triggers.forEach { it.delete() }
 
                     createCueChildren(
                         cue,
                         presets ?: emptyList(),
                         effects ?: emptyList(),
+                        assignments ?: emptyList(),
                         triggers ?: emptyList(),
                     )
                 }
@@ -283,6 +301,17 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     sortOrder = app.sortOrder
                 }
             }
+            for (assignment in sourceCue.propertyAssignments) {
+                DaoCuePropertyAssignment.new {
+                    cue = newCue
+                    targetType = assignment.targetType
+                    targetKey = assignment.targetKey
+                    propertyName = assignment.propertyName
+                    value = assignment.value
+                    fadeDurationMs = assignment.fadeDurationMs
+                    sortOrder = assignment.sortOrder
+                }
+            }
             for (effect in sourceCue.adHocEffects) {
                 DaoCueAdHocEffect.new {
                     cue = newCue
@@ -371,6 +400,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                         )
                     },
                     adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+                    propertyAssignments = cue.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
                     triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
                         CueTriggerDto(
                             triggerType = trigger.triggerType.name,
@@ -523,6 +553,7 @@ data class NewCue(
     val palette: List<String> = emptyList(),
     val presetApplications: List<CuePresetApplicationDto> = emptyList(),
     val adHocEffects: List<CueAdHocEffectDto> = emptyList(),
+    val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDto> = emptyList(),
     val updateGlobalPalette: Boolean = false,
     val cueStackId: Int? = null,
@@ -544,6 +575,7 @@ data class CueDetails(
     val palette: List<String>,
     val presetApplications: List<CuePresetApplicationDetail>,
     val adHocEffects: List<CueAdHocEffectDto>,
+    val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDetailDto> = emptyList(),
     val updateGlobalPalette: Boolean = false,
     val cueStackId: Int? = null,
@@ -611,6 +643,7 @@ internal data class CueApplyData(
     val updateGlobalPalette: Boolean,
     val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
+    val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDto> = emptyList(),
     val autoAdvance: Boolean = false,
     val autoAdvanceDelayMs: Long? = null,
@@ -679,6 +712,16 @@ private fun captureCurrentState(state: State): CapturedState {
 
 // ─── Entity helpers ─────────────────────────────────────────────────────
 
+/** Convert a DaoCuePropertyAssignment entity to its DTO form. */
+internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
+    targetType = targetType,
+    targetKey = targetKey,
+    propertyName = propertyName,
+    value = value,
+    fadeDurationMs = fadeDurationMs,
+    sortOrder = sortOrder,
+)
+
 /** Convert a DaoCueAdHocEffect entity to its DTO form. */
 internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     targetType = targetType,
@@ -724,12 +767,14 @@ internal fun DaoCue.toCueDetails(isCurrentProject: Boolean): CueDetails {
             sortOrder = trigger.sortOrder,
         )
     }
+    val assignmentDetails = this.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() }
     return CueDetails(
         id = this.id.value,
         name = this.name,
         palette = this.palette,
         presetApplications = presetDetails,
-        adHocEffects = this.adHocEffects.map { it.toDto() },
+        adHocEffects = this.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+        propertyAssignments = assignmentDetails,
         triggers = triggerDetails,
         updateGlobalPalette = this.updateGlobalPalette,
         cueStackId = this.cueStack?.id?.value,
@@ -745,11 +790,12 @@ internal fun DaoCue.toCueDetails(isCurrentProject: Boolean): CueDetails {
     )
 }
 
-/** Create child preset application, ad-hoc effect, and trigger entities for a cue. */
+/** Create child preset application, ad-hoc effect, property assignment, and trigger entities for a cue. */
 internal fun createCueChildren(
     cue: DaoCue,
     presetApplications: List<CuePresetApplicationDto>,
     adHocEffects: List<CueAdHocEffectDto>,
+    propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     triggers: List<CueTriggerDto> = emptyList(),
 ) {
     for (app in presetApplications) {
@@ -786,6 +832,17 @@ internal fun createCueChildren(
             sortOrder = effect.sortOrder
         }
     }
+    for (assignment in propertyAssignments) {
+        DaoCuePropertyAssignment.new {
+            this.cue = cue
+            targetType = assignment.targetType
+            targetKey = assignment.targetKey
+            propertyName = assignment.propertyName
+            value = assignment.value
+            fadeDurationMs = assignment.fadeDurationMs
+            sortOrder = assignment.sortOrder
+        }
+    }
     for (trigger in triggers) {
         val script = DaoScript.findById(trigger.scriptId) ?: continue
         // Normalize legacy trigger types: DELAYED/RECURRING → ACTIVATION with timing fields
@@ -810,10 +867,11 @@ internal fun createCueChildren(
     }
 }
 
-/** Delete all child entities (preset applications, ad-hoc effects, and triggers) for a cue. */
+/** Delete all child entities (preset applications, ad-hoc effects, property assignments, and triggers) for a cue. */
 internal fun deleteCueChildren(cue: DaoCue) {
     cue.presetApplications.forEach { it.delete() }
     cue.adHocEffects.forEach { it.delete() }
+    cue.propertyAssignments.forEach { it.delete() }
     cue.triggers.forEach { it.delete() }
 }
 
