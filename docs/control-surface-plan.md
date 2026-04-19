@@ -210,20 +210,25 @@ Confirmed with the user 2026-04-18:
   class XTouchCompactStandard : ControlSurfaceDevice() {
       init {
           repeat(9) { i ->
-              motorFader(id = "fader-${i+1}", cc = 1 + i, touchNote = 101 + i)
+              motorFader(id = "fader-${i+1}", cc = 1 + i, touchCc = 101 + i)
           }
-          repeat(16) { i ->
-              encoder(id = "enc-${i+1}", cc = 16 + i, ringCc = 48 + i, pushNote = 32 + i)
+          // Encoders 1–8: top horizontal row above the button block.
+          repeat(8) { i ->
+              encoder(id = "enc-${i+1}", cc = 10 + i, ringCc = 26 + i, pushNote = 0 + i)
+          }
+          // Encoders 9–16: right-side 2×4 block above the master fader.
+          repeat(8) { i ->
+              encoder(id = "enc-${i+9}", cc = 18 + i, ringCc = 34 + i, pushNote = 8 + i)
           }
           repeat(39) { i ->
-              button(id = "btn-${i+1}", note = 8 + i, ledFeedback = LedFeedback.ON_OFF)
+              button(id = "btn-${i+1}", note = 16 + i, ledFeedback = LedFeedback.ON_OFF)
           }
-          bank(id = "layer-a", inputNote = 84, name = "A")
-          bank(id = "layer-b", inputNote = 85, name = "B")
+          bank(id = "layer-a", name = "A", inputProgramChange = 0)
+          bank(id = "layer-b", name = "B", inputProgramChange = 1)
       }
   }
   ```
-- `ControlDescriptor` sealed hierarchy: `FaderDescriptor` (with optional `touchNote` and `motorCc`), `EncoderDescriptor` (with optional `ringCc` and `pushNote`), `ButtonDescriptor` (with `ledFeedback` capability), `BankButtonDescriptor`. Each carries a stable `controlId`, input and feedback message shapes, resolution, feedback capability.
+- `ControlDescriptor` sealed hierarchy: `FaderDescriptor` (with optional `touchNote` / `touchCc` and `motorCc`), `EncoderDescriptor` (with optional `ringCc` and `pushNote`), `ButtonDescriptor` (with `ledFeedback` capability), `BankButtonDescriptor`. Each carries a stable `controlId`, input and feedback message shapes, resolution, feedback capability.
 - `ControlSurfaceRegistry` mirrors `FixtureTypeRegistry`:
   - Manual list of concrete device classes (`private val deviceClasses: List<KClass<out ControlSurfaceDevice>>`).
   - Lazy-computed `allTypes: List<DeviceTypeInfo>` (typeKey, vendor, product, controls, banks).
