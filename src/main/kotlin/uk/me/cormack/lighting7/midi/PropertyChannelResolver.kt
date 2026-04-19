@@ -123,4 +123,65 @@ object PropertyChannelResolver {
         val dmx = min.toInt() + (m * span + 63) / 127
         return dmx.coerceIn(0, 255).toUByte()
     }
+
+    /** Inverse of [scale7BitToDmx]. 0 → 0, 255 → 127. Used for feedback position. */
+    fun scaleDmxTo7Bit(dmx: UByte): UByte {
+        val v = dmx.toInt().coerceIn(0, 255)
+        return ((v * 127 + 127) / 255).toUByte()
+    }
+
+    /**
+     * Inverse of [scaleWithinRange]: given a raw DMX value and the slider's `[min..max]`,
+     * return the equivalent 7-bit position. Values outside the range clamp to 0 / 127.
+     */
+    fun scaleWithinRangeTo7Bit(dmx: UByte, min: UByte, max: UByte): UByte {
+        if (min == max) return 0u
+        val v = dmx.toInt().coerceIn(min.toInt(), max.toInt())
+        val span = max.toInt() - min.toInt()
+        return (((v - min.toInt()) * 127 + span / 2) / span).coerceIn(0, 127).toUByte()
+    }
+
+    /**
+     * Find the channels that back [propertyName] on [fixture] without reading a value —
+     * useful for building a reverse index for feedback purposes. Each returned entry
+     * carries the channel's `category` and its `min`/`max` range (255 for Colour axes).
+     */
+    fun describeFixtureProperty(
+        fixture: Fixture,
+        propertyName: String,
+    ): List<PropertyChannel> {
+        val property = fixture.fixtureProperty(propertyName) ?: return emptyList()
+        val raw = try {
+            property.classProperty.call(fixture)
+        } catch (_: Exception) {
+            return emptyList()
+        } ?: return emptyList()
+
+        return when (raw) {
+            is DmxSlider -> listOf(
+                PropertyChannel(
+                    universe = raw.universe,
+                    channel = raw.channelNo,
+                    min = raw.min,
+                    max = raw.max,
+                    category = property.category,
+                )
+            )
+            is DmxColour -> listOf(
+                PropertyChannel(raw.universe, raw.redSlider.channelNo, 0u, 255u, PropertyCategory.COLOUR),
+                PropertyChannel(raw.universe, raw.greenSlider.channelNo, 0u, 255u, PropertyCategory.COLOUR),
+                PropertyChannel(raw.universe, raw.blueSlider.channelNo, 0u, 255u, PropertyCategory.COLOUR),
+            )
+            else -> emptyList()
+        }
+    }
+
+    /** Structural description of one channel that backs a fixture property. */
+    data class PropertyChannel(
+        val universe: Universe,
+        val channel: Int,
+        val min: UByte,
+        val max: UByte,
+        val category: PropertyCategory,
+    )
 }

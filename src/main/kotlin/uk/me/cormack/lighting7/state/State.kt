@@ -10,6 +10,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.fx.CueTriggerManager
 import uk.me.cormack.lighting7.midi.ActiveBankState
@@ -20,6 +21,7 @@ import uk.me.cormack.lighting7.midi.FlashStateTracker
 import uk.me.cormack.lighting7.midi.LibreMidiAccessSource
 import uk.me.cormack.lighting7.midi.MidiDeviceRegistry
 import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
+import uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher
 import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.Show
@@ -101,9 +103,28 @@ class State(val config: ApplicationConfig) {
     val flashStateTracker: FlashStateTracker by lazy { FlashStateTracker() }
 
     /**
+     * Phase 4 feedback driver. Observes the composition model + flash / scaler state and
+     * pushes motor / ring / LED feedback back to attached surfaces. Also hosts touch and
+     * soft-takeover state consulted by [surfaceInputRouter].
+     */
+    val surfaceFeedbackPublisher: SurfaceFeedbackPublisher by lazy {
+        SurfaceFeedbackPublisher(
+            deviceMatcher = deviceMatcher,
+            controllerLookup = midiRegistry::controllerFor,
+            bindingService = controlSurfaceBindingService,
+            bankState = activeBankState,
+            flashTracker = flashStateTracker,
+            projectIdProvider = { projectManager.currentProject.id.value },
+            fixturesProvider = { show.fixtures },
+            globalScalerStateProvider = { show.globalScalerState },
+        )
+    }
+
+    /**
      * Central dispatch for inbound surface events (Phase 3). Subscribes to
      * [deviceMatcher] attach events and per-controller input flows, resolves bindings
      * via [controlSurfaceBindingService], and calls through to [DefaultSurfaceActions].
+     * Phase 4: consults [surfaceFeedbackPublisher] for touch suppression + soft takeover.
      */
     val surfaceInputRouter: SurfaceInputRouter by lazy {
         SurfaceInputRouter(
@@ -114,6 +135,7 @@ class State(val config: ApplicationConfig) {
             flashTracker = flashStateTracker,
             projectIdProvider = { projectManager.currentProject.id.value },
             actions = DefaultSurfaceActions(this),
+            feedbackHooks = surfaceFeedbackPublisher,
         )
     }
 
@@ -128,7 +150,15 @@ class State(val config: ApplicationConfig) {
         midiRegistry.start(GlobalScope)
         deviceMatcher.start(GlobalScope)
         midiLearnSessionManager.start(GlobalScope)
+        surfaceFeedbackPublisher.start(GlobalScope)
         surfaceInputRouter.start(GlobalScope)
+        // Re-attach the feedback publisher to the new show's fixture listener on project
+        // switch so motor / LED drive follows the composition model of the active project.
+        GlobalScope.launch {
+            projectManager.projectChangedFlow.collect {
+                surfaceFeedbackPublisher.onProjectChanged()
+            }
+        }
         return show
     }
 

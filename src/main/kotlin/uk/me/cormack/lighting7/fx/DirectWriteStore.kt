@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.midi.PropertyChannelResolver
@@ -29,20 +30,17 @@ import java.util.concurrent.ConcurrentHashMap
 class DirectWriteStore {
     private val values = ConcurrentHashMap<Long, UByte>()
 
-    private fun packKey(universe: Int, channel: Int): Long =
-        (universe.toLong() shl 20) or (channel.toLong() and 0xFFFFFL)
-
     /** Record a direct write at (universe, channel). Overwrites any previous value. */
     fun put(universe: Int, channel: Int, value: UByte) {
-        values[packKey(universe, channel)] = value
+        values[packChannelKey(universe, channel)] = value
     }
 
     /** Read the sticky value at (universe, channel), or null if none. */
-    fun get(universe: Int, channel: Int): UByte? = values[packKey(universe, channel)]
+    fun get(universe: Int, channel: Int): UByte? = values[packChannelKey(universe, channel)]
 
     /** Remove the sticky value at (universe, channel). No-op if absent. */
     fun clear(universe: Int, channel: Int) {
-        values.remove(packKey(universe, channel))
+        values.remove(packChannelKey(universe, channel))
     }
 
     /** Remove all sticky values. Primarily for tests and shutdown. */

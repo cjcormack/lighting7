@@ -1,5 +1,11 @@
 package uk.me.cormack.lighting7.midi
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -43,5 +49,46 @@ class FlashStateTrackerTest {
         t.clearAll()
         assertEquals(0, t.activeCount)
         assertFalse(t.isActive(1))
+    }
+
+    @Test
+    fun `changes flow emits on press and release edges only`() = runBlocking {
+        val t = FlashStateTracker()
+        val emitted = mutableListOf<FlashStateTracker.FlashChange>()
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val job = scope.launch { t.changes.collect { emitted += it } }
+        yield()
+        t.pressed(1)
+        t.pressed(1)  // retrigger — no flow emission
+        t.clearPress(1)
+        t.clearPress(1)  // already released — no emission
+        yield()
+        assertEquals(
+            listOf(
+                FlashStateTracker.FlashChange(1, true),
+                FlashStateTracker.FlashChange(1, false),
+            ),
+            emitted,
+        )
+        job.cancel()
+        scope.cancel()
+    }
+
+    @Test
+    fun `clearAll emits release events for every held binding`() = runBlocking {
+        val t = FlashStateTracker()
+        val emitted = mutableListOf<FlashStateTracker.FlashChange>()
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val job = scope.launch { t.changes.collect { emitted += it } }
+        yield()
+        t.pressed(1)
+        t.pressed(2)
+        emitted.clear()
+        t.clearAll()
+        yield()
+        assertEquals(setOf(1, 2), emitted.map { it.bindingId }.toSet())
+        assertTrue(emitted.all { !it.pressed })
+        job.cancel()
+        scope.cancel()
     }
 }

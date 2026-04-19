@@ -1,5 +1,9 @@
 package uk.me.cormack.lighting7.midi
 
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -15,20 +19,40 @@ import java.util.concurrent.ConcurrentHashMap
  * composition model resolves them on next frame via [uk.me.cormack.lighting7.fx.LayerResolver].
  *
  * Thread-safety: backed by a [ConcurrentHashMap]-derived set for lock-free access.
+ *
+ * Change broadcast: [changes] emits a [FlashChange] on every true state transition so the
+ * [SurfaceFeedbackPublisher] can drive button LEDs to match the current state.
  */
 class FlashStateTracker {
     private val activePresses = ConcurrentHashMap.newKeySet<Int>()
+
+    data class FlashChange(val bindingId: Int, val pressed: Boolean)
+
+    private val _changes = MutableSharedFlow<FlashChange>(
+        replay = 0,
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val changes: SharedFlow<FlashChange> = _changes.asSharedFlow()
 
     /**
      * Mark a binding as pressed. Returns true if the press was newly registered (false if
      * already held — MIDI retrigger from repeated NoteOn while key still held).
      */
-    fun pressed(bindingId: Int): Boolean = activePresses.add(bindingId)
+    fun pressed(bindingId: Int): Boolean {
+        val added = activePresses.add(bindingId)
+        if (added) _changes.tryEmit(FlashChange(bindingId, true))
+        return added
+    }
 
     /**
      * Clear a binding's press state. Returns true if the binding was actually active.
      */
-    fun clearPress(bindingId: Int): Boolean = activePresses.remove(bindingId)
+    fun clearPress(bindingId: Int): Boolean {
+        val removed = activePresses.remove(bindingId)
+        if (removed) _changes.tryEmit(FlashChange(bindingId, false))
+        return removed
+    }
 
     /** True if the given binding is currently held. */
     fun isActive(bindingId: Int): Boolean = activePresses.contains(bindingId)
@@ -38,6 +62,8 @@ class FlashStateTracker {
 
     /** Drop all press state. Used on project change / device detach. */
     fun clearAll() {
+        val snapshot = activePresses.toList()
         activePresses.clear()
+        for (bindingId in snapshot) _changes.tryEmit(FlashChange(bindingId, false))
     }
 }

@@ -93,4 +93,36 @@ class PropertyChannelResolverTest {
         val mid = PropertyChannelResolver.scaleWithinRange(64u, 0u, 100u)
         assertTrue(mid.toInt() in 49..51, "midpoint should be ~50, was $mid")
     }
+
+    @Test
+    fun `scaleDmxTo7Bit round-trips endpoints`() {
+        assertEquals(0u.toUByte(), PropertyChannelResolver.scaleDmxTo7Bit(0u))
+        assertEquals(127u.toUByte(), PropertyChannelResolver.scaleDmxTo7Bit(255u))
+    }
+
+    @Test
+    fun `scaleWithinRangeTo7Bit round-trips sub-range endpoints`() {
+        assertEquals(0u.toUByte(), PropertyChannelResolver.scaleWithinRangeTo7Bit(50u, 50u, 200u))
+        assertEquals(127u.toUByte(), PropertyChannelResolver.scaleWithinRangeTo7Bit(200u, 50u, 200u))
+    }
+
+    @Test
+    fun `describeFixtureProperty returns channels without reading value`() {
+        val desc = PropertyChannelResolver.describeFixtureProperty(hex(), "dimmer")
+        assertEquals(1, desc.size)
+        assertEquals(1, desc.single().channel)
+        assertEquals(PropertyCategory.DIMMER, desc.single().category)
+        assertEquals(0u.toUByte(), desc.single().min)
+        assertEquals(255u.toUByte(), desc.single().max)
+
+        val colour = PropertyChannelResolver.describeFixtureProperty(hex(), "rgbColour")
+        assertEquals(3, colour.size)
+        assertEquals(listOf(2, 3, 4), colour.map { it.channel })
+    }
+
+    @Test
+    fun `describeFixtureProperty returns empty for enum setting`() {
+        val desc = PropertyChannelResolver.describeFixtureProperty(hex(), "mode")
+        assertTrue(desc.isEmpty())
+    }
 }

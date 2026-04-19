@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Routes inbound events from attached control surfaces to the app's composition / cue /
- * transport layers. Phase 3 of docs/control-surface-plan.md.
+ * transport layers.
  *
  * Lifecycle mirrors [MidiLearnSessionManager]:
  *   - [start] subscribes to [DeviceMatcher.events] and launches a per-device collector for
@@ -19,16 +19,18 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Hot path per inbound event:
  *   1. Look up the event against the device's [ControlSurfaceRegistry] profile to resolve
- *      a stable `controlId`. Bank-button presses take a short-circuit path straight to
- *      [ActiveBankState.setBank] — they are not user-bindable (see Phase 1 design notes).
- *   2. Resolve the binding via [ControlSurfaceBindingService.resolve] using
+ *      a stable `controlId`. Bank-button presses short-circuit straight to
+ *      [ActiveBankState.setBank] — they are intentionally not user-bindable.
+ *   2. For fader / encoder continuous input: consult [SurfaceFeedbackHooks] soft takeover.
+ *      If pickup hasn't occurred, drop the event silently but record the physical position
+ *      so subsequent events can trigger pickup.
+ *   3. Resolve the binding via [ControlSurfaceBindingService.resolve] using
  *      `(deviceTypeKey, controlId, activeBank)`. Exact-bank wins over bank-agnostic.
- *   3. Dispatch by [BindingTarget] variant into [SurfaceActions]. Fader / encoder moves route
- *      to Layer 4 direct writes; buttons fire GO / Back / Pause / fire cue / flash / blackout
- *      / grand master / set bank. Flash press and release are tracked per-binding by
- *      [FlashStateTracker] so overlapping holds don't corrupt each other's release state.
- *
- * No feedback / motor drive — that's Phase 4.
+ *   4. Dispatch by [BindingTarget] variant into [SurfaceActions]. Flash press / release
+ *      is tracked per-binding by [FlashStateTracker] so overlapping holds don't corrupt
+ *      each other's release state.
+ *   5. Touch events pass through to the feedback hooks so motor writes are suppressed
+ *      while a fader is held.
  */
 class SurfaceInputRouter(
     private val deviceMatcher: DeviceMatcher,
@@ -39,6 +41,8 @@ class SurfaceInputRouter(
     private val projectIdProvider: () -> Int,
     private val actions: SurfaceActions,
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
+    /** Consulted for touch suppression + soft takeover. Null disables both. */
+    private val feedbackHooks: SurfaceFeedbackHooks? = null,
 ) {
     companion object {
         private val logger = LoggerFactory.getLogger(SurfaceInputRouter::class.java)
@@ -82,20 +86,25 @@ class SurfaceInputRouter(
         val controller = controllerLookup(displayKey) ?: return
         val s = scope ?: return
         val job = s.launch(CoroutineName("SurfaceRouter-$displayKey")) {
-            controller.input.collect { event -> route(deviceTypeKey, event) }
+            controller.input.collect { event -> route(displayKey, deviceTypeKey, event) }
         }
         inputJobs[displayKey] = job
     }
 
     /**
      * Entry point for tests. Drives a single event through the routing pipeline without
-     * requiring a real [MidiController] or [DeviceMatcher].
+     * requiring a real [MidiController] or [DeviceMatcher]. `displayKey` defaults to the
+     * typeKey since most tests have one logical device.
      */
-    internal fun offerInputForTest(deviceTypeKey: String, event: MidiInputEvent) {
-        route(deviceTypeKey, event)
+    internal fun offerInputForTest(
+        deviceTypeKey: String,
+        event: MidiInputEvent,
+        displayKey: String = deviceTypeKey,
+    ) {
+        route(displayKey, deviceTypeKey, event)
     }
 
-    private fun route(deviceTypeKey: String, event: MidiInputEvent) {
+    private fun route(displayKey: String, deviceTypeKey: String, event: MidiInputEvent) {
         val profile = types().firstOrNull { it.typeKey == deviceTypeKey } ?: return
         val match = matchEvent(profile, event) ?: return
         when (match) {
@@ -104,6 +113,12 @@ class SurfaceInputRouter(
                 if (match.pressed) bankState.setBank(deviceTypeKey, match.bankId)
             }
             is ResolvedInput.Continuous -> {
+                // Soft-takeover check for faders / encoders. Non-motor controls may suppress
+                // the event until pickup; motor controls always pass through.
+                val accepted = feedbackHooks?.acceptInboundFader(
+                    displayKey, deviceTypeKey, match.controlId, match.value7Bit,
+                ) ?: true
+                if (!accepted) return
                 val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
                 dispatchContinuous(binding, match.value7Bit)
             }
@@ -116,7 +131,7 @@ class SurfaceInputRouter(
                 dispatchButtonRelease(binding)
             }
             is ResolvedInput.Touch -> {
-                // Phase 4: touch suppression. Silent in Phase 3.
+                feedbackHooks?.onTouch(displayKey, match.controlId, match.down)
             }
         }
     }
@@ -224,16 +239,13 @@ class SurfaceInputRouter(
         when (event) {
             is MidiInputEvent.ControlChange -> {
                 for (control in profile.controls) {
-                    when (control) {
-                        is FaderDescriptor ->
-                            if (control.cc == event.cc && control.channel == event.channel) {
-                                return ResolvedInput.Continuous(control.controlId, event.value)
-                            }
-                        is EncoderDescriptor ->
-                            if (control.cc == event.cc && control.channel == event.channel) {
-                                return ResolvedInput.Continuous(control.controlId, event.value)
-                            }
-                        else -> Unit
+                    val (cc, channel) = when (control) {
+                        is FaderDescriptor -> control.cc to control.channel
+                        is EncoderDescriptor -> control.cc to control.channel
+                        else -> continue
+                    }
+                    if (cc == event.cc && channel == event.channel) {
+                        return ResolvedInput.Continuous(control.controlId, event.value)
                     }
                 }
             }

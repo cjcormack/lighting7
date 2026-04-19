@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.TransmitModifier
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
@@ -149,24 +150,21 @@ class GlobalScalerState(
 
     private fun addValueChannels(universe: Int, value: Any, into: MutableSet<Long>) {
         when (value) {
-            is DmxSlider -> into += packKey(universe, value.channelNo)
+            is DmxSlider -> into += packChannelKey(universe, value.channelNo)
             is DmxColour -> {
                 // Colour isn't strictly intensity-like by default; but if a fixture annotated its
                 // `rgbColour` as DIMMER (unusual but possible), the caller ends up here. Include
                 // all three channels so behaviour is consistent.
-                into += packKey(universe, value.redSlider.channelNo)
-                into += packKey(universe, value.greenSlider.channelNo)
-                into += packKey(universe, value.blueSlider.channelNo)
+                into += packChannelKey(universe, value.redSlider.channelNo)
+                into += packChannelKey(universe, value.greenSlider.channelNo)
+                into += packChannelKey(universe, value.blueSlider.channelNo)
             }
         }
     }
 
-    private fun packKey(universe: Int, channel: Int): Long =
-        (universe.toLong() shl 20) or (channel.toLong() and 0xFFFFFL)
-
     override fun modify(universe: Universe, channel: Int, value: UByte): UByte {
         if (!isKilled()) return value
-        val key = packKey(universe.universe, channel)
+        val key = packChannelKey(universe.universe, channel)
         return if (key in intensityChannels.get()) 0u else value
     }
 
@@ -220,7 +218,7 @@ class GlobalScalerState(
      * without walking fixtures. Hides the packed-key encoding from tests.
      */
     internal fun seedIntensityChannelsForTest(pairs: Set<Pair<Int, Int>>) {
-        intensityChannels.set(pairs.mapTo(HashSet()) { (u, c) -> packKey(u, c) })
+        intensityChannels.set(pairs.mapTo(HashSet()) { (u, c) -> packChannelKey(u, c) })
     }
 }
 

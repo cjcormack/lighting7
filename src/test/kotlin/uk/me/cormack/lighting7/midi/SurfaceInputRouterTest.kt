@@ -212,6 +212,59 @@ class SurfaceInputRouterTest {
     }
 
     @Test
+    fun `touch event is forwarded to feedback hooks`() {
+        val actions = RecordingActions()
+        val feedback = RecordingFeedbackHooks()
+        val router = SurfaceInputRouter(
+            deviceMatcher = DeviceMatcher(MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false)),
+            controllerLookup = { null },
+            bindingService = ControlSurfaceBindingService(FakeDatabase.instance).also {
+                it.seedCacheForTest(projectId, emptyList())
+            },
+            bankState = ActiveBankState(),
+            flashTracker = FlashStateTracker(),
+            projectIdProvider = { projectId },
+            actions = actions,
+            feedbackHooks = feedback,
+        )
+        // fader-1 touch note is 101 on X-Touch Standard.
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 101, velocity = 127u), displayKey = "dev-a")
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 101, velocity = 0u), displayKey = "dev-a")
+        assertEquals(
+            listOf<RecordingFeedbackHooks.Call>(
+                RecordingFeedbackHooks.Call.Touch("dev-a", "fader-1", true),
+                RecordingFeedbackHooks.Call.Touch("dev-a", "fader-1", false),
+            ),
+            feedback.calls.toList(),
+        )
+        // Touch doesn't reach actions.
+        assertTrue(actions.calls.isEmpty())
+    }
+
+    @Test
+    fun `feedback hooks rejection suppresses continuous dispatch`() {
+        val actions = RecordingActions()
+        val feedback = RecordingFeedbackHooks()
+        feedback.acceptReturn = false  // always reject pickup
+        val router = SurfaceInputRouter(
+            deviceMatcher = DeviceMatcher(MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false)),
+            controllerLookup = { null },
+            bindingService = ControlSurfaceBindingService(FakeDatabase.instance).also {
+                it.seedCacheForTest(projectId, listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))))
+            },
+            bankState = ActiveBankState(),
+            flashTracker = FlashStateTracker(),
+            projectIdProvider = { projectId },
+            actions = actions,
+            feedbackHooks = feedback,
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
+        // Hook saw the attempt but action was suppressed.
+        assertEquals(1, feedback.calls.size)
+        assertTrue(actions.calls.isEmpty())
+    }
+
+    @Test
     fun `NoteOn with velocity 0 is treated as release`() {
         val actions = RecordingActions()
         val flashTracker = FlashStateTracker()
@@ -253,6 +306,30 @@ private class RecordingActions : SurfaceActions {
     override fun fireCue(cueId: Int) { calls += RecordedCall.FireCue(cueId) }
     override fun toggleBlackout(): Boolean { calls += RecordedCall.ToggleBlackout; return true }
     override fun toggleGrandMaster(): Boolean { calls += RecordedCall.ToggleGrandMaster; return true }
+}
+
+/** Recording fake of [SurfaceFeedbackHooks] for tests. */
+private class RecordingFeedbackHooks : SurfaceFeedbackHooks {
+    sealed class Call {
+        data class Touch(val displayKey: String, val controlId: String, val down: Boolean) : Call()
+        data class InboundFader(val displayKey: String, val deviceTypeKey: String, val controlId: String, val value: UByte) : Call()
+    }
+    val calls = mutableListOf<Call>()
+    var acceptReturn: Boolean = true
+
+    override fun onTouch(displayKey: String, controlId: String, down: Boolean) {
+        calls += Call.Touch(displayKey, controlId, down)
+    }
+
+    override fun acceptInboundFader(
+        displayKey: String,
+        deviceTypeKey: String,
+        controlId: String,
+        value7Bit: UByte,
+    ): Boolean {
+        calls += Call.InboundFader(displayKey, deviceTypeKey, controlId, value7Bit)
+        return acceptReturn
+    }
 }
 
 private sealed class RecordedCall {

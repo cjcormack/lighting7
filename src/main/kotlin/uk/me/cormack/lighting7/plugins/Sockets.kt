@@ -26,6 +26,7 @@ import uk.me.cormack.lighting7.fx.parseExtendedColour
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
+import uk.me.cormack.lighting7.midi.SoftTakeoverStateMachine
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.state.State
@@ -457,6 +458,20 @@ data class SurfaceScalerSetBlackoutInMessage(val enabled: Boolean) : InMessage()
 @SerialName("surfaceScaler.setGrandMaster")
 data class SurfaceScalerSetGrandMasterInMessage(val enabled: Boolean) : InMessage()
 
+/**
+ * Emitted when a non-motor fader transitions between engaged and pickup-awaiting state.
+ * Frontend renders a pickup indicator near the relevant control.
+ */
+@Serializable
+@SerialName("surfacePickup.changed")
+data class SurfacePickupChangedOutMessage(
+    val displayKey: String,
+    val controlId: String,
+    val state: SoftTakeoverStateMachine.State,
+    /** Target 7-bit value that the fader must cross to re-engage. Null when engaged. */
+    val target: Int?,
+) : OutMessage()
+
 // Project-related messages
 
 @Serializable
@@ -761,6 +776,19 @@ fun Application.configureSockets(state: State) {
                 .onEach { sendSerialized<OutMessage>(it) }
                 .launchIn(this)
 
+            val pickupChangeJob = state.surfaceFeedbackPublisher.takeover.changes
+                .onEach { change ->
+                    sendSerialized<OutMessage>(
+                        SurfacePickupChangedOutMessage(
+                            displayKey = change.displayKey,
+                            controlId = change.controlId,
+                            state = change.state,
+                            target = change.target?.toInt(),
+                        )
+                    )
+                }
+                .launchIn(this)
+
             try {
                 for (frame in incoming) {
                     when (val message = converter?.deserialize<InMessage>(frame)) {
@@ -962,6 +990,7 @@ fun Application.configureSockets(state: State) {
                 bindingChangeJob.cancel()
                 bankChangeJob.cancel()
                 scalerStateJob.cancel()
+                pickupChangeJob.cancel()
                 ownedLearnSessions.toList().forEach { state.midiLearnSessionManager.cancel(it) }
                 ownedLearnSessions.clear()
                 currentFixtures.unregisterListener(listener)

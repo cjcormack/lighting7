@@ -10,8 +10,12 @@ import kotlinx.coroutines.flow.SharedFlow
  * Inbound events are a hot [SharedFlow]. Subscribers attach and detach freely; the controller
  * does not buffer arbitrary history. Outbound feedback is delivered via [sendFeedback], which
  * is conflated per-control and rate-limited inside the controller.
+ *
+ * Not sealed: test helpers in the `src/test` source set need to supply recording fakes, and
+ * Kotlin treats the main / test compilation units as separate modules for sealed membership
+ * purposes. Concrete implementations should still be kept to transport classes.
  */
-sealed interface MidiController {
+interface MidiController {
     val handle: MidiDeviceHandle
     val input: SharedFlow<MidiInputEvent>
 
