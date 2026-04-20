@@ -17,70 +17,33 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: 1 — in flight. Backend DB + DTO + route round-trip landed 2026-04-19a. Layer-3 apply integration + stomp switch landed 2026-04-19b. cueEdit sockets + legacy-effect migration + snapshot-from-live landed 2026-04-19c. Smoke-check + frontend plumbing + cueEdit.setMode/clearAssignment landed 2026-04-19d. **Layer 3 transmit gap fixed 2026-04-20** — pure-property-assignment cues now paint the stage (9 new unit tests over `MockDmxController.currentValues`). Crossfade-weight integration is the main remaining Phase 1 backend item.
+**Phase**: 1 — exit-ready pending dev-rig smoke-check. All Phase 1 backend work (DB/DTO,
+Layer 3 apply, stomp switch, cueEdit sockets, legacy-effect migration, snapshot-from-live,
+Layer 3 transmit publish, crossfade-weight integration) is in; frontend routing layer is
+wired. The smoke-check is the only remaining item — see §"Next actions". Deferred follow-
+ups (stack-cue Live edit, remaining cueEdit stubs, fixture-level colour-picker fixtureKey
+threading) are scheduled for Phase 2.
 
-**Most recent session**: 2026-04-20. Closed the Layer 3 transmit gap flagged by the 2026-04-19d smoke-check: `FxEngine.setCueAssignments` / `removeCueAssignments` / `clearAllCueAssignments` now drive a one-shot `ControllerTransaction` via a new `publishLayer3ToControllers` pass, composing Layer 3 → Layer 4 → Layer 5 onto every (fixture, property) whose Layer 3 state changed. Skips running-effect keys (tick loop handles them) and fully-parked targets. 9 new unit tests in `FxEnginePublishLayer3Test` exercise the DMX controller directly via the existing `MockDmxController` — no Phase 5 harness needed after all.
-
-**Prior sessions**: 2026-04-19d — Smoke-check + frontend plumbing + cueEdit.setMode/clearAssignment. 2026-04-19c — cueEdit core sockets + legacy migration + snapshot-from-live. See change log entries.
-
----
-
-**Most recent session (detailed)**: 2026-04-19d. Three deliverables landed:
-
-1. **Manual smoke-check against a live backend + frontend** — dev DB, project "43!", group `hexes` (members hex2/hex3/hex4, dimmer channels 17/65/81 on universe 0). Results:
-    - **Legacy migration**: 5 `StaticSetting` rows auto-converted on startup to `cue_property_assignments`. Confirmed by spot-checking — rows now appear on the right cues with the right keys.
-    - **Cue CRUD**: POST + PATCH + GET of a cue with `propertyAssignments` round-trips cleanly.
-    - **Layer 3 + effect blend (headline)**: cue with `(group hexes, dimmer=180)` applied, then SineWave ADDITIVE min=0/max=40 on the same group's dimmer → ch 17 samples: min=180, max=220, mean≈200. The reset-to-layer-below pass does its job.
-    - **cueEdit WS round-trip**: all implemented messages behave per spec —
-      `beginEdit`/`endEdit`/`setProperty`/`setChannel`/`discardChanges` all return the expected outbound messages; orphan writes (no session) are rejected; colour sub-channels on `setChannel` return the helpful error; `discardChanges` reverts to the beginEdit snapshot; Live-mode `beginEdit` applies the cue on stage; stub messages (`setMode`, `clearAssignment`, etc. — this session also implemented the first two) return the "not implemented yet" error.
-    - **Bug found (see §"Known issues")**: pure-property-assignment cues (no effects) don't paint the stage on apply. The FX engine tick loop early-returns when no effects are running, so Layer 3 values only reach controllers via the effect-reset pass. Any cue with ≥1 effect works correctly.
-
-2. **Frontend plumbing** (`/Users/chris/Development/Personal/lighting-react`):
-    - `src/api/cueEditWsApi.ts` — typed `cueEdit.*` message shapes + `send()` / `subscribe()` helpers, wired into `lightingApi`.
-    - `src/api/cuesApi.ts` — new `CuePropertyAssignment` type; `Cue` + `CueInput` carry `propertyAssignments`.
-    - `src/store/cues.ts` — `useSnapshotCueFromLiveMutation` (POST `/cues/{id}/snapshot-from-live`).
-    - `src/components/lighting-editor/EditorContext.tsx` — `{ kind: 'live' | 'cue' | 'preset', id?, mode? }` context. Default `kind: 'live'`.
-    - `src/components/lighting-editor/routing.ts` — named routed hooks (`useRoutedUpdateChannel`, `useRoutedSetProperty`, `useRoutedClearAssignment`, `useRoutedUpdatePalette`, `useRoutedApplyPreset`, `useRoutedAddAdHocEffect`) + session lifecycle helpers (`beginCueEditSession` / `endCueEditSession` / `setCueEditMode` / `discardCueEditChanges`).
-    - **In-place routing** of the low-level hooks that the existing Fixture/Group views already use (`useUpdateChannel` in `hooks/usePropertyValues.ts`, and `useUpdateGroupSlider`/`useUpdateGroupColour`/`useUpdateGroupPosition`/`useUpdateGroupSetting` in `hooks/useGroupPropertyValues.ts`). Each now reads `EditorContext` and, when `kind === 'cue'`, dispatches via `cueEdit.*` WS messages; `kind === 'live'` is byte-identical to before. `FixtureContent.tsx` swapped from the RTK `useUpdateChannelMutation` to the routing-aware `useUpdateChannel` hook (signature adjusted from `{universe, channelNo, value}` to `(ChannelRef, value)`).
-    - `npm run type-check` + `npm run build` clean. Fixtures view renders with no console errors under the dev server; the routing layer is transparent in live mode.
-
-3. **`cueEdit.setMode` + `cueEdit.clearAssignment`** — both stubs now implemented in `CueEditSessionHandler`:
-    - `setMode(cueId, mode)`: mid-session transition preserving the session snapshot. `LIVE → BLIND` calls `removeEffectsForCue` (which also drops Layer 3 via the existing cascade), keeps the session open. `BLIND → LIVE` re-runs `buildCueApplyData` + `applyCue` — same path as `beginEdit`'s Live branch, which picks up any edits made during the Blind pass. Same-mode is a no-op success. Stack cues still reject Live mode (follow-up).
-    - `clearAssignment(cueId, targetType, targetKey, propertyName)`: deletes the matching row from `cue_property_assignments`; idempotent (silent success if no row matches). In Live mode, republishes Layer 3 via the same `buildCueApplyData` + `setCueAssignments` path `setProperty` uses, so the channel releases to Layer 4 / Layer 5 on the next tick.
-    - New `CueEditAssignmentClearedOutMessage` output type (distinct from `assignmentChanged` so clients can render a "removed" affordance).
-    - Wired into `Sockets.kt`; the catch-all stub branch now only covers `setPalette` / `addPresetApplication` / `addAdHocEffect`.
-    - 3 new wire-format tests in `CueEditSessionTest`; full suite is 583 tests, all pass.
-
-**Legacy static-effect migration (landed 2026-04-19c, detail retained for context)**: New `LegacyStaticEffectMigration` in `src/main/kotlin/uk/me/cormack/lighting7/models/MigrateLegacyStaticEffects.kt` with a pure `convertRow(LegacyRow) → ConversionResult` and a DB-touching `run(Transaction) → Summary`. Wired into `State.configureDatabase()` alongside the other startup migrations — reads `cue_ad_hoc_effects` rows with `effect_type` in `{StaticValue, StaticSetting}`, converts each (pulling `parameters["value"]` for `StaticValue` and `parameters["level"]` for `StaticSetting`), INSERTs a matching `cue_property_assignments` row, DELETEs the original. Lossy cases (null property_name, missing value key, non-UByte) log at WARN and are left in place. Idempotent — next startup it's a no-op. 11 unit tests in `LegacyStaticEffectMigrationTest`.
-
-2. **`cueEdit.*` socket messages** — minimum viable subset for control-surface Phase 6. New `CueEditSession.kt` with per-connection session state `(cueId, mode, snapshot)` held in an `AtomicReference` inside the `configureSockets` connection scope. Implemented: `beginEdit` (snapshots current assignments, applies cue on stage in Live mode), `endEdit` (stops cue in Live mode, clears session), `setProperty` (upserts one assignment, republishes Layer 3 in Live), `setChannel` (resolves universe/channel → fixture+property via patch walk, delegates to `setProperty` for sliders/settings, rejects colour sub-channels with a "use setProperty with rgbColour" error), `discardChanges` (deletes all current assignments, re-creates from snapshot). Stubs for `setMode / setPalette / addPresetApplication / addAdHocEffect / clearAssignment` reply with "not implemented yet" — they're accepted by the deserializer so the frontend doesn't crash, and land in a follow-up. Live stack-cue edit rejects — only no-stack cues can be edited Live in this pass. Disconnect-safety: `endSessionOnDisconnect` stops any orphaned Live cue on connection close. 13 new wire-format + mode-parsing tests in `CueEditSessionTest`.
-
-3. **`POST /cues/{cueId}/snapshot-from-live`** — wraps `captureCurrentState` (now with a fourth `propertyAssignments` field) and replaces the cue's presetApplications + adHocEffects + propertyAssignments + palette wholesale. `captureCurrentState` walks `FxEngine.layerResolver.currentLayer3State` and emits one `CuePropertyAssignmentDto` per (targetKey, propertyName) via the new `Layer3Resolver.PropertyValue.serialize()` helper (inverse of `parseAssignmentValue` — unsigned decimal for Slider/Setting, `ExtendedColour.toSerializedString()` for Colour, `"pan,tilt"` for Position). 7 round-trip tests in `Layer3ResolverTest` assert `parse(serialize(v)) == v` for every PropertyValue shape.
-
-Refactor: extracted `buildCueApplyData(DaoCue)` from the inline transaction in the `/apply` handler so both it and `CueEditSessionHandler.beginEdit` / `republishLayer3` share one source of truth for cue-data assembly. 580 tests pass.
-
-**Prior sessions**: **2026-04-19b** — Layer 3 apply integration + stomp switch. **2026-04-19a** — Phase 1 backend foundation. **2026-04-18** — Phase 0 complete. See change log entries.
-
-**Paused 2026-04-18** — control-surface v1 is running ahead of this plan's Phase 1 because its EditorContext/composition-model touchpoints are co-designed with cue authoring. See [control-surface-plan.md](control-surface-plan.md). Phase 6 of that plan (cueEdit integration) depends on Phase 1 of **this** plan landing, so we'll resume here after surface Phase 5, then loop back for surface Phase 6 — or bundle the two together. **Control-surface Phase 5 complete as of 2026-04-19**, so Phase 1 here is unblocked.
+See the Change log for durable invariants and engine surface.
 
 ## Known issues
 
 **Colour picker in cue-edit mode (Phase 1 plumbing limitation)**. `PropertyVisualizers.tsx::ColourSwatch` fires per-channel `updateChannel` calls for R/G/B/W/A/UV. In `kind: 'cue'`, those become `cueEdit.setChannel`, and the backend rejects R/G/B sub-channels with the "use setProperty with rgbColour" error. Root cause: `ColourPropertyDescriptor` doesn't carry `fixtureKey`, so the routing layer can't assemble a `setProperty` call from inside the hook. Group-level colour writes are already routed to one `setProperty` per member (`useUpdateGroupColour` has access to `member.fixtureKey`). Two fixes possible: thread `fixtureKey` through to the fixture-level colour components, or have the backend accept R/G/B sub-channels by merging with the existing `rgbColour` assignment. Defer until Phase 2 when the CueEditor sets context and controls where colour writes originate.
 
 **Next actions**:
-1. **Crossfade-weight integration (Phase 1b)**: the `// TODO Phase 1b` marker in `buildLayer3AssignmentsForCue` hardcodes `fadeWeight = 1.0`. Teach `CueStackManager.runCrossfade` to push fade progress into `FxEngine.setCueAssignments(…)` so outgoing and incoming cues' Layer 3 contributions fade symmetrically (outgoing cue's assignments currently snap off the moment the incoming cue starts — see `CueStackManager.activateCueInStack` where `removeCueAssignments(oldCueId)` runs before the crossfade job). Now-applicable follow-up from the 2026-04-20 publish fix: crossfade updates should flow through the new publish pass too — currently `setCueAssignments` publishes once per call, so a crossfade would need either per-frame `setCueAssignments` calls (expensive) or a dedicated `tickLayer3Fade` path. Discuss before implementing.
+1. **Re-run the 2026-04-19d smoke-check against the dev rig** — now the top priority; all backend code for Phase 1 is in. Covers the Layer 3 transmit fix (2026-04-20a) and the Phase 1b crossfade-weight integration (2026-04-20b) end-to-end. Belt-and-braces before claiming Phase 1 exit; additionally exercises specificity (group red + fixture green override), stop-releases-to-0, stack snap vs crossfade (now both Layer 3 and effects fade symmetrically), and the Phase 0 leftovers (SineWave + `updateChannel=180`, park+effect, two-effects-same-property priority determinism). The `/tmp/smoke_helper.py` WS helper from the prior session wasn't persisted — reconstruct from 2026-04-19d §"Smoke-check" notes or write fresh.
 2. Remaining `cueEdit.*` follow-up messages: `setPalette` + `addPresetApplication` + `addAdHocEffect`. Stubs exist but reply "not implemented yet". These all need UI to exercise them meaningfully, so land them alongside Phase 2.
 3. Live stack-cue edit support. Current `beginEdit` / `setMode` reject cues with a non-null `cueStackId` when mode=LIVE. Next pass: delegate to `CueStackManager.activateCueInStack` and plumb stack deactivation through `endSessionOnDisconnect`.
 4. Integration test: PATCH + snapshot-from-live + cueEdit round-trip through an in-memory HTTP harness — blocked on the same DB test-harness gap that blocks Phase 5's pipeline test. Track under Phase 5.
 5. Frontend: thread `fixtureKey` through to fixture-level colour components (or accept the Phase 2 hand-off) — see §"Known issues" first item.
-6. Re-run the 2026-04-19d smoke-check against the dev rig to confirm the Layer 3 transmit fix end-to-end. The unit tests assert the transmit path via `MockDmxController.currentValues`, so this is belt-and-braces — but worth it before claiming Phase 1 exit. Also exercises: specificity (group red + fixture green override), stop-releases-to-0, stack snap vs crossfade, and the Phase 0 leftovers (SineWave + `updateChannel=180`, park+effect, two-effects-same-property priority determinism). The `/tmp/smoke_helper.py` WS helper from the prior session wasn't persisted — reconstruct from 2026-04-19d §"Smoke-check" notes or write fresh.
+6. **moveInDark during outgoing fade** (spec'd, not yet implemented). The current linear interp path handles basic position fades; the "pre-apply incoming position during outgoing fade when outgoing intensity is 0 at end" affordance is deferred. Scope small — the resolver already knows the moveInDark flag on each `Assignment`. Good candidate for a standalone follow-up session once a real moving-head fixture is on the test rig.
 
 **Per-phase tracker:**
 
 | Phase | Summary | Status |
 |-------|---------|--------|
 | 0 | Layering foundation: make the composition model explicit in code (priority-ordered effects, reset-to-layer-below, `PropertyCategory` composition rules, stomp plumbing) | Done |
-| 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | In flight (backend DB + DTO + routes + Layer 3 apply + stomp switch + cueEdit core sockets + legacy migration + snapshot-from-live + frontend plumbing + cueEdit.setMode + cueEdit.clearAssignment + **Layer 3 transmit fix** done; crossfade-weight + stack-cue edit + remaining cueEdit stubs still pending) |
+| 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | Exit-ready pending dev-rig smoke-check (backend DB + DTO + routes + Layer 3 apply + stomp switch + cueEdit core sockets + legacy migration + snapshot-from-live + frontend plumbing + cueEdit.setMode + cueEdit.clearAssignment + Layer 3 transmit fix + **crossfade-weight integration** done; stack-cue edit + remaining cueEdit stubs deferred to Phase 2) |
 | 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | Not started |
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Not started |
 | 4 | Program view inline editor + "Grab live state" snapshot action | Not started |
@@ -145,56 +108,16 @@ Leaving edit mode deactivates the cue or hands back to stack playback (in Live m
 
 ---
 
-## Phase 0 — Layering Foundation
+## Phase 0 — Layering Foundation (done)
 
-**Goal**: make the channel-composition model documented in [docs/lighting-composition-model.md](lighting-composition-model.md) explicit in code. No user-visible feature changes; existing UIs keep working. This unblocks every later phase.
-
-### Entry criteria
-- [docs/lighting-composition-model.md](lighting-composition-model.md) exists and is reviewed (the spec is the precondition; it's already drafted alongside this plan).
-
-### Exit criteria
-- `FxEngine` / `ControllerTransaction` / `ArtNetController` refactored so the layer pipeline is explicit in code — named layers, ordered composition, single documented output site. Matches the model in the spec doc.
-- `PropertyCategory` carries a `defaultComposition: CompositionRule` per enum value, per the spec's HTP/LTP table.
-- `@FixtureProperty(composition = CompositionRule)` annotation parameter exists and overrides the category default when set (unused by any current fixture; Phase 1+ uses it if needed).
-- `FxInstance` has a `priority: Int` field; effect iteration is a sorted pass (priority → cue-stack position → creation time).
-- The reset-to-neutral pass resets to the layer below (Layer 3 → Layer 4 → Layer 5), not hardcoded zero. Direct writes are sticky under running effects.
-- Parking is pre-composition-aware: a parked channel skips Layer 2 work rather than being overwritten at transmit time (still overridden at transmit time as a defence-in-depth — both paths agree).
-- Cue model carries `stomp: Boolean` (default `false`); the engine honours it when a stomping cue applies.
-- `dmx-engineering.md`, `fx-engineering.md`, `cues-engineering.md` each link to [docs/lighting-composition-model.md](lighting-composition-model.md) where they currently describe ad-hoc rules.
-
-### Phase 0 work
-
-Repo: `/Users/chris/Development/Personal/lighting7`. No frontend changes in Phase 0.
-
-- [x] **Declare composition rules on `PropertyCategory`** (per the spec's table): `DIMMER`, `UV`, `STROBE` default `HTP`; all others default `LTP`. Add a `CompositionRule` enum (`HTP`, `LTP`) alongside `PropertyCategory`.
-- [x] **Extend `@FixtureProperty` annotation** with `composition: CompositionRule = CompositionRule.UNSET` (or nullable). The resolver uses the annotation value when set, else falls back to the category default.
-- [x] **Refactor output pipeline so layers are explicit** in `FxEngine.processBeatTick()` and `ControllerTransaction.apply()`. Named composition steps; Layer 3 resolution hook present but returns empty (Phase 1 fills it). Parking consulted pre-composition to skip Layer 2 work for parked channels.
-- [x] **Add `priority: Int` field to `FxInstance`** and replace the `ConcurrentHashMap` iteration with a sorted pass (priority ascending → stable tie-break). Default priority = 0 for manual effects; cue-stack cues get derived priorities from their stack position.
-- [x] **Fix reset-to-neutral** in `FxEngine`: target = Layer 3 composed value if any, else Layer 4 sticky direct write if any, else Layer 5 baseline. Remove the hardcoded-zero path.
-- [x] **Add `stomp: Boolean` to the cue model** (DB column + DTO) with a Phase 0 resolver that, on cue apply, removes ad-hoc effects owned by other cue IDs whose targets overlap this cue's property assignments. Layer 3 assignments don't exist until Phase 1, so in Phase 0 this resolver uses the stomping cue's own ad-hoc effect targets as the overlap set — plumbing lands now so Phase 1 doesn't have to re-touch the cue model.
-- [x] **Layer 3 resolver scaffolding**: empty input, real output. Accepts an (empty) list of property assignments and emits per-property values via the category's composition rule, applying fade weights. Unit-tested with synthetic inputs; Phase 1 wires it to real data.
-- [x] **Tests**: unit tests covering the composition-rule defaults, DirectWriteStore, Layer3Resolver (HTP / LTP / colour crossfade / settings snap / specificity / per-property override), and FxEngine stomp + priority. LayerResolver cascade covered end-to-end via the smoke-check verification step (sealed-class restriction prevents direct stub extension in tests). All 30 test suites pass.
-
-### Files touched in Phase 0
-
-- `src/main/kotlin/uk/me/cormack/lighting7/fixture/FixtureProperty.kt` (add `CompositionRule` enum; `defaultComposition` on each `PropertyCategory` value; `composition` param on `@FixtureProperty`).
-- `src/main/kotlin/uk/me/cormack/lighting7/fx/FxEngine.kt` (explicit layer pipeline, sorted effect iteration, reset-to-layer-below, stomp handling).
-- `src/main/kotlin/uk/me/cormack/lighting7/fx/FxInstance.kt` — or wherever `FxInstance` lives (add `priority` field).
-- `src/main/kotlin/uk/me/cormack/lighting7/fx/FxTarget.kt` (blend-mode application; confirm it composes over the new reset target).
-- `src/main/kotlin/uk/me/cormack/lighting7/dmx/ArtNetController.kt` (keep transmit-time parking override; confirm no change needed).
-- `src/main/kotlin/uk/me/cormack/lighting7/dmx/ParkManager.kt` (expose a pre-composition query so FxEngine can skip parked channels).
-- `src/main/kotlin/uk/me/cormack/lighting7/models/cues.kt` (add `stomp` column / field on the cue table).
-- New: `src/main/kotlin/uk/me/cormack/lighting7/fx/Layer3Resolver.kt` (scaffolding; empty assignments in Phase 0, real data in Phase 1).
-- Updates: `docs/dmx-engineering.md`, `docs/fx-engineering.md`, `docs/cues-engineering.md` — cross-reference [docs/lighting-composition-model.md](lighting-composition-model.md).
-
-### Phase 0 verification
-
-- New unit tests for every layer interaction from the spec's Worked Examples pass.
-- Existing tests pass unchanged.
-- Run the backend + frontend manually. Confirm no user-visible behaviour change in fixture/group modals, cue apply, busking, and program playback. One *intended* behaviour change: direct channel writes now persist visibly under running effects instead of being reset to zero on the next tick — verify this improvement and note it in the phase's changelog.
-- Verify parked channels still win over effects.
-- Verify two effects on the same property compose deterministically by priority (previously last-wins).
-- Verify a cue with `stomp: true` applied via API removes another cue's ad-hoc effects targeting the same fixtures (even though the stomping cue has no Layer 3 assignments yet — use its effect targets as the overlap set for Phase 0 test scaffolding).
+Formalised the composition model documented in
+[docs/lighting-composition-model.md](lighting-composition-model.md) — see the Change log
+for invariants. Summary: named layer pipeline through `FxEngine` →
+`ControllerTransaction` → `ArtNetController`; `CompositionRule` enum + per-category
+defaults + `@FixtureProperty` override; `FxInstance.priority` with sorted-snapshot
+iteration; reset-to-layer-below; parking consulted pre-composition; `stomp` on the cue
+model; `Layer3Resolver` scaffolding ready for Phase 1. Direct writes now persist under
+running effects (intended behavioural change).
 
 ---
 
@@ -571,117 +494,81 @@ Flag these to the user before implementing.
 
 ## Change log
 
-**2026-04-20 — Layer 3 transmit gap fixed.**
+Detailed per-session narration lives in git. This section captures durable invariants and
+gotchas that would cost time to rediscover.
 
-- **`FxEngine.publishLayer3ToControllers`** — new private method called from `republishLayer3Assignments()` (which is now called by `setCueAssignments` / `removeCueAssignments` / `clearAllCueAssignments`). Captures the Layer 3 state snapshot before and after the swap, walks the union of affected `(fixtureKey, propertyName)` keys, and for each key composes Layer 3 → Layer 4 → Layer 5 via the existing `LayerResolver.fallbackFor` and writes the result through a one-shot `ControllerTransaction`. Mirrors the pattern the effect-reset pass (`resetActiveProperties`) already uses. Skips keys a currently-running effect covers — the effect tick will paint them on its next run, so the publish would just be clobbered — and skips fully-parked targets (the transmit-time park override wins anyway).
-- **Release semantics**: when a key is in the before snapshot but not the after (cue dropped, or `setCueAssignments(cueId, emptyList())`), `fallbackFor` returns Layer 4 (sticky direct writes) → Layer 5 (baseline) naturally, so channels release to whatever is underneath rather than snapping to zero. Verified via `removeCueAssignments releases the channel back to direct-write value` and the symmetric `no layer 4 releases to baseline zero` test.
-- **Target derivation**: the resolved `Layer3Resolver.PropertyValue` type (`Slider` / `Colour` / `Position` / `Setting`) drives which `FxTarget` subclass to construct. For release-only keys (absent from the after snapshot) we fall back to the before snapshot's type. This keeps target construction entirely in-engine — no reliance on the `createFixtureTargetForCue` helper from `projectCues.kt`, which lives in a routes module.
-- **Tests**: new `FxEnginePublishLayer3Test` (9 tests) exercises the fix end-to-end against the real `MockDmxController` already in main sources. Covers: single-cue dimmer write, release-to-Layer-4 with sticky write, release-to-baseline without sticky write, `setCueAssignments(empty)` release, `clearAllCueAssignments`, colour (R/G/B write and release to Layer 4), HTP composition across two cues, and "publish leaves unrelated channels alone". Full suite: 592 tests pass, build clean.
-- **Prior-session testing concern resolved**: the 2026-04-19d session concluded the test-harness gap (sealed `DmxController`) blocked writing a failing test before the fix. On reading the source, `MockDmxController` already exists in main sources (`src/main/kotlin/uk/me/cormack/lighting7/dmx/MockDmxController.kt`) and is widely used by existing group/trait tests — the sealed interface only prevents *test-source* extensions, which isn't needed here. No Phase 5 scaffolding required for this fix; the test-controller stub the plan suggested is already in place.
+### Phase 1 — `CuePropertyAssignment` + cueEdit routing (landed 2026-04-19 → 2026-04-20b)
 
-**Deviations from session brief**
+**DB / DTO shape.** `cue_property_assignments(id, cue_id FK, target_type ∈ {fixture, group},
+target_key, property_name, value TEXT, fade_duration_ms NULLABLE, sort_order)`. Value is
+always a canonical property-level string — unsigned decimal `"0".."255"` for Slider /
+Setting, `ExtendedColour.toSerializedString()` for Colour, `"pan,tilt"` for Position.
+`Layer3Resolver.parseAssignmentValue` / `PropertyValue.serialize()` are inverses; there's a
+round-trip test per shape in `Layer3ResolverTest`.
 
-- **Did not re-run the 2026-04-19d dev-rig smoke-check.** The `/tmp/smoke_helper.py` WS sampling script from that session was not persisted on this machine and no backend/frontend is currently running. The new unit tests assert the same invariant (Layer 3 publish writes reach the DMX controller's channel map) directly via `MockDmxController.currentValues`, which is what the smoke-check was sampling at the DMX receiver. Smoke-check moved to §"Next actions" as belt-and-braces verification before claiming Phase 1 exit.
-- **Chose a single publish pass over a Layer-3-only tick.** The brief offered option (a) a one-shot publish on state change or (b) a dedicated tick path. Went with (a) per the brief's recommendation — surgical, matches the `updateChannel → controller.setValue` pattern, and doesn't add per-tick work when no effects are running. Note in §"Next actions" #1 flags that Phase 1b crossfade-weight will need to revisit this: smooth fade progress likely needs either per-frame `setCueAssignments` calls (expensive) or a dedicated tick path — discuss before implementing.
+**Apply path.** `buildLayer3AssignmentsForCue(fixtures, cueData)` in `routes/projectCues.kt`
+expands groups to per-member rows AND keeps a group-level row so `Layer3Resolver`'s
+specificity rule fires when a fixture-level override exists in the same cue. Missing
+fixture / group / property rows are logged at warn and skipped — cue apply never throws on
+stale references. The builder always stamps `fadeWeight = 1.0`; per-cue fade progress is
+the engine's concern.
 
-**2026-04-19d — Phase 1 smoke-check + frontend plumbing + `cueEdit.setMode` + `cueEdit.clearAssignment`.**
+**Engine surface.** `FxEngine.setCueAssignments(cueId, list)` / `removeCueAssignments(cueId)`
+/ `clearAllCueAssignments()` are the authoritative writers; each publishes Layer 3 → Layer 4
+→ Layer 5 to controllers via `publishLayer3ToControllers` (single `ControllerTransaction`,
+skips effect-covered keys and fully-parked targets). `updateCueFadeWeights(Map<Int, Double>)`
+scales each stored `Assignment.fadeWeight` by a per-cue weight at republish time — weight =
+1.0 entries are dropped, so the map stays small across the lifetime of a show.
+`publishLayer3ToControllers` short-circuits keys whose composed `PropertyValue` didn't
+change, so 60 fps crossfade ticks don't thrash the controller.
 
-- **Smoke-check against live dev DB + backend + frontend.** First end-to-end exercise of the Phase 1 code. Legacy migration confirmed (5 `StaticSetting` rows auto-converted on backend restart, visible in `cue_property_assignments`). Cue POST+PATCH+GET round-trip of `propertyAssignments` works. Layer 3 + additive effect blend works (SineWave ADDITIVE min=0/max=40 on `hexes.dimmer` wiggles hex2 dimmer channel in the 180–220 band when a `(group hexes, dimmer=180)` cue is applied). All implemented `cueEdit.*` messages behave per spec (begin/end/setProperty/setChannel with colour-sub-channel rejection/discardChanges/orphan rejection). One real bug discovered — see next bullet.
-- **Known bug: Layer 3 transmit gap.** Pure-property-assignment cues (no effects) don't paint the stage on apply. `FxEngine.processBeatTick` / `processWallClockTick` early-return when no effects are running, so the effect-reset pass — the only code path that currently composes Layer 3 onto controllers — never runs for these cues. Verified by: applying a `(group hexes, dimmer=180)` cue leaves channels at whatever they were before; adding any effect (even ADDITIVE min=max=0 no-op) makes the channels jump to 180 immediately. Same gap affects `cueEdit.setProperty` / `cueEdit.setChannel` in LIVE mode when the edited cue has no effects. Hoisted into §"Known issues" as the #1 blocking item for Phase 1 exit; fix sketch documented. No failing unit test added — the DB/controller test-harness gap (same one that blocks Phase 5) makes this awkward to assert without a stub controller; fix will land alongside that stub.
-- **Frontend plumbing** (`/Users/chris/Development/Personal/lighting-react`):
-    - New `src/api/cueEditWsApi.ts` — typed `cueEdit.*` message shapes + `send()` / `subscribe()` helpers. Wired into `lightingApi` as `lightingApi.cueEdit`.
-    - `src/api/cuesApi.ts` — added `CuePropertyAssignment` type; `Cue` now carries `propertyAssignments: CuePropertyAssignment[]` (required); `CueInput` carries it as optional (backend defaults to `[]`).
-    - `src/store/cues.ts` — new `useSnapshotCueFromLiveMutation` (POST `/cues/{id}/snapshot-from-live`).
-    - New `src/components/lighting-editor/EditorContext.tsx` + `routing.ts`. Context default `kind: 'live'`. Routed hooks: `useRoutedUpdateChannel` / `useRoutedSetProperty` / `useRoutedClearAssignment` / `useRoutedUpdatePalette` / `useRoutedApplyPreset` / `useRoutedAddAdHocEffect`, plus session-lifecycle helpers `beginCueEditSession` / `endCueEditSession` / `setCueEditMode` / `discardCueEditChanges`.
-    - **In-place routing** of the low-level hooks that fixture/group views already use — `hooks/usePropertyValues.ts::useUpdateChannel` and `hooks/useGroupPropertyValues.ts::useUpdateGroup{Slider,Colour,Position,Setting}`. Each now reads `EditorContext`: `kind === 'live'` is byte-identical to before; `kind === 'cue'` dispatches `cueEdit.setChannel` (slider/setting) or `cueEdit.setProperty` with `propertyName='rgbColour'` / `'position'` (colour/position). `useUpdateGroupColour` writes per-fixture `setProperty` rows (Phase 1 deviation — `GroupColourPropertyDescriptor` has no `groupName`, so per-fixture is the most specific we can do from here; Phase 2 CueEditor will emit group-level assignments).
-    - `FixtureContent.tsx` swapped from the RTK `useUpdateChannelMutation` to the routing-aware `useUpdateChannel` hook. Signature changed from `{universe, channelNo, value}` to `(ChannelRef, value)` at the call sites.
-    - Not wired: `useVirtualDimmer` (no `fixtureKey` on `ColourPropertyDescriptor`, same limitation as fixture-level colour picker — see §"Known issues" second item).
-    - `npm run type-check` + `npm run build` clean. Fixtures view renders in the dev server with no console errors — confirmed the routing layer is transparent in live mode (the only mode exercised today, since no UI opens a cue-edit session yet).
-- **`cueEdit.setMode` + `cueEdit.clearAssignment`** implemented in `CueEditSessionHandler`:
-    - `setMode(cueId, mode)`: mid-session transition preserving the session snapshot. LIVE→BLIND stops the cue on stage (`removeEffectsForCue` also drops Layer 3 via the Phase 1b cascade) and keeps the session open. BLIND→LIVE re-runs `buildCueApplyData` + `applyCue` (fresh DB read so edits during the Blind pass take effect). Same-mode is a no-op success returning `sessionStarted`. Stack cues still reject LIVE mode (follow-up, same as `beginEdit`).
-    - `clearAssignment(cueId, targetType, targetKey, propertyName)`: deletes the matching row; idempotent if no row matches. In LIVE mode, republishes Layer 3 via the same path `setProperty` uses — Layer 3 transmit gap aside, the channel releases to Layer 4/5 on the next effect tick.
-    - New outbound `CueEditAssignmentClearedOutMessage` (distinct from `assignmentChanged` so clients can render a "removed" affordance).
-    - Stubs remaining: `setPalette` / `addPresetApplication` / `addAdHocEffect` — all need UI to exercise meaningfully, land alongside Phase 2.
-    - 3 new wire-format tests in `CueEditSessionTest`; full suite 583 tests, all pass. Build clean.
+**Crossfade ownership.** `CueStackManager.activateCueInStack` keeps outgoing Layer 3 live
+for the crossfade duration; `runCrossfade` ticks both cues' weights each 16 ms; end-of-
+crossfade calls `removeCueAssignments(outgoingCueId)`. `ActiveStackState.crossfadeOutgoingCueId`
+is the single source of truth for "who are we currently fading out" — consulted on cancel,
+on normal completion, and on `deactivateStack`, so a mid-flight cancel never leaks Layer 3.
 
-**Deviations from the written plan**
+**Composer invariants.** `Layer3Resolver.composeLtp`'s outgoing-contributor filter is
+`fadeWeight > 0.0`. The earlier `< 1.0` upper bound excluded steady-state outgoing at weight
+1.0 (crossfade start) and would have snap-cut to incoming at t=0. Existing mid-fade tests
+don't exercise the boundary — the three LTP-boundary tests in `Layer3ResolverTest` do.
 
-- **Smoke-check found a real bug; no failing test landed.** The session brief said "if anything breaks, add a failing test that reproduces it BEFORE fixing." The Layer 3 transmit gap is the kind of bug that needs a controller-side assertion (did we emit a transaction to the DMX controller?), and the test harness for that doesn't exist yet — the same gap Phase 5 is scoped to close. Adding a component-level test that asserts "`FxEngine.setCueAssignments` does NOT call any `publishLayer3ToControllers`" would be scaffolding code for a fix that isn't in this session. Instead: documented the bug in §"Known issues" with a reproducible smoke-check recipe and a fix sketch; raised it to the #1 blocking item for Phase 1 exit.
-- **In-place routing rather than new hook names at call sites.** The plan said "wire callers: swap direct uses of `useUpdateChannelMutation`, palette mutations, etc. ... to the routed hooks". I landed the routed hooks in `routing.ts` (per the plan) AND made the existing low-level hooks routing-aware via `EditorContext`. Net effect is the same — `kind: 'live'` is byte-identical, `kind: 'cue'` routes — but existing callers don't need to import the new names. Lower churn; the named hooks in `routing.ts` are still available for Phase 2 CueEditor code that wants to be explicit.
-- **`useVirtualDimmer` left unrouted.** The hook writes R/G/B channels, and the `ColourPropertyDescriptor` it takes doesn't carry `fixtureKey`, so we can't form a `cueEdit.setProperty` call from inside. Same root cause as the fixture-level colour-picker limitation; see §"Known issues" item 2 for the fix options.
-- **`cueEdit.setMode` same-mode reply is `sessionStarted`.** The plan didn't spec same-mode behaviour; I chose a no-op success reusing `sessionStarted` as the "current mode is X" confirmation. Open to changing it to a dedicated `modeUnchanged` if clients want to distinguish.
+**Legacy migration.** `LegacyStaticEffectMigration` in `models/MigrateLegacyStaticEffects.kt`
+runs on every `State.configureDatabase()` boot. Reads `cue_ad_hoc_effects` rows where
+`effect_type IN ('StaticValue', 'StaticSetting')`, converts to `cue_property_assignments`,
+deletes originals. Idempotent (filter becomes empty once rows are gone). `StaticValue` /
+`StaticSetting` effect classes are still registered because the busking view still spawns
+them — cleanup blocks on busking migrating to Layer 4.
 
-**2026-04-19c — Phase 1 cueEdit sockets + legacy migration + snapshot-from-live landed.**
+**cueEdit socket session.** Per-connection `AtomicReference<CueEditSessionState?>` held in
+the `configureSockets` scope; `endSessionOnDisconnect` stops orphaned Live cues on close.
+Implemented: `beginEdit` / `endEdit` / `setProperty` / `setChannel` / `setMode` /
+`clearAssignment` / `discardChanges`. Live stack-cue edit still rejects — delegate to
+`CueStackManager.activateCueInStack` in a Phase 2 pass. `setChannel` rejects colour sub-
+channels (use `setProperty` with `rgbColour`); `setPalette` / `addPresetApplication` /
+`addAdHocEffect` are still stubs (need UI).
 
-- **Legacy `StaticValue` / `StaticSetting` migration.** New `uk.me.cormack.lighting7.models.LegacyStaticEffectMigration` in `src/main/kotlin/uk/me/cormack/lighting7/models/MigrateLegacyStaticEffects.kt`. The pure `convertRow(LegacyRow) → ConversionResult` handles the per-row mapping (lossy cases — null `property_name`, missing `value`/`level` key, non-UByte — return `Skipped(reason)` and log at WARN); the DB-touching `run(Transaction) → Summary` reads matching rows out of `cue_ad_hoc_effects`, INSERTs the converted `cue_property_assignments` rows, then DELETEs the originals. Wired into `State.configureDatabase()` alongside the other startup migrations so it runs on every boot — idempotent via the `effect_type IN ('StaticValue', 'StaticSetting')` filter (becomes a no-op once the rows are gone). 11 new tests in `LegacyStaticEffectMigrationTest`.
-- **`cueEdit.*` WebSocket messages.** New `plugins/CueEditSession.kt` with the per-connection session model (`CueEditSessionState(cueId, mode, snapshot)`), all inbound + outbound message types, and a stateless `CueEditSessionHandler` that takes `(State, AtomicReference<CueEditSessionState?>, …)`. Wire-up in `plugins/Sockets.kt`: a per-connection `AtomicReference` is threaded into each handler call, and `endSessionOnDisconnect` runs in the WS `finally` block so a client crash never leaves a Live cue stuck on. Implemented messages:
-  - `cueEdit.beginEdit { cueId, mode }` — snapshots the cue's current `propertyAssignments` (fresh read inside the same transaction that builds the `CueApplyData`), applies the cue in `LIVE` mode via the existing `applyCue(state, cueData)`. Rejects non-current-project cues and — in `LIVE` — stack-member cues (stack-aware edit sessions land in a follow-up; `BLIND` is fine because it doesn't touch the stage).
-  - `cueEdit.endEdit { cueId }` — clears the session and, in `LIVE`, calls `removeEffectsForCue(cueId)` (which also drops Layer 3 via `removeCueAssignments` per Phase 0/1b wiring).
-  - `cueEdit.setProperty { cueId, targetType, targetKey, propertyName, value }` — in-transaction upsert (match by `(targetType, targetKey, propertyName)` and overwrite, or insert). In `LIVE` mode, republishes Layer 3 via the same `buildLayer3AssignmentsForCue` + `setCueAssignments` path `applyCue` uses — so the change is visible on the next tick.
-  - `cueEdit.setChannel { cueId, universe, channel, level }` — walks `getChannelMappings()` to find the owning fixture, then reflects over `fixture.fixtureProperties` to identify the property whose `DmxSlider` / `DmxFixtureSetting` / `DmxColour` sub-channel matches. Sliders and settings delegate to `setProperty` with the resolved name + `level.toString()`. Colour sub-channels return an error telling the caller to use `setProperty` with `propertyName='rgbColour'` (see Deviations — full sub-channel merge is a follow-up).
-  - `cueEdit.discardChanges { cueId }` — deletes all `propertyAssignments` for the cue, re-creates from the snapshot, republishes Layer 3 in `LIVE`.
-  - Stubs (`setMode / setPalette / addPresetApplication / addAdHocEffect / clearAssignment`) deserialise cleanly but reply with a "not implemented yet" error.
-- **`POST /project/{projectId}/cues/{cueId}/snapshot-from-live`.** Wrapped in `withCurrentProject` (non-current projects respond 409). Uses the existing `captureCurrentState` path, now extended with a fourth `propertyAssignments` field built by walking `state.show.fxEngine.layerResolver.currentLayer3State` (entries emitted one row per `(targetKey, propertyName)` via a new `Layer3Resolver.PropertyValue.serialize()` helper — inverse of `parseAssignmentValue`). Then replaces the cue's palette + presetApplications + adHocEffects + propertyAssignments wholesale via the existing `createCueChildren` helper.
-- **Refactor.** Extracted `buildCueApplyData(DaoCue) : CueApplyData` from the inline transaction inside the `/apply` handler so both it and `CueEditSessionHandler.beginEdit` / `republishLayer3` share one source of truth. Also added `Layer3Resolver.PropertyValue.serialize()` with the round-trip invariant `parseAssignmentValue(category, name, v.serialize()) == v` — 7 tests in `Layer3ResolverTest` cover slider / setting / plain colour / extended colour / position shapes.
-- 580 tests pass (550 + 11 migration + 13 cueEdit wire-format + 7 serialize round-trip − 1 deduped). Build clean.
+**Snapshot-from-live.** `POST /cues/{id}/snapshot-from-live` walks
+`FxEngine.layerResolver.currentLayer3State`, serialises via `PropertyValue.serialize()`, and
+replaces the cue's palette + preset-applications + ad-hoc-effects + property-assignments via
+the shared `createCueChildren` helper. `buildCueApplyData(DaoCue)` is the single source of
+truth for cue-data assembly shared between `/apply`, `beginEdit`, and `republishLayer3`.
 
-**Deviations from the written plan**
+**Frontend routing.** `src/components/lighting-editor/EditorContext.tsx` carries
+`{ kind: 'live' | 'cue' | 'preset', id?, mode? }`; default `kind: 'live'`. Low-level hooks
+(`useUpdateChannel`, `useUpdateGroup{Slider,Colour,Position,Setting}`) are routing-aware —
+`kind === 'live'` is byte-identical to pre-Phase-1; `kind === 'cue'` dispatches `cueEdit.*`.
+Fixture-level colour writes still flow through `updateChannel` because
+`ColourPropertyDescriptor` doesn't carry `fixtureKey` — see §"Known issues" item 1 for the
+two-option fix, deferred to Phase 2.
 
-- **Manual smoke-check deferred.** The plan named smoke-check as this session's top priority but it requires a running PostgreSQL + backend + frontend and a physical rig (or at least an ArtNet-accepting stand-in) to observe DMX output. Spinning those up in a one-shot session would eat most of the budget and leave the code work undone; the implementation chunks (migration + sockets + snapshot) are concrete enough to land on tests alone. The smoke-check is now the top item in §Next actions for the next human-in-the-loop session.
-- **Live edit of stack cues rejected for now.** `CueEditSessionHandler.beginEdit` returns an error if the cue has a non-null `cueStackId` and mode is `LIVE` — going through `applyCue` directly would bypass `CueStackManager`'s stack state. Blind edits on stack cues still work. Proper stack-aware edit sessions are a follow-up (Next actions #4).
-- **`cueEdit.setChannel` rejects colour sub-channels.** The 1-to-1 channel→property resolver covers `DmxSlider` and `DmxFixtureSetting` fully, but for `DmxColour` (three channels → one `rgbColour` property) I reject the write with an error telling the caller to use `setProperty` instead. A full implementation would read the existing `rgbColour` assignment for the fixture, mutate the relevant R/G/B component, and persist the merged colour. That's a clean follow-up; no operator loss in the interim because the frontend colour picker already sends `setProperty` with a composed colour string.
-- **`StaticValue` / `StaticSetting` effect classes + fx.kts registrations kept in place.** The plan's "After migration, remove the effect registrations and delete the classes — check there are no other callers first" has an escape clause: there are other callers. The busking view in `lighting-react` (`useBuskingState.ts`) spawns `StaticValue` for slider property writes and `StaticSetting` for setting property writes, and `FxInstanceTest` / `FxEngineStompAndPriorityTest` / `DimmerEffectsTest` / `FxRegistryTest` exercise the classes directly. Removing them breaks busking. A proper cleanup needs busking to migrate to direct-channel writes (Layer 4) — out of scope for the cue-authoring plan. Migration is a pure win regardless: cue DB rows stop using the clunky indirection.
-- **No DB round-trip test for the migration.** The pure `convertRow` has 11 unit tests but `run(Transaction)` isn't covered — no DB test harness exists (same gap that blocks Phase 5's pipeline test). The migration runs at every startup against the dev DB, which is the fastest feedback loop in practice.
-- **No WebSocket-level integration test for `cueEdit.*`.** Same DB-harness gap — `CueEditSessionHandler` methods take `State`, which can't be constructed without a real database. Unit coverage is wire-format + mode parsing (13 tests); handler correctness is covered by the manual smoke-check (pending).
+### Phase 0 — layering foundation (landed 2026-04-18)
 
-**2026-04-19b — Phase 1 Layer-3 apply integration + stomp switch landed.**
-
-- `FxEngine` now tracks per-cue Layer 3 contributions in a `ConcurrentHashMap<Int, List<Layer3Resolver.Assignment>>` guarded by `cueAssignmentsLock`. `setCueAssignments(cueId, assignments)` replaces the cue's contribution (empty-list removes it), `removeCueAssignments(cueId)` drops one cue, `clearAllCueAssignments()` wipes everything. Every mutation rebuilds the flat combined list under the lock and calls `layerResolver.applyAssignments(...)`, which atomically swaps the `@Volatile` snapshot read by the hot tick loop inside `LayerResolver.fallbackFor`. Mirrors the `cuePalettes` pattern.
-- `removeEffectsForCue` / `clearAllEffects` / `stop` now also clear the matching Layer 3 state. `CueStackManager.deactivateStack` drops the active cue's assignments explicitly (so a cue that contributed only property assignments, no effects, still releases).
-- New `Layer3Resolver.Companion.parseAssignmentValue(category, propertyName, value)` handles the DTO's canonical string form. `propertyName == "position"` (case-insensitive) takes `"pan,tilt"`; `COLOUR` delegates to `parseExtendedColour`; `SETTING` / `OTHER` produce `PropertyValue.Setting`; every other category produces `PropertyValue.Slider`. Returns `null` on bad input — callers log at warn and skip, never throw.
-- New `buildLayer3AssignmentsForCue(fixtures, cueData)` in `routes/projectCues.kt`. For each `CuePropertyAssignmentDto`: canonicalises `colour`/`color`/`rgbcolour` → `rgbColour`; resolves category + composition override via `fixture.fixtureProperties` (with a PAN-category fallback for the synthetic `"position"` compound property); parses the value; expands group targets to N per-member Assignments (all flagged `targetIsGroup = false`) plus one group-level row (`targetIsGroup = true`) so a later fixture-level override in the same list wins via the resolver's specificity rule; records `priority = cueDerivedPriority(cueData)`, `fadeWeight = 1.0` (Phase 1b will thread real fade progress through here), and the cue's `cueId`. Missing fixture / group / property rows are logged to stderr and skipped — cue apply must not throw on stale references.
-- `applyCue()` in `routes/projectCues.kt` publishes `buildLayer3AssignmentsForCue(...)` via `engine.setCueAssignments(cueId, built)` before running effect application so the effect reset pass immediately sees the Layer 3 baseline. `CueStackManager.activateCueInStack` publishes on the incoming cue and drops the outgoing cue's assignments before the crossfade starts.
-- Stomp overlap: the `// TODO Phase 1` marker in `applyCue` is gone. The overlap set is now built from `propertyAssignments` via new `buildStompOverlapFromAssignments(fixtures, cueData)` — group targets are expanded to member keys so ad-hoc effects targeting individual fixtures inside the same group are stomped. `CueStackManager.activateCueInStack` also honours `stomp` now (previously the field was read into `CueApplyData` but never acted upon for stack-based cues).
-- Tests: 7 new cue-assignment tests in `FxEngineCueAssignmentsTest` (publish, HTP compose, per-cue removal, empty-list clears, `clearAllCueAssignments`, group-expansion specificity, `removeEffectsForCue` teardown). 7 new helper tests in `BuildLayer3AssignmentsForCueTest` (single fixture, group expansion, colour canonicalisation, missing-fixture skip, unknown-property skip, empty input, stomp overlap). 9 new parser tests in `Layer3ResolverTest` (slider/clamp/setting/other/hex-colour/extended-colour/position/malformed-position/non-numeric). Full suite: 550 tests, all pass. Build clean.
-
-**Deviations from the written plan**
-
-- `fadeWeight` hard-coded to `1.0` on every published assignment. Real crossfade-weight integration with `CueStackManager.runCrossfade` is a Phase 1b follow-up — the marker is in `buildLayer3AssignmentsForCue`. Current behaviour: outgoing cue's assignments snap off at the moment the incoming cue's assignments are published (which happens at the start of `activateCueInStack`, before the crossfade job runs). Effects fade correctly via `intensityMultiplier`; Layer 3 assignments do not yet fade.
-- `buildLayer3AssignmentsForCue` takes `Fixtures` directly rather than `State` (keeps it unit-testable against a freshly-constructed `Fixtures` instance without spinning up a `State`). Call sites pass `state.show.fixtures`.
-- The DTO's optional `fadeDurationMs` per-assignment override is plumbed through the model/DB but unused by the resolver yet — comes online when Phase 1b wires real fade progress.
-- No end-to-end rig test. Blocked on the sealed `DmxController` interface (Phase 5). Coverage is component-level: the `setCueAssignments → LayerResolver.currentLayer3State` round trip is asserted in `FxEngineCueAssignmentsTest`, and the effect reset pass's consumption of Layer 3 is unchanged from Phase 0 (still routed through `layerResolver.fallbackFor`).
-- Legacy `StaticValue` / `StaticSetting` migration still not touched; manual smoke-check against a running backend still pending. Next session.
-- A pre-existing N+1 in the `GET /cues` endpoint (`toCueDetails` walks 4 lazy child collections without `.with(...)`) was flagged as a spawned task; handled separately from this session.
-
-**2026-04-19 — Phase 1 backend foundation landed.**
-
-- `CuePropertyAssignmentDto` + `DaoCuePropertyAssignments` table + `DaoCuePropertyAssignment` DAO added to `src/main/kotlin/uk/me/cormack/lighting7/models/cues.kt`. Columns: `id`, `cue_id` (FK), `target_type`, `target_key`, `property_name`, `value` (text; canonical property-level string form), `fade_duration_ms` (nullable per-assignment override — carried now so a later UX phase doesn't touch the model), `sort_order`.
-- Table registered with `SchemaUtils.createMissingTablesAndColumns` in `State.kt` — auto-creates on first startup, no explicit migration needed.
-- `NewCue` / `CueDetails` / `CueApplyData` all round-trip `propertyAssignments`. POST, PUT, PATCH (partial, presence-of-key semantics), GET, and `copy` all handle the collection. `createCueChildren` / `deleteCueChildren` helpers extended. `CueStackManager.activateCueInStack` reads assignments into `CueApplyData`.
-- New `DaoCuePropertyAssignment.toDto()` extension mirrors the adhoc-effect one.
-- 4 new DTO-serialization tests in `CueRoutesTest`: round-trip with all fields, defaults, three value forms (colour / position / setting), and `NewCue` with assignments plus other collections. `./gradlew build` clean; full suite green.
-
-**Deviations from the written plan**
-
-- Value format left as a single `value: String` field in the DTO per plan — canonical per-type parsing (Slider `"0".."255"`, Colour extended-colour string, Position `"pan,tilt"`, Setting `"0".."255"`) happens at Layer 3 resolver entry, not at DTO boundary. This keeps the DB schema simple and lets us revisit typed values later if needed.
-- `applyCue()` Layer 3 integration deferred to the next session. It needs a registry of "currently-active cues' assignments" on `FxEngine` (or adjacent) so the flat `layerResolver.applyAssignments(...)` input can be reassembled on cue apply/stop. The scaffolding is already in place in Phase 0 (`LayerResolver.applyAssignments` + `clearAssignments`); this session landed the data shape, next session wires it.
-- Stomp overlap still uses ad-hoc effect targets (Phase 0 placeholder). The `// TODO Phase 1` marker in `projectCues.kt` remains.
-- Legacy `StaticValue` / `StaticSetting` migration deferred — need to inspect current production data shape and confirm the mapping before running it. Not running in production, so safe to defer.
-- Frontend work, cueEdit socket messages, and snapshot-from-live endpoint not touched this session.
-
-**2026-04-18 — Phase 0 complete.**
-
-- `CompositionRule` enum and `defaultComposition` on `PropertyCategory` land per the spec table; `@FixtureProperty(composition = …)` overrides resolve into `Fixture.Property.composition` at reflection time, so hot-path lookups are field reads.
-- `FxInstance.priority` added. `FxEngine` keeps two `@Volatile` sorted snapshots (`sortedBeatEffects`, `sortedWallClockEffects`) rebuilt under `synchronized` on every `addEffect` / `removeEffect` / `removeEffectsForFixture|Group|Cue` / `clearAllEffects` / `updateEffect` swap / `stompForCue` / `stop`. Tick readers lock-free.
-- New `LayerResolver` + `DirectWriteStore` + `Layer3Resolver`. `FxTarget.applyNeutralValueToFixture` replaced by `resetToFallback(fixture, fallback: FxOutput)`; each subclass also implements `fallbackFromDirectWrites` (Layer 4 → Layer 5) and `forEachChannel` (parking short-circuit, allocation-free via lambda visitor).
-- Parking short-circuit: when *every* DMX channel backing a property is parked, the effect reset + apply pass skips that property. Transmit-time parking override in `ArtNetController` retained as defence-in-depth.
-- `updateChannel` WebSocket handler writes into `DirectWriteStore` in addition to the transient controller write, so running effects reset over the sticky value on the next tick. **Behavioural change**: direct writes now persist under running effects instead of resetting to zero.
-- `DaoCues.stomp` column with auto-migration via `SchemaUtils.createMissingTablesAndColumns`; DTOs (`NewCue`, `CueDetails`), POST/PUT/PATCH/copy round-trip the field. `FxEngine.stompForCue(stompingCueId, overlap)` removes ad-hoc effects owned by other cues targeting the overlap set. Phase 0 sources the overlap from the stomping cue's own ad-hoc effect targets; Phase 1 will switch to Layer 3 assignments. `// TODO Phase 1` comment in `projectCues.kt` marks the switch site.
-- Cue-derived priority formula: `stackId * 1_000_000 + sortOrder * 1_000 + 1`. Manual effects stay at `0` (strictly below). Leaves gaps for future fine-tuning without renumbering.
-- 26 new unit tests. Integration-level LayerResolver cascade tests skipped — Kotlin prohibits extending sealed `FxTarget` from test sources across module boundaries. Covered instead by component tests (Layer3Resolver + DirectWriteStore tested independently; LayerResolver is thin glue) plus the manual smoke check.
-
-**Deviations from the written plan**
-
-- `FxEnginePipelineTest` (integration test that drives real ticks against a synthetic rig) deferred — would require a real fixtures + DMX controller setup in test; the smaller component tests plus the manual smoke check cover the behaviour. If regressions show up, this is the first place to add coverage.
-- No benchmark gate landed. The per-tick allocation shape is unchanged from before (same `PropertyKey` / `buildList`) plus one extra lock-free volatile read for the sorted snapshot and O(1) `DirectWriteStore.get` per property. Adding a synthetic-rig benchmark is blocked by the sealed `DmxController` interface — a test-side stub controller can't live in test sources without relaxing the seal. Deferred to a future **integration test + benchmark harness** project that invests in a rig-stub (probably a production-side test-only `DmxController` impl) usable for both purposes. Until then, performance regressions would be caught by manual smoke-check only.
-- `CueApplyData` gained `cueStackId` and `sortOrder` fields (needed for the priority formula). Not in the original plan but unavoidable once the formula referenced stack position.
+Formalised the composition model documented in
+[docs/lighting-composition-model.md](lighting-composition-model.md): `CompositionRule`
+enum + per-`PropertyCategory` defaults (`HTP` for DIMMER/UV/STROBE, `LTP` elsewhere),
+`@FixtureProperty(composition = ...)` per-property override, `FxInstance.priority` with
+sorted-snapshot iteration, reset-to-layer-below instead of reset-to-zero, parking consulted
+pre-composition, `stomp: Boolean` on the cue model. Cue-derived priority formula:
+`stackId * 1_000_000 + sortOrder * 1_000 + 1`; manual effects stay at 0. Direct writes now
+persist under running effects (behavioural change).

@@ -215,16 +215,30 @@ class FxEngine(
     // [ConcurrentHashMap] would add internal striping we don't need.
 
     private val cueAssignments = HashMap<Int, List<Layer3Resolver.Assignment>>()
+
+    // Per-cue crossfade weight in [0, 1]. Absent entries default to 1.0 (fully in). Scales each
+    // stored Assignment's own `fadeWeight` at flat-list build time — the composition resolver
+    // sees the product. Kept separate from `cueAssignments` so the stored assignment list stays
+    // constant across a crossfade; only the scalar per-cue weight ticks. See
+    // [updateCueFadeWeights] / Phase 1b in `docs/cue-authoring-unification-plan.md`.
+    private val cueFadeWeights = HashMap<Int, Double>()
+
     private val cueAssignmentsLock = Any()
 
     /**
      * Replace the Layer 3 assignments contributed by [cueId]. An empty list removes the cue's
      * contribution (equivalent to [removeCueAssignments]).
+     *
+     * Does not touch the cue's fade weight — callers that want to publish at a weight other
+     * than 1.0 should follow with [updateCueFadeWeights]. In the common non-crossfade apply
+     * path the absent-entry default (1.0) is correct.
      */
     fun setCueAssignments(cueId: Int, assignments: List<Layer3Resolver.Assignment>) {
         synchronized(cueAssignmentsLock) {
             val changed = if (assignments.isEmpty()) {
-                cueAssignments.remove(cueId) != null
+                val removed = cueAssignments.remove(cueId) != null
+                cueFadeWeights.remove(cueId)
+                removed
             } else {
                 cueAssignments[cueId] = assignments
                 true
@@ -233,10 +247,44 @@ class FxEngine(
         }
     }
 
+    /**
+     * Update the crossfade weight for one or more cues atomically. Only cues present in
+     * [cueAssignments] have an effect — unknown cue ids are ignored (silent no-op) because a
+     * crossfade tick may fire during the tiny window between an outgoing cue's end-of-fade
+     * [removeCueAssignments] and the next tick being cancelled.
+     *
+     * A single republish runs per call regardless of how many cues are updated, so crossfade
+     * ticks that update both outgoing and incoming cues pay one publish pass per frame.
+     *
+     * Weights are clamped to `[0, 1]`. Setting a weight of exactly 1.0 (the default) clears
+     * the entry — no need to accumulate stale entries once the crossfade is over.
+     */
+    fun updateCueFadeWeights(updates: Map<Int, Double>) {
+        if (updates.isEmpty()) return
+        synchronized(cueAssignmentsLock) {
+            var changed = false
+            for ((cueId, rawWeight) in updates) {
+                if (cueId !in cueAssignments) continue
+                val weight = rawWeight.coerceIn(0.0, 1.0)
+                val previous = cueFadeWeights[cueId] ?: 1.0
+                if (previous == weight) continue
+                if (weight >= 1.0) {
+                    cueFadeWeights.remove(cueId)
+                } else {
+                    cueFadeWeights[cueId] = weight
+                }
+                changed = true
+            }
+            if (changed) republishLayer3Assignments()
+        }
+    }
+
     /** Drop all Layer 3 contributions from [cueId]. */
     fun removeCueAssignments(cueId: Int) {
         synchronized(cueAssignmentsLock) {
-            if (cueAssignments.remove(cueId) != null) {
+            val removed = cueAssignments.remove(cueId) != null
+            cueFadeWeights.remove(cueId)
+            if (removed) {
                 republishLayer3Assignments()
             }
         }
@@ -245,8 +293,9 @@ class FxEngine(
     /** Drop every cue's Layer 3 contribution — used by [stop] / [clearAllEffects] callers. */
     fun clearAllCueAssignments() {
         synchronized(cueAssignmentsLock) {
-            if (cueAssignments.isEmpty()) return
+            if (cueAssignments.isEmpty() && cueFadeWeights.isEmpty()) return
             cueAssignments.clear()
+            cueFadeWeights.clear()
             republishLayer3Assignments()
         }
     }
@@ -258,7 +307,16 @@ class FxEngine(
             layerResolver.applyAssignments(emptyList())
         } else {
             val flat = ArrayList<Layer3Resolver.Assignment>()
-            for (list in cueAssignments.values) flat.addAll(list)
+            for ((cueId, list) in cueAssignments) {
+                val cueWeight = cueFadeWeights[cueId] ?: 1.0
+                if (cueWeight >= 1.0) {
+                    flat.addAll(list)
+                } else {
+                    for (assignment in list) {
+                        flat.add(assignment.copy(fadeWeight = assignment.fadeWeight * cueWeight))
+                    }
+                }
+            }
             layerResolver.applyAssignments(flat)
         }
         val afterState = layerResolver.currentLayer3State
@@ -318,7 +376,16 @@ class FxEngine(
         for (key in keys) {
             if ((key.targetKey to key.propertyName) in coveredByEffects) continue
 
-            val typeSource = afterState[key] ?: beforeState[key] ?: continue
+            val before = beforeState[key]
+            val after = afterState[key]
+            // Skip keys whose composed Layer 3 value didn't actually change. Crossfade ticks
+            // call republish at ~60 fps; mid-fade the eased weight often quantises to the
+            // same UByte for several ticks in a row, and any cue not involved in the fade
+            // keeps a constant composed value the whole way through. Equality is a cheap
+            // data-class check.
+            if (before == after) continue
+
+            val typeSource = after ?: before ?: continue
             val target = resolveTargetForLayer3Key(key, typeSource)
 
             try {

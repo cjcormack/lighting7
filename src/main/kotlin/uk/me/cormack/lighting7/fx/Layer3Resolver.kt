@@ -243,8 +243,13 @@ class Layer3Resolver {
             compareBy<Assignment>({ it.priority }, { it.fadeWeight })
         ) ?: return contributors.first().value
 
+        // Any still-contributing contributor (fadeWeight > 0) other than the winner is treated as
+        // an outgoing candidate — including steady-state weight=1.0. Crossfade start has
+        // outgoing at exactly 1.0 and incoming (winner) at 0.0; the earlier `< 1.0` bound
+        // would exclude the outgoing and snap-cut to the incoming value. End-of-fade is
+        // guarded below by `winner.fadeWeight >= 1.0`.
         val outgoing = contributors
-            .filter { it !== winner && it.fadeWeight > 0.0 && it.fadeWeight < 1.0 }
+            .filter { it !== winner && it.fadeWeight > 0.0 }
             .maxByOrNull { it.priority }
 
         // No crossfade in flight — winner's value stands.

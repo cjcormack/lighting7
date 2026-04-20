@@ -115,6 +115,48 @@ class Layer3ResolverTest {
         assertEquals(170u.toUByte(), v.value)
     }
 
+    /**
+     * Regression test for the Phase 1b composeLtp filter fix. At the very start of a
+     * crossfade (outgoing.weight=1.0, incoming.weight=0.0) the outgoing's value must still
+     * win. The previous `fadeWeight > 0 && fadeWeight < 1.0` filter excluded outgoing at
+     * exactly 1.0, causing the incoming's raw value to snap onto stage.
+     */
+    @Test
+    fun `LTP crossfade start — outgoing at 1 pins outgoing value`() {
+        val result = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 100u,
+                category = PropertyCategory.PAN, propertyName = "pan"),
+            slider(cueId = 2, priority = 2, fadeWeight = 0.0, value = 200u,
+                category = PropertyCategory.PAN, propertyName = "pan"),
+        ))
+        val v = result[Layer3Resolver.Key("fx-1", "pan")] as Layer3Resolver.PropertyValue.Slider
+        // progress 0 → 100 + (200 - 100) * 0 = 100 (outgoing value).
+        assertEquals(100u.toUByte(), v.value)
+    }
+
+    @Test
+    fun `LTP crossfade end — incoming at 1 pins incoming value`() {
+        // Symmetric: progress reaches 1.0, outgoing filtered out (weight=0), winner stands.
+        val result = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 0.0, value = 100u,
+                category = PropertyCategory.PAN, propertyName = "pan"),
+            slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 200u,
+                category = PropertyCategory.PAN, propertyName = "pan"),
+        ))
+        val v = result[Layer3Resolver.Key("fx-1", "pan")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(200u.toUByte(), v.value)
+    }
+
+    @Test
+    fun `LTP colour crossfade start — outgoing at 1 pins outgoing colour`() {
+        val result = resolver.resolve(listOf(
+            colour(cueId = 1, priority = 1, fadeWeight = 1.0, red = 255, green = 0, blue = 0),
+            colour(cueId = 2, priority = 2, fadeWeight = 0.0, red = 0, green = 0, blue = 255),
+        ))
+        val v = result[Layer3Resolver.Key("fx-1", "rgbColour")] as Layer3Resolver.PropertyValue.Colour
+        assertEquals(Color(255, 0, 0), v.value.color, "outgoing red dominates at progress 0")
+    }
+
     @Test
     fun `LTP settings snap at 50 percent fade progress`() {
         // Progress < 0.5 → outgoing; progress >= 0.5 → incoming.

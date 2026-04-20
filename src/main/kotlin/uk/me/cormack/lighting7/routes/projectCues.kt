@@ -1201,7 +1201,8 @@ internal fun buildLayer3AssignmentsForCue(
             continue
         }
 
-        // TODO Phase 1b: fadeWeight from CueStackManager crossfade progress instead of 1.0.
+        // Assignment.fadeWeight always 1.0 here — crossfade progress is applied per-cue by
+        // [FxEngine.updateCueFadeWeights] at publish time, not baked into individual rows.
         fun row(key: String, isGroup: Boolean) = Layer3Resolver.Assignment(
             cueId = cueData.cueId,
             priority = priority,
