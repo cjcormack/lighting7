@@ -17,12 +17,12 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: 1 — exit-ready pending dev-rig smoke-check. All Phase 1 backend work (DB/DTO,
+**Phase**: 1 — **done**. Ready to start Phase 2. All Phase 1 backend work (DB/DTO,
 Layer 3 apply, stomp switch, cueEdit sockets, legacy-effect migration, snapshot-from-live,
 Layer 3 transmit publish, crossfade-weight integration) is in; frontend routing layer is
-wired. The smoke-check is the only remaining item — see §"Next actions". Deferred follow-
-ups (stack-cue Live edit, remaining cueEdit stubs, fixture-level colour-picker fixtureKey
-threading) are scheduled for Phase 2.
+wired; dev-rig smoke-check passed 2026-04-21. Deferred follow-ups (stack-cue Live edit,
+remaining cueEdit stubs, fixture-level colour-picker fixtureKey threading) are scheduled
+for Phase 2 alongside the CueEditor rebuild.
 
 See the Change log for durable invariants and engine surface.
 
@@ -30,20 +30,19 @@ See the Change log for durable invariants and engine surface.
 
 **Colour picker in cue-edit mode (Phase 1 plumbing limitation)**. `PropertyVisualizers.tsx::ColourSwatch` fires per-channel `updateChannel` calls for R/G/B/W/A/UV. In `kind: 'cue'`, those become `cueEdit.setChannel`, and the backend rejects R/G/B sub-channels with the "use setProperty with rgbColour" error. Root cause: `ColourPropertyDescriptor` doesn't carry `fixtureKey`, so the routing layer can't assemble a `setProperty` call from inside the hook. Group-level colour writes are already routed to one `setProperty` per member (`useUpdateGroupColour` has access to `member.fixtureKey`). Two fixes possible: thread `fixtureKey` through to the fixture-level colour components, or have the backend accept R/G/B sub-channels by merging with the existing `rgbColour` assignment. Defer until Phase 2 when the CueEditor sets context and controls where colour writes originate.
 
-**Next actions**:
-1. **Re-run the 2026-04-19d smoke-check against the dev rig** — now the top priority; all backend code for Phase 1 is in. Covers the Layer 3 transmit fix (2026-04-20a) and the Phase 1b crossfade-weight integration (2026-04-20b) end-to-end. Belt-and-braces before claiming Phase 1 exit; additionally exercises specificity (group red + fixture green override), stop-releases-to-0, stack snap vs crossfade (now both Layer 3 and effects fade symmetrically), and the Phase 0 leftovers (SineWave + `updateChannel=180`, park+effect, two-effects-same-property priority determinism). The `/tmp/smoke_helper.py` WS helper from the prior session wasn't persisted — reconstruct from 2026-04-19d §"Smoke-check" notes or write fresh.
-2. Remaining `cueEdit.*` follow-up messages: `setPalette` + `addPresetApplication` + `addAdHocEffect`. Stubs exist but reply "not implemented yet". These all need UI to exercise them meaningfully, so land them alongside Phase 2.
-3. Live stack-cue edit support. Current `beginEdit` / `setMode` reject cues with a non-null `cueStackId` when mode=LIVE. Next pass: delegate to `CueStackManager.activateCueInStack` and plumb stack deactivation through `endSessionOnDisconnect`.
-4. Integration test: PATCH + snapshot-from-live + cueEdit round-trip through an in-memory HTTP harness — blocked on the same DB test-harness gap that blocks Phase 5's pipeline test. Track under Phase 5.
-5. Frontend: thread `fixtureKey` through to fixture-level colour components (or accept the Phase 2 hand-off) — see §"Known issues" first item.
-6. **moveInDark during outgoing fade** (spec'd, not yet implemented). The current linear interp path handles basic position fades; the "pre-apply incoming position during outgoing fade when outgoing intensity is 0 at end" affordance is deferred. Scope small — the resolver already knows the moveInDark flag on each `Assignment`. Good candidate for a standalone follow-up session once a real moving-head fixture is on the test rig.
+**Next actions** (all carry into Phase 2):
+1. Remaining `cueEdit.*` follow-up messages: `setPalette` + `addPresetApplication` + `addAdHocEffect`. Stubs exist but reply "not implemented yet". These all need UI to exercise them meaningfully, so land them alongside Phase 2.
+2. Live stack-cue edit support. Current `beginEdit` / `setMode` reject cues with a non-null `cueStackId` when mode=LIVE. Next pass: delegate to `CueStackManager.activateCueInStack` and plumb stack deactivation through `endSessionOnDisconnect`.
+3. Integration test: PATCH + snapshot-from-live + cueEdit round-trip through an in-memory HTTP harness — blocked on the same DB test-harness gap that blocks Phase 5's pipeline test. Track under Phase 5.
+4. Frontend: thread `fixtureKey` through to fixture-level colour components (or accept the Phase 2 hand-off) — see §"Known issues" first item.
+5. **moveInDark during outgoing fade** (spec'd, not yet implemented). The current linear interp path handles basic position fades; the "pre-apply incoming position during outgoing fade when outgoing intensity is 0 at end" affordance is deferred. Scope small — the resolver already knows the moveInDark flag on each `Assignment`. Good candidate for a standalone follow-up session once a real moving-head fixture is on the test rig.
 
 **Per-phase tracker:**
 
 | Phase | Summary | Status |
 |-------|---------|--------|
 | 0 | Layering foundation: make the composition model explicit in code (priority-ordered effects, reset-to-layer-below, `PropertyCategory` composition rules, stomp plumbing) | Done |
-| 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | Exit-ready pending dev-rig smoke-check (backend DB + DTO + routes + Layer 3 apply + stomp switch + cueEdit core sockets + legacy migration + snapshot-from-live + frontend plumbing + cueEdit.setMode + cueEdit.clearAssignment + Layer 3 transmit fix + **crossfade-weight integration** done; stack-cue edit + remaining cueEdit stubs deferred to Phase 2) |
+| 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | Done (smoke-check passed 2026-04-21; stack-cue Live edit + remaining cueEdit stubs carried into Phase 2) |
 | 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | Not started |
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Not started |
 | 4 | Program view inline editor + "Grab live state" snapshot action | Not started |
@@ -497,7 +496,7 @@ Flag these to the user before implementing.
 Detailed per-session narration lives in git. This section captures durable invariants and
 gotchas that would cost time to rediscover.
 
-### Phase 1 — `CuePropertyAssignment` + cueEdit routing (landed 2026-04-19 → 2026-04-20b)
+### Phase 1 — `CuePropertyAssignment` + cueEdit routing (landed 2026-04-19 → 2026-04-20b, smoke-check passed 2026-04-21)
 
 **DB / DTO shape.** `cue_property_assignments(id, cue_id FK, target_type ∈ {fixture, group},
 target_key, property_name, value TEXT, fade_duration_ms NULLABLE, sort_order)`. Value is
