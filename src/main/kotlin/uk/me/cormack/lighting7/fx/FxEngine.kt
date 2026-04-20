@@ -253,6 +253,7 @@ class FxEngine(
 
     /** Callers hold [cueAssignmentsLock]. */
     private fun republishLayer3Assignments() {
+        val beforeState = layerResolver.currentLayer3State
         if (cueAssignments.isEmpty()) {
             layerResolver.applyAssignments(emptyList())
         } else {
@@ -260,6 +261,95 @@ class FxEngine(
             for (list in cueAssignments.values) flat.addAll(list)
             layerResolver.applyAssignments(flat)
         }
+        val afterState = layerResolver.currentLayer3State
+        publishLayer3ToControllers(beforeState, afterState)
+    }
+
+    /**
+     * Transmit the composed Layer 3 → Layer 4 → Layer 5 fallback for every property whose
+     * Layer 3 state changed. Without this, cues that contribute only property assignments
+     * (no effects) never paint the stage — the tick loop early-returns when no effects are
+     * running, and the effect-reset pass is the only other site that writes the composed
+     * cascade onto controllers.
+     *
+     * Walks the union of (fixtureKey, propertyName) keys from the before and after Layer 3
+     * snapshots. Skips keys a currently-running effect covers (the effect tick will paint
+     * them) and fully-parked targets (park wins at transmit regardless). Otherwise opens a
+     * single [ControllerTransaction] and writes the resolved fallback via
+     * [FxTarget.resetToFallback] — same mechanism [resetActiveProperties] uses.
+     *
+     * Release semantics: when a key is in [beforeState] but not [afterState],
+     * [LayerResolver.fallbackFor] naturally falls through to Layer 4 (sticky direct writes)
+     * then Layer 5 (baseline), so the channel releases to whatever's underneath rather than
+     * to zero.
+     *
+     * Callers hold [cueAssignmentsLock]. The controller write is in-memory buffering on the
+     * transaction; the actual transmit-side work is quick enough that running it under the
+     * lock is fine — mirrors the pattern in the `updateChannel` handler which also writes
+     * through to the controller synchronously.
+     */
+    private fun publishLayer3ToControllers(
+        beforeState: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue>,
+        afterState: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue>,
+    ) {
+        if (beforeState.isEmpty() && afterState.isEmpty()) return
+
+        val keys = HashSet<Layer3Resolver.Key>(beforeState.size + afterState.size)
+        keys.addAll(beforeState.keys)
+        keys.addAll(afterState.keys)
+
+        // Precompute the (fixtureKey, propertyName) set covered by running effects — one walk
+        // instead of re-scanning effects per Layer 3 key. The resolver already handles group
+        // expansion + multi-element keys, matching the behaviour of [isPropertyCoveredByAny].
+        val coveredByEffects = buildSet {
+            for (effect in activeEffects.values) {
+                if (!effect.isRunning) continue
+                val propertyName = effect.target.propertyName
+                for (fixtureKey in resolveEffectFixtureKeys(effect)) {
+                    add(fixtureKey to propertyName)
+                }
+            }
+        }
+
+        val transaction = ControllerTransaction(fixtures.controllers)
+        val fixturesWithTx = fixtures.withTransaction(transaction)
+        var wrote = false
+
+        for (key in keys) {
+            if ((key.targetKey to key.propertyName) in coveredByEffects) continue
+
+            val typeSource = afterState[key] ?: beforeState[key] ?: continue
+            val target = resolveTargetForLayer3Key(key, typeSource)
+
+            try {
+                val fixture = fixturesWithTx.untypedGroupableFixture(key.targetKey)
+                if (allChannelsParked(target, fixture)) continue
+                val fallback = layerResolver.fallbackFor(target, fixture, key.targetKey)
+                target.resetToFallback(fixture, fallback)
+                wrote = true
+            } catch (e: Exception) {
+                System.err.println(
+                    "FX Engine: failed to publish Layer 3 for ${key.targetKey}.${key.propertyName}: ${e.message}"
+                )
+            }
+        }
+
+        if (wrote) transaction.apply()
+    }
+
+    /** Construct the [FxTarget] for a Layer 3 [key], deriving target kind from [typeSource]. */
+    private fun resolveTargetForLayer3Key(
+        key: Layer3Resolver.Key,
+        typeSource: Layer3Resolver.PropertyValue,
+    ): FxTarget = when (typeSource) {
+        is Layer3Resolver.PropertyValue.Slider ->
+            SliderTarget(key.targetKey, key.propertyName)
+        is Layer3Resolver.PropertyValue.Colour ->
+            ColourTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
+        is Layer3Resolver.PropertyValue.Position ->
+            PositionTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
+        is Layer3Resolver.PropertyValue.Setting ->
+            SettingTarget(key.targetKey, key.propertyName)
     }
 
     // --- Per-Stack Palettes ---
