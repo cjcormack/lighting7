@@ -17,12 +17,11 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: 2 — sub-phase **2a landed 2026-04-21** (frontend `CueEditor` for editing
-non-stack cues + backend `cueEdit.setPalette` / `addPresetApplication` /
-`addAdHocEffect` handlers + fixture-level colour picker `fixtureKey` threading).
-`Cues.tsx` now mounts `CueEditor` for the edit path; create-new still uses
-`CueForm` (no cueId until save, so no session). Type-check and Vite build are
-green; Kotlin compiles. Sub-phases 2b (Live stack-cue edit + auto-advance pause),
+**Phase**: 2 — sub-phase **2b landed 2026-04-21** (backend Live stack-cue edit
+via `CueStackManager.activateCueInStack` + auto-advance pause on `beginEdit`,
+resume on `endEdit` / disconnect). `CueEditSessionState` gained `cueStackId`,
+`CueStackManager` gained `resumeAutoAdvance` + a private `scheduleAutoAdvance`
+helper shared with `activateCueInStack`. All 622 backend tests green. Sub-phases
 2c (ProgramPage inline + RunPage sheet), 2d (delete old components + doc
 collapse) are queued.
 
@@ -34,10 +33,12 @@ See the Change log for durable invariants and engine surface.
 
 **Next actions:**
 1. ~~Remaining `cueEdit.*` follow-up messages~~ — **landed 2a**. `setPalette` / `addPresetApplication` / `addAdHocEffect` handlers implemented; immediate (no-timing) presets/effects spawn on stage in Live mode.
-2. Live stack-cue edit support — queued for 2b. Current `beginEdit` / `setMode` reject cues with a non-null `cueStackId` when mode=LIVE. Next pass: delegate to `CueStackManager.activateCueInStack`, plumb deactivation through `endSessionOnDisconnect`, and add auto-advance pause (resolved OQ3 — pause on `beginEdit`, resume on `endEdit`).
-3. Integration test: PATCH + snapshot-from-live + cueEdit round-trip through an in-memory HTTP harness — blocked on the same DB test-harness gap that blocks Phase 5's pipeline test. Track under Phase 5.
-4. ~~Frontend: thread `fixtureKey` through to fixture-level colour components~~ — **landed 2a**. See Change log entry and resolved Known Issue 1.
-5. **moveInDark during outgoing fade** (spec'd, not yet implemented). The current linear interp path handles basic position fades; the "pre-apply incoming position during outgoing fade when outgoing intensity is 0 at end" affordance is deferred. Scope small — the resolver already knows the moveInDark flag on each `Assignment`. Good candidate for a standalone follow-up session once a real moving-head fixture is on the test rig.
+2. ~~Live stack-cue edit support~~ — **landed 2b**. `beginEdit` / `setMode` LIVE now delegate to `CueStackManager.activateCueInStack`; `endEdit` / disconnect leave the stack active and resume auto-advance; `setMode LIVE→BLIND` deactivates the stack. Auto-advance is paused on `beginEdit` for stack LIVE sessions (resolved OQ3).
+3. ProgramPage / RunPage migration to `CueEditor` — queued for 2c.
+4. Delete `CueForm` / `CueEffectFlow` / `CuePresetPicker`; collapse 2a/2b/2c/2d sections into one Phase 2 block; consolidate change log entries — queued for 2d.
+5. Integration test: PATCH + snapshot-from-live + cueEdit round-trip through an in-memory HTTP harness — blocked on the same DB test-harness gap that blocks Phase 5's pipeline test. Track under Phase 5.
+6. ~~Frontend: thread `fixtureKey` through to fixture-level colour components~~ — **landed 2a**. See Change log entry and resolved Known Issue 1.
+7. **moveInDark during outgoing fade** (spec'd, not yet implemented). The current linear interp path handles basic position fades; the "pre-apply incoming position during outgoing fade when outgoing intensity is 0 at end" affordance is deferred. Scope small — the resolver already knows the moveInDark flag on each `Assignment`. Good candidate for a standalone follow-up session once a real moving-head fixture is on the test rig.
 
 **Per-phase tracker:**
 
@@ -45,7 +46,7 @@ See the Change log for durable invariants and engine surface.
 |-------|---------|--------|
 | 0 | Layering foundation: make the composition model explicit in code (priority-ordered effects, reset-to-layer-below, `PropertyCategory` composition rules, stomp plumbing) | Done |
 | 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | Done (smoke-check passed 2026-04-21; stack-cue Live edit + remaining cueEdit stubs carried into Phase 2) |
-| 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | In progress (2a landed 2026-04-21; 2b–2d queued) |
+| 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | In progress (2a + 2b landed 2026-04-21; 2c–2d queued) |
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Not started |
 | 4 | Program view inline editor + "Grab live state" snapshot action | Not started |
 | 5 | **FX pipeline integration harness**: rig stub + end-to-end tests covering the Phase-0 layer cascade with real Layer-3 data, unlocking a reusable benchmark + integration test suite | Not started |
@@ -382,20 +383,34 @@ for the duration of the edit session (resolved OQ3).
 
 #### 2b work
 
-- [ ] `beginEdit` LIVE path (`CueEditSession.kt:186–194`) — replace the
-  rejection with a delegate to `CueStackManager.activateCueInStack(state,
-  stackId, cueId)`. Snapshot still captured before activation. Session state
-  remembers `cueStackId` for `endEdit` / `setMode` cleanup.
-- [ ] `setMode` BLIND→LIVE path (`CueEditSession.kt:250–256`) — same delegate.
-- [ ] `endSessionOnDisconnect` (`CueEditSession.kt:455–466`) — on LIVE stack-
-  cue sessions, either call `CueStackManager.deactivateStack(stackId)` or a
-  lighter "return-to-stack-playback" helper. Confirm semantics in session.
-- [ ] Auto-advance pause — pause the stack's auto-advance timer on `beginEdit`
-  LIVE for a stack cue; resume on `endEdit` / disconnect. Hook into
-  `activeStacks` state in `CueStackManager`.
-- [ ] Republish path: `setProperty` / `setChannel` / `clearAssignment` during
-  a stack-cue LIVE session continue to use `publishLayer3ToControllers`;
-  verify against `CueStackManager`'s crossfade ownership (Phase 1 change log).
+- [x] `beginEdit` LIVE path — replaced the rejection with a shared
+  `applyCueForLiveEdit(state, applyData)` helper that dispatches to
+  `CueStackManager.activateCueInStack(state, stackId, cueId)` for stack cues
+  and `applyCue(..)` for standalone cues. Snapshot still captured before
+  activation. `CueEditSessionState.cueStackId` remembers stack membership for
+  cleanup paths.
+- [x] `setMode` BLIND→LIVE path — same shared helper.
+- [x] `setMode` LIVE→BLIND path — stack cues clean up through
+  `CueStackManager.deactivateStack(stackId, state)` (drops effects + Layer 3
+  + triggers + cancels the paused auto-advance job in one call); standalone
+  cues retain the existing trigger-deactivate + effect-removal pair.
+- [x] `endEdit` + `endSessionOnDisconnect` — on LIVE stack-cue sessions,
+  leave the stack active with the edited cue as its active cue and call
+  `CueStackManager.resumeAutoAdvance(state, stackId)` so the show keeps
+  rolling. Standalone cues keep the stop-on-stage behaviour. Decision
+  2026-04-21: prefer resume-playback over `deactivateStack` — matches
+  operator expectation that closing the editor mid-show shouldn't freeze
+  the stack.
+- [x] Auto-advance pause on `beginEdit` LIVE for stack cues via the existing
+  `CueStackManager.pauseAutoAdvance(stackId)`; resumption handled by the new
+  `resumeAutoAdvance(state, stackId, scope)` which re-reads the active cue's
+  config and reschedules via the extracted private `scheduleAutoAdvance`
+  helper.
+- [x] Republish path verified — `setProperty` / `setChannel` /
+  `clearAssignment` continue to use `publishLayer3ToControllers` through
+  `FxEngine.setCueAssignments(cueId, built)`; `CueStackManager`'s crossfade
+  ownership is undisturbed because the stack isn't mid-crossfade during a
+  human-speed edit session.
 - [ ] Integration test once Phase 5 test harness lands; dev-rig smoke only
   for now.
 
@@ -762,6 +777,77 @@ Flag these to the user before implementing.
 Detailed per-session narration lives in git. This section captures durable invariants and
 gotchas that would cost time to rediscover.
 
+### Phase 2b — Live stack-cue edit + auto-advance pause (landed 2026-04-21)
+
+Per-sub-phase entry — will be folded into a single "Phase 2" change log block in 2d.
+
+**Session state carries stack membership.** `CueEditSessionState` gained
+`cueStackId: Int?`, snapshotted from `applyData.cueStackId` at `beginEdit` and
+kept in sync on `setMode` transitions. Cleanup paths (`endEdit`, `setMode`,
+`endSessionOnDisconnect`) branch on this to pick between the standalone
+cue-stop path and the stack-aware path. Storing the id on the session (rather
+than re-reading the DB on close) keeps teardown correct even if the cue's
+`cueStack` FK has been reassigned mid-session.
+
+**Live apply routes through CueStackManager.** New private helper
+`applyCueForLiveEdit(state, applyData)` centralises the branch:
+- `applyData.cueStackId != null`:
+  `cueStackManager.activateCueInStack(state, stackId, cueId)` +
+  `cueStackManager.pauseAutoAdvance(stackId)`. The pause happens immediately
+  after the activate call so the auto-advance timer scheduled by step 8 of
+  `activateCueInStack` is cancelled before it can fire — microsecond race
+  window, but the timer delay is always >0 so it wouldn't fire anyway.
+- Otherwise: the existing `applyCue(state, applyData, replaceAll = false)`.
+
+Called from both `beginEdit` LIVE and `setMode` BLIND→LIVE so the two paths
+behave identically.
+
+**Cleanup semantics on session end.** Decision 2026-04-21 on the plan's
+"`deactivateStack` vs lighter return-to-stack-playback" open question:
+- **`endEdit` LIVE / `endSessionOnDisconnect` LIVE stack cue** → leave the
+  stack active with the edited cue as its active cue, call
+  `resumeAutoAdvance(state, stackId)`. The show keeps rolling; the operator
+  can GO / BACK from here. Rationale: symmetric to how pause/resume works
+  for surface `CueStackPause` — explicit user action vs. implicit cleanup on
+  a network blip should not freeze the show.
+- **`setMode` LIVE→BLIND stack cue** → `deactivateStack(stackId, state)`.
+  The operator explicitly asked for no stage impact, so tear the stack
+  down completely (effects + Layer 3 + triggers + cancel the paused
+  auto-advance job).
+- **Standalone cue cleanup** unchanged: `deactivateTriggersForCue` +
+  `removeEffectsForCue`.
+
+**Auto-advance pause + resume.** `CueStackManager` gained:
+- `resumeAutoAdvance(state, stackId, scope)` — looks up the active cue in
+  `activeStacks[stackId]`, re-reads its `autoAdvance` + `autoAdvanceDelayMs`
+  from the DB, and reschedules via the extracted private helper. No-ops if
+  the stack isn't active, the active cue has no auto-advance, or a timer is
+  already running. Returns `Boolean` for parity with `pauseAutoAdvance`.
+- Private `scheduleAutoAdvance(state, stackId, delayMs, scope)` — single
+  canonical timer-launching shape used by step 8 of `activateCueInStack`
+  and by `resumeAutoAdvance`.
+
+The resumed timer starts its countdown from *now*, not from the original
+scheduled deadline — the operator just spent N seconds editing, so
+re-starting the countdown is more predictable than racing a stale deadline.
+
+**Republish path untouched.** `setProperty` / `setChannel` /
+`clearAssignment` during a stack-cue LIVE session continue to use
+`republishLayer3` → `FxEngine.setCueAssignments(cueId, built)`, same as
+Phase 1. Crossfade ownership is undisturbed because a human-speed edit
+session doesn't overlap with the 16ms-tick crossfade window that happens
+only during a cue transition. If the operator opens edit on a cue that's
+currently mid-fade-in, the crossfade will naturally complete (via the
+existing `crossfadeOutgoingCueId` state) before any edits arrive.
+
+**Test adjustment.** The 2a-era placeholder
+`remaining stub messages still deserialise without error` in
+`CueEditSessionTest` was testing that `addPresetApplication` accepted a
+minimal `{cueId:1}` payload — true when the handler was a stub, false after
+2a added `presetId` + `targets`. Renamed to
+`setPalette addPresetApplication addAdHocEffect round-trip` and exercises
+the full post-2a payload shape.
+
 ### Phase 2a — `CueEditor` component + core cueEdit stubs (landed 2026-04-21)
 
 Per-sub-phase entry — will be folded into a single "Phase 2" change log block in 2d.
@@ -822,8 +908,8 @@ which is how the sheet's read model refreshes.
 paths. Flagging here because future cueEdit handlers that spawn effects will need
 the same imports.
 
-**Deferred into later sub-phases.** (i) Live stack-cue edit + auto-advance pause →
-2b. (ii) ProgramPage inline + RunPage sheet migration → 2c. (iii) Delete
+**Deferred into later sub-phases.** (i) ~~Live stack-cue edit + auto-advance pause~~
+**→ landed 2b**. (ii) ProgramPage inline + RunPage sheet migration → 2c. (iii) Delete
 `CueForm` / `CueEffectFlow` / `CuePresetPicker`, extract shared effect/preset
 steps, migrate the create-new path, collapse these sub-phase sections back into
 one → 2d.

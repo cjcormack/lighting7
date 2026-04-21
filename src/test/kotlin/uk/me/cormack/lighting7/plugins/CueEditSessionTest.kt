@@ -125,16 +125,24 @@ class CueEditSessionTest {
     }
 
     @Test
-    fun `remaining stub messages still deserialise without error`() {
+    fun `setPalette addPresetApplication addAdHocEffect round-trip`() {
         val setPalette = json.decodeFromString<InMessage>(
             """{"type":"cueEdit.setPalette","cueId":1,"palette":["#ff0000","#00ff00"]}"""
         )
-        assertIs<CueEditSetPaletteInMessage>(setPalette)
+        val decodedPalette = assertIs<CueEditSetPaletteInMessage>(setPalette)
+        assertEquals(listOf("#ff0000", "#00ff00"), decodedPalette.palette)
 
         val addPreset = json.decodeFromString<InMessage>(
-            """{"type":"cueEdit.addPresetApplication","cueId":1}"""
+            """{
+                "type":"cueEdit.addPresetApplication",
+                "cueId":1,
+                "presetId":42,
+                "targets":[{"type":"fixture","key":"hex-1"}]
+            }"""
         )
-        assertIs<CueEditAddPresetApplicationInMessage>(addPreset)
+        val decodedPreset = assertIs<CueEditAddPresetApplicationInMessage>(addPreset)
+        assertEquals(42, decodedPreset.presetId)
+        assertEquals(1, decodedPreset.targets.size)
     }
 
     @Test

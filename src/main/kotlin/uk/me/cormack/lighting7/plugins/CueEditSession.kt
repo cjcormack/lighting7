@@ -19,6 +19,7 @@ import uk.me.cormack.lighting7.models.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoFxPreset
 import uk.me.cormack.lighting7.models.FxPresetEffectDto
+import uk.me.cormack.lighting7.routes.CueApplyData
 import uk.me.cormack.lighting7.routes.TogglePresetTarget
 import uk.me.cormack.lighting7.routes.applyCue
 import uk.me.cormack.lighting7.routes.buildCueApplyData
@@ -40,6 +41,14 @@ data class CueEditSessionState(
     val cueId: Int,
     val mode: CueEditMode,
     val snapshot: List<CuePropertyAssignmentDto>,
+    /**
+     * Stack ID when editing a cue that belongs to a cue stack. `null` for standalone cues.
+     *
+     * Tracked so cleanup paths (`endEdit`, `setMode LIVE→BLIND`, `endSessionOnDisconnect`) know
+     * whether to route through `CueStackManager` rather than the fixture-level
+     * `removeEffectsForCue` / `deactivateTriggersForCue` pair used for standalone cues.
+     */
+    val cueStackId: Int? = null,
 )
 
 enum class CueEditMode {
@@ -209,36 +218,21 @@ object CueEditSessionHandler {
         val mode = CueEditMode.parseOrNull(modeStr)
             ?: return CueEditErrorOutMessage(cueId, "Unknown mode '$modeStr'")
 
-        // Snapshot assignments + gather cue apply data inside a single transaction.
-        val applyData = transaction(state.database) {
-            val cue = DaoCue.findById(cueId) ?: return@transaction null
-            val project = cue.project
-            if (project.id != state.projectManager.currentProject.id) {
-                return@transaction null
-            }
-            buildCueApplyData(cue)
-        } ?: return CueEditErrorOutMessage(cueId, "Cue not found in current project")
+        val applyData = loadCueApplyData(state, cueId)
+            ?: return CueEditErrorOutMessage(cueId, "Cue not found in current project")
 
         sessionRef.set(CueEditSessionState(
             cueId = cueId,
             mode = mode,
             snapshot = applyData.propertyAssignments,
+            cueStackId = applyData.cueStackId,
         ))
 
         if (mode == CueEditMode.LIVE) {
-            // Going through applyCue() directly for a stack-member cue would bypass
-            // CueStackManager's stack state. Reject; Blind mode is fine because it doesn't
-            // touch the stage.
-            if (applyData.cueStackId != null) {
-                return CueEditErrorOutMessage(
-                    cueId,
-                    "Live edit of stack cues not supported yet — use Blind mode or edit via the stack",
-                )
-            }
             try {
-                applyCue(state, applyData, replaceAll = false)
+                applyCueForLiveEdit(state, applyData)
             } catch (e: Exception) {
-                logger.warn("cueEdit.beginEdit applyCue failed for cue {}: {}", cueId, e.message)
+                logger.warn("cueEdit.beginEdit apply failed for cue {}: {}", cueId, e.message)
                 sessionRef.set(null)
                 return CueEditErrorOutMessage(cueId, "Failed to apply cue: ${e.message}")
             }
@@ -252,10 +246,10 @@ object CueEditSessionHandler {
      * always reverts to the state captured at the original [beginEdit], regardless of how many
      * [setMode] flips happened in between.
      *
-     * - `LIVE → BLIND`: stop the cue on stage (same semantics as [endEdit] in Live mode), but
-     *   keep the session open so further edits still route to the cue.
-     * - `BLIND → LIVE`: apply the cue's current persisted state to the stage — same path as
-     *   [beginEdit]'s Live branch. Stack cues still reject (no CueStackManager integration yet).
+     * - `LIVE → BLIND`: stop the cue on stage (stack cues tear down the whole stack; standalone
+     *   drops effects + triggers) but keep the session open so further edits still route to the cue.
+     * - `BLIND → LIVE`: fresh-read the cue and apply it — same path as [beginEdit]'s Live branch,
+     *   picking up any edits made while Blind.
      * - Same-mode call: no-op success; returns [CueEditSessionStartedOutMessage] to confirm.
      */
     fun setMode(
@@ -275,37 +269,35 @@ object CueEditSessionHandler {
             return CueEditSessionStartedOutMessage(cueId, newMode.name)
         }
 
+        val newCueStackId: Int?
         when (newMode) {
             CueEditMode.BLIND -> {
-                // LIVE → BLIND: release the cue from stage but keep the session open.
-                state.cueTriggerManager.deactivateTriggersForCue(cueId)
-                state.show.fxEngine.removeEffectsForCue(cueId)
+                // Stack cues tear down the whole stack (drops effects, Layer 3, triggers, and
+                // the paused auto-advance job in one call); standalone cues just drop their
+                // own effects + triggers.
+                if (session.cueStackId != null) {
+                    state.show.cueStackManager.deactivateStack(session.cueStackId, state)
+                } else {
+                    state.cueTriggerManager.deactivateTriggersForCue(cueId)
+                    state.show.fxEngine.removeEffectsForCue(cueId)
+                }
+                newCueStackId = session.cueStackId
             }
             CueEditMode.LIVE -> {
-                // BLIND → LIVE: apply the cue's current persisted state to the stage. Fresh
-                // read inside a transaction so any edits made during the Blind pass take effect.
-                val applyData = transaction(state.database) {
-                    val cue = DaoCue.findById(cueId) ?: return@transaction null
-                    if (cue.project.id != state.projectManager.currentProject.id) return@transaction null
-                    buildCueApplyData(cue)
-                } ?: return CueEditErrorOutMessage(cueId, "Cue not found in current project")
+                val applyData = loadCueApplyData(state, cueId)
+                    ?: return CueEditErrorOutMessage(cueId, "Cue not found in current project")
 
-                if (applyData.cueStackId != null) {
-                    return CueEditErrorOutMessage(
-                        cueId,
-                        "Live edit of stack cues not supported yet — keep the session Blind or edit via the stack",
-                    )
-                }
                 try {
-                    applyCue(state, applyData, replaceAll = false)
+                    applyCueForLiveEdit(state, applyData)
                 } catch (e: Exception) {
-                    logger.warn("cueEdit.setMode applyCue failed for cue {}: {}", cueId, e.message)
+                    logger.warn("cueEdit.setMode apply failed for cue {}: {}", cueId, e.message)
                     return CueEditErrorOutMessage(cueId, "Failed to apply cue: ${e.message}")
                 }
+                newCueStackId = applyData.cueStackId
             }
         }
 
-        sessionRef.set(session.copy(mode = newMode))
+        sessionRef.set(session.copy(mode = newMode, cueStackId = newCueStackId))
         return CueEditSessionStartedOutMessage(cueId, newMode.name)
     }
 
@@ -349,8 +341,9 @@ object CueEditSessionHandler {
     }
 
     /**
-     * End the current session. In `LIVE` mode, stops the cue on stage. In `BLIND`, no stage
-     * interaction. Session state is cleared regardless.
+     * End the current session. In `LIVE` mode, releases stage ownership via [releaseLiveSession]
+     * — standalone cues stop on stage; stack cues leave the stack running with auto-advance
+     * resumed. In `BLIND`, no stage interaction. Session state is cleared regardless.
      */
     fun endEdit(
         state: State,
@@ -363,10 +356,7 @@ object CueEditSessionHandler {
         }
         sessionRef.set(null)
 
-        if (session.mode == CueEditMode.LIVE) {
-            state.cueTriggerManager.deactivateTriggersForCue(cueId)
-            state.show.fxEngine.removeEffectsForCue(cueId)
-        }
+        if (session.mode == CueEditMode.LIVE) releaseLiveSession(state, session)
         return CueEditSessionEndedOutMessage(cueId)
     }
 
@@ -667,8 +657,9 @@ object CueEditSessionHandler {
     }
 
     /**
-     * Called on WebSocket disconnect to release any open session. In Live mode, also stops
-     * the cue on stage — otherwise a client crash would leave the cue stuck on.
+     * Called on WebSocket disconnect to release any open session. Mirrors [endEdit]'s Live
+     * cleanup but wrapped in [runCatching] so a stale DB / manager state can't propagate an
+     * exception up the disconnect handler.
      */
     fun endSessionOnDisconnect(
         state: State,
@@ -676,10 +667,7 @@ object CueEditSessionHandler {
     ) {
         val session = sessionRef.getAndSet(null) ?: return
         if (session.mode == CueEditMode.LIVE) {
-            runCatching {
-                state.cueTriggerManager.deactivateTriggersForCue(session.cueId)
-                state.show.fxEngine.removeEffectsForCue(session.cueId)
-            }
+            runCatching { releaseLiveSession(state, session) }
         }
     }
 
@@ -716,10 +704,51 @@ object CueEditSessionHandler {
     }
 
     /**
+     * Load a cue's apply data, gating on project membership. Returns `null` for missing cues
+     * or cues outside the current project — callers turn that into `CueEditErrorOutMessage`.
+     */
+    private fun loadCueApplyData(state: State, cueId: Int): CueApplyData? =
+        transaction(state.database) {
+            val cue = DaoCue.findById(cueId) ?: return@transaction null
+            if (cue.project.id != state.projectManager.currentProject.id) return@transaction null
+            buildCueApplyData(cue)
+        }
+
+    /**
+     * Apply [applyData] to stage for a Live edit session. Stack cues delegate to
+     * [CueStackManager.activateCueInStack] so the stack's active-cue state and crossfade
+     * ownership stay coherent, and pause auto-advance so the edit session isn't yanked
+     * forward by a timer. Standalone cues go through [applyCue] as before.
+     */
+    private fun applyCueForLiveEdit(state: State, applyData: CueApplyData) {
+        val stackId = applyData.cueStackId
+        if (stackId != null) {
+            state.show.cueStackManager.activateCueInStack(state, stackId, applyData.cueId)
+            state.show.cueStackManager.pauseAutoAdvance(stackId)
+        } else {
+            applyCue(state, applyData, replaceAll = false)
+        }
+    }
+
+    /**
+     * Release stage ownership for a Live session. Stack cues leave the stack active with the
+     * edited cue as its active cue and resume auto-advance — a closed editor mid-show keeps
+     * the show rolling. Standalone cues drop their effects + triggers.
+     */
+    private fun releaseLiveSession(state: State, session: CueEditSessionState) {
+        if (session.cueStackId != null) {
+            state.show.cueStackManager.resumeAutoAdvance(state, session.cueStackId)
+        } else {
+            state.cueTriggerManager.deactivateTriggersForCue(session.cueId)
+            state.show.fxEngine.removeEffectsForCue(session.cueId)
+        }
+    }
+
+    /**
      * Republish Layer 3 for [cueId] from pre-built [applyData]. Callers build the apply data
      * inside the persist transaction so we don't round-trip to the DB twice per edit.
      */
-    private fun republishLayer3(state: State, cueId: Int, applyData: uk.me.cormack.lighting7.routes.CueApplyData) {
+    private fun republishLayer3(state: State, cueId: Int, applyData: CueApplyData) {
         val built = buildLayer3AssignmentsForCue(state.show.fixtures, applyData)
         if (built.isNotEmpty()) {
             state.show.fxEngine.setCueAssignments(cueId, built)

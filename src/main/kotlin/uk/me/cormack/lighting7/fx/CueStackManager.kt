@@ -315,15 +315,7 @@ class CueStackManager(
 
         // 8. Start auto-advance timer if configured
         if (cueData.autoAdvance && cueData.autoAdvanceDelayMs != null) {
-            val delayMs = cueData.autoAdvanceDelayMs
-            activeStacks[stackId]?.autoAdvanceJob = scope.launch {
-                delay(delayMs)
-                try {
-                    advanceStack(state, stackId, AdvanceDirection.FORWARD, scope)
-                } catch (_: Exception) {
-                    // Stack may have been deactivated or cue deleted
-                }
-            }
+            scheduleAutoAdvance(state, stackId, cueData.autoAdvanceDelayMs, scope)
         }
 
         return ActivateResult(
@@ -526,6 +518,47 @@ class CueStackManager(
         job.cancel()
         state.autoAdvanceJob = null
         return true
+    }
+
+    /**
+     * Reschedule auto-advance on an active stack, re-reading the active cue's configuration.
+     *
+     * Used by `cueEdit.endEdit` / disconnect after `pauseAutoAdvance` was called at the start
+     * of a Live stack-cue edit session: on edit end we want the stack to keep rolling forward
+     * if the cue had auto-advance configured. No-op if:
+     * - the stack isn't active
+     * - the active cue has no `autoAdvance` or no `autoAdvanceDelayMs`
+     * - an auto-advance timer is already running (we don't stack timers)
+     *
+     * The fresh delay starts from *now* — we don't track remaining time from the original
+     * schedule. Acceptable because the operator just spent time editing; re-starting the
+     * countdown is more predictable than racing a stale deadline.
+     */
+    fun resumeAutoAdvance(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): Boolean {
+        val stackState = activeStacks[stackId] ?: return false
+        if (stackState.autoAdvanceJob?.isActive == true) return false
+
+        val cueConfig = transaction(state.database) {
+            val cue = DaoCue.findById(stackState.activeCueId) ?: return@transaction null
+            if (!cue.autoAdvance) return@transaction null
+            val delay = cue.autoAdvanceDelayMs ?: return@transaction null
+            delay
+        } ?: return false
+
+        scheduleAutoAdvance(state, stackId, cueConfig, scope)
+        return true
+    }
+
+    /** Launch and record a fresh auto-advance timer for [stackId]. */
+    private fun scheduleAutoAdvance(state: State, stackId: Int, delayMs: Long, scope: CoroutineScope) {
+        activeStacks[stackId]?.autoAdvanceJob = scope.launch {
+            delay(delayMs)
+            try {
+                advanceStack(state, stackId, AdvanceDirection.FORWARD, scope)
+            } catch (_: Exception) {
+                // Stack may have been deactivated or cue deleted
+            }
+        }
     }
 
     /**
