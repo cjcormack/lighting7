@@ -17,12 +17,32 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: **Phase 3 backend in flight (2026-04-21).** Preset child
-collection + apply-path + toggle Layer-3 pseudo-cue landed on the backend.
-`./gradlew test` green including new `BuildLayer3AssignmentsForPresetTest`.
-Frontend (`PresetEditor`, draft context, hook routing, call-site swap) next
-up — see the Phase 3 section and the 2026-04-21 planning notes captured in
-Decisions.
+**Phase**: **Phase 3 complete (landed 2026-04-21).** Frontend ships
+`PresetEditor` replacing `PresetForm` (881-line monolith deleted, zero
+remaining `PresetForm` import hits). `FxPreset` + `FxPresetInput` carry
+`palette` + `propertyAssignments` and round-trip through RTK Query without
+store changes. New `PresetDraftContext` owns the assignment draft; the
+existing property read/write hooks (`useSliderValue`/`useColourValue`/
+`usePositionValue`/`useSettingValue`, `useUpdateChannel`/
+`useUpdateFixtureColour`, `useUpdateGroup{Slider,Colour,Position,Setting}`,
+`useVirtualDimmer`) grew a `kind: 'preset'` branch that routes through the
+draft instead of DMX/channels. A synthetic `Fixture` built from the chosen
+`FixtureTypeMode` drives `FixtureContent` inside an
+`EditorContextProvider({ kind: 'preset', id })` + `PresetDraftProvider` so
+all existing property primitives (ColourSwatch, VirtualDimmerSlider,
+PropertyVisualizers, etc.) work unchanged. `FxSection` early-returns null
+in preset mode (the synthetic fixture key doesn't resolve in
+`useFixtureEffectsQuery`). `BuskingView` swapped over too. `npm run
+type-check` + `npm run build` green; round-trip verified end-to-end
+(PUT → GET → reopen shows `dimmer=200, strobe=64` pulled from the saved
+`propertyAssignments` via the draft context).
+
+Next up is Phase 4 (Program view inline editor) — see Next actions below
+and the Phase 4 section for entry criteria.
+
+Prior milestone — **Phase 3 backend (landed 2026-04-21):** preset child
+collection + apply-path + toggle Layer-3 pseudo-cue. `./gradlew test`
+green including new `BuildLayer3AssignmentsForPresetTest`.
 
 Prior milestone — **Phase 2 complete (2026-04-21):** `CueEditor` ships on
 all three call-sites (`Cues.tsx`, `ProgramPage.tsx`, `RunPage.tsx`) covering
@@ -42,7 +62,7 @@ See the Change log for durable invariants and engine surface.
 ~~**Colour picker in cue-edit mode (Phase 1 plumbing limitation)**~~ — **Addressed in Phase 2 (2026-04-21)**. `ColourSwatch` / `VirtualDimmerSlider` now accept a `fixtureKey` prop (threaded from `FixtureContent` / per-head `PropertiesList`) and a new `useUpdateFixtureColour` hook routes RGB writes via `cueEdit.setProperty { propertyName: 'rgbColour' }` in cue mode (W/A/UV still use `setChannel` — the backend accepts those). Mirrors the existing `useUpdateGroupColour` pattern; no backend changes.
 
 **Next actions:**
-1. **Phase 3 frontend** — `PresetEditor` rebuild on `FixtureContent` primitives, draft context, hook routing for `kind: 'preset'`, swap in `FxPresets.tsx`, delete `PresetForm`. Backend is done.
+1. **Phase 4** — Program view inline editor + "Grab live state" snapshot action. Prerequisites (Phase 2 `CueEditor`) are met; Phase 3 is not a blocker. See Phase 4 section.
 2. **Phase 3 follow-ups** (all flagged 2026-04-21; see Phase 3 section for detail):
    - Palette-resolution cascade for presets — preset palette → cue palette → global, resolved property-like. Backend now ships the data field (`fx_presets.palette`); cascade resolution still matches Phase 2's "global palette only" semantics.
    - Timed preset property assignments — `applyCue` immediate presets contribute Layer 3, delayed/recurring preset applications do NOT. `FxEngine.setCueAssignments` is a replace operation; a timed-fire append path needs new engine API. Document limitation.
@@ -61,7 +81,7 @@ See the Change log for durable invariants and engine surface.
 | 0 | Layering foundation: make the composition model explicit in code (priority-ordered effects, reset-to-layer-below, `PropertyCategory` composition rules, stomp plumbing) | Done |
 | 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | Done |
 | 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | Done (2026-04-21) |
-| 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Backend done (2026-04-21); frontend in progress |
+| 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Done (2026-04-21) |
 | 4 | Program view inline editor + "Grab live state" snapshot action | Not started |
 | 5 | **FX pipeline integration harness**: rig stub + end-to-end tests covering the Phase-0 layer cascade with real Layer-3 data, unlocking a reusable benchmark + integration test suite | Not started |
 | 6 | **Persisted-reference validation for cue assignments**: dead-reference diagnostic for `CuePropertyAssignment` rows (fixture rename / removal), paralleling control-surface Phase 7 | Not started |
@@ -262,7 +282,7 @@ Frontend:
 
 ---
 
-## Phase 3 — FX Preset editor rebuild
+## Phase 3 — FX Preset editor rebuild (done 2026-04-21)
 
 **Goal**: rebuild `PresetForm` on the same primitives, scoped to a fixture type.
 
@@ -415,6 +435,16 @@ tick duration. Uses Kotlin's `measureTime` and the JVM's allocation counters via
 control-surface Phase 7 applies to surface bindings. When a fixture is renamed or a property
 removed, cue assignments referencing the old shape are flagged in the UI rather than
 silently failing at apply time.
+
+**Preset scope added 2026-04-21**: now that Phase 3 has landed
+`FxPresetPropertyAssignment`, Phase 6 must also cover preset assignments. The preset case
+is actually narrower — assignments are preset-local (keyed by `propertyName` only) — so
+the validator only has to check `propertyName` existence against the preset's
+`fixtureType` mode. No target-key lookup. But preset assignments *do* carry the same
+silent-failure risk: rename a property on the fixture type, reopen the preset, and the
+author gets no signal. `PresetEditor` rendering already validates by "needs fixture type"
+/ "needs target property" heuristics for **effects**; extend to property assignments as
+part of Phase 6.
 
 **Motivating review finding** (2026-04-19): cue assignments store `(target_type, target_key,
 property_name)` — the same persisted-fixture-reference shape that causes silent-failure
@@ -575,8 +605,14 @@ Frontend:
 - `FixtureContent`, `PropertyVisualizers`, `GroupPropertyVisualizers`, `CompactFixtureCard`, `GroupPropertiesSection`, `GroupMembersSection`, `MultiHeadIndicator`, `ParkedIndicator`, `GroupDimmerBar`.
 - `ColourPickerPopover`.
 - `EffectParameterForm`, `EffectTypePicker`, `EffectCategoryPicker`. Compatibility filtering from commit `1ebc633` kicks in automatically.
-- `CuePaletteEditor` — already reused by `CueEditor`; share as-is with the preset editor.
+- `CuePaletteEditor` — already reused by `CueEditor` and `PresetEditor`.
 - `CueTriggerEditor`.
+- `PresetDraftContext` (Phase 3) — reusable for any future preset-shape authoring
+  (e.g. Phase 4's Program view inline editor if it ever needs preset-scoped drafts,
+  or the Phase-3 follow-up "preview on selection" live-apply affordance).
+- `syntheticFixture.buildSyntheticPresetFixture` — converts a `FixtureTypeMode` into a
+  fully-typed `Fixture`. Reusable anywhere a FixtureContent-shaped surface needs to run
+  without a real patched fixture behind it.
 - `useLazyCurrentCueStateQuery` in `src/store/cues.ts` — basis for "Grab live state".
 
 Backend:
@@ -622,6 +658,91 @@ Flag these to the user before implementing.
 
 Detailed per-session narration lives in git. This section captures durable invariants and
 gotchas that would cost time to rediscover.
+
+### Phase 3 frontend — PresetEditor on fixture-modal primitives (landed 2026-04-21)
+
+Replaces `PresetForm` (881-line monolithic Sheet) with `PresetEditor` built on
+`FixtureContent` + the existing property primitives. `git grep 'PresetForm'` → zero code
+hits after.
+
+**Draft context.** New
+[`src/components/presets/PresetDraftContext.tsx`](../../lighting-react/src/components/presets/PresetDraftContext.tsx)
+owns the `FxPresetPropertyAssignment[]` draft. Deliberately kept separate from
+`EditorContext` so slider-drag churn doesn't rerender every consumer of the kind
+discriminator — the draft is a tiny external store with per-property subscribers
+(`usePresetDraftValue(propertyName)` via `useSyncExternalStore`). On every write, the
+provider mutates its internal index **first** so reads see the new value synchronously,
+then notifies the subscribers for that property, then hands the parent a new array (the
+prop flow back in is idempotent because we compare against the last-seen reference).
+`onClearProperty` removes the entry entirely (stage output reverts to layer below on
+apply); for now the editor only ever writes, never clears — clear-on-reset is Phase 3.5
+UX if users ask for "untouch this property."
+
+**Routed read + write hooks.** All the property-level hooks in `usePropertyValues.ts`,
+`useGroupPropertyValues.ts`, and `useVirtualDimmer.ts` gained a `kind === 'preset'` branch:
+- **Reads** (`useSliderValue`, `useColourValue`, `usePositionValue`, `useSettingValue`):
+  always subscribe to both the channel store *and* `usePresetDraftValue(property.name)`
+  to respect the rules of hooks, then branch at return time. In preset mode we parse the
+  canonical string (`"0".."255"` for sliders/settings, hex-with-`;wNNN;aNNN;uvNNN`
+  extended-colour suffix for colour, `"pan,tilt"` for position) back into the hook's
+  typed result; when there's no draft value yet we fall through to a zero/default —
+  **not** a channel read, because the synthetic fixture's `ChannelRef`s are invented.
+- **Writes**: `useUpdateFixtureColour` and `useUpdateGroupColour` canonicalise RGB +
+  W/A/UV through `serializeExtendedColour` and call `draft.onSetProperty(property.name,
+  canonical)`; `useUpdateGroupPosition` emits `"pan,tilt"`; sliders/settings stringify
+  directly; `useVirtualDimmer.setValue` reads the current draft value for ratio scaling
+  (so rapid drags don't desync). `useUpdateChannel` is a no-op in preset mode —
+  channel-level writes can't be reverse-mapped to property names, and no current
+  rendering path emits them for the synthetic fixture.
+
+**Synthetic fixture.**
+[`src/components/presets/syntheticFixture.ts`](../../lighting-react/src/components/presets/syntheticFixture.ts)
+builds a `Fixture` from a `FixtureTypeMode`. Invented channel refs are safe because all
+rendered reads + writes in preset mode are context-routed. Single-head only (no
+`elements` / `elementGroupProperties`) — the per-head follow-up is flagged. Fixture key
+is a sentinel `'__preset_editor__'` so consumers that filter by fixtureKey (e.g.
+`FixtureBoundControlsRow`) silently render nothing. `FxSection` also received an explicit
+`useEditorContext().kind === 'preset'` early-return because its `useFixtureEffectsQuery`
+would otherwise 404 on the synthetic key.
+
+**API + store.** `FxPreset` + `FxPresetInput` in `fxPresetsApi.ts` gained `palette:
+string[]` and `propertyAssignments: FxPresetPropertyAssignment[]`. No change needed to
+`store/fxPresets.ts` — the mutation endpoints already spread `...body`, so the new fields
+flow through unchanged. `FxPresetPropertyAssignment` shape matches the backend DTO:
+`{ propertyName, value, fadeDurationMs, sortOrder }` — no target fields (preset-local).
+
+**PresetEditor shape.**
+[`src/components/presets/PresetEditor.tsx`](../../lighting-react/src/components/presets/PresetEditor.tsx)
+mirrors `CueEditor`'s layout minus the per-target grid: `SheetContent` (flex col, max-w-2xl),
+a sub-view state machine (`form` / `fixture-type` / `add-effect` / `edit-effect` /
+`confirm-delete`) so inline-back stays within the one Sheet. The form view wraps its body
+in `<EditorContextProvider value={{kind:'preset', id: preset?.id ?? 0}}>` +
+`<PresetDraftProvider assignments={...} onChange={setPropertyAssignments}>`. Tabs split
+**Properties** (synthetic fixture driving `FixtureContent`) from **Effects** (reuses
+`EffectCategoryPicker` / `EffectTypePicker` / `EffectParameterForm` — same as the old
+`PresetForm`; a full reuse of `EffectFlow` isn't possible because it's target-shaped and
+preset effects have no targets). Save requires name + fixtureType; the picker button
+turns red when unset to match the backend's 400. Delete uses a `'confirm-delete'` sub-view
+instead of a separate `<Dialog>`.
+
+**Import hazard.** `FixtureTypeMode` lives in `@/api/fxPresetsApi` — not `@/store/fixtures`
+— because `FixtureTypeInfo` (from the store) carries `elementGroupProperties` while the
+picker-oriented `FixtureTypeMode` doesn't. Future preset-editor work that wants element
+group properties needs to source them from `FixtureTypeInfo` directly, not via the
+`typeKeyToModel` hierarchy map.
+
+**Call-sites swapped.** `src/routes/FxPresets.tsx` and
+`src/components/busking/BuskingView.tsx` both import `PresetEditor` now. The old standalone
+delete `<Dialog>` on the FxPresets route is gone — deletion flows through
+`PresetEditor.onDelete` → inline `'confirm-delete'` sub-view. `PresetListRow.onDelete` now
+opens the editor (which surfaces its own Delete button) rather than a separate dialog.
+
+**Verification.** `npm run type-check` + `npm run build` green. Browser round-trip
+confirmed: POST a new preset via the editor → backend returns preset with `palette: []`
+and `propertyAssignments: []`. PUT with `propertyAssignments: [{dimmer, '200'}, {strobe,
+'64'}]` → reopen editor → Dimmer slider shows `200 (78%)`, Strobe slider shows `64
+(25%)`, all other sliders `0 (0%)` — read path through `PresetDraftContext` +
+`useSliderValue` preset branch works end-to-end. Console + warn logs clean.
 
 ### Phase 3 backend — preset property assignments + toggle pseudo-cue (landed 2026-04-21)
 
