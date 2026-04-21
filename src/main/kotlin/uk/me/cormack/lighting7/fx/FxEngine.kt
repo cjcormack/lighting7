@@ -233,17 +233,34 @@ class FxEngine(
      * than 1.0 should follow with [updateCueFadeWeights]. In the common non-crossfade apply
      * path the absent-entry default (1.0) is correct.
      */
-    fun setCueAssignments(cueId: Int, assignments: List<Layer3Resolver.Assignment>) {
+    /**
+     * Replace [cueId]'s Layer 3 assignments. Empty [assignments] removes the cue entirely
+     * (equivalent to [removeCueAssignments]). The optional [weight] sets the cue's crossfade
+     * weight atomically in the same publish — used by the crossfade-start path to pin the
+     * incoming cue at 0 without briefly flashing its full value onto stage. A weight of 1.0
+     * (the default) clears any prior entry in the fade-weight map so reapplying a cue resets
+     * it to steady state. Clamped to `[0, 1]`.
+     */
+    fun setCueAssignments(
+        cueId: Int,
+        assignments: List<Layer3Resolver.Assignment>,
+        weight: Double = 1.0,
+    ) {
         synchronized(cueAssignmentsLock) {
-            val changed = if (assignments.isEmpty()) {
+            if (assignments.isEmpty()) {
                 val removed = cueAssignments.remove(cueId) != null
                 cueFadeWeights.remove(cueId)
-                removed
-            } else {
-                cueAssignments[cueId] = assignments
-                true
+                if (removed) republishLayer3Assignments()
+                return
             }
-            if (changed) republishLayer3Assignments()
+            cueAssignments[cueId] = assignments
+            val clamped = weight.coerceIn(0.0, 1.0)
+            if (clamped >= 1.0) {
+                cueFadeWeights.remove(cueId)
+            } else {
+                cueFadeWeights[cueId] = clamped
+            }
+            republishLayer3Assignments()
         }
     }
 

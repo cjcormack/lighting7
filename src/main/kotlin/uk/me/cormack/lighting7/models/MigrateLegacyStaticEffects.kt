@@ -23,14 +23,25 @@ import org.slf4j.LoggerFactory
  * | `cue_id`                      | `cue_id`                            |
  * | `target_type`                 | `target_type`                       |
  * | `target_key`                  | `target_key`                        |
- * | `property_name`               | `property_name` (required — rows without it are skipped) |
+ * | `property_name` (falls back to `category` when null — see below) | `property_name` |
  * | `parameters["value"]` for `StaticValue` / `parameters["level"]` for `StaticSetting` | `value` |
  * | `sort_order`                  | `sort_order`                        |
+ *
+ * ## `property_name` null fallback
+ *
+ * Ad-hoc effects authored via the UI before Layer 3 existed often leave `property_name` null
+ * and rely on runtime resolution from `category` (see `resolvePresetEffectPropertyForCue` in
+ * `projectCues.kt`). The migration mirrors that fallback so these rows convert too:
+ * - `category='dimmer'`  → `property_name='dimmer'`
+ * - `category='colour'`  → `property_name='rgbColour'` (canonical)
+ * - `category='position'`→ `property_name='position'`
+ * - anything else (`controls`, `setting`, unknown) → skipped, since the runtime also needs an
+ *   explicit `property_name` for those.
  *
  * ## Lossy cases
  *
  * The migration logs a `WARN` and skips rows that can't be converted losslessly:
- * - `property_name` is null — without a target property we can't persist as an assignment.
+ * - `property_name` is null and `category` doesn't map to a canonical property name.
  * - `parameters` is missing the `value` / `level` key.
  * - `parameters[key]` is not a valid `0..255` UByte.
  *
@@ -55,6 +66,7 @@ internal object LegacyStaticEffectMigration {
         val targetType: String,
         val targetKey: String,
         val effectType: String,
+        val category: String,
         val propertyName: String?,
         val parameters: Map<String, String>,
         val sortOrder: Int,
@@ -88,8 +100,10 @@ internal object LegacyStaticEffectMigration {
             else -> return ConversionResult.Skipped("unknown effect_type '${row.effectType}'")
         }
 
-        val propertyName = row.propertyName
-            ?: return ConversionResult.Skipped("property_name is null")
+        val propertyName = row.propertyName ?: categoryToPropertyName(row.category)
+            ?: return ConversionResult.Skipped(
+                "property_name is null and category='${row.category}' has no default property"
+            )
 
         val rawValue = row.parameters[valueKey]
             ?: return ConversionResult.Skipped("parameters.$valueKey missing")
@@ -152,10 +166,23 @@ internal object LegacyStaticEffectMigration {
 
     data class Summary(val converted: Int, val skipped: Int)
 
+    /**
+     * Derive a canonical `property_name` from the legacy `category` column, matching the
+     * runtime fallback in `resolvePresetEffectPropertyForCue`. Returns null for categories
+     * that don't have a canonical property (`controls`, `setting`, anything else) — those
+     * must carry an explicit `property_name`.
+     */
+    private fun categoryToPropertyName(category: String): String? = when (category.lowercase()) {
+        "dimmer" -> "dimmer"
+        "colour", "color" -> "rgbColour"
+        "position" -> "position"
+        else -> null
+    }
+
     private fun Transaction.readLegacyRows(): List<LegacyRow> {
         val out = ArrayList<LegacyRow>()
         exec(
-            """SELECT id, cue_id, target_type, target_key, effect_type, property_name, parameters, sort_order
+            """SELECT id, cue_id, target_type, target_key, effect_type, category, property_name, parameters, sort_order
                FROM cue_ad_hoc_effects
                WHERE effect_type IN ('StaticValue', 'StaticSetting')"""
         ) { rs ->
@@ -172,6 +199,7 @@ internal object LegacyStaticEffectMigration {
                     targetType = rs.getString("target_type"),
                     targetKey = rs.getString("target_key"),
                     effectType = rs.getString("effect_type"),
+                    category = rs.getString("category") ?: "",
                     propertyName = rs.getString("property_name"),
                     parameters = params,
                     sortOrder = rs.getInt("sort_order"),

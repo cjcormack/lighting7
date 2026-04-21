@@ -174,37 +174,29 @@ class Layer3Resolver {
     }
 
     /**
-     * HTP: output = max over contributors of (value × fadeWeight), per sub-channel.
+     * HTP: combines contributors so two independent cues at full weight take the highest
+     * value (classic HTP), while contributors whose weights look like a crossfade pair
+     * interpolate linearly. For [PropertyValue.Slider] / [PropertyValue.Setting]:
      *
-     * For [PropertyValue.Slider] / [PropertyValue.Setting] this is the natural max. For
-     * [PropertyValue.Colour] we max each of R/G/B/W/A/UV independently (the "highest takes
-     * precedence on each channel" reading), which keeps behaviour consistent if an HTP override
-     * is ever applied to COLOUR. Typical COLOUR use stays LTP.
+     * - `Σ fadeWeight ≤ 1.0 + ε` → treated as a crossfade partition, composed as
+     *   `Σ value × fadeWeight` (linear blend, no V-dip).
+     * - `Σ fadeWeight > 1.0` → classical HTP max: `max(value × fadeWeight)` per contributor.
      *
-     * For [PropertyValue.Position], HTP is not musically meaningful — we fall back to the
-     * highest-priority contributor to avoid arithmetic on axis values.
+     * [PropertyValue.Colour] maxes each R/G/B/W/A/UV independently. [PropertyValue.Position]
+     * falls through to LTP — HTP isn't meaningful on axis values.
      */
     private fun composeHtp(contributors: List<Assignment>): PropertyValue {
         val first = contributors.first().value
+        // Epsilon tolerates floating-point sums like `0.5 + 0.5 = 1.0000000000000002`.
+        val weightSum = contributors.sumOf { it.fadeWeight }
+        val isCrossfadeBlend = weightSum <= 1.0 + 1e-9
         return when (first) {
-            is PropertyValue.Slider -> {
-                var maxVal = 0
-                for (a in contributors) {
-                    val v = (a.value as PropertyValue.Slider).value.toInt()
-                    val scaled = (v * a.fadeWeight).toInt().coerceIn(0, 255)
-                    if (scaled > maxVal) maxVal = scaled
-                }
-                PropertyValue.Slider(maxVal.toUByte())
-            }
-            is PropertyValue.Setting -> {
-                var maxVal = 0
-                for (a in contributors) {
-                    val v = (a.value as PropertyValue.Setting).channelValue.toInt()
-                    val scaled = (v * a.fadeWeight).toInt().coerceIn(0, 255)
-                    if (scaled > maxVal) maxVal = scaled
-                }
-                PropertyValue.Setting(maxVal.toUByte())
-            }
+            is PropertyValue.Slider -> PropertyValue.Slider(
+                composeHtpScalar(contributors, isCrossfadeBlend) { (it.value as PropertyValue.Slider).value.toInt() }
+            )
+            is PropertyValue.Setting -> PropertyValue.Setting(
+                composeHtpScalar(contributors, isCrossfadeBlend) { (it.value as PropertyValue.Setting).channelValue.toInt() }
+            )
             is PropertyValue.Colour -> {
                 var r = 0; var g = 0; var b = 0
                 var w = 0; var amber = 0; var uv = 0
@@ -222,6 +214,27 @@ class Layer3Resolver {
             }
             is PropertyValue.Position -> composeLtp(contributors) // positions don't combine
         }
+    }
+
+    /** HTP scalar composition shared by Slider and Setting — see [composeHtp]. */
+    private inline fun composeHtpScalar(
+        contributors: List<Assignment>,
+        isCrossfadeBlend: Boolean,
+        extract: (Assignment) -> Int,
+    ): UByte {
+        val value = if (isCrossfadeBlend) {
+            var acc = 0.0
+            for (a in contributors) acc += extract(a) * a.fadeWeight
+            acc.toInt().coerceIn(0, 255)
+        } else {
+            var maxVal = 0
+            for (a in contributors) {
+                val scaled = (extract(a) * a.fadeWeight).toInt().coerceIn(0, 255)
+                if (scaled > maxVal) maxVal = scaled
+            }
+            maxVal
+        }
+        return value.toUByte()
     }
 
     /**

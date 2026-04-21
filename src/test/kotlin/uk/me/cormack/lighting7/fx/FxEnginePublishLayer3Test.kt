@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Exercises the Layer 3 transmit path: [FxEngine.setCueAssignments] /
@@ -272,6 +273,54 @@ class FxEnginePublishLayer3Test {
             180u.toUByte(), rig.controller.currentValues[1],
             "remove + re-register must not carry over the 0.25 weight",
         )
+    }
+
+    // ─── setCueAssignments(cueId, assignments, weight) atomic crossfade-start ─
+
+    @Test
+    fun `atomic weight arg starts incoming at given weight without flashing its full value`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 50u)))
+        rig.engine.setCueAssignments(
+            cueId = 20,
+            assignments = listOf(slider(cueId = 20, priority = 2, value = 200u)),
+            weight = 0.0,
+        )
+        assertEquals(50u.toUByte(), rig.controller.currentValues[1])
+        assertTrue(
+            200u.toUByte() !in rig.controller.writesTo(1),
+            "incoming value must never flash: writes were ${rig.controller.writesTo(1)}",
+        )
+    }
+
+    @Test
+    fun `reapplying a cue clears any stale crossfade weight`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 180u)))
+        rig.engine.updateCueFadeWeights(mapOf(10 to 0.3))
+        assertEquals(54u.toUByte(), rig.controller.currentValues[1], "180 * 0.3 = 54")
+
+        rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 180u)))
+        assertEquals(180u.toUByte(), rig.controller.currentValues[1])
+    }
+
+    @Test
+    fun `atomic weight arg clamps out-of-range values`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 50u)))
+        rig.engine.setCueAssignments(
+            cueId = 20,
+            assignments = listOf(slider(cueId = 20, priority = 2, value = 200u)),
+            weight = -0.5,
+        )
+        assertEquals(50u.toUByte(), rig.controller.currentValues[1])
+
+        rig.engine.setCueAssignments(
+            cueId = 20,
+            assignments = listOf(slider(cueId = 20, priority = 2, value = 200u)),
+            weight = 1.5,
+        )
+        assertEquals(200u.toUByte(), rig.controller.currentValues[1])
     }
 
     @Test

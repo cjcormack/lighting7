@@ -77,6 +77,74 @@ class Layer3ResolverTest {
         assertEquals(180u.toUByte(), v.value)
     }
 
+    // HTP switches to linear blend (Σ v×w) when Σ weights ≤ 1 — otherwise the naive
+    // max(v × w) rule dips below the outgoing value midway through a crossfade.
+
+    @Test
+    fun `HTP crossfade start — outgoing at 1_0 incoming at 0_0 reads outgoing value`() {
+        val v = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 50u),
+            slider(cueId = 2, priority = 2, fadeWeight = 0.0, value = 200u),
+        ))[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(50u.toUByte(), v.value)
+    }
+
+    @Test
+    fun `HTP crossfade mid — half-half blends linearly`() {
+        val v = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 0.5, value = 50u),
+            slider(cueId = 2, priority = 2, fadeWeight = 0.5, value = 200u),
+        ))[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(125u.toUByte(), v.value)
+    }
+
+    @Test
+    fun `HTP crossfade end — outgoing at 0_0 incoming at 1_0 reads incoming value`() {
+        val v = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 0.0, value = 50u),
+            slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 200u),
+        ))[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(200u.toUByte(), v.value)
+    }
+
+    @Test
+    fun `HTP two cues both at weight 1 keeps max semantics`() {
+        val v = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 100u),
+            slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 180u),
+        ))[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(180u.toUByte(), v.value)
+    }
+
+    @Test
+    fun `HTP floating-point sum near 1 still takes the blend path`() {
+        // `0.5 + 0.5` = `1.0000000000000002` — without the epsilon this tips into max.
+        val v = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 0.5, value = 50u),
+            slider(cueId = 2, priority = 2, fadeWeight = 0.5, value = 200u),
+        ))[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(125u.toUByte(), v.value)
+    }
+
+    @Test
+    fun `HTP setting category uses blend path for crossfade`() {
+        val assignment1 = Layer3Resolver.Assignment(
+            cueId = 1, priority = 1, fadeWeight = 0.5,
+            targetKey = "fx-1", targetIsGroup = false,
+            propertyName = "mode", category = PropertyCategory.SETTING,
+            compositionOverride = CompositionRule.HTP,
+            value = Layer3Resolver.PropertyValue.Setting(60u),
+        )
+        val assignment2 = assignment1.copy(
+            cueId = 2, priority = 2,
+            value = Layer3Resolver.PropertyValue.Setting(200u),
+        )
+        val v = resolver.resolve(listOf(assignment1, assignment2))[
+            Layer3Resolver.Key("fx-1", "mode")
+        ] as Layer3Resolver.PropertyValue.Setting
+        assertEquals(130u.toUByte(), v.channelValue)
+    }
+
     /** Spec Example 4 — LTP colour, B fully in, A is not contributing fade-out. */
     @Test
     fun `LTP colour picks highest priority when no crossfade`() {

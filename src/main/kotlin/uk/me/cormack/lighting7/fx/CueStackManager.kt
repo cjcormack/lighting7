@@ -250,23 +250,19 @@ class CueStackManager(
             effectCount++
         }
 
-        // Apply Layer 3 property assignments for the incoming cue. Stomp, if requested, also
-        // runs off the new assignments so HTP/LTP and stomp overlap agree.
+        // Apply Layer 3 for the incoming cue. Under crossfade the incoming starts at weight 0
+        // atomically with the insert; `runCrossfade` ticks it up from there. Stomp runs off
+        // the same assignments so HTP/LTP and stomp overlap agree.
         val layer3Assignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData)
+        val incomingStartWeight = if (useCrossfade) 0.0 else 1.0
         if (layer3Assignments.isNotEmpty()) {
-            fxEngine.setCueAssignments(cueData.cueId, layer3Assignments)
+            fxEngine.setCueAssignments(cueData.cueId, layer3Assignments, incomingStartWeight)
         } else {
             fxEngine.removeCueAssignments(cueData.cueId)
         }
-        // Under crossfade, the outgoing cue's assignments are still live. Clamp the incoming
-        // to weight 0 and pin the outgoing at 1 so the composer starts the fade at the
-        // outgoing value. `runCrossfade` ticks the weights from there.
-        if (useCrossfade && layer3Assignments.isNotEmpty()) {
-            val weightUpdates = buildMap {
-                put(cueData.cueId, 0.0)
-                if (outgoingCueId != null) put(outgoingCueId, 1.0)
-            }
-            fxEngine.updateCueFadeWeights(weightUpdates)
+        // Restore outgoing to 1.0 in case a prior mid-flight crossfade left it partial.
+        if (useCrossfade && layer3Assignments.isNotEmpty() && outgoingCueId != null) {
+            fxEngine.updateCueFadeWeights(mapOf(outgoingCueId to 1.0))
         }
         if (cueData.stomp) {
             val overlap = buildStompOverlapFromAssignments(state.show.fixtures, cueData)

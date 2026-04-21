@@ -17,6 +17,19 @@ class MockDmxController(
     var transmitRequests: Int = 0
         private set
 
+    private val _writeLog = mutableListOf<Pair<Int, UByte>>()
+
+    /**
+     * Ordered log of every (channel, value) write the controller has received since the last
+     * [reset]. Lets tests assert that no intermediate flash value appeared between two
+     * expected endpoints — e.g. a crossfade-start republish that writes the outgoing value
+     * without first writing the incoming value.
+     */
+    val writeLog: List<Pair<Int, UByte>> get() = _writeLog.toList()
+
+    /** Returns the writes to [channelNo] only, in order. */
+    fun writesTo(channelNo: Int): List<UByte> = _writeLog.filter { it.first == channelNo }.map { it.second }
+
     override val currentValues: Map<Int, UByte>
         get() = values.toMap()
 
@@ -26,15 +39,18 @@ class MockDmxController(
     override fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>) {
         valuesToSet.forEach { (channel, change) ->
             values[channel] = change.newValue
+            _writeLog.add(channel to change.newValue)
         }
     }
 
     override fun setValue(channelNo: Int, channelChange: ChannelChange) {
         values[channelNo] = channelChange.newValue
+        _writeLog.add(channelNo to channelChange.newValue)
     }
 
     override fun setValue(channelNo: Int, channelValue: UByte, fadeMs: Long) {
         values[channelNo] = channelValue
+        _writeLog.add(channelNo to channelValue)
     }
 
     override fun getValue(channelNo: Int): UByte {
@@ -83,6 +99,7 @@ class MockDmxController(
         values.clear()
         _parkedChannels.clear()
         _transmitModifiers.clear()
+        _writeLog.clear()
         transmitRequests = 0
     }
 }

@@ -17,6 +17,7 @@ class LegacyStaticEffectMigrationTest {
 
     private fun row(
         effectType: String,
+        category: String = "dimmer",
         propertyName: String? = "dimmer",
         parameters: Map<String, String> = mapOf("value" to "180"),
         targetType: String = "fixture",
@@ -28,6 +29,7 @@ class LegacyStaticEffectMigrationTest {
         targetType = targetType,
         targetKey = targetKey,
         effectType = effectType,
+        category = category,
         propertyName = propertyName,
         parameters = parameters,
         sortOrder = sortOrder,
@@ -68,12 +70,50 @@ class LegacyStaticEffectMigrationTest {
     }
 
     @Test
-    fun `null property name is skipped`() {
+    fun `null property name with dimmer category falls back to dimmer`() {
         val result = LegacyStaticEffectMigration.convertRow(
-            row("StaticValue", propertyName = null)
+            row("StaticSetting", category = "dimmer", propertyName = null, parameters = mapOf("level" to "50"))
+        )
+        val converted = assertIs<LegacyStaticEffectMigration.ConversionResult.Converted>(result)
+        assertEquals("dimmer", converted.row.propertyName)
+        assertEquals("50", converted.row.value)
+    }
+
+    @Test
+    fun `null property name with colour category falls back to rgbColour`() {
+        val result = LegacyStaticEffectMigration.convertRow(
+            row("StaticValue", category = "colour", propertyName = null)
+        )
+        val converted = assertIs<LegacyStaticEffectMigration.ConversionResult.Converted>(result)
+        assertEquals("rgbColour", converted.row.propertyName)
+    }
+
+    @Test
+    fun `null property name with position category falls back to position`() {
+        val result = LegacyStaticEffectMigration.convertRow(
+            row("StaticValue", category = "position", propertyName = null)
+        )
+        val converted = assertIs<LegacyStaticEffectMigration.ConversionResult.Converted>(result)
+        assertEquals("position", converted.row.propertyName)
+    }
+
+    @Test
+    fun `null property name with setting category is still skipped`() {
+        val result = LegacyStaticEffectMigration.convertRow(
+            row("StaticSetting", category = "setting", propertyName = null, parameters = mapOf("level" to "50"))
         )
         val skipped = assertIs<LegacyStaticEffectMigration.ConversionResult.Skipped>(result)
         assertTrue("property_name" in skipped.reason)
+        assertTrue("setting" in skipped.reason)
+    }
+
+    @Test
+    fun `explicit property name wins over category fallback`() {
+        val result = LegacyStaticEffectMigration.convertRow(
+            row("StaticValue", category = "dimmer", propertyName = "uv")
+        )
+        val converted = assertIs<LegacyStaticEffectMigration.ConversionResult.Converted>(result)
+        assertEquals("uv", converted.row.propertyName)
     }
 
     @Test
