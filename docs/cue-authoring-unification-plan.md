@@ -17,13 +17,16 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: 2 — sub-phase **2b landed 2026-04-21** (backend Live stack-cue edit
-via `CueStackManager.activateCueInStack` + auto-advance pause on `beginEdit`,
-resume on `endEdit` / disconnect). `CueEditSessionState` gained `cueStackId`,
-`CueStackManager` gained `resumeAutoAdvance` + a private `scheduleAutoAdvance`
-helper shared with `activateCueInStack`. All 622 backend tests green. Sub-phases
-2c (ProgramPage inline + RunPage sheet), 2d (delete old components + doc
-collapse) are queued.
+**Phase**: 2 — sub-phase **2c landed 2026-04-21** (frontend migration:
+`ProgramPage.tsx` wide-viewport inline panel and narrow-viewport sheet both
+mount `CueEditor`; `RunPage.tsx` mobile cue-list sheet mounts `CueEditor`).
+All three call-sites — `Cues.tsx`, `ProgramPage.tsx`, `RunPage.tsx` — now use
+`CueEditor`; `CueForm` has zero remaining JSX references. `cueFormSaving`
+state removed from both routes (CueEditor manages its own in-flight save
+state). `npm run type-check` and `npm run build` green. Sub-phase 2d (delete
+`CueForm` / `CueEffectFlow` / `CuePresetPicker`, collapse this Phase 2 section
+back into a single block, consolidate per-sub-phase change log entries) is
+queued.
 
 See the Change log for durable invariants and engine surface.
 
@@ -34,7 +37,7 @@ See the Change log for durable invariants and engine surface.
 **Next actions:**
 1. ~~Remaining `cueEdit.*` follow-up messages~~ — **landed 2a**. `setPalette` / `addPresetApplication` / `addAdHocEffect` handlers implemented; immediate (no-timing) presets/effects spawn on stage in Live mode.
 2. ~~Live stack-cue edit support~~ — **landed 2b**. `beginEdit` / `setMode` LIVE now delegate to `CueStackManager.activateCueInStack`; `endEdit` / disconnect leave the stack active and resume auto-advance; `setMode LIVE→BLIND` deactivates the stack. Auto-advance is paused on `beginEdit` for stack LIVE sessions (resolved OQ3).
-3. ProgramPage / RunPage migration to `CueEditor` — queued for 2c.
+3. ~~ProgramPage / RunPage migration to `CueEditor`~~ — **landed 2c**. Both routes' CueForm call-sites swapped for `CueEditor` (inline + sheet). `cueFormSaving` state removed; CueEditor manages save progress internally.
 4. Delete `CueForm` / `CueEffectFlow` / `CuePresetPicker`; collapse 2a/2b/2c/2d sections into one Phase 2 block; consolidate change log entries — queued for 2d.
 5. Integration test: PATCH + snapshot-from-live + cueEdit round-trip through an in-memory HTTP harness — blocked on the same DB test-harness gap that blocks Phase 5's pipeline test. Track under Phase 5.
 6. ~~Frontend: thread `fixtureKey` through to fixture-level colour components~~ — **landed 2a**. See Change log entry and resolved Known Issue 1.
@@ -46,7 +49,7 @@ See the Change log for durable invariants and engine surface.
 |-------|---------|--------|
 | 0 | Layering foundation: make the composition model explicit in code (priority-ordered effects, reset-to-layer-below, `PropertyCategory` composition rules, stomp plumbing) | Done |
 | 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | Done (smoke-check passed 2026-04-21; stack-cue Live edit + remaining cueEdit stubs carried into Phase 2) |
-| 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | In progress (2a + 2b landed 2026-04-21; 2c–2d queued) |
+| 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | In progress (2a + 2b + 2c landed 2026-04-21; 2d queued) |
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Not started |
 | 4 | Program view inline editor + "Grab live state" snapshot action | Not started |
 | 5 | **FX pipeline integration harness**: rig stub + end-to-end tests covering the Phase-0 layer cascade with real Layer-3 data, unlocking a reusable benchmark + integration test suite | Not started |
@@ -448,12 +451,20 @@ right panel and RunPage's mobile sheet for `CueEditor`. Keep Phase 4 polish
 
 #### 2c work
 
-- [ ] `src/routes/ProgramPage.tsx:327–356` — replace the inline `CueForm`
-  render with `CueEditor mode="inline"`. Reuse `cueFormCueId` / `cueFormCue`
-  / `cueFormStackId` / `showInlineCueForm` state.
-- [ ] `src/routes/RunPage.tsx:137–145` — swap to `CueEditor mode="sheet"`.
-- [ ] Default mode stays `'live'` for Program view (resolved OQ2); revisit in
-  Phase 4 once "show is running" is defined.
+- [x] `src/routes/ProgramPage.tsx` — replaced both the inline-panel and
+  narrow-viewport sheet `CueForm` renders with `CueEditor` (inline / sheet
+  modes respectively). Reused `cueFormCueId` / `cueFormCue` / `cueFormStackId`
+  / `showInlineCueForm` state; renamed the shared props object from
+  `cueFormProps` to `cueEditorProps`; dropped `isSaving` from the props
+  (CueEditor manages its own `isSaving`).
+- [x] `src/routes/RunPage.tsx` — swapped the mobile cue-list sheet to
+  `CueEditor mode="sheet"`; added explicit `defaultEditMode="live"`.
+- [x] `cueFormSaving` state and its setter calls (in both `handleCueFormSave`
+  and `handleDuplicate` on ProgramPage; in `handleCueFormSave` on RunPage)
+  removed — the state was only wired to CueForm's `isSaving` prop, and
+  CueEditor doesn't accept that prop.
+- [x] Default mode stays `'live'` for Program/Run views (resolved OQ2);
+  revisit in Phase 4 once "show is running" is defined.
 
 #### 2c files
 
@@ -776,6 +787,53 @@ Flag these to the user before implementing.
 
 Detailed per-session narration lives in git. This section captures durable invariants and
 gotchas that would cost time to rediscover.
+
+### Phase 2c — ProgramPage + RunPage migrated to `CueEditor` (landed 2026-04-21)
+
+Per-sub-phase entry — will be folded into a single "Phase 2" change log block
+in 2d.
+
+**All three call-sites use `CueEditor` now.** `Cues.tsx` (edit-existing path,
+landed in 2a), `ProgramPage.tsx` (wide-viewport inline panel and
+narrow-viewport sheet, this sub-phase), and `RunPage.tsx` (mobile cue-list
+sheet, this sub-phase). The only remaining `CueForm` render is Cues.tsx's
+create-new path — the cue-edit session is keyed on a backend cueId that
+doesn't exist for unsaved drafts. Creation-flow migration is tied up in 2d's
+decision on a "draft cue" shape.
+
+**`cueFormSaving` state deleted from both routes.** `CueEditor` has no
+`isSaving` prop — it manages save progress via its own internal `isSaving`
+state set inside `handleSave`. The routes' `cueFormSaving` was only ever
+wired to `CueForm`'s `isSaving` prop, so removing it is pure cleanup.
+`handleDuplicate` on ProgramPage used to toggle `cueFormSaving` around the
+create-cue + re-open flow; that's now just a plain try/catch. Operator-speed
+double-clicks aren't a concern because the mutation awaits the HTTP response,
+and the duplicate button inside CueEditor's footer is gated by CueEditor's
+own `isSaving`.
+
+**Prop-object rename.** `cueFormProps` → `cueEditorProps` on ProgramPage, to
+stop the name implying it goes to `CueForm`. The object still carries `open`
+/ `onOpenChange` / `cue` / `projectId` / `onSave` / `isInStack: true as const`
+/ `onDuplicate` / `onRemoveFromStack` plus a new `defaultEditMode: 'live' as
+const`. ProgramPage always operates in a stack context, so `isInStack` stays
+hardcoded to `true`.
+
+**Default `defaultEditMode` is `'live'`** for both Program and Run (matches
+`Cues.tsx`). OQ2 resolution notes this may flip to `'blind'` in Phase 4 once
+"show is running" is a defined signal, but today's mental model is "open for
+edit = apply on stage" regardless of surface.
+
+**Lint / type-check / build baseline.** `npm run type-check` passes clean.
+`npm run build` green (1.94 MB bundle, same shape as before). `npm run lint`
+reports 4284 errors — identical count to the pre-migration baseline (spot-
+checked by `git stash` + re-lint), confirming no new lint debt.
+
+**Deferred into 2d.** (i) Delete `CueForm.tsx`, `CueEffectFlow.tsx`,
+`CuePresetPicker.tsx`. (ii) Migrate the create-new path in `Cues.tsx` (needs
+a draft-cue shape decision). (iii) Extract `EffectConfigureStep` /
+`PresetPickStep` / `TimingFields` into `shared/` — 2a's deferred cleanup.
+(iv) Collapse Phase 2 sub-phase sections back into a single block.
+(v) Consolidate 2a/2b/2c change log entries into one.
 
 ### Phase 2b — Live stack-cue edit + auto-advance pause (landed 2026-04-21)
 
