@@ -992,9 +992,48 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         engine.removeCuePalette(cueData.cueId)
     }
 
+    val priority = cueDerivedPriority(cueData)
+
+    // Load each immediate preset once — effects + property assignments in a single DB hit.
+    // Timed preset applications (delayMs/intervalMs) are handled entirely by CueTriggerManager
+    // and don't contribute Layer 3 — setCueAssignments is a replace, so an at-fire append path
+    // would need new engine API.
+    data class ImmediatePreset(
+        val presetId: Int,
+        val targets: List<CueTargetDto>,
+        val effects: List<FxPresetEffectDto>,
+        val assignments: List<FxPresetPropertyAssignmentDto>,
+    )
+    val immediatePresets = transaction(state.database) {
+        cueData.presetApplications
+            .filter { it.delayMs == null && it.intervalMs == null }
+            .mapNotNull { app ->
+                val preset = DaoFxPreset.findById(app.presetId) ?: return@mapNotNull null
+                ImmediatePreset(
+                    presetId = app.presetId,
+                    targets = app.targets,
+                    effects = preset.effects,
+                    assignments = preset.toPropertyAssignmentDtos(),
+                )
+            }
+    }
+
     // Publish Layer 3 before applying effects so the effect reset pass sees the cue's baseline
-    // instead of Layer 5 zero.
-    val layer3Assignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData)
+    // instead of Layer 5 zero. Combines the cue's own assignments with each immediate preset's
+    // property assignments.
+    val cueOwnAssignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData)
+    val presetRows = immediatePresets.flatMap { ip ->
+        buildLayer3AssignmentsForPreset(
+            state.show.fixtures, cueData.cueId, priority,
+            ip.presetId, ip.assignments, ip.targets,
+        )
+    }
+
+    val layer3Assignments = when {
+        presetRows.isEmpty() -> cueOwnAssignments
+        cueOwnAssignments.isEmpty() -> presetRows
+        else -> cueOwnAssignments + presetRows
+    }
     if (layer3Assignments.isNotEmpty()) {
         engine.setCueAssignments(cueData.cueId, layer3Assignments)
     } else {
@@ -1016,25 +1055,20 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         }
     }
 
-    // 3. Apply immediate preset effects — read each preset fresh from DB
-    // (Timed presets with delayMs/intervalMs are handled by CueTriggerManager)
-    for (presetApp in cueData.presetApplications.filter { it.delayMs == null && it.intervalMs == null }) {
-        val presetEffects = transaction(state.database) {
-            DaoFxPreset.findById(presetApp.presetId)?.effects
-        } ?: continue // Skip if preset was deleted
-
-        for (target in presetApp.targets) {
+    // 3. Spawn immediate preset effects from the data loaded above.
+    for (ip in immediatePresets) {
+        for (target in ip.targets) {
             val toggleTarget = TogglePresetTarget(type = target.type, key = target.key)
-            for (presetEffect in presetEffects) {
+            for (presetEffect in ip.effects) {
                 val fxTarget = try {
                     resolveTargetForCue(state, toggleTarget, presetEffect)
                 } catch (_: Exception) { null } ?: continue
 
                 val instance = createInstanceFromPresetForCue(
-                    presetEffect, fxTarget, presetApp.presetId, state, cueData.cueId
+                    presetEffect, fxTarget, ip.presetId, state, cueData.cueId
                 )
                 instance.cueId = cueData.cueId
-                instance.priority = cueDerivedPriority(cueData)
+                instance.priority = priority
                 engine.addEffect(instance)
                 effectCount++
             }
@@ -1066,7 +1100,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             presetEffectDto, fxTarget, null, state, cueData.cueId
         )
         instance.cueId = cueData.cueId
-        instance.priority = cueDerivedPriority(cueData)
+        instance.priority = priority
         engine.addEffect(instance)
         effectCount++
     }
@@ -1222,6 +1256,98 @@ internal fun buildLayer3AssignmentsForCue(
             for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true))
         } else {
             out.add(row(assignment.targetKey, isGroup = false))
+        }
+    }
+    return out
+}
+
+/**
+ * Build Layer 3 rows for a preset application. Preset assignments are preset-local
+ * (no target field) — the builder fans each (propertyName, value) across the supplied
+ * [applyTargets], reusing the cue builder's group→member expansion and specificity tagging.
+ *
+ * Rows are tagged with [cueId] and [priority] so the cue's normal teardown
+ * ([FxEngine.removeCueAssignments]) cleans up preset-originated rows alongside the cue's
+ * own assignments. If both the applying cue and the preset assert the same
+ * `(targetKey, propertyName)`, the caller concatenates the two lists and lets
+ * [Layer3Resolver.resolve] pick the winner by [Layer3Resolver.Assignment.priority] —
+ * callers should keep preset rows at the same priority as the cue's own rows so the sort
+ * order alone decides (last-write-wins for OVERRIDE blend). Rows whose fixture / group /
+ * property cannot be resolved are logged at warn and skipped — stale data must not break
+ * cue apply.
+ */
+internal fun buildLayer3AssignmentsForPreset(
+    fixtures: uk.me.cormack.lighting7.show.Fixtures,
+    cueId: Int,
+    priority: Int,
+    presetId: Int,
+    presetAssignments: List<FxPresetPropertyAssignmentDto>,
+    applyTargets: List<CueTargetDto>,
+): List<Layer3Resolver.Assignment> {
+    if (presetAssignments.isEmpty() || applyTargets.isEmpty()) return emptyList()
+    val out = ArrayList<Layer3Resolver.Assignment>(presetAssignments.size * applyTargets.size * 2)
+
+    for (target in applyTargets) {
+        val memberKeys: List<String>
+        val referenceFixture: Fixture
+        if (target.type == "group") {
+            val group = try {
+                fixtures.untypedGroup(target.key)
+            } catch (_: IllegalStateException) {
+                logger.warn("preset {} (cue {}): group '{}' missing — skipping", presetId, cueId, target.key)
+                continue
+            }
+            val members = group.fixtures.filterIsInstance<Fixture>()
+            if (members.isEmpty()) {
+                logger.warn("preset {} (cue {}): group '{}' has no Fixture members — skipping", presetId, cueId, target.key)
+                continue
+            }
+            memberKeys = members.map { it.key }
+            referenceFixture = members.first()
+        } else {
+            referenceFixture = try {
+                fixtures.untypedFixture(target.key)
+            } catch (_: IllegalStateException) {
+                logger.warn("preset {} (cue {}): fixture '{}' missing — skipping", presetId, cueId, target.key)
+                continue
+            }
+            memberKeys = emptyList()
+        }
+
+        for (assignment in presetAssignments) {
+            val canonical = canonicalPropertyName(assignment.propertyName)
+            val (category, override) = fixtureCategoryFor(referenceFixture, canonical) ?: run {
+                logger.warn(
+                    "preset {} (cue {}): property '{}' not on '{}' — skipping",
+                    presetId, cueId, assignment.propertyName, target.key,
+                )
+                continue
+            }
+            val parsed = Layer3Resolver.parseAssignmentValue(category, canonical, assignment.value) ?: run {
+                logger.warn(
+                    "preset {} (cue {}): invalid value '{}' for {}.{} — skipping",
+                    presetId, cueId, assignment.value, target.key, assignment.propertyName,
+                )
+                continue
+            }
+
+            fun row(key: String, isGroup: Boolean) = Layer3Resolver.Assignment(
+                cueId = cueId,
+                priority = priority,
+                fadeWeight = 1.0,
+                targetKey = key,
+                targetIsGroup = isGroup,
+                propertyName = canonical,
+                category = category,
+                compositionOverride = override,
+                value = parsed,
+            )
+
+            if (target.type == "group") {
+                for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true))
+            } else {
+                out.add(row(target.key, isGroup = false))
+            }
         }
     }
     return out

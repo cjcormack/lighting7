@@ -24,9 +24,11 @@ import uk.me.cormack.lighting7.routes.TogglePresetTarget
 import uk.me.cormack.lighting7.routes.applyCue
 import uk.me.cormack.lighting7.routes.buildCueApplyData
 import uk.me.cormack.lighting7.routes.buildLayer3AssignmentsForCue
+import uk.me.cormack.lighting7.routes.buildLayer3AssignmentsForPreset
 import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
 import uk.me.cormack.lighting7.routes.cueDerivedPriority
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
+import uk.me.cormack.lighting7.routes.toPropertyAssignmentDtos
 import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.atomic.AtomicReference
 
@@ -558,19 +560,25 @@ object CueEditSessionHandler {
         }
 
         val (applyData, presetEffects) = result
-        if (applyData != null && presetEffects != null) {
-            for (target in targets) {
-                val toggleTarget = TogglePresetTarget(type = target.type, key = target.key)
-                for (presetEffect in presetEffects) {
-                    val fxTarget = try {
-                        resolveTargetForCue(state, toggleTarget, presetEffect)
-                    } catch (_: Exception) { null } ?: continue
-                    val instance = createInstanceFromPresetForCue(
-                        presetEffect, fxTarget, presetId, state, cueId
-                    )
-                    instance.cueId = cueId
-                    instance.priority = cueDerivedPriority(applyData)
-                    state.show.fxEngine.addEffect(instance)
+        if (applyData != null) {
+            // Republish Layer 3 so the new preset's property assignments land on stage before
+            // effects spawn — effects reset-to-layer-below sees the preset-contributed baseline.
+            republishLayer3(state, cueId, applyData)
+
+            if (presetEffects != null) {
+                for (target in targets) {
+                    val toggleTarget = TogglePresetTarget(type = target.type, key = target.key)
+                    for (presetEffect in presetEffects) {
+                        val fxTarget = try {
+                            resolveTargetForCue(state, toggleTarget, presetEffect)
+                        } catch (_: Exception) { null } ?: continue
+                        val instance = createInstanceFromPresetForCue(
+                            presetEffect, fxTarget, presetId, state, cueId
+                        )
+                        instance.cueId = cueId
+                        instance.priority = cueDerivedPriority(applyData)
+                        state.show.fxEngine.addEffect(instance)
+                    }
                 }
             }
         }
@@ -747,11 +755,31 @@ object CueEditSessionHandler {
     /**
      * Republish Layer 3 for [cueId] from pre-built [applyData]. Callers build the apply data
      * inside the persist transaction so we don't round-trip to the DB twice per edit.
+     *
+     * Combines the cue's own property assignments with property assignments from each
+     * immediate preset application (timed presets don't contribute — matches [applyCue]).
      */
     private fun republishLayer3(state: State, cueId: Int, applyData: CueApplyData) {
-        val built = buildLayer3AssignmentsForCue(state.show.fixtures, applyData)
-        if (built.isNotEmpty()) {
-            state.show.fxEngine.setCueAssignments(cueId, built)
+        val cueOwn = buildLayer3AssignmentsForCue(state.show.fixtures, applyData)
+        val priority = cueDerivedPriority(applyData)
+        val presetRows = transaction(state.database) {
+            applyData.presetApplications
+                .filter { it.delayMs == null && it.intervalMs == null }
+                .flatMap { app ->
+                    val preset = DaoFxPreset.findById(app.presetId) ?: return@flatMap emptyList()
+                    buildLayer3AssignmentsForPreset(
+                        state.show.fixtures, cueId, priority,
+                        app.presetId, preset.toPropertyAssignmentDtos(), app.targets,
+                    )
+                }
+        }
+        val combined = when {
+            presetRows.isEmpty() -> cueOwn
+            cueOwn.isEmpty() -> presetRows
+            else -> cueOwn + presetRows
+        }
+        if (combined.isNotEmpty()) {
+            state.show.fxEngine.setCueAssignments(cueId, combined)
         } else {
             state.show.fxEngine.removeCueAssignments(cueId)
         }

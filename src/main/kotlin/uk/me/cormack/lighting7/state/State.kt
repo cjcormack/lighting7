@@ -208,7 +208,8 @@ class State(val config: ApplicationConfig) {
             // but is acceptable for this development/personal project setup
             @Suppress("DEPRECATION")
             SchemaUtils.createMissingTablesAndColumns(
-                DaoProjects, DaoScripts, DaoFxPresets, DaoCueStacks, DaoCues,
+                DaoProjects, DaoScripts, DaoFxPresets, DaoFxPresetPropertyAssignments,
+                DaoCueStacks, DaoCues,
                 DaoCuePresetApplications, DaoCueAdHocEffects, DaoCuePropertyAssignments, DaoCueTriggers,
                 DaoAiConversations, DaoCueSlots,
                 DaoUniverseConfigs, DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,

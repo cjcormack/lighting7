@@ -108,7 +108,11 @@ class AiTools(private val state: State) {
                     key = obj["key"]!!.jsonPrimitive.content,
                 )
             }
-            val result = togglePresetOnTargets(state, presetId, effects, toggleTargets, null)
+            val result = togglePresetOnTargets(
+                state, presetId, effects,
+                presetPropertyAssignments = emptyList(),
+                toggleTargets, null,
+            )
             appliedCount = result.effectCount
         }
 
@@ -130,10 +134,11 @@ class AiTools(private val state: State) {
         val targetsArray = input["targets"]?.jsonArray ?: return errorResult("Missing 'targets'")
         val beatDivision = input["beatDivision"]?.jsonPrimitive?.doubleOrNull
 
-        val presetEffects = transaction(state.database) {
+        val presetData = transaction(state.database) {
             val preset = DaoFxPreset.findById(presetId) ?: return@transaction null
-            preset.effects
+            preset.effects to preset.toPropertyAssignmentDtos()
         } ?: return errorResult("Preset not found: $presetId")
+        val (presetEffects, presetAssignments) = presetData
 
         val targets = targetsArray.map { t ->
             val obj = t.jsonObject
@@ -143,7 +148,7 @@ class AiTools(private val state: State) {
             )
         }
 
-        val result = togglePresetOnTargets(state, presetId, presetEffects, targets, beatDivision)
+        val result = togglePresetOnTargets(state, presetId, presetEffects, presetAssignments, targets, beatDivision)
 
         return ToolExecutionResult(
             success = true,

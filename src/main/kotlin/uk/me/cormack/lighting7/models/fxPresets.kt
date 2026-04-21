@@ -23,12 +23,27 @@ data class FxPresetEffectDto(
     val parameters: Map<String, String> = emptyMap(),
 )
 
+/**
+ * Preset-local property assignment — operator-authored "this preset asserts property X = value"
+ * record. Assignments are fanned out over each target at apply time; see
+ * [uk.me.cormack.lighting7.routes.buildLayer3AssignmentsForPreset]. Value strings share the cue
+ * parser ([uk.me.cormack.lighting7.fx.Layer3Resolver.parseAssignmentValue]).
+ */
+@Serializable
+data class FxPresetPropertyAssignmentDto(
+    val propertyName: String,
+    val value: String,
+    val fadeDurationMs: Long? = null,
+    val sortOrder: Int = 0,
+)
+
 object DaoFxPresets : IntIdTable("fx_presets") {
     val name = varchar("name", 255)
     val description = varchar("description", 1000).nullable()
     val project = reference("project_id", DaoProjects)
     val fixtureType = varchar("fixture_type", 255).nullable()
     val effects = json<List<FxPresetEffectDto>>("effects", Json)
+    val palette = json<List<String>>("palette", Json).default(emptyList())
 
     init {
         uniqueIndex(project, fixtureType, name)
@@ -43,4 +58,26 @@ class DaoFxPreset(id: EntityID<Int>) : IntEntity(id) {
     var project by DaoProject referencedOn DaoFxPresets.project
     var fixtureType by DaoFxPresets.fixtureType
     var effects by DaoFxPresets.effects
+    var palette by DaoFxPresets.palette
+    val propertyAssignments by DaoFxPresetPropertyAssignment referrersOn DaoFxPresetPropertyAssignments.preset
+}
+
+// ─── Preset Property Assignments table ─────────────────────────────────
+
+object DaoFxPresetPropertyAssignments : IntIdTable("fx_preset_property_assignments") {
+    val preset = reference("preset_id", DaoFxPresets)
+    val propertyName = varchar("property_name", 255)
+    val value = text("value")
+    val fadeDurationMs = long("fade_duration_ms").nullable()
+    val sortOrder = integer("sort_order").default(0)
+}
+
+class DaoFxPresetPropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
+    companion object : IntEntityClass<DaoFxPresetPropertyAssignment>(DaoFxPresetPropertyAssignments)
+
+    var preset by DaoFxPreset referencedOn DaoFxPresetPropertyAssignments.preset
+    var propertyName by DaoFxPresetPropertyAssignments.propertyName
+    var value by DaoFxPresetPropertyAssignments.value
+    var fadeDurationMs by DaoFxPresetPropertyAssignments.fadeDurationMs
+    var sortOrder by DaoFxPresetPropertyAssignments.sortOrder
 }

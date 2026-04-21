@@ -296,6 +296,11 @@ class FxEngine(
         }
     }
 
+    /** True if [cueId] currently has any Layer 3 assignments. */
+    fun hasCueAssignments(cueId: Int): Boolean = synchronized(cueAssignmentsLock) {
+        cueAssignments.containsKey(cueId)
+    }
+
     /** Drop all Layer 3 contributions from [cueId]. */
     fun removeCueAssignments(cueId: Int) {
         synchronized(cueAssignmentsLock) {

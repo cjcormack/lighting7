@@ -43,14 +43,21 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
             { p -> "Cannot create presets in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val newPreset = call.receive<NewFxPreset>()
+            if (newPreset.fixtureType.isBlank()) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("fixtureType is required"))
+                return@withCurrentProject
+            }
             val presetDetails = transaction(state.database) {
-                DaoFxPreset.new {
+                val preset = DaoFxPreset.new {
                     name = newPreset.name
                     description = newPreset.description
                     fixtureType = newPreset.fixtureType
                     this.project = project
                     effects = newPreset.effects
-                }.toPresetDetails(isCurrentProject = true)
+                    palette = newPreset.palette
+                }
+                createPresetChildren(preset, newPreset.propertyAssignments)
+                preset.toPresetDetails(isCurrentProject = true)
             }
             state.show.fixtures.presetListChanged()
             call.respond(HttpStatusCode.Created, presetDetails)
@@ -88,6 +95,10 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
             { p -> "Cannot modify presets in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val updatedData = call.receive<NewFxPreset>()
+            if (updatedData.fixtureType.isBlank()) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("fixtureType is required"))
+                return@withCurrentProject
+            }
             val presetDetails = transaction(state.database) {
                 val preset = DaoFxPreset.findById(resource.presetId)
                     ?: return@transaction null
@@ -100,6 +111,9 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
                 preset.description = updatedData.description
                 preset.fixtureType = updatedData.fixtureType
                 preset.effects = updatedData.effects
+                preset.palette = updatedData.palette
+                deletePresetChildren(preset)
+                createPresetChildren(preset, updatedData.propertyAssignments)
                 preset.toPresetDetails(isCurrentProject = true)
             }
 
@@ -136,6 +150,7 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
                     return@transaction "used_by_cues:${referencingCues.joinToString(", ")}"
                 }
 
+                deletePresetChildren(preset)
                 preset.delete()
                 "ok"
             }
@@ -198,7 +213,9 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
                 fixtureType = sourceFixtureType
                 project = targetProject
                 effects = sourcePreset.effects
+                palette = sourcePreset.palette
             }
+            createPresetChildren(newPreset, sourcePreset.toPropertyAssignmentDtos())
 
             CopyPresetResponse(
                 presetId = newPreset.id.value,
@@ -232,18 +249,22 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
                 return@withProject
             }
 
-            val preset = transaction(state.database) {
+            val presetData = transaction(state.database) {
                 val p = DaoFxPreset.findById(resource.presetId) ?: return@transaction null
                 if (p.project.id != project.id) return@transaction null
-                p.effects
+                p.effects to p.toPropertyAssignmentDtos()
             }
-            if (preset == null) {
+            if (presetData == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
                 return@withProject
             }
+            val (presetEffects, presetAssignments) = presetData
 
             try {
-                val result = togglePresetOnTargets(state, resource.presetId, preset, request.targets, request.beatDivision)
+                val result = togglePresetOnTargets(
+                    state, resource.presetId, presetEffects, presetAssignments,
+                    request.targets, request.beatDivision,
+                )
                 call.respond(result)
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
@@ -272,8 +293,12 @@ data class ToggleFxPresetResource(val parent: ProjectFxPresetsResource, val pres
 data class NewFxPreset(
     val name: String,
     val description: String? = null,
-    val fixtureType: String? = null,
+    // Required from Phase 3 forward — PresetEditor always knows the target fixture type.
+    // DB column stays nullable during the backfill window; a hard NOT NULL lands as a follow-up.
+    val fixtureType: String,
     val effects: List<FxPresetEffectDto>,
+    val propertyAssignments: List<FxPresetPropertyAssignmentDto> = emptyList(),
+    val palette: List<String> = emptyList(),
 )
 
 @Serializable
@@ -283,6 +308,8 @@ data class FxPresetDetails(
     val description: String?,
     val fixtureType: String?,
     val effects: List<FxPresetEffectDto>,
+    val propertyAssignments: List<FxPresetPropertyAssignmentDto>,
+    val palette: List<String>,
     val canEdit: Boolean,
     val canDelete: Boolean,
     val cannotDeleteReason: String? = null,
@@ -335,11 +362,45 @@ internal fun DaoFxPreset.toPresetDetails(isCurrentProject: Boolean): FxPresetDet
         description = this.description,
         fixtureType = this.fixtureType,
         effects = this.effects,
+        propertyAssignments = this.toPropertyAssignmentDtos(),
+        palette = this.palette,
         canEdit = isCurrentProject,
         canDelete = isCurrentProject && !usedByCues,
         cannotDeleteReason = if (usedByCues) "Used by $cueUsageCount cue${if (cueUsageCount != 1) "s" else ""}" else null,
         cueUsageCount = cueUsageCount,
     )
+}
+
+/** Map this preset's property-assignment rows to their sorted DTO form. */
+internal fun DaoFxPreset.toPropertyAssignmentDtos(): List<FxPresetPropertyAssignmentDto> =
+    this.propertyAssignments.sortedBy { it.sortOrder }.map {
+        FxPresetPropertyAssignmentDto(
+            propertyName = it.propertyName,
+            value = it.value,
+            fadeDurationMs = it.fadeDurationMs,
+            sortOrder = it.sortOrder,
+        )
+    }
+
+/** Create [DaoFxPresetPropertyAssignment] rows for a preset. */
+internal fun createPresetChildren(
+    preset: DaoFxPreset,
+    propertyAssignments: List<FxPresetPropertyAssignmentDto>,
+) {
+    for (assignment in propertyAssignments) {
+        DaoFxPresetPropertyAssignment.new {
+            this.preset = preset
+            this.propertyName = assignment.propertyName
+            this.value = assignment.value
+            this.fadeDurationMs = assignment.fadeDurationMs
+            this.sortOrder = assignment.sortOrder
+        }
+    }
+}
+
+/** Delete all child entities (property assignments) for a preset. */
+internal fun deletePresetChildren(preset: DaoFxPreset) {
+    preset.propertyAssignments.forEach { it.delete() }
 }
 
 /**
@@ -368,28 +429,55 @@ private fun isPresetActiveOnTarget(
 }
 
 /**
- * Toggle a preset's effects on/off for the given targets.
+ * Synthetic `cueId` for preset-toggle Layer 3 assignments. Negative so it never collides with
+ * real (positive) cue IDs; derived from `presetId` so we can key lookup + clear per preset.
  *
- * Uses the presetId tag on effects for deterministic matching:
- * - If ALL targets have at least one effect tagged with this presetId, removes those effects.
- * - Otherwise, applies all preset effects (tagged with the presetId) to each target.
+ * Rationale: the standalone preset-toggle path has no owning cue, but preset property
+ * assignments still need to land on stage. The cleanest implementation reuses the Layer 3
+ * pipeline with a pseudo-cue at priority 0 — real cues (priority ≥ 1) naturally override, and
+ * `removeCueAssignments` cleans up with zero new engine API surface. This is a pragmatic
+ * deviation from the plan's "Layer 4 direct-write" framing; observable behaviour is identical
+ * for the cases operators care about (toggle shows values, real cue overrides, untoggle clears).
+ */
+private fun presetTogglePseudoCueId(presetId: Int): Int = -presetId
+
+/** Check if this preset currently has a pseudo-cue active in Layer 3. */
+private fun isPresetTogglePseudoCueActive(engine: FxEngine, presetId: Int): Boolean =
+    engine.hasCueAssignments(presetTogglePseudoCueId(presetId))
+
+/**
+ * Toggle a preset's effects + property assignments on/off for the given targets.
+ *
+ * Uses the presetId tag on effects + a negative pseudo-`cueId` on Layer 3 assignments for
+ * deterministic matching:
+ * - If ALL targets have at least one effect tagged with this presetId (or the pseudo-cue is
+ *   active when the preset has no effects), removes those effects and clears the pseudo-cue.
+ * - Otherwise, applies all preset effects (tagged with the presetId) + Layer 3 property
+ *   assignments to each target.
  */
 internal fun togglePresetOnTargets(
     state: State,
     presetId: Int,
     presetEffects: List<FxPresetEffectDto>,
+    presetPropertyAssignments: List<FxPresetPropertyAssignmentDto>,
     targets: List<TogglePresetTarget>,
     beatDivisionOverride: Double?,
 ): TogglePresetResponse {
     val engine = state.show.fxEngine
 
-    // Check if all targets have this preset active
-    val allActive = targets.all { target ->
-        isPresetActiveOnTarget(engine, presetId, target.type, target.key)
-    }
+    // Active if: all targets have effects AND the pseudo-cue state matches whether we have
+    // property assignments. When the preset has only property assignments (no effects), rely
+    // solely on the pseudo-cue.
+    val effectsActive = if (presetEffects.isNotEmpty()) {
+        targets.all { target -> isPresetActiveOnTarget(engine, presetId, target.type, target.key) }
+    } else true
+    val assignmentsActive = if (presetPropertyAssignments.isNotEmpty()) {
+        isPresetTogglePseudoCueActive(engine, presetId)
+    } else true
+    val allActive = effectsActive && assignmentsActive &&
+        (presetEffects.isNotEmpty() || presetPropertyAssignments.isNotEmpty())
 
     if (allActive) {
-        // Remove all effects tagged with this presetId from all targets
         var removedCount = 0
         for (target in targets) {
             val activeEffects = if (target.type == "group") {
@@ -404,10 +492,12 @@ internal fun togglePresetOnTargets(
                 }
             }
         }
+        if (presetPropertyAssignments.isNotEmpty()) {
+            engine.removeCueAssignments(presetTogglePseudoCueId(presetId))
+        }
         return TogglePresetResponse(action = "removed", effectCount = removedCount)
     } else {
-        // First remove any existing effects from this preset on all targets,
-        // then apply all preset effects fresh
+        // Remove any lingering preset state, then apply fresh.
         for (target in targets) {
             val activeEffects = if (target.type == "group") {
                 engine.getEffectsForGroup(target.key)
@@ -415,6 +505,17 @@ internal fun togglePresetOnTargets(
                 engine.getEffectsForFixture(target.key)
             }
             activeEffects.filter { it.presetId == presetId }.forEach { engine.removeEffect(it.id) }
+        }
+        if (presetPropertyAssignments.isNotEmpty()) {
+            val pseudoCueId = presetTogglePseudoCueId(presetId)
+            val applyTargets = targets.map { CueTargetDto(type = it.type, key = it.key) }
+            val rows = buildLayer3AssignmentsForPreset(
+                state.show.fixtures, pseudoCueId, /* priority = */ 0,
+                presetId, presetPropertyAssignments, applyTargets,
+            )
+            if (rows.isNotEmpty()) {
+                engine.setCueAssignments(pseudoCueId, rows)
+            }
         }
 
         var addedCount = 0
