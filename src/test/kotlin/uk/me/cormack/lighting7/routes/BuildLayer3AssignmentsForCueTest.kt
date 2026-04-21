@@ -67,7 +67,7 @@ class BuildLayer3AssignmentsForCueTest {
     }
 
     @Test
-    fun `group target expands to group row plus one Assignment per member`() {
+    fun `group target expands to per-member rows flagged as group-derived`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val out = buildLayer3AssignmentsForCue(fixtures, cueData(
             CuePropertyAssignmentDto(
@@ -77,16 +77,37 @@ class BuildLayer3AssignmentsForCueTest {
                 value = "150",
             ),
         ))
-        assertEquals(3, out.size, "one group-flagged row plus two per-member rows")
-        val groupRow = out.first { it.targetIsGroup }
-        assertEquals("front-wash", groupRow.targetKey)
-        val memberRows = out.filter { !it.targetIsGroup }.map { it.targetKey }.toSet()
-        assertEquals(setOf("hex-1", "hex-2"), memberRows)
-        // All rows share the same parsed value.
+        assertEquals(2, out.size, "one row per group member; no orphan group-level row")
+        assertTrue(out.all { it.targetIsGroup }, "member rows carry the group-derived flag")
+        assertEquals(setOf("hex-1", "hex-2"), out.map { it.targetKey }.toSet())
         out.forEach {
             val v = assertIs<Layer3Resolver.PropertyValue.Slider>(it.value)
             assertEquals(150u.toUByte(), v.value)
         }
+    }
+
+    @Test
+    fun `fixture override wins over group expansion via specificity`() {
+        // Cue asserts group dimmer=150 AND fixture hex-1 dimmer=50. Specificity rule: the
+        // direct fixture row wins on hex-1 (50); hex-2 keeps the group value (150).
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val rows = buildLayer3AssignmentsForCue(fixtures, cueData(
+            CuePropertyAssignmentDto(targetType = "group", targetKey = "front-wash",
+                propertyName = "dimmer", value = "150"),
+            CuePropertyAssignmentDto(targetType = "fixture", targetKey = "hex-1",
+                propertyName = "dimmer", value = "50"),
+        ))
+        val resolved = Layer3Resolver().resolve(rows)
+        assertEquals(
+            Layer3Resolver.PropertyValue.Slider(50u),
+            resolved[Layer3Resolver.Key("hex-1", "dimmer")],
+            "fixture-level override wins",
+        )
+        assertEquals(
+            Layer3Resolver.PropertyValue.Slider(150u),
+            resolved[Layer3Resolver.Key("hex-2", "dimmer")],
+            "unaffected member keeps group value",
+        )
     }
 
     @Test

@@ -1146,9 +1146,9 @@ private fun fixtureCategoryFor(
 
 /**
  * Build the flat [Layer3Resolver.Assignment] list for a single cue's [propertyAssignments],
- * expanding group targets to per-member rows while also emitting the group-level row so the
- * specificity rule in [Layer3Resolver] has the chance to fire when a fixture-level assignment
- * overrides a group assignment within the same cue.
+ * expanding group targets to per-member rows. Member rows produced by a group expansion carry
+ * `targetIsGroup = true` so the resolver's specificity rule can drop them when the same cue
+ * also asserts a direct fixture-level row on the same (fixtureKey, property).
  *
  * Assignments whose fixture, group, or property cannot be resolved are logged at warn and
  * skipped — missing data must not break cue apply.
@@ -1216,11 +1216,10 @@ internal fun buildLayer3AssignmentsForCue(
         )
 
         if (assignment.targetType == "group") {
-            // Keep the group-level row so a later fixture-level override in the same flat list
-            // can win via the specificity rule — [Layer3Resolver.applySpecificity] filters
-            // group-flagged rows out when any fixture-level row exists for the same key.
-            out.add(row(assignment.targetKey, isGroup = true))
-            for (memberKey in memberKeys) out.add(row(memberKey, isGroup = false))
+            // Emit only per-member rows; the group-level key isn't a resolvable fixture at
+            // publish time. Mark these as targetIsGroup=true so a direct fixture-level row
+            // for the same member overrides via [Layer3Resolver.applySpecificity].
+            for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true))
         } else {
             out.add(row(assignment.targetKey, isGroup = false))
         }

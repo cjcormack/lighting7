@@ -24,9 +24,12 @@ class Layer3Resolver {
      * @property priority cue-stack position or activation-order tie-break. Higher priority wins
      *   LTP, and — for HTP — priority matters only if values happen to tie.
      * @property fadeWeight crossfade progress in `[0, 1]`. 1 = fully in, 0 = fully out.
-     * @property targetKey fixture or group key.
-     * @property targetIsGroup true when [targetKey] refers to a group. Group assignments are
-     *   expanded to member fixtures by the caller before resolution.
+     * @property targetKey the fixture key. The caller pre-expands group assignments into
+     *   per-member rows; the resolver never sees a group-level [targetKey].
+     * @property targetIsGroup true when this row came from a group-scoped assignment (member
+     *   row produced by group expansion). Lets [applySpecificity] drop the group-derived row
+     *   when the same cue also asserts a direct fixture-level row on the same (fixture,
+     *   property).
      * @property propertyName property on the (resolved) fixture.
      * @property category property category — drives composition default when [compositionOverride]
      *   is [CompositionRule.UNSET].
@@ -127,10 +130,9 @@ class Layer3Resolver {
     /**
      * Resolve a flat list of assignments to a per-(targetKey, propertyName) composed value.
      *
-     * Specificity rule: a fixture-level assignment wins over a group-level assignment for the
-     * same (fixture, property). The caller is responsible for expanding group assignments to
-     * member fixtures before calling [resolve]; the resolver treats [Assignment.targetIsGroup]
-     * as an advisory flag and deduplicates purely by [Assignment.targetKey].
+     * Specificity rule: when a cue asserts both a group assignment (expanded to member rows
+     * with `targetIsGroup = true`) and a direct fixture-level row for the same member, the
+     * fixture-level row wins. See [applySpecificity].
      *
      * Complexity: O(n) over assignments, grouped into O(distinct (key, property)) output
      * entries. Allocates one [HashMap] per call and short-lived lists per group — acceptable
@@ -164,9 +166,9 @@ class Layer3Resolver {
     data class Key(val targetKey: String, val propertyName: String)
 
     /**
-     * If both a fixture-level and a group-level assignment target the same (key, property),
-     * the fixture-level wins. In Phase 0 the caller is expected to pre-expand group assignments
-     * to per-member rows marked [Assignment.targetIsGroup] = false, so this is usually a no-op.
+     * Within a (targetKey, propertyName) bucket, drop group-expanded rows when any direct
+     * fixture-level row is present — the direct row wins. If all rows share the same origin
+     * (all direct, or all from group expansion), everything passes through.
      */
     private fun applySpecificity(contributors: List<Assignment>): List<Assignment> {
         val hasFixtureLevel = contributors.any { !it.targetIsGroup }

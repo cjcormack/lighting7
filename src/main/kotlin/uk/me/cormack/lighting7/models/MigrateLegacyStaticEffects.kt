@@ -4,11 +4,12 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Transaction
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.fx.parseExtendedColour
 
 /**
  * One-time migration: convert `cue_ad_hoc_effects` rows with `effect_type` in
- * {`StaticValue`, `StaticSetting`} into `cue_property_assignments` rows, then delete the
- * originals.
+ * {`StaticValue`, `StaticSetting`, `StaticColour`, `StaticPosition`} into
+ * `cue_property_assignments` rows, then delete the originals.
  *
  * This is the "effects were the poor person's property assignment" migration. Static effects
  * were how operators asserted a constant slider or setting value inside a cue before
@@ -18,14 +19,23 @@ import org.slf4j.LoggerFactory
  *
  * ## Mapping
  *
- * | Source (`cue_ad_hoc_effects`) | Target (`cue_property_assignments`) |
- * |-------------------------------|-------------------------------------|
- * | `cue_id`                      | `cue_id`                            |
- * | `target_type`                 | `target_type`                       |
- * | `target_key`                  | `target_key`                        |
+ * | Source (`cue_ad_hoc_effects`)    | Target (`cue_property_assignments`) |
+ * |----------------------------------|-------------------------------------|
+ * | `cue_id`                         | `cue_id`                            |
+ * | `target_type`                    | `target_type`                       |
+ * | `target_key`                     | `target_key`                        |
  * | `property_name` (falls back to `category` when null — see below) | `property_name` |
- * | `parameters["value"]` for `StaticValue` / `parameters["level"]` for `StaticSetting` | `value` |
- * | `sort_order`                  | `sort_order`                        |
+ * | `parameters` (effect-type-specific — see [convertRow]) | `value` |
+ * | `sort_order`                     | `sort_order`                        |
+ *
+ * ## Value extraction per effect type
+ *
+ * - `StaticValue`  → `parameters["value"]`, `0..255` decimal.
+ * - `StaticSetting`→ `parameters["level"]`, `0..255` decimal.
+ * - `StaticColour` → `parameters["colour"]`, any format [parseExtendedColour] accepts,
+ *   re-serialised into the canonical `#rrggbb[;w…;a…;uv…]` form.
+ * - `StaticPosition` → `parameters["pan"]` + `parameters["tilt"]`, combined into
+ *   `"pan,tilt"` — the format [Layer3Resolver.parseAssignmentValue] expects for position.
  *
  * ## `property_name` null fallback
  *
@@ -94,10 +104,9 @@ internal object LegacyStaticEffectMigration {
      * INSERT/DELETE plumbing.
      */
     internal fun convertRow(row: LegacyRow): ConversionResult {
-        val valueKey = when (row.effectType) {
-            "StaticValue" -> "value"
-            "StaticSetting" -> "level"
-            else -> return ConversionResult.Skipped("unknown effect_type '${row.effectType}'")
+        val value = when (val v = extractValue(row)) {
+            is ValueExtract.Ok -> v.serialized
+            is ValueExtract.Err -> return ConversionResult.Skipped(v.reason)
         }
 
         val propertyName = row.propertyName ?: categoryToPropertyName(row.category)
@@ -105,29 +114,60 @@ internal object LegacyStaticEffectMigration {
                 "property_name is null and category='${row.category}' has no default property"
             )
 
-        val rawValue = row.parameters[valueKey]
-            ?: return ConversionResult.Skipped("parameters.$valueKey missing")
-
-        // Validate the value parses as 0..255 so we don't poison Layer 3 at the other end.
-        val parsed = rawValue.trim().toIntOrNull()
-        if (parsed == null || parsed !in 0..255) {
-            return ConversionResult.Skipped("parameters.$valueKey='$rawValue' not a 0..255 UByte")
-        }
-
         return ConversionResult.Converted(ConvertedRow(
             cueId = row.cueId,
             targetType = row.targetType,
             targetKey = row.targetKey,
             propertyName = propertyName,
-            value = parsed.toString(),
+            value = value,
             sortOrder = row.sortOrder,
         ))
     }
 
+    private sealed class ValueExtract {
+        data class Ok(val serialized: String) : ValueExtract()
+        data class Err(val reason: String) : ValueExtract()
+    }
+
+    private fun extractValue(row: LegacyRow): ValueExtract = when (row.effectType) {
+        "StaticValue" -> extractUByte(row.parameters, "value")
+        "StaticSetting" -> extractUByte(row.parameters, "level")
+        "StaticColour" -> extractColour(row.parameters)
+        "StaticPosition" -> extractPosition(row.parameters)
+        else -> ValueExtract.Err("unknown effect_type '${row.effectType}'")
+    }
+
+    private fun extractUByte(params: Map<String, String>, key: String): ValueExtract {
+        val raw = params[key] ?: return ValueExtract.Err("parameters.$key missing")
+        val parsed = raw.trim().toIntOrNull()
+        if (parsed == null || parsed !in 0..255) {
+            return ValueExtract.Err("parameters.$key='$raw' not a 0..255 UByte")
+        }
+        return ValueExtract.Ok(parsed.toString())
+    }
+
+    private fun extractColour(params: Map<String, String>): ValueExtract {
+        val raw = params["colour"] ?: return ValueExtract.Err("parameters.colour missing")
+        val parsed = try {
+            parseExtendedColour(raw.trim())
+        } catch (e: Exception) {
+            return ValueExtract.Err("parameters.colour='$raw' not a valid colour: ${e.message}")
+        }
+        return ValueExtract.Ok(parsed.toSerializedString())
+    }
+
+    private fun extractPosition(params: Map<String, String>): ValueExtract {
+        val panResult = extractUByte(params, "pan")
+        if (panResult is ValueExtract.Err) return panResult
+        val tiltResult = extractUByte(params, "tilt")
+        if (tiltResult is ValueExtract.Err) return tiltResult
+        return ValueExtract.Ok("${(panResult as ValueExtract.Ok).serialized},${(tiltResult as ValueExtract.Ok).serialized}")
+    }
+
     /**
-     * Run the migration on the current [Transaction]. Reads all `StaticValue` / `StaticSetting`
-     * ad-hoc effect rows, converts each via [convertRow], INSERTs converted rows, and
-     * DELETEs the originals. Idempotent — becomes a no-op once the legacy rows are gone.
+     * Run the migration on the current [Transaction]. Reads every legacy static ad-hoc effect
+     * row, converts each via [convertRow], INSERTs converted rows, and DELETEs the originals.
+     * Idempotent — becomes a no-op once the legacy rows are gone.
      *
      * @return a summary of rows converted vs skipped. Callers log at info/warn.
      */
@@ -184,7 +224,7 @@ internal object LegacyStaticEffectMigration {
         exec(
             """SELECT id, cue_id, target_type, target_key, effect_type, category, property_name, parameters, sort_order
                FROM cue_ad_hoc_effects
-               WHERE effect_type IN ('StaticValue', 'StaticSetting')"""
+               WHERE effect_type IN ('StaticValue', 'StaticSetting', 'StaticColour', 'StaticPosition')"""
         ) { rs ->
             while (rs.next()) {
                 val paramsJson = rs.getString("parameters") ?: "{}"

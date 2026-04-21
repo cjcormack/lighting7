@@ -169,6 +169,66 @@ class LegacyStaticEffectMigrationTest {
     }
 
     @Test
+    fun `StaticColour converts via parameters colour`() {
+        val result = LegacyStaticEffectMigration.convertRow(
+            row("StaticColour", category = "colour", propertyName = null,
+                parameters = mapOf("colour" to "#ff8000"))
+        )
+        val converted = assertIs<LegacyStaticEffectMigration.ConversionResult.Converted>(result)
+        assertEquals("rgbColour", converted.row.propertyName)
+        assertEquals("#ff8000", converted.row.value)
+    }
+
+    @Test
+    fun `StaticColour preserves extended W-A-UV channels`() {
+        val result = LegacyStaticEffectMigration.convertRow(
+            row("StaticColour", category = "colour", propertyName = null,
+                parameters = mapOf("colour" to "#ff0000;w128;a64;uv200"))
+        )
+        val converted = assertIs<LegacyStaticEffectMigration.ConversionResult.Converted>(result)
+        assertEquals("#ff0000;w128;a64;uv200", converted.row.value)
+    }
+
+    @Test
+    fun `StaticColour missing colour parameter is skipped`() {
+        val result = LegacyStaticEffectMigration.convertRow(
+            row("StaticColour", category = "colour", propertyName = null, parameters = emptyMap())
+        )
+        val skipped = assertIs<LegacyStaticEffectMigration.ConversionResult.Skipped>(result)
+        assertTrue("colour" in skipped.reason)
+    }
+
+    @Test
+    fun `StaticPosition combines pan and tilt parameters`() {
+        val result = LegacyStaticEffectMigration.convertRow(
+            row("StaticPosition", category = "position", propertyName = null,
+                parameters = mapOf("pan" to "100", "tilt" to "200"))
+        )
+        val converted = assertIs<LegacyStaticEffectMigration.ConversionResult.Converted>(result)
+        assertEquals("position", converted.row.propertyName)
+        assertEquals("100,200", converted.row.value)
+    }
+
+    @Test
+    fun `StaticPosition missing tilt is skipped`() {
+        val result = LegacyStaticEffectMigration.convertRow(
+            row("StaticPosition", category = "position", propertyName = null,
+                parameters = mapOf("pan" to "100"))
+        )
+        val skipped = assertIs<LegacyStaticEffectMigration.ConversionResult.Skipped>(result)
+        assertTrue("tilt" in skipped.reason)
+    }
+
+    @Test
+    fun `StaticPosition out-of-range pan is skipped`() {
+        val result = LegacyStaticEffectMigration.convertRow(
+            row("StaticPosition", category = "position", propertyName = null,
+                parameters = mapOf("pan" to "500", "tilt" to "100"))
+        )
+        assertIs<LegacyStaticEffectMigration.ConversionResult.Skipped>(result)
+    }
+
+    @Test
     fun `value with surrounding whitespace parses`() {
         val result = LegacyStaticEffectMigration.convertRow(
             row("StaticValue", parameters = mapOf("value" to "  200  "))
