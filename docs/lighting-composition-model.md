@@ -67,7 +67,9 @@ Multi-effect composition on the same property: start from the reset baseline, it
 
 ### Fade envelopes
 
-Each `FxInstance` carries an `intensityMultiplier` in `[0, 1]` representing its cue/stack fade weight. The effect's output is scaled by this multiplier before the blend.
+Each `FxInstance` carries an `intensityMultiplier` in `[0, 1]`. The effect's output is scaled by this multiplier before the blend. It is used for manual and scripted effect fades.
+
+Cue transitions do **not** drive `intensityMultiplier`. On a cue change, outgoing effects are removed immediately and incoming effects start at full intensity; only Layer 3 property assignments crossfade (via per-cue fade weights). This matches Eos / grandMA / Hog 4 and avoids the drop-to-0 artefact that came from scaling OVERRIDE-blend effect outputs by a crossfade multiplier.
 
 ## Layer 3 — Property Assignments
 

@@ -521,11 +521,20 @@ scales each stored `Assignment.fadeWeight` by a per-cue weight at republish time
 `publishLayer3ToControllers` short-circuits keys whose composed `PropertyValue` didn't
 change, so 60 fps crossfade ticks don't thrash the controller.
 
-**Crossfade ownership.** `CueStackManager.activateCueInStack` keeps outgoing Layer 3 live
-for the crossfade duration; `runCrossfade` ticks both cues' weights each 16 ms; end-of-
-crossfade calls `removeCueAssignments(outgoingCueId)`. `ActiveStackState.crossfadeOutgoingCueId`
-is the single source of truth for "who are we currently fading out" — consulted on cancel,
-on normal completion, and on `deactivateStack`, so a mid-flight cancel never leaks Layer 3.
+**Crossfade ownership.** `CueStackManager.activateCueInStack` always removes outgoing
+effects immediately via `removeEffectsForCueStackKeepPalette`, and incoming effects start
+at full intensity. Only Layer 3 property assignments crossfade: outgoing Layer 3 is kept
+live for the crossfade duration, `runCrossfade` ticks per-cue fade weights each 16 ms via
+`updateCueFadeWeights`, and end-of-crossfade calls `removeCueAssignments(outgoingCueId)`.
+`ActiveStackState.crossfadeOutgoingCueId` is the single source of truth for "who are we
+currently fading out" — consulted on cancel, on normal completion, and on `deactivateStack`,
+so a mid-flight cancel never leaks Layer 3. Rationale: scaling running effects via
+`FxInstance.intensityMultiplier` during cue transitions produced a drop-to-0 bug when two
+cues' OVERRIDE-blend effects targeted the same property (higher-priority effect
+last-writes-wins, `scaled(0)` on a `StaticSetting` emitted a literal 0 at t=0). Industry
+consoles (Eos, grandMA, Hog 4) snap effects on cue transition and fade values; we now
+match. `FxInstance.intensityMultiplier` and `FxOutput.scaled()` are retained for
+manual / scripted effect fades.
 
 **Composer invariants.** `Layer3Resolver.composeLtp`'s outgoing-contributor filter is
 `fadeWeight > 0.0`. The earlier `< 1.0` upper bound excluded steady-state outgoing at weight

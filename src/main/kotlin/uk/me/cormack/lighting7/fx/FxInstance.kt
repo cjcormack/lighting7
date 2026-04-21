@@ -156,11 +156,12 @@ class FxInstance(
     var isRunning: Boolean = true
 
     /**
-     * Intensity multiplier for crossfade transitions (0.0 = silent, 1.0 = full).
+     * Intensity multiplier (0.0 = silent, 1.0 = full). The FxEngine multiplies effect
+     * output by this value during processing.
      *
-     * During a cue stack crossfade, outgoing effects ramp from 1→0 and incoming
-     * effects ramp from 0→1 over the fade duration. The FxEngine multiplies
-     * effect output by this value during processing.
+     * Used by manual / scripted effect fades. Cue transitions do NOT touch this field —
+     * effects snap on cue transition (outgoing removed, incoming start at full intensity);
+     * only Layer 3 property assignments crossfade. See [CueStackManager] for rationale.
      */
     @Volatile
     var intensityMultiplier: Double = 1.0

@@ -175,10 +175,11 @@ class FxEnginePublishLayer3Test {
         assertEquals(77u.toUByte(), rig.controller.currentValues[200], "unrelated channel untouched")
     }
 
-    // ─── Phase 1b crossfade-weight integration ──────────────────────────────
+    // ─── Layer 3 crossfade-weight integration ───────────────────────────────
     //
     // Drives [FxEngine.updateCueFadeWeights] directly, covering the composition behaviour
-    // that [CueStackManager.runCrossfade] now relies on each tick. Simulates the
+    // that [CueStackManager.runCrossfade] ticks each frame (Layer 3 only — effects snap on
+    // cue transition and don't participate in the crossfade). Simulates the
     // outgoing-at-1.0 / incoming-at-0.0 start, the 0.5 / 0.5 mid-fade, and the 0.0 / 1.0 end.
 
     // Uses a composition override to force LTP semantics on the dimmer channel so a

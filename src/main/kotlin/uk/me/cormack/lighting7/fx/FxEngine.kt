@@ -470,6 +470,11 @@ class FxEngine(
         val toRemove = activeEffects.values.filter { it.cueStackId == stackId }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
+            // Sorted snapshots are read lock-free by [processBeatTick] / [processWallClockTick].
+            // Without rebuilding, the tick loops keep firing the orphaned [FxInstance] refs
+            // against their old targets — one of the reasons a cue's effects would "refuse to
+            // die" after a cue transition.
+            rebuildSortedSnapshots()
             resetUncoveredProperties(toRemove)
             emitStateUpdate()
         }
