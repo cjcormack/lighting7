@@ -9,12 +9,23 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fx.parseExtendedColour
+import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoFxPreset
+import uk.me.cormack.lighting7.models.FxPresetEffectDto
+import uk.me.cormack.lighting7.routes.TogglePresetTarget
 import uk.me.cormack.lighting7.routes.applyCue
 import uk.me.cormack.lighting7.routes.buildCueApplyData
 import uk.me.cormack.lighting7.routes.buildLayer3AssignmentsForCue
+import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
+import uk.me.cormack.lighting7.routes.cueDerivedPriority
+import uk.me.cormack.lighting7.routes.resolveTargetForCue
 import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.atomic.AtomicReference
 
@@ -74,7 +85,6 @@ data class CueEditSetPropertyInMessage(
 @SerialName("cueEdit.discardChanges")
 data class CueEditDiscardChangesInMessage(val cueId: Int) : InMessage()
 
-/** Stubs for the follow-up message set — accepted so the client doesn't error on unknown type. */
 @Serializable
 @SerialName("cueEdit.setMode")
 data class CueEditSetModeInMessage(val cueId: Int, val mode: String) : InMessage()
@@ -85,11 +95,21 @@ data class CueEditSetPaletteInMessage(val cueId: Int, val palette: List<String>)
 
 @Serializable
 @SerialName("cueEdit.addPresetApplication")
-data class CueEditAddPresetApplicationInMessage(val cueId: Int) : InMessage()
+data class CueEditAddPresetApplicationInMessage(
+    val cueId: Int,
+    val presetId: Int,
+    val targets: List<CueTargetDto>,
+    val delayMs: Long? = null,
+    val intervalMs: Long? = null,
+    val randomWindowMs: Long? = null,
+) : InMessage()
 
 @Serializable
 @SerialName("cueEdit.addAdHocEffect")
-data class CueEditAddAdHocEffectInMessage(val cueId: Int) : InMessage()
+data class CueEditAddAdHocEffectInMessage(
+    val cueId: Int,
+    val effect: CueAdHocEffectDto,
+) : InMessage()
 
 @Serializable
 @SerialName("cueEdit.clearAssignment")
@@ -134,6 +154,28 @@ data class CueEditAssignmentClearedOutMessage(
     val targetType: String,
     val targetKey: String,
     val propertyName: String,
+) : OutMessage()
+
+@Serializable
+@SerialName("cueEdit.paletteChanged")
+data class CueEditPaletteChangedOutMessage(
+    val cueId: Int,
+    val palette: List<String>,
+) : OutMessage()
+
+@Serializable
+@SerialName("cueEdit.presetApplicationAdded")
+data class CueEditPresetApplicationAddedOutMessage(
+    val cueId: Int,
+    val presetId: Int,
+) : OutMessage()
+
+@Serializable
+@SerialName("cueEdit.adHocEffectAdded")
+data class CueEditAdHocEffectAddedOutMessage(
+    val cueId: Int,
+    val effectType: String,
+    val targetKey: String,
 ) : OutMessage()
 
 @Serializable
@@ -446,6 +488,182 @@ object CueEditSessionHandler {
         if (applyData != null) republishLayer3(state, cueId, applyData)
         state.show.fixtures.cueListChanged()
         return CueEditChangesDiscardedOutMessage(cueId)
+    }
+
+    /**
+     * Replace the cue's palette. In Live mode also updates the stage palette via
+     * [FxEngine.setCuePalette] so running effects that reference palette entries pick up the
+     * change on the next tick.
+     */
+    fun setPalette(
+        state: State,
+        sessionRef: AtomicReference<CueEditSessionState?>,
+        cueId: Int,
+        palette: List<String>,
+    ): OutMessage {
+        val session = sessionRef.get()
+        if (session == null || session.cueId != cueId) {
+            return CueEditErrorOutMessage(cueId, "No active cueEdit session for this cue")
+        }
+
+        try {
+            transaction(state.database) {
+                val cue = DaoCue.findById(cueId) ?: error("Cue not found")
+                cue.palette = palette
+            }
+        } catch (e: Exception) {
+            return CueEditErrorOutMessage(cueId, "Persist failed: ${e.message}")
+        }
+
+        if (session.mode == CueEditMode.LIVE) {
+            val colours = runCatching { palette.map { parseExtendedColour(it) } }.getOrNull()
+            if (colours != null) state.show.fxEngine.setCuePalette(cueId, colours)
+        }
+
+        state.show.fixtures.cueListChanged()
+        return CueEditPaletteChangedOutMessage(cueId, palette)
+    }
+
+    /**
+     * Append a preset application to the cue. In Live mode also spawns the effect immediately
+     * via the same path as [applyCue], so operators see the effect on stage as soon as they
+     * add it. Timed presets (delayMs/intervalMs) are persisted but not spawned — the cue-
+     * trigger manager handles those when the cue is applied normally.
+     */
+    fun addPresetApplication(
+        state: State,
+        sessionRef: AtomicReference<CueEditSessionState?>,
+        cueId: Int,
+        presetId: Int,
+        targets: List<CueTargetDto>,
+        delayMs: Long?,
+        intervalMs: Long?,
+        randomWindowMs: Long?,
+    ): OutMessage {
+        val session = sessionRef.get()
+        if (session == null || session.cueId != cueId) {
+            return CueEditErrorOutMessage(cueId, "No active cueEdit session for this cue")
+        }
+
+        val shouldSpawn = session.mode == CueEditMode.LIVE && delayMs == null && intervalMs == null
+        val result = try {
+            transaction(state.database) {
+                val cue = DaoCue.findById(cueId) ?: error("Cue not found")
+                val preset = DaoFxPreset.findById(presetId) ?: error("Preset not found")
+                DaoCuePresetApplication.new {
+                    this.cue = cue
+                    this.preset = preset
+                    this.targets = targets
+                    this.delayMs = delayMs
+                    this.intervalMs = intervalMs
+                    this.randomWindowMs = randomWindowMs
+                    this.sortOrder = cue.presetApplications.count().toInt()
+                }
+                val applyData = if (session.mode == CueEditMode.LIVE) buildCueApplyData(cue) else null
+                val effects = if (shouldSpawn) preset.effects else null
+                applyData to effects
+            }
+        } catch (e: Exception) {
+            return CueEditErrorOutMessage(cueId, "Persist failed: ${e.message}")
+        }
+
+        val (applyData, presetEffects) = result
+        if (applyData != null && presetEffects != null) {
+            for (target in targets) {
+                val toggleTarget = TogglePresetTarget(type = target.type, key = target.key)
+                for (presetEffect in presetEffects) {
+                    val fxTarget = try {
+                        resolveTargetForCue(state, toggleTarget, presetEffect)
+                    } catch (_: Exception) { null } ?: continue
+                    val instance = createInstanceFromPresetForCue(
+                        presetEffect, fxTarget, presetId, state, cueId
+                    )
+                    instance.cueId = cueId
+                    instance.priority = cueDerivedPriority(applyData)
+                    state.show.fxEngine.addEffect(instance)
+                }
+            }
+        }
+
+        state.show.fixtures.cueListChanged()
+        return CueEditPresetApplicationAddedOutMessage(cueId, presetId)
+    }
+
+    /**
+     * Append an ad-hoc effect to the cue. In Live mode spawns the effect immediately
+     * (immediate effects only — timed ones are persisted for [CueTriggerManager]).
+     */
+    fun addAdHocEffect(
+        state: State,
+        sessionRef: AtomicReference<CueEditSessionState?>,
+        cueId: Int,
+        effect: CueAdHocEffectDto,
+    ): OutMessage {
+        val session = sessionRef.get()
+        if (session == null || session.cueId != cueId) {
+            return CueEditErrorOutMessage(cueId, "No active cueEdit session for this cue")
+        }
+
+        val applyData = try {
+            transaction(state.database) {
+                val cue = DaoCue.findById(cueId) ?: error("Cue not found")
+                val nextSort = cue.adHocEffects.count().toInt()
+                DaoCueAdHocEffect.new {
+                    this.cue = cue
+                    targetType = effect.targetType
+                    targetKey = effect.targetKey
+                    effectType = effect.effectType
+                    category = effect.category
+                    propertyName = effect.propertyName
+                    beatDivision = effect.beatDivision
+                    blendMode = effect.blendMode
+                    distribution = effect.distribution
+                    phaseOffset = effect.phaseOffset
+                    elementMode = effect.elementMode
+                    elementFilter = effect.elementFilter
+                    stepTiming = effect.stepTiming
+                    parameters = effect.parameters
+                    delayMs = effect.delayMs
+                    intervalMs = effect.intervalMs
+                    randomWindowMs = effect.randomWindowMs
+                    sortOrder = effect.sortOrder.takeIf { it > 0 } ?: nextSort
+                }
+                if (session.mode == CueEditMode.LIVE) buildCueApplyData(cue) else null
+            }
+        } catch (e: Exception) {
+            return CueEditErrorOutMessage(cueId, "Persist failed: ${e.message}")
+        }
+
+        if (applyData != null && effect.delayMs == null && effect.intervalMs == null) {
+            val target = TogglePresetTarget(type = effect.targetType, key = effect.targetKey)
+            val presetEffectDto = FxPresetEffectDto(
+                effectType = effect.effectType,
+                category = effect.category,
+                propertyName = effect.propertyName,
+                beatDivision = effect.beatDivision,
+                blendMode = effect.blendMode,
+                distribution = effect.distribution,
+                phaseOffset = effect.phaseOffset,
+                elementMode = effect.elementMode,
+                elementFilter = effect.elementFilter,
+                stepTiming = effect.stepTiming,
+                parameters = effect.parameters,
+            )
+            val fxTarget = runCatching {
+                resolveTargetForCue(state, target, presetEffectDto)
+            }.getOrNull()
+            if (fxTarget != null) {
+                val instance = createInstanceFromPresetForCue(
+                    presetEffectDto, fxTarget, null, state, cueId
+                )
+                instance.cueId = cueId
+                instance.priority = cueDerivedPriority(applyData)
+                state.show.fxEngine.addEffect(instance)
+            }
+        }
+
+        state.show.fixtures.cueListChanged()
+        return CueEditAdHocEffectAddedOutMessage(cueId, effect.effectType, effect.targetKey)
     }
 
     /**

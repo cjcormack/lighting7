@@ -17,24 +17,26 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: 1 — **done**. Ready to start Phase 2. All Phase 1 backend work (DB/DTO,
-Layer 3 apply, stomp switch, cueEdit sockets, legacy-effect migration, snapshot-from-live,
-Layer 3 transmit publish, crossfade-weight integration) is in; frontend routing layer is
-wired; dev-rig smoke-check passed 2026-04-21. Deferred follow-ups (stack-cue Live edit,
-remaining cueEdit stubs, fixture-level colour-picker fixtureKey threading) are scheduled
-for Phase 2 alongside the CueEditor rebuild.
+**Phase**: 2 — sub-phase **2a landed 2026-04-21** (frontend `CueEditor` for editing
+non-stack cues + backend `cueEdit.setPalette` / `addPresetApplication` /
+`addAdHocEffect` handlers + fixture-level colour picker `fixtureKey` threading).
+`Cues.tsx` now mounts `CueEditor` for the edit path; create-new still uses
+`CueForm` (no cueId until save, so no session). Type-check and Vite build are
+green; Kotlin compiles. Sub-phases 2b (Live stack-cue edit + auto-advance pause),
+2c (ProgramPage inline + RunPage sheet), 2d (delete old components + doc
+collapse) are queued.
 
 See the Change log for durable invariants and engine surface.
 
 ## Known issues
 
-**Colour picker in cue-edit mode (Phase 1 plumbing limitation)**. `PropertyVisualizers.tsx::ColourSwatch` fires per-channel `updateChannel` calls for R/G/B/W/A/UV. In `kind: 'cue'`, those become `cueEdit.setChannel`, and the backend rejects R/G/B sub-channels with the "use setProperty with rgbColour" error. Root cause: `ColourPropertyDescriptor` doesn't carry `fixtureKey`, so the routing layer can't assemble a `setProperty` call from inside the hook. Group-level colour writes are already routed to one `setProperty` per member (`useUpdateGroupColour` has access to `member.fixtureKey`). Two fixes possible: thread `fixtureKey` through to the fixture-level colour components, or have the backend accept R/G/B sub-channels by merging with the existing `rgbColour` assignment. Defer until Phase 2 when the CueEditor sets context and controls where colour writes originate.
+~~**Colour picker in cue-edit mode (Phase 1 plumbing limitation)**~~ — **Addressed in 2a (2026-04-21)**. `ColourSwatch` / `VirtualDimmerSlider` now accept a `fixtureKey` prop (threaded from `FixtureContent` / per-head `PropertiesList`) and a new `useUpdateFixtureColour` hook routes RGB writes via `cueEdit.setProperty { propertyName: 'rgbColour' }` in cue mode (W/A/UV still use `setChannel` — the backend accepts those). Mirrors the existing `useUpdateGroupColour` pattern; no backend changes.
 
-**Next actions** (all carry into Phase 2):
-1. Remaining `cueEdit.*` follow-up messages: `setPalette` + `addPresetApplication` + `addAdHocEffect`. Stubs exist but reply "not implemented yet". These all need UI to exercise them meaningfully, so land them alongside Phase 2.
-2. Live stack-cue edit support. Current `beginEdit` / `setMode` reject cues with a non-null `cueStackId` when mode=LIVE. Next pass: delegate to `CueStackManager.activateCueInStack` and plumb stack deactivation through `endSessionOnDisconnect`.
+**Next actions:**
+1. ~~Remaining `cueEdit.*` follow-up messages~~ — **landed 2a**. `setPalette` / `addPresetApplication` / `addAdHocEffect` handlers implemented; immediate (no-timing) presets/effects spawn on stage in Live mode.
+2. Live stack-cue edit support — queued for 2b. Current `beginEdit` / `setMode` reject cues with a non-null `cueStackId` when mode=LIVE. Next pass: delegate to `CueStackManager.activateCueInStack`, plumb deactivation through `endSessionOnDisconnect`, and add auto-advance pause (resolved OQ3 — pause on `beginEdit`, resume on `endEdit`).
 3. Integration test: PATCH + snapshot-from-live + cueEdit round-trip through an in-memory HTTP harness — blocked on the same DB test-harness gap that blocks Phase 5's pipeline test. Track under Phase 5.
-4. Frontend: thread `fixtureKey` through to fixture-level colour components (or accept the Phase 2 hand-off) — see §"Known issues" first item.
+4. ~~Frontend: thread `fixtureKey` through to fixture-level colour components~~ — **landed 2a**. See Change log entry and resolved Known Issue 1.
 5. **moveInDark during outgoing fade** (spec'd, not yet implemented). The current linear interp path handles basic position fades; the "pre-apply incoming position during outgoing fade when outgoing intensity is 0 at end" affordance is deferred. Scope small — the resolver already knows the moveInDark flag on each `Assignment`. Good candidate for a standalone follow-up session once a real moving-head fixture is on the test rig.
 
 **Per-phase tracker:**
@@ -43,7 +45,7 @@ See the Change log for durable invariants and engine surface.
 |-------|---------|--------|
 | 0 | Layering foundation: make the composition model explicit in code (priority-ordered effects, reset-to-layer-below, `PropertyCategory` composition rules, stomp plumbing) | Done |
 | 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | Done (smoke-check passed 2026-04-21; stack-cue Live edit + remaining cueEdit stubs carried into Phase 2) |
-| 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | Not started |
+| 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | In progress (2a landed 2026-04-21; 2b–2d queued) |
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Not started |
 | 4 | Program view inline editor + "Grab live state" snapshot action | Not started |
 | 5 | **FX pipeline integration harness**: rig stub + end-to-end tests covering the Phase-0 layer cascade with real Layer-3 data, unlocking a reusable benchmark + integration test suite | Not started |
@@ -90,6 +92,15 @@ Locked design decisions from the 2026-04-17 prior-art survey (detailed in the sp
 - **Effect reset-to-neutral fix lands in Phase 0**: effects reset to the layer below (Layer 3 value, else Layer 4 direct write, else Layer 5 baseline), not to hardcoded zero. Fixes the "direct writes clobbered under running effects" bug.
 - **Layer 4 direct-write stickiness**: direct writes persist until a new cue covers the channel, `clearAssignment` is called, or a fresh `updateChannel` lands.
 - **Stomp flag** on cues (default `false`): when a stomping cue applies, the FX engine removes ad-hoc effects owned by *other* cue IDs that target properties covered by this cue's Layer 3. Data-model support lands in Phase 0; authoring UX deferred.
+
+### Phase 2 sub-phasing (2026-04-21)
+
+Confirmed with the user 2026-04-21:
+
+- **Phase 2 split into 2a / 2b / 2c / 2d**, one Claude Code session per sub-phase. Each sub-phase must be pickup-able cold from this doc alone. See the [Phase 2](#phase-2--fx-cue-editor-rebuild) section for the detailed breakdown.
+- **Fixture-level colour routing fix**: thread `fixtureKey` through `ColourPropertyDescriptor` so `ColourSwatch` / `VirtualDimmerSlider` emit `cueEdit.setProperty { propertyName: 'rgbColour' }` in cue mode, matching group-level behaviour. Frontend-only; closes Phase 1 Known Issue 1. Lands in 2a.
+- **Auto-advance during Live stack-cue edit** (resolves OQ3): pause on `beginEdit`, resume on `endEdit` / disconnect. Applies only when editing a stack cue in LIVE mode. Lands in 2b.
+- **ProgramPage default mode** (resolves OQ2): Live, matching `Cues.tsx`. Revisit once "show is running" becomes a defined signal. Lands in 2c.
 
 ## Target experience
 
@@ -198,43 +209,298 @@ Frontend:
 
 **Goal**: replace `CueForm` with `CueEditor` built on fixture/group modal primitives.
 
-### Entry criteria
+Phase 2 is split into four sub-phases, each a separate Claude Code session:
+**2a** (frontend `CueEditor` + core stubs + fixture-level colour fix), **2b**
+(backend Live stack-cue edit + auto-advance pause), **2c** (ProgramPage inline
++ RunPage migration), **2d** (delete `CueForm` / `CueEffectFlow` /
+`CuePresetPicker`, collapse this section back into one Phase-5-sized block,
+consolidate change log entries). Each sub-phase must be pickup-able cold from
+this doc alone. The collapse step at the end of 2d is mandatory — the long-
+lived doc should not carry ~250 lines of sub-phase detail forever.
+
+### Phase 2 exit criteria (applies across 2a–2d)
+- Users can open a cue from `Cues.tsx`, `ProgramPage.tsx`, or `RunPage.tsx`,
+  edit contents via the new surface, and the cue reproduces the stage shape
+  when re-triggered.
+- Ad-hoc effects and preset applications are authored via per-target tabs, not
+  nested sheets.
+- Stack cues editable in Live mode.
+- `CueForm.tsx`, `CueEffectFlow.tsx`, `CuePresetPicker.tsx` removed.
+
+---
+
+### Sub-phase 2a — `CueEditor` component + core stubs
+
+**Goal**: replace `CueForm` for non-stack cues in `Cues.tsx`. Implement the three
+remaining `cueEdit.*` stubs so the editor's palette, preset-application, and
+ad-hoc-effect tabs have working routed backends. Fix the fixture-level colour
+picker known issue from Phase 1.
+
+#### 2a entry criteria
 - Phase 1 exit criteria met.
 
-### Exit criteria
-- Users can open a cue from `Cues.tsx`, edit contents via the new surface, and the cue reproduces the stage shape when re-triggered.
-- Ad-hoc effects and preset applications are authored via per-target tabs, not nested sheets.
-- `CueForm.tsx` removed.
+#### 2a exit criteria
+- New `src/components/cues/editor/` folder holds the orchestrator
+  (`CueEditor.tsx`) + header/grid/detail/tabs components.
+- `Cues.tsx` sheet mounts `CueEditor mode="sheet"` in place of `CueForm`.
+  `CueForm` remains in-tree for ProgramPage/RunPage until 2c/2d.
+- Non-stack cues round-trip through the editor — Live mode reflects on stage,
+  Blind persists silently.
+- Backend `cueEdit.setPalette`, `cueEdit.addPresetApplication`,
+  `cueEdit.addAdHocEffect` implemented (no more "not implemented yet"
+  rejections).
+- Fixture-level colour picker no longer errors in cue mode — RGB writes route
+  via `cueEdit.setProperty { propertyName: 'rgbColour' }`.
 
-### Work
+#### 2a work
 
-- **New** `src/components/cues/CueEditor.tsx`:
-  - Header: metadata + palette bar (lift `CuePaletteEditor` from `CueForm.tsx:397-430` into shared) + **Live / Blind** toggle with clear visual state (e.g. a pill / segmented control; red or amber accent when Blind so the operator never forgets which mode they're in).
-  - Main area: segmented control (`Groups` / `Fixtures`), grid of `CompactFixtureCard`-style cards. Each card driven by the cue's `propertyAssignments` via `GroupPropertyVisualizers`.
-  - Detail pane: selected card opens `FixtureContent` / `GroupPropertiesSection`, wrapped in `<EditorContext.Provider value={{ kind: 'cue', id, mode }}>` where `mode` reflects the header toggle.
-  - Per-target tabs: **Properties** / **Effects** / **Presets**.
-  - Triggers panel as collapsible aside, reuses `CueTriggerEditor`.
-  - Lifecycle: on mount → `cueEdit.beginEdit { cueId, mode }` (Live also fires `POST /cues/{id}/apply`); on unmount → `cueEdit.endEdit`; on toggle → `cueEdit.setMode { mode }`.
-  - Default mode = `live` for `Cues.tsx`; Program view may default differently — see Open Questions.
-- **Effects-overlay preview**: when effects are running on the cue being edited and obscuring a property the user is trying to see, show a subtle indicator on the property pad (e.g. "Effect active — showing base value"). Full solo-layer preview is a stretch goal. Add this affordance in Phase 2 design; revisit if users struggle.
+Frontend — `CueEditor` component tree (new `src/components/cues/editor/`):
+
+- [x] `CueEditor.tsx` — orchestrator. Props: `cue`, `projectId`, `isInStack`,
+  `inheritedPalette`, `mode: 'sheet' | 'inline'`, `defaultEditMode`. Wraps
+  children in `<EditorContextProvider value={{ kind: 'cue', id, mode }}>`.
+  Lifecycle: on mount → `beginCueEditSession(cueId, mode)`; on unmount →
+  `endCueEditSession(cueId)`; on Live/Blind toggle → `setCueEditMode`.
+- [x] `CueEditorHeader.tsx` — metadata (name, cue#, notes, fade, auto-advance)
+  + palette bar (reuse `CuePaletteEditor`) + Live/Blind toggle button (amber
+  accent when Blind).
+- [x] `CueTargetGrid.tsx` — segmented `Groups | Fixtures` + card grid with
+  "in cue" badges on cards that have existing assignments / presets / effects.
+- [x] `CueTargetDetail.tsx` — selected-card detail pane. Wraps
+  `FixtureContent` / `GroupPropertiesSection`. Per-target tabs:
+  **Properties** / **Effects** / **Presets**.
+- [ ] Extraction of `EffectConfigureStep` / `PresetPickStep` / `TimingFields`
+  into `shared/` — **deferred to 2d**. 2a reuses `CueEffectFlow` and
+  `CuePresetPicker` as-is (user still picks target in the flow even though the
+  detail pane has one). Not ideal UX; split happens in cleanup.
+- [x] Triggers panel — reuse `CueTriggerEditor` in a collapsible section of
+  the editor body.
+
+Frontend — fixture-level colour picker (closes Phase 1 Known Issue 1):
+
+- [x] Add `fixtureKey?: string` prop to `ColourSwatch` / `VirtualDimmerSlider`
+  / `PropertyVisualizer` (prop-threaded from `FixtureContent`; descriptor type
+  unchanged — no backend work needed).
+- [x] New `useUpdateFixtureColour` hook in `src/hooks/usePropertyValues.ts`
+  mirrors `useUpdateGroupColour`: RGB → `cueEdit.setProperty` with
+  `rgbColour`; W/A/UV → `cueEdit.setChannel`.
+- [x] `FixtureContent` passes `fixture.key` to every property visualizer;
+  per-head `PropertiesList` passes `element.key`.
+- [x] `useVirtualDimmer` now accepts `fixtureKey`, routes via `setProperty` in
+  cue mode, and the "Not routed for cue-edit" comment is gone.
+- [x] Individual R/G/B `ColourChannelSlider` onChange now route via the
+  combined `updateColour` callback, so they emit one `setProperty` rather
+  than three rejected `setChannel` calls.
+
+Frontend — `Cues.tsx` swap:
+
+- [x] Edit-existing path mounts `CueEditor mode="sheet"`. Create-new still
+  uses `CueForm` (no cueId → no session to open). Creation flow migration
+  deferred — either 2c/2d or a separate cleanup once we decide on a "draft
+  cue" shape.
+
+Backend — remaining cueEdit stubs in
+`src/main/kotlin/uk/me/cormack/lighting7/plugins/CueEditSession.kt`:
+
+- [x] `cueEdit.setPalette { cueId, palette }` — replaces cue palette in DB;
+  in Live mode also calls `FxEngine.setCuePalette` so running effects pick up
+  palette-ref changes on the next tick.
+- [x] `cueEdit.addPresetApplication { cueId, presetId, targets, timing }` —
+  inserts the DaoCuePresetApplication row; in Live mode, immediate presets
+  (no timing) spawn via the same `createInstanceFromPresetForCue` path as
+  `applyCue`. Timed presets are persisted only — `CueTriggerManager` handles
+  them when the cue is applied normally.
+- [x] `cueEdit.addAdHocEffect { cueId, effect }` — same shape. Immediate
+  effects spawn live; timed ones persist only.
+- [x] Dispatch wired in `Sockets.kt` — the "not implemented yet" rejection
+  is gone.
+- [x] Ack messages: `cueEdit.paletteChanged` /
+  `cueEdit.presetApplicationAdded` / `cueEdit.adHocEffectAdded`. Frontend
+  types in `src/api/cueEditWsApi.ts` updated.
+
+#### 2a files
+
+Frontend (new):
+- `src/components/cues/editor/CueEditor.tsx`
+- `src/components/cues/editor/CueEditorHeader.tsx`
+- `src/components/cues/editor/CueTargetGrid.tsx`
+- `src/components/cues/editor/CueTargetDetail.tsx`
+- `src/components/cues/editor/CueTargetEffectsTab.tsx`
+- `src/components/cues/editor/CueTargetPresetsTab.tsx`
+- `src/components/cues/editor/shared/EffectConfigureStep.tsx`
+- `src/components/cues/editor/shared/PresetPickStep.tsx`
+- `src/components/cues/editor/shared/TimingFields.tsx`
+
+Frontend (updated):
 - `src/routes/Cues.tsx` — swap sheet contents for `CueEditor`.
-- `src/routes/ProgramPage.tsx` — wide-viewport inline panel mounts `CueEditor` (rough; Phase 4 polishes).
-- Obsolete: `src/components/cues/CueEffectFlow.tsx`, `CuePresetPicker.tsx`. Keep `CueFxTable.tsx` for read-only previews in list rows.
+- `src/api/fixturesApi.ts` — `fixtureKey` on `ColourPropertyDescriptor`.
+- `src/components/fixtures/PropertyVisualizers.tsx` — RGB routing in cue mode.
+- `src/hooks/useVirtualDimmer.ts` — drop stale "can't route" comment.
 
-### Phase 2 verification
+Backend (updated):
+- `src/main/kotlin/uk/me/cormack/lighting7/plugins/CueEditSession.kt` —
+  `setPalette`, `addPresetApplication`, `addAdHocEffect` handlers.
+- `src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt` — confirm
+  dispatch wires the new handlers (already stubbed at ~1081–1093).
+
+#### 2a verification
 
 Use `preview_*` MCP tools against running frontend + backend.
 
-- Open a cue from `Cues.tsx` in **Live** mode → cue activates on stage.
-- Groups mode: pick a group, change colour → stage updates; close editor; reopen → cue persists change.
-- Fixtures mode: open a multi-head fixture, set per-head overrides → overrides persist.
-- Effects tab: add a beat-synced ad-hoc effect → runs on stage, saved.
-- Presets tab: quick-apply → preset application saved.
-- Close editor; trigger cue normally → identical stage output.
-- Open a *different* cue in **Blind** mode (from the same session, stage still showing the previous live cue): change its colour and intensity → stage is unchanged; close; re-trigger that cue normally → reproduces the blind-edited state.
-- Toggle Live → Blind mid-session: stage stops showing the cue; further edits don't affect stage.
-- Toggle Blind → Live mid-session: stage shows the cue's current persisted state; subsequent edits appear live.
-- Lint, typecheck, build pass.
+- `npm run lint`, `npm run type-check`, `npm run build` pass.
+- Open a non-stack cue from `/cues` → header Live/Blind toggle flips cleanly
+  (amber in Blind).
+- Groups tab: pick a group, edit colour → stage updates in Live / stays in
+  Blind → re-open cue → colour assignment persists.
+- Fixtures tab: pick a multi-head fixture, set a per-head override → persists.
+- Effects tab: add a beat-synced ad-hoc effect → runs on stage in Live, shows
+  in cue summary.
+- Presets tab: quick-apply a preset → preset application saved.
+- Triggers panel: add/edit/remove a trigger unchanged.
+- Close → re-trigger cue normally → identical stage output.
+- Fixture-level colour picker: open non-stack cue, open a fixture card, spin
+  the colour wheel → no "use setProperty with rgbColour" errors; RGB persists
+  into `propertyAssignments`.
+
+---
+
+### Sub-phase 2b — Live stack-cue edit
+
+**Goal**: drop the "Live edit of stack cues not supported yet" rejection by
+routing stack-cue LIVE edits through `CueStackManager`. Add auto-advance pause
+for the duration of the edit session (resolved OQ3).
+
+#### 2b entry criteria
+- 2a landed and merged. Editor is exercised for non-stack cues.
+
+#### 2b exit criteria
+- Opening a stack cue from `Cues.tsx` in Live mode activates the cue on stage
+  via the stack manager; `cueEdit.*` writes reflect on stage; `endEdit`
+  returns the stack cleanly.
+- Parent stack's auto-advance is paused for the duration of any Live stack-cue
+  edit session and resumed on `endEdit` / disconnect.
+
+#### 2b work
+
+- [ ] `beginEdit` LIVE path (`CueEditSession.kt:186–194`) — replace the
+  rejection with a delegate to `CueStackManager.activateCueInStack(state,
+  stackId, cueId)`. Snapshot still captured before activation. Session state
+  remembers `cueStackId` for `endEdit` / `setMode` cleanup.
+- [ ] `setMode` BLIND→LIVE path (`CueEditSession.kt:250–256`) — same delegate.
+- [ ] `endSessionOnDisconnect` (`CueEditSession.kt:455–466`) — on LIVE stack-
+  cue sessions, either call `CueStackManager.deactivateStack(stackId)` or a
+  lighter "return-to-stack-playback" helper. Confirm semantics in session.
+- [ ] Auto-advance pause — pause the stack's auto-advance timer on `beginEdit`
+  LIVE for a stack cue; resume on `endEdit` / disconnect. Hook into
+  `activeStacks` state in `CueStackManager`.
+- [ ] Republish path: `setProperty` / `setChannel` / `clearAssignment` during
+  a stack-cue LIVE session continue to use `publishLayer3ToControllers`;
+  verify against `CueStackManager`'s crossfade ownership (Phase 1 change log).
+- [ ] Integration test once Phase 5 test harness lands; dev-rig smoke only
+  for now.
+
+#### 2b files
+
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/plugins/CueEditSession.kt`
+- Updated (optional): `src/main/kotlin/uk/me/cormack/lighting7/fx/CueStackManager.kt`
+  (auto-advance pause helper).
+- Updated: `src/store/cues.ts` if any new error/success shape.
+
+#### 2b verification
+
+- Open a cue inside a stack from `/cues`: editor opens in Live mode, cue
+  activates on stage (stack state = this cue active).
+- Edit colour / position → stage reflects; re-open → persists.
+- Close editor → stack returns to prior playback cleanly.
+- Auto-advance timer paused during the edit; resumes on close.
+- Toggle Blind ↔ Live across the stack boundary: stage follows.
+
+---
+
+### Sub-phase 2c — ProgramPage inline hosting
+
+**Goal**: swap the existing `CueForm` usage in ProgramPage's wide-viewport
+right panel and RunPage's mobile sheet for `CueEditor`. Keep Phase 4 polish
+(inline Q/name/fade cells, "Grab live state" button) out of scope.
+
+#### 2c entry criteria
+- 2a + 2b landed. Non-stack and stack-cue edits both work in Live and Blind.
+
+#### 2c exit criteria
+- `ProgramPage.tsx` wide-viewport right panel mounts `CueEditor mode="inline"`.
+- `RunPage.tsx` mobile sheet mounts `CueEditor mode="sheet"`.
+- All three call-sites (Cues / Program / Run) use `CueEditor`.
+
+#### 2c work
+
+- [ ] `src/routes/ProgramPage.tsx:327–356` — replace the inline `CueForm`
+  render with `CueEditor mode="inline"`. Reuse `cueFormCueId` / `cueFormCue`
+  / `cueFormStackId` / `showInlineCueForm` state.
+- [ ] `src/routes/RunPage.tsx:137–145` — swap to `CueEditor mode="sheet"`.
+- [ ] Default mode stays `'live'` for Program view (resolved OQ2); revisit in
+  Phase 4 once "show is running" is defined.
+
+#### 2c files
+
+- Updated: `src/routes/ProgramPage.tsx`
+- Updated: `src/routes/RunPage.tsx`
+
+#### 2c verification
+
+- Wide-viewport Program view: drill into a stack, row-click a cue → inline
+  `CueEditor` mounts; edit Properties / Effects / Presets / Triggers → same
+  round-trip as `Cues.tsx`.
+- Mobile Run view: row-click → sheet opens with `CueEditor`.
+
+---
+
+### Sub-phase 2d — Clean-up + doc collapse
+
+**Goal**: delete obsolete components once all three call-sites use
+`CueEditor`. Collapse this Phase 2 section back into a single ~40-line block
+and consolidate the per-sub-phase Change log entries into one durable Phase 2
+entry.
+
+#### 2d entry criteria
+- 2a + 2b + 2c landed; all three call-sites migrated.
+
+#### 2d exit criteria
+- `CueForm.tsx`, `CueEffectFlow.tsx`, `CuePresetPicker.tsx` deleted.
+- `git grep 'CueForm\|CueEffectFlow\|CuePresetPicker'` returns zero hits (other
+  than commit messages / change-log history).
+- Phase 2 doc section collapsed; per-sub-phase Change log entries consolidated
+  into one.
+- Status block says Phase 2 done, Phase 3 ready.
+
+#### 2d work
+
+- [ ] Delete `src/components/cues/CueForm.tsx`.
+- [ ] Delete `src/components/cues/CueEffectFlow.tsx`.
+- [ ] Delete `src/components/cues/CuePresetPicker.tsx`.
+- [ ] Keep `CueFxTable.tsx` (read-only row previews), `CueTriggerEditor.tsx`
+  (reused), `CuePaletteEditor.tsx` (reused).
+- [ ] Remove unused exports from `src/components/cues/index.ts`.
+- [ ] Collapse four sub-phase sections back into one ~40-line block matching
+  Phase 3 / Phase 6 size (Entry / Exit + terse Work summary).
+- [ ] Consolidate per-sub-phase Change log entries into a single "Phase 2 —
+  CueEditor + stubs + stack-cue Live (landed YYYY-MM-DD)" entry. Durable
+  invariants to cover: session lifecycle wiring, `fixtureKey` on
+  `ColourPropertyDescriptor`, stack-cue Live delegate, auto-advance pause,
+  new cueEdit handlers + their Live-mode side-effects.
+- [ ] Tick Phase 1 "Next actions" carried into Phase 2 (remaining stubs,
+  stack-cue Live, colour-picker threading).
+
+#### 2d files
+
+- Deleted: `src/components/cues/CueForm.tsx`, `CueEffectFlow.tsx`, `CuePresetPicker.tsx`.
+- Updated: `src/components/cues/index.ts` (if it exists).
+- Updated: `docs/cue-authoring-unification-plan.md` (collapse + consolidate).
+
+#### 2d verification
+
+- Full build + smoke-check of `Cues.tsx`, `ProgramPage.tsx`, `RunPage.tsx`.
+- `git grep` for deleted components returns zero code hits.
+- Handover doc re-reads cleanly as a single Phase 2 entry.
 
 ---
 
@@ -475,8 +741,8 @@ Backend:
 Flag these to the user before implementing.
 
 1. **Stack mid-fade (Live mode only)**: if a cue is opened for edit in Live mode while another cue in the same stack is mid-fade, what's the correct behaviour? Snap-to-target then enter edit is proposed but not confirmed. (Blind mode is safe — no stage interaction.)
-2. **Default mode per surface**: Cues page defaults to Live (rehearsal context). Should Program view default to Blind when the parent stack is active in a running show — i.e. protect live performance by default? Suggested yes, but depends on how "show is running" is signalled. Related: should the default be a user preference sticky across sessions?
-3. **Auto-advance pause (Live mode only)**: should opening a cue for edit in Live mode pause the parent stack's auto-advance? Strongly suggested yes. Blind mode should never touch auto-advance.
+2. ~~**Default mode per surface**~~ — **Resolved 2026-04-21**. Program view defaults to Live, matching `Cues.tsx`. Revisit once "show is running" is a defined signal; may then flip to Blind when a show is running. User-preference sticky default deferred.
+3. ~~**Auto-advance pause (Live mode only)**~~ — **Resolved 2026-04-21**. Yes — pause on `beginEdit`, resume on `endEdit` / disconnect, for Live stack-cue edits only. Blind never touches auto-advance. Lands in sub-phase 2b.
 4. **Session ownership of `cueEdit.*`**: with multi-client connections, should the server reject `cueEdit.setChannel` from clients that didn't send `beginEdit`? Default to yes (session-scoped) unless looser semantics preferred. Also: can two clients edit the same cue simultaneously (one Live, one Blind)? Probably reject the second `beginEdit` for the same `cueId`.
 5. ~~**Layer 3 fade behaviour during cue crossfades**~~ — **Resolved 2026-04-17**. Per-category rules: sliders linear, colour RGB-linear, settings snap at 50% fade progress, position with `moveInDark` pre-applies during outgoing fade-out when outgoing intensity is 0 at end. Specified in [docs/lighting-composition-model.md](lighting-composition-model.md).
 6. **Phase 2 effects-overlay preview affordance** — how prominent? Just a badge, or a "show base only" toggle? Most relevant in Live mode; less important in Blind.
@@ -495,6 +761,72 @@ Flag these to the user before implementing.
 
 Detailed per-session narration lives in git. This section captures durable invariants and
 gotchas that would cost time to rediscover.
+
+### Phase 2a — `CueEditor` component + core cueEdit stubs (landed 2026-04-21)
+
+Per-sub-phase entry — will be folded into a single "Phase 2" change log block in 2d.
+
+**Frontend editor.** New folder `src/components/cues/editor/` hosts the orchestrator
+(`CueEditor.tsx`) + three child components (`CueEditorHeader`, `CueTargetGrid`,
+`CueTargetDetail`). `Cues.tsx` mounts `CueEditor` for the edit-existing path; create-new
+still uses `CueForm` because the cue-edit session is keyed on a backend cueId that
+doesn't exist for unsaved drafts. `CueTargetDetail` reuses `CueEffectFlow` /
+`CuePresetPicker` as-is inside the Effects / Presets tabs (step extraction into
+`shared/` deferred to 2d cleanup — for 2a the target-picker step is redundant when
+opened from a selected card, but not broken). Triggers stay in a collapsible section
+inside the editor body, powered by the existing `CueTriggerEditor`. Metadata / palette
+still round-trip through the existing REST `PUT /cues/{id}` on Save; the session
+messages only drive Layer 3 / effect / preset spawns that need cue-edit semantics.
+
+**Lifecycle wiring.** `CueEditor` opens `cueEdit.beginEdit { cueId, mode }` on mount
+(default `'live'`), closes with `cueEdit.endEdit` on unmount, and emits
+`cueEdit.setMode` on Live/Blind toggle. The `sessionIdRef` gate stops a re-render
+during an in-flight save from reopening a session. `EditorContextProvider` wraps the
+entire editor subtree with `{ kind: 'cue', id: cueId, mode }` so all routing-aware
+hooks (`useUpdateChannel`, `useUpdateFixtureColour`, group update hooks, …) dispatch
+`cueEdit.*` automatically.
+
+**Fixture-level colour routing.** Fixed Phase 1 Known Issue 1 without touching the
+backend or the descriptor schema: `ColourSwatch` / `VirtualDimmerSlider` /
+`PropertyVisualizer` gained an optional `fixtureKey` prop (threaded from
+`FixtureContent` and from per-head `PropertiesList` using `element.key`). A new
+`useUpdateFixtureColour` hook in `src/hooks/usePropertyValues.ts` mirrors
+`useUpdateGroupColour`: in cue mode RGB goes out as one `cueEdit.setProperty` with
+`propertyName: 'rgbColour'` and a `#RRGGBB` value; W/A/UV still go out as
+`cueEdit.setChannel` (the backend accepts those, only R/G/B sub-channels are
+rejected). Individual R/G/B `ColourChannelSlider` onChange also go through the
+combined callback — setting R while preserving G/B — so we send one `setProperty`
+instead of three rejected `setChannel` calls. `useVirtualDimmer.setValue` routes the
+same way.
+
+**cueEdit handlers.** `CueEditSession.kt` gained three handlers:
+- `setPalette(cueId, palette)` — replaces `DaoCue.palette`; in LIVE mode also calls
+  `FxEngine.setCuePalette` so running effects pick up palette-ref changes. The cue-
+  palette version bump already exists in the engine.
+- `addPresetApplication(cueId, presetId, targets, timing)` — inserts a
+  `DaoCuePresetApplication` row; in LIVE mode immediate presets (no `delayMs`,
+  no `intervalMs`) spawn per target via the same `createInstanceFromPresetForCue`
+  path `applyCue` uses, with `cueId` + derived priority attached. Timed presets
+  persist only — `CueTriggerManager` handles them at normal cue apply.
+- `addAdHocEffect(cueId, effect)` — same shape as `addPresetApplication` but for
+  ad-hoc `CueAdHocEffectDto`. Sort order auto-computed if caller sends `0`.
+
+All three return cue-change acks (`cueEdit.paletteChanged` /
+`cueEdit.presetApplicationAdded` / `cueEdit.adHocEffectAdded`) that the client can
+subscribe to. `cueListChanged()` broadcasts the REST-shaped update to all clients,
+which is how the sheet's read model refreshes.
+
+**Import hazard.** `FxPresetEffectDto` lives in `uk.me.cormack.lighting7.models`
+(not `.fx`) and `TogglePresetTarget` lives in `uk.me.cormack.lighting7.routes` (not
+`.fx`). Got burned on the first compile pass; resolved with the correct package
+paths. Flagging here because future cueEdit handlers that spawn effects will need
+the same imports.
+
+**Deferred into later sub-phases.** (i) Live stack-cue edit + auto-advance pause →
+2b. (ii) ProgramPage inline + RunPage sheet migration → 2c. (iii) Delete
+`CueForm` / `CueEffectFlow` / `CuePresetPicker`, extract shared effect/preset
+steps, migrate the create-new path, collapse these sub-phase sections back into
+one → 2d.
 
 ### Phase 1 — `CuePropertyAssignment` + cueEdit routing (landed 2026-04-19 → 2026-04-20b, smoke-check passed 2026-04-21)
 

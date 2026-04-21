@@ -1078,19 +1078,28 @@ fun Application.configureSockets(state: State) {
                                 )
                             )
                         }
-                        is CueEditSetPaletteInMessage,
-                        is CueEditAddPresetApplicationInMessage,
+                        is CueEditSetPaletteInMessage -> {
+                            sendSerialized<OutMessage>(
+                                CueEditSessionHandler.setPalette(
+                                    state, cueEditSessionRef, message.cueId, message.palette,
+                                )
+                            )
+                        }
+                        is CueEditAddPresetApplicationInMessage -> {
+                            sendSerialized<OutMessage>(
+                                CueEditSessionHandler.addPresetApplication(
+                                    state, cueEditSessionRef, message.cueId,
+                                    message.presetId, message.targets,
+                                    message.delayMs, message.intervalMs, message.randomWindowMs,
+                                )
+                            )
+                        }
                         is CueEditAddAdHocEffectInMessage -> {
-                            val cueId = when (message) {
-                                is CueEditSetPaletteInMessage -> message.cueId
-                                is CueEditAddPresetApplicationInMessage -> message.cueId
-                                is CueEditAddAdHocEffectInMessage -> message.cueId
-                                else -> null
-                            }
-                            sendSerialized<OutMessage>(CueEditErrorOutMessage(
-                                cueId = cueId,
-                                message = "cueEdit message not yet implemented — pending follow-up session",
-                            ))
+                            sendSerialized<OutMessage>(
+                                CueEditSessionHandler.addAdHocEffect(
+                                    state, cueEditSessionRef, message.cueId, message.effect,
+                                )
+                            )
                         }
 
                         null -> TODO()
