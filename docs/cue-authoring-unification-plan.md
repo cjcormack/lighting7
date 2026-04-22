@@ -17,28 +17,27 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: **Phase 3 complete (landed 2026-04-21).** Frontend ships
-`PresetEditor` replacing `PresetForm` (881-line monolith deleted, zero
-remaining `PresetForm` import hits). `FxPreset` + `FxPresetInput` carry
-`palette` + `propertyAssignments` and round-trip through RTK Query without
-store changes. New `PresetDraftContext` owns the assignment draft; the
-existing property read/write hooks (`useSliderValue`/`useColourValue`/
-`usePositionValue`/`useSettingValue`, `useUpdateChannel`/
-`useUpdateFixtureColour`, `useUpdateGroup{Slider,Colour,Position,Setting}`,
-`useVirtualDimmer`) grew a `kind: 'preset'` branch that routes through the
-draft instead of DMX/channels. A synthetic `Fixture` built from the chosen
-`FixtureTypeMode` drives `FixtureContent` inside an
-`EditorContextProvider({ kind: 'preset', id })` + `PresetDraftProvider` so
-all existing property primitives (ColourSwatch, VirtualDimmerSlider,
-PropertyVisualizers, etc.) work unchanged. `FxSection` early-returns null
-in preset mode (the synthetic fixture key doesn't resolve in
-`useFixtureEffectsQuery`). `BuskingView` swapped over too. `npm run
-type-check` + `npm run build` green; round-trip verified end-to-end
-(PUT → GET → reopen shows `dimmer=200, strobe=64` pulled from the saved
-`propertyAssignments` via the draft context).
+**Phase**: **Phase 4 complete (landed 2026-04-22).** `CueEditorHeader` grew
+an optional `onSnapshotFromLive` / `snapshotPending` pair; when set, a
+**Grab live state** button renders next to the Live/Blind toggle (camera
+icon, `Loader2` spinner on pending, disabled while pending or on a
+blank/new cue). `ProgramPage` owns the mutation + a small inline confirm
+`<Dialog>` and applies the returned `Cue` straight to the editor's local
+state (the `snapshot-from-live` endpoint already serves `toCueDetails`, so
+no follow-up `fetchCue` is needed). The other two call-sites (`Cues.tsx`,
+`RunPage.tsx`) leave the prop undefined so the button stays Program-only,
+matching the plan. The rest of Phase 4's scope (wide-viewport inline
+editor, inline Q/name/fade cells) was already in place — landed earlier
+under Phase 2c (`9baa756`), the `ba93e81` inline panels commit, and
+`78380cb` inline metadata cells. Snapshot mutation + backend endpoint were
+plumbed from Phase 1. `npm run type-check` + `npm run build` green; browser
+round-trip verified (Program → pick cue → Grab live state → confirm →
+palette + assignments reload in-place).
 
-Next up is Phase 4 (Program view inline editor) — see Next actions below
-and the Phase 4 section for entry criteria.
+Next up is **Phase 5 (FX pipeline integration harness)** — see Phase 5
+section. The "PATCH + snapshot-from-live + cueEdit round-trip" integration
+test in Next actions is the concrete driver for the Phase 5 test-harness
+work.
 
 Prior milestone — **Phase 3 backend (landed 2026-04-21):** preset child
 collection + apply-path + toggle Layer-3 pseudo-cue. `./gradlew test`
@@ -62,7 +61,7 @@ See the Change log for durable invariants and engine surface.
 ~~**Colour picker in cue-edit mode (Phase 1 plumbing limitation)**~~ — **Addressed in Phase 2 (2026-04-21)**. `ColourSwatch` / `VirtualDimmerSlider` now accept a `fixtureKey` prop (threaded from `FixtureContent` / per-head `PropertiesList`) and a new `useUpdateFixtureColour` hook routes RGB writes via `cueEdit.setProperty { propertyName: 'rgbColour' }` in cue mode (W/A/UV still use `setChannel` — the backend accepts those). Mirrors the existing `useUpdateGroupColour` pattern; no backend changes.
 
 **Next actions:**
-1. **Phase 4** — Program view inline editor + "Grab live state" snapshot action. Prerequisites (Phase 2 `CueEditor`) are met; Phase 3 is not a blocker. See Phase 4 section.
+1. **Phase 5** — FX pipeline integration harness. Unblocks the deferred `snapshot-from-live` / `cueEdit` round-trip tests. See Phase 5 section.
 2. **Phase 3 follow-ups** (all flagged 2026-04-21; see Phase 3 section for detail):
    - Palette-resolution cascade for presets — preset palette → cue palette → global, resolved property-like. Backend now ships the data field (`fx_presets.palette`); cascade resolution still matches Phase 2's "global palette only" semantics.
    - Timed preset property assignments — `applyCue` immediate presets contribute Layer 3, delayed/recurring preset applications do NOT. `FxEngine.setCueAssignments` is a replace operation; a timed-fire append path needs new engine API. Document limitation.
@@ -82,7 +81,7 @@ See the Change log for durable invariants and engine surface.
 | 1 | `CuePropertyAssignment` model + migration; frontend `EditorContext` routing layer | Done |
 | 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | Done (2026-04-21) |
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Done (2026-04-21) |
-| 4 | Program view inline editor + "Grab live state" snapshot action | Not started |
+| 4 | Program view inline editor + "Grab live state" snapshot action | Done (2026-04-22) |
 | 5 | **FX pipeline integration harness**: rig stub + end-to-end tests covering the Phase-0 layer cascade with real Layer-3 data, unlocking a reusable benchmark + integration test suite | Not started |
 | 6 | **Persisted-reference validation for cue assignments**: dead-reference diagnostic for `CuePropertyAssignment` rows (fixture rename / removal), paralleling control-surface Phase 7 | Not started |
 | 7 | **Property-level Layer 4 writer**: reusable `PropertyValue → channel-writes` resolver + migrate preset-toggle off the Phase-3 pseudo-cue onto a real Layer-4 path | Not started |
@@ -308,7 +307,7 @@ Frontend:
 
 ---
 
-## Phase 4 — Program view inline editor
+## Phase 4 — Program view inline editor (done 2026-04-22)
 
 **Goal**: bring the new editor into Program view; add live-snapshot workflow.
 
@@ -322,9 +321,13 @@ Frontend:
 
 ### Work
 
-- `src/components/runner/program/StackDetail.tsx` — click a cue row → inline `CueEditor` on wide viewports.
-- Header action **"Grab live state"** → `POST /cues/{cueId}/snapshot-from-live`, refresh.
-- Inline metadata cells in `ProgramCueRow` — mirror Run view pattern (commit `78380cb` in lighting-react).
+Most of the scope for this phase was drawn forward and landed under Phase 2:
+
+- **Wide-viewport inline editor** — already in place (`9baa756` Phase 2c + `ba93e81`). `ProgramPage` splits the stack list and a 400px `CueEditor` panel in `mode="inline"` on XL viewports; narrow viewports fall back to the sheet.
+- **Inline Q / name / fade cells** in `ProgramCueRow` — already in place (`78380cb`) via `InlineTextCell` / `InlineEditCell` wired to `usePatchProjectCueMutation`.
+- **"Grab live state" snapshot button** — the outstanding item for Phase 4. Implemented in this pass.
+
+See the Change log entry for the snapshot-button implementation details.
 
 ### Phase 4 verification
 
@@ -658,6 +661,59 @@ Flag these to the user before implementing.
 
 Detailed per-session narration lives in git. This section captures durable invariants and
 gotchas that would cost time to rediscover.
+
+### Phase 4 — Program view "Grab live state" (landed 2026-04-22)
+
+Small, surgical pass: the inline wide-viewport `CueEditor` and inline
+metadata cells were already in place from Phase 2c (`9baa756`), `ba93e81`,
+and `78380cb`, and the `snapshotCueFromLive` mutation + `POST
+/cues/{cueId}/snapshot-from-live` endpoint were both plumbed in Phase 1.
+Phase 4 wires the remaining UI: a **Grab live state** button in the cue
+editor header, Program-only.
+
+**Header actions slot.**
+[`CueEditorHeader`](../../lighting-react/src/components/cues/editor/CueEditorHeader.tsx)
+gained optional `onSnapshotFromLive?: () => void` + `snapshotPending?:
+boolean` props. When `onSnapshotFromLive` is set, a `Button` renders next
+to the existing `LiveBlindToggle`: camera icon normally, `Loader2` spinner
+while pending, "Grab live state" label hidden below the `sm:` breakpoint.
+Disabled on pending or when `!isEditing` (new cues can't snapshot). Chose a
+specific prop pair over a generic `headerActions` slot — keeps the call-site
+self-documenting and matches the existing `onX` + `xPending` convention
+elsewhere in the codebase.
+[`CueEditor`](../../lighting-react/src/components/cues/editor/CueEditor.tsx)
+threads the two props through unchanged.
+
+**Call-site wiring.**
+[`ProgramPage`](../../lighting-react/src/routes/ProgramPage.tsx) owns the
+mutation (`useSnapshotCueFromLiveMutation`), a `snapshotConfirmOpen` +
+`snapshotError` pair of local state, and a small inline `<Dialog>` matching
+the `DeleteProjectConfirmDialog` / `ProjectSwitchConfirmDialog` hand-rolled
+pattern (no generic confirm primitive exists in this codebase). Confirm →
+`.unwrap()` → the returned `Cue` is applied straight to the editor's
+`cueEditorCue` state. No follow-up `fetchCue` — the backend's
+`snapshot-from-live` route already returns `cue.toCueDetails(...)`, so the
+mutation's typed `Cue` return value is the fresh cue (saved one HTTP
+round-trip vs. the initial design that planned a separate refetch). The
+`Cues.tsx` and `RunPage.tsx` call-sites leave `onSnapshotFromLive`
+undefined so the button stays Program-only, matching the plan's "header
+action ... in Program context" framing.
+
+**Error UX.** The dialog's `open` change handler ignores close requests
+while `snapshotPending` is true (can't abandon the mutation mid-flight).
+Errors surface inside the dialog next to Cancel/Confirm — kept local to
+the action surface rather than routing through `CueEditor.error` because
+the error is contextual to the confirmation, not the editor as a whole.
+
+**Verification.** `npm run type-check` + `npm run build` green. Browser
+round-trip: Program view (wide viewport) → drill into Lark Stack → first
+cue auto-opens in the inline editor → **Grab live state** → confirm →
+network shows `POST /api/rest/project/8/cues/62/snapshot-from-live → 200`
+followed by `GET /api/rest/project/8/cues → 200` (RTK's `CueList`
+invalidation) and `GET /api/rest/project/8/cues/62 → 200` (RTK's automatic
+refetch of the detail query — a separate consumer, not the local state
+update path). Editor's Properties tab + Palette reload in-place with the
+captured assignments.
 
 ### Phase 3 frontend — PresetEditor on fixture-modal primitives (landed 2026-04-21)
 
