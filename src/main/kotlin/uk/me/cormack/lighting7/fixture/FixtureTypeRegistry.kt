@@ -59,6 +59,13 @@ object FixtureTypeRegistry {
         fixtureClasses.flatMap { klass -> discoverTypes(klass) }
     }
 
+    private val typeKeyToInfo: Map<String, FixtureTypeInfo> by lazy {
+        allTypes.associateBy { it.typeKey }
+    }
+
+    /** O(1) lookup of a [FixtureTypeInfo] by its declared typeKey. */
+    fun typeInfoForKey(typeKey: String): FixtureTypeInfo? = typeKeyToInfo[typeKey]
+
     /**
      * Map from typeKey to concrete KClass, lazily computed.
      * Used for instantiation by typeKey (DB-based mode).

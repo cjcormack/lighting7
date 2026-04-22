@@ -7,6 +7,7 @@ import org.jetbrains.exposed.dao.IntEntityClass
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.IntIdTable
 import org.jetbrains.exposed.sql.json.json
+import uk.me.cormack.lighting7.fx.AssignmentHealth
 
 // ─── DTOs (used for API serialization) ──────────────────────────────────
 
@@ -39,6 +40,13 @@ data class CuePropertyAssignmentDto(
     val value: String,
     val fadeDurationMs: Long? = null,
     val sortOrder: Int = 0,
+    /**
+     * Validation status of this row against the live patch. Populated server-side on read
+     * (see Phase 6 dead-reference diagnostics); ignored on write — the server never trusts
+     * client-supplied health. Defaults to [AssignmentHealth.Ok] so snapshots and apply-path
+     * code paths that don't resolve health stay serialisable unchanged.
+     */
+    val health: AssignmentHealth = AssignmentHealth.Ok,
 )
 
 @Serializable

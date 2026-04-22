@@ -30,6 +30,40 @@ import uk.me.cormack.lighting7.state.State
 
 private val logger = LoggerFactory.getLogger("projectCues")
 
+/**
+ * Dead-assignment warn throttle. Keeps the log quiet when the same cue is fired repeatedly
+ * with the same dead-reference shape (e.g. a stack advancing the same dead cue on every GO).
+ * Capped at [DEAD_WARN_STATE_MAX] entries so a long-running process can't accumulate one
+ * entry per ever-applied cue — on overflow the oldest entry is evicted. Not a cache of
+ * correctness — just a log-rate gate, so imprecise eviction is fine.
+ */
+private const val DEAD_WARN_THROTTLE_MS = 30_000L
+private const val DEAD_WARN_STATE_MAX = 1024
+private val deadWarnState = java.util.Collections.synchronizedMap(
+    object : java.util.LinkedHashMap<Int, Pair<Long, String>>(16, 0.75f, /* accessOrder = */ true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Pair<Long, String>>?): Boolean =
+            size > DEAD_WARN_STATE_MAX
+    },
+)
+
+private fun maybeLogDeadAssignments(
+    cueId: Int,
+    cueName: String,
+    deadRows: List<CuePropertyAssignmentDto>,
+) {
+    val signature = deadRows.joinToString(";") { "${it.targetType}:${it.targetKey}.${it.propertyName}" }
+    val now = System.currentTimeMillis()
+    val previous = deadWarnState[cueId]
+    if (previous != null && previous.second == signature && (now - previous.first) < DEAD_WARN_THROTTLE_MS) {
+        return
+    }
+    deadWarnState[cueId] = now to signature
+    logger.warn(
+        "applyCue '{}' ({}): {} dead assignment(s): {}",
+        cueName, cueId, deadRows.size, signature,
+    )
+}
+
 internal fun Route.routeApiRestProjectCues(state: State) {
     // GET /{projectId}/cues - List cues for a project
     get<ProjectCuesResource> { resource ->
@@ -47,7 +81,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                         DaoCuePresetApplication::preset,
                         DaoCueTrigger::script,
                     )
-                    .map { it.toCueDetails(isCurrentProject) }
+                    .map { it.toCueDetails(isCurrentProject, state.show.fixtures) }
             }
             call.respond(cues)
         }
@@ -94,7 +128,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     newCue.propertyAssignments,
                     newCue.triggers,
                 )
-                cue.toCueDetails(isCurrentProject = true)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
             state.show.fixtures.cueListChanged()
             if (newCue.cueStackId != null) state.show.fixtures.cueStackListChanged()
@@ -109,7 +143,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val cue = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
-                cue.toCueDetails(isCurrentProject)
+                cue.toCueDetails(isCurrentProject, state.show.fixtures)
             }
 
             if (cue != null) {
@@ -153,7 +187,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     updatedData.triggers,
                 )
 
-                cue.toCueDetails(isCurrentProject = true)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
             if (cueDetails != null) {
@@ -225,7 +259,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     )
                 }
 
-                cue.toCueDetails(isCurrentProject = true)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
             if (cueDetails != null) {
@@ -509,7 +543,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     propertyAssignments = captured.propertyAssignments,
                     triggers = emptyList(),
                 )
-                cue.toCueDetails(isCurrentProject = true)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
             if (cueDetails != null) {
@@ -799,7 +833,7 @@ internal fun buildCueApplyData(cue: DaoCue): CueApplyData = CueApplyData(
     sortOrder = cue.sortOrder,
 )
 
-/** Convert a DaoCuePropertyAssignment entity to its DTO form. */
+/** Convert a DaoCuePropertyAssignment entity to its DTO form. Health defaults to [AssignmentHealth.Ok]. */
 internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
     targetType = targetType,
     targetKey = targetKey,
@@ -808,6 +842,20 @@ internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
     fadeDurationMs = fadeDurationMs,
     sortOrder = sortOrder,
 )
+
+/**
+ * DTO + health evaluated against the live patch [fixtures]. Used for REST responses where
+ * dead-reference diagnostics are surfaced (Phase 6). Apply-path and snapshot callers keep
+ * using [toDto] — they don't need health and shouldn't pay the lookup cost.
+ */
+internal fun DaoCuePropertyAssignment.toDtoWithHealth(fixtures: uk.me.cormack.lighting7.show.Fixtures): CuePropertyAssignmentDto {
+    val base = toDto()
+    return base.copy(
+        health = PersistedFixtureReferenceValidator.validateTargetedReference(
+            fixtures, base.targetType, base.targetKey, base.propertyName,
+        ),
+    )
+}
 
 /** Convert a DaoCueAdHocEffect entity to its DTO form. */
 internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
@@ -830,8 +878,16 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     sortOrder = sortOrder,
 )
 
-/** Convert a DaoCue entity to CueDetails API response. */
-internal fun DaoCue.toCueDetails(isCurrentProject: Boolean): CueDetails {
+/**
+ * Convert a DaoCue entity to CueDetails API response. Property-assignment rows are tagged
+ * with [AssignmentHealth] by resolving each `(targetType, targetKey, propertyName)` against
+ * [fixtures] — dead references surface in the UI with markers (Phase 6) rather than
+ * silently dropping at apply time.
+ */
+internal fun DaoCue.toCueDetails(
+    isCurrentProject: Boolean,
+    fixtures: uk.me.cormack.lighting7.show.Fixtures,
+): CueDetails {
     val presetDetails = presetApplications.sortedBy { it.sortOrder }.map { app ->
         CuePresetApplicationDetail(
             presetId = app.preset.id.value,
@@ -854,7 +910,8 @@ internal fun DaoCue.toCueDetails(isCurrentProject: Boolean): CueDetails {
             sortOrder = trigger.sortOrder,
         )
     }
-    val assignmentDetails = this.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() }
+    val assignmentDetails = this.propertyAssignments.sortedBy { it.sortOrder }
+        .map { it.toDtoWithHealth(fixtures) }
     return CueDetails(
         id = this.id.value,
         name = this.name,
@@ -973,6 +1030,20 @@ internal fun deleteCueChildren(cue: DaoCue) {
 internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean = false): ApplyCueResponse {
     val engine = state.show.fxEngine
     var effectCount = 0
+
+    // Pre-apply validation: warn once per cue-apply when any assignment targets a
+    // removed/renamed fixture / group / property. The per-row warns inside the build helpers
+    // stay (they're the detailed diagnostic trail); this summary is the rate-limited
+    // operator-facing signal. Same-shape warns within `DEAD_WARN_THROTTLE_MS` are dropped
+    // so a stack GO'ing the same dead cue on every beat doesn't flood the logs.
+    val deadRows = cueData.propertyAssignments.filter {
+        PersistedFixtureReferenceValidator.validateTargetedReference(
+            state.show.fixtures, it.targetType, it.targetKey, it.propertyName,
+        ) != AssignmentHealth.Ok
+    }
+    if (deadRows.isNotEmpty()) {
+        maybeLogDeadAssignments(cueData.cueId, cueData.cueName, deadRows)
+    }
 
     // 1. Remove effects — either all cue effects or just this cue's effects
     if (replaceAll) {
@@ -1143,16 +1214,9 @@ internal fun buildStompOverlapFromAssignments(
     return out
 }
 
-/**
- * Canonicalise the `propertyName` on a [CuePropertyAssignmentDto] to the name used by the
- * matching [FxTarget] — `LayerResolver` looks up Layer 3 state using `target.propertyName`, so
- * aliases like `"colour"` / `"color"` must normalise to `rgbColour`.
- */
-private fun canonicalPropertyName(propertyName: String): String =
-    when (propertyName.lowercase()) {
-        "colour", "color", "rgbcolour" -> "rgbColour"
-        else -> propertyName
-    }
+// Canonical form for property names is defined in [uk.me.cormack.lighting7.fx.canonicalPropertyName]
+// — shared with [PersistedFixtureReferenceValidator] so route handlers and validation
+// don't drift apart on the aliasing rule.
 
 /**
  * Fixture property lookup used when building Layer 3 assignments. Returns the resolved

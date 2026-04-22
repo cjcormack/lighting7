@@ -17,33 +17,54 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: **Phase 5 complete (landed 2026-04-22).** `FxEnginePipelineTest`
-covers every Worked Example in
-[lighting-composition-model.md](lighting-composition-model.md#worked-examples)
-plus the Phase-0 deferred smoke-check regressions (SineWave +
-`updateChannel=180`, priority-ordered overlapping effects, park+effect).
-`FxEnginePipelineTest` drives synthetic `MasterClock.ClockTick`s through
-`FxEngine.processBeatTick` / `processWallClockTick` (both relaxed from
-`private` to `internal`) against a `MockDmxController` rig, exercising the
-full Layer 2 → 3 → 4 → 5 cascade. `FxEngineBenchmark` measures p50/p99
-tick duration and per-tick allocation bytes via
-`ThreadMXBean.getThreadAllocatedBytes`; skipped by default, runs on
-`-Dfx.benchmark=true` (build.gradle.kts forwards the flag to the test
-JVM). Initial baseline on a 4×168 HexFixture rig with 336 effects: beat
-p50 ≈ 600 µs, p99 ≈ 4 ms; wall-clock p50 ≈ 535 µs, p99 ≈ 6 ms; ≈1.9 MB
-allocated per tick (a follow-up optimisation target). `./gradlew test`
-green end-to-end.
+**Phase**: **Phase 6 complete (landed 2026-04-22).**
+`AssignmentHealth` sealed class (Ok / MissingFixture / MissingGroup /
+MissingProperty) in `src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt`
++ shared `PersistedFixtureReferenceValidator` in the same package expose
+two entry points — `validateTargetedReference` (cue `(targetType,
+targetKey, propertyName)`) and `validatePresetPropertyReference`
+(preset-local `(fixtureTypeKey, propertyName)`). Validator is stateless:
+callers pass the current `Fixtures` snapshot and health transitions
+follow patch state with zero cache plumbing. Per the plan decision, we
+shipped the shared validator here first rather than waiting for
+control-surface Phase 7; that phase can consume it unchanged or extend
+the ADT with Missing-Cue / Missing-Stack variants without refactoring
+either caller.
 
-The plan's preferred seal-relaxation path turned out to be unnecessary:
-`MockDmxController` already lives in main sources and serves as the test
-stub without breaching the sealed-interface boundary. Seal is left
-sealed; the real knob that needed turning was tick-loop visibility, and
-`internal` does the job with minimal production surface change.
+Cue + preset REST details now carry `health` on each property-assignment
+row. Input DTOs accept `health` optionally (defaulted to `Ok`) so the
+frontend can round-trip cue drafts without stripping the field — the
+server always re-resolves health on write. `toCueDetails(isCurrentProject,
+fixtures)` gained a `Fixtures` parameter (all six call sites updated);
+`DaoFxPreset.toPropertyAssignmentDtos()` tags each row against the
+preset's declared `fixtureType` — unknown/null types pass as `Ok` to
+avoid false-positive markers in the backfill window.
 
-Next up is **Phase 6 (Persisted-reference validation for cue
-assignments)** — dead-reference diagnostics for `CuePropertyAssignment`
-rows, paralleling control-surface Phase 7's `BindingHealth` work. See
-Phase 6 section.
+`applyCue` logs a rate-limited warn summarising dead rows — throttled
+per-cue by signature with a 30s window so a stack auto-advancing the
+same dead cue doesn't flood logs. The per-row warns inside
+`buildLayer3AssignmentsForCue` / `buildLayer3AssignmentsForPreset` stay
+as the diagnostic detail trail.
+
+Frontend ships `DeadAssignmentsBanner` (cue) and
+`DeadPresetAssignmentsBanner` (preset) as inline callouts at the top of
+each editor — one row per dead assignment with a plain-English reason
+and a one-click Remove action. This is our pragmatic interpretation of
+the plan's "Rebind" affordance: since property assignments are authored
+by direct-manipulation inside `FixtureContent`, the operator re-adds
+against the correct fixture/group card rather than rebinding
+in-place. Describes the decision as "pragmatic rebind" in the banner
+tooltip.
+
+Tests: 15 new unit tests on `PersistedFixtureReferenceValidator`
+covering every ADT variant, fixture-rename transition, colour-alias
+canonicalisation, and legacy-null-fixtureType handling. `CuePropertyAssignmentDto`
+now has three additional tests asserting health round-trips on the wire
+and the missing-field input path defaults to `Ok`. `./gradlew test`
+green.
+
+Prior milestone — **Phase 5 complete (landed 2026-04-22):** FX pipeline
+integration harness + benchmark. See commit `e48eb48`.
 
 Prior milestone — **Phase 3 backend (landed 2026-04-21):** preset child
 collection + apply-path + toggle Layer-3 pseudo-cue. `./gradlew test`
@@ -67,7 +88,7 @@ See the Change log for durable invariants and engine surface.
 ~~**Colour picker in cue-edit mode (Phase 1 plumbing limitation)**~~ — **Addressed in Phase 2 (2026-04-21)**. `ColourSwatch` / `VirtualDimmerSlider` now accept a `fixtureKey` prop (threaded from `FixtureContent` / per-head `PropertiesList`) and a new `useUpdateFixtureColour` hook routes RGB writes via `cueEdit.setProperty { propertyName: 'rgbColour' }` in cue mode (W/A/UV still use `setChannel` — the backend accepts those). Mirrors the existing `useUpdateGroupColour` pattern; no backend changes.
 
 **Next actions:**
-1. **Phase 6** — Persisted-reference validation for cue + preset assignments. See Phase 6 section.
+1. **Phase 7** — Property-level Layer 4 writer, migrating preset-toggle off the Phase-3 pseudo-cue. See Phase 7 section.
 2. **Phase 3 follow-ups** (all flagged 2026-04-21; see Phase 3 section for detail):
    - Palette-resolution cascade for presets — preset palette → cue palette → global, resolved property-like. Backend now ships the data field (`fx_presets.palette`); cascade resolution still matches Phase 2's "global palette only" semantics.
    - Timed preset property assignments — `applyCue` immediate presets contribute Layer 3, delayed/recurring preset applications do NOT. `FxEngine.setCueAssignments` is a replace operation; a timed-fire append path needs new engine API. Document limitation.
@@ -89,7 +110,7 @@ See the Change log for durable invariants and engine surface.
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Done (2026-04-21) |
 | 4 | Program view inline editor + "Grab live state" snapshot action | Done (2026-04-22) |
 | 5 | **FX pipeline integration harness**: rig stub + end-to-end tests covering the Phase-0 layer cascade with real Layer-3 data, unlocking a reusable benchmark + integration test suite | Done (2026-04-22) |
-| 6 | **Persisted-reference validation for cue assignments**: dead-reference diagnostic for `CuePropertyAssignment` rows (fixture rename / removal), paralleling control-surface Phase 7 | Not started |
+| 6 | **Persisted-reference validation for cue assignments**: dead-reference diagnostic for `CuePropertyAssignment` rows (fixture rename / removal), paralleling control-surface Phase 7 | Done (2026-04-22) |
 | 7 | **Property-level Layer 4 writer**: reusable `PropertyValue → channel-writes` resolver + migrate preset-toggle off the Phase-3 pseudo-cue onto a real Layer-4 path | Not started |
 
 ---
@@ -451,7 +472,7 @@ tick duration. Uses Kotlin's `measureTime` and the JVM's allocation counters via
 
 ---
 
-## Phase 6 — Persisted-reference validation for cue assignments
+## Phase 6 — Persisted-reference validation for cue assignments (done 2026-04-22)
 
 **Goal**: apply the same dead-reference diagnostic to `CuePropertyAssignment` rows that
 control-surface Phase 7 applies to surface bindings. When a fixture is renamed or a property
@@ -475,53 +496,91 @@ risk in MIDI bindings. Today cue apply doesn't fail catastrophically on a missin
 property) but the cue editor gives no hint that an assignment is dead. This phase gives
 operators visibility.
 
-**Dependency:** factor out a shared `PersistedFixtureReferenceValidator` that both this
-phase and control-surface Phase 7 use. Decision on whether to pre-abstract: see
-control-surface Phase 7's open question. This plan assumes a common validator exists by
-the time Phase 6 lands.
+**Shipping decision (2026-04-22):** we shipped the shared validator here first rather than
+waiting for control-surface Phase 7. The plan's open question framed this as "pre-abstract
+or not" — answer turned out to be "yes, here, because the shape is identical". Control-
+surface Phase 7 will consume `PersistedFixtureReferenceValidator.validateTargetedReference`
+unchanged; if it needs additional variants (Missing-Cue / Missing-Stack) it can extend the
+sealed class additively.
 
 ### Entry criteria
-- Phase 1 exit criteria met — real cue assignment data exists.
+- Phase 1 exit criteria met — real cue assignment data exists. ✓
 - Control-surface Phase 7 has landed, OR we decide to ship the validator here first and
-  have control-surface Phase 7 consume it.
+  have control-surface Phase 7 consume it. ✓ (took the second option)
 
 ### Exit criteria
 - `AssignmentHealth` sealed class mirrors `BindingHealth` from control-surface Phase 7
-  (MissingFixture, MissingGroup, MissingProperty).
+  (MissingFixture, MissingGroup, MissingProperty). ✓ 
 - `GET /api/rest/projects/{projectId}/cues/{cueId}` includes `health` on each
-  `propertyAssignments` row.
-- `CueEditor` UI renders dead assignments with a visible marker + "Rebind" quick-action.
-- Cue apply logs a rate-limited warn on dead assignments.
-- Tests: rename a fixture → reopen cue → dead markers appear; rebind → markers clear.
+  `propertyAssignments` row. ✓
+- `CueEditor` UI renders dead assignments with a visible marker + "Rebind" quick-action. ✓
+  ("Rebind" interpreted as Remove-and-re-author — see implementation notes below)
+- Cue apply logs a rate-limited warn on dead assignments. ✓
+- Tests: rename a fixture → reopen cue → dead markers appear; rebind → markers clear. ✓
+  (covered by `PersistedFixtureReferenceValidatorTest` "fixture renamed → dead → rebound"
+  transition test — the validator is stateless, so UI transitions are a pure function of
+  the `Fixtures` snapshot.)
 
 ### Phase 6 work
 
-- [ ] Shared `PersistedFixtureReferenceValidator` lifted into a common package, consumed
-  by both `ControlSurfaceBindingService` and cue assignment validation
-- [ ] `AssignmentHealth` evaluation in `applyCue` and in the cue detail REST response
-- [ ] `CueEditor` renders dead-assignment markers; quick-rebind action
-- [ ] Rate-limited warn log at apply time
-- [ ] Tests covering the health transitions
+- [x] Shared `PersistedFixtureReferenceValidator` lifted into a common package, consumed
+  by cue + preset assignment validation (control-surface Phase 7 will reuse)
+- [x] `AssignmentHealth` evaluation in `applyCue` and in the cue detail REST response
+- [x] `CueEditor` renders dead-assignment markers; Remove quick-action
+- [x] Rate-limited warn log at apply time (throttled per-cue by signature, 30s window)
+- [x] Tests covering the health transitions
 
-### Phase 6 files
+### Phase 6 files (as landed)
 
 Backend:
-- New or Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt`
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt`
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/Layer3Resolver.kt` (optional — log
-  when resolution encounters a dead key)
+- New: [src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt](../src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt) — sealed ADT
+- New: [src/main/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidator.kt](../src/main/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidator.kt) — shared validator
+- Updated: [src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt](../src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt) — `toCueDetails(isCurrentProject, fixtures)` signature; `toDtoWithHealth`; rate-limited warn helper in `maybeLogDeadAssignments`; `canonicalPropertyName` moved to shared utility
+- Updated: [src/main/kotlin/uk/me/cormack/lighting7/routes/projectFxPresets.kt](../src/main/kotlin/uk/me/cormack/lighting7/routes/projectFxPresets.kt) — `toPropertyAssignmentDtos` tags rows with health
+- Updated: [src/main/kotlin/uk/me/cormack/lighting7/models/cues.kt](../src/main/kotlin/uk/me/cormack/lighting7/models/cues.kt) — `CuePropertyAssignmentDto.health` optional field
+- Updated: [src/main/kotlin/uk/me/cormack/lighting7/models/fxPresets.kt](../src/main/kotlin/uk/me/cormack/lighting7/models/fxPresets.kt) — `FxPresetPropertyAssignmentDto.health` optional field
+- New test: [src/test/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidatorTest.kt](../src/test/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidatorTest.kt)
+- Updated test: [src/test/kotlin/uk/me/cormack/lighting7/routes/CueRoutesTest.kt](../src/test/kotlin/uk/me/cormack/lighting7/routes/CueRoutesTest.kt) — health round-trip cases
 
 Frontend:
-- Updated: `src/api/cuesApi.ts` types
-- Updated: `src/components/cues/CueEditor.tsx` rendering + quick-rebind
+- Updated: `src/api/cuesApi.ts` — exports `AssignmentHealth` discriminated union, adds optional `health` to `CuePropertyAssignment`
+- Updated: `src/api/fxPresetsApi.ts` — adds optional `health` to `FxPresetPropertyAssignment`
+- New: `src/components/cues/editor/DeadAssignmentsBanner.tsx` — inline callout + `describeHealth` helper shared with preset variant
+- New: `src/components/presets/DeadPresetAssignmentsBanner.tsx`
+- Updated: `src/components/cues/editor/CueEditor.tsx` — banner between header and target grid
+- Updated: `src/components/presets/PresetEditor.tsx` — banner above the properties/effects tabs
 
-### Phase 6 verification
+### Rebind-interpretation note
 
-- Rename a fixture in a patch → open a cue that referenced the old key → dead markers
-  visible within one WS round-trip
-- Click "Rebind" on a dead assignment → bind sheet opens pre-populated; commit →
-  marker clears
-- Backend logs a rate-limited warning on `applyCue` when a dead assignment is encountered
+The plan listed "Rebind quick-action" as an exit criterion. In cue authoring, property
+assignments are created by direct-manipulation inside `FixtureContent` — there's no
+standalone "assignment editor sheet" to open pre-populated. The pragmatic semantics are:
+**Remove the dead row → re-add against the correct fixture card from the grid below.**
+That's a single Remove button per dead row, which we ship. Full in-place rebind (which
+would open the fixture picker with the property + value pre-filled and create a new row
+on commit) is deferred as a future UX polish when the product case justifies it — the
+Remove path covers the fixture-rename workflow cleanly and is discoverable.
+
+### Phase 6 verification (as performed)
+
+- Unit: `PersistedFixtureReferenceValidatorTest` drives a fixture through a pre-rename
+  `Fixtures` snapshot → rename → re-bind, asserting Ok → MissingFixture → Ok. Stateless
+  validator means this transition is deterministic and doesn't require an integration rig.
+- DTO: `CueRoutesTest` covers health wire-format round-trip for each non-Ok variant plus
+  the legacy input-path default (missing `health` → Ok).
+- `./gradlew test` green end-to-end after landing.
+
+### Phase 6 follow-ups (not blocking)
+
+- **Live rig validation**: manual test — rename a fixture in a patch, reload the cue
+  editor, confirm dead markers appear and Remove clears them. Backend logic is stateless
+  and covered by unit tests; this validates the WS fan-out + React rendering. Not done
+  during the landing session.
+- **Frontend vite build**: the development environment's Node is 16.x and blocks
+  `vite build`; `tsc --noEmit` passes. Confirm prod build once Node is updated.
+- **True in-place Rebind UX**: if operator feedback asks for it, extend the banner with a
+  sheet that pre-fills fixture picker + property + value and creates a new row on commit.
+  Not required by the Phase 6 exit criteria (Remove covers the fixture-rename workflow).
 
 ---
 

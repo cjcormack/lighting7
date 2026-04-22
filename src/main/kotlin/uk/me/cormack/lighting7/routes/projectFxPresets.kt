@@ -371,16 +371,29 @@ internal fun DaoFxPreset.toPresetDetails(isCurrentProject: Boolean): FxPresetDet
     )
 }
 
-/** Map this preset's property-assignment rows to their sorted DTO form. */
-internal fun DaoFxPreset.toPropertyAssignmentDtos(): List<FxPresetPropertyAssignmentDto> =
-    this.propertyAssignments.sortedBy { it.sortOrder }.map {
+/**
+ * Map this preset's property-assignment rows to their sorted DTO form. Rows are tagged
+ * server-side with [AssignmentHealth] resolved against the preset's declared [fixtureType]
+ * so the UI can mark dead rows (property removed, fixture type reworked). Without a
+ * declared `fixtureType` every row is treated as `Ok` — legacy backfill window.
+ *
+ * Apply-path callers (toggle / cue apply) also invoke this — they ignore the `health`
+ * field, so the extra lookup cost is negligible and keeps a single code path.
+ */
+internal fun DaoFxPreset.toPropertyAssignmentDtos(): List<FxPresetPropertyAssignmentDto> {
+    val fixtureTypeKey = this.fixtureType
+    return this.propertyAssignments.sortedBy { it.sortOrder }.map {
         FxPresetPropertyAssignmentDto(
             propertyName = it.propertyName,
             value = it.value,
             fadeDurationMs = it.fadeDurationMs,
             sortOrder = it.sortOrder,
+            health = PersistedFixtureReferenceValidator.validatePresetPropertyReference(
+                fixtureTypeKey, it.propertyName,
+            ),
         )
     }
+}
 
 /** Create [DaoFxPresetPropertyAssignment] rows for a preset. */
 internal fun createPresetChildren(

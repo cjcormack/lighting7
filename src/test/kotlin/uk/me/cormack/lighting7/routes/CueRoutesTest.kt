@@ -2,12 +2,14 @@ package uk.me.cormack.lighting7.routes
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
+import uk.me.cormack.lighting7.fx.AssignmentHealth
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CuePresetApplicationDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 /**
@@ -151,6 +153,28 @@ class CueRoutesTest {
         )
         assertNull(dto.fadeDurationMs)
         assertEquals(0, dto.sortOrder)
+        assertEquals(AssignmentHealth.Ok, dto.health)
+    }
+
+    @Test
+    fun `CuePropertyAssignmentDto health field round-trips non-Ok variants`() {
+        val deadFixture = CuePropertyAssignmentDto(
+            targetType = "fixture",
+            targetKey = "hex-renamed",
+            propertyName = "dimmer",
+            value = "200",
+            health = AssignmentHealth.MissingFixture("hex-renamed"),
+        )
+        val round = json.decodeFromString<CuePropertyAssignmentDto>(json.encodeToString(deadFixture))
+        assertIs<AssignmentHealth.MissingFixture>(round.health)
+        assertEquals("hex-renamed", (round.health as AssignmentHealth.MissingFixture).fixtureKey)
+    }
+
+    @Test
+    fun `CuePropertyAssignmentDto input without health deserialises to Ok default`() {
+        val inputJson = """{"targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200"}"""
+        val deserialized = json.decodeFromString<CuePropertyAssignmentDto>(inputJson)
+        assertEquals(AssignmentHealth.Ok, deserialized.health)
     }
 
     @Test

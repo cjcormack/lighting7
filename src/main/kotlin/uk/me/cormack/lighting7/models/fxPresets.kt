@@ -7,6 +7,7 @@ import org.jetbrains.exposed.dao.IntEntityClass
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.IntIdTable
 import org.jetbrains.exposed.sql.json.json
+import uk.me.cormack.lighting7.fx.AssignmentHealth
 
 @Serializable
 data class FxPresetEffectDto(
@@ -35,6 +36,12 @@ data class FxPresetPropertyAssignmentDto(
     val value: String,
     val fadeDurationMs: Long? = null,
     val sortOrder: Int = 0,
+    /**
+     * Validation status against the preset's declared `fixtureType`. Populated server-side
+     * on read (see cue-authoring Phase 6); ignored on write. Default [AssignmentHealth.Ok]
+     * keeps the apply-path / pseudo-cue builders working unchanged.
+     */
+    val health: AssignmentHealth = AssignmentHealth.Ok,
 )
 
 object DaoFxPresets : IntIdTable("fx_presets") {
