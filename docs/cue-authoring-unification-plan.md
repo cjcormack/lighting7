@@ -17,27 +17,33 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: **Phase 4 complete (landed 2026-04-22).** `CueEditorHeader` grew
-an optional `onSnapshotFromLive` / `snapshotPending` pair; when set, a
-**Grab live state** button renders next to the Live/Blind toggle (camera
-icon, `Loader2` spinner on pending, disabled while pending or on a
-blank/new cue). `ProgramPage` owns the mutation + a small inline confirm
-`<Dialog>` and applies the returned `Cue` straight to the editor's local
-state (the `snapshot-from-live` endpoint already serves `toCueDetails`, so
-no follow-up `fetchCue` is needed). The other two call-sites (`Cues.tsx`,
-`RunPage.tsx`) leave the prop undefined so the button stays Program-only,
-matching the plan. The rest of Phase 4's scope (wide-viewport inline
-editor, inline Q/name/fade cells) was already in place — landed earlier
-under Phase 2c (`9baa756`), the `ba93e81` inline panels commit, and
-`78380cb` inline metadata cells. Snapshot mutation + backend endpoint were
-plumbed from Phase 1. `npm run type-check` + `npm run build` green; browser
-round-trip verified (Program → pick cue → Grab live state → confirm →
-palette + assignments reload in-place).
+**Phase**: **Phase 5 complete (landed 2026-04-22).** `FxEnginePipelineTest`
+covers every Worked Example in
+[lighting-composition-model.md](lighting-composition-model.md#worked-examples)
+plus the Phase-0 deferred smoke-check regressions (SineWave +
+`updateChannel=180`, priority-ordered overlapping effects, park+effect).
+`FxEnginePipelineTest` drives synthetic `MasterClock.ClockTick`s through
+`FxEngine.processBeatTick` / `processWallClockTick` (both relaxed from
+`private` to `internal`) against a `MockDmxController` rig, exercising the
+full Layer 2 → 3 → 4 → 5 cascade. `FxEngineBenchmark` measures p50/p99
+tick duration and per-tick allocation bytes via
+`ThreadMXBean.getThreadAllocatedBytes`; skipped by default, runs on
+`-Dfx.benchmark=true` (build.gradle.kts forwards the flag to the test
+JVM). Initial baseline on a 4×168 HexFixture rig with 336 effects: beat
+p50 ≈ 600 µs, p99 ≈ 4 ms; wall-clock p50 ≈ 535 µs, p99 ≈ 6 ms; ≈1.9 MB
+allocated per tick (a follow-up optimisation target). `./gradlew test`
+green end-to-end.
 
-Next up is **Phase 5 (FX pipeline integration harness)** — see Phase 5
-section. The "PATCH + snapshot-from-live + cueEdit round-trip" integration
-test in Next actions is the concrete driver for the Phase 5 test-harness
-work.
+The plan's preferred seal-relaxation path turned out to be unnecessary:
+`MockDmxController` already lives in main sources and serves as the test
+stub without breaching the sealed-interface boundary. Seal is left
+sealed; the real knob that needed turning was tick-loop visibility, and
+`internal` does the job with minimal production surface change.
+
+Next up is **Phase 6 (Persisted-reference validation for cue
+assignments)** — dead-reference diagnostics for `CuePropertyAssignment`
+rows, paralleling control-surface Phase 7's `BindingHealth` work. See
+Phase 6 section.
 
 Prior milestone — **Phase 3 backend (landed 2026-04-21):** preset child
 collection + apply-path + toggle Layer-3 pseudo-cue. `./gradlew test`
@@ -61,7 +67,7 @@ See the Change log for durable invariants and engine surface.
 ~~**Colour picker in cue-edit mode (Phase 1 plumbing limitation)**~~ — **Addressed in Phase 2 (2026-04-21)**. `ColourSwatch` / `VirtualDimmerSlider` now accept a `fixtureKey` prop (threaded from `FixtureContent` / per-head `PropertiesList`) and a new `useUpdateFixtureColour` hook routes RGB writes via `cueEdit.setProperty { propertyName: 'rgbColour' }` in cue mode (W/A/UV still use `setChannel` — the backend accepts those). Mirrors the existing `useUpdateGroupColour` pattern; no backend changes.
 
 **Next actions:**
-1. **Phase 5** — FX pipeline integration harness. Unblocks the deferred `snapshot-from-live` / `cueEdit` round-trip tests. See Phase 5 section.
+1. **Phase 6** — Persisted-reference validation for cue + preset assignments. See Phase 6 section.
 2. **Phase 3 follow-ups** (all flagged 2026-04-21; see Phase 3 section for detail):
    - Palette-resolution cascade for presets — preset palette → cue palette → global, resolved property-like. Backend now ships the data field (`fx_presets.palette`); cascade resolution still matches Phase 2's "global palette only" semantics.
    - Timed preset property assignments — `applyCue` immediate presets contribute Layer 3, delayed/recurring preset applications do NOT. `FxEngine.setCueAssignments` is a replace operation; a timed-fire append path needs new engine API. Document limitation.
@@ -69,7 +75,7 @@ See the Change log for durable invariants and engine surface.
    - Preset per-head / per-element assignments — schema would need a nullable `target_key` column (not yet added). UI stays single-head in Phase 3.
    - "Preview on selection" live-apply affordance for the preset editor — deferred from Phase 3 scope.
    - ~~Preset-toggle Layer-4 true direct-write path~~ — **Promoted to its own [Phase 7](#phase-7--property-level-layer-4-writer)** (2026-04-21). Phase 3 backend implements preset-toggle as a **Layer 3 pseudo-cue** (negative `cueId = -presetId`, priority 0) for pragmatism; Phase 7 builds the reusable `PropertyValue → channel-writes` resolver and migrates toggle onto a real Layer-4 path. Observable behaviour of the Phase-3 workaround matches Layer-4 for the common case; divergence only shows when an `updateChannel` lands on a channel the preset toggle is asserting (Phase-3 pseudo-cue wins; Phase-7 Layer-4 channel-keyed last-write-wins puts the manual drag on top).
-3. **Integration test**: PATCH + snapshot-from-live + cueEdit round-trip through an in-memory HTTP harness — blocked on the same DB test-harness gap that blocks Phase 5's pipeline test. Track under Phase 5.
+3. **Integration test**: PATCH + snapshot-from-live + cueEdit round-trip through an in-memory HTTP harness — still blocked on a DB test-harness (Phase 5's FxEngine-level pipeline test covers the composition semantics in isolation; the HTTP-path round-trip is a separate gap).
 4. **moveInDark during outgoing fade** (spec'd, not yet implemented). The current linear interp path handles basic position fades; the "pre-apply incoming position during outgoing fade when outgoing intensity is 0 at end" affordance is deferred. Scope small — the resolver already knows the moveInDark flag on each `Assignment`. Good candidate for a standalone follow-up session once a real moving-head fixture is on the test rig.
 5. **Effect/Preset picker UX polish** (deferred from 2d). The Effects/Presets tabs inside `CueTargetDetail` still open `EffectFlow` / `PresetPicker` at their target-picker step even though a card selection is already active — redundant and confusing. Extract `EffectConfigureStep` / `PresetPickStep` / `TimingFields` into `editor/shared/` and drop the target-picker step when opened from a selected card.
 
@@ -82,7 +88,7 @@ See the Change log for durable invariants and engine surface.
 | 2 | `CueEditor` replaces `CueForm` — fixture/group modal UX for cue authoring | Done (2026-04-21) |
 | 3 | `PresetEditor` replaces `PresetForm` using the same primitives | Done (2026-04-21) |
 | 4 | Program view inline editor + "Grab live state" snapshot action | Done (2026-04-22) |
-| 5 | **FX pipeline integration harness**: rig stub + end-to-end tests covering the Phase-0 layer cascade with real Layer-3 data, unlocking a reusable benchmark + integration test suite | Not started |
+| 5 | **FX pipeline integration harness**: rig stub + end-to-end tests covering the Phase-0 layer cascade with real Layer-3 data, unlocking a reusable benchmark + integration test suite | Done (2026-04-22) |
 | 6 | **Persisted-reference validation for cue assignments**: dead-reference diagnostic for `CuePropertyAssignment` rows (fixture rename / removal), paralleling control-surface Phase 7 | Not started |
 | 7 | **Property-level Layer 4 writer**: reusable `PropertyValue → channel-writes` resolver + migrate preset-toggle off the Phase-3 pseudo-cue onto a real Layer-4 path | Not started |
 
@@ -338,12 +344,16 @@ See the Change log entry for the snapshot-button implementation details.
 
 ---
 
-## Phase 5 — FX pipeline integration harness
+## Phase 5 — FX pipeline integration harness (done 2026-04-22)
 
 **Goal**: pay off the two test-infrastructure deferrals from Phase 0 — a rig stub that lets
 us drive real `FxEngine` ticks against a synthetic `DmxController` in test sources, and a
 benchmark harness for the per-tick allocation shape. With Phase 1 in place, integration
 tests can finally exercise the full Layer 2 → 3 → 4 → 5 cascade end-to-end.
+
+**Landed as `FxEnginePipelineTest` + `FxEngineBenchmark` on 2026-04-22.** See the Phase 5
+change log entry below for the delta against the original plan (MockDmxController reuse vs.
+seal relaxation, `internal` tick-loop visibility, benchmark opt-in flag).
 
 **Motivating review finding** (2026-04-19): Phase 0's change log flagged two deferred items
 (*`FxEnginePipelineTest`*, *benchmark gate*) both blocked on the same missing piece — a test-
@@ -399,36 +409,45 @@ tick duration. Uses Kotlin's `measureTime` and the JVM's allocation counters via
 
 ### Phase 5 work
 
-- [ ] Decide stub approach (relax seal vs `@InternalForTests`) — confirm with the user
-- [ ] Land the stub under `src/test/kotlin/.../dmx/TestDmxController.kt`
-- [ ] `FxEnginePipelineTest` with one test per Worked Example
-- [ ] `FxEngineBenchmark` with baseline capture and regression gate
-- [ ] Update Phase 0 Change log's "deviations from plan" section: cross off the deferred
-  items
-- [ ] Wire the benchmark into CI (decide: pass/fail on absolute numbers, or track-only?)
+- [x] Decide stub approach — **reused existing `MockDmxController` in main sources**; the
+  sealed-interface blocker turned out not to apply (main-source subclasses are always visible
+  to test sources regardless of the seal).
+- [x] `FxEnginePipelineTest` with one test per Worked Example + Phase-0 smoke-check regressions
+- [x] `FxEngineBenchmark` with baseline capture (track-only; regression gate is follow-up)
+- [x] `FxEngine.processBeatTick` / `processWallClockTick` relaxed to `internal` so tests can
+  drive the tick loop synchronously.
+- [x] Update Phase 0 Change log's "deviations from plan" section: cross off the deferred
+  items (done below).
+- [ ] Wire the benchmark into CI (fail-on-regression with ±20% tolerance) — deferred per the
+  original open question. Collect a week of baseline numbers first, then decide.
 
 ### Phase 5 files
 
-- New: `src/test/kotlin/uk/me/cormack/lighting7/dmx/TestDmxController.kt`
-- New: `src/test/kotlin/uk/me/cormack/lighting7/fx/FxEnginePipelineTest.kt`
-- New: `src/test/kotlin/uk/me/cormack/lighting7/fx/FxEngineBenchmark.kt`
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/DmxController.kt` (if we relax
-  the seal)
+- New: `src/test/kotlin/uk/me/cormack/lighting7/fx/FxEnginePipelineTest.kt` (14 tests;
+  5 Worked Examples + 3 smoke-check regressions + 6 composition-invariant cases).
+- New: `src/test/kotlin/uk/me/cormack/lighting7/fx/FxEngineBenchmark.kt` (1 test, opt-in).
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/FxEngine.kt` (tick loops → `internal`).
+- Updated: `build.gradle.kts` — forwards `-Dfx.benchmark=true` to the forked test JVM.
+- No change needed to `DmxController.kt` — seal left in place; `MockDmxController` already
+  satisfies the "test-accessible stub" requirement.
 
 ### Phase 5 verification
 
-- `./gradlew test` runs the pipeline test suite to green
-- Benchmark run produces a baseline report; a deliberately-regressed commit (e.g. an
-  extra per-tick `mutableListOf`) fails the regression gate
-- No production behaviour change
+- [x] `./gradlew test` runs the pipeline test suite to green — all 14 `FxEnginePipelineTest`
+  cases pass; full suite green.
+- [x] Benchmark runs end-to-end with `-Dfx.benchmark=true`: baseline at ~600 µs p50 /
+  ~4 ms p99 per beat tick, ~1.9 MB/tick allocations on a 4×168 HexFixture rig with 336
+  effects.
+- [x] No production behaviour change (only visibility modifier relaxed on two tick methods).
 
 ### Phase 5 open questions
 
-- **Relax the `DmxController` seal or add a test-only subclass?** Relaxing matches the MIDI
-  precedent and is the simpler path, but it does weaken the production contract slightly.
-  Recommend: relax with a comment, consistent with MIDI.
-- **CI regression gate semantics?** Track-only (report, don't fail) vs fail-on-regression.
-  Recommend: fail-on-regression with ±20% tolerance after one week of baseline collection.
+- **Relax the `DmxController` seal or add a test-only subclass?** **Resolved (2026-04-22):**
+  neither. The existing `MockDmxController` in main sources is already a subclass of the
+  sealed interface and is fully reachable from test code, so no production change was
+  needed. Seal stays.
+- **CI regression gate semantics?** **Deferred (2026-04-22):** benchmark ships as track-only.
+  Turn into fail-on-regression once a week of baseline numbers exists to judge variance.
 
 ---
 
@@ -661,6 +680,86 @@ Flag these to the user before implementing.
 
 Detailed per-session narration lives in git. This section captures durable invariants and
 gotchas that would cost time to rediscover.
+
+### Phase 5 — FX pipeline integration harness (landed 2026-04-22)
+
+Closes the two test-infrastructure deferrals that Phase 0 parked on "no test-accessible
+`DmxController` stub" — it turns out the original diagnosis was wrong, and the simpler path
+solved it.
+
+**Stub decision: reuse `MockDmxController`, seal stays.** The plan called for either
+relaxing `sealed interface DmxController` or adding an `@InternalForTests` subclass. In
+practice, `MockDmxController` already lives under `src/main/kotlin/.../dmx/` (it's used by
+`DbFixtureLoader` for the `"MOCK"` controller type) and is fully reachable from test code.
+Kotlin's sealed-interface boundary is module-scoped, not source-set-scoped — main/test share
+a module, so a main-source subclass is visible either way. No `DmxController.kt` change
+needed. The plan's open question on this is resolved above.
+
+**Tick visibility: `private` → `internal`.** The real knob that needed turning was
+`FxEngine.processBeatTick` and `processWallClockTick` — both were `private`, which blocked
+tests from pumping synthetic ticks without standing up the real-time tick coroutine. Both
+relaxed to `internal` with a comment pointing at `FxEnginePipelineTest`. No production
+behaviour change.
+
+**`FxEnginePipelineTest` (14 cases).** Covers:
+
+- Worked Examples 1-5 from the composition-model doc, one test each. Deterministic: uses
+  `StaticValue` / `StaticColour` so asserted arithmetic doesn't hinge on phase sampling
+  — except Example 1 (parked channel under `SineWave`), which pumps 9 ticks across several
+  phases to prove park wins for all of them.
+- Phase-0 deferred smoke-check regressions: `SineWave` + `updateChannel=180` baseline fallback,
+  two OVERRIDE effects with priority ordering, park+effect raw-write vs effective-output.
+- Composition invariants: MAX-blend under Layer 3, effect-removal reset-to-Layer-3,
+  clearAllCueAssignments mid-effect, 50-tick stability for a static effect with no spurious
+  writes outside the expected channel.
+- `WALL_CLOCK` timing: confirms `processBeatTick` is a no-op for wall-clock effects and
+  `processWallClockTick` is the only thing that drives them.
+
+Test setup pattern borrowed from `FxEnginePublishLayer3Test` — a `Rig` data class wrapping
+a single `MockDmxController` + one `HexFixture` + engine on universe (0, 0), so channel
+addresses in assertions (R at 2, G at 3, B at 4) are stable.
+
+**`FxEngineBenchmark` (opt-in).** Single test, `Assume.assumeTrue` gated on
+`-Dfx.benchmark=true`. Synthetic rig: 4 universes × 64 HexFixture slots, but only 42
+fixtures per universe fit in 512 channels (168 fixtures total). 336 effects (beat SineWave
+on `dimmer` + wall-clock StaticValue on `uv` per fixture). Warm-up 200 beat + 20 wall-clock
+ticks, then measures 2 400 beat ticks + 500 wall-clock ticks. Reports p50/p99/mean tick
+duration via `measureNanoTime` and per-tick allocation bytes via
+`com.sun.management.ThreadMXBean.getThreadAllocatedBytes`. Initial pass (2026-04-22,
+selwyn.local, JDK 25):
+
+```
+[beat] ticks=2400 p50=600µs p99=3915µs mean=806µs allocBytes/tick=1961513
+[wall] ticks=500  p50=535µs p99=6080µs mean=758µs allocBytes/tick=1959129
+```
+
+Track-only today: only asserts p99 < 1 s (obvious-breakage floor). The ~1.9 MB/tick
+allocation number is notable — that's a real future optimisation target, but outside Phase
+5's scope. Regression gate with a committed baseline is deferred per the open question on
+CI semantics; re-visit after a week of numbers.
+
+**`build.gradle.kts` tweak.** `tasks.test { ... }` block added to forward
+`-Dfx.benchmark=true` from the Gradle invocation into the forked test JVM. Gradle doesn't
+inherit arbitrary system properties by default; without this, the benchmark would silently
+skip forever on the command line. Kept minimal — only forwards when set, so no change to
+default test runs.
+
+**Deviations from plan:**
+
+- No new `TestDmxController.kt` under test sources (reused `MockDmxController`).
+- No `DmxController.kt` seal change.
+- `FxEnginePipelineTest` extends to 14 cases rather than the 5-Worked-Examples-plus-regressions
+  the plan implied — the composition-invariant cases (MAX/Layer 3 interaction, pipeline
+  stability) came up naturally while designing the test rig and seemed cheap coverage wins.
+- Benchmark uses `com.sun.management.ThreadMXBean` (Oracle/OpenJDK extension) rather than
+  sticking to the portable `java.lang.management.ThreadMXBean`. Guarded by a capability
+  check (`isThreadAllocatedMemorySupported`) so the benchmark still runs on JVMs that don't
+  expose the hook — allocation figures would just report `-1` there.
+
+**Phase 0 deferred items — closed.** The original Phase 0 change log flagged
+`FxEnginePipelineTest` and the benchmark harness as deferred. Both now exist; the "missing
+test-accessible `DmxController` stub" diagnosis that blocked them was incorrect, and the
+`internal` modifier move on the tick loops was the minimal-invasive fix.
 
 ### Phase 4 — Program view "Grab live state" (landed 2026-04-22)
 

@@ -870,8 +870,11 @@ class FxEngine(
 
     /**
      * Process all BEAT-timed effects on a Master Clock tick.
+     *
+     * `internal` so that `FxEnginePipelineTest` can drive synthetic ticks without waiting on the
+     * real-time tick loop.
      */
-    private fun processBeatTick(tick: MasterClock.ClockTick) {
+    internal fun processBeatTick(tick: MasterClock.ClockTick) {
         // Snapshot read is lock-free (volatile). If empty, nothing to do.
         val beatEffects = sortedBeatEffects
         if (beatEffects.isEmpty()) return
@@ -914,8 +917,10 @@ class FxEngine(
      * beat position, making them independent of BPM. The phase calculation is
      * handled by [FxInstance.calculateWallClockPhase] and
      * [FxInstance.calculateWallClockPhaseForMember].
+     *
+     * `internal` so that `FxEnginePipelineTest` can drive the wall-clock path synchronously.
      */
-    private fun processWallClockTick() {
+    internal fun processWallClockTick() {
         val wallClockEffects = sortedWallClockEffects
         if (wallClockEffects.isEmpty()) return
         if (wallClockEffects.none { it.isRunning }) return

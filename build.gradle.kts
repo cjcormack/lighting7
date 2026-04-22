@@ -80,3 +80,20 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-scripting-dependencies")
 
 }
+
+tasks.test {
+    // Forward opt-in test flags to the forked test JVM. `fx.benchmark` gates the
+    // FxEngineBenchmark harness (skipped by default; takes ~10 s when enabled).
+    val benchmarkFlag = System.getProperty("fx.benchmark")
+    if (benchmarkFlag != null) {
+        systemProperty("fx.benchmark", benchmarkFlag)
+        // Always rerun + stream stdout when the benchmark is requested, otherwise Gradle's
+        // up-to-date check swallows the numbers and the test runner's default stdout policy
+        // hides the [beat]/[wall] println lines.
+        outputs.upToDateWhen { false }
+        testLogging {
+            showStandardStreams = true
+            events("passed", "skipped", "failed")
+        }
+    }
+}
