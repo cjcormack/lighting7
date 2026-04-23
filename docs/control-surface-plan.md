@@ -22,7 +22,7 @@ Related:
 
 ## Status
 
-**Phase**: 5 complete. Phase 6 next (gated on cue-authoring Phase 1).
+**Phase**: 5 complete. Phase 6 and Phase 7 both unblocked — cue-authoring has progressed through Phase 8 in parallel (see [cue-authoring-unification-plan.md](cue-authoring-unification-plan.md)); Phase 1's `CuePropertyAssignment` model + `cueEdit.*` messages have been live since 2026-04-19, and Phase 6's `AssignmentHealth` sealed class + `PersistedFixtureReferenceValidator` (landed 2026-04-22) are drop-in consumables for surface Phase 7. Either phase can land next; no ordering constraint.
 
 **Most recent session**: 2026-04-19 (cont.). Phase 5 `/surfaces` frontend + one backend helper landed.
 Backend: one new WS message pair `surfaceDevices.state` in [Sockets.kt](../src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt) — outbound shape `{ devices: [{ displayKey, displayName, typeKey, isMatched, hasInputPort, hasOutputPort, activeBank }] }` built from `midiRegistry.devices + deviceMatcher.attached + activeBankState.active`. Inbound object singleton pulls the current snapshot; a `combine()` flow on the same three sources pushes every change (`drop(1)` so only deltas, not the initial value). Fills the gap noted in Phase 4's "no WS message enumerates attached devices" — the frontend needed it to render the device panel without polling REST. Job cancelled in the same finally block as the other subscription jobs. No new tests (Phase 5 is mostly UI; the backend change is a pure fan-out over existing StateFlows and doesn't add logic).
@@ -35,7 +35,8 @@ Build: TypeScript clean across the frontend (`tsc --noEmit` passes), `vite build
 
 **Next actions** (for the session that picks this up):
 1. Manually validate Phase 5 end-to-end on the X-Touch Compact: connect the device → `/surfaces` shows it. Click + on a fader row, open MIDI Learn, wiggle the physical fader → binding appears. Switch banks via the BankSwitcher → matrix rows update to show bank-scoped bindings. Drive fader → stage moves (Phase 3 still in play). Go back to Groups view → verify the `BoundControlBadge` chip appears next to the bound property. Click the chip → /surfaces opens with that binding highlighted.
-2. Phase 6 work depends on cue-authoring Phase 1 landing first. Resume cue-authoring Phase 1 next; surface Phase 6 then bundles into that work OR lands as its own follow-up, per the plan's "decided at the time" note.
+2. Phase 6 (cueEdit integration) is unblocked now that cue-authoring Phase 1+ has landed — pick this up when ready.
+3. Phase 7 (binding validation) is unblocked and partially pre-built: consume `fx/AssignmentHealth.kt` + `fx/PersistedFixtureReferenceValidator.kt` (cue-authoring Phase 6, 2026-04-22) rather than building a parallel `midi/BindingHealth`. See the Phase 7 section for the revised design.
 
 **Per-phase tracker:**
 
@@ -47,8 +48,8 @@ Build: TypeScript clean across the frontend (`tsc --noEmit` passes), `vite build
 | 3 | Inbound routing: fader → Layer 4 writes, buttons → GO/Back/Pause/FireCue/Flash/Blackout/Grand Master, app-side banks | **Complete** |
 | 4 | Feedback & reconciliation: motor drive, LED feedback, touch suppression, soft takeover, initial sync, device-side A/B layer coordination | **Complete** |
 | 5 | Frontend `/surfaces` route: device list, binding matrix, MIDI Learn mode, bank management, binding badges on existing views | **Complete** |
-| 6 | cueEdit integration (depends on cue-authoring Phase 1): fader writes route through `cueEdit.*` when a session is active; surfaces participate in EditorContext | Not started |
-| 7 | **Binding validation & dead-binding diagnostics**: load-time validation that `FixtureProperty` / `GroupProperty` bindings still resolve against the current patch; surface dead bindings in `/surfaces` | Not started |
+| 6 | cueEdit integration (formerly gated on cue-authoring Phase 1 — now landed): fader writes route through `cueEdit.*` when a session is active; surfaces participate in EditorContext | Not started (unblocked 2026-04-19) |
+| 7 | **Binding validation & dead-binding diagnostics**: load-time validation that `FixtureProperty` / `GroupProperty` bindings still resolve against the current patch; surface dead bindings in `/surfaces`. Consumes cue-authoring Phase 6's `fx/AssignmentHealth` + `fx/PersistedFixtureReferenceValidator` | Not started (prerequisite validator landed 2026-04-22) |
 | 8 | **Non-blocking `setValues` on `DmxController`**: remove the `runBlocking` inside `ArtNetController.setValues`; move to suspend / `Deferred`-based commit; unify beat + wall-clock frame transaction | Not started |
 | 9 | **Per-project `GlobalScalerState` scoping**: blackout / Grand Master per project rather than per show instance; preserve state across project switches | Not started |
 
@@ -114,7 +115,7 @@ Confirmed with the user 2026-04-18:
 
 ### Plan structure
 
-- **Cue-authoring is paused after its Phase 0** (which has landed). Control surfaces run end-to-end through Phase 5 of this plan. Phase 6 of this plan (cueEdit integration) is gated on cue-authoring Phase 1 landing. After surface Phase 5, we either resume cue-authoring Phase 1 and then loop back for surface Phase 6, or we bundle cue-authoring Phase 1 into surface Phase 6 — decided at the time.
+- **Cue-authoring pause lifted (2026-04-23).** When this plan was drafted, cue-authoring was paused at its Phase 0 and surface Phase 6 was gated on cue-authoring Phase 1. Since then cue-authoring has run end-to-end through its Phase 8 in parallel: Phase 1 (`CuePropertyAssignment` model + `cueEdit.*` messages) landed 2026-04-19, Phase 6 shipped the shared `AssignmentHealth` / `PersistedFixtureReferenceValidator` in the `fx` package specifically to unblock surface Phase 7, and Phase 7 landed a property-level Layer 4 writer (`PropertyChannelWriter`) that coexists with `DirectWriteStore` rather than replacing the channel-level primitives surface Phase 3 already consumes. Both surface Phase 6 and Phase 7 are now independently pick-up-able.
 
 ---
 
@@ -338,7 +339,7 @@ Confirmed with the user 2026-04-18:
   2. Dispatch based on `BindingTarget` type.
 - Fader / encoder continuous events:
   - `FixtureProperty` / `GroupProperty` targets → Layer 4 write via the existing `DirectWriteStore` + transient channel write (same path `updateChannel` uses). Group property writes fan out to members by the group's property-aggregator semantics.
-  - Value mapping: 7-bit (0–127) → 0–255 via linear scale for sliders; colour components pick an axis per binding (not in v1 — groups' `rgbColour` is bound via MIDI Learn only to individual components in v1); position pan/tilt map to native unit range declared on the property.
+  - Value mapping: 7-bit (0–127) → 0–255 via linear scale for sliders; colour components pick an axis per binding (not in v1 — groups' `rgbColour` is bound via MIDI Learn only to individual components in v1); position pan/tilt map to native unit range declared on the property. **Backend-readiness note (2026-04-23):** cue-authoring Phase 8 added `WithWhite` / `WithAmber` traits + `SliderTarget.getSlider` fast paths for `"white"` / `"amber"`. White / amber fixture-property bindings now route identically to the existing `"uv"` path; the v1-scope decision is a frontend choice, not a backend gap.
 - Button events:
   - `CueStackGo/Back/Pause` → call existing cue-stack service.
   - `FireCue` → call existing cue-apply service.
@@ -520,7 +521,7 @@ Frontend (`lighting-react`):
 
 ### Entry criteria
 - Phase 5 exit criteria met.
-- Cue-authoring plan Phase 1 has landed (`CuePropertyAssignment` model + `cueEdit.*` messages exist).
+- Cue-authoring plan Phase 1 has landed (`CuePropertyAssignment` model + `cueEdit.*` messages exist). **Met 2026-04-19.**
 
 ### Exit criteria
 - `SurfaceInputRouter` consults cue-edit session state before dispatching fader events:
@@ -565,8 +566,10 @@ that reference the old shape silently return empty `ChannelWrite` lists. No log,
 no UI indication. Operators discover it mid-show when a fader does nothing.
 
 Scope is MIDI-specific but the pattern generalises: any persisted `(fixtureKey, propertyName)`
-pair has the same failure mode. This phase addresses the MIDI side; a future cross-cutting
-"persisted fixture reference" validator could fold in cues and presets (Open question below).
+pair has the same failure mode. **The cross-cutting validator already exists** — cue-authoring
+Phase 6 (landed 2026-04-22) shipped `fx/AssignmentHealth.kt` + `fx/PersistedFixtureReferenceValidator.kt`
+ahead of this phase so surface Phase 7 can consume it directly rather than rebuilding. See the
+revised Phase 7 design below.
 
 ### Entry criteria
 - Phase 5 complete. Phase 6 not required — binding validation is independent.
@@ -588,61 +591,88 @@ pair has the same failure mode. This phase addresses the MIDI side; a future cro
 
 ### Phase 7 design
 
-**`BindingHealth` ADT:**
+**Reuse `fx/AssignmentHealth.kt`, don't duplicate.** Cue-authoring Phase 6 shipped:
 
 ```kotlin
-sealed class BindingHealth {
-    data object Ok : BindingHealth()
-    data class MissingFixture(val fixtureKey: String) : BindingHealth()
-    data class MissingGroup(val groupName: String) : BindingHealth()
-    data class MissingProperty(val targetKey: String, val propertyName: String) : BindingHealth()
-    data class UnresolvableChannels(val reason: String) : BindingHealth()
+// fx/AssignmentHealth.kt  — already on main since 2026-04-22
+sealed class AssignmentHealth {
+    data object Ok : AssignmentHealth()
+    data class MissingFixture(val fixtureKey: String) : AssignmentHealth()
+    data class MissingGroup(val groupName: String) : AssignmentHealth()
+    data class MissingProperty(val targetKey: String, val propertyName: String) : AssignmentHealth()
 }
 ```
 
+covering the fixture / group / property variants exactly. The earlier surface-side
+`UnresolvableChannels(reason)` variant was speculative — after Phase 6 experience it
+collapses into `MissingProperty` (if the property exists but the resolver can't find
+channels, that's a patch/mode bug, not a binding-reference bug — handled separately).
+
+Surface-specific additions that cue-authoring's validator doesn't cover:
+- `MissingStack(stackId: Int)` — for `CueStackGo/Back/Pause` targets.
+- `MissingCue(cueId: Int)` — for `FireCue` targets.
+- `UnknownBank(deviceTypeKey: String, bankId: String)` — for `SetBank` targets.
+
+Either extend the sealed class in `fx/AssignmentHealth.kt` with these variants (one
+source of truth; cue-authoring consumers ignore them), or define a thin surface-side
+`BindingHealth` wrapper (`sealed class BindingHealth { data class Targeted(val inner: AssignmentHealth) ; data class MissingStack(...) ; ... }`). **Preferred:** extend the
+existing sealed class — cue-authoring's `DeadAssignmentsBanner` renders by variant
+name, so unknown variants would just not render, no visual regression.
+
 **Validation pass:**
-- `FixtureProperty(fixtureKey, propertyName)` → `Fixtures.untypedFixture(fixtureKey)` exists
-  AND `fixture.fixtureProperty(propertyName) != null` AND
-  `PropertyChannelResolver.resolveFixtureProperty(fixture, propertyName, 127u)` returns
-  non-empty
-- `GroupProperty(groupName, propertyName)` → group exists AND members exist AND at least one
-  member can resolve the property
-- `CueStackGo`/`Back`/`Pause` / `FireCue` → stack / cue exists in the project
-- `SetBank(deviceTypeKey, bank)` → profile exists AND bank id is declared on the profile
-- `Flash(target, max)` → recurse on `target`
-- `Blackout` / `GrandMasterToggle` → always `Ok`
+- `FixtureProperty(fixtureKey, propertyName)` → call
+  `PersistedFixtureReferenceValidator.validateTargetedReference(targetType = "fixture", targetKey = fixtureKey, propertyName = propertyName, fixtures)`.
+- `GroupProperty(groupName, propertyName)` → same validator with `targetType = "group"`.
+- `CueStackGo/Back/Pause` → stack exists in `CueStackManager.listStacks(projectId)`; else `MissingStack`.
+- `FireCue` → cue exists in DAO; else `MissingCue`.
+- `SetBank(deviceTypeKey, bank)` → profile exists in `ControlSurfaceRegistry` AND bank id
+  is declared on the profile; else `UnknownBank`.
+- `Flash(target, max)` → recurse on `target`.
+- `Blackout` / `GrandMasterToggle` → always `Ok`.
 
 **Integration:**
-- New field `BindingService.Entry.health: BindingHealth` computed on cache rebuild
+- New field `BindingService.Entry.health: AssignmentHealth` (or surface superset)
+  computed on cache rebuild.
 - Cache rebuild triggered by `fixturesChanged`, `patchListChanged`, `cueListChanged`,
-  `cueStackListChanged` listeners
-- Dispatch path in `SurfaceInputRouter` can short-circuit dead bindings with a warn-level
-  log (rate-limited) instead of the current silent-drop
+  `cueStackListChanged` listeners (the validator is stateless — it takes a `Fixtures`
+  snapshot per call, so no cache plumbing beyond the existing cache rebuild).
+- Dispatch path in `SurfaceInputRouter` short-circuits dead bindings with a
+  rate-limited warn log (mirror the 30s-per-signature throttle cue-authoring Phase 6
+  uses in `applyCue`).
 - Frontend: `BindingMatrix` row gets a `health` prop; dead rows render with an outline,
-  tooltip explaining the failure, and a "Rebind" quick-action
+  tooltip explaining the failure, and a "Rebind" quick-action. Cue-authoring's
+  `DeadAssignmentsBanner` is not directly reusable (different UI surface), but the
+  plain-English reason-string logic can be copied.
 
 ### Phase 7 work
 
-- [ ] `BindingHealth.kt` with the sealed class
-- [ ] `BindingHealthEvaluator` pure function: `(BindingTarget, Fixtures, CueStackManager, ControlSurfaceRegistry) → BindingHealth`
-- [ ] Wire into `ControlSurfaceBindingService` cache rebuild
+- [ ] Decide: extend `fx/AssignmentHealth.kt` with `MissingStack` / `MissingCue` /
+  `UnknownBank` variants, or wrap in a surface-side `BindingHealth`. Preference: extend.
+- [ ] `BindingHealthEvaluator` pure function: `(BindingTarget, Fixtures, CueStackManager, ControlSurfaceRegistry) → AssignmentHealth`
+  — delegates `FixtureProperty` / `GroupProperty` variants to `PersistedFixtureReferenceValidator.validateTargetedReference`.
+- [ ] Wire into `ControlSurfaceBindingService` cache rebuild.
 - [ ] Add `fixturesChanged` / `patchListChanged` / `cueListChanged` / `cueStackListChanged`
-  subscriptions so the cache re-validates
-- [ ] Extend REST response types and `surfaceBindingsChanged` payload with `health`
-- [ ] Router warn-log on dead dispatch (with throttle — don't flood logs if a surface is
-  wiggling a dead binding)
-- [ ] Frontend `BindingMatrix` dead-binding rendering + quick-rebind action
-- [ ] Tests: 6+ covering the health ADT, each transition, and the cache-rebuild trigger set
+  subscriptions so the cache re-validates.
+- [ ] Extend REST response types and `surfaceBindingsChanged` payload with `health`.
+- [ ] Router warn-log on dead dispatch (30s-per-signature throttle, mirror the pattern
+  cue-authoring Phase 6 uses in `applyCue`).
+- [ ] Frontend `BindingMatrix` dead-binding rendering + quick-rebind action.
+- [ ] Tests: 6+ covering each variant, each transition, and the cache-rebuild trigger
+  set. Reuse cue-authoring Phase 6's validator test patterns where applicable.
 
 ### Phase 7 files
 
 Backend:
-- New: `src/main/kotlin/uk/me/cormack/lighting7/midi/BindingHealth.kt`
-- New: `src/main/kotlin/uk/me/cormack/lighting7/midi/BindingHealthEvaluator.kt`
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt` (new
+  variants for stack/cue/bank if extending in place), or new
+  `src/main/kotlin/uk/me/cormack/lighting7/midi/BindingHealth.kt` (if wrapping).
+- New: `src/main/kotlin/uk/me/cormack/lighting7/midi/BindingHealthEvaluator.kt` —
+  delegates fixture/group validation to the existing
+  `fx/PersistedFixtureReferenceValidator.kt`.
 - Updated: `src/main/kotlin/uk/me/cormack/lighting7/midi/ControlSurfaceBindingService.kt`
 - Updated: `src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt` (throttled
-  warn-log)
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt` (payload field)
+  warn-log).
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt` (payload field).
 
 Frontend:
 - Updated: `src/api/surfacesApi.ts` (types), `src/components/surfaces/BindingMatrix.tsx`
@@ -660,11 +690,12 @@ Frontend:
 
 ### Phase 7 open question
 
-**Cross-cutting validator?** Cues (`CuePropertyAssignment` in cue-authoring Phase 1) will
-have the same dead-reference problem. Worth factoring out a shared
-`PersistedFixtureReferenceValidator` that both subsystems call? Proposal: defer until
-cue-authoring Phase 1 exposes the concrete data shape, then refactor both callers onto a
-common validator if the shapes align. Don't pre-abstract.
+~~**Cross-cutting validator?**~~ — **Resolved 2026-04-22.** Cue-authoring Phase 6
+shipped `fx/PersistedFixtureReferenceValidator.kt` + `fx/AssignmentHealth.kt`
+specifically to be consumable here. Surface Phase 7 should delegate `FixtureProperty` /
+`GroupProperty` validation to the existing validator rather than implementing a
+parallel one. Remaining decision (above): extend `AssignmentHealth` with
+surface-specific variants in place, or wrap it.
 
 ---
 
@@ -857,13 +888,14 @@ toggle — small rows, infrequent, should be fine.
 
 Backend:
 - `ArtNetController`'s coroutine model — mirror the per-device / per-control coroutine + transmission-thread + conflated-channel pattern for `KtMidiController`.
-- `DirectWriteStore` from cue-authoring Phase 0 — Layer 4 writes land here.
+- `DirectWriteStore` from cue-authoring Phase 0 — Layer 4 channel-level writes land here. Phase 3 already consumes `DirectWriteStore.putProperty` for fader dispatch; cue-authoring Phase 7 added a property-level `PropertyChannelWriter` alongside (not a replacement) for preset-toggle and the direct-write flash path — surfaces have no reason to migrate.
 - `FxEngine` composition listeners — feedback subscribes here.
 - `ParkManager` — the transmit-time override pattern. Blackout / Grand Master reuse this hook.
 - Cue-stack service and cue-apply service — buttons call these unchanged.
+- `fx/AssignmentHealth.kt` + `fx/PersistedFixtureReferenceValidator.kt` from cue-authoring Phase 6 — Phase 7 binding validation consumes these directly. See Phase 7 design.
 
 Frontend:
-- `EditorContext` from cue-authoring Phase 1 (when it lands) — reuse shape; surfaces don't need a separate context.
+- `EditorContext` from cue-authoring Phase 1 — reuse shape; surfaces don't need a separate context. (Landed 2026-04-19.)
 - WebSocket plumbing — surface state follows the existing pattern (`surfacesState` message).
 
 ## Out of scope
