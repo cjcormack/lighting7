@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
+import uk.me.cormack.lighting7.fixture.trait.WithWhite
 import kotlin.math.roundToInt
 
 /**
@@ -219,7 +220,7 @@ sealed class LedLightbar12PixelFixture(
         elementIndex: Int,
         pixelTransaction: ControllerTransaction?,
         private val pixelFirstChannel: Int
-    ) : Pixel(elementIndex, pixelTransaction), WithColour {
+    ) : Pixel(elementIndex, pixelTransaction), WithColour, WithWhite {
 
         @FixtureProperty("RGB colour", category = PropertyCategory.COLOUR)
         override val rgbColour = DmxColour(
@@ -231,7 +232,7 @@ sealed class LedLightbar12PixelFixture(
         )
 
         @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
-        val white = DmxSlider(pixelTransaction, universe, pixelFirstChannel + 3)
+        override val white = DmxSlider(pixelTransaction, universe, pixelFirstChannel + 3)
 
         override fun withTransaction(transaction: ControllerTransaction): RgbwPixel =
             RgbwPixel(elementIndex, transaction, pixelFirstChannel)
@@ -304,7 +305,7 @@ sealed class LedLightbar12PixelFixture(
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
         universe, firstChannel, 4, key, fixtureName, transaction
-    ), WithColour {
+    ), WithColour, WithWhite {
 
         override val mode = Mode.MODE_4CH_RGBW
 
@@ -326,7 +327,7 @@ sealed class LedLightbar12PixelFixture(
         )
 
         @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
-        val white = DmxSlider(transaction, universe, firstChannel + 3)
+        override val white = DmxSlider(transaction, universe, firstChannel + 3)
     }
 
     /**
@@ -349,7 +350,7 @@ sealed class LedLightbar12PixelFixture(
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
         universe, firstChannel, 6, key, fixtureName, transaction
-    ), WithDimmer, WithColour, WithStrobe {
+    ), WithDimmer, WithColour, WithWhite, WithStrobe {
 
         override val mode = Mode.MODE_6CH
 
@@ -377,7 +378,7 @@ sealed class LedLightbar12PixelFixture(
         )
 
         @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
-        val white = DmxSlider(transaction, universe, firstChannel + 5)
+        override val white = DmxSlider(transaction, universe, firstChannel + 5)
     }
 
     /**
@@ -464,7 +465,7 @@ sealed class LedLightbar12PixelFixture(
         transaction: ControllerTransaction? = null,
     ) : LedLightbar12PixelFixture(
         universe, firstChannel, 12, key, fixtureName, transaction
-    ), WithDimmer, WithColour, WithStrobe {
+    ), WithDimmer, WithColour, WithWhite, WithStrobe {
 
         override val mode = Mode.MODE_12CH
 
@@ -510,7 +511,7 @@ sealed class LedLightbar12PixelFixture(
         )
 
         @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
-        val white = DmxSlider(transaction, universe, firstChannel + 11)
+        override val white = DmxSlider(transaction, universe, firstChannel + 11)
     }
 
     /**

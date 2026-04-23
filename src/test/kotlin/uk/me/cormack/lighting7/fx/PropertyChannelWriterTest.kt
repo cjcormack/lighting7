@@ -5,6 +5,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.Fusion100SpotMkIIFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fixture.dmx.LightstripFixture
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
 import kotlin.test.Test
@@ -81,38 +82,50 @@ class PropertyChannelWriterTest {
     // ─── Colour ─────────────────────────────────────────────────────────────
 
     @Test
-    fun `colour on fixture with UV emits R G B and UV`() {
-        val ext = ExtendedColour(Color(200, 100, 50), white = 0u, amber = 0u, uv = 180u)
+    fun `colour on RGBWA+UV fixture emits all six channels`() {
+        val ext = ExtendedColour(Color(200, 100, 50), white = 128u, amber = 64u, uv = 180u)
         val writes = PropertyChannelWriter.resolve(hex(), "rgbColour", Layer3Resolver.PropertyValue.Colour(ext))
-        // Hex R/G/B at firstChannel+1..+3 (2, 3, 4) and UV at firstChannel+6 (7).
+        // HexFixture: R/G/B at firstChannel+1..+3 (2, 3, 4), amber at +4 (5), white at +5 (6), UV at +6 (7).
         val byChannel = writes.associate { it.channel to it.value }
         assertEquals(200u.toUByte(), byChannel[2])
         assertEquals(100u.toUByte(), byChannel[3])
         assertEquals(50u.toUByte(), byChannel[4])
-        assertEquals(180u.toUByte(), byChannel[7], "uv channel is present via WithUv")
-        assertEquals(4, writes.size, "R/G/B + UV only — W/A intentionally skipped (Phase 8)")
+        assertEquals(64u.toUByte(), byChannel[5], "amber via WithAmber")
+        assertEquals(128u.toUByte(), byChannel[6], "white via WithWhite")
+        assertEquals(180u.toUByte(), byChannel[7], "uv via WithUv")
+        assertEquals(6, writes.size, "R/G/B + W + A + UV — full extended colour")
+        assertEquals(PropertyCategory.WHITE, writes.single { it.channel == 6 }.category)
+        assertEquals(PropertyCategory.AMBER, writes.single { it.channel == 5 }.category)
+        assertEquals(PropertyCategory.UV, writes.single { it.channel == 7 }.category)
     }
 
     @Test
-    fun `colour without UV value still writes UV channel as zero on WithUv fixtures`() {
-        // HexFixture is WithUv. An ExtendedColour with uv=0 should still emit the UV write
-        // to ensure Layer 4 covers that channel — otherwise a previous UV sticky would linger.
+    fun `colour without extended values still writes W A UV channels as zero on trait-bearing fixtures`() {
+        // HexFixture implements WithWhite/WithAmber/WithUv. An ExtendedColour with the
+        // extended channels defaulted to 0 should still emit writes for each — otherwise
+        // a previous sticky value on those channels would linger at Layer 4.
         val ext = ExtendedColour(Color(255, 0, 0))
         val writes = PropertyChannelWriter.resolve(hex(), "rgbColour", Layer3Resolver.PropertyValue.Colour(ext))
-        assertEquals(4, writes.size)
-        val uv = writes.single { it.channel == 7 }
-        assertEquals(0u.toUByte(), uv.value)
-        assertEquals(PropertyCategory.UV, uv.category)
+        assertEquals(6, writes.size)
+        assertEquals(0u.toUByte(), writes.single { it.channel == 5 }.value, "amber zero-write")
+        assertEquals(0u.toUByte(), writes.single { it.channel == 6 }.value, "white zero-write")
+        assertEquals(0u.toUByte(), writes.single { it.channel == 7 }.value, "uv zero-write")
     }
 
     @Test
-    fun `colour white and amber components are silently dropped pending Phase 8`() {
+    fun `colour on fixture with WithWhite but no WithAmber drops amber silently`() {
+        // LightstripFixture implements WithColour + WithWhite, but not WithAmber or WithUv.
+        // Asymmetric-trait case: white lands, amber/uv drop without error.
+        val lightstrip = LightstripFixture(universe, key = "strip-1", fixtureName = "Strip 1", firstChannel = 1)
         val ext = ExtendedColour(Color(200, 100, 50), white = 128u, amber = 64u, uv = 180u)
-        val writes = PropertyChannelWriter.resolve(hex(), "rgbColour", Layer3Resolver.PropertyValue.Colour(ext))
-        // Only R/G/B + UV. HexFixture has WHITE and AMBER channels, but Phase 7 doesn't
-        // route through them — Phase 8 will introduce the WithWhite / WithAmber traits.
-        assertEquals(4, writes.size)
-        assertTrue(writes.all { it.channel in setOf(2, 3, 4, 7) })
+        val writes = PropertyChannelWriter.resolve(lightstrip, "rgbColour", Layer3Resolver.PropertyValue.Colour(ext))
+        // LightstripFixture: RGB at 1/2/3, white at 4. No amber / no UV.
+        val byChannel = writes.associate { it.channel to it.value }
+        assertEquals(200u.toUByte(), byChannel[1])
+        assertEquals(100u.toUByte(), byChannel[2])
+        assertEquals(50u.toUByte(), byChannel[3])
+        assertEquals(128u.toUByte(), byChannel[4], "white via WithWhite")
+        assertEquals(4, writes.size, "amber and uv drop silently — traits not implemented")
     }
 
     // ─── Position ───────────────────────────────────────────────────────────
@@ -182,9 +195,10 @@ class PropertyChannelWriterTest {
     }
 
     @Test
-    fun `channelsFor colour returns R G B plus UV`() {
+    fun `channelsFor colour returns R G B plus W A UV`() {
         val channels = PropertyChannelWriter.channelsFor(hex(), "rgbColour")
-        assertEquals(setOf(2, 3, 4, 7), channels.map { it.channel }.toSet())
+        // HexFixture: R/G/B (2,3,4) + amber (5) + white (6) + UV (7).
+        assertEquals(setOf(2, 3, 4, 5, 6, 7), channels.map { it.channel }.toSet())
     }
 
     @Test
@@ -220,7 +234,7 @@ class PropertyChannelWriterTest {
         )
 
         // Cue-apply path: assignment → setCueAssignments → publishLayer3ToControllers → controller bytes.
-        val ext = ExtendedColour(Color(200, 100, 50), uv = 180u)
+        val ext = ExtendedColour(Color(200, 100, 50), white = 128u, amber = 64u, uv = 180u)
         val assignment = Layer3Resolver.Assignment(
             cueId = 1, priority = 1, fadeWeight = 1.0,
             targetKey = "hex-1", targetIsGroup = false,
@@ -233,6 +247,8 @@ class PropertyChannelWriterTest {
             2 to controller.currentValues[2],
             3 to controller.currentValues[3],
             4 to controller.currentValues[4],
+            5 to controller.currentValues[5],
+            6 to controller.currentValues[6],
             7 to controller.currentValues[7],
         )
 
@@ -246,6 +262,8 @@ class PropertyChannelWriterTest {
         assertEquals(cueBytes[2], writerBytes[2], "red channel matches cue-apply")
         assertEquals(cueBytes[3], writerBytes[3], "green channel matches cue-apply")
         assertEquals(cueBytes[4], writerBytes[4], "blue channel matches cue-apply")
+        assertEquals(cueBytes[5], writerBytes[5], "amber channel matches cue-apply")
+        assertEquals(cueBytes[6], writerBytes[6], "white channel matches cue-apply")
         assertEquals(cueBytes[7], writerBytes[7], "uv channel matches cue-apply")
     }
 

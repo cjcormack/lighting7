@@ -8,10 +8,12 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithUv
+import uk.me.cormack.lighting7.fixture.trait.WithWhite
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
 
@@ -228,6 +230,8 @@ data class SliderTarget(
         return when (propertyName) {
             "dimmer" -> (fixture as? WithDimmer)?.dimmer
             "uv" -> (fixture as? WithUv)?.uv
+            "white" -> (fixture as? WithWhite)?.white
+            "amber" -> (fixture as? WithAmber)?.amber
             else -> {
                 // Look up arbitrary slider properties via fixture reflection
                 val f = fixture as? Fixture ?: return null

@@ -4,10 +4,12 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.property.Strobe
+import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import uk.me.cormack.lighting7.fixture.trait.WithUv
+import uk.me.cormack.lighting7.fixture.trait.WithWhite
 import kotlin.math.roundToInt
 
 @FixtureType("hex", manufacturer = "Chauvet", model = "Freedom Par Hex")
@@ -19,7 +21,7 @@ class HexFixture(
     private val maxDimmerLevel: UByte = 255u,
     transaction: ControllerTransaction? = null,
 ) : DmxFixture(universe, firstChannel, 12, key, fixtureName),
-    WithDimmer, WithColour, WithUv, WithStrobe
+    WithDimmer, WithColour, WithWhite, WithAmber, WithUv, WithStrobe
 {
     private constructor(
         fixture: HexFixture,
@@ -75,10 +77,10 @@ class HexFixture(
     )
 
     @FixtureProperty(category = PropertyCategory.AMBER, bundleWithColour = true)
-    val amberColour = DmxSlider(transaction, universe, firstChannel + 4)
+    override val amber = DmxSlider(transaction, universe, firstChannel + 4)
 
     @FixtureProperty(category = PropertyCategory.WHITE, bundleWithColour = true)
-    val whiteColour = DmxSlider(transaction, universe, firstChannel + 5)
+    override val white = DmxSlider(transaction, universe, firstChannel + 5)
 
     @FixtureProperty(category = PropertyCategory.UV, bundleWithColour = true)
     override val uv = DmxSlider(transaction, universe, firstChannel + 6)

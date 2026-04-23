@@ -9,11 +9,13 @@ import uk.me.cormack.lighting7.fixture.property.AggregateColour
 import uk.me.cormack.lighting7.fixture.property.AggregatePosition
 import uk.me.cormack.lighting7.fixture.property.AggregateSlider
 import uk.me.cormack.lighting7.fixture.property.AggregateStrobe
+import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import uk.me.cormack.lighting7.fixture.trait.WithUv
+import uk.me.cormack.lighting7.fixture.trait.WithWhite
 
 /**
  * Extension properties for accessing group-level properties.
@@ -98,6 +100,32 @@ val <T> FixtureGroup<T>.tilt: AggregateSlider
 val <T> FixtureGroup<T>.uv: AggregateSlider
     where T : GroupableFixture, T : WithUv
     get() = GroupSlider(this) { it.uv }
+
+// ============================================
+// White Extensions
+// ============================================
+
+/**
+ * Get the aggregated white slider for groups where all members have a dedicated white channel.
+ *
+ * @return AggregateSlider providing unified access to all member white values
+ */
+val <T> FixtureGroup<T>.white: AggregateSlider
+    where T : GroupableFixture, T : WithWhite
+    get() = GroupSlider(this) { it.white }
+
+// ============================================
+// Amber Extensions
+// ============================================
+
+/**
+ * Get the aggregated amber slider for groups where all members have a dedicated amber channel.
+ *
+ * @return AggregateSlider providing unified access to all member amber values
+ */
+val <T> FixtureGroup<T>.amber: AggregateSlider
+    where T : GroupableFixture, T : WithAmber
+    get() = GroupSlider(this) { it.amber }
 
 // ============================================
 // Strobe Extensions

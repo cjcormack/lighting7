@@ -6,8 +6,11 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithUv
+import uk.me.cormack.lighting7.fixture.trait.WithWhite
 import uk.me.cormack.lighting7.midi.PropertyChannelResolver
 
 /**
@@ -19,9 +22,10 @@ import uk.me.cormack.lighting7.midi.PropertyChannelResolver
  * Handles:
  * - [Layer3Resolver.PropertyValue.Slider] — single channel write at full 0..255 range.
  * - [Layer3Resolver.PropertyValue.Setting] — single channel write at the raw DMX level.
- * - [Layer3Resolver.PropertyValue.Colour] — R/G/B writes always; UV write when the fixture
- *   implements [WithUv]. White / amber are not emitted — no `WithWhite` / `WithAmber`
- *   traits exist.
+ * - [Layer3Resolver.PropertyValue.Colour] — R/G/B writes always; white / amber / UV
+ *   writes emitted when the fixture implements the respective [WithWhite] / [WithAmber]
+ *   / [WithUv] trait. Trait-less fixtures silently drop the extended channel (same
+ *   contract for all three).
  * - [Layer3Resolver.PropertyValue.Position] — pan + tilt writes when the fixture implements
  *   [WithPosition].
  *
@@ -71,7 +75,9 @@ object PropertyChannelWriter {
                 add(PropertyChannelResolver.ChannelWrite(raw.universe, raw.redSlider.channelNo, 0u, PropertyCategory.COLOUR))
                 add(PropertyChannelResolver.ChannelWrite(raw.universe, raw.greenSlider.channelNo, 0u, PropertyCategory.COLOUR))
                 add(PropertyChannelResolver.ChannelWrite(raw.universe, raw.blueSlider.channelNo, 0u, PropertyCategory.COLOUR))
-                uvChannelWrite(fixture, 0u)?.let { add(it) }
+                extendedChannelWrite((fixture as? WithWhite)?.white, 0u, PropertyCategory.WHITE)?.let { add(it) }
+                extendedChannelWrite((fixture as? WithAmber)?.amber, 0u, PropertyCategory.AMBER)?.let { add(it) }
+                extendedChannelWrite((fixture as? WithUv)?.uv, 0u, PropertyCategory.UV)?.let { add(it) }
             }
             is DmxFixtureSetting<*> -> listOf(
                 PropertyChannelResolver.ChannelWrite(raw.universe, raw.channelNo, 0u, PropertyCategory.SETTING)
@@ -133,8 +139,9 @@ object PropertyChannelWriter {
             add(PropertyChannelResolver.ChannelWrite(raw.universe, raw.redSlider.channelNo, value.color.red.toUByte(), PropertyCategory.COLOUR))
             add(PropertyChannelResolver.ChannelWrite(raw.universe, raw.greenSlider.channelNo, value.color.green.toUByte(), PropertyCategory.COLOUR))
             add(PropertyChannelResolver.ChannelWrite(raw.universe, raw.blueSlider.channelNo, value.color.blue.toUByte(), PropertyCategory.COLOUR))
-            uvChannelWrite(fixture, value.uv)?.let { add(it) }
-            // white / amber dropped: no WithWhite / WithAmber trait exists yet.
+            extendedChannelWrite((fixture as? WithWhite)?.white, value.white, PropertyCategory.WHITE)?.let { add(it) }
+            extendedChannelWrite((fixture as? WithAmber)?.amber, value.amber, PropertyCategory.AMBER)?.let { add(it) }
+            extendedChannelWrite((fixture as? WithUv)?.uv, value.uv, PropertyCategory.UV)?.let { add(it) }
         }
     }
 
@@ -156,10 +163,17 @@ object PropertyChannelWriter {
         )
     }
 
-    /** UV channel discovered via [WithUv]; null if the fixture doesn't expose UV. */
-    private fun uvChannelWrite(fixture: Fixture, value: UByte): PropertyChannelResolver.ChannelWrite? {
-        val uv = (fixture as? WithUv)?.uv as? DmxSlider ?: return null
-        return PropertyChannelResolver.ChannelWrite(uv.universe, uv.channelNo, value, PropertyCategory.UV)
+    /**
+     * Build a channel write for an optional extended-colour slider. Returns null when the
+     * slider is absent (trait not implemented on the fixture) or not DMX-backed.
+     */
+    private fun extendedChannelWrite(
+        slider: Slider?,
+        value: UByte,
+        category: PropertyCategory,
+    ): PropertyChannelResolver.ChannelWrite? {
+        val dmx = slider as? DmxSlider ?: return null
+        return PropertyChannelResolver.ChannelWrite(dmx.universe, dmx.channelNo, value, category)
     }
 
     private fun callProperty(fixture: Fixture, propertyName: String): Any? {

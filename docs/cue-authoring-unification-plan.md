@@ -17,7 +17,34 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: **Phase 7 complete (landed 2026-04-23).**
+**Phase**: **Phase 8 complete (backend, landed 2026-04-23).**
+`WithWhite` / `WithAmber` traits land in `fixture/trait/`, mirroring `WithUv` — single
+`val white: Slider` / `val amber: Slider` each. HexFixture, WhexFixture, LightstripFixture,
+and the four RGBW-bearing `LedLightbar12PixelFixture` inner classes (`RgbwPixel`,
+`Mode4ChRgbw`, `Mode6Ch`, `Mode12Ch`) are retrofitted — trait added to the class
+declaration, fields renamed to `white` / `amber` where needed, `override` keyword
+added. `PropertyChannelWriter.resolveColour` and `channelsFor` now emit W/A writes
+symmetrically to the existing UV path via two new private helpers
+(`whiteChannelWrite` / `amberChannelWrite`). Trait-less fixtures continue to drop the
+extended channel silently — same contract as UV.
+
+`GroupExtensions` gains `val <T> FixtureGroup<T>.white` / `.amber` aggregate accessors
+(`AggregateSlider`), `where T : With[White|Amber]`, mirroring the UV extension.
+
+Tests: the three existing W/A-adjacent cases in `PropertyChannelWriterTest` are rewritten
+around the new symmetric shape — `colour on RGBWA+UV fixture emits all six channels`
+(positive), `colour without extended values still writes W A UV channels as zero on
+trait-bearing fixtures` (sticky-coverage), `colour on fixture with WithWhite but no
+WithAmber drops amber silently` (asymmetric-trait drop). The cue-apply/writer round-trip
+is extended to all six channels. `channelsFor` enumerates `{2,3,4,5,6,7}` for HexFixture.
+`./gradlew test` green — 679 tests, 0 failures.
+
+Frontend `ColourPickerPopover` W/A/UV slider affordance remains a deferred
+`lighting-react` follow-up — the popover currently renders RGB only, but
+`FxColourPicker` and `PropertyVisualizers` already expose per-channel sliders via
+`ExtendedChannelSlider`, so the backend write path is fully consumable today.
+
+Prior milestone — **Phase 7 complete (landed 2026-04-23).**
 New `PropertyChannelWriter` object
 (`src/main/kotlin/uk/me/cormack/lighting7/fx/PropertyChannelWriter.kt`) resolves a typed
 `Layer3Resolver.PropertyValue` + `Fixture` + property name to a list of
@@ -39,10 +66,6 @@ so decide-apply-record is atomic per preset. The apply path reuses
 `buildLayer3AssignmentsForPreset` to get parsed `PropertyValue`s and expanded member
 keys — no logic duplicated. Stale-reference risk (fixture rekeyed mid-session) matches
 the pre-Phase-7 behaviour and is documented in code.
-
-Colour `.white` and `.amber` remain dropped — no `WithWhite` / `WithAmber` traits exist
-yet. A new **Phase 8** stub covers the end-to-end W/A gap (traits, fixture retrofits,
-resolver/composition extension, UI picker).
 
 Tests: 17 new unit cases on `PropertyChannelWriter` (per-variant plus round-trip against
 the cue-apply pipeline) + 5 new "Worked Example 6" cases in `FxEnginePipelineTest`
@@ -120,8 +143,12 @@ See the Change log for durable invariants and engine surface.
 ~~**Colour picker in cue-edit mode (Phase 1 plumbing limitation)**~~ — **Addressed in Phase 2 (2026-04-21)**. `ColourSwatch` / `VirtualDimmerSlider` now accept a `fixtureKey` prop (threaded from `FixtureContent` / per-head `PropertiesList`) and a new `useUpdateFixtureColour` hook routes RGB writes via `cueEdit.setProperty { propertyName: 'rgbColour' }` in cue mode (W/A/UV still use `setChannel` — the backend accepts those). Mirrors the existing `useUpdateGroupColour` pattern; no backend changes.
 
 **Next actions:**
-1. **Phase 8** — Extended colour W/A end-to-end (traits + fixtures + writer + composition + UI).
-   See Phase 8 section.
+1. **Frontend `ColourPickerPopover` W/A/UV sliders** (`lighting-react`) — the backend
+   write path now emits W/A/UV via Phase 8; `FxColourPicker` and `PropertyVisualizers`
+   already render `ExtendedChannelSlider` per channel, but the swatch popover itself
+   is still RGB-only. Adding W/A/UV sliders to the popover, gated on
+   `ColourPropertyDescriptor.whiteChannel/amberChannel/uvChannel`, is pure UI polish
+   and can land independently.
 2. **Phase 3 follow-ups** (all flagged 2026-04-21; see Phase 3 section for detail):
    - Palette-resolution cascade for presets — preset palette → cue palette → global, resolved property-like. Backend now ships the data field (`fx_presets.palette`); cascade resolution still matches Phase 2's "global palette only" semantics.
    - Timed preset property assignments — `applyCue` immediate presets contribute Layer 3, delayed/recurring preset applications do NOT. `FxEngine.setCueAssignments` is a replace operation; a timed-fire append path needs new engine API. Document limitation.
@@ -144,7 +171,7 @@ See the Change log for durable invariants and engine surface.
 | 5 | **FX pipeline integration harness**: rig stub + end-to-end tests covering the Phase-0 layer cascade with real Layer-3 data, unlocking a reusable benchmark + integration test suite | Done (2026-04-22) |
 | 6 | **Persisted-reference validation for cue assignments**: dead-reference diagnostic for `CuePropertyAssignment` rows (fixture rename / removal), paralleling control-surface Phase 7 | Done (2026-04-22) |
 | 7 | **Property-level Layer 4 writer**: reusable `PropertyValue → channel-writes` resolver + migrate preset-toggle off the Phase-3 pseudo-cue onto a real Layer-4 path | Done (2026-04-23) |
-| 8 | **Extended colour W/A end-to-end**: introduce `WithWhite` / `WithAmber` traits, retrofit fixtures, wire through the resolver / composition / UI | Not started |
+| 8 | **Extended colour W/A end-to-end**: introduce `WithWhite` / `WithAmber` traits, retrofit fixtures, wire through the resolver / composition / UI | Done (2026-04-23, backend; frontend popover polish deferred) |
 
 ---
 
@@ -717,6 +744,9 @@ unblocked once the resolver exists — layer that on as a small follow-up if des
 
 ## Phase 8 — Extended colour: White / Amber end-to-end
 
+**Status**: **Backend complete (2026-04-23)**. Frontend `ColourPickerPopover`
+polish deferred to `lighting-react` as an independent follow-up — see Next actions.
+
 **Goal**: close the `ExtendedColour.white` / `.amber` gap surfaced by Phase 7. Today RGB + UV
 round-trip through traits (`WithColour`, `WithUv`), but white / amber channels are written
 only via the `@FixtureProperty(category = WHITE|AMBER, bundleWithColour = true)` slider
@@ -825,6 +855,47 @@ Flag these to the user before implementing.
 
 Detailed per-session narration lives in git. This section captures durable invariants and
 gotchas that would cost time to rediscover.
+
+### Phase 8 — Extended colour W/A (landed 2026-04-23)
+
+Closes the Phase-7 "W/A silently dropped" gap. Backend is feature-complete; frontend
+`ColourPickerPopover` W/A/UV slider affordance deferred as `lighting-react` polish.
+
+**Trait symmetry is the design.** `WithWhite` / `WithAmber` expose a single
+`val white: Slider` / `val amber: Slider` and nothing else — same shape as
+[`WithUv`](../src/main/kotlin/uk/me/cormack/lighting7/fixture/trait/WithUv.kt). The
+`PropertyChannelWriter` change is three new lines per extended-channel helper
+(`whiteChannelWrite`, `amberChannelWrite`), invoked symmetrically from both
+`resolveColour` and `channelsFor` alongside the existing `uvChannelWrite`. Anyone
+porting from "how UV works" to "how W/A works" has zero cognitive load.
+
+**Field renames changed the persisted property-name contract.** `HexFixture.whiteColour`
+→ `white`, `HexFixture.amberColour` → `amber`, and the same for `WhexFixture` and
+`LightstripFixture`. The `LedLightbar12PixelFixture` modes / pixel classes already used
+`white`, so only the trait declaration + `override` keyword changed there.
+`Fixture.fixtureProperty(name)` keys on the Kotlin field name (not the
+`@FixtureProperty("...")` description string), so any cue/preset rows referencing
+`whiteColour` / `amberColour` in the DB are now `MissingProperty` health rows per
+Phase 6's validator. Acceptable under the "pre-production, DB can be lossy" policy;
+Phase 6's `DeadAssignmentsBanner` affordance lets operators re-bind dead rows
+one-click.
+
+**Zero-writes for W/A match the UV pattern.** `resolveColour` emits a W/A/UV write
+even when the value is 0 (as long as the trait is present) — otherwise a previously
+sticky Layer-4 extended channel would linger. This matches Phase 7's "UV zero still
+writes" invariant and is covered by a dedicated test.
+
+**`GroupColour` is deliberately still RGB-only.** W/A/UV aggregates live on the
+top-level `FixtureGroup` via `val <T> FixtureGroup<T>.white` / `.amber` / `.uv`
+extension properties, not inside the `GroupColour` composite. This matches how
+`group.uv` worked pre-Phase-8 — consistent with the rule "one extension per extended
+channel, not a composite aggregate type".
+
+**`ColourTarget` in `FxTarget.kt` required no change.** Its W/A/UV plumbing already
+looks up sliders by `fixture.fixtureProperties.find { bundleWithColour && category == ... }`
+— category-driven, not name-driven — so the rename of `whiteColour` → `white` on the
+Kotlin side doesn't affect this code path. Grep-audit confirmed no other consumers of
+the old names.
 
 ### Phase 7 — Property-level Layer 4 writer (landed 2026-04-23)
 
