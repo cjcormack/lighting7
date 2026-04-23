@@ -1,8 +1,11 @@
 # Control Surface — Follow-ups & Deferred Improvements
 
-Ideas surfaced during Phase 6 review that aren't blocking but are worth revisiting once we
-have real operator hours on the hardware. Each entry includes the origin (which phase / review
-noticed it), the scope, and a suggested fix shape.
+Ideas surfaced during Phase 6 review and subsequent phases that aren't blocking but are
+worth revisiting once we have real operator hours on the hardware. Each entry includes the
+origin (which phase / review noticed it), the scope, and a suggested fix shape.
+
+Companion: [cue-authoring-followups.md](cue-authoring-followups.md) — deferred items from
+the cue-authoring plan. Cross-plan items are cross-referenced rather than duplicated.
 
 ## Performance
 
@@ -185,3 +188,67 @@ project B → verify cache is empty, feedback falls back to live DMX. Add an int
 The plan defers to cue-authoring's "reject-second-beginEdit" conflict resolution, but
 there's no Phase 6 test that two WS connections racing on `beginEdit` behave correctly for
 surface routing. Add one once the exact semantics are confirmed with cue-authoring owners.
+
+## Deferred phases
+
+### 10. Phase 9.1 — cross-restart scaler persistence (option B)
+
+**Origin**: Phase 9 design, deferred 2026-04-23.
+
+Phase 9 shipped option A: `GlobalScalerState` is project-scoped and survives project
+switches within a session. Backend restart resets Blackout / Grand Master on every project
+(intended).
+
+Option B, deferred, persists scaler state across restarts via a single-row DB table per
+project:
+
+```sql
+project_scaler_state(project_id, blackout BOOLEAN, grand_master BOOLEAN)
+```
+
+**Shape when picked up**: `State.scalerHolderFor(projectId)` loads from DB on first
+access; `GlobalScalerStateHolder.setBlackout` / `setGrandMaster` write through via
+`transaction(state.database)`. Exposed `SchemaUtils.createMissingTablesAndColumns` picks
+up the new table on next boot — no migration file.
+
+**Trigger to revisit**: an operator asks to preserve Blackout across a backend restart
+(e.g. remote-restart during a show). Without that signal, the deferred framing in the
+phase's open question stands — preserving across session-restart is a behaviour change
+that warrants explicit user confirmation.
+
+## Manual hardware validation
+
+These are operational validations pending an operator session on the X-Touch Compact —
+captured here so the plan file can be marked complete. No engineering scope; each is
+10–15 minutes end-to-end.
+
+### 11. Phase 9 — scaler state across project switches
+
+Connect device → toggle **Blackout** on project A (confirm LED + stage) → switch to
+project B via `/projects` → Blackout off on B (fresh holder) → switch back to A →
+Blackout still on, stage still dark. Same flow for **Grand Master**. Verify a WS client
+open across the switch sees the correct `surfaceScaler.state` payload at each switch and
+after toggling within the new project. Backend restart resets both projects (expected —
+option B not landed; see §10).
+
+### 12. Phase 8 — suspend-path sanity check
+
+Run a script that adds and removes 100 effects/sec while a MIDI fader is at full 60 Hz
+on the same property. Confirm no stage stutter, no WebSocket `channelState` lag, no
+coroutine leak on a thread dump. No functional changes are expected — the suspend path
+delivers the same per-channel acks as the old blocking path — this is a regression
+sanity check, not new validation work.
+
+### 13. Phase 6 — cueEdit integration on hardware
+
+Open a cue for edit in Live mode via the frontend → wiggle a bound fader → confirm the
+cue's Layer 3 `dimmer` row updates (via `GET /cues/{id}`) → stage reflects the new value
+→ close the editor → retrigger the cue → reproduces the edit. Repeat in Blind mode: the
+stage is unaffected during the edit, the value still persists.
+
+### 14. Phase 5 — end-to-end `/surfaces` flow
+
+Connect the device → `/surfaces` shows it as attached. Click **+** on a fader row, open
+MIDI Learn, wiggle the physical fader → binding appears. Switch banks via the
+`BankSwitcher` → matrix rows update. Validates the Phase 5 UI + Phase 3/4 wiring against
+real hardware edges (debounce, device-side bank events, motor drive under load).

@@ -1,6 +1,6 @@
 # Control Surface Support — Plan & Handover
 
-> **Document status:** Living plan. Will be converted into permanent engineering docs (`control-surface-engineering.md`, possibly updates to `lighting-composition-model.md` and `websocket-engineering.md`) once implementation lands. Update this file at the end of every session.
+> **Document status: COMPLETE (2026-04-23).** Phases 0–9 landed; Surfaces v1 is feature-complete through the plan's scope. Remaining deferred items (Phase 9.1 DB-persisted scaler state, Phase 8 step 2 frame-transaction unification, DMX/FX micro-benchmark harness, manual hardware validations) are tracked in [control-surface-followups.md](control-surface-followups.md). The narrative below is preserved as a session-by-session record; durable engineering reference lives in [midi-control-surface-engineering.md](midi-control-surface-engineering.md).
 >
 > **Not in production yet.** We're free to break the DB, skip rollback shims, and iterate on migrations loosely.
 

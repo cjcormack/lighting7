@@ -1,6 +1,6 @@
 # Cue Authoring Unification — Plan & Handover
 
-> **Document status:** Living plan. Will be converted into permanent engineering docs (`lighting-composition-model.md`, `cues-engineering.md`, frontend docs) once implementation lands. Update this file at the end of every session.
+> **Document status: COMPLETE (2026-04-23).** Phases 0–8 landed (Phase 8 frontend `ColourPickerPopover` polish deferred to `lighting-react`). Remaining deferred items (frontend polish, palette cascade for presets, timed-preset Layer 3 contribution, FxEngine allocation reduction, HTTP round-trip tests, and others) are tracked in [cue-authoring-followups.md](cue-authoring-followups.md). The narrative below is preserved as a session-by-session record; durable engineering reference lives in [lighting-composition-model.md](lighting-composition-model.md) and [cues-engineering.md](cues-engineering.md).
 >
 > **Not in production yet.** We're free to break the DB, skip rollback shims, and iterate on migrations loosely.
 
