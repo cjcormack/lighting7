@@ -1,0 +1,534 @@
+# Lighting7 Follow-ups
+
+Consolidated follow-up items from the completed cue-authoring-unification and
+control-surface plans (Phases 0–9 landed through 2026-04-23). Each entry is
+self-contained so a Claude Code session can pick up one item cold.
+
+## How to use
+
+- **Pick items by slug ID** (e.g. `FU-PERF-COALESCE-WRITES`). Slugs are stable —
+  unlike numbers, they don't shift when items land.
+- **Check the status tag first**:
+  - **Ready** — scope is clear, no blocker; pick up and go.
+  - **Trigger** — listed signal must fire first; the condition is named in the
+    item body.
+  - **Blocked** — named prerequisite must land first.
+  - **Manual** — operational validation on hardware; no engineering scope.
+- **Each item is self-contained**: origin, scope, suggested shape, and (where
+  relevant) the trigger to revisit. A cold session should need nothing else.
+- **When an item lands**, move it to the Completed section at the bottom with
+  the commit SHA or PR link — keeps an audit trail.
+- **New follow-ups** surfacing during work: add them here rather than a new doc.
+
+---
+
+## Performance
+
+### `FU-PERF-COALESCE-WRITES` — Coalesce per-target cue-edit writes on the fader hot path
+
+**Status**: Trigger (profile first)
+**Origin**: Control-surface Phase 6, 2026-04-23
+
+A bound fader during an open `cueEdit` session runs
+`CueEditSessionHandler.setPropertyForSession` per inbound MIDI CC event —
+potentially 100 transactions/second on the MIDI input coroutine (Hikari borrow,
+Exposed transaction, lazy-load of `propertyAssignments`, `upsertAssignment`,
+`buildCueApplyData`, `republishLayer3`, registry resync). Layer 4 fallback
+(`writeFixtureProperty`) is pure in-memory + UDP, orders of magnitude cheaper.
+
+**Mitigation options**:
+- **Coalesce**: debounce per `(cueId, targetType, targetKey, propertyName)` so
+  only the last value in a ~10 ms window is persisted. Per-target coroutine
+  with a conflated channel.
+- **Off-thread dispatch**: dedicated single-consumer coroutine so the MIDI
+  input loop never blocks on a DB transaction. Cheaper than debouncing (no
+  drop-intermediate) but doesn't reduce total work.
+- **Batch at transaction boundary**: per-session dispatcher groups N writes
+  into one transaction. Harder — the handler also republishes Layer 3 per
+  write.
+
+Recommended first step: **coalesce + off-thread**. 10–20 ms debounce in a
+per-target actor on `Dispatchers.IO`. Acceptable sacrifice: mid-move values
+don't all hit the DB (only endpoints + ~50 Hz samples).
+
+**Trigger to revisit**: profile first. Operators probably don't wiggle faders
+at 100 Hz for minutes on end; Hikari + Exposed on local Postgres may be fast
+enough for show-scale operation.
+
+### `FU-PERF-HEX-FORMAT-ALLOC` — `String.format` allocation per colour cueEdit write
+
+**Status**: Trigger (after `FU-PERF-COALESCE-WRITES`)
+**Origin**: Control-surface Phase 6, 2026-04-23
+
+Routed through `Layer3Resolver.PropertyValue.Colour.serialize()` →
+`ExtendedColour.toSerializedString()` → `Color.toHexString()`. Each fader move
+on a colour binding allocates a Formatter + intermediate strings. Low priority
+— dwarfed by `FU-PERF-COALESCE-WRITES`.
+
+**Fix shape**: micro-benchmark first, then replace with a lookup table (e.g.
+`val HEX = Array(256) { "%02x".format(it) }`).
+
+### `FU-PERF-FRAME-TXN-UNIFY` — FX beat + wall-clock frame-transaction unification
+
+**Status**: Trigger (event-driven)
+**Origin**: Control-surface Phase 8 step 2, deferred 2026-04-23
+
+The two FX tick loops (`processBeatTickSuspend` ~120 Hz,
+`processWallClockTickSuspend` 50 Hz) each construct their own
+`ControlTransaction` and call `applySuspend()` independently. Within the same
+~20 ms window on the same universe, two ArtNet packets go out. The 25 ms
+transmission throttle in `ArtNetController.runTransmissionChannel` coalesces
+most of that; the per-channel delta filter in `sendCurrentValues()`
+(`previousSentDmxData != byteValue`) suppresses redundant values at packet-
+build time — visible cost today is negligible.
+
+Phase 8 design sketched a `FrameTransaction` abstraction: beat + wall-clock
+share one `ControlTransaction` when their tick times fall inside a
+configurable fuzz window (default 10 ms); otherwise commit independently.
+Implementation needs an `AtomicReference<FrameTransaction?>` + a short mutex
+around the open/close edge (both loops run on `Dispatchers.Default`).
+
+**Trigger to revisit** (any one):
+- Operator reports visible flicker / double-stepping on a fixture where beat
+  and wall-clock effects share a universe.
+- Profiling shows sustained ArtNet packet rate above ~40 pkts/sec per universe
+  under effect load (indicates the 25 ms throttle is being bypassed).
+- A future effect category pushes wall-clock density high enough that the tick
+  windows overlap frequently (current 50 Hz wall-clock + ~120 Hz beat worst-
+  case doesn't).
+
+Without one of those, coordination cost > savings. Leave dormant.
+
+### `FU-PERF-REGISTRY-INDICES` — Secondary indices for registry + feedback publisher
+
+**Status**: Trigger (binding growth)
+**Origin**: Control-surface Phase 6 efficiency review
+
+- `CueEditSessionRegistry.activeSession(projectId)` — O(N) scan over
+  `sessions.values`. N ≤ 1 in practice; a `ConcurrentHashMap<Int, Entry>`
+  keyed by projectId (kept in lockstep with the handle-keyed map) makes it
+  O(1).
+- `SurfaceFeedbackPublisher.resyncEntriesMatching(key)` walks every
+  `continuousByDisplay` entry on every assignment change. With one device +
+  ≤50 controls this is trivial; a secondary
+  `Map<AssignmentKey, List<ContinuousEntry>>` built in `rebuildIndex()` would
+  make it O(1).
+
+**Trigger to revisit**: when binding counts grow materially.
+
+### `FU-PERF-FX-TICK-ALLOCS` — Reduce FxEngine per-tick allocation
+
+**Status**: Ready (profile → refactor)
+**Origin**: Cue-authoring Phase 5 baseline capture, 2026-04-22
+
+Benchmark baseline: ~600 µs p50 / ~4 ms p99 per beat tick, **~1.9 MB/tick
+allocation** on a 4×168 HexFixture rig with 336 effects. Allocation is the
+most surprising number — not an immediate correctness concern, but a real
+future optimisation target.
+
+**Hot spots to profile before refactoring**: `Layer3Resolver.compose*`
+list-building, `PropertyValue` boxing through the sealed hierarchy,
+`ChannelWrite` record allocation per channel per tick. JFR flight recording
+over a benchmark run should surface which dominates.
+
+---
+
+## Frontend polish
+
+### `FU-FE-EXT-COLOUR-CHANNELS` — `ColourPickerPopover` W/A/UV sliders
+
+**Status**: Ready
+**Origin**: Cue-authoring Phase 8, deferred 2026-04-23
+
+Backend now emits white / amber / UV channels symmetrically for `Colour`
+property values via `PropertyChannelWriter` (`fx/PropertyChannelWriter.kt`).
+`FxColourPicker` and `PropertyVisualizers` already expose per-channel sliders
+through `ExtendedChannelSlider`; the one remaining surface is
+`lighting-react`'s `ColourPickerPopover`, still RGB-only.
+
+**Scope**: add W/A/UV sliders to the popover, gated on
+`ColourPropertyDescriptor.whiteChannel` / `amberChannel` / `uvChannel`
+presence. Pure UI polish; no backend change. Palette serialisation already
+round-trips the extended suffix (`#rrggbb;w128;a64;uv32`), so writes go
+through existing `useUpdateFixtureColour` / `useUpdateGroupColour` hooks
+unchanged.
+
+### `FU-FE-PICKER-UX-POLISH` — Effect / Preset picker UX polish
+
+**Status**: Ready
+**Origin**: Cue-authoring Phase 2d, deferred 2026-04-21
+
+Inside `CueTargetDetail`, the Effects and Presets tabs still open `EffectFlow`
+/ `PresetPicker` at their target-picker step even though a card selection is
+already active. Redundant — the selection is known, the picker step shouldn't
+re-ask.
+
+**Fix shape**: extract `EffectConfigureStep` / `PresetPickStep` / `TimingFields`
+into `src/components/cues/editor/shared/` and drop the target-picker step
+when opened from a selected card. Keep the full flow for the non-selected-card
+entry path.
+
+### `FU-FE-REBIND-INPLACE` — In-place "Rebind" UX for dead assignments
+
+**Status**: Trigger (operator feedback)
+**Origin**: Cue-authoring Phase 6, deferred 2026-04-22
+
+`DeadAssignmentsBanner` / `DeadPresetAssignmentsBanner` ship a single Remove
+button per dead row. The plan's original framing called for a "Rebind" quick-
+action that opens a picker pre-populated with the dead assignment's property +
+value and creates a new row on commit. We shipped the simpler Remove-and-re-
+author flow.
+
+**Trigger to revisit**: operator feedback asks for it.
+`PropertyChannelWriter` (Phase 7) can drive live-preview of the proposed
+rebind — implementation is unblocked.
+
+### `FU-FE-PRESET-LIVE-PREVIEW` — "Preview on selection" live-apply for `PresetEditor`
+
+**Status**: Ready
+**Origin**: Cue-authoring Phase 3, unblocked by Phase 7 (2026-04-23)
+
+Apply the preset-in-progress to a scratch fixture selection inside the preset
+editor to test live. Was blocked on a property-level resolver;
+`PropertyChannelWriter` now provides exactly that.
+
+**Fix shape**: Layer-4 write fan-out across the scratch selection when the
+editor has a live preview active; toggle-off clear on editor close.
+
+---
+
+## Backend / composition model
+
+### `FU-BE-GROUP-LAYER3-ROUNDTRIP` — Group-level Layer 3 assignments round-trip
+
+**Status**: Ready (decision needed first)
+**Origin**: Cross-plan — Control-surface Phase 6 + Cue-authoring cross-ref
+
+`routes/projectCues.kt::captureCurrentState` always emits `targetType="fixture"`
+rows (reads `layerResolver.currentLayer3State`, which is post-expansion).
+Phase 6's surface `writeGroupPropertyToCueEdit` writes `targetType="group"`
+rows directly. Both paths work, but `captureCurrentState` called after a
+surface edit to a group round-trips through as per-fixture rows rather than
+preserving the group shape.
+
+**Scope**:
+- Decide whether group-scoped assignments are first-class Layer 3 rows (they
+  are per DB schema; `CueEditSessionHandler` accepts them).
+- Align `captureCurrentState`: snapshot from the pre-expansion assignment
+  list on the cue, not from the resolver's expanded state.
+
+### `FU-BE-PALETTE-CASCADE` — Palette-resolution cascade for presets
+
+**Status**: Ready
+**Origin**: Cue-authoring Phase 3, 2026-04-21
+
+Backend ships the `fx_presets.palette` data field, but the resolver still
+treats palette refs as "global only" — preset palette → cue palette → global
+cascade isn't wired. A colour swatch with a palette ref inside a preset is
+resolved against the global palette, not the preset's own.
+
+**Fix shape**: teach `Layer3Resolver` to take a per-contribution palette
+context (cue palette + preset palette when the row came from a preset
+application), resolving property-like. Cue palette already flows through via
+`FxEngine.setCuePalette`; extend to carry the originating preset's palette
+through the `buildLayer3AssignmentsForPreset` path.
+
+### `FU-BE-TIMED-PRESETS-LAYER3` — Timed preset property assignments contribute Layer 3
+
+**Status**: Ready
+**Origin**: Cue-authoring Phase 3, 2026-04-21
+
+`applyCue` immediate presets (no `delayMs` / `intervalMs`) fan their property
+assignments into Layer 3 alongside the cue's own assignments. Delayed /
+recurring preset applications stay effects-only — `FxEngine.setCueAssignments`
+is a **replace** operation, so a runtime "append Layer 3 at fire time" path
+needs new engine API.
+
+**Fix shape**:
+- Add `FxEngine.appendCueAssignments(cueId, additions)` that composes with
+  the existing stored list instead of replacing it.
+- Wire `CueTriggerManager`'s timed preset fire path to call
+  `appendCueAssignments` at fire time, and `removeCueAssignmentSubset(cueId,
+  keys)` on stop.
+- Document semantics — operators should expect timed presets to contribute
+  layer state from fire-time, not from cue-apply time.
+
+### `FU-BE-PRESET-PER-ELEMENT` — Preset per-head / per-element assignments
+
+**Status**: Ready (scope audit needed)
+**Origin**: Cue-authoring Phase 3, 2026-04-21
+
+Preset property assignments are preset-local (`propertyName` only, no
+`target_type` / `target_key`). Works for single-head fixtures; a 4-head LED
+bar preset has to pick one head's values for all heads.
+
+**Fix shape**: add a nullable `element_key` column to
+`fx_preset_property_assignments`. Null = applies to all heads (current
+behaviour); non-null = applies only to the named element. `PresetEditor` UI
+grows an element switcher for multi-element fixture types.
+
+**Audit required**: which fixture types need this? If the set is small
+(SlenderBeam, LedLightbar12Pixel), a simple "heads tab" alongside
+Properties/Effects covers it.
+
+### `FU-BE-MOVE-IN-DARK` — `moveInDark` during outgoing fade
+
+**Status**: Blocked (needs moving-head fixture on test rig)
+**Origin**: Cue-authoring spec'd Phase 1, not yet implemented
+
+Current linear-interp crossfade path handles basic position fades. The
+"pre-apply incoming position during outgoing fade when outgoing intensity is
+0 at end" affordance (spec'd in
+[lighting-composition-model.md](../lighting-composition-model.md)) is still
+deferred. Scope small — `Layer3Resolver` already knows the `moveInDark` flag
+on each `Assignment`.
+
+**Blocker**: needs a real moving-head fixture on the test rig to validate the
+behaviour visually and tune the "pre-apply window" threshold empirically.
+
+### `FU-BE-PRESET-FIXTURE-TYPE-NOTNULL` — Hard `NOT NULL` on `fx_presets.fixture_type`
+
+**Status**: Ready
+**Origin**: Cue-authoring Phase 3, 2026-04-21
+
+Runtime enforcement (input validation) already rejects nulls as of Phase 3
+backend. DB column stays nullable during a backfill window so pre-existing
+rows don't break boot.
+
+**Fix shape**: after a backfill pass (or on next migration sweep), tighten
+the column to `NOT NULL`. No meaningful operator impact — DB hygiene.
+
+### `FU-BE-SCALER-PERSISTENCE` — Cross-restart scaler persistence (Phase 9 option B)
+
+**Status**: Trigger (operator ask)
+**Origin**: Control-surface Phase 9 design, deferred 2026-04-23
+
+Phase 9 shipped option A: `GlobalScalerState` is project-scoped, survives
+project switches within a session. Backend restart resets Blackout / Grand
+Master on every project (intended).
+
+Option B, deferred, persists scaler state across restarts via a single-row DB
+table per project:
+```sql
+project_scaler_state(project_id, blackout BOOLEAN, grand_master BOOLEAN)
+```
+
+**Shape when picked up**: `State.scalerHolderFor(projectId)` loads from DB on
+first access; `GlobalScalerStateHolder.setBlackout` / `setGrandMaster` write
+through via `transaction(state.database)`. Exposed
+`SchemaUtils.createMissingTablesAndColumns` picks up the new table on next
+boot — no migration file.
+
+**Trigger to revisit**: operator asks to preserve Blackout across a backend
+restart (e.g. remote-restart during a show). Without that signal, preserving
+across session-restart is a behaviour change that warrants explicit user
+confirmation.
+
+---
+
+## Code quality
+
+### `FU-QUAL-TARGET-REF-SEALED` — Replace stringly-typed `"fixture"` / `"group"` with a sealed type
+
+**Status**: Ready (large scope — dedicated pass)
+**Origin**: Cross-plan — Control-surface Phase 6 + Cue-authoring cross-ref
+
+Pervasive: `CueTargetDto.type`, `CuePropertyAssignmentDto.targetType`, DB
+columns, `resolveTargetForCue` switch-on-string logic in
+`routes/projectCues.kt`. A sealed `TargetRef.Fixture(key) | Group(key)` would
+be type-safe but touches many files. Phase 6's `AssignmentKey` inherits the
+convention.
+
+**Scope**: dedicated cleanup pass, not in-flight with feature work. Relates to
+`FU-QUAL-KEY-CONVERGENCE`.
+
+### `FU-QUAL-PUSHDOWN-SESSION-ROUTING` — Push session routing into `DefaultSurfaceActions`
+
+**Status**: Ready (small)
+**Origin**: Control-surface Phase 6
+
+Currently the router branches on `activeCueEditSession()` and calls one of
+`writeFixturePropertyToCueEdit` / `writeFixtureProperty`. Alternative: the
+`DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty`
+implementations themselves check for a session and fan out to the cueEdit
+path, removing the `cueEditSessionProvider` parameter from the router
+entirely.
+
+**Tradeoff**: current router shape is easier to test (router test doesn't
+need a session provider); push-down moves branching into
+`DefaultSurfaceActions`, already State-coupled.
+
+**Defer until**: the router grows more context-dependent routing rules.
+
+### `FU-QUAL-KEY-CONVERGENCE` — `AssignmentKey` vs `Layer3Resolver.Key` convergence
+
+**Status**: Trigger (bigger refactor)
+**Origin**: Cross-plan — Control-surface Phase 6 + Cue-authoring cross-ref
+
+`Layer3Resolver.Key(targetKey, propertyName)` is targetType-agnostic because
+the resolver expands group rows to member rows upstream via `targetIsGroup`.
+Surfaces sit before that expansion, so they need the `targetType`
+discriminator.
+
+**Fix shape**: add targetType to `Layer3Resolver.Key` and thread it through
+the resolver — bigger than either plan's scope. Relates to
+`FU-QUAL-TARGET-REF-SEALED`; pairs naturally with it.
+
+---
+
+## Testing
+
+### `FU-TEST-DMX-FX-BENCH-HARNESS` — DMX/FX micro-benchmark harness
+
+**Status**: Trigger (next perf-sensitive DMX/FX change)
+**Origin**: Control-surface Phase 8 exit criterion, 2026-04-23
+
+Phase 8 proposed `BenchmarkSetValues.kt` in `src/test/kotlin/…/dmx/`
+synthesising a "burst of 512 channel writes across 4 universes" workload and
+recording the blocking-vs-suspend delta. `MockDmxController.setValuesSuspend`
+is synchronous (delegates to the sync body), so benchmarking against the mock
+shows no difference between the two paths — meaningful numbers need a
+coroutine-aware test controller that mimics `ArtNetController`'s per-channel
+conflated consumer loop without opening a UDP socket. Non-trivial to build
+well.
+
+**Trigger to revisit**: build alongside the next perf-sensitive DMX/FX change
+that would benefit from regression coverage — another `setValues` refactor, a
+new effect-engine hot path, or an operator-reported lag investigation.
+Premature to build speculatively without a concrete workload to calibrate
+against.
+
+### `FU-TEST-FX-BENCH-CI-GATE` — `FxEngineBenchmark` CI regression gate
+
+**Status**: Trigger (variance study)
+**Origin**: Cue-authoring Phase 5, deferred 2026-04-22
+
+Benchmark ships track-only. The plan called for a fail-on-regression gate at
+±20% tolerance against a committed baseline.
+
+**Trigger to revisit**: collect a week of baseline numbers across dev / CI
+hardware first to judge variance. 20% is a guess; real tolerance depends on
+how jittery the allocation counter + `measureNanoTime` numbers are on the
+actual CI runner. Without that variance study, a fixed threshold will either
+flake constantly or fail to catch real regressions.
+
+### `FU-TEST-PROJECT-SWITCH-CUEEDIT` — Project switch during open cueEdit session
+
+**Status**: Ready
+**Origin**: Control-surface Phase 6 efficiency review
+
+`SurfaceFeedbackPublisher.onProjectChanged()` now clears `sessionAssignments`
+(fixed during simplification pass), but no test covers the scenario: begin
+edit on project A → switch to project B → verify cache is empty, feedback
+falls back to live DMX.
+
+**Scope**: add an integration test.
+
+### `FU-TEST-MULTI-CONN-CUEEDIT` — Multi-connection cueEdit conflict
+
+**Status**: Blocked (awaiting cue-authoring semantics)
+**Origin**: Control-surface Phase 6
+
+The plan defers to cue-authoring's "reject-second-beginEdit" conflict
+resolution, but there's no Phase 6 test that two WS connections racing on
+`beginEdit` behave correctly for surface routing.
+
+**Unblock by**: confirming exact semantics with cue-authoring owners, then
+add the test.
+
+### `FU-TEST-HTTP-ROUNDTRIP` — End-to-end HTTP round-trip test
+
+**Status**: Blocked (needs DB test harness)
+**Origin**: Cue-authoring Phase 1, 2026-04-21
+
+`PATCH` + `snapshot-from-live` + `cueEdit` round-trip through an in-memory
+HTTP harness is still missing. Phase 5's FX-engine-level pipeline test covers
+composition semantics in isolation; HTTP-path end-to-end is a separate gap.
+
+**Blocker**: no DB test harness (tests run against a fresh Postgres schema or
+not at all). Proper fix sets up an ephemeral Postgres via Testcontainers (or
+a transaction-rollback harness against a shared dev DB), wires Ktor's
+`testApplication` DSL around it, and drives the full cue-edit → snapshot →
+apply flow. Cross-cutting — unblocks a bunch of other route-level tests.
+
+### `FU-TEST-VITE-BUILD` — Frontend `vite build` validation
+
+**Status**: Blocked (Node upgrade)
+**Origin**: Cue-authoring Phase 6, 2026-04-22
+
+Node 16.x on the development machine at landing time blocked `vite build`;
+`tsc --noEmit` passed. Subsequent landings have worked around this. Confirm
+a clean prod build once Node is upgraded — nothing structural is known to
+fail, but the check hasn't run cleanly in a while.
+
+---
+
+## Manual hardware validation
+
+These are operational validations pending an operator session on the X-Touch
+Compact. No engineering scope; each is 10–15 minutes end-to-end.
+
+### `FU-MANUAL-SCALER-PROJECT-SWITCH` — Scaler state across project switches (Phase 9)
+
+**Status**: Manual
+**Origin**: Control-surface Phase 9
+
+Connect device → toggle **Blackout** on project A (confirm LED + stage) →
+switch to project B via `/projects` → Blackout off on B (fresh holder) →
+switch back to A → Blackout still on, stage still dark. Same flow for
+**Grand Master**. Verify a WS client open across the switch sees the correct
+`surfaceScaler.state` payload at each switch and after toggling within the
+new project. Backend restart resets both projects (expected — option B not
+landed; see `FU-BE-SCALER-PERSISTENCE`).
+
+### `FU-MANUAL-SUSPEND-PATH` — Suspend-path sanity check (Phase 8)
+
+**Status**: Manual
+**Origin**: Control-surface Phase 8
+
+Run a script that adds and removes 100 effects/sec while a MIDI fader is at
+full 60 Hz on the same property. Confirm no stage stutter, no WebSocket
+`channelState` lag, no coroutine leak on a thread dump. No functional changes
+expected — the suspend path delivers the same per-channel acks as the old
+blocking path — regression sanity check, not new validation work.
+
+### `FU-MANUAL-CUEEDIT-HARDWARE` — cueEdit integration on hardware (Phase 6)
+
+**Status**: Manual
+**Origin**: Control-surface Phase 6
+
+Open a cue for edit in Live mode via the frontend → wiggle a bound fader →
+confirm the cue's Layer 3 `dimmer` row updates (via `GET /cues/{id}`) →
+stage reflects the new value → close the editor → retrigger the cue →
+reproduces the edit. Repeat in Blind mode: stage unaffected during the edit,
+value still persists.
+
+### `FU-MANUAL-SURFACES-FLOW` — End-to-end `/surfaces` flow (Phase 5)
+
+**Status**: Manual
+**Origin**: Control-surface Phase 5
+
+Connect the device → `/surfaces` shows it as attached. Click **+** on a fader
+row, open MIDI Learn, wiggle the physical fader → binding appears. Switch
+banks via the `BankSwitcher` → matrix rows update. Validates the Phase 5 UI
++ Phase 3/4 wiring against real hardware edges (debounce, device-side bank
+events, motor drive under load).
+
+### `FU-MANUAL-DEAD-ASSIGNMENTS` — Dead-assignment banner live rig (Phase 6)
+
+**Status**: Manual
+**Origin**: Cue-authoring Phase 6, 2026-04-22
+
+Backend logic for `DeadAssignmentsBanner` / `DeadPresetAssignmentsBanner` is
+stateless and covered by unit tests. WS fan-out + React rendering of dead
+markers after a fixture rename wasn't validated end-to-end on real hardware.
+
+**Manual test**: rename a fixture in a patch, reload the cue editor, confirm
+dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
+
+---
+
+## Completed
+
+_Move items here as they land. Format:_
+`- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
