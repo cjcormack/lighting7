@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.midi
 
+import uk.me.cormack.lighting7.fx.AssignmentHealth
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.plugins.CueEditMode
 import uk.me.cormack.lighting7.plugins.CueEditSessionState
@@ -47,6 +48,7 @@ class SurfaceInputRouterTest {
         controlId: String,
         target: BindingTarget,
         bank: String? = null,
+        health: AssignmentHealth = AssignmentHealth.Ok,
     ) = ControlSurfaceBindingService.ResolvedBinding(
         id = id,
         projectId = projectId,
@@ -56,6 +58,7 @@ class SurfaceInputRouterTest {
         target = target,
         takeoverPolicy = BindingTakeoverPolicy.IMMEDIATE,
         sortOrder = 0,
+        health = health,
     )
 
     @Test
@@ -370,6 +373,38 @@ class SurfaceInputRouterTest {
             listOf<RecordedCall>(RecordedCall.FlashFixturePress("hex-1", "dimmer", 255u)),
             actions.calls.toList(),
         )
+    }
+
+    @Test
+    fun `dead fader binding is dropped without invoking actions`() {
+        val actions = RecordingActions()
+        val router = buildRouter(
+            actions,
+            listOf(
+                binding(
+                    1, "fader-1", BindingTarget.FixtureProperty("hex-gone", "dimmer"),
+                    health = AssignmentHealth.MissingFixture("hex-gone"),
+                ),
+            ),
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
+        assertTrue(actions.calls.isEmpty())
+    }
+
+    @Test
+    fun `dead button binding is dropped without invoking actions`() {
+        val actions = RecordingActions()
+        val router = buildRouter(
+            actions,
+            listOf(
+                binding(
+                    1, "btn-1", BindingTarget.CueStackGo(7),
+                    health = AssignmentHealth.MissingStack(7),
+                ),
+            ),
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        assertTrue(actions.calls.isEmpty())
     }
 
     @Test

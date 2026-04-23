@@ -14,7 +14,9 @@ import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.fx.CueTriggerManager
 import uk.me.cormack.lighting7.midi.ActiveBankState
+import uk.me.cormack.lighting7.midi.BindingHealthEvaluator
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
+import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
 import uk.me.cormack.lighting7.midi.DefaultSurfaceActions
 import uk.me.cormack.lighting7.midi.DeviceMatcher
 import uk.me.cormack.lighting7.midi.FlashStateTracker
@@ -25,7 +27,10 @@ import uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher
 import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
+import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
+import uk.me.cormack.lighting7.dmx.Universe
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
 
 private val logger = LoggerFactory.getLogger("State")
@@ -78,10 +83,45 @@ class State(val config: ApplicationConfig) {
 
     /**
      * Control-surface binding persistence + cache. Owns the in-memory resolver keyed by
-     * `(projectId, deviceTypeKey, controlId, bank)`.
+     * `(projectId, deviceTypeKey, controlId, bank)`. The health-context provider
+     * assembles a [BindingHealthEvaluator.Context] on each cache rebuild so bindings
+     * whose target is now stale surface as non-Ok
+     * [uk.me.cormack.lighting7.fx.AssignmentHealth] rather than silently dropping at
+     * dispatch time.
      */
     val controlSurfaceBindingService: ControlSurfaceBindingService by lazy {
-        ControlSurfaceBindingService(database)
+        ControlSurfaceBindingService(
+            database = database,
+            healthContextProvider = { projectId -> buildBindingHealthContext(projectId) },
+        )
+    }
+
+    /**
+     * Build a snapshot for [BindingHealthEvaluator]: current [Fixtures], valid cue / stack
+     * IDs for [projectId], and the device-type profile list. Returns null if the show
+     * isn't initialized yet — callers treat that as "leave existing health unchanged",
+     * which keeps newly-loaded bindings marked [AssignmentHealth.Ok] until the show comes
+     * up and [ControlSurfaceBindingService.invalidateHealth] is fired.
+     */
+    private fun buildBindingHealthContext(projectId: Int): BindingHealthEvaluator.Context? {
+        val fixtures = try {
+            projectManager.show.fixtures
+        } catch (_: Exception) {
+            return null
+        }
+        val (stackIds, cueIds) = transaction(database) {
+            val stacks = DaoCueStack.find { DaoCueStacks.project eq projectId }
+                .map { it.id.value }.toSet()
+            val cues = DaoCue.find { DaoCues.project eq projectId }
+                .map { it.id.value }.toSet()
+            stacks to cues
+        }
+        return BindingHealthEvaluator.Context(
+            fixtures = fixtures,
+            validStackIds = stackIds,
+            validCueIds = cueIds,
+            deviceTypes = ControlSurfaceRegistry.allTypes,
+        )
     }
 
     /**
@@ -173,14 +213,58 @@ class State(val config: ApplicationConfig) {
         surfaceFeedbackPublisher.start(GlobalScope)
         surfaceInputRouter.start(GlobalScope)
         registerCoreMidiChangeListener()
+        attachBindingHealthListener()
         // Re-attach the feedback publisher to the new show's fixture listener on project
         // switch so motor / LED drive follows the composition model of the active project.
         GlobalScope.launch {
             projectManager.projectChangedFlow.collect {
                 surfaceFeedbackPublisher.onProjectChanged()
+                attachBindingHealthListener()
+                // Patch / cue / stack row identities flip on project switch; re-evaluate
+                // cached binding health against the new show.
+                controlSurfaceBindingService.invalidateHealth(projectManager.currentProject.id.value)
             }
         }
         return show
+    }
+
+    /**
+     * Refresh binding health on every cached binding for the current project whenever
+     * the fixture / patch / cue / cue-stack lists mutate. Re-registered on project
+     * switch so the listener follows the active show's [Fixtures] instance.
+     */
+    private var bindingHealthFixtures: Fixtures? = null
+    private val bindingHealthListener = object : FixturesChangeListener {
+        override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) {}
+        override fun controllersChanged() {}
+        override fun fixturesChanged() = refreshActiveProjectBindingHealth()
+        override fun presetListChanged() {}
+        override fun cueListChanged() = refreshActiveProjectBindingHealth()
+        override fun cueStackListChanged() = refreshActiveProjectBindingHealth()
+        override fun cueSlotListChanged() {}
+        override fun patchListChanged() = refreshActiveProjectBindingHealth()
+        override fun showEntriesChanged() {}
+        override fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?) {}
+    }
+
+    private fun attachBindingHealthListener() {
+        bindingHealthFixtures?.unregisterListener(bindingHealthListener)
+        val fixtures = try {
+            show.fixtures
+        } catch (_: Exception) {
+            null
+        }
+        fixtures?.registerListener(bindingHealthListener)
+        bindingHealthFixtures = fixtures
+    }
+
+    private fun refreshActiveProjectBindingHealth() {
+        val projectId = try {
+            projectManager.currentProject.id.value
+        } catch (_: Exception) {
+            return
+        }
+        controlSurfaceBindingService.invalidateHealth(projectId)
     }
 
     // CoreMIDI4J pushes midiSystemUpdated callbacks on macOS plug/unplug. We turn each one

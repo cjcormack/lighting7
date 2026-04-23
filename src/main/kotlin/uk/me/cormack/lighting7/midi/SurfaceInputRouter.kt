@@ -5,7 +5,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.fx.AssignmentHealth
+import uk.me.cormack.lighting7.fx.describeAssignmentHealth
 import uk.me.cormack.lighting7.plugins.CueEditSessionState
+import java.util.Collections
+import java.util.LinkedHashMap
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -54,11 +58,35 @@ class SurfaceInputRouter(
 ) {
     companion object {
         private val logger = LoggerFactory.getLogger(SurfaceInputRouter::class.java)
+
+        /**
+         * Suppress repeat dead-dispatch warnings for the same `(bindingId, health)`
+         * signature inside a 30s window. Fader drags fire dozens of events per second, so
+         * without a throttle a single dead binding floods the log while the operator tries
+         * to figure out why nothing's happening. Mirrors the `applyCue` throttle in
+         * `routes/projectCues.kt`.
+         */
+        private const val DEAD_WARN_THROTTLE_MS = 30_000L
+
+        /** Capped to prevent unbounded growth in a long-running process with many churned bindings. */
+        private const val DEAD_WARN_STATE_MAX = 1024
     }
 
     private val inputJobs = ConcurrentHashMap<String /* displayKey */, Job>()
     private var matcherJob: Job? = null
     private var scope: CoroutineScope? = null
+
+    /**
+     * Keyed by binding id; value is (lastWarnNanos, signature) for the 30s throttle.
+     * Access-ordered LRU capped at [DEAD_WARN_STATE_MAX] — it's a log-rate gate, not a
+     * correctness cache, so imprecise eviction is fine.
+     */
+    private val deadWarnState: MutableMap<Int, Pair<Long, String>> = Collections.synchronizedMap(
+        object : LinkedHashMap<Int, Pair<Long, String>>(16, 0.75f, /* accessOrder = */ true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Pair<Long, String>>?): Boolean =
+                size > DEAD_WARN_STATE_MAX
+        },
+    )
 
     fun start(parentScope: CoroutineScope) {
         if (matcherJob != null) return
@@ -128,14 +156,17 @@ class SurfaceInputRouter(
                 ) ?: true
                 if (!accepted) return
                 val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
+                if (isDeadBinding(binding)) return
                 dispatchContinuous(binding, match.value7Bit)
             }
             is ResolvedInput.ButtonPress -> {
                 val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
+                if (isDeadBinding(binding)) return
                 dispatchButtonPress(deviceTypeKey, binding)
             }
             is ResolvedInput.ButtonRelease -> {
                 val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
+                if (isDeadBinding(binding)) return
                 dispatchButtonRelease(binding)
                 feedbackHooks?.onButtonRelease(displayKey, match.controlId)
             }
@@ -154,6 +185,28 @@ class SurfaceInputRouter(
         }
         val bank = bankState.bankFor(deviceTypeKey)
         return bindingService.resolve(projectId, deviceTypeKey, controlId, bank)
+    }
+
+    /**
+     * Short-circuit dispatch for bindings whose target no longer resolves against the
+     * current project. Logs a throttled warn so the operator can see *why* the control
+     * isn't doing anything without flooding the log on a held fader.
+     */
+    private fun isDeadBinding(binding: ControlSurfaceBindingService.ResolvedBinding): Boolean {
+        val health = binding.health
+        if (health is AssignmentHealth.Ok) return false
+        val signature = describeAssignmentHealth(health)
+        val now = System.nanoTime()
+        val throttleNs = DEAD_WARN_THROTTLE_MS * 1_000_000L
+        val previous = deadWarnState[binding.id]
+        if (previous == null || previous.second != signature || (now - previous.first) >= throttleNs) {
+            deadWarnState[binding.id] = now to signature
+            logger.warn(
+                "surface-in: dropping dead binding id={} control={} ({})",
+                binding.id, binding.controlId, signature,
+            )
+        }
+        return true
     }
 
     private fun dispatchContinuous(

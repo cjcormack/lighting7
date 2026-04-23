@@ -649,39 +649,76 @@ name, so unknown variants would just not render, no visual regression.
   `DeadAssignmentsBanner` is not directly reusable (different UI surface), but the
   plain-English reason-string logic can be copied.
 
-### Phase 7 work
+### Phase 7 work — **Landed 2026-04-23**
 
-- [ ] Decide: extend `fx/AssignmentHealth.kt` with `MissingStack` / `MissingCue` /
-  `UnknownBank` variants, or wrap in a surface-side `BindingHealth`. Preference: extend.
-- [ ] `BindingHealthEvaluator` pure function: `(BindingTarget, Fixtures, CueStackManager, ControlSurfaceRegistry) → AssignmentHealth`
-  — delegates `FixtureProperty` / `GroupProperty` variants to `PersistedFixtureReferenceValidator.validateTargetedReference`.
-- [ ] Wire into `ControlSurfaceBindingService` cache rebuild.
-- [ ] Add `fixturesChanged` / `patchListChanged` / `cueListChanged` / `cueStackListChanged`
-  subscriptions so the cache re-validates.
-- [ ] Extend REST response types and `surfaceBindingsChanged` payload with `health`.
-- [ ] Router warn-log on dead dispatch (30s-per-signature throttle, mirror the pattern
-  cue-authoring Phase 6 uses in `applyCue`).
-- [ ] Frontend `BindingMatrix` dead-binding rendering + quick-rebind action.
-- [ ] Tests: 6+ covering each variant, each transition, and the cache-rebuild trigger
-  set. Reuse cue-authoring Phase 6's validator test patterns where applicable.
+- [x] Decided to extend `fx/AssignmentHealth.kt` in place with `MissingStack` /
+  `MissingCue` / `UnknownBank` variants — one ADT for cue-authoring and surface
+  consumers, no wrapper layer. Cue consumers simply ignore the new variants.
+- [x] `BindingHealthEvaluator` pure function in `midi/BindingHealthEvaluator.kt`:
+  `(BindingTarget, Context) → AssignmentHealth` where `Context` bundles the `Fixtures`
+  snapshot + valid stack IDs + valid cue IDs + device-type list. Fixture / group
+  variants delegate to `PersistedFixtureReferenceValidator.validateTargetedReference`;
+  `Flash` recurses on its inner target.
+- [x] Wired into `ControlSurfaceBindingService` via an optional
+  `healthContextProvider: (projectId) → Context?` constructor arg. Cache rebuild
+  (`ensureLoaded`, `create`, `update`) now runs the evaluator per binding and stores
+  the result on `ResolvedBinding.health`. New `invalidateHealth(projectId)` method
+  re-evaluates the cache in place and emits `BindingChange.Reloaded` iff anything
+  actually changed.
+- [x] `State` registers a `FixturesChangeListener` that calls `invalidateHealth` on
+  `fixturesChanged` / `patchListChanged` / `cueListChanged` / `cueStackListChanged`.
+  Re-attaches on project switch so the listener tracks the active show's `Fixtures`.
+- [x] Extended `SurfaceBindingDto` with a `health: AssignmentHealth` field (defaults
+  to `Ok`, back-compat with older payloads). The existing
+  `surfaceBindingsChanged(RELOADED)` WS event already triggers a client refetch via
+  RTK Query tag invalidation, so the WS payload itself didn't need a `health` field.
+- [x] `SurfaceInputRouter.isDeadBinding` short-circuits dispatch for any binding
+  whose `health !== Ok`; warn-logs the control id + health reason with a 30s-per-
+  `(bindingId, signature)` throttle mirroring `routes/projectCues.kt`'s
+  `maybeLogDeadAssignments`.
+- [x] Frontend: `surfacesApi.ts` declares the `BindingHealth` TS discriminated union
+  and adds `ControlSurfaceBinding.health?`. `BindingMatrix.tsx` marks dead rows with
+  a destructive-styled outline, a `dead` badge carrying the reason as a tooltip,
+  the reason rendered inline under the binding summary, and a new **Rebind**
+  quick-action button that opens the existing edit sheet pre-populated with the
+  current binding. `Surfaces.tsx` renders a header count badge ("N dead bindings")
+  when any are present.
+- [x] Tests: `BindingHealthEvaluatorTest` (9) covers each variant + Flash recursion;
+  `ControlSurfaceBindingHealthTest` (7) covers the service-level wire-up — dead
+  transition, revive, stack-delete, unloaded-project no-op, unwired-provider no-op,
+  resolver keeps returning dead bindings so the router can log. `SurfaceInputRouterTest`
+  grew two dead-dispatch cases. `./gradlew test` is clean.
 
 ### Phase 7 files
 
 Backend:
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt` (new
-  variants for stack/cue/bank if extending in place), or new
-  `src/main/kotlin/uk/me/cormack/lighting7/midi/BindingHealth.kt` (if wrapping).
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt` — added
+  `MissingStack` / `MissingCue` / `UnknownBank` variants to the shared sealed class.
 - New: `src/main/kotlin/uk/me/cormack/lighting7/midi/BindingHealthEvaluator.kt` —
-  delegates fixture/group validation to the existing
-  `fx/PersistedFixtureReferenceValidator.kt`.
+  delegates fixture/group validation to `fx/PersistedFixtureReferenceValidator.kt`
+  and adds stack/cue/bank checks.
+- New: `src/test/kotlin/uk/me/cormack/lighting7/midi/BindingHealthEvaluatorTest.kt`
+- New: `src/test/kotlin/uk/me/cormack/lighting7/midi/ControlSurfaceBindingHealthTest.kt`
 - Updated: `src/main/kotlin/uk/me/cormack/lighting7/midi/ControlSurfaceBindingService.kt`
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt` (throttled
-  warn-log).
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt` (payload field).
+  — optional `healthContextProvider` + `invalidateHealth(projectId)` + health tagged
+  onto `ResolvedBinding` at cache install time.
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt` —
+  `isDeadBinding` short-circuit + throttled warn-log.
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/routes/projectSurfaceBindings.kt`
+  — `SurfaceBindingDto.health` field.
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/state/State.kt` — wires the
+  `healthContextProvider` and registers a `FixturesChangeListener` that re-evaluates
+  on `fixtures / patch / cue / cueStack` list changes and on project switch.
+- Updated: `src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouterTest.kt`
+  — dead-dispatch short-circuit cases.
 
 Frontend:
-- Updated: `src/api/surfacesApi.ts` (types), `src/components/surfaces/BindingMatrix.tsx`
-  (rendering), `src/routes/Surfaces.tsx` (counts in header)
+- Updated: `src/api/surfacesApi.ts` — `BindingHealth` discriminated-union type + new
+  `ControlSurfaceBinding.health?` field.
+- Updated: `src/store/surfaces.ts` — re-export the new `BindingHealth` type.
+- Updated: `src/components/surfaces/BindingMatrix.tsx` — dead-row outline, `dead`
+  badge with tooltip, inline reason text, Rebind quick-action.
+- Updated: `src/routes/Surfaces.tsx` — header dead-count badge.
 
 ### Phase 7 verification
 
@@ -697,10 +734,15 @@ Frontend:
 
 ~~**Cross-cutting validator?**~~ — **Resolved 2026-04-22.** Cue-authoring Phase 6
 shipped `fx/PersistedFixtureReferenceValidator.kt` + `fx/AssignmentHealth.kt`
-specifically to be consumable here. Surface Phase 7 should delegate `FixtureProperty` /
-`GroupProperty` validation to the existing validator rather than implementing a
-parallel one. Remaining decision (above): extend `AssignmentHealth` with
-surface-specific variants in place, or wrap it.
+specifically to be consumable here. Surface Phase 7 delegates `FixtureProperty` /
+`GroupProperty` validation to the existing validator.
+
+~~**Extend `AssignmentHealth` or wrap it?**~~ — **Resolved 2026-04-23 (Phase 7
+landed).** Extended the sealed class in place with `MissingStack` / `MissingCue` /
+`UnknownBank`. Cue-authoring consumers never construct those variants, and their
+`DeadAssignmentsBanner`'s `describeHealth` is exhaustive over the cue-relevant
+subset — the new variants are unreachable from that code path, so there's no UI
+regression. Single ADT keeps serialisation and tests simple.
 
 ---
 

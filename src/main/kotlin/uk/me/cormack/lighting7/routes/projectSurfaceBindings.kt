@@ -11,6 +11,7 @@ import io.ktor.server.resources.post
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.fx.AssignmentHealth
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
@@ -204,6 +205,12 @@ data class SurfaceBindingDto(
     val targetType: String,
     val takeoverPolicy: String?,
     val sortOrder: Int,
+    /**
+     * Dead-reference diagnostics. Non-Ok variants indicate the binding's target no longer
+     * resolves against the current project (fixture renamed, stack deleted, bank removed
+     * from profile, etc.) and the router will drop inbound events.
+     */
+    val health: AssignmentHealth = AssignmentHealth.Ok,
 )
 
 private fun ControlSurfaceBindingService.ResolvedBinding.toDto(): SurfaceBindingDto = SurfaceBindingDto(
@@ -216,4 +223,5 @@ private fun ControlSurfaceBindingService.ResolvedBinding.toDto(): SurfaceBinding
     targetType = target.discriminator(),
     takeoverPolicy = takeoverPolicy?.name,
     sortOrder = sortOrder,
+    health = health,
 )

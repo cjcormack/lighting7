@@ -10,6 +10,8 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.fx.AssignmentHealth
+import uk.me.cormack.lighting7.fx.describeAssignmentHealth
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
@@ -30,14 +32,24 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class ControlSurfaceBindingService(
     private val database: Database,
+    /**
+     * Supplies the snapshot needed to tag each cached binding with an [AssignmentHealth].
+     * Called under the per-project lock during cache rebuild and on [invalidateHealth].
+     * Returns null when no snapshot is available (tests, pre-show init) — bindings fall
+     * back to [AssignmentHealth.Ok] in that case.
+     */
+    private val healthContextProvider: ((projectId: Int) -> BindingHealthEvaluator.Context?)? = null,
 ) {
     companion object {
         private val logger = LoggerFactory.getLogger(ControlSurfaceBindingService::class.java)
     }
 
     /**
-     * Resolved in-memory form of a persisted binding. [id] is the primary key; the remaining
-     * fields mirror the DB columns with [target] deserialized from JSON.
+     * Resolved in-memory form of a persisted binding. [id] is the primary key; the
+     * remaining fields mirror the DB columns with [target] deserialized from JSON.
+     * [health] is evaluated against the current project snapshot at cache install time
+     * — see [BindingHealthEvaluator]. When no health provider is wired (tests,
+     * pre-show init), [health] defaults to [AssignmentHealth.Ok].
      */
     data class ResolvedBinding(
         val id: Int,
@@ -48,6 +60,7 @@ class ControlSurfaceBindingService(
         val target: BindingTarget,
         val takeoverPolicy: BindingTakeoverPolicy?,
         val sortOrder: Int,
+        val health: AssignmentHealth = AssignmentHealth.Ok,
     )
 
     /** Emitted on any cache-mutating operation so UIs can react. */
@@ -99,16 +112,27 @@ class ControlSurfaceBindingService(
         if (loaded.contains(projectId)) return
         synchronized(lockFor(projectId)) {
             if (loaded.contains(projectId)) return
-            val list = transaction(database) {
+            val raw = transaction(database) {
                 DaoControlSurfaceBinding.find { DaoControlSurfaceBindings.project eq projectId }
                     .orderBy(DaoControlSurfaceBindings.sortOrder to SortOrder.ASC)
                     .map { it.toResolved() }
             }
+            val context = resolveHealthContext(projectId)
+            val list = raw.map { it.withHealth(context) }
             val pc = ProjectCache()
             list.forEach { pc.install(it) }
             cache[projectId] = pc
             loaded.add(projectId)
-            logger.info("Loaded ${list.size} control-surface bindings for project $projectId")
+            val dead = list.filter { it.health !is AssignmentHealth.Ok }
+            if (dead.isEmpty()) {
+                logger.info("Loaded ${list.size} control-surface bindings for project $projectId (all resolved)")
+            } else {
+                logger.warn(
+                    "Loaded {} control-surface bindings for project {}; {} dead: {}",
+                    list.size, projectId, dead.size,
+                    dead.joinToString(", ") { "id=${it.id}(${describeAssignmentHealth(it.health)})" },
+                )
+            }
         }
     }
 
@@ -173,7 +197,7 @@ class ControlSurfaceBindingService(
             check(existing == null) {
                 "Binding already exists for $deviceTypeKey.$controlId (bank=$bank) in project $projectId"
             }
-            val entity = transaction(database) {
+            val raw = transaction(database) {
                 DaoControlSurfaceBinding.new {
                     this.project = DaoProject.findById(projectId)
                         ?: throw IllegalArgumentException("Project $projectId not found")
@@ -186,6 +210,7 @@ class ControlSurfaceBindingService(
                     this.sortOrder = sortOrder
                 }.toResolved()
             }
+            val entity = raw.withHealth(resolveHealthContext(projectId))
             cache.getOrPut(projectId) { ProjectCache() }.install(entity)
             entity
         }
@@ -222,7 +247,7 @@ class ControlSurfaceBindingService(
             check(slotClash == null || slotClash.id == bindingId) {
                 "Binding already exists for $newDeviceTypeKey.$newControlId (bank=$newBank) in project $projectId"
             }
-            val entity = transaction(database) {
+            val raw = transaction(database) {
                 val row = DaoControlSurfaceBinding.findById(bindingId) ?: return@transaction null
                 if (row.project.id.value != projectId) return@transaction null
                 if (deviceTypeKey != null) row.deviceTypeKey = deviceTypeKey
@@ -238,6 +263,7 @@ class ControlSurfaceBindingService(
                 if (sortOrder != null) row.sortOrder = sortOrder
                 row.toResolved()
             } ?: return null
+            val entity = raw.withHealth(resolveHealthContext(projectId))
             pc.uninstall(existing)
             pc.install(entity)
             entity
@@ -273,6 +299,52 @@ class ControlSurfaceBindingService(
             loaded.remove(projectId)
         }
         _changes.tryEmit(BindingChange.Reloaded(projectId))
+    }
+
+    /**
+     * Re-evaluate [AssignmentHealth] for every cached binding of [projectId] against the
+     * current [healthContextProvider] snapshot and overwrite each entry in-place. Emits a
+     * single [BindingChange.Reloaded] event iff any binding's health actually changed —
+     * the binding *rows* haven't moved, only their derived health. Called from listeners
+     * when fixtures / patches / cues / cue stacks mutate.
+     *
+     * No-op if the project isn't loaded, the provider is null, or the provider returns
+     * null (pre-show init). Safe to call from any thread.
+     */
+    fun invalidateHealth(projectId: Int) {
+        if (!loaded.contains(projectId)) return
+        val provider = healthContextProvider ?: return
+        var changed = false
+        synchronized(lockFor(projectId)) {
+            val pc = cache[projectId] ?: return
+            val context = provider(projectId) ?: return
+            // Copy entries because we mutate byId via (un)install during iteration.
+            val snapshot = pc.byId.values.toList()
+            for (existing in snapshot) {
+                val newHealth = BindingHealthEvaluator.evaluate(existing.target, context)
+                if (newHealth == existing.health) continue
+                pc.uninstall(existing)
+                pc.install(existing.copy(health = newHealth))
+                changed = true
+            }
+        }
+        if (changed) _changes.tryEmit(BindingChange.Reloaded(projectId))
+    }
+
+    private fun resolveHealthContext(projectId: Int): BindingHealthEvaluator.Context? {
+        val provider = healthContextProvider ?: return null
+        return try {
+            provider(projectId)
+        } catch (e: Exception) {
+            logger.debug("Health context unavailable for project {}: {}", projectId, e.message)
+            null
+        }
+    }
+
+    private fun ResolvedBinding.withHealth(context: BindingHealthEvaluator.Context?): ResolvedBinding {
+        if (context == null) return this
+        val health = BindingHealthEvaluator.evaluate(target, context)
+        return if (health == this.health) this else copy(health = health)
     }
 
     /** Two-state sentinel to distinguish "no change" from "set to null" in update APIs. */
