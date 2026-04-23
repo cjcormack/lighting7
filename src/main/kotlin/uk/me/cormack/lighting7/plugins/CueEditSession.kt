@@ -216,6 +216,7 @@ object CueEditSessionHandler {
         sessionRef: AtomicReference<CueEditSessionState?>,
         cueId: Int,
         modeStr: String,
+        handle: Any = sessionRef,
     ): OutMessage {
         val mode = CueEditMode.parseOrNull(modeStr)
             ?: return CueEditErrorOutMessage(cueId, "Unknown mode '$modeStr'")
@@ -223,12 +224,13 @@ object CueEditSessionHandler {
         val applyData = loadCueApplyData(state, cueId)
             ?: return CueEditErrorOutMessage(cueId, "Cue not found in current project")
 
-        sessionRef.set(CueEditSessionState(
+        val newSession = CueEditSessionState(
             cueId = cueId,
             mode = mode,
             snapshot = applyData.propertyAssignments,
             cueStackId = applyData.cueStackId,
-        ))
+        )
+        sessionRef.set(newSession)
 
         if (mode == CueEditMode.LIVE) {
             try {
@@ -240,6 +242,7 @@ object CueEditSessionHandler {
             }
         }
 
+        state.cueEditSessionRegistry.register(handle, state.projectManager.currentProject.id.value, newSession)
         return CueEditSessionStartedOutMessage(cueId, mode.name)
     }
 
@@ -259,6 +262,7 @@ object CueEditSessionHandler {
         sessionRef: AtomicReference<CueEditSessionState?>,
         cueId: Int,
         modeStr: String,
+        handle: Any = sessionRef,
     ): OutMessage {
         val newMode = CueEditMode.parseOrNull(modeStr)
             ?: return CueEditErrorOutMessage(cueId, "Unknown mode '$modeStr'")
@@ -299,7 +303,9 @@ object CueEditSessionHandler {
             }
         }
 
-        sessionRef.set(session.copy(mode = newMode, cueStackId = newCueStackId))
+        val updated = session.copy(mode = newMode, cueStackId = newCueStackId)
+        sessionRef.set(updated)
+        state.cueEditSessionRegistry.register(handle, state.projectManager.currentProject.id.value, updated)
         return CueEditSessionStartedOutMessage(cueId, newMode.name)
     }
 
@@ -338,6 +344,9 @@ object CueEditSessionHandler {
 
         if (applyData != null) republishLayer3(state, cueId, applyData)
 
+        state.cueEditSessionRegistry.notifyAssignmentCleared(
+            state.projectManager.currentProject.id.value, cueId, targetType, targetKey, propertyName,
+        )
         state.show.fixtures.cueListChanged()
         return CueEditAssignmentClearedOutMessage(cueId, targetType, targetKey, propertyName)
     }
@@ -351,12 +360,14 @@ object CueEditSessionHandler {
         state: State,
         sessionRef: AtomicReference<CueEditSessionState?>,
         cueId: Int,
+        handle: Any = sessionRef,
     ): OutMessage {
         val session = sessionRef.get()
         if (session == null || session.cueId != cueId) {
             return CueEditErrorOutMessage(cueId, "No active cueEdit session for this cue")
         }
         sessionRef.set(null)
+        state.cueEditSessionRegistry.unregister(handle)
 
         if (session.mode == CueEditMode.LIVE) releaseLiveSession(state, session)
         return CueEditSessionEndedOutMessage(cueId)
@@ -379,7 +390,24 @@ object CueEditSessionHandler {
         if (session == null || session.cueId != cueId) {
             return CueEditErrorOutMessage(cueId, "No active cueEdit session for this cue")
         }
+        return setPropertyForSession(state, session, targetType, targetKey, propertyName, value)
+    }
 
+    /**
+     * Core upsert + republish for a property assignment. Used both by the WS-level
+     * [setProperty] and by server-side callers (e.g. [SurfaceInputRouter]) that already hold
+     * a validated [session]. Does not revalidate session identity; the caller should pass the
+     * exact [CueEditSessionState] retrieved from the registry.
+     */
+    fun setPropertyForSession(
+        state: State,
+        session: CueEditSessionState,
+        targetType: String,
+        targetKey: String,
+        propertyName: String,
+        value: String,
+    ): OutMessage {
+        val cueId = session.cueId
         val upserted = CuePropertyAssignmentDto(
             targetType = targetType,
             targetKey = targetKey,
@@ -398,6 +426,9 @@ object CueEditSessionHandler {
 
         if (applyData != null) republishLayer3(state, cueId, applyData)
 
+        state.cueEditSessionRegistry.notifyAssignmentChanged(
+            state.projectManager.currentProject.id.value, cueId, targetType, targetKey, propertyName, value,
+        )
         state.show.fixtures.cueListChanged()
         return CueEditAssignmentChangedOutMessage(cueId, targetType, targetKey, propertyName, value)
     }
@@ -478,6 +509,9 @@ object CueEditSessionHandler {
         }
 
         if (applyData != null) republishLayer3(state, cueId, applyData)
+        state.cueEditSessionRegistry.notifyAssignmentsReloaded(
+            state.projectManager.currentProject.id.value, cueId, session.snapshot,
+        )
         state.show.fixtures.cueListChanged()
         return CueEditChangesDiscardedOutMessage(cueId)
     }
@@ -672,8 +706,10 @@ object CueEditSessionHandler {
     fun endSessionOnDisconnect(
         state: State,
         sessionRef: AtomicReference<CueEditSessionState?>,
+        handle: Any = sessionRef,
     ) {
         val session = sessionRef.getAndSet(null) ?: return
+        state.cueEditSessionRegistry.unregister(handle)
         if (session.mode == CueEditMode.LIVE) {
             runCatching { releaseLiveSession(state, session) }
         }

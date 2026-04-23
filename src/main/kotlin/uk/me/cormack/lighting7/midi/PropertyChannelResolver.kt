@@ -7,6 +7,9 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fx.ExtendedColour
+import uk.me.cormack.lighting7.fx.Layer3Resolver
+import java.awt.Color
 
 /**
  * Resolves a named property on a [Fixture] to the concrete DMX channels that back it.
@@ -139,6 +142,44 @@ object PropertyChannelResolver {
         val v = dmx.toInt().coerceIn(min.toInt(), max.toInt())
         val span = max.toInt() - min.toInt()
         return (((v - min.toInt()) * 127 + span / 2) / span).coerceIn(0, 127).toUByte()
+    }
+
+    /**
+     * Phase 6: serialize a MIDI 7-bit value for [propertyName] on [fixture] into the string
+     * form consumed by [uk.me.cormack.lighting7.fx.Layer3Resolver.parseAssignmentValue] —
+     * i.e. the value that sits in `CuePropertyAssignment.value`.
+     *
+     * - [DmxSlider] → `"0".."255"`, scaled through the slider's own `min..max` sub-range so a
+     *   fader at 100% produces the slider's own max rather than raw DMX 255.
+     * - [DmxColour] → `"#rrggbb"` grey, each axis set to the full 7→8-bit scaled value. Matches
+     *   [resolveFixtureProperty]'s fan-out semantics (all three channels carry the same value).
+     * - [DmxFixtureSetting] and unknown types → `null`. Settings are bindable only to buttons.
+     *
+     * Output format is produced via [uk.me.cormack.lighting7.fx.Layer3Resolver.PropertyValue.serialize]
+     * so this path round-trips through `parseAssignmentValue` by construction.
+     */
+    fun serializeToAssignmentValue(
+        fixture: Fixture,
+        propertyName: String,
+        midiValue7Bit: UByte,
+    ): String? {
+        val property = fixture.fixtureProperty(propertyName) ?: return null
+        val raw = try {
+            property.classProperty.call(fixture)
+        } catch (_: Exception) {
+            return null
+        } ?: return null
+        val value: Layer3Resolver.PropertyValue = when (raw) {
+            is DmxSlider -> Layer3Resolver.PropertyValue.Slider(
+                scaleWithinRange(midiValue7Bit, raw.min, raw.max),
+            )
+            is DmxColour -> {
+                val dmx = scale7BitToDmx(midiValue7Bit).toInt()
+                Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(dmx, dmx, dmx)))
+            }
+            else -> return null
+        }
+        return value.serialize()
     }
 
     /**

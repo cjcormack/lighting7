@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.midi
 
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
+import uk.me.cormack.lighting7.plugins.CueEditMode
+import uk.me.cormack.lighting7.plugins.CueEditSessionState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -265,6 +267,112 @@ class SurfaceInputRouterTest {
     }
 
     @Test
+    fun `fader CC routes to writeFixturePropertyToCueEdit when session is active`() {
+        val actions = RecordingActions()
+        val session = CueEditSessionState(
+            cueId = 7, mode = CueEditMode.LIVE,
+            snapshot = emptyList(),
+        )
+        val router = SurfaceInputRouter(
+            deviceMatcher = DeviceMatcher(MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false)),
+            controllerLookup = { null },
+            bindingService = ControlSurfaceBindingService(FakeDatabase.instance).also {
+                it.seedCacheForTest(projectId, listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))))
+            },
+            bankState = ActiveBankState(),
+            flashTracker = FlashStateTracker(),
+            projectIdProvider = { projectId },
+            actions = actions,
+            cueEditSessionProvider = { session },
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 64u))
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.WriteFixtureToCueEdit(7, "hex-1", "dimmer", 64u)),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
+    fun `fader CC falls back to Layer 4 when session provider returns null`() {
+        val actions = RecordingActions()
+        val router = SurfaceInputRouter(
+            deviceMatcher = DeviceMatcher(MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false)),
+            controllerLookup = { null },
+            bindingService = ControlSurfaceBindingService(FakeDatabase.instance).also {
+                it.seedCacheForTest(projectId, listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))))
+            },
+            bankState = ActiveBankState(),
+            flashTracker = FlashStateTracker(),
+            projectIdProvider = { projectId },
+            actions = actions,
+            cueEditSessionProvider = { null },
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 64u))
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.WriteFixture("hex-1", "dimmer", 64u)),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
+    fun `group property fader routes to writeGroupPropertyToCueEdit during session`() {
+        val actions = RecordingActions()
+        val session = CueEditSessionState(
+            cueId = 9, mode = CueEditMode.BLIND,
+            snapshot = emptyList(),
+        )
+        val router = SurfaceInputRouter(
+            deviceMatcher = DeviceMatcher(MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false)),
+            controllerLookup = { null },
+            bindingService = ControlSurfaceBindingService(FakeDatabase.instance).also {
+                it.seedCacheForTest(projectId, listOf(binding(1, "fader-2", BindingTarget.GroupProperty("front-wash", "dimmer"))))
+            },
+            bankState = ActiveBankState(),
+            flashTracker = FlashStateTracker(),
+            projectIdProvider = { projectId },
+            actions = actions,
+            cueEditSessionProvider = { session },
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 2, value = 50u))
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.WriteGroupToCueEdit(9, "front-wash", "dimmer", 50u)),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
+    fun `flash press still writes Layer 4 during active session`() {
+        // Flash is a momentary stage override, not an authoring gesture — it should continue
+        // to hit Layer 4 even when a cue-edit session is open. Mirrors the frontend behaviour.
+        val actions = RecordingActions()
+        val session = CueEditSessionState(
+            cueId = 7, mode = CueEditMode.LIVE,
+            snapshot = emptyList(),
+        )
+        val flash = BindingTarget.Flash(
+            target = BindingTarget.FixtureProperty("hex-1", "dimmer"),
+            max = 255,
+        )
+        val router = SurfaceInputRouter(
+            deviceMatcher = DeviceMatcher(MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false)),
+            controllerLookup = { null },
+            bindingService = ControlSurfaceBindingService(FakeDatabase.instance).also {
+                it.seedCacheForTest(projectId, listOf(binding(1, "btn-2", flash)))
+            },
+            bankState = ActiveBankState(),
+            flashTracker = FlashStateTracker(),
+            projectIdProvider = { projectId },
+            actions = actions,
+            cueEditSessionProvider = { session },
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.FlashFixturePress("hex-1", "dimmer", 255u)),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
     fun `NoteOn with velocity 0 is treated as release`() {
         val actions = RecordingActions()
         val flashTracker = FlashStateTracker()
@@ -287,6 +395,22 @@ private class RecordingActions : SurfaceActions {
     }
     override fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte) {
         calls += RecordedCall.WriteGroup(groupName, propertyName, midiValue7Bit)
+    }
+    override fun writeFixturePropertyToCueEdit(
+        session: CueEditSessionState,
+        fixtureKey: String,
+        propertyName: String,
+        midiValue7Bit: UByte,
+    ) {
+        calls += RecordedCall.WriteFixtureToCueEdit(session.cueId, fixtureKey, propertyName, midiValue7Bit)
+    }
+    override fun writeGroupPropertyToCueEdit(
+        session: CueEditSessionState,
+        groupName: String,
+        propertyName: String,
+        midiValue7Bit: UByte,
+    ) {
+        calls += RecordedCall.WriteGroupToCueEdit(session.cueId, groupName, propertyName, midiValue7Bit)
     }
     override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {
         calls += RecordedCall.FlashFixturePress(fixtureKey, propertyName, max)
@@ -335,6 +459,8 @@ private class RecordingFeedbackHooks : SurfaceFeedbackHooks {
 private sealed class RecordedCall {
     data class WriteFixture(val fixtureKey: String, val prop: String, val value: UByte) : RecordedCall()
     data class WriteGroup(val groupName: String, val prop: String, val value: UByte) : RecordedCall()
+    data class WriteFixtureToCueEdit(val cueId: Int, val fixtureKey: String, val prop: String, val value: UByte) : RecordedCall()
+    data class WriteGroupToCueEdit(val cueId: Int, val groupName: String, val prop: String, val value: UByte) : RecordedCall()
     data class FlashFixturePress(val fixtureKey: String, val prop: String, val max: UByte) : RecordedCall()
     data class FlashGroupPress(val groupName: String, val prop: String, val max: UByte) : RecordedCall()
     data class FlashFixtureRelease(val fixtureKey: String, val prop: String) : RecordedCall()

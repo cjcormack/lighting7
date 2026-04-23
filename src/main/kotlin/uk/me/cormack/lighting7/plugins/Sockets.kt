@@ -1065,9 +1065,7 @@ fun Application.configureSockets(state: State) {
                         }
                         is CueEditSetModeInMessage -> {
                             sendSerialized<OutMessage>(
-                                CueEditSessionHandler.setMode(
-                                    state, cueEditSessionRef, message.cueId, message.mode,
-                                )
+                                CueEditSessionHandler.setMode(state, cueEditSessionRef, message.cueId, message.mode)
                             )
                         }
                         is CueEditClearAssignmentInMessage -> {

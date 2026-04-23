@@ -10,6 +10,10 @@ import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
+import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.plugins.CueEditMode
+import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
+import uk.me.cormack.lighting7.plugins.CueEditSessionState
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
@@ -228,6 +232,8 @@ class SurfaceFeedbackPublisherTest {
             val scalerActions = object : SurfaceActions {
                 override fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte) {}
                 override fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte) {}
+                override fun writeFixturePropertyToCueEdit(session: CueEditSessionState, fixtureKey: String, propertyName: String, midiValue7Bit: UByte) {}
+                override fun writeGroupPropertyToCueEdit(session: CueEditSessionState, groupName: String, propertyName: String, midiValue7Bit: UByte) {}
                 override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {}
                 override fun flashGroupPropertyPress(groupName: String, propertyName: String, max: UByte) {}
                 override fun flashFixturePropertyRelease(fixtureKey: String, propertyName: String) {}
@@ -442,6 +448,195 @@ class SurfaceFeedbackPublisherTest {
             // Motor fader → IMMEDIATE policy → always accepted.
             assertTrue(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 64u))
             assertTrue(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 127u))
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    /**
+     * Phase-6 harness variant: wires a [CueEditSessionRegistry] into the publisher so tests
+     * can drive session events and verify feedback switches between cue-assignment and
+     * DMX-derived sources.
+     */
+    private inner class CueEditHarness(
+        bindings: List<ControlSurfaceBindingService.ResolvedBinding>,
+        val initialSession: CueEditSessionState? = null,
+    ) {
+        val fixtures = Fixtures()
+        val controller = MockDmxController(Universe(0, 0))
+        val bindingService = ControlSurfaceBindingService(FakeDatabase.instance)
+        val bankState = ActiveBankState()
+        val flashTracker = FlashStateTracker()
+        val scaler: GlobalScalerState
+        val matcher: DeviceMatcher
+        val recordingController = RecordingController(
+            MidiDeviceHandle(
+                displayKey = "x-touch-compact",
+                displayName = "X-Touch Compact",
+                inputPort = MidiDevicePort("in-1", "X-Touch Compact", "Behringer", PortDirection.INPUT),
+                outputPort = MidiDevicePort("out-1", "X-Touch Compact", "Behringer", PortDirection.OUTPUT),
+            ),
+        )
+        val registry = CueEditSessionRegistry()
+
+        @Volatile
+        private var currentSession: CueEditSessionState? = initialSession
+
+        val publisher: SurfaceFeedbackPublisher
+
+        init {
+            fixtures.register {
+                addController(controller)
+                addFixture(HexFixture(Universe(0, 0), "hex-1", "Hex 1", firstChannel = 1))
+            }
+            scaler = GlobalScalerState(fixtures)
+            scaler.attach()
+            bindingService.seedCacheForTest(projectId, bindings)
+
+            val reg = MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false)
+            matcher = DeviceMatcher(reg)
+
+            publisher = SurfaceFeedbackPublisher(
+                deviceMatcher = matcher,
+                controllerLookup = { key -> if (key == "x-touch-compact") recordingController else null },
+                bindingService = bindingService,
+                bankState = bankState,
+                flashTracker = flashTracker,
+                projectIdProvider = { projectId },
+                fixturesProvider = { fixtures },
+                globalScalerStateProvider = { scaler },
+                cueEditSessionProvider = { currentSession },
+                cueEditEvents = registry.events,
+            )
+        }
+
+        suspend fun attachXTouch() {
+            matcher.handle(MidiDeviceRegistry.DeviceEvent.Connected(
+                MidiDeviceHandle(
+                    displayKey = "x-touch-compact",
+                    displayName = "X-Touch Compact",
+                    inputPort = MidiDevicePort("in-1", "X-Touch Compact", "Behringer", PortDirection.INPUT),
+                    outputPort = MidiDevicePort("out-1", "X-Touch Compact", "Behringer", PortDirection.OUTPUT),
+                ),
+            ))
+        }
+
+        fun beginSession(session: CueEditSessionState) {
+            currentSession = session
+            registry.register(this, projectId, session)
+        }
+
+        fun endSession() {
+            currentSession = null
+            registry.unregister(this)
+        }
+    }
+
+    @Test
+    fun `during cue-edit session feedback reflects the cue's assigned value`() = runBlocking {
+        val assignment = CuePropertyAssignmentDto(
+            targetType = "fixture",
+            targetKey = "hex-1",
+            propertyName = "dimmer",
+            value = "64",  // dmx 64 → 32 in 7-bit (≈25%)
+        )
+        val session = CueEditSessionState(
+            cueId = 1,
+            mode = CueEditMode.BLIND,
+            snapshot = listOf(assignment),
+        )
+        val h = CueEditHarness(
+            listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))),
+        )
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            // Live DMX = 255 (bright), but the cue's assignment is 64 — feedback should follow
+            // the cue.
+            h.controller.setValue(1, 255u, 0)
+            h.recordingController.feedback.clear()
+
+            h.beginSession(session)
+            yield()
+
+            val cc = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()
+            assertTrue(cc.isNotEmpty(), "Expected feedback after session Started event")
+            val expected = PropertyChannelResolver.scaleDmxTo7Bit(64u)
+            assertEquals(expected, cc.last().value, "Feedback should reflect cue's Layer 3 (64) not live DMX (255)")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `AssignmentChanged event drives feedback to the new cue value`() = runBlocking {
+        val session = CueEditSessionState(
+            cueId = 1,
+            mode = CueEditMode.BLIND,
+            snapshot = emptyList(),
+        )
+        val h = CueEditHarness(
+            listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))),
+        )
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            h.beginSession(session)
+            yield()
+            h.recordingController.feedback.clear()
+
+            // Edit: set dimmer to 200.
+            h.registry.notifyAssignmentChanged(projectId, 1, "fixture", "hex-1", "dimmer", "200")
+            yield()
+
+            val cc = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()
+            assertTrue(cc.isNotEmpty(), "Expected feedback after AssignmentChanged event")
+            val expected = PropertyChannelResolver.scaleDmxTo7Bit(200u)
+            assertEquals(expected, cc.last().value)
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `Session Ended restores DMX-derived feedback`() = runBlocking {
+        val session = CueEditSessionState(
+            cueId = 1,
+            mode = CueEditMode.BLIND,
+            snapshot = listOf(
+                CuePropertyAssignmentDto(
+                    targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "64",
+                )
+            ),
+        )
+        val h = CueEditHarness(
+            listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))),
+        )
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            h.controller.setValue(1, 255u, 0)
+
+            h.beginSession(session)
+            yield()
+            h.recordingController.feedback.clear()
+
+            // End the session — feedback should switch back to the live DMX value.
+            h.endSession()
+            yield()
+
+            val cc = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()
+            assertTrue(cc.isNotEmpty(), "Expected feedback after session Ended event")
+            val expected = PropertyChannelResolver.scaleDmxTo7Bit(255u)
+            assertEquals(expected, cc.last().value, "Feedback should follow live DMX after session ends")
         } finally {
             h.publisher.stop()
             scope.cancel()

@@ -8,6 +8,8 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.fx.DirectWriteStore
+import uk.me.cormack.lighting7.plugins.CueEditSessionHandler
+import uk.me.cormack.lighting7.plugins.CueEditSessionState
 import uk.me.cormack.lighting7.show.Fixtures
 
 /**
@@ -26,6 +28,28 @@ interface SurfaceActions {
 
     /** Write a continuous value (0..127 MIDI 7-bit) to every member of a group. */
     fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte)
+
+    /**
+     * Phase 6: while a cue-edit session is active, route a fader write into the cue's Layer 3
+     * via `cueEdit.setProperty` instead of hitting Layer 4. [session] is the active session
+     * resolved from [uk.me.cormack.lighting7.plugins.CueEditSessionRegistry]; the
+     * implementation parses [midiValue7Bit] into a property-type-appropriate assignment string
+     * and upserts via [uk.me.cormack.lighting7.plugins.CueEditSessionHandler].
+     */
+    fun writeFixturePropertyToCueEdit(
+        session: CueEditSessionState,
+        fixtureKey: String,
+        propertyName: String,
+        midiValue7Bit: UByte,
+    )
+
+    /** Group variant of [writeFixturePropertyToCueEdit]. The cue stores one group-scoped row. */
+    fun writeGroupPropertyToCueEdit(
+        session: CueEditSessionState,
+        groupName: String,
+        propertyName: String,
+        midiValue7Bit: UByte,
+    )
 
     /** Flash press: store at 0..255 [max] on the property's channels. */
     fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte)
@@ -85,6 +109,64 @@ class DefaultSurfaceActions(
         }
         val writes = directWriteStore.putGroupProperty(group, propertyName, midiValue7Bit)
         pushToControllers(writes)
+    }
+
+    override fun writeFixturePropertyToCueEdit(
+        session: CueEditSessionState,
+        fixtureKey: String,
+        propertyName: String,
+        midiValue7Bit: UByte,
+    ) {
+        val fixture = fixtures.tryUntypedFixture(fixtureKey) ?: run {
+            logger.debug("Surface cueEdit write: fixture '{}' not found", fixtureKey)
+            return
+        }
+        upsertCueAssignment(session, "fixture", fixtureKey, fixture, propertyName, midiValue7Bit)
+    }
+
+    override fun writeGroupPropertyToCueEdit(
+        session: CueEditSessionState,
+        groupName: String,
+        propertyName: String,
+        midiValue7Bit: UByte,
+    ) {
+        val group = fixtures.tryUntypedGroup(groupName) ?: run {
+            logger.debug("Surface cueEdit write: group '{}' not found", groupName)
+            return
+        }
+        // Serialise via the first member — property types are consistent within a group.
+        val first = group.fixtures.firstOrNull() as? Fixture ?: run {
+            logger.debug("Surface cueEdit write: group '{}' has no fixture members", groupName)
+            return
+        }
+        upsertCueAssignment(session, "group", groupName, first, propertyName, midiValue7Bit)
+    }
+
+    private fun upsertCueAssignment(
+        session: CueEditSessionState,
+        targetType: String,
+        targetKey: String,
+        serialiserFixture: Fixture,
+        propertyName: String,
+        midiValue7Bit: UByte,
+    ) {
+        val valueStr = PropertyChannelResolver.serializeToAssignmentValue(
+            serialiserFixture, propertyName, midiValue7Bit,
+        ) ?: run {
+            logger.debug(
+                "Surface cueEdit write: {} property '{}' on '{}' not serialisable",
+                targetType, propertyName, targetKey,
+            )
+            return
+        }
+        CueEditSessionHandler.setPropertyForSession(
+            state = state,
+            session = session,
+            targetType = targetType,
+            targetKey = targetKey,
+            propertyName = propertyName,
+            value = valueStr,
+        )
     }
 
     override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {

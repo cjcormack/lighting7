@@ -24,6 +24,7 @@ import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
 import uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher
 import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
 import uk.me.cormack.lighting7.show.Show
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
 
@@ -107,6 +108,14 @@ class State(val config: ApplicationConfig) {
     val flashStateTracker: FlashStateTracker by lazy { FlashStateTracker() }
 
     /**
+     * Phase 6 cue-edit session registry. Each WebSocket connection that runs `cueEdit.*`
+     * messages registers its [uk.me.cormack.lighting7.plugins.CueEditSessionState] here so
+     * the [SurfaceInputRouter] can route fader writes into the open cue and the
+     * [SurfaceFeedbackPublisher] can drive motors from the cue's Layer 3 value.
+     */
+    val cueEditSessionRegistry: CueEditSessionRegistry by lazy { CueEditSessionRegistry() }
+
+    /**
      * Phase 4 feedback driver. Observes the composition model + flash / scaler state and
      * pushes motor / ring / LED feedback back to attached surfaces. Also hosts touch and
      * soft-takeover state consulted by [surfaceInputRouter].
@@ -121,6 +130,10 @@ class State(val config: ApplicationConfig) {
             projectIdProvider = { projectManager.currentProject.id.value },
             fixturesProvider = { show.fixtures },
             globalScalerStateProvider = { show.globalScalerState },
+            cueEditSessionProvider = { projectId ->
+                cueEditSessionRegistry.activeSession(projectId)?.session
+            },
+            cueEditEvents = cueEditSessionRegistry.events,
         )
     }
 
@@ -140,6 +153,9 @@ class State(val config: ApplicationConfig) {
             projectIdProvider = { projectManager.currentProject.id.value },
             actions = DefaultSurfaceActions(this),
             feedbackHooks = surfaceFeedbackPublisher,
+            cueEditSessionProvider = { projectId ->
+                cueEditSessionRegistry.activeSession(projectId)?.session
+            },
         )
     }
 
