@@ -54,6 +54,52 @@ colour binding allocates a Formatter + a few intermediate strings. Low priority 
 follow-up 1 — but worth a micro-benchmark before picking a replacement (e.g. a
 `val HEX = Array(256) { "%02x".format(it) }` lookup table).
 
+### 2b. Frame-transaction unification (FX beat + wall-clock loops)
+
+**Origin**: Phase 8 step 2, deferred 2026-04-23.
+
+The two FX tick loops (`processBeatTickSuspend` at up to ~120 Hz, `processWallClockTickSuspend`
+at 50 Hz) each construct their own `ControlTransaction` and call `applySuspend()`
+independently. When both loops tick within the same ~20 ms window and touch the same
+universe, two ArtNet packets go out. The 25 ms transmission throttle in
+`ArtNetController.runTransmissionChannel` coalesces most of that, and the per-channel delta
+filter in `sendCurrentValues()` (`previousSentDmxData != byteValue`) suppresses redundant
+values at packet-build time — so the visible cost today is negligible.
+
+The Phase 8 design sketched a `FrameTransaction` abstraction: beat + wall-clock processing
+share one `ControlTransaction` when their tick times fall inside a configurable fuzz window
+(default 10 ms); otherwise they commit independently. Implementation needs an
+`AtomicReference<FrameTransaction?>` plus a short mutex around the open/close edge to
+coordinate ownership between the two tick loops (both running on `Dispatchers.Default`).
+
+**Trigger to revisit — event-driven, not scheduled:**
+
+- Operator reports visible flicker or double-stepping on a fixture where beat and wall-clock
+  effects share a universe.
+- Profiling shows sustained ArtNet packet rate above ~40 pkts/sec per universe under effect
+  load (would indicate the 25 ms throttle is being bypassed rather than coalescing).
+- A future effect category pushes wall-clock effect densities high enough that the tick
+  windows overlap frequently (current 50 Hz wall-clock + ~120 Hz beat worst-case doesn't).
+
+Without one of those signals, the coordination cost outweighs the savings. Leave dormant.
+
+### 2c. DMX/FX micro-benchmark harness
+
+**Origin**: Phase 8 exit criterion, deferred 2026-04-23.
+
+Phase 8 proposed a `BenchmarkSetValues.kt` harness in `src/test/kotlin/…/dmx/` that would
+synthesise a "burst of 512 channel writes across 4 universes" workload and record the
+blocking-vs-suspend delta. `MockDmxController.setValuesSuspend` is synchronous (delegates to
+the sync body), so benchmarking against the mock shows no difference between the two paths —
+meaningful numbers need a coroutine-aware test controller that mimics `ArtNetController`'s
+per-channel conflated consumer loop without opening a UDP socket. Building that stub well is
+non-trivial.
+
+**Trigger to revisit:** build alongside the next perf-sensitive DMX/FX change that would
+benefit from regression coverage — e.g. another `setValues` refactor, a new effect-engine
+hot path, or investigating a specific operator-reported lag. Premature to build
+speculatively without a concrete workload to calibrate against.
+
 ### 3. Secondary indices for registry and feedback publisher
 
 **Origin**: Phase 6 efficiency review.

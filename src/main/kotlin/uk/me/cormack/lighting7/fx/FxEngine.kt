@@ -735,7 +735,7 @@ class FxEngine(
         // BPM-synced processing loop (24 ticks per beat)
         processingJob = scope.launch(Dispatchers.Default) {
             masterClock.tickFlow.collect { tick ->
-                processBeatTick(tick)
+                processBeatTickSuspend(tick)
             }
         }
 
@@ -743,7 +743,7 @@ class FxEngine(
         wallClockJob = scope.launch(Dispatchers.Default) {
             while (isActive) {
                 delay(WALL_CLOCK_INTERVAL_MS)
-                processWallClockTick()
+                processWallClockTickSuspend()
             }
         }
     }
@@ -1069,7 +1069,16 @@ class FxEngine(
      * `internal` so that `FxEnginePipelineTest` can drive synthetic ticks without waiting on the
      * real-time tick loop.
      */
-    internal fun processBeatTick(tick: MasterClock.ClockTick) {
+    /**
+     * Non-suspend entry point used by tests (`runBlocking` shim). Production calls
+     * [processBeatTickSuspend] directly from the collect loop so the transaction commit
+     * doesn't pin the calling thread on a `runBlocking`.
+     */
+    internal fun processBeatTick(tick: MasterClock.ClockTick) = runBlocking {
+        processBeatTickSuspend(tick)
+    }
+
+    internal suspend fun processBeatTickSuspend(tick: MasterClock.ClockTick) {
         // Snapshot read is lock-free (volatile). If empty, nothing to do.
         val beatEffects = sortedBeatEffects
         if (beatEffects.isEmpty()) return
@@ -1102,7 +1111,7 @@ class FxEngine(
             }
         }
 
-        transaction.apply()
+        transaction.applySuspend()
     }
 
     /**
@@ -1115,7 +1124,15 @@ class FxEngine(
      *
      * `internal` so that `FxEnginePipelineTest` can drive the wall-clock path synchronously.
      */
-    internal fun processWallClockTick() {
+    /**
+     * Non-suspend entry point used by tests (`runBlocking` shim). Production calls
+     * [processWallClockTickSuspend] directly from the wall-clock loop.
+     */
+    internal fun processWallClockTick() = runBlocking {
+        processWallClockTickSuspend()
+    }
+
+    internal suspend fun processWallClockTickSuspend() {
         val wallClockEffects = sortedWallClockEffects
         if (wallClockEffects.isEmpty()) return
         if (wallClockEffects.none { it.isRunning }) return
@@ -1154,7 +1171,7 @@ class FxEngine(
             }
         }
 
-        transaction.apply()
+        transaction.applySuspend()
     }
 
     /**

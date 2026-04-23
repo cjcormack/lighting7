@@ -107,6 +107,7 @@ sealed interface DmxController {
     val parkedChannels: Map<Int, UByte>
 
     fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>)
+    suspend fun setValuesSuspend(valuesToSet: List<Pair<Int, ChannelChange>>)
     fun setValue(channelNo: Int, channelChange: ChannelChange)
     fun setValue(channelNo: Int, channelValue: UByte, fadeMs: Long = 0)
     fun getValue(channelNo: Int): UByte
@@ -332,20 +333,29 @@ Each universe maintains:
 
 The `getValue()` method returns the pending value (what will be after `apply()`), not the actual current hardware value. This enables read-after-write consistency within a transaction.
 
-### Blocking commit caveat
+### Suspend vs blocking commit
 
-`ArtNetController.setValues()` (called by `transaction.apply()`) uses `runBlocking` internally
-to wait for every per-channel coroutine to acknowledge the update before returning. This
-guarantees immediate read-after-write consistency — a subsequent `getValue()` on the same
-channel returns the committed value — but it means the *caller* thread blocks until every
-channel coroutine has processed its payload.
+`DmxController` exposes two commit entry points:
 
-In practice channel coroutines are very fast (they queue into a conflated channel and return)
-so stalls are rare. However, as more writers arrive (FX tick at 50 Hz beat + 50 Hz wall-clock,
-MIDI surface at up to 60 Hz, WebSocket clients), the aggregate blocking cost on the common
-writer threads is something to watch. A suspend-based `setValues()` that returns a
-`Deferred<Unit>` is a possible future improvement — tracked as Phase 8 of
-[control-surface-plan.md](control-surface-plan.md#phase-8--non-blocking-setvalues).
+- `suspend fun setValuesSuspend(values)` — hot writer paths (FX beat + wall-clock tick loops,
+  MIDI surface input, script coroutines) should call this. Each per-channel update is sent
+  and awaited as a child of `coroutineScope`, so the calling coroutine parks on a continuation
+  rather than a thread. `ControllerTransaction.applySuspend()` fans commits across universes
+  in parallel via `coroutineScope { launch { setValuesSuspend(…) } }`.
+- `fun setValues(values)` / `ControllerTransaction.apply()` — convenience wrappers that
+  delegate to the suspend path via `runBlocking`. Kept for callers that aren't in a coroutine
+  context (tests, a few GENERAL-script apply edges).
+
+Both variants still guarantee read-after-write consistency — a subsequent `getValue()` on the
+same channel returns the committed value — because each channel's conflated consumer acks the
+update before the commit returns. The suspend path just doesn't pin a carrier thread on
+`runBlocking` while it waits.
+
+The frame-transaction unification that would share a single `ControllerTransaction` between
+the beat and wall-clock FX loops is not in scope for Phase 8 — the 25 ms ArtNet throttle
+coalesces most double-transmits and the coordination cost (shared `AtomicReference` + mutex
+around the open-close edge) isn't a clear win. Tracked as a future consideration in
+[fx-engineering.md §Future Considerations](fx-engineering.md#future-considerations).
 
 ## Timing Characteristics
 

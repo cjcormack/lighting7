@@ -6,6 +6,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ticker
 import kotlinx.coroutines.selects.select
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 
 @OptIn(DelicateCoroutinesApi::class, ObsoleteCoroutinesApi::class, ExperimentalCoroutinesApi::class)
@@ -52,26 +53,31 @@ class ArtNetController(override val universe: Universe, val address: String? = n
     class ChannelUpdatePayload(val change: ChannelChange, val updateNotificationChannel: Channel<Unit>)
 
     override fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>) {
-        var valuesChanged = false
+        runBlocking { setValuesSuspend(valuesToSet) }
+    }
 
-        runBlocking {
-            valuesToSet.forEach { (channelNo, channelChange) ->
-                if (doSetChannel(channelNo, channelChange)) {
-                    valuesChanged = true
+    override suspend fun setValuesSuspend(valuesToSet: List<Pair<Int, ChannelChange>>) {
+        if (valuesToSet.isEmpty()) return
+
+        val valuesChanged = AtomicBoolean(false)
+        coroutineScope {
+            for ((channelNo, channelChange) in valuesToSet) {
+                launch {
+                    if (doSetChannelSuspend(channelNo, channelChange)) {
+                        valuesChanged.set(true)
+                    }
                 }
             }
         }
 
-        if (valuesChanged) {
-            runBlocking {
-                transmissionNeeded.send(Unit)
-            }
+        if (valuesChanged.get()) {
+            transmissionNeeded.send(Unit)
         }
     }
 
     override fun setValue(channelNo: Int, channelChange: ChannelChange) {
         val hasUpdated = runBlocking {
-            doSetChannel(channelNo, channelChange)
+            doSetChannelSuspend(channelNo, channelChange)
         }
 
         if (hasUpdated) {
@@ -85,7 +91,7 @@ class ArtNetController(override val universe: Universe, val address: String? = n
         setValue(channelNo, ChannelChange(channelValue, fadeMs))
     }
 
-    private fun CoroutineScope.doSetChannel(channelNo: Int, channelChange: ChannelChange): Boolean {
+    private suspend fun doSetChannelSuspend(channelNo: Int, channelChange: ChannelChange): Boolean {
         if (channelNo < 1 || channelNo > 512) {
             return false
         }
@@ -97,11 +103,8 @@ class ArtNetController(override val universe: Universe, val address: String? = n
         checkNotNull(changeChannel)
 
         val updateDoneChannel = Channel<Unit>()
-
-        launch {
-            changeChannel.send(ChannelUpdatePayload(channelChange, updateDoneChannel))
-            updateDoneChannel.receive()
-        }
+        changeChannel.send(ChannelUpdatePayload(channelChange, updateDoneChannel))
+        updateDoneChannel.receive()
 
         return true
     }

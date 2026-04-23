@@ -12,6 +12,21 @@ sealed interface DmxController {
     val parkedChannels: Map<Int, UByte>
 
     fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>)
+
+    /**
+     * Suspend variant of [setValues]. Sends each channel update and awaits its ack
+     * without blocking the calling thread. Prefer this on hot writer paths (FX ticks,
+     * surface input, WebSocket bursts) so converging writers don't pile up on a
+     * `runBlocking` primitive.
+     *
+     * The default delegates to the blocking [setValues] for implementations that have
+     * no asynchronous work to defer (tests, fakes). The production ArtNet path overrides
+     * with a real non-blocking implementation.
+     */
+    suspend fun setValuesSuspend(valuesToSet: List<Pair<Int, ChannelChange>>) {
+        setValues(valuesToSet)
+    }
+
     fun setValue(channelNo: Int, channelChange: ChannelChange)
     fun setValue(channelNo: Int, channelValue: UByte, fadeMs: Long = 0)
     fun getValue(channelNo: Int): UByte

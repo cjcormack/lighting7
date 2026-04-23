@@ -1060,4 +1060,9 @@ The timing source is stored on `EffectRegistration` in the `FxRegistry` and prop
 5. **Unified single-transaction per frame**: beat + wall-clock loops currently each create
    their own `ControllerTransaction`. A shared frame-scoped transaction would reduce
    duplicate transmissions when both loops target the same universe in the same ~20 ms
-   window. Tracked in [control-surface-plan.md](control-surface-plan.md#phase-8--non-blocking-setvalues).
+   window. Control-surface plan Phase 8 (2026-04-23) landed the non-blocking commit half of
+   that ticket — both tick loops now call `transaction.applySuspend()` instead of blocking
+   per-channel acks — but intentionally deferred the two-loop coordination: the 25 ms
+   ArtNet throttle coalesces most back-to-back transmits and the shared-state machinery
+   (`AtomicReference<FrameTransaction?>` + short mutex around open/close) isn't a clear
+   win over the coalesced baseline.

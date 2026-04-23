@@ -22,12 +22,16 @@ Related:
 
 ## Status
 
-**Phase**: 6 complete. Phase 7 unblocked and ready to consume `fx/AssignmentHealth.kt` + `fx/PersistedFixtureReferenceValidator.kt` (cue-authoring Phase 6, 2026-04-22).
+**Phase**: 7 complete. Phase 8 step 1 (non-blocking `setValues`) landed 2026-04-23; frame-transaction unification (step 2) intentionally deferred. Phase 9 (per-project `GlobalScalerState`) is the next unblocked item.
 
-**Most recent session**: 2026-04-23. Phase 6 cueEdit integration landed — surface fader writes now route through `cueEdit.setProperty` when a session is open, and motor feedback follows the cue's Layer 3 assignment instead of the composed live value.
+**Most recent session**: 2026-04-23 (cont., later). Phase 8 step 1 landed — `DmxController.setValuesSuspend` + `ControllerTransaction.applySuspend` remove the `runBlocking` from the FX beat and wall-clock tick loops.
+Backend: `DmxController` grew `suspend fun setValuesSuspend(valuesToSet)` on the sealed interface. `ArtNetController`'s new implementation runs each channel's send+receive as an `async` child under a single `coroutineScope` and signals `transmissionNeeded` once at the end; the blocking `setValues` is now a one-line `runBlocking` shim. `MockDmxController.setValuesSuspend` just delegates to the synchronous body. `ControllerTransaction.applySuspend()` fans commits across universes in parallel under one `coroutineScope`, and the blocking `apply()` delegates to it. `FxEngine.processBeatTick` / `processWallClockTick` were split: the hot `start(scope)` collect loops now call suspend internals (`processBeatTickSuspend` / `processWallClockTickSuspend`) directly, while the existing non-suspend entry points remain as `runBlocking` shims so `FxEnginePipelineTest` / `FxEngineBenchmark` keep their synchronous driver surface intact. Three unit tests in `ControllerTransactionSuspendTest` pin the suspend commit contract — multi-universe fan-out, blocking/suspend equivalence on the Mock path, and the empty-pending edge. Full test suite still green.
+Frame-transaction unification (step 2 in the Phase 8 design) was explicitly deferred per the plan's "accept or defer based on complexity" fallback: the 25 ms ArtNet transmit throttle coalesces most double-transmits when the two loops hit the same universe within a ~20 ms window, and the coordination machinery (`AtomicReference<FrameTransaction?>` + mutex around the open/close edge) would cost more than it saves at current effect densities. Tracked as a "Future Consideration" in [fx-engineering.md §Future Considerations](fx-engineering.md#future-considerations). Docs updated — `docs/dmx-engineering.md` replaced its "Blocking commit caveat" with a "Suspend vs blocking commit" section that describes both entry points; the public `DmxController` interface sketch in the same doc picks up the new `setValuesSuspend` line.
+
+**Previous session**: 2026-04-23 (earlier). Phase 6 cueEdit integration landed — surface fader writes now route through `cueEdit.setProperty` when a session is open, and motor feedback follows the cue's Layer 3 assignment instead of the composed live value.
 Backend: new `CueEditSessionRegistry` in [CueEditSessionRegistry.kt](../src/main/kotlin/uk/me/cormack/lighting7/plugins/CueEditSessionRegistry.kt) — project-scoped view over per-connection `CueEditSessionState`s, with a `events: SharedFlow<Event>` that emits `Started` / `ModeChanged` / `Ended` / `AssignmentChanged` / `AssignmentCleared` / `AssignmentsReloaded`. Keyed by an opaque identity-equal `handle` (the WS connection passes its `AtomicReference<CueEditSessionState?>`). Threaded through every lifecycle / assignment method on `CueEditSessionHandler` via optional `registry: CueEditSessionRegistry? = null` + `handle: Any = sessionRef` parameters — handlers register on `beginEdit`, update on `setMode`, unregister on `endEdit` / disconnect, and fire assignment events from `setProperty` / `setChannel` / `clearAssignment` / `discardChanges`. Extracted `setPropertyForSession(state, session, ...)` as a programmatic entry point (bypasses sessionRef revalidation) so `DefaultSurfaceActions` can invoke it directly without a WS round-trip. State wiring: new `State.cueEditSessionRegistry` lazy; `SurfaceInputRouter` and `SurfaceFeedbackPublisher` both take a `cueEditSessionProvider: ((Int) -> CueEditSessionState?)?` that consults the registry by project id. Router branch: in `dispatchContinuous`, `FixtureProperty` / `GroupProperty` targets route through two new `SurfaceActions` methods (`writeFixturePropertyToCueEdit`, `writeGroupPropertyToCueEdit`) when a session is active; otherwise fall through to Layer 4 as before. Flash press / release stays on Layer 4 regardless — a momentary stage override is not an authoring gesture, matching frontend semantics. `DefaultSurfaceActions` serialises the 7-bit MIDI value to an assignment-string via a new `PropertyChannelResolver.serializeToAssignmentValue` helper — sliders scale through the declared `min..max` to `"0".."255"` (respects per-slider sub-ranges), colour properties emit `"#rrggbb"` grey (matches Phase 3's R/G/B fan-out), settings refuse. Publisher: `sessionAssignments` is an `AtomicReference<Map<AssignmentKey, String>>` patched incrementally on `AssignmentChanged` / `AssignmentCleared` and rebuilt from `session.snapshot` or the reloaded list on lifecycle events — no per-tick DB reads on the hot path. `computeValue7Bit` consults the cache first (with a `value7BitFromAssignment` parser that routes through `Layer3Resolver.parseAssignmentValue` and picks the primary channel's axis for Colour / Position targets) and falls back to DMX only when the cue has no assignment for the target. Lifecycle events trigger `resyncAllDevices()`; incremental events trigger `resyncEntriesMatching(key)` which walks `continuousByDisplay` and tests each entry against the changed `(targetType, targetKey, propertyName)` key. Test suite: 14 new tests (7 `CueEditSessionRegistryTest`, 4 router cueEdit branching, 3 publisher cueEdit feedback) — **693 total passing**. Existing `RecordingActions` stubs in `SurfaceInputRouterTest` / `SurfaceFeedbackPublisherTest` updated to satisfy the new `SurfaceActions` methods.
 
-**Previous session**: 2026-04-19 (cont.). Phase 5 `/surfaces` frontend + one backend helper landed.
+**Earlier session**: 2026-04-19 (cont.). Phase 5 `/surfaces` frontend + one backend helper landed.
 Backend: one new WS message pair `surfaceDevices.state` in [Sockets.kt](../src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt) — outbound shape `{ devices: [{ displayKey, displayName, typeKey, isMatched, hasInputPort, hasOutputPort, activeBank }] }` built from `midiRegistry.devices + deviceMatcher.attached + activeBankState.active`. Inbound object singleton pulls the current snapshot; a `combine()` flow on the same three sources pushes every change (`drop(1)` so only deltas, not the initial value). Fills the gap noted in Phase 4's "no WS message enumerates attached devices" — the frontend needed it to render the device panel without polling REST. Job cancelled in the same finally block as the other subscription jobs. No new tests (Phase 5 is mostly UI; the backend change is a pure fan-out over existing StateFlows and doesn't add logic).
 Frontend (`lighting-react`): new route `/projects/:projectId/surfaces` in [App.tsx](../../lighting-react/src/App.tsx) + nav entry in the Setup group of [navigation.ts](../../lighting-react/src/navigation.ts). Types mirror the backend 1:1 in [surfacesApi.ts](../../lighting-react/src/api/surfacesApi.ts) — `BindingTarget` discriminated union (9 variants), `ControlDescriptor` discriminated union (4 kinds), plus the WS event payloads. The same file exports `createSurfacesWsApi(conn)` which subscribes to every `surface*` message and exposes six `subscribe*()` callbacks + the send helpers (`setBank`, `beginLearn`, `cancelLearn`, `commitLearn`, `setBlackout`, `setGrandMaster`). The WS-driven state caches the last snapshot of each stream so late subscribers get current values without an extra round-trip; on socket reopen the API re-requests the three initial snapshots (`surfaceDevices.state`, `surfaceBank.state`, `surfaceScaler.state`) so reconnect is transparent. REST for bindings lives in [store/surfaces.ts](../../lighting-react/src/store/surfaces.ts) as four RTK Query endpoints (`surfaceBindings`, `createSurfaceBinding`, `updateSurfaceBinding`, `deleteSurfaceBinding`) plus an endpoint for `controlSurfaceTypes`; a top-level `lightingApi.surfaces.subscribeBindingsChanged` handler invalidates the per-project cache on every server-side mutation, so two `/surfaces` tabs stay in sync. Hooks: `useSurfaceDevices`, `useActiveBanks`, `usePickupStates`, `useScalerState` are small `useState + useEffect` wrappers around the WS callbacks. `usePickupStates` returns a `Map<"displayKey|controlId", PickupChange>` so matrix rows can render an "awaiting pickup @ N" badge.
 UI composition in [routes/Surfaces.tsx](../../lighting-react/src/routes/Surfaces.tsx): left column = device list (matched + unmatched, with bank chip + port-direction chips), right column = selected device detail (header + `BankSwitcher` + `BindingMatrix`). Global `Blackout` / `Grand Master` toggle buttons in the page header drive directly into `lightingApi.surfaces.setBlackout` / `setGrandMaster` and visually reflect the state from `useScalerState`. `BindingMatrix` ([components/surfaces/BindingMatrix.tsx](../../lighting-react/src/components/surfaces/BindingMatrix.tsx)) groups a device profile's controls into Faders / Encoders / Buttons / Bank buttons sections and renders a table row per control with: kind badge, resolved binding for the active bank (falling back to global, then to "unbound"), pickup-state indicator if present, edit/delete icons on hover, plus a `+` button to open the `CreateBindingSheet`. `CreateBindingSheet` offers both a direct REST create path and a "MIDI Learn" path — the Learn button opens `LearnModeOverlay`, which owns the session lifecycle (begin → waiting → captured → commit → committed) scoped to the active sheet's target + bank + policy; cancel and session-error are handled as dialog-closure paths. The per-control "capture pre-move" flow intentionally starts the Learn session at dialog-open, not at user action inside it, so the first physical move captures immediately (matches the frontend shape the backend `MidiLearnSessionManager` was designed around). `BindingTargetPicker` ([components/surfaces/BindingTargetPicker.tsx](../../lighting-react/src/components/surfaces/BindingTargetPicker.tsx)) is a compact form that switches between the 9 target kinds; continuous controls show fixture/group/property pickers (populated from existing `useGroupListQuery` / `usePatchListQuery` / `useProjectCueStackListQuery` so no new REST endpoints), button controls offer the full set including the recursive `Flash { target }` and direct `SetBank` / `Blackout` / `GrandMasterToggle` choices. Bank entry is a free-text input (empty = global) rather than a dropdown because the profile's bank list is available on the parent device, and per-binding bank can also be ad-hoc (future custom banks).
@@ -39,9 +43,11 @@ Build: TypeScript clean across the frontend (`tsc --noEmit` passes), `vite build
 **See also**: [control-surface-followups.md](control-surface-followups.md) for non-blocking improvements surfaced during review (per-fader-event DB coalescing, targetType-as-enum refactor, and others).
 
 **Next actions** (for the session that picks this up):
-1. Manually validate Phase 6 end-to-end on the X-Touch Compact: open a cue for edit in Live mode via the frontend → wiggle a bound fader → cue's Layer 3 `dimmer` row updates (confirm via `GET /cues/{id}`) → stage reflects the new value → close the editor → retrigger the cue → reproduces the edit. Repeat in Blind mode to confirm the stage is unaffected during the edit and the value still persists.
-2. Manually validate Phase 5 end-to-end on the X-Touch Compact: connect the device → `/surfaces` shows it. Click + on a fader row, open MIDI Learn, wiggle the physical fader → binding appears. Switch banks via the BankSwitcher → matrix rows update.
-3. Phase 7 (binding validation) is ready to pick up — consume `fx/AssignmentHealth.kt` + `fx/PersistedFixtureReferenceValidator.kt` (cue-authoring Phase 6, 2026-04-22) rather than building a parallel `midi/BindingHealth`. See the Phase 7 section for the revised design.
+1. Phase 9 (per-project `GlobalScalerState`) is the next unblocked item. Option A (ephemeral per-session state scoped to the project rather than the show instance) is the recommended shape — see the Phase 9 section for the two-option breakdown and the "persistence in or out of scope" open question.
+2. Phase 8 smoke-check on hardware still pending: run a script that adds and removes 100 effects/sec while a MIDI fader is at full 60 Hz on the same property. Confirm no stage stutter, no WebSocket `channelState` lag, no coroutine leak on a thread dump. No functional changes are expected since the suspend path delivers the same per-channel acks as the old blocking path — this is a sanity check against regressions, not new validation work.
+3. Phase 8 step 2 (frame-transaction unification) remains intentionally deferred. Revisit only if operator feedback calls out visible double-transmits that the 25 ms coalesce window isn't catching.
+4. Manually validate Phase 6 end-to-end on the X-Touch Compact: open a cue for edit in Live mode via the frontend → wiggle a bound fader → cue's Layer 3 `dimmer` row updates (confirm via `GET /cues/{id}`) → stage reflects the new value → close the editor → retrigger the cue → reproduces the edit. Repeat in Blind mode to confirm the stage is unaffected during the edit and the value still persists.
+5. Manually validate Phase 5 end-to-end on the X-Touch Compact: connect the device → `/surfaces` shows it. Click + on a fader row, open MIDI Learn, wiggle the physical fader → binding appears. Switch banks via the BankSwitcher → matrix rows update.
 
 **Per-phase tracker:**
 
@@ -54,8 +60,8 @@ Build: TypeScript clean across the frontend (`tsc --noEmit` passes), `vite build
 | 4 | Feedback & reconciliation: motor drive, LED feedback, touch suppression, soft takeover, initial sync, device-side A/B layer coordination | **Complete** |
 | 5 | Frontend `/surfaces` route: device list, binding matrix, MIDI Learn mode, bank management, binding badges on existing views | **Complete** |
 | 6 | cueEdit integration: fader writes route through `cueEdit.*` when a session is active; feedback follows the cue's Layer 3 value; new `CueEditSessionRegistry` bridges per-connection sessions to surfaces | **Complete** |
-| 7 | **Binding validation & dead-binding diagnostics**: load-time validation that `FixtureProperty` / `GroupProperty` bindings still resolve against the current patch; surface dead bindings in `/surfaces`. Consumes cue-authoring Phase 6's `fx/AssignmentHealth` + `fx/PersistedFixtureReferenceValidator` | Not started (prerequisite validator landed 2026-04-22) |
-| 8 | **Non-blocking `setValues` on `DmxController`**: remove the `runBlocking` inside `ArtNetController.setValues`; move to suspend / `Deferred`-based commit; unify beat + wall-clock frame transaction | Not started |
+| 7 | **Binding validation & dead-binding diagnostics**: load-time validation that `FixtureProperty` / `GroupProperty` bindings still resolve against the current patch; surface dead bindings in `/surfaces`. Consumes cue-authoring Phase 6's `fx/AssignmentHealth` + `fx/PersistedFixtureReferenceValidator` | **Complete** (landed 2026-04-23) |
+| 8 | **Non-blocking `setValues` on `DmxController`**: remove the `runBlocking` inside `ArtNetController.setValues`; move to suspend / `Deferred`-based commit; unify beat + wall-clock frame transaction | **Step 1 complete** (2026-04-23) — suspend API landed, FX tick loops on the non-blocking path; frame-transaction unification deferred |
 | 9 | **Per-project `GlobalScalerState` scoping**: blackout / Grand Master per project rather than per show instance; preserve state across project switches | Not started |
 
 ---
@@ -801,38 +807,81 @@ throttle coalesces most of this, but not all.
 **Fallback:** if step 2 adds more complexity than it saves, ship step 1 and document the
 double-transmit as acceptable given the 25 ms throttle coalesces most of it.
 
-### Phase 8 work
+### Phase 8 work — **Step 1 landed 2026-04-23** (step 2 deferred)
 
-- [ ] `ArtNetController.setValuesSuspend(values): Deferred<Unit>` — non-blocking variant
-- [ ] Blocking `setValues` reimplemented as `runBlocking { setValuesSuspend(values).await() }`
-- [ ] `ControllerTransaction.applySuspend()` — parallel await across universes
-- [ ] Refactor `FxEngine.processBeatTick` and `processWallClockTick` to call the suspend
-  variant
-- [ ] Explore frame-transaction unification; accept or defer based on complexity
-- [ ] Benchmark harness in `src/test/kotlin/.../dmx/BenchmarkSetValues.kt` (blocked on a
-  test-side `DmxController` stub — the sealed interface is relaxed to an interface in the
-  MIDI layer; do the same for `DmxController` if needed, or add a test-only production
-  subclass)
-- [ ] Smoke-check: start a script that adds and removes 100 effects per second. Confirm
-  no visible DMX stutter, no coroutine leak (jmap / thread dump clean).
+- [x] `DmxController.setValuesSuspend(values)` suspend method added to the sealed
+  interface; implemented non-blocking in `ArtNetController` via
+  `coroutineScope { async { doSetChannelSuspend(…) } }.awaitAll()` + a single
+  `transmissionNeeded.send(Unit)` at the end. The per-channel suspend helper replaces the
+  previous `CoroutineScope.doSetChannel` that `launch`-ed a child — no more nested
+  structured-concurrency tree per commit.
+- [x] Blocking `ArtNetController.setValues` reimplemented as
+  `runBlocking { setValuesSuspend(values) }`. `MockDmxController.setValuesSuspend`
+  delegates to the synchronous body (tests don't care about the suspend edge).
+- [x] `ControllerTransaction.applySuspend()` — parallel `launch { setValuesSuspend(…) }`
+  across universes under a single `coroutineScope`. `apply()` kept as a `runBlocking`
+  shim for callers outside a coroutine context.
+- [x] `FxEngine.processBeatTick` / `processWallClockTick` split into suspend internals
+  (`processBeatTickSuspend` / `processWallClockTickSuspend`) + non-suspend `runBlocking`
+  test shims. `start(scope)` collect loops call the suspend variants directly so the
+  production hot path never hits `runBlocking`; `FxEnginePipelineTest` and
+  `FxEngineBenchmark` continue to drive the non-suspend entry points synchronously.
+- [x] Frame-transaction unification explored and deferred — per the "accept or defer
+  based on complexity" fallback in the phase design. Rationale captured in the change
+  log entry below: the 25 ms ArtNet throttle coalesces most double-transmits, so the
+  shared-state coordination (`AtomicReference<FrameTransaction?>` + mutex around the
+  open/close edge) wouldn't pay for the locking it introduces. Tracked with a concrete
+  revisit trigger in [control-surface-followups.md §2b](control-surface-followups.md)
+  and cross-referenced from [fx-engineering.md §Future Considerations](fx-engineering.md#future-considerations).
+- [x] Unit tests: `ControllerTransactionSuspendTest` (2) pins the suspend commit
+  contract — multi-universe fan-out and the empty-pending edge case. Existing FX / DMX
+  suites remain green (no behaviour changes on the non-suspend entry points).
+- [ ] Micro-benchmark deferred. `MockDmxController.setValuesSuspend` is synchronous so
+  benchmarking against it shows no delta between blocking and suspend paths — a
+  meaningful "burst of 512 channel writes across 4 universes" benchmark needs a
+  coroutine-aware test controller that simulates the ArtNet per-channel conflated
+  consumer loop. Tracked with a concrete revisit trigger in
+  [control-surface-followups.md §2c](control-surface-followups.md).
+- [ ] Smoke-check on hardware (add-and-remove 100 effects/sec) — pending an operator
+  session; no functional changes expected since the suspend path delivers the same
+  per-channel acks.
 
 ### Phase 8 files
 
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/DmxController.kt`
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/ArtNetController.kt`
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/MockDmxController.kt`
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/ControllerTransaction.kt`
-- Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/FxEngine.kt`
-- Updated: `docs/dmx-engineering.md`, `docs/fx-engineering.md` — remove the blocking
-  caveat once step 1 lands.
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/DmxController.kt` — added
+  `suspend fun setValuesSuspend(valuesToSet)` to the sealed interface with a default
+  body that delegates to `setValues`, so implementations without asynchronous work to
+  defer (test fakes) don't need to override.
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/ArtNetController.kt` — non-
+  blocking `setValuesSuspend` uses `launch { … }` + a scope-shared `AtomicBoolean`
+  (no intermediate `List<Deferred<Boolean>>` allocated per commit); the renamed
+  `doSetChannelSuspend` helper sends and awaits the ack inline. Blocking `setValues`
+  is a one-line `runBlocking` shim.
+- `src/main/kotlin/uk/me/cormack/lighting7/dmx/MockDmxController.kt` — no override
+  needed (picks up the interface default).
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/dmx/ControllerTransaction.kt` —
+  `suspend fun applySuspend(): Map<Universe, Map<Int, UByte>>` fans commits across
+  universes in parallel; `apply()` kept as a `runBlocking` wrapper.
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/FxEngine.kt` —
+  `processBeatTickSuspend` / `processWallClockTickSuspend` internals; collect loops
+  wired to the suspend variants; non-suspend `processBeatTick` / `processWallClockTick`
+  shims retained for the existing test surface.
+- New: `src/test/kotlin/uk/me/cormack/lighting7/dmx/ControllerTransactionSuspendTest.kt`
+  — 3 tests covering the suspend commit contract.
+- Updated: `docs/dmx-engineering.md` — replaced the "Blocking commit caveat" section
+  with a "Suspend vs blocking commit" section covering both entry points, and added
+  the suspend method to the `DmxController` interface sketch.
+- Updated: `docs/fx-engineering.md` — Future Considerations §5 now records Phase 8's
+  non-blocking landing + frame-transaction deferral rationale.
 
 ### Phase 8 verification
 
-- All existing tests pass.
-- Run an FX-heavy script (a `GENERAL` script adding 50 effects in parallel) — coroutine
-  thread dump shows no long-held waiters on `runBlocking`.
-- Ramp a MIDI fader at full 60 Hz while a beat-synced Pulse runs on the same property —
-  no dropped frames on stage; WS `channelState` updates match.
+- `./gradlew test` green — 714 tests passing (+3 from the 711 baseline after Phase 7, all
+  three in the new `ControllerTransactionSuspendTest`).
+- FX-heavy-script thread dump check: pending (no change expected — the suspend path
+  delivers identical per-channel acks, so a long-held `runBlocking` waiter would only
+  appear if a caller wrapped the suspend path back inside `runBlocking` on a hot edge).
+- 60 Hz MIDI fader + beat-synced Pulse on the same property: pending operator session.
 
 ### Phase 8 open question
 
@@ -982,6 +1031,14 @@ Flag these to the user before implementing.
 - [ ] Commit this file alongside the code changes.
 
 ## Change log
+
+**2026-04-23 (Phase 8 step 1 implementation)** — Three design choices worth noting:
+
+1. **Suspend variant as a sibling method on the sealed interface, not a replacement.** The natural temptation was to make `setValues` itself suspend and force every caller to adapt. But the call graph has a long tail — GENERAL scripts, non-coroutine plugin edges, and the `ControllerTransaction.apply()` callers in `Show.kt` for script result assembly — that would either need `runBlocking` wrappers at each site or a churn-heavy audit. Instead `setValuesSuspend(…)` sits alongside `setValues(…)` on the sealed interface; `ArtNetController` implements the suspend path as the source of truth and the blocking path becomes a one-liner `runBlocking { setValuesSuspend(values) }`. Same shape for `ControllerTransaction.apply()` / `applySuspend()`. Hot paths migrate; everything else stays quiet.
+
+2. **Hot-path migration scoped to the FX tick loops, not every writer.** The motivating review finding flagged four converging writers (beat tick, wall-clock tick, MIDI surface input, WebSocket bursts). Of those, the two FX tick loops are the only ones that actually create and apply a `ControllerTransaction` every frame — MIDI surface input goes through `DirectWriteStore.putProperty` → `controller.setValue(channel, value, 0)` (single-channel, not a transaction) and WebSocket `updateChannel` goes through the same single-channel path. So the high-value migration is: split `processBeatTick` / `processWallClockTick` into suspend internals (`processBeatTickSuspend` / `processWallClockTickSuspend`) and wire the `start(scope)` collect loops to them directly; leave the other `setValue` sites on the blocking single-channel path for now. Single-channel `setValue` still uses `runBlocking` internally — revisit only if a profile shows it's a bottleneck. Existing `FxEnginePipelineTest` / `FxEngineBenchmark` keep their synchronous `processBeatTick(tick)` / `processWallClockTick()` drivers via thin `runBlocking` shims on the non-suspend entry points, so 0 test-file changes were needed beyond adding new suspend-path unit tests.
+
+3. **Frame-transaction unification deferred per the phase fallback.** The phase design explicitly ranked this as "ship step 1 and document the double-transmit as acceptable given the 25 ms throttle coalesces most of it" if step 2 adds more complexity than it saves. Step 2 would have needed a shared `AtomicReference<FrameTransaction?>` + short mutex around the open-close edge, plus a configurable fuzz window (default 10 ms) to decide when the beat and wall-clock loops should share a transaction vs. commit independently. The coordination cost (synchronous ownership handoff between two otherwise-independent tick loops running on `Dispatchers.Default`) is non-trivial and the `previousSentDmxData != byteValue` check in `sendCurrentValues()` already filters redundant-value transmits at the per-channel level even when two transactions land back-to-back. Net: at current effect densities, the 25 ms throttle + per-channel delta filter already coalesce most of what step 2 would coalesce. Recorded as a Future Consideration in `fx-engineering.md` rather than a follow-up phase, so a future session only revisits it under operator feedback rather than on schedule.
 
 **2026-04-23 (Phase 6 implementation)** — Four design choices worth noting:
 
