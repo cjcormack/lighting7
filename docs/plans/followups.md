@@ -135,24 +135,6 @@ over a benchmark run should surface which dominates.
 
 ## Frontend polish
 
-### `FU-FE-EXT-COLOUR-CHANNELS` — `ColourPickerPopover` W/A/UV sliders
-
-**Status**: Ready
-**Origin**: Cue-authoring Phase 8, deferred 2026-04-23
-
-Backend now emits white / amber / UV channels symmetrically for `Colour`
-property values via `PropertyChannelWriter` (`fx/PropertyChannelWriter.kt`).
-`FxColourPicker` and `PropertyVisualizers` already expose per-channel sliders
-through `ExtendedChannelSlider`; the one remaining surface is
-`lighting-react`'s `ColourPickerPopover`, still RGB-only.
-
-**Scope**: add W/A/UV sliders to the popover, gated on
-`ColourPropertyDescriptor.whiteChannel` / `amberChannel` / `uvChannel`
-presence. Pure UI polish; no backend change. Palette serialisation already
-round-trips the extended suffix (`#rrggbb;w128;a64;uv32`), so writes go
-through existing `useUpdateFixtureColour` / `useUpdateGroupColour` hooks
-unchanged.
-
 ### `FU-FE-PICKER-UX-POLISH` — Effect / Preset picker UX polish
 
 **Status**: Ready
@@ -532,3 +514,11 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
+
+- `FU-FE-EXT-COLOUR-CHANNELS` — 2026-04-23 — Added W/A/UV sliders to
+  `ColourPickerPopover` (lighting-react), gated on
+  `ColourPropertyDescriptor.whiteChannel` / `amberChannel` / `uvChannel`
+  presence. Writes route through existing `useUpdateFixtureColour` /
+  `useUpdateGroupColour` hooks unchanged. Both `PropertyVisualizers` (fixture)
+  and `GroupPropertyVisualizers` (group) pass current `w` / `a` / `uv` values
+  so the popover reflects live state.
