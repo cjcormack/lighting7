@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
 import uk.me.cormack.lighting7.midi.DefaultSurfaceActions
 import uk.me.cormack.lighting7.midi.DeviceMatcher
 import uk.me.cormack.lighting7.midi.FlashStateTracker
+import uk.me.cormack.lighting7.midi.GlobalScalerStateHolder
 import uk.me.cormack.lighting7.midi.LibreMidiAccessSource
 import uk.me.cormack.lighting7.midi.MidiDeviceRegistry
 import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
@@ -146,6 +147,23 @@ class State(val config: ApplicationConfig) {
      * already active is ignored so MIDI retriggers don't double-apply.
      */
     val flashStateTracker: FlashStateTracker by lazy { FlashStateTracker() }
+
+    /**
+     * Per-project [GlobalScalerStateHolder] registry (Phase 9). Lives above the [Show]
+     * lifecycle so Blackout / Grand Master state survives project switches within a
+     * session. Option A: ephemeral — not persisted across backend restarts. On every
+     * project activation the [Show] obtains (or creates) its project's holder here, and
+     * the show-scoped [uk.me.cormack.lighting7.midi.GlobalScalerState] reads through to
+     * it. A previously-toggled project retains its state across an A → B → A switch.
+     */
+    private val scalerHolders = java.util.concurrent.ConcurrentHashMap<Int, GlobalScalerStateHolder>()
+
+    /**
+     * Return the [GlobalScalerStateHolder] for [projectId], creating a fresh one on first
+     * access. Thread-safe; called by [Show] during construction.
+     */
+    fun scalerHolderFor(projectId: Int): GlobalScalerStateHolder =
+        scalerHolders.computeIfAbsent(projectId) { GlobalScalerStateHolder() }
 
     /**
      * Phase 6 cue-edit session registry. Each WebSocket connection that runs `cueEdit.*`

@@ -49,8 +49,12 @@ class Show(
      * Global transmit-time scalers (Blackout, Grand Master) — Phase 3 of
      * [docs/control-surface-plan.md]. Attached to every registered DMX controller on
      * show start so toggles take effect immediately without a show-wide restart.
+     *
+     * The underlying state (blackout / Grand Master flags) is held in a project-scoped
+     * [GlobalScalerStateHolder] owned by [State.scalerHolderFor], so operator intent
+     * survives project switches within a session (Phase 9).
      */
-    val globalScalerState = GlobalScalerState(fixtures)
+    val globalScalerState = GlobalScalerState(fixtures, state.scalerHolderFor(project.id.value))
     private val scripts: MutableMap<String, Script> = mutableMapOf()
     private val scriptsLock = ReentrantLock()
     private val scriptingHost = BasicJvmScriptingHost()

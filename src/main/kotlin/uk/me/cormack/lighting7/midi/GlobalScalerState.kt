@@ -1,8 +1,6 @@
 package uk.me.cormack.lighting7.midi
 
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.TransmitModifier
 import uk.me.cormack.lighting7.dmx.Universe
@@ -30,27 +28,33 @@ import kotlin.reflect.full.memberProperties
  * channels pass through unchanged — this matches the proposal in Open Question 2/3 of
  * docs/control-surface-plan.md and the behaviour of most professional consoles.
  *
+ * The *state* (blackout / Grand Master flags) lives in a project-scoped
+ * [GlobalScalerStateHolder] supplied by construction. This instance is show-scoped: it owns
+ * the fixture classification and controller wiring for the *current* show. On project
+ * switch a new [GlobalScalerState] is constructed against the same holder, so operator
+ * intent (e.g. "blackout pressed on project A") survives the show tear-down and rebuild —
+ * see Phase 9 of docs/control-surface-plan.md.
+ *
  * Implementation:
  *   - Classifies every DMX channel by walking [Fixtures] at fixture-change time and
  *     reading the `@FixtureProperty.category` annotations. The classification is a set of
  *     packed `(universe << 20) | channel` keys held in an [AtomicReference] for lock-free
  *     lookup on the hot path.
  *   - Registers itself as a [TransmitModifier] on every controller in [Fixtures] when
- *     [attachToControllers] is called, and refreshes on `fixturesChanged`.
+ *     [attach] is called, and refreshes on `fixturesChanged`.
  *   - On toggle, calls [DmxController.requestTransmit] on every attached controller so the
  *     change shows up immediately instead of waiting up to 25 ms for the next frame.
  */
 class GlobalScalerState(
     private val fixtures: Fixtures,
+    private val holder: GlobalScalerStateHolder = GlobalScalerStateHolder(),
 ) : TransmitModifier {
 
-    private val _blackoutEnabled = MutableStateFlow(false)
     /** True while blackout is active — intensity channels output 0. */
-    val blackoutEnabled: StateFlow<Boolean> = _blackoutEnabled.asStateFlow()
+    val blackoutEnabled: StateFlow<Boolean> get() = holder.blackoutEnabled
 
-    private val _grandMasterEnabled = MutableStateFlow(true)
     /** True while Grand Master is "on" (normal output). False kills intensity channels. */
-    val grandMasterEnabled: StateFlow<Boolean> = _grandMasterEnabled.asStateFlow()
+    val grandMasterEnabled: StateFlow<Boolean> get() = holder.grandMasterEnabled
 
     /** Packed `(universe << 20) | channel` keys for every intensity-category channel. */
     private val intensityChannels = AtomicReference<Set<Long>>(emptySet())
@@ -169,36 +173,30 @@ class GlobalScalerState(
     }
 
     private fun isKilled(): Boolean =
-        _blackoutEnabled.value || !_grandMasterEnabled.value
+        holder.blackoutEnabled.value || !holder.grandMasterEnabled.value
 
     /** Toggle blackout. Returns the new state. */
     fun toggleBlackout(): Boolean {
-        val next = !_blackoutEnabled.value
-        _blackoutEnabled.value = next
+        val next = holder.toggleBlackout()
         requestTransmit()
         return next
     }
 
     /** Toggle Grand Master. Returns the new state. */
     fun toggleGrandMaster(): Boolean {
-        val next = !_grandMasterEnabled.value
-        _grandMasterEnabled.value = next
+        val next = holder.toggleGrandMaster()
         requestTransmit()
         return next
     }
 
     /** Explicitly set the blackout state (exposed for WS `surfaceScaler.set`). */
     fun setBlackout(enabled: Boolean) {
-        if (_blackoutEnabled.value == enabled) return
-        _blackoutEnabled.value = enabled
-        requestTransmit()
+        if (holder.setBlackout(enabled)) requestTransmit()
     }
 
     /** Explicitly set the Grand Master state. */
     fun setGrandMaster(enabled: Boolean) {
-        if (_grandMasterEnabled.value == enabled) return
-        _grandMasterEnabled.value = enabled
-        requestTransmit()
+        if (holder.setGrandMaster(enabled)) requestTransmit()
     }
 
     private fun requestTransmit() {

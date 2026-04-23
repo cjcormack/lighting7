@@ -22,9 +22,11 @@ Related:
 
 ## Status
 
-**Phase**: 7 complete. Phase 8 step 1 (non-blocking `setValues`) landed 2026-04-23; frame-transaction unification (step 2) intentionally deferred. Phase 9 (per-project `GlobalScalerState`) is the next unblocked item.
+**Phase**: 7, 8 step 1, and 9 complete. Surfaces v1 is **feature-complete through the plan's scope**. Phase 8 step 2 (frame-transaction unification) and Phase 9.1 (cross-restart scaler persistence) remain deferred per operator feedback.
 
-**Most recent session**: 2026-04-23 (cont., later). Phase 8 step 1 landed — `DmxController.setValuesSuspend` + `ControllerTransaction.applySuspend` remove the `runBlocking` from the FX beat and wall-clock tick loops.
+**Most recent session**: 2026-04-23 (cont., later still). Phase 9 landed — Blackout and Grand Master state now survive project switches within a session. `GlobalScalerState` split into a show-scoped `TransmitModifier` facade + a project-scoped `GlobalScalerStateHolder` held by `State.scalerHolderFor(projectId)`. The facade's `blackoutEnabled` / `grandMasterEnabled` properties read through to the holder, so every existing consumer (router, publisher, WS) keeps its signature. `Sockets.kt`'s scaler state broadcast wraps in `flatMapLatest` off `projectChangedFlow.onStart { emit(Unit) }` so the outbound flow re-subscribes to the active show's facade on every switch; `SurfaceFeedbackPublisher.onProjectChanged()` does the same internally for the LED / motor feedback path. Two new tests in `GlobalScalerStateTest` pin the A → B → A state-retention contract and holder ↔ facade read-through semantics. Full test suite green (**715 total passing**). DB persistence (option B in the Phase 9 design) is deliberately out of scope — this phase only preserves within a session; cross-restart persistence is deferred to a possible Phase 9.1 if operators ask for it.
+
+**Previous session**: 2026-04-23 (cont., later). Phase 8 step 1 landed — `DmxController.setValuesSuspend` + `ControllerTransaction.applySuspend` remove the `runBlocking` from the FX beat and wall-clock tick loops.
 Backend: `DmxController` grew `suspend fun setValuesSuspend(valuesToSet)` on the sealed interface. `ArtNetController`'s new implementation runs each channel's send+receive as an `async` child under a single `coroutineScope` and signals `transmissionNeeded` once at the end; the blocking `setValues` is now a one-line `runBlocking` shim. `MockDmxController.setValuesSuspend` just delegates to the synchronous body. `ControllerTransaction.applySuspend()` fans commits across universes in parallel under one `coroutineScope`, and the blocking `apply()` delegates to it. `FxEngine.processBeatTick` / `processWallClockTick` were split: the hot `start(scope)` collect loops now call suspend internals (`processBeatTickSuspend` / `processWallClockTickSuspend`) directly, while the existing non-suspend entry points remain as `runBlocking` shims so `FxEnginePipelineTest` / `FxEngineBenchmark` keep their synchronous driver surface intact. Three unit tests in `ControllerTransactionSuspendTest` pin the suspend commit contract — multi-universe fan-out, blocking/suspend equivalence on the Mock path, and the empty-pending edge. Full test suite still green.
 Frame-transaction unification (step 2 in the Phase 8 design) was explicitly deferred per the plan's "accept or defer based on complexity" fallback: the 25 ms ArtNet transmit throttle coalesces most double-transmits when the two loops hit the same universe within a ~20 ms window, and the coordination machinery (`AtomicReference<FrameTransaction?>` + mutex around the open/close edge) would cost more than it saves at current effect densities. Tracked as a "Future Consideration" in [fx-engineering.md §Future Considerations](fx-engineering.md#future-considerations). Docs updated — `docs/dmx-engineering.md` replaced its "Blocking commit caveat" with a "Suspend vs blocking commit" section that describes both entry points; the public `DmxController` interface sketch in the same doc picks up the new `setValuesSuspend` line.
 
@@ -43,11 +45,13 @@ Build: TypeScript clean across the frontend (`tsc --noEmit` passes), `vite build
 **See also**: [control-surface-followups.md](control-surface-followups.md) for non-blocking improvements surfaced during review (per-fader-event DB coalescing, targetType-as-enum refactor, and others).
 
 **Next actions** (for the session that picks this up):
-1. Phase 9 (per-project `GlobalScalerState`) is the next unblocked item. Option A (ephemeral per-session state scoped to the project rather than the show instance) is the recommended shape — see the Phase 9 section for the two-option breakdown and the "persistence in or out of scope" open question.
-2. Phase 8 smoke-check on hardware still pending: run a script that adds and removes 100 effects/sec while a MIDI fader is at full 60 Hz on the same property. Confirm no stage stutter, no WebSocket `channelState` lag, no coroutine leak on a thread dump. No functional changes are expected since the suspend path delivers the same per-channel acks as the old blocking path — this is a sanity check against regressions, not new validation work.
-3. Phase 8 step 2 (frame-transaction unification) remains intentionally deferred. Revisit only if operator feedback calls out visible double-transmits that the 25 ms coalesce window isn't catching.
-4. Manually validate Phase 6 end-to-end on the X-Touch Compact: open a cue for edit in Live mode via the frontend → wiggle a bound fader → cue's Layer 3 `dimmer` row updates (confirm via `GET /cues/{id}`) → stage reflects the new value → close the editor → retrigger the cue → reproduces the edit. Repeat in Blind mode to confirm the stage is unaffected during the edit and the value still persists.
-5. Manually validate Phase 5 end-to-end on the X-Touch Compact: connect the device → `/surfaces` shows it. Click + on a fader row, open MIDI Learn, wiggle the physical fader → binding appears. Switch banks via the BankSwitcher → matrix rows update.
+1. Surfaces v1 is plan-complete. No remaining phase is unblocked within this document. The follow-ups below are manual validation tasks and deferred items that can be picked up independently.
+2. Manually validate Phase 9 end-to-end on the X-Touch Compact: connect device → toggle Blackout on project A (confirm LED + stage) → `switchProject` to B via `/projects` → Blackout is off on B (fresh holder) → switch back to A → Blackout still on, stage still dark. Same flow for Grand Master. Then check that a WS client open across the switch sees the correct `surfaceScaler.state` payload at each switch and after toggling within the new project. Backend restart resets both projects (expected — option B not landed).
+3. Phase 8 smoke-check on hardware still pending: run a script that adds and removes 100 effects/sec while a MIDI fader is at full 60 Hz on the same property. Confirm no stage stutter, no WebSocket `channelState` lag, no coroutine leak on a thread dump. No functional changes are expected since the suspend path delivers the same per-channel acks as the old blocking path — this is a sanity check against regressions, not new validation work.
+4. Phase 8 step 2 (frame-transaction unification) remains intentionally deferred. Revisit only if operator feedback calls out visible double-transmits that the 25 ms coalesce window isn't catching.
+5. Phase 9.1 (DB-persisted scaler state — option B in the Phase 9 design) remains deferred. Revisit only if operators ask for cross-restart persistence; at that point add a `project_scaler_state(project_id, blackout, grand_master)` single-row table loaded by `State.scalerHolderFor` on first access and written by the holder's `set*` methods.
+6. Manually validate Phase 6 end-to-end on the X-Touch Compact: open a cue for edit in Live mode via the frontend → wiggle a bound fader → cue's Layer 3 `dimmer` row updates (confirm via `GET /cues/{id}`) → stage reflects the new value → close the editor → retrigger the cue → reproduces the edit. Repeat in Blind mode to confirm the stage is unaffected during the edit and the value still persists.
+7. Manually validate Phase 5 end-to-end on the X-Touch Compact: connect the device → `/surfaces` shows it. Click + on a fader row, open MIDI Learn, wiggle the physical fader → binding appears. Switch banks via the BankSwitcher → matrix rows update.
 
 **Per-phase tracker:**
 
@@ -62,7 +66,7 @@ Build: TypeScript clean across the frontend (`tsc --noEmit` passes), `vite build
 | 6 | cueEdit integration: fader writes route through `cueEdit.*` when a session is active; feedback follows the cue's Layer 3 value; new `CueEditSessionRegistry` bridges per-connection sessions to surfaces | **Complete** |
 | 7 | **Binding validation & dead-binding diagnostics**: load-time validation that `FixtureProperty` / `GroupProperty` bindings still resolve against the current patch; surface dead bindings in `/surfaces`. Consumes cue-authoring Phase 6's `fx/AssignmentHealth` + `fx/PersistedFixtureReferenceValidator` | **Complete** (landed 2026-04-23) |
 | 8 | **Non-blocking `setValues` on `DmxController`**: remove the `runBlocking` inside `ArtNetController.setValues`; move to suspend / `Deferred`-based commit; unify beat + wall-clock frame transaction | **Step 1 complete** (2026-04-23) — suspend API landed, FX tick loops on the non-blocking path; frame-transaction unification deferred |
-| 9 | **Per-project `GlobalScalerState` scoping**: blackout / Grand Master per project rather than per show instance; preserve state across project switches | Not started |
+| 9 | **Per-project `GlobalScalerState` scoping**: blackout / Grand Master per project rather than per show instance; preserve state across project switches | **Complete** (landed 2026-04-23, option A) — DB persistence deferred to an optional Phase 9.1 |
 
 ---
 
@@ -944,18 +948,34 @@ toggle — small rows, infrequent, should be fine.
   against the new show's controllers, but reuse the existing scaler-state holder if
   projectId matches; otherwise load from DB (option B) or init fresh (option A).
 
-### Phase 9 work
+### Phase 9 work — **landed 2026-04-23** (option A)
 
-- [ ] Refactor `GlobalScalerState` into two pieces: `GlobalScalerStateHolder`
-  (project-scoped `MutableStateFlow`s) and `GlobalScalerTransmitModifier` (show-scoped
-  `TransmitModifier` that reads from the holder)
-- [ ] Update `State.kt` wiring — holder moves up, modifier stays in `Show`
-- [ ] `ProjectManager.switchProject` hook: load / persist scaler state per project
-- [ ] (Option B) migration: `project_scaler_state` table via Exposed `SchemaUtils`
-- [ ] Tests: toggle → switch project → switch back → state preserved; concurrent project
-  switches during pending toggle don't lose the toggle
-- [ ] Update `docs/midi-control-surface-engineering.md` §Known limitations to remove the
-  per-show caveat
+- [x] Refactor `GlobalScalerState` into two pieces: `GlobalScalerStateHolder`
+  (project-scoped `MutableStateFlow`s) and `GlobalScalerState` (show-scoped
+  `TransmitModifier` that reads from the holder). `GlobalScalerState` keeps its public
+  surface identical — the `blackoutEnabled` / `grandMasterEnabled` properties are now
+  read-through getters onto the holder's flows, so existing WS / router / publisher
+  consumers didn't need a signature change.
+- [x] Update `State.kt` wiring — new `scalerHolders: ConcurrentHashMap<Int, GlobalScalerStateHolder>`
+  plus `fun scalerHolderFor(projectId: Int)`. Show construction pulls the holder on every
+  instantiation, so a project switch A → B → A reuses A's original holder.
+- [x] WebSocket `surfaceScaler.state` re-subscribes on project change. `Sockets.kt` now
+  wraps the combined flow in a `flatMapLatest` off `projectChangedFlow.onStart { emit(Unit) }`
+  so (a) toggles on the newly-active project reach the socket and (b) the new project's
+  current state is pushed on switch.
+- [x] `SurfaceFeedbackPublisher` re-subscribes its scaler flow on `onProjectChanged()`.
+  Without this the publisher would still observe the previous project's holder after a
+  switch, so motor / LED state wouldn't reflect the new project.
+- [x] Tests: `GlobalScalerStateTest` gains "shared holder preserves state across facade
+  re-creation" (covers A → B → A state retention end-to-end) and "state exposed via facade
+  tracks the shared holder" (covers holder ↔ facade read-through in both directions).
+  Full suite still green (**715 total passing**).
+- [x] `docs/midi-control-surface-engineering.md` §Known limitations updated: the per-show
+  caveat is replaced with a note that state survives project switches but not backend
+  restarts (option B would add DB persistence).
+- [ ] ~~(Option B) migration: `project_scaler_state` table via Exposed `SchemaUtils`~~ —
+  deferred per the open question below; revisit if operators ask for cross-restart
+  persistence.
 
 ### Phase 9 files
 
@@ -1031,6 +1051,14 @@ Flag these to the user before implementing.
 - [ ] Commit this file alongside the code changes.
 
 ## Change log
+
+**2026-04-23 (Phase 9 implementation)** — Three design choices worth noting:
+
+1. **Facade getters, not a StateFlow field rename.** The most direct refactor is to *move* `blackoutEnabled` / `grandMasterEnabled` from `GlobalScalerState` onto the new `GlobalScalerStateHolder` and update every consumer to dereference `globalScalerState.holder.blackoutEnabled`. Instead `GlobalScalerState` keeps both property names but implements them as `get() = holder.blackoutEnabled` read-through getters — so `SurfaceInputRouter`, `SurfaceFeedbackPublisher`, `Sockets.kt`, and `SurfaceActions` didn't change their call sites, and the test stubs (`RecordingActions`, test `scaler` fakes in `SurfaceFeedbackPublisherTest`) kept working unchanged. Net: one new file, one in-place class rewrite, zero churn at call sites.
+
+2. **Re-subscription on project change, not a meta-flow indirection.** Two consumers subscribe to the scaler flows across a project's lifetime: the WS `scalerStateJob` in `Sockets.kt` and the `FeedbackPublisher-scaler` job in `SurfaceFeedbackPublisher`. Both capture the *current* show's facade at subscription time, so after a project switch they'd still observe the previous project's holder — a real correctness bug surfaced by the Phase 9 split, not an artefact of it. Two plausible fixes: (a) introduce a "current project's blackout" meta-flow that re-emits on project switch, or (b) cancel + re-subscribe on `projectChangedFlow`. (a) is cleaner in theory but requires every consumer to route through the meta-flow and doesn't compose well with the existing `combine` shapes. (b) is localised: `Sockets.kt` uses `projectChangedFlow.onStart { emit(Unit) }.flatMapLatest { combine(...) }`; `SurfaceFeedbackPublisher` tracks a `scalerJob: Job?` + a `publisherScope`, cancelling and re-launching in `onProjectChanged()`. Both patterns keep the scaler-subscription code local to the consumer that needs it, which seemed better than a new cross-cutting flow abstraction in the State or Show classes.
+
+3. **Option A (ephemeral) without the option-B shape baked in.** The phase design mentioned option B (DB-persisted) as a possible follow-up and hinted at a `project_scaler_state` table. The temptation was to write the holder's `setBlackout` / `setGrandMaster` to return early if persistence is disabled and leave a `persist: suspend (Boolean) -> Unit` hook for the future. Rejected — the phase's open question explicitly defers persistence to 9.1 and suggests a separate user confirmation is needed before changing restart behaviour. So the holder stays pure in-memory today; option B will add a new table + a `State.loadScalerHolder(projectId)` seam when asked for. "Build for the feature you have, not the feature you might need."
 
 **2026-04-23 (Phase 8 step 1 implementation)** — Three design choices worth noting:
 

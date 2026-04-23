@@ -173,11 +173,14 @@ class SurfaceFeedbackPublisher(
     }
 
     private val jobs = mutableListOf<Job>()
+    private var scalerJob: Job? = null
+    private var publisherScope: CoroutineScope? = null
     private var running = false
 
     fun start(scope: CoroutineScope) {
         if (running) return
         running = true
+        publisherScope = scope
         attachToFixtures()
 
         jobs += scope.launch(CoroutineName("FeedbackPublisher-matcher")) {
@@ -192,16 +195,7 @@ class SurfaceFeedbackPublisher(
         jobs += scope.launch(CoroutineName("FeedbackPublisher-flash")) {
             flashTracker.changes.collect { onFlashChanged(it) }
         }
-        val scaler = try {
-            globalScalerStateProvider()
-        } catch (_: Exception) {
-            null
-        }
-        if (scaler != null) {
-            jobs += combine(scaler.blackoutEnabled, scaler.grandMasterEnabled) { b, g -> b to g }
-                .onEach { (blackout, grandMaster) -> onScalerChanged(blackout, grandMaster) }
-                .launchIn(scope)
-        }
+        subscribeScaler(scope)
         cueEditEvents?.let { events ->
             jobs += scope.launch(CoroutineName("FeedbackPublisher-cueEdit")) {
                 events.collect { onCueEditEvent(it) }
@@ -209,10 +203,31 @@ class SurfaceFeedbackPublisher(
         }
     }
 
+    /**
+     * (Re)subscribe to the current show's [GlobalScalerState] flows. The facade is
+     * re-created on project switch (the underlying holder is preserved elsewhere), so
+     * the subscription needs to follow the active facade — otherwise the publisher would
+     * still observe the previous project's holder after a switch.
+     */
+    private fun subscribeScaler(scope: CoroutineScope) {
+        scalerJob?.cancel()
+        val scaler = try {
+            globalScalerStateProvider()
+        } catch (_: Exception) {
+            null
+        } ?: return
+        scalerJob = combine(scaler.blackoutEnabled, scaler.grandMasterEnabled) { b, g -> b to g }
+            .onEach { (blackout, grandMaster) -> onScalerChanged(blackout, grandMaster) }
+            .launchIn(scope)
+    }
+
     fun stop() {
         running = false
         jobs.forEach { it.cancel() }
         jobs.clear()
+        scalerJob?.cancel()
+        scalerJob = null
+        publisherScope = null
         sessionAssignments.set(emptyMap())
         detachFromFixtures()
     }
@@ -226,6 +241,10 @@ class SurfaceFeedbackPublisher(
         sessionAssignments.set(emptyMap())
         attachToFixtures()
         rebuildIndex()
+        // Re-subscribe to the new show's scaler facade — the previous subscription
+        // observes the stale facade (its holder is preserved, but the facade itself is
+        // re-created on project switch).
+        publisherScope?.let { subscribeScaler(it) }
         // Push a full resync for every currently-attached device so the new show's logical
         // values land on the hardware.
         for (displayKey in deviceMatcher.attached.value.keys) {

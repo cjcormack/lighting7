@@ -5,12 +5,16 @@ import io.ktor.serialization.kotlinx.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -527,6 +531,7 @@ class SocketConnection(val session: WebSocketServerSession) {
     val name = "conn${lastId.getAndIncrement()}"
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 fun Application.configureSockets(state: State) {
     install(WebSockets) {
         pingPeriod = 15.seconds
@@ -798,10 +803,22 @@ fun Application.configureSockets(state: State) {
                 }
                 .launchIn(this)
 
-            val scalerStateJob = combine(
-                state.show.globalScalerState.blackoutEnabled,
-                state.show.globalScalerState.grandMasterEnabled,
-            ) { blackout, grandMaster -> SurfaceScalerStateOutMessage(blackout, grandMaster) }
+            // `state.show.globalScalerState` is re-created on project switch, so a plain
+            // `combine(...)` at connect time would observe the previous project's facade
+            // forever. Re-subscribing via `flatMapLatest` off `projectChangedFlow` (plus
+            // an initial Unit to bootstrap the first subscription) makes the outbound flow
+            // follow the active show. The `drop(1)` suppresses the combine's initial emit
+            // so connect doesn't push state the client hasn't asked for — clients fetch
+            // initial state via the `surfaceScaler.state` request message.
+            val scalerStateJob = state.projectManager.projectChangedFlow
+                .map { Unit }
+                .onStart { emit(Unit) }
+                .flatMapLatest {
+                    combine(
+                        state.show.globalScalerState.blackoutEnabled,
+                        state.show.globalScalerState.grandMasterEnabled,
+                    ) { blackout, grandMaster -> SurfaceScalerStateOutMessage(blackout, grandMaster) }
+                }
                 .drop(1)
                 .onEach { sendSerialized<OutMessage>(it) }
                 .launchIn(this)

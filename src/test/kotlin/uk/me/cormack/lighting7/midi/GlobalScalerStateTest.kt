@@ -116,4 +116,51 @@ class GlobalScalerStateTest {
         assertEquals(0u.toUByte(), scaler.modify(Universe(0, 0), 5, 200u))
         assertEquals(200u.toUByte(), scaler.modify(Universe(0, 0), 6, 200u))
     }
+
+    @Test
+    fun `shared holder preserves state across facade re-creation`() {
+        // A project's holder outlives any single `GlobalScalerState` facade. Simulate a
+        // project switch A → B → A by constructing three facades against two holders and
+        // confirm the A holder's state survives the B interlude.
+        val (fixturesA, controllerA) = registry()
+        val holderA = GlobalScalerStateHolder()
+        val holderB = GlobalScalerStateHolder()
+
+        val scalerA = GlobalScalerState(fixturesA, holderA)
+        scalerA.attach()
+        scalerA.setBlackout(true)
+        assertTrue(holderA.blackoutEnabled.value)
+        controllerA.setValue(1, 200u, 0)
+        assertEquals(0u.toUByte(), controllerA.getEffectiveValue(1))
+
+        scalerA.detach()
+        val (fixturesB, _) = registry()
+        val scalerB = GlobalScalerState(fixturesB, holderB)
+        scalerB.attach()
+        assertFalse(holderB.blackoutEnabled.value)
+
+        scalerB.detach()
+        val (fixturesA2, controllerA2) = registry()
+        val scalerA2 = GlobalScalerState(fixturesA2, holderA)
+        scalerA2.attach()
+        assertTrue(scalerA2.blackoutEnabled.value)
+        controllerA2.setValue(1, 200u, 0)
+        assertEquals(0u.toUByte(), controllerA2.getEffectiveValue(1))
+    }
+
+    @Test
+    fun `state exposed via facade tracks the shared holder`() {
+        val (fixtures, _) = registry()
+        val holder = GlobalScalerStateHolder()
+        val scaler = GlobalScalerState(fixtures, holder)
+
+        assertFalse(scaler.blackoutEnabled.value)
+        assertTrue(scaler.grandMasterEnabled.value)
+
+        holder.setBlackout(true)
+        assertTrue(scaler.blackoutEnabled.value)
+
+        scaler.toggleGrandMaster()
+        assertFalse(holder.grandMasterEnabled.value)
+    }
 }
