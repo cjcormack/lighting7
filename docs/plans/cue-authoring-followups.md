@@ -1,6 +1,6 @@
 # Cue Authoring Unification — Follow-ups & Deferred Improvements
 
-Items surfaced while running [cue-authoring-unification-plan.md](cue-authoring-unification-plan.md) to completion (Phases 0–8 landed through 2026-04-23). None are blocking; each is captured here so the plan file itself can be closed out.
+Items surfaced while running [cue-authoring-unification-plan.md](completed/cue-authoring-unification-plan.md) to completion (Phases 0–8 landed through 2026-04-23). None are blocking; each is captured here so the plan file itself can be closed out.
 
 Companion: [control-surface-followups.md](control-surface-followups.md) — some deferred items span both plans and are cross-referenced rather than duplicated.
 
@@ -66,7 +66,7 @@ Preset property assignments are preset-local (`propertyName` only, no `target_ty
 
 **Origin**: Spec'd in Phase 1; not yet implemented.
 
-The current linear-interp crossfade path handles basic position fades. The "pre-apply incoming position during outgoing fade when outgoing intensity is 0 at end" affordance (spec'd in [lighting-composition-model.md](lighting-composition-model.md)) is still deferred.
+The current linear-interp crossfade path handles basic position fades. The "pre-apply incoming position during outgoing fade when outgoing intensity is 0 at end" affordance (spec'd in [lighting-composition-model.md](../lighting-composition-model.md)) is still deferred.
 
 Scope small — `Layer3Resolver` already knows the `moveInDark` flag on each `Assignment`. Good candidate for a standalone session once a real moving-head fixture is on the test rig and can validate the behaviour visually. Without hardware, it's hard to judge the "pre-apply window" threshold empirically.
 

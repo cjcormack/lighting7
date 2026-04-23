@@ -1,6 +1,6 @@
 # Cue Authoring Unification — Plan & Handover
 
-> **Document status: COMPLETE (2026-04-23).** Phases 0–8 landed (Phase 8 frontend `ColourPickerPopover` polish deferred to `lighting-react`). Remaining deferred items (frontend polish, palette cascade for presets, timed-preset Layer 3 contribution, FxEngine allocation reduction, HTTP round-trip tests, and others) are tracked in [cue-authoring-followups.md](cue-authoring-followups.md). The narrative below is preserved as a session-by-session record; durable engineering reference lives in [lighting-composition-model.md](lighting-composition-model.md) and [cues-engineering.md](cues-engineering.md).
+> **Document status: COMPLETE (2026-04-23).** Phases 0–8 landed (Phase 8 frontend `ColourPickerPopover` polish deferred to `lighting-react`). Remaining deferred items (frontend polish, palette cascade for presets, timed-preset Layer 3 contribution, FxEngine allocation reduction, HTTP round-trip tests, and others) are tracked in [cue-authoring-followups.md](../cue-authoring-followups.md). The narrative below is preserved as a session-by-session record; durable engineering reference lives in [lighting-composition-model.md](../../lighting-composition-model.md) and [cues-engineering.md](../../cues-engineering.md).
 >
 > **Not in production yet.** We're free to break the DB, skip rollback shims, and iterate on migrations loosely.
 
@@ -202,7 +202,7 @@ Confirmed with the user 2026-04-17:
 
 ### Composition model — canonical spec
 
-The layer stack, per-category composition rules, crossfade behaviour, direct-write semantics, stomp flag, and cue-edit session semantics are specified in **[docs/lighting-composition-model.md](lighting-composition-model.md)**. That document is the source of truth; the plan references it rather than restating the rules.
+The layer stack, per-category composition rules, crossfade behaviour, direct-write semantics, stomp flag, and cue-edit session semantics are specified in **[docs/lighting-composition-model.md](../../lighting-composition-model.md)**. That document is the source of truth; the plan references it rather than restating the rules.
 
 Locked design decisions from the 2026-04-17 prior-art survey (detailed in the spec):
 
@@ -253,7 +253,7 @@ Leaving edit mode deactivates the cue or hands back to stack playback (in Live m
 ## Phase 0 — Layering Foundation (done)
 
 Formalised the composition model documented in
-[docs/lighting-composition-model.md](lighting-composition-model.md) — see the Change log
+[docs/lighting-composition-model.md](../../lighting-composition-model.md) — see the Change log
 for invariants. Summary: named layer pipeline through `FxEngine` →
 `ControllerTransaction` → `ArtNetController`; `CompositionRule` enum + per-category
 defaults + `@FixtureProperty` override; `FxInstance.priority` with sorted-snapshot
@@ -454,7 +454,7 @@ detection of any Phase-1 regression that only shows up when the full pipeline ru
     convention — same move the MIDI layer made in Phase 4 for `MidiController`
   - or: add a production-side `TestableDmxController` subclass marked `@InternalForTests`
 - `FxEnginePipelineTest` exists, driving real beat and wall-clock ticks against the stub,
-  covering every Worked Example from [lighting-composition-model.md](lighting-composition-model.md#worked-examples).
+  covering every Worked Example from [lighting-composition-model.md](../../lighting-composition-model.md#worked-examples).
 - Benchmark harness in `src/test/kotlin/.../fx/FxEngineBenchmark.kt` measures per-tick
   allocation shape. Initial pass establishes a baseline; subsequent runs detect regressions.
 - CI gates on the benchmark's baseline within a tolerance (e.g. ±20%). Failing baseline
@@ -593,14 +593,14 @@ sealed class additively.
 ### Phase 6 files (as landed)
 
 Backend:
-- New: [src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt](../src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt) — sealed ADT
-- New: [src/main/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidator.kt](../src/main/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidator.kt) — shared validator
-- Updated: [src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt](../src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt) — `toCueDetails(isCurrentProject, fixtures)` signature; `toDtoWithHealth`; rate-limited warn helper in `maybeLogDeadAssignments`; `canonicalPropertyName` moved to shared utility
-- Updated: [src/main/kotlin/uk/me/cormack/lighting7/routes/projectFxPresets.kt](../src/main/kotlin/uk/me/cormack/lighting7/routes/projectFxPresets.kt) — `toPropertyAssignmentDtos` tags rows with health
-- Updated: [src/main/kotlin/uk/me/cormack/lighting7/models/cues.kt](../src/main/kotlin/uk/me/cormack/lighting7/models/cues.kt) — `CuePropertyAssignmentDto.health` optional field
-- Updated: [src/main/kotlin/uk/me/cormack/lighting7/models/fxPresets.kt](../src/main/kotlin/uk/me/cormack/lighting7/models/fxPresets.kt) — `FxPresetPropertyAssignmentDto.health` optional field
-- New test: [src/test/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidatorTest.kt](../src/test/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidatorTest.kt)
-- Updated test: [src/test/kotlin/uk/me/cormack/lighting7/routes/CueRoutesTest.kt](../src/test/kotlin/uk/me/cormack/lighting7/routes/CueRoutesTest.kt) — health round-trip cases
+- New: [src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt](../../../src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt) — sealed ADT
+- New: [src/main/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidator.kt](../../../src/main/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidator.kt) — shared validator
+- Updated: [src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt](../../../src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt) — `toCueDetails(isCurrentProject, fixtures)` signature; `toDtoWithHealth`; rate-limited warn helper in `maybeLogDeadAssignments`; `canonicalPropertyName` moved to shared utility
+- Updated: [src/main/kotlin/uk/me/cormack/lighting7/routes/projectFxPresets.kt](../../../src/main/kotlin/uk/me/cormack/lighting7/routes/projectFxPresets.kt) — `toPropertyAssignmentDtos` tags rows with health
+- Updated: [src/main/kotlin/uk/me/cormack/lighting7/models/cues.kt](../../../src/main/kotlin/uk/me/cormack/lighting7/models/cues.kt) — `CuePropertyAssignmentDto.health` optional field
+- Updated: [src/main/kotlin/uk/me/cormack/lighting7/models/fxPresets.kt](../../../src/main/kotlin/uk/me/cormack/lighting7/models/fxPresets.kt) — `FxPresetPropertyAssignmentDto.health` optional field
+- New test: [src/test/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidatorTest.kt](../../../src/test/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidatorTest.kt)
+- Updated test: [src/test/kotlin/uk/me/cormack/lighting7/routes/CueRoutesTest.kt](../../../src/test/kotlin/uk/me/cormack/lighting7/routes/CueRoutesTest.kt) — health round-trip cases
 
 Frontend:
 - Updated: `src/api/cuesApi.ts` — exports `AssignmentHealth` discriminated union, adds optional `health` to `CuePropertyAssignment`
@@ -837,7 +837,7 @@ Flag these to the user before implementing.
 2. ~~**Default mode per surface**~~ — **Resolved 2026-04-21**. Program view defaults to Live, matching `Cues.tsx`. Revisit once "show is running" is a defined signal; may then flip to Blind when a show is running. User-preference sticky default deferred.
 3. ~~**Auto-advance pause (Live mode only)**~~ — **Resolved 2026-04-21**. Yes — pause on `beginEdit`, resume on `endEdit` / disconnect, for Live stack-cue edits only. Blind never touches auto-advance. Lands in sub-phase 2b.
 4. **Session ownership of `cueEdit.*`**: with multi-client connections, should the server reject `cueEdit.setChannel` from clients that didn't send `beginEdit`? Default to yes (session-scoped) unless looser semantics preferred. Also: can two clients edit the same cue simultaneously (one Live, one Blind)? Probably reject the second `beginEdit` for the same `cueId`.
-5. ~~**Layer 3 fade behaviour during cue crossfades**~~ — **Resolved 2026-04-17**. Per-category rules: sliders linear, colour RGB-linear, settings snap at 50% fade progress, position with `moveInDark` pre-applies during outgoing fade-out when outgoing intensity is 0 at end. Specified in [docs/lighting-composition-model.md](lighting-composition-model.md).
+5. ~~**Layer 3 fade behaviour during cue crossfades**~~ — **Resolved 2026-04-17**. Per-category rules: sliders linear, colour RGB-linear, settings snap at 50% fade progress, position with `moveInDark` pre-applies during outgoing fade-out when outgoing intensity is 0 at end. Specified in [docs/lighting-composition-model.md](../../lighting-composition-model.md).
 6. **Phase 2 effects-overlay preview affordance** — how prominent? Just a badge, or a "show base only" toggle? Most relevant in Live mode; less important in Blind.
 7. **Blind→Live "apply to stage" safety**: toggling Blind→Live mid-session pushes the cue's current state to the stage. Is that safe to do unconditionally, or should it require confirmation ("this will override the live output")?
 8. ~~**Preset-toggle layer placement (Phase 3)**~~ — **Resolved in Phase 7 (2026-04-23).** `PropertyChannelWriter` + `FxEngine.writeLayer4Property` / `clearLayer4Property` give preset-toggle a true Layer-4 path; toggle state is tracked in an in-memory map keyed by `presetId`. `updateChannel` now last-write-wins on any channel a toggled preset is asserting (pseudo-cue won before).
@@ -863,7 +863,7 @@ Closes the Phase-7 "W/A silently dropped" gap. Backend is feature-complete; fron
 
 **Trait symmetry is the design.** `WithWhite` / `WithAmber` expose a single
 `val white: Slider` / `val amber: Slider` and nothing else — same shape as
-[`WithUv`](../src/main/kotlin/uk/me/cormack/lighting7/fixture/trait/WithUv.kt). The
+[`WithUv`](../../../src/main/kotlin/uk/me/cormack/lighting7/fixture/trait/WithUv.kt). The
 `PropertyChannelWriter` change is three new lines per extended-channel helper
 (`whiteChannelWrite`, `amberChannelWrite`), invoked symmetrically from both
 `resolveColour` and `channelsFor` alongside the existing `uvChannelWrite`. Anyone
@@ -1058,7 +1058,7 @@ Phase 4 wires the remaining UI: a **Grab live state** button in the cue
 editor header, Program-only.
 
 **Header actions slot.**
-[`CueEditorHeader`](../../lighting-react/src/components/cues/editor/CueEditorHeader.tsx)
+[`CueEditorHeader`](../../../../lighting-react/src/components/cues/editor/CueEditorHeader.tsx)
 gained optional `onSnapshotFromLive?: () => void` + `snapshotPending?:
 boolean` props. When `onSnapshotFromLive` is set, a `Button` renders next
 to the existing `LiveBlindToggle`: camera icon normally, `Loader2` spinner
@@ -1067,11 +1067,11 @@ Disabled on pending or when `!isEditing` (new cues can't snapshot). Chose a
 specific prop pair over a generic `headerActions` slot — keeps the call-site
 self-documenting and matches the existing `onX` + `xPending` convention
 elsewhere in the codebase.
-[`CueEditor`](../../lighting-react/src/components/cues/editor/CueEditor.tsx)
+[`CueEditor`](../../../../lighting-react/src/components/cues/editor/CueEditor.tsx)
 threads the two props through unchanged.
 
 **Call-site wiring.**
-[`ProgramPage`](../../lighting-react/src/routes/ProgramPage.tsx) owns the
+[`ProgramPage`](../../../../lighting-react/src/routes/ProgramPage.tsx) owns the
 mutation (`useSnapshotCueFromLiveMutation`), a `snapshotConfirmOpen` +
 `snapshotError` pair of local state, and a small inline `<Dialog>` matching
 the `DeleteProjectConfirmDialog` / `ProjectSwitchConfirmDialog` hand-rolled
@@ -1108,7 +1108,7 @@ Replaces `PresetForm` (881-line monolithic Sheet) with `PresetEditor` built on
 hits after.
 
 **Draft context.** New
-[`src/components/presets/PresetDraftContext.tsx`](../../lighting-react/src/components/presets/PresetDraftContext.tsx)
+[`src/components/presets/PresetDraftContext.tsx`](../../../../lighting-react/src/components/presets/PresetDraftContext.tsx)
 owns the `FxPresetPropertyAssignment[]` draft. Deliberately kept separate from
 `EditorContext` so slider-drag churn doesn't rerender every consumer of the kind
 discriminator — the draft is a tiny external store with per-property subscribers
@@ -1138,7 +1138,7 @@ UX if users ask for "untouch this property."
   rendering path emits them for the synthetic fixture.
 
 **Synthetic fixture.**
-[`src/components/presets/syntheticFixture.ts`](../../lighting-react/src/components/presets/syntheticFixture.ts)
+[`src/components/presets/syntheticFixture.ts`](../../../../lighting-react/src/components/presets/syntheticFixture.ts)
 builds a `Fixture` from a `FixtureTypeMode`. Invented channel refs are safe because all
 rendered reads + writes in preset mode are context-routed. Single-head only (no
 `elements` / `elementGroupProperties`) — the per-head follow-up is flagged. Fixture key
@@ -1154,7 +1154,7 @@ flow through unchanged. `FxPresetPropertyAssignment` shape matches the backend D
 `{ propertyName, value, fadeDurationMs, sortOrder }` — no target fields (preset-local).
 
 **PresetEditor shape.**
-[`src/components/presets/PresetEditor.tsx`](../../lighting-react/src/components/presets/PresetEditor.tsx)
+[`src/components/presets/PresetEditor.tsx`](../../../../lighting-react/src/components/presets/PresetEditor.tsx)
 mirrors `CueEditor`'s layout minus the per-target grid: `SheetContent` (flex col, max-w-2xl),
 a sub-view state machine (`form` / `fixture-type` / `add-effect` / `edit-effect` /
 `confirm-delete`) so inline-back stays within the one Sheet. The form view wraps its body
@@ -1445,7 +1445,7 @@ two-option fix, deferred to Phase 2.
 ### Phase 0 — layering foundation (landed 2026-04-18)
 
 Formalised the composition model documented in
-[docs/lighting-composition-model.md](lighting-composition-model.md): `CompositionRule`
+[docs/lighting-composition-model.md](../../lighting-composition-model.md): `CompositionRule`
 enum + per-`PropertyCategory` defaults (`HTP` for DIMMER/UV/STROBE, `LTP` elsewhere),
 `@FixtureProperty(composition = ...)` per-property override, `FxInstance.priority` with
 sorted-snapshot iteration, reset-to-layer-below instead of reset-to-zero, parking consulted

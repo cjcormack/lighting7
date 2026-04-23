@@ -5,7 +5,7 @@ encoders, buttons) drives the lighting composition model and how fixture state f
 LEDs and motorised faders.
 
 Related:
-- Strategic plan (phases, decisions, open questions): [control-surface-plan.md](control-surface-plan.md).
+- Strategic plan (phases, decisions, open questions): [control-surface-plan.md](plans/completed/control-surface-plan.md).
 - Composition layers surfaces write into: [lighting-composition-model.md](lighting-composition-model.md).
 - Transport layer surfaces write through: [dmx-engineering.md](dmx-engineering.md).
 
@@ -18,7 +18,7 @@ A fader bound to a fixture dimmer writes **Layer 4** (the same `DirectWriteStore
 on the ArtNet controller, alongside parking. There is no "surface mode" in the engine.
 
 The implementation follows four separable concerns, mirroring the phase breakdown in
-[control-surface-plan.md](control-surface-plan.md):
+[control-surface-plan.md](plans/completed/control-surface-plan.md):
 
 1. **Transport** — MIDI I/O via ktmidi with a dedicated per-device thread and conflated
    outbound channels (pattern borrowed from `ArtNetController`).
@@ -139,7 +139,7 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 | `ActiveBankState.kt` | Ephemeral `deviceTypeKey → bank` map backed by a `ConcurrentHashMap` fast-lookup plus a `changes: SharedFlow<BankChange>` for WS broadcast. Not persisted. |
 | `FlashStateTracker.kt` | Lock-free `Set<Int>` of currently-held binding IDs (overlapping presses don't clobber release semantics). Exposes `changes: SharedFlow<FlashChange>`. |
 | `GlobalScalerState.kt` | Show-scoped `TransmitModifier` implementation of Blackout + Grand Master. Walks fixtures on `fixturesChanged` to classify intensity-category channels into a packed-`Long` `AtomicReference<Set<Long>>` for allocation-free hot-path lookup. On toggle, calls `DmxController.requestTransmit()` on every attached controller so the change is visible within the next frame rather than up to 25 ms later. The `blackoutEnabled` / `grandMasterEnabled` flags read through to a project-scoped `GlobalScalerStateHolder` so state survives project switches within a session. |
-| `GlobalScalerStateHolder.kt` | Per-project holder for the `MutableStateFlow<Boolean>` backing Blackout and Grand Master. Lives on `State.scalerHolderFor(projectId)`, outside the `Show` lifecycle; a fresh `GlobalScalerState` facade is constructed against the same holder on every project activation. Phase 9 of [control-surface-plan.md](control-surface-plan.md) — option A (ephemeral per-session); DB persistence deferred. |
+| `GlobalScalerStateHolder.kt` | Per-project holder for the `MutableStateFlow<Boolean>` backing Blackout and Grand Master. Lives on `State.scalerHolderFor(projectId)`, outside the `Show` lifecycle; a fresh `GlobalScalerState` facade is constructed against the same holder on every project activation. Phase 9 of [control-surface-plan.md](plans/completed/control-surface-plan.md) — option A (ephemeral per-session); DB persistence deferred. |
 
 ### Feedback and reconciliation
 
@@ -242,7 +242,7 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `GrandMasterToggle` | Button | `GlobalScalerState.toggleGrandMaster()` |
 | `SetBank(deviceTypeKey, bank)` | Button / bank-button | `ActiveBankState.setBank(deviceTypeKey, bank)` |
 
-**Related non-MIDI path.** Phase 7 of `docs/cue-authoring-unification-plan.md` adds a
+**Related non-MIDI path.** Phase 7 of `docs/plans/completed/cue-authoring-unification-plan.md` adds a
 separate FX-layer resolver, `fx/PropertyChannelWriter`, for property-value → channel
 resolution without 7-bit MIDI scaling. The surface-input path above keeps using
 `PropertyChannelResolver` for 7-bit input; Layer 4 writes originating elsewhere
@@ -368,7 +368,7 @@ All subscribers are cancelled together on `SurfaceFeedbackPublisher.stop()`.
 | Cue stack buttons | `CueStackManager.*` | *(Layer 3 via cue apply)* | Same path as REST / UI |
 | Fire cue | `CueStackManager.fireCue` | *(Layer 3)* | |
 
-Phase 6 adds a **cueEdit-aware router branch**: when a cue-edit session is open for the project, continuous writes route to `cueEdit.setProperty` (Layer 3) instead of Layer 4. This matches the frontend `EditorContext` pattern — surfaces become another client of the same session. See [control-surface-plan.md](control-surface-plan.md) §Phase 6.
+Phase 6 adds a **cueEdit-aware router branch**: when a cue-edit session is open for the project, continuous writes route to `cueEdit.setProperty` (Layer 3) instead of Layer 4. This matches the frontend `EditorContext` pattern — surfaces become another client of the same session. See [control-surface-plan.md](plans/completed/control-surface-plan.md) §Phase 6.
 
 ## Threading model
 
@@ -439,9 +439,9 @@ From `State.kt`:
 
 ## Known limitations
 
-1. **`PropertyChannelResolver` is reflective and fixture-aware.** Bindings store `(fixtureKey, propertyName)`. If a fixture type is refactored (property renamed, mode changed), existing bindings silently fail to resolve at dispatch time. There is no compile-time or load-time validation today. See Open Question 9 in [control-surface-plan.md](control-surface-plan.md) — proposed fix (binding reconciliation diagnostic) is tracked as Phase 7 of that plan.
+1. **`PropertyChannelResolver` is reflective and fixture-aware.** Bindings store `(fixtureKey, propertyName)`. If a fixture type is refactored (property renamed, mode changed), existing bindings silently fail to resolve at dispatch time. There is no compile-time or load-time validation today. See Open Question 9 in [control-surface-plan.md](plans/completed/control-surface-plan.md) — proposed fix (binding reconciliation diagnostic) is tracked as Phase 7 of that plan.
 
-2. **Blackout / Grand Master state is in-memory per project.** State survives show tear-down on project switch (the `GlobalScalerStateHolder` lives on `State`, keyed by `projectId`), so toggling Blackout on project A → switching to B → switching back to A keeps Blackout on. Cross-restart persistence is **not** implemented in v1 — a backend restart resets every project's scalers to default. If operators need restart persistence, add a `project_scaler_state` DB table (option B of Phase 9 in [control-surface-plan.md](control-surface-plan.md)).
+2. **Blackout / Grand Master state is in-memory per project.** State survives show tear-down on project switch (the `GlobalScalerStateHolder` lives on `State`, keyed by `projectId`), so toggling Blackout on project A → switching to B → switching back to A keeps Blackout on. Cross-restart persistence is **not** implemented in v1 — a backend restart resets every project's scalers to default. If operators need restart persistence, add a `project_scaler_state` DB table (option B of Phase 9 in [control-surface-plan.md](plans/completed/control-surface-plan.md)).
 
 3. **Soft-takeover only applies to faders.** Encoders always use `IMMEDIATE` policy. If an encoder's logical value drifts (e.g. a cue changed it), the next encoder turn snaps the hardware to the new value. This matches industry practice but is worth knowing.
 
@@ -471,4 +471,4 @@ From `State.kt`:
 - Submasters
 - Multi-operator concurrent surface editing
 
-See [control-surface-plan.md §Out of scope](control-surface-plan.md#out-of-scope) for rationale.
+See [control-surface-plan.md §Out of scope](plans/completed/control-surface-plan.md#out-of-scope) for rationale.

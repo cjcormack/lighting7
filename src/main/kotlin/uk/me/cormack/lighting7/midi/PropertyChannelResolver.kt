@@ -19,7 +19,7 @@ import java.awt.Color
  * [uk.me.cormack.lighting7.fixture.DmxFixture.channelDescriptions] / `generatePropertyDescriptors`
  * but emits a simpler per-write record.
  *
- * v1 scope (matches docs/control-surface-plan.md Phase 3):
+ * v1 scope (matches docs/plans/completed/control-surface-plan.md Phase 3):
  *   - [DmxSlider] → one channel write, value scaled 0..127 → property's `min..max` range.
  *   - [DmxColour] → three channel writes (red / green / blue), same value applied to each,
  *     scaled 0..127 → 0..255. Intended as a "brightness on a colour" fallback; for per-axis

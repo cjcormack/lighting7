@@ -3,7 +3,7 @@
 This document specifies how lighting7 composes the DMX channel output sent each frame. It is the source of truth for priority rules, blending, direct-write semantics, cue crossfades, and `cueEdit` session behaviour.
 
 Related:
-- Strategic plan for adopting this model: [cue-authoring-unification-plan.md](cue-authoring-unification-plan.md).
+- Strategic plan for adopting this model: [cue-authoring-unification-plan.md](plans/completed/cue-authoring-unification-plan.md).
 - Effect engine details: [fx-engineering.md](fx-engineering.md).
 - DMX transport and parking: [dmx-engineering.md](dmx-engineering.md).
 - Prior-art survey that drove these decisions: [research/composition-model-prior-art.md](research/composition-model-prior-art.md).
@@ -115,7 +115,7 @@ Layer 4 writes are **sticky** — they persist until explicitly released. Effect
 
 Interaction with cue-edit sessions: when a client holds an active `cueEdit` session, `updateChannel` is replaced by `cueEdit.setChannel`, which routes the write into the cue's Layer 3 property assignments rather than Layer 4. See [Cue edit sessions](#cue-edit-sessions) below.
 
-**Control surfaces write Layer 4** the same way the web UI does. A surface fader bound to `group.dimmer` routes through the same `DirectWriteStore` that `updateChannel` uses; during a cue-edit session it routes into Layer 3 via `cueEdit.*` just like the frontend. Surfaces are not a separate layer — they are another client of the existing routing. Flash buttons write an ephemeral Layer 4 entry on press and clear it on release. Blackout and Grand Master are applied at transmit time (alongside parking), not as composition layers. See [control-surface-plan.md](control-surface-plan.md).
+**Control surfaces write Layer 4** the same way the web UI does. A surface fader bound to `group.dimmer` routes through the same `DirectWriteStore` that `updateChannel` uses; during a cue-edit session it routes into Layer 3 via `cueEdit.*` just like the frontend. Surfaces are not a separate layer — they are another client of the existing routing. Flash buttons write an ephemeral Layer 4 entry on press and clear it on release. Blackout and Grand Master are applied at transmit time (alongside parking), not as composition layers. See [control-surface-plan.md](plans/completed/control-surface-plan.md).
 
 ## Layer 5 — Baseline / defaults
 

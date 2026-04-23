@@ -56,7 +56,7 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
     implementation("ch.bildspur:artnet4j:0.6.2")
 
-    // MIDI control-surface transport (Phase 0 of control-surface-plan.md).
+    // MIDI control-surface transport (Phase 0 of plans/completed/control-surface-plan.md).
     // ktmidi-jvm-desktop brings LibreMidiAccess (native libremidi via Panama FFM).
     implementation("dev.atsushieno:ktmidi-jvm:0.11.2")
     implementation("dev.atsushieno:ktmidi-jvm-desktop:0.11.2")

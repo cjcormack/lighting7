@@ -8,8 +8,8 @@ import kotlinx.serialization.Serializable
  * property assignment, or MIDI binding target. Surfaced in REST responses so the UI can
  * mark dead rows instead of silently dropping them at apply time.
  *
- * See `docs/cue-authoring-unification-plan.md` §"Phase 6" for the motivating workflow and
- * `docs/control-surface-plan.md` §"Phase 7" for the sibling binding-health pattern this
+ * See `docs/plans/completed/cue-authoring-unification-plan.md` §"Phase 6" for the motivating workflow and
+ * `docs/plans/completed/control-surface-plan.md` §"Phase 7" for the sibling binding-health pattern this
  * intentionally mirrors — both subsystems consume the same ADT via
  * [PersistedFixtureReferenceValidator] and [uk.me.cormack.lighting7.midi.BindingHealthEvaluator].
  * Cue / preset consumers only ever see [Ok] / [MissingFixture] / [MissingGroup] /

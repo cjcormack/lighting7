@@ -227,7 +227,7 @@ class FxEngine(
     // stored Assignment's own `fadeWeight` at flat-list build time — the composition resolver
     // sees the product. Kept separate from `cueAssignments` so the stored assignment list stays
     // constant across a crossfade; only the scalar per-cue weight ticks. See
-    // [updateCueFadeWeights] / Phase 1b in `docs/cue-authoring-unification-plan.md`.
+    // [updateCueFadeWeights] / Phase 1b in `docs/plans/completed/cue-authoring-unification-plan.md`.
     private val cueFadeWeights = HashMap<Int, Double>()
 
     private val cueAssignmentsLock = Any()

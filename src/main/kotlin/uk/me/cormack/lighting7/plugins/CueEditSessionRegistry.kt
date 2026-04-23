@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
  * registry lets server-side consumers — control surfaces in particular — observe whether
  * *any* client currently has a cue open for edit in a given project, and react accordingly.
  *
- * Phase 6 of `docs/control-surface-plan.md`: surface fader writes route through
+ * Phase 6 of `docs/plans/completed/control-surface-plan.md`: surface fader writes route through
  * `cueEdit.setProperty` when [activeSession] returns non-null for the project, and the
  * [SurfaceFeedbackPublisher] drives motors from the cue's Layer 3 value instead of the
  * composed live value.

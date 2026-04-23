@@ -62,7 +62,7 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
-     * Control-surface MIDI device registry (Phase 0 of control-surface-plan.md).
+     * Control-surface MIDI device registry (Phase 0 of plans/completed/control-surface-plan.md).
      * Polls connected MIDI ports on a 1 Hz interval, pairs them into device handles, and
      * auto-opens a [uk.me.cormack.lighting7.midi.KtMidiController] for each.
      */

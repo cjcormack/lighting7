@@ -26,14 +26,14 @@ import kotlin.reflect.full.memberProperties
  *
  * Both scalers affect only intensity-category properties. Colour, position, and setting
  * channels pass through unchanged — this matches the proposal in Open Question 2/3 of
- * docs/control-surface-plan.md and the behaviour of most professional consoles.
+ * docs/plans/completed/control-surface-plan.md and the behaviour of most professional consoles.
  *
  * The *state* (blackout / Grand Master flags) lives in a project-scoped
  * [GlobalScalerStateHolder] supplied by construction. This instance is show-scoped: it owns
  * the fixture classification and controller wiring for the *current* show. On project
  * switch a new [GlobalScalerState] is constructed against the same holder, so operator
  * intent (e.g. "blackout pressed on project A") survives the show tear-down and rebuild —
- * see Phase 9 of docs/control-surface-plan.md.
+ * see Phase 9 of docs/plans/completed/control-surface-plan.md.
  *
  * Implementation:
  *   - Classifies every DMX channel by walking [Fixtures] at fixture-change time and
@@ -222,7 +222,7 @@ class GlobalScalerState(
 
 /**
  * Categories the global scalers affect: intensity-like properties (dimmer / UV / strobe).
- * Rationale in docs/control-surface-plan.md Open Questions 2 and 3.
+ * Rationale in docs/plans/completed/control-surface-plan.md Open Questions 2 and 3.
  */
 private fun PropertyCategory.isIntensityLike(): Boolean = when (this) {
     PropertyCategory.DIMMER, PropertyCategory.UV, PropertyCategory.STROBE -> true
