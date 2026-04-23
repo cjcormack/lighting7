@@ -9,7 +9,8 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
-import uk.me.cormack.lighting7.fx.parseExtendedColour
+import uk.me.cormack.lighting7.fx.PaletteCascade
+import uk.me.cormack.lighting7.fx.toPaletteColours
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -542,7 +543,7 @@ object CueEditSessionHandler {
         }
 
         if (session.mode == CueEditMode.LIVE) {
-            val colours = runCatching { palette.map { parseExtendedColour(it) } }.getOrNull()
+            val colours = runCatching { palette.toPaletteColours() }.getOrNull()
             if (colours != null) state.show.fxEngine.setCuePalette(cueId, colours)
         }
 
@@ -796,7 +797,12 @@ object CueEditSessionHandler {
      * immediate preset application (timed presets don't contribute — matches [applyCue]).
      */
     private fun republishLayer3(state: State, cueId: Int, applyData: CueApplyData) {
-        val cueOwn = buildLayer3AssignmentsForCue(state.show.fixtures, applyData)
+        val engine = state.show.fxEngine
+        val cascade = PaletteCascade(
+            cue = applyData.palette.toPaletteColours(),
+            global = engine.getPalette(),
+        )
+        val cueOwn = buildLayer3AssignmentsForCue(state.show.fixtures, applyData, cascade)
         val priority = cueDerivedPriority(applyData)
         val presetRows = transaction(state.database) {
             applyData.presetApplications
@@ -806,6 +812,7 @@ object CueEditSessionHandler {
                     buildLayer3AssignmentsForPreset(
                         state.show.fixtures, cueId, priority,
                         app.presetId, preset.toPropertyAssignmentDtos(), app.targets,
+                        cascade = cascade.copy(preset = preset.palette.toPaletteColours()),
                     )
                 }
         }

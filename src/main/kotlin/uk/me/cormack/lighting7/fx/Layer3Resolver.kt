@@ -5,6 +5,31 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
 import java.awt.Color
 
 /**
+ * Scoped palette cascade for resolving colour palette refs (`"P1"`, `"P2"`, …) in Layer 3
+ * assignment values. [effective] picks the most specific scope with a non-empty palette:
+ * [preset] > [cue] > [global]. All empty → palette refs fall through to the static colour
+ * parser (invalid hex → white).
+ *
+ * Cue-originated rows leave [preset] empty; preset-originated rows populate all three.
+ */
+data class PaletteCascade(
+    val preset: List<ExtendedColour> = emptyList(),
+    val cue: List<ExtendedColour> = emptyList(),
+    val global: List<ExtendedColour> = emptyList(),
+) {
+    val effective: List<ExtendedColour>
+        get() = when {
+            preset.isNotEmpty() -> preset
+            cue.isNotEmpty() -> cue
+            else -> global
+        }
+
+    companion object {
+        val EMPTY = PaletteCascade()
+    }
+}
+
+/**
  * Layer 3 composition resolver — merges [CuePropertyAssignment] rows from active cues into
  * a per-(target, property) value stream that [LayerResolver] consumes.
  *
@@ -96,7 +121,9 @@ class Layer3Resolver {
          * - `propertyName == "position"` (case-insensitive): `"pan,tilt"` (each `0..255`) →
          *   [PropertyValue.Position]. This matches the `createFixtureTargetForCue` special case.
          * - [PropertyCategory.COLOUR]: hex / named / extended string consumed by
-         *   [parseExtendedColour] → [PropertyValue.Colour].
+         *   [resolveColour] → [PropertyValue.Colour]. Palette refs (`"P1"`, `"P2"`, …) are
+         *   resolved against [palette] when non-empty; an empty palette falls through to the
+         *   static colour parser (`"P1"` → white). See [PaletteCascade] for the scope rules.
          * - [PropertyCategory.SETTING] / [PropertyCategory.OTHER]: `"0".."255"` → [PropertyValue.Setting].
          * - Every other category (intensity-like and axis sliders): `"0".."255"` →
          *   [PropertyValue.Slider].
@@ -108,6 +135,7 @@ class Layer3Resolver {
             category: PropertyCategory,
             propertyName: String,
             value: String,
+            palette: List<ExtendedColour> = emptyList(),
         ): PropertyValue? {
             val trimmed = value.trim()
             if (propertyName.equals("position", ignoreCase = true)) {
@@ -118,7 +146,7 @@ class Layer3Resolver {
                 return PropertyValue.Position(pan, tilt)
             }
             return when (category) {
-                PropertyCategory.COLOUR -> runCatching { PropertyValue.Colour(parseExtendedColour(trimmed)) }.getOrNull()
+                PropertyCategory.COLOUR -> runCatching { PropertyValue.Colour(resolveColour(trimmed, palette)) }.getOrNull()
                 PropertyCategory.SETTING, PropertyCategory.OTHER ->
                     trimmed.toUByteParam()?.let { PropertyValue.Setting(it) }
                 else ->

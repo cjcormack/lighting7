@@ -2,10 +2,13 @@ package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.PaletteCascade
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.FxPresetPropertyAssignmentDto
 import uk.me.cormack.lighting7.show.Fixtures
+import java.awt.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -120,6 +123,72 @@ class BuildLayer3AssignmentsForPresetTest {
         )
         assertEquals(1, out.size)
         assertEquals("dimmer", out.single().propertyName)
+    }
+
+    private fun paletteRefPreset(value: String = "P1") = listOf(
+        FxPresetPropertyAssignmentDto(propertyName = "colour", value = value),
+    )
+    private val hex1Target = listOf(CueTargetDto(type = "fixture", key = "hex-1"))
+
+    @Test
+    fun `palette cascade - preset palette wins over cue and global`() {
+        val out = buildLayer3AssignmentsForPreset(
+            fixturesWithTwoHexesInAGroup(), cueId, priority, presetId,
+            paletteRefPreset(), hex1Target,
+            cascade = PaletteCascade(
+                preset = listOf(ExtendedColour(Color(10, 20, 30))),
+                cue = listOf(ExtendedColour(Color(40, 50, 60))),
+                global = listOf(ExtendedColour(Color(70, 80, 90))),
+            ),
+        )
+        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        assertEquals(Color(10, 20, 30), v.value.color)
+    }
+
+    @Test
+    fun `palette cascade - falls through to cue palette when preset empty`() {
+        val out = buildLayer3AssignmentsForPreset(
+            fixturesWithTwoHexesInAGroup(), cueId, priority, presetId,
+            paletteRefPreset(), hex1Target,
+            cascade = PaletteCascade(
+                cue = listOf(ExtendedColour(Color(40, 50, 60))),
+                global = listOf(ExtendedColour(Color(70, 80, 90))),
+            ),
+        )
+        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        assertEquals(Color(40, 50, 60), v.value.color)
+    }
+
+    @Test
+    fun `palette cascade - falls through to global when preset and cue empty`() {
+        val out = buildLayer3AssignmentsForPreset(
+            fixturesWithTwoHexesInAGroup(), cueId, priority, presetId,
+            paletteRefPreset(), hex1Target,
+            cascade = PaletteCascade(global = listOf(ExtendedColour(Color(70, 80, 90)))),
+        )
+        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        assertEquals(Color(70, 80, 90), v.value.color)
+    }
+
+    @Test
+    fun `palette cascade - no palettes falls through to static parser returning white`() {
+        val out = buildLayer3AssignmentsForPreset(
+            fixturesWithTwoHexesInAGroup(), cueId, priority, presetId,
+            paletteRefPreset(), hex1Target,
+        )
+        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        assertEquals(Color.WHITE, v.value.color)
+    }
+
+    @Test
+    fun `palette cascade - hex colour values ignore palette`() {
+        val out = buildLayer3AssignmentsForPreset(
+            fixturesWithTwoHexesInAGroup(), cueId, priority, presetId,
+            paletteRefPreset(value = "#00FF00"), hex1Target,
+            cascade = PaletteCascade(preset = listOf(ExtendedColour(Color(10, 20, 30)))),
+        )
+        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        assertEquals(Color(0, 255, 0), v.value.color)
     }
 
     @Test

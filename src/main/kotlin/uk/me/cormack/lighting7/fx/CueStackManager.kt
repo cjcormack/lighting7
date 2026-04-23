@@ -164,17 +164,14 @@ class CueStackManager(
 
         // 2. Merge cue palette into stack palette
         if (cueData.palette.isNotEmpty()) {
-            val colours = cueData.palette.map { parseExtendedColour(it) }
-            fxEngine.setStackPalette(stackId, colours)
+            fxEngine.setStackPalette(stackId, cueData.palette.toPaletteColours())
         } else if (fxEngine.getStackPalette(stackId) == null && stackData.palette.isNotEmpty()) {
-            val colours = stackData.palette.map { parseExtendedColour(it) }
-            fxEngine.setStackPalette(stackId, colours)
+            fxEngine.setStackPalette(stackId, stackData.palette.toPaletteColours())
         }
 
         // Also update global palette if the cue requests it
         if (cueData.updateGlobalPalette && cueData.palette.isNotEmpty()) {
-            val colours = cueData.palette.map { parseExtendedColour(it) }
-            fxEngine.setPalette(colours)
+            fxEngine.setPalette(cueData.palette.toPaletteColours())
         }
 
         // 3. Apply cue effects with stack palette resolution
@@ -245,7 +242,11 @@ class CueStackManager(
         // Apply Layer 3 for the incoming cue. Under crossfade the incoming starts at weight 0
         // atomically with the insert; `runCrossfade` ticks it up from there. Stomp runs off
         // the same assignments so HTP/LTP and stomp overlap agree.
-        val layer3Assignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData)
+        val stackCascade = PaletteCascade(
+            cue = fxEngine.getStackPalette(stackId) ?: emptyList(),
+            global = fxEngine.getPalette(),
+        )
+        val layer3Assignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData, stackCascade)
         val incomingStartWeight = if (useCrossfade) 0.0 else 1.0
         if (layer3Assignments.isNotEmpty()) {
             fxEngine.setCueAssignments(cueData.cueId, layer3Assignments, incomingStartWeight)
@@ -301,6 +302,10 @@ class CueStackManager(
                 timedPresets = timedPresets,
                 timedAdHocEffects = timedAdHoc,
                 scope = scope,
+                // Stack cues merge their own palette into the stack palette (see step 2), so
+                // the stack palette is the authoritative cue-scope palette for timed preset
+                // palette-ref resolution. Falls through to global inside the build call.
+                cuePalette = fxEngine.getStackPalette(stackId) ?: emptyList(),
             )
         }
 

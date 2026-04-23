@@ -252,18 +252,23 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
             val presetData = transaction(state.database) {
                 val p = DaoFxPreset.findById(resource.presetId) ?: return@transaction null
                 if (p.project.id != project.id) return@transaction null
-                p.effects to p.toPropertyAssignmentDtos()
+                Triple(
+                    p.effects,
+                    p.toPropertyAssignmentDtos(),
+                    p.palette.toPaletteColours(),
+                )
             }
             if (presetData == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
                 return@withProject
             }
-            val (presetEffects, presetAssignments) = presetData
+            val (presetEffects, presetAssignments, presetPalette) = presetData
 
             try {
                 val result = togglePresetOnTargets(
                     state, resource.presetId, presetEffects, presetAssignments,
                     request.targets, request.beatDivision,
+                    presetPalette = presetPalette,
                 )
                 call.respond(result)
             } catch (e: IllegalStateException) {
@@ -475,6 +480,7 @@ internal fun togglePresetOnTargets(
     presetPropertyAssignments: List<FxPresetPropertyAssignmentDto>,
     targets: List<TogglePresetTarget>,
     beatDivisionOverride: Double?,
+    presetPalette: List<ExtendedColour> = emptyList(),
 ): TogglePresetResponse {
     val engine = state.show.fxEngine
     lateinit var response: TogglePresetResponse
@@ -512,7 +518,7 @@ internal fun togglePresetOnTargets(
             }
             existing?.forEach { clearPresetToggleWrite(state, it) }
 
-            val writes = applyPresetLayer4Writes(state, presetId, presetPropertyAssignments, targets)
+            val writes = applyPresetLayer4Writes(state, presetId, presetPropertyAssignments, targets, presetPalette)
 
             var addedCount = 0
             for (target in targets) {
@@ -544,10 +550,12 @@ private fun applyPresetLayer4Writes(
     presetId: Int,
     presetPropertyAssignments: List<FxPresetPropertyAssignmentDto>,
     targets: List<TogglePresetTarget>,
+    presetPalette: List<ExtendedColour>,
 ): List<PresetToggleWrite> {
     if (presetPropertyAssignments.isEmpty()) return emptyList()
     val engine = state.show.fxEngine
 
+    // Layer 4 writes don't belong to a cue — preset palette cascades straight to the global.
     val rows = buildLayer3AssignmentsForPreset(
         state.show.fixtures,
         cueId = -presetId,
@@ -555,6 +563,7 @@ private fun applyPresetLayer4Writes(
         presetId = presetId,
         presetAssignments = presetPropertyAssignments,
         applyTargets = targets.map { CueTargetDto(type = it.type, key = it.key) },
+        cascade = PaletteCascade(preset = presetPalette, global = engine.getPalette()),
     )
 
     val writes = ArrayList<PresetToggleWrite>(rows.size)

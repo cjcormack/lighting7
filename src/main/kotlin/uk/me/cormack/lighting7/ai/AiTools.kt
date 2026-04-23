@@ -138,9 +138,13 @@ class AiTools(private val state: State) {
 
         val presetData = transaction(state.database) {
             val preset = DaoFxPreset.findById(presetId) ?: return@transaction null
-            preset.effects to preset.toPropertyAssignmentDtos()
+            Triple(
+                preset.effects,
+                preset.toPropertyAssignmentDtos(),
+                preset.palette.toPaletteColours(),
+            )
         } ?: return errorResult("Preset not found: $presetId")
-        val (presetEffects, presetAssignments) = presetData
+        val (presetEffects, presetAssignments, presetPalette) = presetData
 
         val targets = targetsArray.map { t ->
             val obj = t.jsonObject
@@ -150,7 +154,10 @@ class AiTools(private val state: State) {
             )
         }
 
-        val result = togglePresetOnTargets(state, presetId, presetEffects, presetAssignments, targets, beatDivision)
+        val result = togglePresetOnTargets(
+            state, presetId, presetEffects, presetAssignments,
+            targets, beatDivision, presetPalette = presetPalette,
+        )
 
         return ToolExecutionResult(
             success = true,

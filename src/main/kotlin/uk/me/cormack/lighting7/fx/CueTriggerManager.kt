@@ -56,6 +56,10 @@ class CueTriggerManager(
      * [priority] is the cue-derived Layer 3 priority (see
      * [uk.me.cormack.lighting7.routes.cueDerivedPriority]). Timed preset fires produce Layer 3
      * rows at this priority so they compose consistently with the cue's apply-time rows.
+     *
+     * [cuePalette] is the cue's declared palette (parsed to [ExtendedColour]) or empty when the
+     * cue doesn't declare one. Combined with each preset's own palette and the global palette
+     * at fire time, see [PaletteCascade].
      */
     fun activateTimedEffectsForCue(
         cueId: Int,
@@ -64,6 +68,7 @@ class CueTriggerManager(
         timedPresets: List<CuePresetApplicationDto>,
         timedAdHocEffects: List<CueAdHocEffectDto>,
         scope: CoroutineScope,
+        cuePalette: List<ExtendedColour> = emptyList(),
     ) {
         if (timedPresets.isEmpty() && timedAdHocEffects.isEmpty()) return
 
@@ -71,6 +76,11 @@ class CueTriggerManager(
 
         val jobs = mutableListOf<Job>()
         val effectIds = triggerEffectIds.getOrPut(cueId) { mutableListOf() }
+
+        // Hoisted so recurring fires don't re-synchronise the global palette on every tick.
+        // The global palette only changes when the operator mutates it, and a palette edit
+        // will re-apply the cue anyway.
+        val baseCascade = PaletteCascade(cue = cuePalette, global = fxEngine.getPalette())
 
         // Timed presets contribute their property assignments to Layer 3 atomically alongside
         // spawning effects; recurring fires retract the prior tick's rows in the same
@@ -85,20 +95,25 @@ class CueTriggerManager(
                 scope = scope,
                 initialState = emptyList<Layer3Resolver.Assignment>(),
             ) { priorLayer3Rows ->
-                // One transaction per fire loads both effects and property assignments —
-                // splitting them would double the DB hit on recurring presets.
+                // One transaction per fire loads both effects, property assignments, and the
+                // preset's palette — splitting them would double the DB hit on recurring presets.
                 val loaded = transaction(state.database) {
                     val preset = DaoFxPreset.findById(presetApp.presetId) ?: return@transaction null
-                    preset.effects to preset.toPropertyAssignmentDtos()
+                    Triple(
+                        preset.effects,
+                        preset.toPropertyAssignmentDtos(),
+                        preset.palette.toPaletteColours(),
+                    )
                 }
                 if (loaded == null) return@launchTimedActionWithState priorLayer3Rows
-                val (presetEffects, presetAssignments) = loaded
+                val (presetEffects, presetAssignments, presetPalette) = loaded
 
                 applyPresetToTargets(presetApp.presetId, presetApp.targets, cueId, cueStackId, presetEffects, effectIds)
 
                 val newRows = if (presetAssignments.isEmpty()) emptyList() else buildLayer3AssignmentsForPreset(
                     state.show.fixtures, cueId, priority,
                     presetApp.presetId, presetAssignments, presetApp.targets,
+                    cascade = baseCascade.copy(preset = presetPalette),
                 )
                 fxEngine.replaceCueAssignmentSubset(cueId, priorLayer3Rows, newRows)
                 newRows

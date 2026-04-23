@@ -199,22 +199,6 @@ preserving the group shape.
 - Align `captureCurrentState`: snapshot from the pre-expansion assignment
   list on the cue, not from the resolver's expanded state.
 
-### `FU-BE-PALETTE-CASCADE` — Palette-resolution cascade for presets
-
-**Status**: Ready
-**Origin**: Cue-authoring Phase 3, 2026-04-21
-
-Backend ships the `fx_presets.palette` data field, but the resolver still
-treats palette refs as "global only" — preset palette → cue palette → global
-cascade isn't wired. A colour swatch with a palette ref inside a preset is
-resolved against the global palette, not the preset's own.
-
-**Fix shape**: teach `Layer3Resolver` to take a per-contribution palette
-context (cue palette + preset palette when the row came from a preset
-application), resolving property-like. Cue palette already flows through via
-`FxEngine.setCuePalette`; extend to carry the originating preset's palette
-through the `buildLayer3AssignmentsForPreset` path.
-
 ### `FU-BE-PRESET-PER-ELEMENT` — Preset per-head / per-element assignments
 
 **Status**: Ready (scope audit needed)
@@ -483,6 +467,31 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
 
+- `FU-BE-PALETTE-CASCADE` — 2026-04-23 — Introduced `PaletteCascade(preset,
+  cue, global)` in [Layer3Resolver.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/Layer3Resolver.kt)
+  with an `effective` property that picks the most-specific non-empty scope.
+  Extended `Layer3Resolver.parseAssignmentValue` with an optional
+  `palette: List<ExtendedColour>` that routes colour values through
+  `resolveColour` (palette-ref aware). Both `buildLayer3AssignmentsForCue`
+  and `buildLayer3AssignmentsForPreset` take a single `cascade: PaletteCascade`
+  parameter; callers construct the cascade once per cue-apply and reuse via
+  `cascade.copy(preset = ip.palette)` for each preset contribution. Added
+  `List<String>.toPaletteColours()` helper in
+  [EffectParamUtils.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/EffectParamUtils.kt)
+  collapsing 10+ `map { parseExtendedColour(it) }` sites. Threaded the
+  cascade through all call sites: `applyCue`, `republishLayer3`,
+  `activateTimedEffectsForCue` (global palette hoisted out of per-fire
+  lambda; recurring fires load only the preset's palette each transaction),
+  `CueStackManager.activateCueInStack`, and the preset toggle / Layer 4
+  write paths. Tests in
+  [Layer3ResolverTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/Layer3ResolverTest.kt)
+  cover palette-ref parsing with empty / non-empty palettes and wrap-modulo
+  indexing;
+  [BuildLayer3AssignmentsForPresetTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/BuildLayer3AssignmentsForPresetTest.kt)
+  asserts the preset → cue → global cascade ordering and static-colour
+  bypass;
+  [BuildLayer3AssignmentsForCueTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/BuildLayer3AssignmentsForCueTest.kt)
+  asserts cue-palette application and no-palette → white fallback.
 - `FU-BE-PRESET-FIXTURE-TYPE-NOTNULL` — 2026-04-23 — Dropped `.nullable()` on
   `DaoFxPresets.fixtureType` and added `migrateFxPresetsFixtureTypeNotNull` to
   [State.kt](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt): inspects

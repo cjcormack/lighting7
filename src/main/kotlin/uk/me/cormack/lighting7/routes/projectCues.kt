@@ -471,6 +471,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                             timedPresets = timedPresets,
                             timedAdHocEffects = timedAdHoc,
                             scope = kotlinx.coroutines.GlobalScope,
+                            cuePalette = cueData.palette.toPaletteColours(),
                         )
                     }
 
@@ -1077,6 +1078,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         val targets: List<CueTargetDto>,
         val effects: List<FxPresetEffectDto>,
         val assignments: List<FxPresetPropertyAssignmentDto>,
+        val palette: List<ExtendedColour>,
     )
     val immediatePresets = transaction(state.database) {
         cueData.presetApplications
@@ -1088,18 +1090,25 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
                     targets = app.targets,
                     effects = preset.effects,
                     assignments = preset.toPropertyAssignmentDtos(),
+                    palette = preset.palette.toPaletteColours(),
                 )
             }
     }
 
+    val cascade = PaletteCascade(
+        cue = cueData.palette.toPaletteColours(),
+        global = engine.getPalette(),
+    )
+
     // Publish Layer 3 before applying effects so the effect reset pass sees the cue's baseline
     // instead of Layer 5 zero. Combines the cue's own assignments with each immediate preset's
     // property assignments.
-    val cueOwnAssignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData)
+    val cueOwnAssignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData, cascade)
     val presetRows = immediatePresets.flatMap { ip ->
         buildLayer3AssignmentsForPreset(
             state.show.fixtures, cueData.cueId, priority,
             ip.presetId, ip.assignments, ip.targets,
+            cascade = cascade.copy(preset = ip.palette),
         )
     }
 
@@ -1257,9 +1266,11 @@ private fun fixtureCategoryFor(
 internal fun buildLayer3AssignmentsForCue(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
     cueData: CueApplyData,
+    cascade: PaletteCascade = PaletteCascade.EMPTY,
 ): List<Layer3Resolver.Assignment> {
     if (cueData.propertyAssignments.isEmpty()) return emptyList()
     val priority = cueDerivedPriority(cueData)
+    val effectivePalette = cascade.effective
     val out = ArrayList<Layer3Resolver.Assignment>(cueData.propertyAssignments.size * 2)
 
     for (assignment in cueData.propertyAssignments) {
@@ -1297,7 +1308,7 @@ internal fun buildLayer3AssignmentsForCue(
             continue
         }
 
-        val parsed = Layer3Resolver.parseAssignmentValue(category, canonical, assignment.value) ?: run {
+        val parsed = Layer3Resolver.parseAssignmentValue(category, canonical, assignment.value, effectivePalette) ?: run {
             logger.warn("cue {}: invalid value '{}' for {}.{} — skipping", cueData.cueId, assignment.value, assignment.targetKey, assignment.propertyName)
             continue
         }
@@ -1342,6 +1353,9 @@ internal fun buildLayer3AssignmentsForCue(
  * order alone decides (last-write-wins for OVERRIDE blend). Rows whose fixture / group /
  * property cannot be resolved are logged at warn and skipped — stale data must not break
  * cue apply.
+ *
+ * Palette refs in colour values resolve against [cascade] — see [PaletteCascade] for the
+ * preset > cue > global scope rules.
  */
 internal fun buildLayer3AssignmentsForPreset(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
@@ -1350,8 +1364,10 @@ internal fun buildLayer3AssignmentsForPreset(
     presetId: Int,
     presetAssignments: List<FxPresetPropertyAssignmentDto>,
     applyTargets: List<CueTargetDto>,
+    cascade: PaletteCascade = PaletteCascade.EMPTY,
 ): List<Layer3Resolver.Assignment> {
     if (presetAssignments.isEmpty() || applyTargets.isEmpty()) return emptyList()
+    val effectivePalette = cascade.effective
     val out = ArrayList<Layer3Resolver.Assignment>(presetAssignments.size * applyTargets.size * 2)
 
     for (target in applyTargets) {
@@ -1390,7 +1406,7 @@ internal fun buildLayer3AssignmentsForPreset(
                 )
                 continue
             }
-            val parsed = Layer3Resolver.parseAssignmentValue(category, canonical, assignment.value) ?: run {
+            val parsed = Layer3Resolver.parseAssignmentValue(category, canonical, assignment.value, effectivePalette) ?: run {
                 logger.warn(
                     "preset {} (cue {}): invalid value '{}' for {}.{} — skipping",
                     presetId, cueId, assignment.value, target.key, assignment.propertyName,

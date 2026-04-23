@@ -2,9 +2,12 @@ package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.PaletteCascade
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.show.Fixtures
+import java.awt.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -159,6 +162,37 @@ class BuildLayer3AssignmentsForCueTest {
             ),
         ))
         assertTrue(out.isEmpty())
+    }
+
+    @Test
+    fun `palette cascade - palette ref resolved against supplied cue palette`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val cascade = PaletteCascade(cue = listOf(ExtendedColour(Color(10, 20, 30))))
+        val out = buildLayer3AssignmentsForCue(fixtures, cueData(
+            CuePropertyAssignmentDto(
+                targetType = "fixture",
+                targetKey = "hex-1",
+                propertyName = "colour",
+                value = "P1",
+            ),
+        ), cascade)
+        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        assertEquals(Color(10, 20, 30), v.value.color)
+    }
+
+    @Test
+    fun `palette cascade - no palette falls through to white`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val out = buildLayer3AssignmentsForCue(fixtures, cueData(
+            CuePropertyAssignmentDto(
+                targetType = "fixture",
+                targetKey = "hex-1",
+                propertyName = "colour",
+                value = "P1",
+            ),
+        ))
+        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        assertEquals(Color.WHITE, v.value.color)
     }
 
     @Test

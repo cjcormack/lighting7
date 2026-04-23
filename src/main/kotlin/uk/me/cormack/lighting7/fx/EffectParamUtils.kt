@@ -27,6 +27,9 @@ fun parseColor(colorString: String): Color {
     return parseExtendedColour(colorString).color
 }
 
+/** Parse a serialised palette (`List<String>`, as stored on cues / presets / stacks) to [ExtendedColour]s. */
+fun List<String>.toPaletteColours(): List<ExtendedColour> = map { parseExtendedColour(it) }
+
 /**
  * Parse a colour string into an [ExtendedColour].
  *
