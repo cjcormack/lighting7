@@ -83,7 +83,7 @@ Manages the runtime lifecycle of both timed effects and script hooks using corou
 
 After the cue's immediate effects have been applied:
 
-1. **Timed effects** (`activateTimedEffectsForCue`): For each preset/ad-hoc effect with `delayMs` or `intervalMs`, launch a coroutine that applies the effect at the configured timing.
+1. **Timed effects** (`activateTimedEffectsForCue`): For each preset/ad-hoc effect with `delayMs` or `intervalMs`, launch a coroutine that applies the effect at the configured timing. Timed preset fires also contribute their property assignments to Layer 3 at fire time (`FxEngine.appendCueAssignments`), retracting the prior fire's rows (`FxEngine.removeCueAssignmentSubset`) on each recurring tick so the cue's assignment list does not accumulate duplicates.
 2. **Script hooks** (`activateTriggersForCue`): For each script trigger, execute by type:
    - **ACTIVATION**: Run script immediately
    - **DEACTIVATION**: Stored for later

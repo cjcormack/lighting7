@@ -303,6 +303,79 @@ class FxEngine(
         }
     }
 
+    /**
+     * Append [additions] to [cueId]'s Layer 3 assignments without touching existing rows. Used
+     * by the runtime timed-preset fire path to contribute Layer 3 rows at fire time rather than
+     * at cue-apply time (immediate presets fan their assignments in during [applyCue]; timed
+     * presets stay effects-only until fired). Creates the cue's entry if absent.
+     */
+    fun appendCueAssignments(cueId: Int, additions: List<Layer3Resolver.Assignment>) {
+        if (additions.isEmpty()) return
+        mutateCueAssignments(cueId, toRemove = emptyList(), additions = additions)
+    }
+
+    /**
+     * Remove rows matching [toRemove] from [cueId]'s Layer 3 assignments by structural equality.
+     * Each element in [toRemove] removes exactly one matching occurrence — so
+     * appendCueAssignments(X) followed by removeCueAssignmentSubset(X) round-trips cleanly even
+     * when the cue independently asserts a value-equal row.
+     */
+    fun removeCueAssignmentSubset(cueId: Int, toRemove: List<Layer3Resolver.Assignment>) {
+        if (toRemove.isEmpty()) return
+        mutateCueAssignments(cueId, toRemove = toRemove, additions = emptyList())
+    }
+
+    /**
+     * Atomically remove [toRemove] and append [additions] in a single locked mutation with one
+     * republish. Used by the recurring timed-preset fire path — retracting the prior fire's
+     * rows and appending the new ones separately costs two full Layer 3 publishes per tick;
+     * this collapses them into one.
+     */
+    fun replaceCueAssignmentSubset(
+        cueId: Int,
+        toRemove: List<Layer3Resolver.Assignment>,
+        additions: List<Layer3Resolver.Assignment>,
+    ) {
+        if (toRemove.isEmpty() && additions.isEmpty()) return
+        mutateCueAssignments(cueId, toRemove = toRemove, additions = additions)
+    }
+
+    /**
+     * Shared implementation of append / remove-subset / replace-subset. Removes `toRemove` rows
+     * by structural equality (one occurrence per element), then adds `additions`. Drops the
+     * cue's entry (and fade-weight) if the list ends up empty. Republishes once on any change.
+     */
+    private fun mutateCueAssignments(
+        cueId: Int,
+        toRemove: List<Layer3Resolver.Assignment>,
+        additions: List<Layer3Resolver.Assignment>,
+    ) {
+        synchronized(cueAssignmentsLock) {
+            val existing = cueAssignments[cueId]
+            if (existing == null) {
+                if (additions.isEmpty()) return
+                cueAssignments[cueId] = ArrayList(additions)
+                republishLayer3Assignments()
+                return
+            }
+            val mutable = ArrayList<Layer3Resolver.Assignment>(existing.size + additions.size)
+            mutable.addAll(existing)
+            var changed = additions.isNotEmpty()
+            for (row in toRemove) {
+                if (mutable.remove(row)) changed = true
+            }
+            if (!changed) return
+            mutable.addAll(additions)
+            if (mutable.isEmpty()) {
+                cueAssignments.remove(cueId)
+                cueFadeWeights.remove(cueId)
+            } else {
+                cueAssignments[cueId] = mutable
+            }
+            republishLayer3Assignments()
+        }
+    }
+
     /** Drop all Layer 3 contributions from [cueId]. */
     fun removeCueAssignments(cueId: Int) {
         synchronized(cueAssignmentsLock) {

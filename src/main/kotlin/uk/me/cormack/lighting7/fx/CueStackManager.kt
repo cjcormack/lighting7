@@ -297,6 +297,7 @@ class CueStackManager(
             state.cueTriggerManager.activateTimedEffectsForCue(
                 cueId = cueData.cueId,
                 cueStackId = stackId,
+                priority = cueDerivedPriority(cueData),
                 timedPresets = timedPresets,
                 timedAdHocEffects = timedAdHoc,
                 scope = scope,

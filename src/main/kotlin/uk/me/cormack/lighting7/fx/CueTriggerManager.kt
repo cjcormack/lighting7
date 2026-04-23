@@ -5,8 +5,10 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.TogglePresetTarget
+import uk.me.cormack.lighting7.routes.buildLayer3AssignmentsForPreset
 import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
+import uk.me.cormack.lighting7.routes.toPropertyAssignmentDtos
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.ConcurrentHashMap
@@ -50,10 +52,15 @@ class CueTriggerManager(
      *
      * Call this after the cue's immediate effects have been applied. Only effects
      * with non-null delayMs or intervalMs should be passed here.
+     *
+     * [priority] is the cue-derived Layer 3 priority (see
+     * [uk.me.cormack.lighting7.routes.cueDerivedPriority]). Timed preset fires produce Layer 3
+     * rows at this priority so they compose consistently with the cue's apply-time rows.
      */
     fun activateTimedEffectsForCue(
         cueId: Int,
         cueStackId: Int?,
+        priority: Int,
         timedPresets: List<CuePresetApplicationDto>,
         timedAdHocEffects: List<CueAdHocEffectDto>,
         scope: CoroutineScope,
@@ -65,10 +72,36 @@ class CueTriggerManager(
         val jobs = mutableListOf<Job>()
         val effectIds = triggerEffectIds.getOrPut(cueId) { mutableListOf() }
 
-        // Launch timed preset applications
-        for (preset in timedPresets) {
-            val job = launchTimedAction(preset.delayMs, preset.intervalMs, preset.randomWindowMs, scope) {
-                applyPresetToTargets(preset.presetId, preset.targets, cueId, cueStackId, effectIds)
+        // Timed presets contribute their property assignments to Layer 3 atomically alongside
+        // spawning effects; recurring fires retract the prior tick's rows in the same
+        // mutation so the cue's assignment list does not accumulate duplicates. Cue
+        // deactivation wipes the whole cue's Layer 3 via [FxEngine.removeCueAssignments] —
+        // no explicit retract of the final fire is needed.
+        for (presetApp in timedPresets) {
+            val job = launchTimedActionWithState(
+                delayMs = presetApp.delayMs,
+                intervalMs = presetApp.intervalMs,
+                randomWindowMs = presetApp.randomWindowMs,
+                scope = scope,
+                initialState = emptyList<Layer3Resolver.Assignment>(),
+            ) { priorLayer3Rows ->
+                // One transaction per fire loads both effects and property assignments —
+                // splitting them would double the DB hit on recurring presets.
+                val loaded = transaction(state.database) {
+                    val preset = DaoFxPreset.findById(presetApp.presetId) ?: return@transaction null
+                    preset.effects to preset.toPropertyAssignmentDtos()
+                }
+                if (loaded == null) return@launchTimedActionWithState priorLayer3Rows
+                val (presetEffects, presetAssignments) = loaded
+
+                applyPresetToTargets(presetApp.presetId, presetApp.targets, cueId, cueStackId, presetEffects, effectIds)
+
+                val newRows = if (presetAssignments.isEmpty()) emptyList() else buildLayer3AssignmentsForPreset(
+                    state.show.fixtures, cueId, priority,
+                    presetApp.presetId, presetAssignments, presetApp.targets,
+                )
+                fxEngine.replaceCueAssignmentSubset(cueId, priorLayer3Rows, newRows)
+                newRows
             }
             if (job != null) jobs.add(job)
         }
@@ -197,6 +230,31 @@ class CueTriggerManager(
         randomWindowMs: Long?,
         scope: CoroutineScope,
         action: () -> Unit,
+    ): Job? = launchTimedActionWithState(
+        delayMs = delayMs,
+        intervalMs = intervalMs,
+        randomWindowMs = randomWindowMs,
+        scope = scope,
+        initialState = Unit,
+    ) { action() }
+
+    /**
+     * Launch a coroutine for a timed action that threads state across recurring fires.
+     *
+     * The state seed is [initialState]; each fire receives the state returned by the previous
+     * fire and emits the next state. For one-shot (delayed-only) actions the state is simply
+     * consumed by the single fire and never re-used.
+     *
+     * Used by the timed-preset path to carry the previous fire's Layer 3 contribution across
+     * ticks so each fire can retract it before appending the new one.
+     */
+    private fun <T> launchTimedActionWithState(
+        delayMs: Long?,
+        intervalMs: Long?,
+        randomWindowMs: Long?,
+        scope: CoroutineScope,
+        initialState: T,
+        action: (T) -> T,
     ): Job? {
         return when {
             // Recurring: fire at intervalMs with optional initial delay
@@ -204,10 +262,11 @@ class CueTriggerManager(
                 scope.launch {
                     // If there's also a delay, wait before starting the recurring loop
                     if (delayMs != null && delayMs > 0) delay(delayMs)
+                    var state = initialState
                     while (isActive) {
                         val actualInterval = computeRandomisedInterval(intervalMs, randomWindowMs)
                         delay(actualInterval)
-                        try { action() } catch (e: Exception) {
+                        try { state = action(state) } catch (e: Exception) {
                             logger.error("Error in recurring timed action", e)
                         }
                     }
@@ -217,7 +276,7 @@ class CueTriggerManager(
             delayMs != null && delayMs > 0 -> {
                 scope.launch {
                     delay(delayMs)
-                    try { action() } catch (e: Exception) {
+                    try { action(initialState) } catch (e: Exception) {
                         logger.error("Error in delayed timed action", e)
                     }
                 }
@@ -227,22 +286,19 @@ class CueTriggerManager(
     }
 
     /**
-     * Apply a preset to targets, creating FxInstances and adding to the engine.
-     * Used by both timed preset applications and immediate apply paths.
+     * Spawn effects for a timed preset application. Takes the preset's effects list preloaded
+     * by the caller so the fire path can share one DB transaction with the Layer 3 property-
+     * assignment lookup.
      */
-    internal fun applyPresetToTargets(
+    private fun applyPresetToTargets(
         presetId: Int,
         targets: List<CueTargetDto>,
         cueId: Int,
         cueStackId: Int?,
+        presetEffects: List<FxPresetEffectDto>,
         effectIds: MutableList<Long>,
     ) {
-        val presetEffects = transaction(state.database) {
-            val preset = DaoFxPreset.findById(presetId) ?: return@transaction null
-            preset.effects
-        }
-        if (presetEffects.isNullOrEmpty()) return
-
+        if (presetEffects.isEmpty()) return
         for (target in targets) {
             val toggleTarget = TogglePresetTarget(type = target.type, key = target.key)
             for (presetEffect in presetEffects) {

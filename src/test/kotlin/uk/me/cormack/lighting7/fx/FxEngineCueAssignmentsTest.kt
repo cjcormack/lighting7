@@ -123,4 +123,133 @@ class FxEngineCueAssignmentsTest {
         engine.removeEffectsForCue(10)
         assertNull(engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "dimmer")])
     }
+
+    @Test
+    fun `appendCueAssignments adds rows without clobbering existing`() {
+        val engine = newEngine()
+        engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 100u)))
+        // Append a second property for the same cue — must not remove the dimmer row.
+        val uvRow = slider(cueId = 10, priority = 1, propertyName = "uv", value = 180u)
+        engine.appendCueAssignments(10, listOf(uvRow))
+
+        val state = engine.layerResolver.currentLayer3State
+        val dimmer = state[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(100u.toUByte(), dimmer.value, "existing dimmer row survives append")
+        val uv = state[Layer3Resolver.Key("fx-1", "uv")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(180u.toUByte(), uv.value, "appended uv row is composed")
+    }
+
+    @Test
+    fun `appendCueAssignments creates entry for cue with no prior assignments`() {
+        val engine = newEngine()
+        // Timed preset fire is the first Layer 3 contribution for a cue whose own assignments
+        // are empty.
+        val uvRow = slider(cueId = 10, priority = 1, propertyName = "uv", value = 180u)
+        engine.appendCueAssignments(10, listOf(uvRow))
+
+        val uv = engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "uv")]
+        assertIs<Layer3Resolver.PropertyValue.Slider>(uv)
+        assertEquals(180u.toUByte(), uv.value)
+    }
+
+    @Test
+    fun `appendCueAssignments with empty list is a no-op`() {
+        val engine = newEngine()
+        engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 100u)))
+        engine.appendCueAssignments(10, emptyList())
+        val dimmer = engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "dimmer")]
+        assertIs<Layer3Resolver.PropertyValue.Slider>(dimmer)
+        assertEquals(100u.toUByte(), dimmer.value)
+    }
+
+    @Test
+    fun `removeCueAssignmentSubset round-trips with appendCueAssignments`() {
+        val engine = newEngine()
+        val apply = slider(cueId = 10, priority = 1, value = 100u)
+        engine.setCueAssignments(10, listOf(apply))
+        val uvRow = slider(cueId = 10, priority = 1, propertyName = "uv", value = 180u)
+        engine.appendCueAssignments(10, listOf(uvRow))
+        engine.removeCueAssignmentSubset(10, listOf(uvRow))
+
+        val state = engine.layerResolver.currentLayer3State
+        assertNull(state[Layer3Resolver.Key("fx-1", "uv")], "uv row retracted")
+        val dimmer = state[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(100u.toUByte(), dimmer.value, "apply-time dimmer row survives subset removal")
+    }
+
+    @Test
+    fun `removeCueAssignmentSubset only removes one matching occurrence per request`() {
+        val engine = newEngine()
+        // Two structurally-equal rows (e.g. apply-time preset + timed preset producing the
+        // same row). Removing the "timed" instance should leave the "apply-time" one.
+        val row = slider(cueId = 10, priority = 1, value = 100u)
+        engine.setCueAssignments(10, listOf(row))
+        engine.appendCueAssignments(10, listOf(row))
+        engine.removeCueAssignmentSubset(10, listOf(row))
+
+        val dimmer = engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "dimmer")]
+        assertIs<Layer3Resolver.PropertyValue.Slider>(dimmer)
+        assertEquals(100u.toUByte(), dimmer.value, "one occurrence of the row still contributes")
+    }
+
+    @Test
+    fun `removeCueAssignmentSubset drops cue entry when list becomes empty`() {
+        val engine = newEngine()
+        val uvRow = slider(cueId = 10, priority = 1, propertyName = "uv", value = 180u)
+        engine.appendCueAssignments(10, listOf(uvRow))
+        engine.removeCueAssignmentSubset(10, listOf(uvRow))
+        assertTrue(engine.layerResolver.currentLayer3State.isEmpty())
+    }
+
+    @Test
+    fun `removeCueAssignmentSubset on unknown cue is a no-op`() {
+        val engine = newEngine()
+        engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 100u)))
+        // cue 99 has no assignments — removal must not touch cue 10.
+        engine.removeCueAssignmentSubset(99, listOf(slider(cueId = 99, priority = 1, value = 200u)))
+
+        val dimmer = engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "dimmer")]
+        assertIs<Layer3Resolver.PropertyValue.Slider>(dimmer)
+        assertEquals(100u.toUByte(), dimmer.value)
+    }
+
+    @Test
+    fun `replaceCueAssignmentSubset atomically retracts and appends`() {
+        val engine = newEngine()
+        val applyRow = slider(cueId = 10, priority = 1, value = 100u)
+        engine.setCueAssignments(10, listOf(applyRow))
+
+        val firstFire = slider(cueId = 10, priority = 1, propertyName = "uv", value = 100u)
+        val secondFire = slider(cueId = 10, priority = 1, propertyName = "uv", value = 200u)
+        engine.appendCueAssignments(10, listOf(firstFire))
+        // Simulates the recurring-fire path: retract prior + append new in one shot.
+        engine.replaceCueAssignmentSubset(10, toRemove = listOf(firstFire), additions = listOf(secondFire))
+
+        val state = engine.layerResolver.currentLayer3State
+        val dimmer = state[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(100u.toUByte(), dimmer.value, "apply-time row preserved")
+        val uv = state[Layer3Resolver.Key("fx-1", "uv")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(200u.toUByte(), uv.value, "second fire wins")
+    }
+
+    @Test
+    fun `recurring timed-preset fire pattern does not accumulate rows`() {
+        val engine = newEngine()
+        val applyRow = slider(cueId = 10, priority = 1, value = 100u)
+        engine.setCueAssignments(10, listOf(applyRow))
+
+        val timedRow = slider(cueId = 10, priority = 1, propertyName = "uv", value = 180u)
+        var prior: List<Layer3Resolver.Assignment> = emptyList()
+        repeat(3) {
+            engine.replaceCueAssignmentSubset(10, toRemove = prior, additions = listOf(timedRow))
+            prior = listOf(timedRow)
+        }
+
+        val state = engine.layerResolver.currentLayer3State
+        // Dimmer still at 100 (apply-time row), uv at 180 (latest timed fire), no duplicates.
+        val dimmer = state[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(100u.toUByte(), dimmer.value)
+        val uv = state[Layer3Resolver.Key("fx-1", "uv")] as Layer3Resolver.PropertyValue.Slider
+        assertEquals(180u.toUByte(), uv.value)
+    }
 }

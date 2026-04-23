@@ -215,26 +215,6 @@ application), resolving property-like. Cue palette already flows through via
 `FxEngine.setCuePalette`; extend to carry the originating preset's palette
 through the `buildLayer3AssignmentsForPreset` path.
 
-### `FU-BE-TIMED-PRESETS-LAYER3` — Timed preset property assignments contribute Layer 3
-
-**Status**: Ready
-**Origin**: Cue-authoring Phase 3, 2026-04-21
-
-`applyCue` immediate presets (no `delayMs` / `intervalMs`) fan their property
-assignments into Layer 3 alongside the cue's own assignments. Delayed /
-recurring preset applications stay effects-only — `FxEngine.setCueAssignments`
-is a **replace** operation, so a runtime "append Layer 3 at fire time" path
-needs new engine API.
-
-**Fix shape**:
-- Add `FxEngine.appendCueAssignments(cueId, additions)` that composes with
-  the existing stored list instead of replacing it.
-- Wire `CueTriggerManager`'s timed preset fire path to call
-  `appendCueAssignments` at fire time, and `removeCueAssignmentSubset(cueId,
-  keys)` on stop.
-- Document semantics — operators should expect timed presets to contribute
-  layer state from fire-time, not from cue-apply time.
-
 ### `FU-BE-PRESET-PER-ELEMENT` — Preset per-head / per-element assignments
 
 **Status**: Ready (scope audit needed)
@@ -515,6 +495,18 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
 
+- `FU-BE-TIMED-PRESETS-LAYER3` — 2026-04-23 — Added
+  `FxEngine.appendCueAssignments(cueId, additions)` and
+  `removeCueAssignmentSubset(cueId, toRemove)` (structural-equality
+  one-per-element remove). Wired `CueTriggerManager`'s timed-preset fire path
+  to append the preset's property assignments to Layer 3 at fire time and
+  retract the prior fire's rows on each recurring tick so the cue's assignment
+  list does not accumulate duplicates. Cue teardown still calls
+  `removeCueAssignments(cueId)` which clears everything in one shot —
+  `removeCueAssignmentSubset` is only needed for the recurring re-fire path.
+  `activateTimedEffectsForCue` now takes a `priority: Int` parameter (passed
+  from `cueDerivedPriority(cueData)` at both call sites) so timed and
+  apply-time rows share composition priority.
 - `FU-FE-EXT-COLOUR-CHANNELS` — 2026-04-23 — Added W/A/UV sliders to
   `ColourPickerPopover` (lighting-react), gated on
   `ColourPropertyDescriptor.whiteChannel` / `amberChannel` / `uvChannel`

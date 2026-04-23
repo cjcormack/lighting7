@@ -467,6 +467,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                         state.cueTriggerManager.activateTimedEffectsForCue(
                             cueId = resource.cueId,
                             cueStackId = null,
+                            priority = cueDerivedPriority(cueData),
                             timedPresets = timedPresets,
                             timedAdHocEffects = timedAdHoc,
                             scope = kotlinx.coroutines.GlobalScope,
@@ -1066,9 +1067,11 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     val priority = cueDerivedPriority(cueData)
 
     // Load each immediate preset once — effects + property assignments in a single DB hit.
-    // Timed preset applications (delayMs/intervalMs) are handled entirely by CueTriggerManager
-    // and don't contribute Layer 3 — setCueAssignments is a replace, so an at-fire append path
-    // would need new engine API.
+    // Timed preset applications (delayMs/intervalMs) are handled entirely by CueTriggerManager;
+    // at fire time they append their property assignments to this cue's Layer 3 via
+    // [FxEngine.appendCueAssignments] so they compose like the cue's apply-time rows. The
+    // contribution goes live at fire time, not cue-apply time — see the timed preset wiring
+    // in [CueTriggerManager.activateTimedEffectsForCue].
     data class ImmediatePreset(
         val presetId: Int,
         val targets: List<CueTargetDto>,
