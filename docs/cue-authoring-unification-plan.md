@@ -17,7 +17,39 @@ This plan spans multiple sessions across two repos (Kotlin backend `lighting7` +
 
 ## Status
 
-**Phase**: **Phase 6 complete (landed 2026-04-22).**
+**Phase**: **Phase 7 complete (landed 2026-04-23).**
+New `PropertyChannelWriter` object
+(`src/main/kotlin/uk/me/cormack/lighting7/fx/PropertyChannelWriter.kt`) resolves a typed
+`Layer3Resolver.PropertyValue` + `Fixture` + property name to a list of
+`PropertyChannelResolver.ChannelWrite`. Handles `Slider`, `Setting`, `Colour` (R/G/B plus
+UV via `WithUv`), and `Position` (via `WithPosition`). `FxEngine` gains four new public
+APIs — `writeLayer4Property` / `clearLayer4Property` for single fixtures and
+`writeLayer4GroupProperty` / `clearLayer4GroupProperty` for groups — plus a private
+`publishLayer4ForKeys` helper that mirrors `publishLayer3ToControllers` but scopes the
+publish to a caller-supplied key set (avoids walking every Layer 3 assignment on each
+Layer 4 write). Publish reuses `LayerResolver.fallbackFor`, so Layer 3 cues correctly
+override Layer 4 and running effects continue to paint. `FxEngine.hasCueAssignments` was
+deleted — preset-toggle was the only external caller, and the internal
+`cueAssignments.containsKey` one-liner stays.
+
+`togglePresetOnTargets` is migrated off the Layer-3 pseudo-cue onto `writeLayer4Property`
+per expanded `(fixture, propertyName)` pair. Toggle state lives in a file-scope
+`ConcurrentHashMap<Int, List<PresetToggleWrite>>` mutated via `compute(presetId) { ... }`
+so decide-apply-record is atomic per preset. The apply path reuses
+`buildLayer3AssignmentsForPreset` to get parsed `PropertyValue`s and expanded member
+keys — no logic duplicated. Stale-reference risk (fixture rekeyed mid-session) matches
+the pre-Phase-7 behaviour and is documented in code.
+
+Colour `.white` and `.amber` remain dropped — no `WithWhite` / `WithAmber` traits exist
+yet. A new **Phase 8** stub covers the end-to-end W/A gap (traits, fixture retrofits,
+resolver/composition extension, UI picker).
+
+Tests: 17 new unit cases on `PropertyChannelWriter` (per-variant plus round-trip against
+the cue-apply pipeline) + 5 new "Worked Example 6" cases in `FxEnginePipelineTest`
+covering the Layer 4 cascade (write, updateChannel last-write-wins, cue override, clear,
+slider clear). `./gradlew test` green — 679 tests, 0 failures.
+
+Prior milestone — **Phase 6 complete (landed 2026-04-22):**
 `AssignmentHealth` sealed class (Ok / MissingFixture / MissingGroup /
 MissingProperty) in `src/main/kotlin/uk/me/cormack/lighting7/fx/AssignmentHealth.kt`
 + shared `PersistedFixtureReferenceValidator` in the same package expose
@@ -88,14 +120,14 @@ See the Change log for durable invariants and engine surface.
 ~~**Colour picker in cue-edit mode (Phase 1 plumbing limitation)**~~ — **Addressed in Phase 2 (2026-04-21)**. `ColourSwatch` / `VirtualDimmerSlider` now accept a `fixtureKey` prop (threaded from `FixtureContent` / per-head `PropertiesList`) and a new `useUpdateFixtureColour` hook routes RGB writes via `cueEdit.setProperty { propertyName: 'rgbColour' }` in cue mode (W/A/UV still use `setChannel` — the backend accepts those). Mirrors the existing `useUpdateGroupColour` pattern; no backend changes.
 
 **Next actions:**
-1. **Phase 7** — Property-level Layer 4 writer, migrating preset-toggle off the Phase-3 pseudo-cue. See Phase 7 section.
+1. **Phase 8** — Extended colour W/A end-to-end (traits + fixtures + writer + composition + UI).
+   See Phase 8 section.
 2. **Phase 3 follow-ups** (all flagged 2026-04-21; see Phase 3 section for detail):
    - Palette-resolution cascade for presets — preset palette → cue palette → global, resolved property-like. Backend now ships the data field (`fx_presets.palette`); cascade resolution still matches Phase 2's "global palette only" semantics.
    - Timed preset property assignments — `applyCue` immediate presets contribute Layer 3, delayed/recurring preset applications do NOT. `FxEngine.setCueAssignments` is a replace operation; a timed-fire append path needs new engine API. Document limitation.
    - Hard `NOT NULL` on `fx_presets.fixture_type` — backfill window first, then tighten the DB column. Runtime enforcement (input validation) already rejects nulls as of Phase 3 backend.
    - Preset per-head / per-element assignments — schema would need a nullable `target_key` column (not yet added). UI stays single-head in Phase 3.
-   - "Preview on selection" live-apply affordance for the preset editor — deferred from Phase 3 scope.
-   - ~~Preset-toggle Layer-4 true direct-write path~~ — **Promoted to its own [Phase 7](#phase-7--property-level-layer-4-writer)** (2026-04-21). Phase 3 backend implements preset-toggle as a **Layer 3 pseudo-cue** (negative `cueId = -presetId`, priority 0) for pragmatism; Phase 7 builds the reusable `PropertyValue → channel-writes` resolver and migrates toggle onto a real Layer-4 path. Observable behaviour of the Phase-3 workaround matches Layer-4 for the common case; divergence only shows when an `updateChannel` lands on a channel the preset toggle is asserting (Phase-3 pseudo-cue wins; Phase-7 Layer-4 channel-keyed last-write-wins puts the manual drag on top).
+   - "Preview on selection" live-apply affordance for the preset editor — deferred from Phase 3 scope. The `PropertyChannelWriter` landed in Phase 7 is the right resolver to drive this; implementation is now unblocked.
 3. **Integration test**: PATCH + snapshot-from-live + cueEdit round-trip through an in-memory HTTP harness — still blocked on a DB test-harness (Phase 5's FxEngine-level pipeline test covers the composition semantics in isolation; the HTTP-path round-trip is a separate gap).
 4. **moveInDark during outgoing fade** (spec'd, not yet implemented). The current linear interp path handles basic position fades; the "pre-apply incoming position during outgoing fade when outgoing intensity is 0 at end" affordance is deferred. Scope small — the resolver already knows the moveInDark flag on each `Assignment`. Good candidate for a standalone follow-up session once a real moving-head fixture is on the test rig.
 5. **Effect/Preset picker UX polish** (deferred from 2d). The Effects/Presets tabs inside `CueTargetDetail` still open `EffectFlow` / `PresetPicker` at their target-picker step even though a card selection is already active — redundant and confusing. Extract `EffectConfigureStep` / `PresetPickStep` / `TimingFields` into `editor/shared/` and drop the target-picker step when opened from a selected card.
@@ -111,7 +143,8 @@ See the Change log for durable invariants and engine surface.
 | 4 | Program view inline editor + "Grab live state" snapshot action | Done (2026-04-22) |
 | 5 | **FX pipeline integration harness**: rig stub + end-to-end tests covering the Phase-0 layer cascade with real Layer-3 data, unlocking a reusable benchmark + integration test suite | Done (2026-04-22) |
 | 6 | **Persisted-reference validation for cue assignments**: dead-reference diagnostic for `CuePropertyAssignment` rows (fixture rename / removal), paralleling control-surface Phase 7 | Done (2026-04-22) |
-| 7 | **Property-level Layer 4 writer**: reusable `PropertyValue → channel-writes` resolver + migrate preset-toggle off the Phase-3 pseudo-cue onto a real Layer-4 path | Not started |
+| 7 | **Property-level Layer 4 writer**: reusable `PropertyValue → channel-writes` resolver + migrate preset-toggle off the Phase-3 pseudo-cue onto a real Layer-4 path | Done (2026-04-23) |
+| 8 | **Extended colour W/A end-to-end**: introduce `WithWhite` / `WithAmber` traits, retrofit fixtures, wire through the resolver / composition / UI | Not started |
 
 ---
 
@@ -168,7 +201,7 @@ Confirmed with the user 2026-04-21:
 
 Confirmed with the user before Phase 3 backend work started:
 
-- **Standalone preset-toggle contributes property values**, not just effects. Operator expectation: toggling "red preset" makes the lights red. Phase 3 backend implements this as a **Layer 3 pseudo-cue** (negative `cueId = -presetId`, priority 0) rather than a true Layer-4 direct-write — same observable behaviour, reuses the full Layer 3 pipeline (multi-channel resolver, group expansion, specificity, DMX publish). A true Layer-4 property-level writer is deferred to follow-up.
+- **Standalone preset-toggle contributes property values**, not just effects. Operator expectation: toggling "red preset" makes the lights red. Phase 3 backend shipped this as a **Layer 3 pseudo-cue** (negative `cueId = -presetId`, priority 0) as a pragmatic workaround. **Replaced in Phase 7** (2026-04-23) by a true Layer-4 direct-write via `FxEngine.writeLayer4Property` + per-preset state tracking; pseudo-cue logic removed.
 - **`fixtureType` required on presets**. Enforced at input validation (POST/PUT reject blank). DB column stays nullable during a backfill window; hard `NOT NULL` lands in a follow-up.
 - **No legacy preset static-effect migration** — user confirms no presets currently use `StaticValue` / `StaticSetting` effect entries in JSON. Skip the `MigrateLegacyPresetStaticEffects` mirror of the cue-side migration.
 - **Presets own a palette** with the same shape as cues. Preset palette refs should resolve via the same composition-model cascade as property values — preset palette → cue palette → global. Phase 3 ships the `fx_presets.palette` data field; the cascade resolver change is scoped as a follow-up.
@@ -584,7 +617,7 @@ Remove path covers the fixture-rename workflow cleanly and is discoverable.
 
 ---
 
-## Phase 7 — Property-level Layer 4 writer
+## Phase 7 — Property-level Layer 4 writer (done 2026-04-23)
 
 **Goal**: add a reusable `PropertyValue → List<ChannelWrite>` resolver and migrate any
 non-cue property-level stage contributions (today: preset-toggle) from the Layer-3
@@ -623,23 +656,24 @@ ever shifts. See the Phase 3 backend change-log entry.
 
 ### Phase 7 work
 
-- [ ] Design the resolver's input shape — `Fixture` + property name + `PropertyValue`, or a
-  pre-resolved `FxTarget`? Favour `Fixture` + property name + `PropertyValue` to keep the
-  helper standalone (not effect-engine coupled).
-- [ ] Implement `PropertyChannelWriter` covering all four `PropertyValue` variants.
-  Round-trip tests against the existing `parseExtendedColour` / `Layer3Resolver.parseAssignmentValue`
-  value parsers — if you can parse a string into a `PropertyValue` and resolve it to
-  channels, the channels should write the same DMX bytes the cue-apply pipeline would have
-  produced for the same assignment.
-- [ ] Add `FxEngine.writeLayer4Property` / `clearLayer4Property` and wire through to
-  `DirectWriteStore` + the controller publish path used by `updateChannel`.
-- [ ] Migrate `togglePresetOnTargets` — remove the pseudo-cue block, call
-  `writeLayer4Property` per (target, preset assignment) on toggle-on, `clearLayer4Property`
-  on toggle-off. Toggle-state check shifts from `hasCueAssignments(-presetId)` to a new
-  per-preset lookup (e.g. a `ConcurrentHashMap<Int, Set<ChannelKey>>` tracking which
-  channels each toggled preset is currently writing).
-- [ ] Update Open Question #8 → "Resolved in Phase 7".
-- [ ] Phase 5 test-harness extension for Layer-4 property writes.
+- [x] Design the resolver's input shape — chose `Fixture` + property name +
+  `PropertyValue`. `PropertyChannelWriter` stays standalone (not effect-engine coupled).
+- [x] Implement `PropertyChannelWriter` covering all four `PropertyValue` variants.
+  Round-trip test in `PropertyChannelWriterTest` compares writer bytes against the cue-apply
+  pipeline's bytes (via `FxEngine.setCueAssignments` + `MockDmxController`).
+- [x] Add `FxEngine.writeLayer4Property` / `clearLayer4Property` (+ group overloads) wired
+  to `DirectWriteStore` and the `LayerResolver.fallbackFor` cascade via a new private
+  `publishLayer4ForKeys` helper.
+- [x] Migrate `togglePresetOnTargets` — pseudo-cue block removed; per-preset
+  `presetToggleStates: ConcurrentHashMap<Int, List<PresetToggleWrite>>` tracks expanded
+  `(fixtureKey, propertyName)` writes so toggle-off can clear each precisely. All decide /
+  apply / record happens inside `compute(presetId) { ... }` for per-preset atomicity.
+- [x] `FxEngine.hasCueAssignments` deleted — preset-toggle was the only external caller.
+- [x] Open Question #8 marked resolved.
+- [x] `FxEnginePipelineTest` extended with Worked Example 6 (five cases) covering the
+  Layer-4 cascade: colour write paints R/G/B/UV, `updateChannel` wins last-write-wins,
+  Layer 3 cue overrides Layer 4, clear cascades back to Layer 5, slider write/clear
+  round-trip.
 
 ### Phase 7 files
 
@@ -673,10 +707,62 @@ unblocked once the resolver exists — layer that on as a small follow-up if des
 
 - **Per-owner tracking in `DirectWriteStore`**: toggle-off needs to know which channels
   each preset toggled — either we track this in `togglePresetOnTargets` (ConcurrentHashMap
-  keyed by `presetId`), or we give `DirectWriteStore` an "owner" concept. Cleaner to keep
-  `DirectWriteStore` simple and track in the toggle caller; confirm before implementing.
-- **Fold "Preview on selection" into Phase 7 or split?** Phase 3 deferred this affordance;
-  it uses the same resolver. Probably leave as a Phase 7 stretch.
+  keyed by `presetId`), or we give `DirectWriteStore` an "owner" concept. **Resolved:** kept
+  `DirectWriteStore` simple; tracking lives in `projectFxPresets.kt` via `presetToggleStates`.
+- **Fold "Preview on selection" into Phase 7 or split?** **Resolved: split.** Phase 7 ships
+  the resolver; the frontend affordance remains a Phase 3 follow-up, unblocked but not
+  landed here.
+
+---
+
+## Phase 8 — Extended colour: White / Amber end-to-end
+
+**Goal**: close the `ExtendedColour.white` / `.amber` gap surfaced by Phase 7. Today RGB + UV
+round-trip through traits (`WithColour`, `WithUv`), but white / amber channels are written
+only via the `@FixtureProperty(category = WHITE|AMBER, bundleWithColour = true)` slider
+convention — there are no `WithWhite` / `WithAmber` traits and nothing in the Layer-4 write
+path emits them. Phase 7 documents this as "silently dropped" with a TODO.
+
+**Motivation**: users with RGBWAU fixtures (HexFixture, WhexFixture) can author white / amber
+via per-slider assignments, but not via a single "set this colour" direct-manipulation
+action. Palette-resolution and colour pickers stop at RGB. A proper fix touches traits,
+the resolver, composition (`Layer3Resolver.composeHtp` already composes W/A but nothing
+consumes), and the frontend colour picker UX.
+
+### Entry criteria
+- Phase 7 complete.
+
+### Exit criteria
+- New `WithWhite` / `WithAmber` fixture traits symmetric to `WithUv`. Retrofit every
+  fixture in `fixture/dmx/` whose patch has a white or amber slider (HexFixture,
+  WhexFixture, and any `bundleWithColour` slider uncovered during the audit).
+- `PropertyChannelWriter` emits `.white` / `.amber` channels for `Colour` values on
+  fixtures implementing the new traits. Drops silently otherwise (same contract as UV).
+- `ColourTarget` (`FxTarget.kt`) continues to route W/A via category-based property
+  lookup — no behaviour change unless the audit finds a fixture with a white/amber
+  channel that is NOT annotated `bundleWithColour = true`, in which case align them.
+- Frontend `ColourPickerPopover` (`lighting-react`) exposes a white and amber slider when
+  the target fixture's capability descriptor reports them. Palette entries accept the
+  extended serialised form (`#rrggbb;w128;a64`) end-to-end.
+- `parseExtendedColour` round-trip is already covered, but add tests asserting writer +
+  frontend pipeline serialise / parse all six channels.
+
+### Phase 8 risks
+- Legacy fixtures might declare a `whiteColour` / `amberColour` slider without an override
+  property name, meaning the trait retrofit needs to survey each and decide whether the
+  trait property points at the existing slider or whether a new convention replaces it.
+- Group property aggregators (`GroupColour` etc.) may need W/A accessors to keep parity
+  with single-fixture semantics.
+
+### Phase 8 files (expected)
+- New: `src/main/kotlin/uk/me/cormack/lighting7/fixture/trait/WithWhite.kt`
+- New: `src/main/kotlin/uk/me/cormack/lighting7/fixture/trait/WithAmber.kt`
+- Updated: `fixture/dmx/HexFixture.kt`, `fixture/dmx/WhexFixture.kt`, any others surfaced
+  during audit.
+- Updated: `src/main/kotlin/uk/me/cormack/lighting7/fx/PropertyChannelWriter.kt`
+- Updated: frontend `lighting-react/src/components/colour/ColourPickerPopover.tsx` (or
+  equivalent).
+- Tests: extend `PropertyChannelWriterTest` with W/A cases; extend frontend visual tests.
 
 ---
 
@@ -724,7 +810,7 @@ Flag these to the user before implementing.
 5. ~~**Layer 3 fade behaviour during cue crossfades**~~ — **Resolved 2026-04-17**. Per-category rules: sliders linear, colour RGB-linear, settings snap at 50% fade progress, position with `moveInDark` pre-applies during outgoing fade-out when outgoing intensity is 0 at end. Specified in [docs/lighting-composition-model.md](lighting-composition-model.md).
 6. **Phase 2 effects-overlay preview affordance** — how prominent? Just a badge, or a "show base only" toggle? Most relevant in Live mode; less important in Blind.
 7. **Blind→Live "apply to stage" safety**: toggling Blind→Live mid-session pushes the cue's current state to the stage. Is that safe to do unconditionally, or should it require confirmation ("this will override the live output")?
-8. ~~**Preset-toggle layer placement (Phase 3)**~~ — **Deferred to [Phase 7](#phase-7--property-level-layer-4-writer) (2026-04-21).** Toggle currently uses a Layer 3 pseudo-cue (negative cueId, priority 0). Phase 7 builds the `PropertyValue → channel-writes` resolver and migrates toggle onto a real Layer-4 direct-write path. Divergence between the two approaches only shows when `updateChannel` lands on a channel the toggle is asserting (pseudo-cue wins today; Layer-4 last-write-wins after Phase 7).
+8. ~~**Preset-toggle layer placement (Phase 3)**~~ — **Resolved in Phase 7 (2026-04-23).** `PropertyChannelWriter` + `FxEngine.writeLayer4Property` / `clearLayer4Property` give preset-toggle a true Layer-4 path; toggle state is tracked in an in-memory map keyed by `presetId`. `updateChannel` now last-write-wins on any channel a toggled preset is asserting (pseudo-cue won before).
 
 ## Handover checklist (end of every session)
 
@@ -739,6 +825,77 @@ Flag these to the user before implementing.
 
 Detailed per-session narration lives in git. This section captures durable invariants and
 gotchas that would cost time to rediscover.
+
+### Phase 7 — Property-level Layer 4 writer (landed 2026-04-23)
+
+Closes Open Question #8 and removes the Phase-3 Layer-3 pseudo-cue workaround.
+
+**`PropertyChannelWriter` is `fx`-package, not `midi`.** Deliberately parallel to the
+existing `midi.PropertyChannelResolver`: the MIDI-side resolver takes a 7-bit value and
+scales to DMX; the new FX-side writer takes a full-range `Layer3Resolver.PropertyValue`
+(sealed: Slider / Setting / Colour / Position) and emits raw channel writes without
+scaling. They share the `ChannelWrite` record — the writer reuses
+`PropertyChannelResolver.ChannelWrite` rather than defining a parallel shape. No duplicate
+data class.
+
+**Colour → R/G/B + UV only.** `ExtendedColour.white` and `.amber` are silently dropped.
+No `WithWhite` / `WithAmber` traits exist; the plan's original "Colour R/G/B + optional
+W/A/UV" target was downgraded to "R/G/B + optional UV" after a trait audit. The gap is
+tracked end-to-end as **Phase 8**.
+
+**Publish path: scoped `publishLayer4ForKeys` helper, not a full Layer-3 republish.**
+`FxEngine.writeLayer4Property` writes the channels into `DirectWriteStore`, then calls the
+new private `publishLayer4ForKeys(Set<Layer3Resolver.Key>)` which mirrors
+`publishLayer3ToControllers` but walks only the caller-supplied keys. Reusing
+`republishLayer3Assignments` would walk every active cue's assignments — overkill for a
+single-property write. `publishLayer4ForKeys` holds `cueAssignmentsLock` for the
+duration so `fallbackFor` doesn't race a concurrent Layer 3 republish.
+
+**Layer 3 overrides Layer 4 "for free".** The clear path doesn't need to know whether a
+cue is covering the property — `LayerResolver.fallbackFor` naturally consults Layer 3
+first, and `resetToFallback` writes whatever it returned. So clearing a Layer 4 colour
+while a cue still asserts the property just re-exposes the cue colour, which matches
+Phase 3 semantics exactly.
+
+**Clear path infers target kind from the property, not the value.** `clearLayer4Property`
+has no `PropertyValue` in hand, so a new private `inferTargetForProperty(fixture, key)`
+helper reflects the property and dispatches by raw DMX type (`DmxSlider` → `SliderTarget`,
+`DmxColour` → `ColourTarget`, `DmxFixtureSetting` → `SettingTarget`; synthetic `"position"`
+name + `WithPosition` → `PositionTarget`). Mirrors the pattern already used by
+`PropertyChannelResolver.describeFixtureProperty`.
+
+**Preset-toggle state tracking: caller-side map, not per-owner `DirectWriteStore`.**
+`projectFxPresets.kt` owns a file-scope
+`ConcurrentHashMap<Int, List<PresetToggleWrite>>`. `PresetToggleWrite` stores only the
+expanded `(fixtureKey, propertyName)` pair — group expansion happens at toggle-on time
+via reuse of `buildLayer3AssignmentsForPreset`. Mutations go through
+`ConcurrentHashMap.compute(presetId) { _, existing -> ... }` so decide / apply / record
+happens atomically per preset. The alternative ("teach `DirectWriteStore` about owners")
+would have coupled the store to a concept — ownership — that no other caller needs.
+
+**`FxEngine.hasCueAssignments` deleted.** Preset-toggle was the only external caller.
+The internal `cueAssignments.containsKey(cueId)` one-liner stays; exposing it was never
+load-bearing. No migration needed.
+
+**Reuse of `buildLayer3AssignmentsForPreset` on the apply path.** The toggle apply loop
+still calls the same builder Phase 3 introduced — it walks targets, expands groups,
+canonicalises property names, and parses values via `Layer3Resolver.parseAssignmentValue`.
+Phase 7 just intercepts the resulting `Layer3Resolver.Assignment` rows before they'd go
+to `setCueAssignments`, converts each to a `writeLayer4Property(fixture, name, value)`
+call, and records the pair for clear. One builder, two call sites.
+
+**Stale-reference risk stays.** If a fixture gets rekeyed between toggle-on and
+toggle-off, the recorded `PresetToggleWrite` references a fixture that no longer exists;
+`clearPresetToggleWrite` silently skips that entry and the channels leak. Same risk as
+the pre-Phase-7 pseudo-cue approach (which also keyed off `cueId = -presetId` against a
+stale fixture key). Documented in code, not fixed in Phase 7.
+
+**Test harness.** `PropertyChannelWriterTest` is 17 cases: per-variant positive tests,
+unsupported-property negatives, value-kind / property-kind mismatch, `channelsFor`
+enumeration for the clear path, and two round-trip tests comparing writer bytes to
+`FxEngine.setCueAssignments` + `MockDmxController.currentValues` on the same fixture.
+`FxEnginePipelineTest` gains five "Worked Example 6" cases covering the Layer 4
+cascade end-to-end. Full suite: 679 tests green.
 
 ### Phase 5 — FX pipeline integration harness (landed 2026-04-22)
 
@@ -1001,18 +1158,14 @@ attached to the cue. `addPresetApplication` in LIVE mode invokes `republishLayer
 spawning preset effects, so the preset-contributed baseline lands before effects do — matches
 `applyCue`'s ordering.
 
-**Preset toggle Layer 3 pseudo-cue.** `togglePresetOnTargets` now also writes property
-assignments to Layer 3 under a **negative synthetic `cueId = -presetId`** at priority 0.
-Rationale: the user requested "Layer 4 direct-write", but a true property-level Layer-4
-writer would need a `PropertyValue → channel-writes` resolver that doesn't exist (current
-`DirectWriteStore.putProperty` is 7-bit MIDI scalar, colour/position not handled). The
-pseudo-cue approach reuses the full Layer 3 pipeline; real cues (priority ≥ 1) still
-override; untoggle calls `removeCueAssignments(-presetId)` to clear. New
-`FxEngine.hasCueAssignments(cueId)` query helper checks whether the pseudo-cue is active,
-so toggle state is derivable from engine state alone (mirrors the existing
-`isPresetActiveOnTarget` effect-tag check). **Promoted to [Phase 7](#phase-7--property-level-layer-4-writer)**
-(2026-04-21) to build the resolver and migrate toggle onto a real Layer-4 path — the
-pseudo-cue shortcut stays until then.
+**Preset toggle Layer 3 pseudo-cue.** `togglePresetOnTargets` initially wrote property
+assignments to Layer 3 under a **negative synthetic `cueId = -presetId`** at priority 0 — a
+pragmatic workaround because a true property-level Layer-4 writer didn't exist yet
+(`DirectWriteStore.putProperty` was 7-bit MIDI scalar only). **Replaced in
+[Phase 7](#phase-7--property-level-layer-4-writer) (2026-04-23):** `PropertyChannelWriter`
++ `FxEngine.writeLayer4Property` now provide the real Layer-4 path; preset-toggle tracks
+state in a per-preset map (`presetToggleStates`) and clears each recorded write on toggle-off.
+`FxEngine.hasCueAssignments` was deleted with the pseudo-cue path.
 
 **`AiTools.kt` signature change.** `togglePresetOnTargets` now takes a
 `presetPropertyAssignments: List<FxPresetPropertyAssignmentDto>` parameter; callers pass

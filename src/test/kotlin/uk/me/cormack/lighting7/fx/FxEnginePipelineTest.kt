@@ -439,6 +439,105 @@ class FxEnginePipelineTest {
         assertEquals(40u.toUByte(), rig.controller.currentValues[1])
     }
 
+    // ─── Worked Example 6: Layer 4 property-level writes ────────────────────
+
+    @Test
+    fun `Worked Example 6 — writeLayer4Property paints RGB and UV channels`() {
+        val rig = newRig(firstChannel = 1)
+        val hex = rig.fixtures.fixture<HexFixture>("hex-a")
+
+        val red = ExtendedColour(Color(255, 0, 0), uv = 128u)
+        rig.engine.writeLayer4Property(hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+
+        // Hex R/G/B at channels 2/3/4, UV at channel 7.
+        assertEquals(255u.toUByte(), rig.controller.currentValues[2], "red painted")
+        assertEquals(0u.toUByte(), rig.controller.currentValues[3], "green painted")
+        assertEquals(0u.toUByte(), rig.controller.currentValues[4], "blue painted")
+        assertEquals(128u.toUByte(), rig.controller.currentValues[7], "uv painted via WithUv")
+    }
+
+    @Test
+    fun `Worked Example 6 — updateChannel after Layer 4 write wins (channel-keyed last-write-wins)`() {
+        val rig = newRig(firstChannel = 1)
+        val hex = rig.fixtures.fixture<HexFixture>("hex-a")
+
+        val red = ExtendedColour(Color(255, 0, 0))
+        rig.engine.writeLayer4Property(hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+        assertEquals(255u.toUByte(), rig.controller.currentValues[2])
+
+        // Simulate updateChannel on the green channel — controller write + directWriteStore put.
+        rig.directWriteStore.put(0, 3, 128u)
+        rig.controller.setValue(3, 128u, 0L)
+        assertEquals(128u.toUByte(), rig.controller.currentValues[3], "manual channel write wins")
+
+        // Writing the same colour again overwrites the green channel back to 0.
+        rig.engine.writeLayer4Property(hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+        assertEquals(0u.toUByte(), rig.controller.currentValues[3], "Layer 4 re-write stomps previous")
+    }
+
+    @Test
+    fun `Worked Example 6 — Layer 3 cue overrides Layer 4 preset on same property`() {
+        val rig = newRig(firstChannel = 1)
+        val hex = rig.fixtures.fixture<HexFixture>("hex-a")
+
+        rig.engine.writeLayer4Property(
+            hex, "rgbColour",
+            Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(255, 0, 0))),
+        )
+        assertEquals(255u.toUByte(), rig.controller.currentValues[2], "Layer 4 red on stage")
+
+        // Layer 3 cue with blue should override.
+        rig.engine.setCueAssignments(
+            10,
+            listOf(colourAssignment(cueId = 10, priority = 1, color = Color(0, 0, 255))),
+        )
+        assertEquals(0u.toUByte(), rig.controller.currentValues[2], "cue overrides Layer 4 red")
+        assertEquals(255u.toUByte(), rig.controller.currentValues[4], "cue blue on stage")
+
+        // Clear the cue: Layer 4 red re-emerges.
+        rig.engine.removeCueAssignments(10)
+        assertEquals(255u.toUByte(), rig.controller.currentValues[2], "Layer 4 red re-emerges")
+        assertEquals(0u.toUByte(), rig.controller.currentValues[4], "cue blue cleared")
+    }
+
+    @Test
+    fun `Worked Example 6 — clearLayer4Property cascades back to Layer 5 baseline`() {
+        val rig = newRig(firstChannel = 1)
+        val hex = rig.fixtures.fixture<HexFixture>("hex-a")
+
+        rig.engine.writeLayer4Property(
+            hex, "rgbColour",
+            Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(200, 100, 50), uv = 128u)),
+        )
+        assertEquals(200u.toUByte(), rig.controller.currentValues[2])
+
+        rig.engine.clearLayer4Property(hex, "rgbColour")
+        assertEquals(0u.toUByte(), rig.controller.currentValues[2], "red cleared")
+        assertEquals(0u.toUByte(), rig.controller.currentValues[3], "green cleared")
+        assertEquals(0u.toUByte(), rig.controller.currentValues[4], "blue cleared")
+        assertEquals(0u.toUByte(), rig.controller.currentValues[7], "uv cleared")
+
+        // DirectWriteStore no longer holds these channels.
+        assertNull(rig.directWriteStore.get(0, 2))
+        assertNull(rig.directWriteStore.get(0, 3))
+        assertNull(rig.directWriteStore.get(0, 4))
+        assertNull(rig.directWriteStore.get(0, 7))
+    }
+
+    @Test
+    fun `Worked Example 6 — slider property write and clear`() {
+        val rig = newRig(firstChannel = 1)
+        val hex = rig.fixtures.fixture<HexFixture>("hex-a")
+
+        rig.engine.writeLayer4Property(hex, "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
+        assertEquals(180u.toUByte(), rig.controller.currentValues[1])
+        assertEquals(180u.toUByte(), rig.directWriteStore.get(0, 1))
+
+        rig.engine.clearLayer4Property(hex, "dimmer")
+        assertEquals(0u.toUByte(), rig.controller.currentValues[1])
+        assertNull(rig.directWriteStore.get(0, 1))
+    }
+
     @Test
     fun `pipeline is deterministic across many ticks for static effects`() {
         val rig = newRig(firstChannel = 1)

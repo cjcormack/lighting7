@@ -135,7 +135,7 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 |---|---|
 | `SurfaceInputRouter.kt` | Per-device `CoroutineName("SurfaceRouter-$displayKey")` collector. Pipeline: `matchEvent → soft-takeover gate → binding resolve → SurfaceActions dispatch`. |
 | `SurfaceActions.kt` | Port interface between router and show services. Production: `DefaultSurfaceActions` resolves `state.show.*` on every call so project switches route cleanly. Tests: `RecordingActions`. |
-| `PropertyChannelResolver.kt` | `object` that walks a fixture's `@FixtureProperty` list and matches on `DmxSlider` / `DmxColour` / `DmxFixtureSetting` to produce `List<ChannelWrite>` from a 7-bit MIDI value. Sliders scale to each channel's native `min..max`; Colour fans the 7-bit value to R/G/B; Settings return empty (enum bindings are button-only — Open Question 7). |
+| `PropertyChannelResolver.kt` | `object` for **MIDI surface input only**: takes a 7-bit MIDI value and produces `List<ChannelWrite>`. Sliders scale to each channel's native `min..max`; Colour fans the 7-bit value to R/G/B; Settings return empty (enum bindings are button-only — Open Question 7). For property-value → channel resolution at the effects layer (preset-toggle Layer 4, future REST property writes, "preview on selection"), see `fx/PropertyChannelWriter` which accepts full-range `Layer3Resolver.PropertyValue` variants and handles Colour + Position without MIDI-7bit scaling. |
 | `ActiveBankState.kt` | Ephemeral `deviceTypeKey → bank` map backed by a `ConcurrentHashMap` fast-lookup plus a `changes: SharedFlow<BankChange>` for WS broadcast. Not persisted. |
 | `FlashStateTracker.kt` | Lock-free `Set<Int>` of currently-held binding IDs (overlapping presses don't clobber release semantics). Exposes `changes: SharedFlow<FlashChange>`. |
 | `GlobalScalerState.kt` | `TransmitModifier` implementation of Blackout + Grand Master. Walks fixtures on `fixturesChanged` to classify intensity-category channels into a packed-`Long` `AtomicReference<Set<Long>>` for allocation-free hot-path lookup. On toggle, calls `DmxController.requestTransmit()` on every attached controller so the change is visible within the next frame rather than up to 25 ms later. |
@@ -240,6 +240,15 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `Blackout` | Button | `GlobalScalerState.toggleBlackout()` |
 | `GrandMasterToggle` | Button | `GlobalScalerState.toggleGrandMaster()` |
 | `SetBank(deviceTypeKey, bank)` | Button / bank-button | `ActiveBankState.setBank(deviceTypeKey, bank)` |
+
+**Related non-MIDI path.** Phase 7 of `docs/cue-authoring-unification-plan.md` adds a
+separate FX-layer resolver, `fx/PropertyChannelWriter`, for property-value → channel
+resolution without 7-bit MIDI scaling. The surface-input path above keeps using
+`PropertyChannelResolver` for 7-bit input; Layer 4 writes originating elsewhere
+(preset-toggle, future REST property writes, "preview on selection") go through
+`FxEngine.writeLayer4Property` which delegates to `PropertyChannelWriter`. Both resolvers
+emit the same `PropertyChannelResolver.ChannelWrite` shape, so downstream consumers
+don't need to distinguish.
 
 ### MIDI Learn
 

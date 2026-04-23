@@ -442,31 +442,34 @@ private fun isPresetActiveOnTarget(
 }
 
 /**
- * Synthetic `cueId` for preset-toggle Layer 3 assignments. Negative so it never collides with
- * real (positive) cue IDs; derived from `presetId` so we can key lookup + clear per preset.
- *
- * Rationale: the standalone preset-toggle path has no owning cue, but preset property
- * assignments still need to land on stage. The cleanest implementation reuses the Layer 3
- * pipeline with a pseudo-cue at priority 0 — real cues (priority ≥ 1) naturally override, and
- * `removeCueAssignments` cleans up with zero new engine API surface. This is a pragmatic
- * deviation from the plan's "Layer 4 direct-write" framing; observable behaviour is identical
- * for the cases operators care about (toggle shows values, real cue overrides, untoggle clears).
+ * Record of one Layer 4 channel assertion made by a preset toggle. Group-scoped preset
+ * assignments expand to one entry per member fixture. `propertyName` is canonical form.
  */
-private fun presetTogglePseudoCueId(presetId: Int): Int = -presetId
+private data class PresetToggleWrite(
+    val fixtureKey: String,
+    val propertyName: String,
+)
 
-/** Check if this preset currently has a pseudo-cue active in Layer 3. */
-private fun isPresetTogglePseudoCueActive(engine: FxEngine, presetId: Int): Boolean =
-    engine.hasCueAssignments(presetTogglePseudoCueId(presetId))
+/**
+ * In-memory tracking of which presets currently have property writes on Layer 4. Mutations
+ * go through [java.util.concurrent.ConcurrentHashMap.compute] so decide + act + record is
+ * atomic per preset — two concurrent toggle requests for the same preset won't interleave.
+ *
+ * Caveat: if a fixture gets rekeyed or a group is rebuilt between toggle-on and toggle-off,
+ * the recorded keys go stale and the corresponding channels leak until cleared manually.
+ */
+private val presetToggleStates =
+    java.util.concurrent.ConcurrentHashMap<Int, List<PresetToggleWrite>>()
 
 /**
  * Toggle a preset's effects + property assignments on/off for the given targets.
  *
- * Uses the presetId tag on effects + a negative pseudo-`cueId` on Layer 3 assignments for
- * deterministic matching:
- * - If ALL targets have at least one effect tagged with this presetId (or the pseudo-cue is
- *   active when the preset has no effects), removes those effects and clears the pseudo-cue.
- * - Otherwise, applies all preset effects (tagged with the presetId) + Layer 3 property
- *   assignments to each target.
+ * Effects are tagged with [presetId] on the [FxInstance]; property assignments land on
+ * Layer 4 via [FxEngine.writeLayer4Property] and are recorded in [presetToggleStates].
+ *
+ * A preset is considered "active" when ALL targets have an effect tagged with [presetId]
+ * (if the preset defines effects) AND a [presetToggleStates] entry is present (if the
+ * preset defines property assignments). "Active" → remove; otherwise → apply.
  */
 internal fun togglePresetOnTargets(
     state: State,
@@ -477,75 +480,109 @@ internal fun togglePresetOnTargets(
     beatDivisionOverride: Double?,
 ): TogglePresetResponse {
     val engine = state.show.fxEngine
+    lateinit var response: TogglePresetResponse
 
-    // Active if: all targets have effects AND the pseudo-cue state matches whether we have
-    // property assignments. When the preset has only property assignments (no effects), rely
-    // solely on the pseudo-cue.
-    val effectsActive = if (presetEffects.isNotEmpty()) {
-        targets.all { target -> isPresetActiveOnTarget(engine, presetId, target.type, target.key) }
-    } else true
-    val assignmentsActive = if (presetPropertyAssignments.isNotEmpty()) {
-        isPresetTogglePseudoCueActive(engine, presetId)
-    } else true
-    val allActive = effectsActive && assignmentsActive &&
-        (presetEffects.isNotEmpty() || presetPropertyAssignments.isNotEmpty())
-
-    if (allActive) {
-        var removedCount = 0
-        for (target in targets) {
-            val activeEffects = if (target.type == "group") {
+    presetToggleStates.compute(presetId) { _, existing ->
+        // Resolve each target's current preset-tagged effects once — used by both the
+        // allActive check and the remove loop. Avoids two `getEffectsFor*` calls per target.
+        val presetEffectsByTarget = targets.map { target ->
+            val active = if (target.type == "group") {
                 engine.getEffectsForGroup(target.key)
             } else {
                 engine.getEffectsForFixture(target.key)
             }
-            val matching = activeEffects.filter { it.presetId == presetId }
-            for (fx in matching) {
-                if (engine.removeEffect(fx.id)) {
-                    removedCount++
+            active.filter { it.presetId == presetId }
+        }
+        val effectsActive = presetEffects.isEmpty() || presetEffectsByTarget.all { it.isNotEmpty() }
+        val assignmentsActive = presetPropertyAssignments.isEmpty() || existing != null
+        val allActive = effectsActive && assignmentsActive &&
+            (presetEffects.isNotEmpty() || presetPropertyAssignments.isNotEmpty())
+
+        if (allActive) {
+            var removedCount = 0
+            for (effectsOnTarget in presetEffectsByTarget) {
+                for (fx in effectsOnTarget) {
+                    if (engine.removeEffect(fx.id)) removedCount++
                 }
             }
-        }
-        if (presetPropertyAssignments.isNotEmpty()) {
-            engine.removeCueAssignments(presetTogglePseudoCueId(presetId))
-        }
-        return TogglePresetResponse(action = "removed", effectCount = removedCount)
-    } else {
-        // Remove any lingering preset state, then apply fresh.
-        for (target in targets) {
-            val activeEffects = if (target.type == "group") {
-                engine.getEffectsForGroup(target.key)
-            } else {
-                engine.getEffectsForFixture(target.key)
+            existing?.forEach { clearPresetToggleWrite(state, it) }
+            response = TogglePresetResponse(action = "removed", effectCount = removedCount)
+            null
+        } else {
+            // Remove any lingering matching effects, then re-apply cleanly.
+            for (effectsOnTarget in presetEffectsByTarget) {
+                effectsOnTarget.forEach { engine.removeEffect(it.id) }
             }
-            activeEffects.filter { it.presetId == presetId }.forEach { engine.removeEffect(it.id) }
-        }
-        if (presetPropertyAssignments.isNotEmpty()) {
-            val pseudoCueId = presetTogglePseudoCueId(presetId)
-            val applyTargets = targets.map { CueTargetDto(type = it.type, key = it.key) }
-            val rows = buildLayer3AssignmentsForPreset(
-                state.show.fixtures, pseudoCueId, /* priority = */ 0,
-                presetId, presetPropertyAssignments, applyTargets,
-            )
-            if (rows.isNotEmpty()) {
-                engine.setCueAssignments(pseudoCueId, rows)
-            }
-        }
+            existing?.forEach { clearPresetToggleWrite(state, it) }
 
-        var addedCount = 0
-        for (target in targets) {
-            for (presetEffect in presetEffects) {
-                val fxTarget = resolveTarget(state, target, presetEffect) ?: continue
+            val writes = applyPresetLayer4Writes(state, presetId, presetPropertyAssignments, targets)
 
-                val instance = createInstanceFromPreset(
-                    presetEffect, fxTarget, presetId,
-                    beatDivisionOverride, state,
-                )
-                engine.addEffect(instance)
-                addedCount++
+            var addedCount = 0
+            for (target in targets) {
+                for (presetEffect in presetEffects) {
+                    val fxTarget = resolveTarget(state, target, presetEffect) ?: continue
+                    val instance = createInstanceFromPreset(
+                        presetEffect, fxTarget, presetId, beatDivisionOverride, state,
+                    )
+                    engine.addEffect(instance)
+                    addedCount++
+                }
             }
+            response = TogglePresetResponse(action = "applied", effectCount = addedCount)
+            writes.ifEmpty { null }
         }
-        return TogglePresetResponse(action = "applied", effectCount = addedCount)
     }
+
+    return response
+}
+
+/**
+ * Apply each of [presetPropertyAssignments] to [targets] as Layer-4 writes. Reuses
+ * [buildLayer3AssignmentsForPreset] for property canonicalisation, category lookup, value
+ * parsing, and group expansion — the returned rows never actually hit Layer 3, the synthetic
+ * `cueId = -presetId` only shows up in the builder's log lines if parsing fails.
+ */
+private fun applyPresetLayer4Writes(
+    state: State,
+    presetId: Int,
+    presetPropertyAssignments: List<FxPresetPropertyAssignmentDto>,
+    targets: List<TogglePresetTarget>,
+): List<PresetToggleWrite> {
+    if (presetPropertyAssignments.isEmpty()) return emptyList()
+    val engine = state.show.fxEngine
+
+    val rows = buildLayer3AssignmentsForPreset(
+        state.show.fixtures,
+        cueId = -presetId,
+        priority = 0,
+        presetId = presetId,
+        presetAssignments = presetPropertyAssignments,
+        applyTargets = targets.map { CueTargetDto(type = it.type, key = it.key) },
+    )
+
+    val writes = ArrayList<PresetToggleWrite>(rows.size)
+    for (row in rows) {
+        val fixture = try {
+            state.show.fixtures.untypedFixture(row.targetKey)
+        } catch (_: IllegalStateException) {
+            continue
+        }
+        val resolved = engine.writeLayer4Property(fixture, row.propertyName, row.value)
+        if (resolved.isNotEmpty()) {
+            writes += PresetToggleWrite(row.targetKey, row.propertyName)
+        }
+    }
+    return writes
+}
+
+/** Clear a single recorded Layer-4 assertion. Silently tolerates a stale record. */
+private fun clearPresetToggleWrite(state: State, write: PresetToggleWrite) {
+    val fixture = try {
+        state.show.fixtures.untypedFixture(write.fixtureKey)
+    } catch (_: IllegalStateException) {
+        return
+    }
+    state.show.fxEngine.clearLayer4Property(fixture, write.propertyName)
 }
 
 /**

@@ -4,9 +4,16 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.ParkManager
+import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.dmx.DmxColour
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
+import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.midi.PropertyChannelResolver
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -296,11 +303,6 @@ class FxEngine(
         }
     }
 
-    /** True if [cueId] currently has any Layer 3 assignments. */
-    fun hasCueAssignments(cueId: Int): Boolean = synchronized(cueAssignmentsLock) {
-        cueAssignments.containsKey(cueId)
-    }
-
     /** Drop all Layer 3 contributions from [cueId]. */
     fun removeCueAssignments(cueId: Int) {
         synchronized(cueAssignmentsLock) {
@@ -319,6 +321,199 @@ class FxEngine(
             cueAssignments.clear()
             cueFadeWeights.clear()
             republishLayer3Assignments()
+        }
+    }
+
+    // --- Layer 4 property writes ---
+    //
+    // Sticky direct writes at property-value granularity. Callers (preset toggle, future REST
+    // property endpoints) hand a typed `PropertyValue`; the writer resolves it to channel
+    // writes, sits them in `DirectWriteStore`, and publishes via `LayerResolver.fallbackFor`
+    // — so Layer 3 (cues) correctly overrides Layer 4 and running effects keep painting.
+
+    /**
+     * Lay a [value] onto Layer 4 for [propertyName] of [fixture] and publish immediately.
+     * Returns the resolved channel writes so callers can record them for later clearing.
+     */
+    fun writeLayer4Property(
+        fixture: Fixture,
+        propertyName: String,
+        value: Layer3Resolver.PropertyValue,
+    ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4Write(fixture, propertyName) {
+        PropertyChannelWriter.resolve(fixture, propertyName, value)
+    }
+
+    /** Group overload — fan out to every member (including sub-groups). */
+    fun writeLayer4GroupProperty(
+        group: FixtureGroup<*>,
+        propertyName: String,
+        value: Layer3Resolver.PropertyValue,
+    ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4GroupOperation(group, propertyName) { f ->
+        val writes = PropertyChannelWriter.resolve(f, propertyName, value)
+        for (w in writes) directWriteStore.put(w.universe.universe, w.channel, w.value)
+        writes
+    }
+
+    /**
+     * Clear Layer 4 writes for [propertyName] on [fixture]. Channels cascade back to Layer 3
+     * (if a cue still asserts them) or Layer 5 baseline.
+     */
+    fun clearLayer4Property(
+        fixture: Fixture,
+        propertyName: String,
+    ): List<PropertyChannelResolver.ChannelWrite> {
+        val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
+        if (channels.isEmpty()) return channels
+        for (c in channels) directWriteStore.clear(c.universe.universe, c.channel)
+        synchronized(cueAssignmentsLock) {
+            publishLayer4ForKeys(setOf(Layer3Resolver.Key(fixture.key, propertyName)))
+        }
+        return channels
+    }
+
+    /** Group overload for [clearLayer4Property]. */
+    fun clearLayer4GroupProperty(
+        group: FixtureGroup<*>,
+        propertyName: String,
+    ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4GroupOperation(group, propertyName) { f ->
+        val channels = PropertyChannelWriter.channelsFor(f, propertyName)
+        for (c in channels) directWriteStore.clear(c.universe.universe, c.channel)
+        channels
+    }
+
+    /** Single-fixture write scaffold — resolve via [perFixture], `put` each, publish the key. */
+    private inline fun applyLayer4Write(
+        fixture: Fixture,
+        propertyName: String,
+        perFixture: () -> List<PropertyChannelResolver.ChannelWrite>,
+    ): List<PropertyChannelResolver.ChannelWrite> {
+        val writes = perFixture()
+        if (writes.isEmpty()) return writes
+        for (w in writes) directWriteStore.put(w.universe.universe, w.channel, w.value)
+        synchronized(cueAssignmentsLock) {
+            publishLayer4ForKeys(setOf(Layer3Resolver.Key(fixture.key, propertyName)))
+        }
+        return writes
+    }
+
+    /**
+     * Group-loop scaffold shared by the write / clear group overloads. [perFixture] does the
+     * per-member `DirectWriteStore` mutation and returns the resolved channel list; non-empty
+     * lists contribute their fixture's key to a single batched publish.
+     */
+    private inline fun applyLayer4GroupOperation(
+        group: FixtureGroup<*>,
+        propertyName: String,
+        perFixture: (Fixture) -> List<PropertyChannelResolver.ChannelWrite>,
+    ): List<PropertyChannelResolver.ChannelWrite> {
+        val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
+        val keys = HashSet<Layer3Resolver.Key>()
+        for (member in group.fixtures) {
+            val f = member as? Fixture ?: continue
+            val result = perFixture(f)
+            if (result.isEmpty()) continue
+            all += result
+            keys += Layer3Resolver.Key(f.key, propertyName)
+        }
+        if (keys.isNotEmpty()) {
+            synchronized(cueAssignmentsLock) {
+                publishLayer4ForKeys(keys)
+            }
+        }
+        return all
+    }
+
+    /**
+     * Transmit the composed Layer 3 → Layer 4 → Layer 5 fallback for each affected
+     * (fixtureKey, propertyName) key. Same publish machinery as [publishLayer3ToControllers],
+     * scoped to a caller-supplied key set rather than the full Layer 3 diff.
+     *
+     * Skips keys a currently-running effect covers (the effect tick handles those) and
+     * fully-parked targets. Callers hold [cueAssignmentsLock] so this doesn't race with a
+     * concurrent Layer 3 republish or fade-weight update reading the same `layer3State`.
+     */
+    private fun publishLayer4ForKeys(keys: Set<Layer3Resolver.Key>) {
+        if (keys.isEmpty()) return
+
+        // Empty effects is the common preset-toggle case; skip the scan and transaction alloc.
+        val coveredByEffects = if (activeEffects.isEmpty()) {
+            emptySet()
+        } else buildSet {
+            for (effect in activeEffects.values) {
+                if (!effect.isRunning) continue
+                val propertyName = effect.target.propertyName
+                for (fixtureKey in resolveEffectFixtureKeys(effect)) {
+                    add(fixtureKey to propertyName)
+                }
+            }
+        }
+
+        if (coveredByEffects.isNotEmpty() &&
+            keys.all { (it.targetKey to it.propertyName) in coveredByEffects }) {
+            return
+        }
+
+        val transaction = ControllerTransaction(fixtures.controllers)
+        val fixturesWithTx = fixtures.withTransaction(transaction)
+        var wrote = false
+
+        for (key in keys) {
+            if ((key.targetKey to key.propertyName) in coveredByEffects) continue
+
+            val fixture = try {
+                fixturesWithTx.untypedGroupableFixture(key.targetKey)
+            } catch (e: Exception) {
+                System.err.println(
+                    "FX Engine: Layer 4 publish could not find fixture '${key.targetKey}': ${e.message}"
+                )
+                continue
+            }
+
+            val target = inferTargetForProperty(fixture, key) ?: continue
+            if (allChannelsParked(target, fixture)) continue
+
+            try {
+                val fallback = layerResolver.fallbackFor(target, fixture, key.targetKey)
+                target.resetToFallback(fixture, fallback)
+                wrote = true
+            } catch (e: Exception) {
+                System.err.println(
+                    "FX Engine: failed to publish Layer 4 for ${key.targetKey}.${key.propertyName}: ${e.message}"
+                )
+            }
+        }
+
+        if (wrote) transaction.apply()
+    }
+
+    /**
+     * Infer the [FxTarget] kind for a Layer 4 publish from the backing DMX property type on
+     * [fixture]. Mirrors the type-dispatch that [resolveTargetForLayer3Key] does from a
+     * [Layer3Resolver.PropertyValue], but walks the fixture's declared `@FixtureProperty`
+     * reflection instead — the clear path doesn't have a value in hand.
+     *
+     * Returns null when the property can't be resolved; caller should skip that key.
+     */
+    private fun inferTargetForProperty(
+        fixture: uk.me.cormack.lighting7.fixture.GroupableFixture,
+        key: Layer3Resolver.Key,
+    ): FxTarget? {
+        if (key.propertyName.equals("position", ignoreCase = true)) {
+            if (fixture !is WithPosition) return null
+            return PositionTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
+        }
+        val f = fixture as? Fixture ?: return null
+        val property = f.fixtureProperty(key.propertyName) ?: return null
+        val raw = try {
+            property.classProperty.call(f)
+        } catch (_: Exception) {
+            return null
+        } ?: return null
+        return when (raw) {
+            is DmxColour -> ColourTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
+            is DmxFixtureSetting<*> -> SettingTarget(key.targetKey, key.propertyName)
+            is DmxSlider -> SliderTarget(key.targetKey, key.propertyName)
+            else -> null
         }
     }
 
