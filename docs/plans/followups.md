@@ -248,18 +248,6 @@ on each `Assignment`.
 **Blocker**: needs a real moving-head fixture on the test rig to validate the
 behaviour visually and tune the "pre-apply window" threshold empirically.
 
-### `FU-BE-PRESET-FIXTURE-TYPE-NOTNULL` — Hard `NOT NULL` on `fx_presets.fixture_type`
-
-**Status**: Ready
-**Origin**: Cue-authoring Phase 3, 2026-04-21
-
-Runtime enforcement (input validation) already rejects nulls as of Phase 3
-backend. DB column stays nullable during a backfill window so pre-existing
-rows don't break boot.
-
-**Fix shape**: after a backfill pass (or on next migration sweep), tighten
-the column to `NOT NULL`. No meaningful operator impact — DB hygiene.
-
 ### `FU-BE-SCALER-PERSISTENCE` — Cross-restart scaler persistence (Phase 9 option B)
 
 **Status**: Trigger (operator ask)
@@ -495,6 +483,16 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
 
+- `FU-BE-PRESET-FIXTURE-TYPE-NOTNULL` — 2026-04-23 — Dropped `.nullable()` on
+  `DaoFxPresets.fixtureType` and added `migrateFxPresetsFixtureTypeNotNull` to
+  [State.kt](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt): inspects
+  `information_schema`, deletes any legacy NULL-type presets (plus their
+  `fx_preset_property_assignments` and `cue_preset_applications` children) so
+  the subsequent `ALTER TABLE … SET NOT NULL` succeeds. Tightened
+  `FxPresetDetails.fixtureType`, `PersistedFixtureReferenceValidator.validatePresetPropertyReference`,
+  and the `lightFixtures` / `lightGroups` compatibility filters to non-nullable
+  now that the column can't be null; required `fixtureType` in the `create_fx_preset`
+  AI tool schema. Dropped the now-obsolete "preset with null fixtureType" test.
 - `FU-BE-TIMED-PRESETS-LAYER3` — 2026-04-23 — Added
   `FxEngine.appendCueAssignments(cueId, additions)` and
   `removeCueAssignmentSubset(cueId, toRemove)` (structural-equality

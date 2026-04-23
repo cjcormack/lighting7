@@ -52,16 +52,13 @@ object PersistedFixtureReferenceValidator {
     /**
      * Validate a preset property assignment. Preset assignments are target-less — they're
      * keyed by `propertyName` only — so the check is against the preset's declared
-     * [fixtureTypeKey]. A null / blank type is treated as valid (legacy backfill window
-     * where `fixture_type` hasn't been tightened to `NOT NULL` yet); an unknown type key
-     * is also treated as valid rather than producing a false positive — the preset will
-     * fail at apply time with its own warn log.
+     * [fixtureTypeKey]. An unknown type key is treated as valid rather than producing a
+     * false positive — the preset will fail at apply time with its own warn log.
      */
     fun validatePresetPropertyReference(
-        fixtureTypeKey: String?,
+        fixtureTypeKey: String,
         propertyName: String,
     ): AssignmentHealth {
-        if (fixtureTypeKey.isNullOrBlank()) return AssignmentHealth.Ok
         val canonical = canonicalPropertyName(propertyName)
         val typeInfo = FixtureTypeRegistry.typeInfoForKey(fixtureTypeKey)
             ?: return AssignmentHealth.Ok

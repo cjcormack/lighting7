@@ -97,31 +97,42 @@ internal fun inferPresetCapabilities(effects: List<FxPresetEffectDto>): Set<Stri
     return caps
 }
 
+internal data class PresetCompatibilityInfo(
+    val id: Int,
+    val fixtureType: String,
+    val effects: List<FxPresetEffectDto>,
+)
+
+/** Load the compatibility metadata for every preset in [projectId]. One DB round-trip. */
+internal fun loadPresetCompatibilityInfos(state: State, projectId: Int): List<PresetCompatibilityInfo> =
+    transaction(state.database) {
+        DaoFxPreset.find { DaoFxPresets.project eq projectId }
+            .map { PresetCompatibilityInfo(it.id.value, it.fixtureType, it.effects) }
+    }
+
+/** Return the IDs of presets whose fixture type is in [allowedTypeKeys] and whose effects' required capabilities are all in [capabilities]. */
+internal fun List<PresetCompatibilityInfo>.compatibleIdsFor(
+    allowedTypeKeys: Set<String>,
+    capabilities: Set<String>,
+): List<Int> = filter { preset ->
+    if (preset.fixtureType !in allowedTypeKeys) return@filter false
+    inferPresetCapabilities(preset.effects).all { it in capabilities }
+}.map { it.id }
+
 internal fun Route.routeApiRestLightsFixtures(state: State) {
     route("/fixture") {
         get("/list") {
             val fixtures = state.show.fixtures
             val currentProject = state.projectManager.currentProject
 
-            // Load all presets for the current project
-            data class PresetInfo(val id: Int, val fixtureType: String?, val effects: List<FxPresetEffectDto>)
-            val presets = transaction(state.database) {
-                DaoFxPreset.find { DaoFxPresets.project eq currentProject.id }
-                    .map { PresetInfo(it.id.value, it.fixtureType, it.effects) }
-            }
+            val presets = loadPresetCompatibilityInfos(state, currentProject.id.value)
 
             call.respond(fixtures.fixtures.map { fixture ->
                 val capabilities = when (fixture) {
                     is DmxFixture -> fixture.detectCapabilities().toSet()
                     else -> emptySet()
                 }
-                val compatibleIds = presets.filter { preset ->
-                    // Check fixture type compatibility
-                    if (preset.fixtureType != null && preset.fixtureType != fixture.typeKey) return@filter false
-                    // Check capability compatibility
-                    val requiredCaps = inferPresetCapabilities(preset.effects)
-                    requiredCaps.all { it in capabilities }
-                }.map { it.id }
+                val compatibleIds = presets.compatibleIdsFor(setOf(fixture.typeKey), capabilities)
                 fixture.details(fixtures, compatibleIds)
             })
         }

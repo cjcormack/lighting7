@@ -363,6 +363,9 @@ class State(val config: ApplicationConfig) {
             // so the is_builtin column is no longer needed and project_id should be non-nullable.
             migrateFxDefinitionsDropBuiltin()
 
+            // Migration: tighten fx_presets.fixture_type to NOT NULL
+            migrateFxPresetsFixtureTypeNotNull()
+
             // Migration: drop script-based configuration mode columns from projects table
             migrateDropScriptBasedMode()
 
@@ -531,6 +534,41 @@ private fun Transaction.migrateFxDefinitionsDropBuiltin() {
     exec("ALTER TABLE fx_definitions DROP COLUMN is_builtin")
 
     logger.info("fx_definitions migration complete")
+}
+
+/**
+ * One-time migration: tighten fx_presets.fixture_type to NOT NULL.
+ *
+ * Any legacy NULL-type row predates Phase 3's non-blank-on-write validation and is unusable;
+ * the preceding DELETEs drop those orphans (and their children) so the ALTER succeeds.
+ *
+ * Safe to run repeatedly — checks the column's nullability before doing anything.
+ */
+private fun Transaction.migrateFxPresetsFixtureTypeNotNull() {
+    var isNullable = false
+    exec(
+        """SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'fx_presets' AND column_name = 'fixture_type'
+             AND is_nullable = 'YES'"""
+    ) { rs ->
+        isNullable = rs.next()
+    }
+    if (!isNullable) return
+
+    logger.info("Migrating fx_presets: dropping orphan NULL-type rows and tightening fixture_type to NOT NULL...")
+
+    exec(
+        """DELETE FROM fx_preset_property_assignments
+           WHERE preset_id IN (SELECT id FROM fx_presets WHERE fixture_type IS NULL)"""
+    )
+    exec(
+        """DELETE FROM cue_preset_applications
+           WHERE preset_id IN (SELECT id FROM fx_presets WHERE fixture_type IS NULL)"""
+    )
+    exec("DELETE FROM fx_presets WHERE fixture_type IS NULL")
+    exec("ALTER TABLE fx_presets ALTER COLUMN fixture_type SET NOT NULL")
+
+    logger.info("fx_presets.fixture_type migration complete")
 }
 
 /**

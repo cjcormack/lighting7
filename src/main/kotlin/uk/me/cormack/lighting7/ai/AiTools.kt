@@ -79,6 +79,8 @@ class AiTools(private val state: State) {
         val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
         val description = input["description"]?.jsonPrimitive?.contentOrNull
         val fixtureType = input["fixtureType"]?.jsonPrimitive?.contentOrNull
+            ?: return errorResult("Missing 'fixtureType'")
+        if (fixtureType.isBlank()) return errorResult("'fixtureType' cannot be blank")
         val effectsArray = input["effects"]?.jsonArray ?: return errorResult("Missing 'effects'")
 
         val effects = effectsArray.map { parsePresetEffect(it.jsonObject) }
@@ -776,7 +778,7 @@ class AiTools(private val state: State) {
                 put("properties", buildJsonObject {
                     put("name", buildJsonObject { put("type", "string"); put("description", "Preset name") })
                     put("description", buildJsonObject { put("type", "string"); put("description", "Optional description") })
-                    put("fixtureType", buildJsonObject { put("type", "string"); put("description", "Optional typeKey to restrict preset to a fixture type") })
+                    put("fixtureType", buildJsonObject { put("type", "string"); put("description", "Required typeKey scoping the preset to a single fixture type") })
                     put("effects", buildJsonObject {
                         put("type", "array")
                         put("items", presetEffectSchema)
@@ -787,7 +789,7 @@ class AiTools(private val state: State) {
                         put("items", targetSchema)
                     })
                 })
-                put("required", buildJsonArray { add("name"); add("effects") })
+                put("required", buildJsonArray { add("name"); add("fixtureType"); add("effects") })
             }
         )
 

@@ -48,7 +48,7 @@ object DaoFxPresets : IntIdTable("fx_presets") {
     val name = varchar("name", 255)
     val description = varchar("description", 1000).nullable()
     val project = reference("project_id", DaoProjects)
-    val fixtureType = varchar("fixture_type", 255).nullable()
+    val fixtureType = varchar("fixture_type", 255)
     val effects = json<List<FxPresetEffectDto>>("effects", Json)
     val palette = json<List<String>>("palette", Json).default(emptyList())
 

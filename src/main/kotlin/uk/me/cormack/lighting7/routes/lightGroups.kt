@@ -18,11 +18,7 @@ import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.fx.group.clearFx
-import uk.me.cormack.lighting7.models.DaoFxPreset
-import uk.me.cormack.lighting7.models.DaoFxPresets
-import uk.me.cormack.lighting7.models.FxPresetEffectDto
 import uk.me.cormack.lighting7.state.State
-import org.jetbrains.exposed.sql.transactions.transaction
 
 /**
  * REST API routes for fixture group management and effects.
@@ -32,25 +28,12 @@ internal fun Route.routeApiRestGroups(state: State) {
         // List all groups
         get<GroupsResource> {
             val currentProject = state.projectManager.currentProject
-
-            // Load all presets for the current project
-            data class PresetInfo(val id: Int, val fixtureType: String?, val effects: List<FxPresetEffectDto>)
-            val presets = transaction(state.database) {
-                DaoFxPreset.find { DaoFxPresets.project eq currentProject.id }
-                    .map { PresetInfo(it.id.value, it.fixtureType, it.effects) }
-            }
+            val presets = loadPresetCompatibilityInfos(state, currentProject.id.value)
 
             val groups = state.show.fixtures.groups.map { group ->
                 val capabilities = group.detectCapabilities().toSet()
                 val memberTypeKeys = group.fixtures.filterIsInstance<Fixture>().map { it.typeKey }.toSet()
-                val compatibleIds = presets.filter { preset ->
-                    // Check fixture type compatibility (matches any member's typeKey)
-                    if (preset.fixtureType != null && preset.fixtureType !in memberTypeKeys) return@filter false
-                    // Check capability compatibility
-                    val requiredCaps = inferPresetCapabilities(preset.effects)
-                    requiredCaps.all { it in capabilities }
-                }.map { it.id }
-                group.toDto(compatibleIds)
+                group.toDto(presets.compatibleIdsFor(memberTypeKeys, capabilities))
             }
             call.respond(groups)
         }
@@ -61,21 +44,12 @@ internal fun Route.routeApiRestGroups(state: State) {
                 val group = state.show.fixtures.untypedGroup(resource.name)
 
                 val currentProject = state.projectManager.currentProject
-                data class PresetInfo(val id: Int, val fixtureType: String?, val effects: List<FxPresetEffectDto>)
-                val presets = transaction(state.database) {
-                    DaoFxPreset.find { DaoFxPresets.project eq currentProject.id }
-                        .map { PresetInfo(it.id.value, it.fixtureType, it.effects) }
-                }
+                val presets = loadPresetCompatibilityInfos(state, currentProject.id.value)
 
                 val capabilities = group.detectCapabilities().toSet()
                 val memberTypeKeys = group.fixtures.filterIsInstance<Fixture>().map { it.typeKey }.toSet()
-                val compatibleIds = presets.filter { preset ->
-                    if (preset.fixtureType != null && preset.fixtureType !in memberTypeKeys) return@filter false
-                    val requiredCaps = inferPresetCapabilities(preset.effects)
-                    requiredCaps.all { it in capabilities }
-                }.map { it.id }
 
-                call.respond(group.toDetailedDto(compatibleIds))
+                call.respond(group.toDetailedDto(presets.compatibleIdsFor(memberTypeKeys, capabilities)))
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
             }

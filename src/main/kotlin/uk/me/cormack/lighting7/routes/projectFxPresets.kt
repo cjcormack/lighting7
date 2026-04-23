@@ -293,8 +293,6 @@ data class ToggleFxPresetResource(val parent: ProjectFxPresetsResource, val pres
 data class NewFxPreset(
     val name: String,
     val description: String? = null,
-    // Required from Phase 3 forward — PresetEditor always knows the target fixture type.
-    // DB column stays nullable during the backfill window; a hard NOT NULL lands as a follow-up.
     val fixtureType: String,
     val effects: List<FxPresetEffectDto>,
     val propertyAssignments: List<FxPresetPropertyAssignmentDto> = emptyList(),
@@ -306,7 +304,7 @@ data class FxPresetDetails(
     val id: Int,
     val name: String,
     val description: String?,
-    val fixtureType: String?,
+    val fixtureType: String,
     val effects: List<FxPresetEffectDto>,
     val propertyAssignments: List<FxPresetPropertyAssignmentDto>,
     val palette: List<String>,
@@ -374,8 +372,7 @@ internal fun DaoFxPreset.toPresetDetails(isCurrentProject: Boolean): FxPresetDet
 /**
  * Map this preset's property-assignment rows to their sorted DTO form. Rows are tagged
  * server-side with [AssignmentHealth] resolved against the preset's declared [fixtureType]
- * so the UI can mark dead rows (property removed, fixture type reworked). Without a
- * declared `fixtureType` every row is treated as `Ok` — legacy backfill window.
+ * so the UI can mark dead rows (property removed, fixture type reworked).
  *
  * Apply-path callers (toggle / cue apply) also invoke this — they ignore the `health`
  * field, so the extra lookup cost is negligible and keeps a single code path.

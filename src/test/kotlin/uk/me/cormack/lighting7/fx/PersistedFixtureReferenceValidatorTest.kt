@@ -157,18 +157,6 @@ class PersistedFixtureReferenceValidatorTest {
     }
 
     @Test
-    fun `preset with null fixtureType returns Ok — legacy backfill window`() {
-        assertEquals(
-            AssignmentHealth.Ok,
-            PersistedFixtureReferenceValidator.validatePresetPropertyReference(null, "dimmer"),
-        )
-        assertEquals(
-            AssignmentHealth.Ok,
-            PersistedFixtureReferenceValidator.validatePresetPropertyReference("", "dimmer"),
-        )
-    }
-
-    @Test
     fun `preset with unknown fixtureType returns Ok — validator prefers no false-positive`() {
         // Unknown type keys should pass — apply-time warn log is the backstop. Marking these
         // dead in the UI when the code simply lacks the profile yet would be misleading.
