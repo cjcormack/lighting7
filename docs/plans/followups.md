@@ -191,21 +191,6 @@ resolution, but there's no Phase 6 test that two WS connections racing on
 **Unblock by**: confirming exact semantics with cue-authoring owners, then
 add the test.
 
-### `FU-TEST-HTTP-ROUNDTRIP` — End-to-end HTTP round-trip test
-
-**Status**: Blocked (needs DB test harness)
-**Origin**: Cue-authoring Phase 1, 2026-04-21
-
-`PATCH` + `snapshot-from-live` + `cueEdit` round-trip through an in-memory
-HTTP harness is still missing. Phase 5's FX-engine-level pipeline test covers
-composition semantics in isolation; HTTP-path end-to-end is a separate gap.
-
-**Blocker**: no DB test harness (tests run against a fresh Postgres schema or
-not at all). Proper fix sets up an ephemeral Postgres via Testcontainers (or
-a transaction-rollback harness against a shared dev DB), wires Ktor's
-`testApplication` DSL around it, and drives the full cue-edit → snapshot →
-apply flow. Cross-cutting — unblocks a bunch of other route-level tests.
-
 ### `FU-TEST-VITE-BUILD` — Frontend `vite build` validation
 
 **Status**: Blocked (Node upgrade)
@@ -605,3 +590,39 @@ _Move items here as they land. Format:_
   commit, falls through to live controller otherwise); new coverage in
   [FixturesWithTransactionTest.kt](src/test/kotlin/uk/me/cormack/lighting7/show/FixturesWithTransactionTest.kt)
   asserts repeated lookups return the same wrapped instance.
+- `FU-TEST-HTTP-ROUNDTRIP` — commit 4245a7d (2026-04-24) — Added
+  `src/test/kotlin/uk/me/cormack/lighting7/testsupport/` harness
+  ([EmbeddedTestPostgres.kt](src/test/kotlin/uk/me/cormack/lighting7/testsupport/EmbeddedTestPostgres.kt),
+  [RouteIntegrationTest.kt](src/test/kotlin/uk/me/cormack/lighting7/testsupport/RouteIntegrationTest.kt),
+  [TestAppConfig.kt](src/test/kotlin/uk/me/cormack/lighting7/testsupport/TestAppConfig.kt),
+  [TestShow.kt](src/test/kotlin/uk/me/cormack/lighting7/testsupport/TestShow.kt))
+  built around `io.zonky.test:embedded-postgres` — Testcontainers 1.21
+  hardcodes Docker API 1.32 via `DockerClientProviderStrategy`, which
+  Docker Engine 25+ and OrbStack reject (min 1.40); embedded Postgres runs
+  a real Postgres binary in-JVM with no Docker daemon needed. Split
+  `Application.module()` → `moduleWithState(state)` in
+  [Application.kt](src/main/kotlin/uk/me/cormack/lighting7/Application.kt)
+  so tests mount routes over an externally-provided `State` without
+  re-entering `initializeShow`. `RouteIntegrationTest` abstract base owns
+  per-test schema reset + project + MOCK universe seed + show init.
+  Primary test
+  [HttpRoundTripTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/HttpRoundTripTest.kt)
+  drives POST `/patches` (hex at ch1) → WS `cueEdit.beginEdit(LIVE)` →
+  `setProperty(dimmer=200)` → POST `/snapshot-from-live` → `endEdit` →
+  GET, asserting the snapshot captured the Live edit's Layer 3 state
+  (snapshot intentionally lands inside the open Live session because
+  `endEdit` for a standalone cue triggers `removeEffectsForCue` →
+  `removeCueAssignments`, tearing Layer 3 down). Inbound WS filter
+  `awaitOfType<T>` skips the initial-state burst
+  (`channelMapping`/`fxState`/`palette`/`beatSync`) the socket fans out
+  on connect. Broader coverage:
+  [CueCrudRoundTripTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/CueCrudRoundTripTest.kt)
+  (pure-HTTP cue CRUD + PATCH partial update + stack membership),
+  [FxPresetRoundTripTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/FxPresetRoundTripTest.kt)
+  (preset POST/GET/PUT/DELETE with property-assignment children). All 3
+  pass; full suite green. Bumped `kotlin.daemon.jvmargs=-Xmx2g` — default
+  1 GB OOMs on full recompiles with Kotlin 2.2 + FX DSL + new test
+  sources. Scope limits retained from the plan: no migration of existing
+  DTO-level route tests, no `State.shutdown` for clean coroutine teardown
+  (known-leaky GlobalScope pollers from `initializeShow` tolerated), no
+  Hikari pool close in tearDown (3 tests × 8 connections acceptable).
