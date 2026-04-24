@@ -137,24 +137,6 @@ rebind — implementation is unblocked.
 
 ## Backend / composition model
 
-### `FU-BE-PRESET-PER-ELEMENT` — Preset per-head / per-element assignments
-
-**Status**: Ready (scope audit needed)
-**Origin**: Cue-authoring Phase 3, 2026-04-21
-
-Preset property assignments are preset-local (`propertyName` only, no
-`target_type` / `target_key`). Works for single-head fixtures; a 4-head LED
-bar preset has to pick one head's values for all heads.
-
-**Fix shape**: add a nullable `element_key` column to
-`fx_preset_property_assignments`. Null = applies to all heads (current
-behaviour); non-null = applies only to the named element. `PresetEditor` UI
-grows an element switcher for multi-element fixture types.
-
-**Audit required**: which fixture types need this? If the set is small
-(SlenderBeam, LedLightbar12Pixel), a simple "heads tab" alongside
-Properties/Effects covers it.
-
 ### `FU-BE-MOVE-IN-DARK` — `moveInDark` during outgoing fade
 
 **Status**: Blocked (needs moving-head fixture on test rig)
@@ -555,3 +537,46 @@ _Move items here as they land. Format:_
   passes its current `selection` directly (`TargetSelection` is
   structurally `CueTarget`). The full target-picker flow is preserved for
   any non-preselected entry path.
+- `FU-BE-PRESET-PER-ELEMENT` — commit 0106ab4 (2026-04-24) — Added nullable
+  `element_key` column to `fx_preset_property_assignments` via
+  [fxPresets.kt](src/main/kotlin/uk/me/cormack/lighting7/models/fxPresets.kt)
+  (picked up automatically by `SchemaUtils.createMissingTablesAndColumns`;
+  no explicit migration). DTO `FxPresetPropertyAssignmentDto.elementKey` is
+  optional (`null` preserves existing per-fixture behaviour); when non-null
+  it's interpreted as either a suffix (`"head-0"`) or a fully-qualified
+  element key (`"bar-1.head-0"`). `buildLayer3AssignmentsForPreset` in
+  [projectCues.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt)
+  now resolves element-scoped assignments via a new `findElement` helper
+  (requires `MultiElementFixture` on the target; skips members without a
+  matching element) and looks up category / composition via
+  `elementCategoryFor`, which reflects on the element class's
+  `@FixtureProperty` annotations since `FixtureElement` isn't a `Fixture`
+  and doesn't participate in the parent's `fixtureProperties` catalogue.
+  Group-scoped element assignments fan out per-member: one row per
+  `${memberKey}.${elementSuffix}` target that exists. Widened
+  [PropertyChannelWriter.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/PropertyChannelWriter.kt)
+  (`resolve` / `channelsFor`) to accept `GroupableFixture` — internally
+  branches on `Fixture` vs `FixtureElement<*>` for the reflection lookup;
+  widened `FxEngine.writeLayer4Property` / `clearLayer4Property` to match
+  so preset toggle / preview Layer 4 writes work on elements too.
+  `applyPresetLayer4Writes` / `clearPresetToggleWrite` switched from
+  `untypedFixture` to `untypedGroupableFixture` to resolve element rows.
+  `PersistedFixtureReferenceValidator.validatePresetPropertyReference` now
+  takes an optional `elementKey: String?`; when set, it validates against
+  `FixtureTypeInfo.elementGroupProperties` (properties common to all
+  elements) rather than the fixture-level descriptor list, so multi-head
+  presets with mixed per-head properties don't false-positive. Coverage:
+  6 new cases in
+  [BuildLayer3AssignmentsForPresetTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/BuildLayer3AssignmentsForPresetTest.kt)
+  (fixture + group element targeting, full-key vs suffix, non-multi-element
+  fixture skip, mixed-group skip-one-emit-other, `elementKey=null`
+  backwards-compat); 4 new cases in
+  [PersistedFixtureReferenceValidatorTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidatorTest.kt)
+  (valid element property, synthetic `position` via pan+tilt, single-head
+  fixture rejection, unknown property on multi-head); 3 new cases in
+  [PropertyChannelWriterTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/PropertyChannelWriterTest.kt)
+  (element slider / position / channelsFor) exercising the
+  `GroupableFixture` path. Frontend preset-editor element switcher is out
+  of scope for this backend landing — when added, it surfaces through the
+  existing `elementGroupProperties` on `FixtureTypeInfo`; DTO already
+  round-trips `elementKey`.
