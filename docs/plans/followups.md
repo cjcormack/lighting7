@@ -579,7 +579,7 @@ _Move items here as they land. Format:_
   semantic change — the resolver still emits only fixture-level keys
   post-expansion; the type now just carries the discriminator the surface
   layer already needed.
-- `FU-PERF-FX-TICK-ALLOCS` — commit TBD (2026-04-24) — On the
+- `FU-PERF-FX-TICK-ALLOCS` — commit a0d5a8c (2026-04-24) — On the
   [FxEngineBenchmark](src/test/kotlin/uk/me/cormack/lighting7/fx/FxEngineBenchmark.kt)
   rig (4 universes × 168 HexFixtures × 336 effects) cut p50 beat-tick latency
   ~520µs → ~287µs and per-tick allocation ~1.97 MB → ~1.03 MB (both ~45–48%
