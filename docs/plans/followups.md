@@ -497,7 +497,8 @@ _Move items here as they land. Format:_
   [SurfaceFeedbackPublisherTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisherTest.kt)
   cover the new paths (including the `AssignmentChanged event drives feedback
   to the new cue value` case which exercises the assignment-key index).
-- `FU-FE-PRESET-LIVE-PREVIEW` — lighting7 + lighting-react (2026-04-24) —
+- `FU-FE-PRESET-LIVE-PREVIEW` — commit bb24302 in lighting7 + 9929274 in
+  lighting-react (2026-04-24) —
   Added `POST /{projectId}/fx-presets/preview` and `DELETE /{projectId}/fx-presets/preview`
   in [projectFxPresets.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectFxPresets.kt).
   Each push atomically clears the project's prior preview Layer-4 writes (via the
