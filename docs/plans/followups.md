@@ -501,7 +501,7 @@ _Move items here as they land. Format:_
   call `SurfaceFeedbackPublisher.onProjectChanged()` → assert the post-switch
   full-resync feedback flips to 7-bit 127 (live DMX 255), proving
   `sessionAssignments` was cleared.
-- `FU-BE-GROUP-LAYER3-ROUNDTRIP` — (2026-04-24) — Reworked
+- `FU-BE-GROUP-LAYER3-ROUNDTRIP` — commit ff578a9 (2026-04-24) — Reworked
   `captureCurrentState` in
   [projectCues.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt)
   to preserve group-scoped Layer 3 shape. Added
