@@ -553,7 +553,7 @@ _Move items here as they land. Format:_
   semantic change — the resolver still emits only fixture-level keys
   post-expansion; the type now just carries the discriminator the surface
   layer already needed.
-- `FU-BE-SCALER-PERSISTENCE` — commit TBD (2026-04-24) — Added
+- `FU-BE-SCALER-PERSISTENCE` — commit 7bcd109 (2026-04-24) — Added
   [DaoProjectScalerStates](../../src/main/kotlin/uk/me/cormack/lighting7/models/projectScalerStates.kt)
   (`project_scaler_states(project_id UNIQUE, blackout BOOLEAN default false,
   grand_master BOOLEAN default true)`) and registered it in
