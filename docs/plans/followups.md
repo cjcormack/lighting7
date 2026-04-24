@@ -99,6 +99,61 @@ around the open/close edge (both loops run on `Dispatchers.Default`).
 
 Without one of those, coordination cost > savings. Leave dormant.
 
+### `FU-PERF-INSTRUMENT-CUEEDIT` — `setPropertyForSession` timing histograms
+
+**Status**: Ready
+**Origin**: Phase B drain plan item 1, surfaced 2026-04-24 while building
+`MidiFloodHarness` (`src/test/kotlin/uk/me/cormack/lighting7/perf/MidiFloodHarness.kt`).
+
+The MIDI flood harness produces a sustained 100 Hz CC stream into a bound cueEdit
+fader, but the corresponding server-side cost is unobservable today —
+`CueEditSessionHandler.setPropertyForSession` runs a Hikari borrow + Exposed
+transaction + Layer 3 republish per call with no instrumentation. Without
+per-call timings, the harness CSV (emit timestamps only) is just a load
+generator; the operator-facing question "is the fader hot path actually slow?"
+can't be answered.
+
+**Fix shape**: a small in-process histogram (HdrHistogram or a hand-rolled
+log-bucket counter — no need for a metrics library yet) wrapping the body of
+`setPropertyForSession`, plus a `/api/rest/perf/cueedit-histogram` GET that
+dumps p50/p95/p99/max + bucket counts. Reset per-session. Publish the snapshot
+on cueEdit `endEdit` so the harness operator can scrape it via curl after a run.
+
+**Why now**: blocks meaningful interpretation of `MidiFloodHarness` output, which
+in turn is the profiling step `FU-PERF-COALESCE-WRITES` calls out as its
+prerequisite ("profile first"). Without this, the trigger condition for
+`FU-PERF-COALESCE-WRITES` can't fire.
+
+**Unblocks**: `FU-PERF-COALESCE-WRITES`, `FU-PERF-HEX-FORMAT-ALLOC` (the colour
+serialize allocation lives inside the same hot path; a per-call timing
+histogram makes the format-allocation cost visible).
+
+### `FU-PERF-INSTRUMENT-ARTNET` — Per-universe ArtNet packet-rate counters
+
+**Status**: Ready
+**Origin**: Phase B drain plan item 2, surfaced 2026-04-24 while building
+`EffectStormHarness` (`src/test/kotlin/uk/me/cormack/lighting7/perf/EffectStormHarness.kt`).
+
+`FU-PERF-FRAME-TXN-UNIFY`'s trigger condition is "sustained ArtNet packet rate
+above ~40 pkts/sec per universe under effect load." Today there's no way to
+measure that — `ArtNetController.runTransmissionChannel` sends packets, but the
+count is not exposed. The effect-storm harness can drive sustained add/remove
+churn against the FX engine, but without per-universe counters the trigger
+condition for `FU-PERF-FRAME-TXN-UNIFY` is unobservable.
+
+**Fix shape**: `AtomicLong` per universe (or a single `ConcurrentHashMap<Universe, AtomicLong>`)
+incremented in `ArtNetController.sendCurrentValues()` after each successful
+UDP send. Add a `/api/rest/perf/artnet-rates` GET that returns
+`{universe → packetsPerSec}` averaged over the last N seconds (30 s window
+plenty). Cheap — one atomic per packet on a path that already does I/O.
+
+**Unblocks**: `FU-PERF-FRAME-TXN-UNIFY`. Also useful as a generic perf signal —
+any future change to the DMX transmission pipeline (throttle, coalesce, batch)
+benefits from the same counter.
+
+**Note**: this is monitoring-only. It does not change packet behaviour, so no
+risk of regressing on-stage output.
+
 ---
 
 ## Frontend polish
