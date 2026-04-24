@@ -489,7 +489,7 @@ _Move items here as they land. Format:_
   exercises collapse on uniform values, fallback on override break / missing
   member / unknown group, mixed group + uncovered uv row, and empty-snapshot
   short-circuit.
-- `FU-PERF-REGISTRY-INDICES` — commit _pending_ (2026-04-24) — Added secondary
+- `FU-PERF-REGISTRY-INDICES` — commit 672c139 (2026-04-24) — Added secondary
   index `sessionsByProject: ConcurrentHashMap<Int, Entry>` to
   [CueEditSessionRegistry.kt](src/main/kotlin/uk/me/cormack/lighting7/plugins/CueEditSessionRegistry.kt),
   kept in lockstep with the handle-keyed `sessions` map under a single
