@@ -200,6 +200,8 @@ class State(val config: ApplicationConfig) {
      * [deviceMatcher] attach events and per-controller input flows, resolves bindings
      * via [controlSurfaceBindingService], and calls through to [DefaultSurfaceActions].
      * Phase 4: consults [surfaceFeedbackPublisher] for touch suppression + soft takeover.
+     * Cue-edit session routing lives inside [DefaultSurfaceActions] — the router itself is
+     * session-agnostic.
      */
     val surfaceInputRouter: SurfaceInputRouter by lazy {
         SurfaceInputRouter(
@@ -211,9 +213,6 @@ class State(val config: ApplicationConfig) {
             projectIdProvider = { projectManager.currentProject.id.value },
             actions = DefaultSurfaceActions(this),
             feedbackHooks = surfaceFeedbackPublisher,
-            cueEditSessionProvider = { projectId ->
-                cueEditSessionRegistry.activeSession(projectId)?.session
-            },
         )
     }
 

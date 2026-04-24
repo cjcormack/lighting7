@@ -7,7 +7,6 @@ import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.AssignmentHealth
 import uk.me.cormack.lighting7.fx.describeAssignmentHealth
-import uk.me.cormack.lighting7.plugins.CueEditSessionState
 import java.util.Collections
 import java.util.LinkedHashMap
 import java.util.concurrent.ConcurrentHashMap
@@ -48,13 +47,6 @@ class SurfaceInputRouter(
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
     /** Consulted for touch suppression + soft takeover. Null disables both. */
     private val feedbackHooks: SurfaceFeedbackHooks? = null,
-    /**
-     * Phase 6: when non-null, inspected on every continuous event for a fixture / group
-     * property target. If the current project has an open cue-edit session, fader writes
-     * route into the cue's Layer 3 via [SurfaceActions.writeFixturePropertyToCueEdit] /
-     * [SurfaceActions.writeGroupPropertyToCueEdit] instead of hitting Layer 4.
-     */
-    private val cueEditSessionProvider: ((Int) -> CueEditSessionState?)? = null,
 ) {
     companion object {
         private val logger = LoggerFactory.getLogger(SurfaceInputRouter::class.java)
@@ -217,40 +209,16 @@ class SurfaceInputRouter(
             "surface-in: binding={} control={} value7Bit={} target={}",
             binding.id, binding.controlId, value7Bit.toInt(), binding.target::class.simpleName,
         )
-        val target = binding.target
-        val session = if (target is BindingTarget.FixtureProperty || target is BindingTarget.GroupProperty) {
-            activeCueEditSession()
-        } else null
-        when (target) {
-            is BindingTarget.FixtureProperty -> if (session != null) {
-                actions.writeFixturePropertyToCueEdit(session, target.fixtureKey, target.propertyName, value7Bit)
-            } else {
+        when (val target = binding.target) {
+            is BindingTarget.FixtureProperty ->
                 actions.writeFixtureProperty(target.fixtureKey, target.propertyName, value7Bit)
-            }
-            is BindingTarget.GroupProperty -> if (session != null) {
-                actions.writeGroupPropertyToCueEdit(session, target.groupName, target.propertyName, value7Bit)
-            } else {
+            is BindingTarget.GroupProperty ->
                 actions.writeGroupProperty(target.groupName, target.propertyName, value7Bit)
-            }
             else -> logger.debug(
                 "Ignoring continuous input on binding {} → {} (discrete target)",
                 binding.id, target::class.simpleName,
             )
         }
-    }
-
-    /**
-     * Resolve the active cue-edit session for the current project, or `null` if none —
-     * covers missing provider, project lookup failure, and empty registry.
-     */
-    private fun activeCueEditSession(): CueEditSessionState? {
-        val provider = cueEditSessionProvider ?: return null
-        val projectId = try {
-            projectIdProvider()
-        } catch (_: Exception) {
-            return null
-        }
-        return provider(projectId)
     }
 
     private fun dispatchButtonPress(

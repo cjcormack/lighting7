@@ -786,7 +786,7 @@ private fun captureCurrentState(state: State): CapturedState {
  * composition is authoritative. Each active cue's DB rows contribute `(groupKey, propertyName)`
  * hints: a hint collapses to a single group row iff every member's composed value matches;
  * otherwise members fall through to per-fixture emission. Preserves operator-authored group
- * shape after surface edits (Phase 6 `writeGroupPropertyToCueEdit`).
+ * shape after surface edits (Phase 6 group-scoped `DefaultSurfaceActions.writeGroupProperty`).
  */
 private fun captureLayer3Assignments(state: State): List<CuePropertyAssignmentDto> {
     val layer3Snapshot = state.show.fxEngine.layerResolver.currentLayer3State

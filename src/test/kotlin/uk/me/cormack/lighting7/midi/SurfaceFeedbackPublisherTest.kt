@@ -232,8 +232,6 @@ class SurfaceFeedbackPublisherTest {
             val scalerActions = object : SurfaceActions {
                 override fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte) {}
                 override fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte) {}
-                override fun writeFixturePropertyToCueEdit(session: CueEditSessionState, fixtureKey: String, propertyName: String, midiValue7Bit: UByte) {}
-                override fun writeGroupPropertyToCueEdit(session: CueEditSessionState, groupName: String, propertyName: String, midiValue7Bit: UByte) {}
                 override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {}
                 override fun flashGroupPropertyPress(groupName: String, propertyName: String, max: UByte) {}
                 override fun flashFixturePropertyRelease(fixtureKey: String, propertyName: String) {}

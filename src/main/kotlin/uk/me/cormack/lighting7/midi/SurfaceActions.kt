@@ -23,33 +23,15 @@ import uk.me.cormack.lighting7.show.Fixtures
  * dispatched onto [GlobalScope] by [DefaultSurfaceActions]).
  */
 interface SurfaceActions {
-    /** Write a continuous value (0..127 MIDI 7-bit) to a fixture property. */
+    /**
+     * Write a continuous value (0..127 MIDI 7-bit) to a fixture property. The production
+     * implementation transparently routes into the active cue's Layer 3 when a cue-edit
+     * session is open on the current project, otherwise hits Layer 4.
+     */
     fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte)
 
-    /** Write a continuous value (0..127 MIDI 7-bit) to every member of a group. */
+    /** Group variant of [writeFixtureProperty]. Same cue-edit fan-out rules apply. */
     fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte)
-
-    /**
-     * Phase 6: while a cue-edit session is active, route a fader write into the cue's Layer 3
-     * via `cueEdit.setProperty` instead of hitting Layer 4. [session] is the active session
-     * resolved from [uk.me.cormack.lighting7.plugins.CueEditSessionRegistry]; the
-     * implementation parses [midiValue7Bit] into a property-type-appropriate assignment string
-     * and upserts via [uk.me.cormack.lighting7.plugins.CueEditSessionHandler].
-     */
-    fun writeFixturePropertyToCueEdit(
-        session: CueEditSessionState,
-        fixtureKey: String,
-        propertyName: String,
-        midiValue7Bit: UByte,
-    )
-
-    /** Group variant of [writeFixturePropertyToCueEdit]. The cue stores one group-scoped row. */
-    fun writeGroupPropertyToCueEdit(
-        session: CueEditSessionState,
-        groupName: String,
-        propertyName: String,
-        midiValue7Bit: UByte,
-    )
 
     /** Flash press: store at 0..255 [max] on the property's channels. */
     fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte)
@@ -96,6 +78,11 @@ class DefaultSurfaceActions(
             logger.debug("Surface write: fixture '{}' not found", fixtureKey)
             return
         }
+        val session = activeCueEditSession()
+        if (session != null) {
+            upsertCueAssignment(session, "fixture", fixtureKey, fixture, propertyName, midiValue7Bit)
+            return
+        }
         val writes = directWriteStore.putProperty(fixture, propertyName, midiValue7Bit)
         pushToControllers(writes)
     }
@@ -107,39 +94,33 @@ class DefaultSurfaceActions(
             logger.debug("Surface write: group '{}' not found", groupName)
             return
         }
+        val session = activeCueEditSession()
+        if (session != null) {
+            // Serialise via the first member — property types are consistent within a group.
+            val first = group.fixtures.firstOrNull() as? Fixture ?: run {
+                logger.debug("Surface cueEdit write: group '{}' has no fixture members", groupName)
+                return
+            }
+            upsertCueAssignment(session, "group", groupName, first, propertyName, midiValue7Bit)
+            return
+        }
         val writes = directWriteStore.putGroupProperty(group, propertyName, midiValue7Bit)
         pushToControllers(writes)
     }
 
-    override fun writeFixturePropertyToCueEdit(
-        session: CueEditSessionState,
-        fixtureKey: String,
-        propertyName: String,
-        midiValue7Bit: UByte,
-    ) {
-        val fixture = fixtures.tryUntypedFixture(fixtureKey) ?: run {
-            logger.debug("Surface cueEdit write: fixture '{}' not found", fixtureKey)
-            return
+    /**
+     * Resolve the active cue-edit session for the current project, or `null` if none. Guards
+     * against `currentProject` throwing before [uk.me.cormack.lighting7.state.State.initializeShow]
+     * has run — surface input can't arrive before then in production, but tests and
+     * start-up races shouldn't crash.
+     */
+    private fun activeCueEditSession(): CueEditSessionState? {
+        val projectId = try {
+            state.projectManager.currentProject.id.value
+        } catch (_: Exception) {
+            return null
         }
-        upsertCueAssignment(session, "fixture", fixtureKey, fixture, propertyName, midiValue7Bit)
-    }
-
-    override fun writeGroupPropertyToCueEdit(
-        session: CueEditSessionState,
-        groupName: String,
-        propertyName: String,
-        midiValue7Bit: UByte,
-    ) {
-        val group = fixtures.tryUntypedGroup(groupName) ?: run {
-            logger.debug("Surface cueEdit write: group '{}' not found", groupName)
-            return
-        }
-        // Serialise via the first member — property types are consistent within a group.
-        val first = group.fixtures.firstOrNull() as? Fixture ?: run {
-            logger.debug("Surface cueEdit write: group '{}' has no fixture members", groupName)
-            return
-        }
-        upsertCueAssignment(session, "group", groupName, first, propertyName, midiValue7Bit)
+        return state.cueEditSessionRegistry.activeSession(projectId)?.session
     }
 
     private fun upsertCueAssignment(

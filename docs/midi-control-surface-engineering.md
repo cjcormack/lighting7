@@ -368,7 +368,7 @@ All subscribers are cancelled together on `SurfaceFeedbackPublisher.stop()`.
 | Cue stack buttons | `CueStackManager.*` | *(Layer 3 via cue apply)* | Same path as REST / UI |
 | Fire cue | `CueStackManager.fireCue` | *(Layer 3)* | |
 
-Phase 6 adds a **cueEdit-aware router branch**: when a cue-edit session is open for the project, continuous writes route to `cueEdit.setProperty` (Layer 3) instead of Layer 4. This matches the frontend `EditorContext` pattern — surfaces become another client of the same session. See [control-surface-plan.md](plans/completed/control-surface-plan.md) §Phase 6.
+Phase 6 adds **cueEdit-aware property writes**: when a cue-edit session is open for the project, `DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty` transparently route to `cueEdit.setProperty` (Layer 3) instead of Layer 4. The router itself is session-agnostic — branching lives inside the action impl (which is already State-coupled). Matches the frontend `EditorContext` pattern: surfaces become another client of the same session. See [control-surface-plan.md](plans/completed/control-surface-plan.md) §Phase 6.
 
 ## Threading model
 

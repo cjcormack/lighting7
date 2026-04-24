@@ -214,24 +214,6 @@ convention.
 **Scope**: dedicated cleanup pass, not in-flight with feature work. Relates to
 `FU-QUAL-KEY-CONVERGENCE`.
 
-### `FU-QUAL-PUSHDOWN-SESSION-ROUTING` — Push session routing into `DefaultSurfaceActions`
-
-**Status**: Ready (small)
-**Origin**: Control-surface Phase 6
-
-Currently the router branches on `activeCueEditSession()` and calls one of
-`writeFixturePropertyToCueEdit` / `writeFixtureProperty`. Alternative: the
-`DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty`
-implementations themselves check for a session and fan out to the cueEdit
-path, removing the `cueEditSessionProvider` parameter from the router
-entirely.
-
-**Tradeoff**: current router shape is easier to test (router test doesn't
-need a session provider); push-down moves branching into
-`DefaultSurfaceActions`, already State-coupled.
-
-**Defer until**: the router grows more context-dependent routing rules.
-
 ### `FU-QUAL-KEY-CONVERGENCE` — `AssignmentKey` vs `Layer3Resolver.Key` convergence
 
 **Status**: Trigger (bigger refactor)
@@ -515,6 +497,26 @@ _Move items here as they land. Format:_
   RTK hooks. Effects-channel preview is intentionally out of scope — only Layer-4
   property assignments land. Single preview slot per project (last-writer-wins);
   multi-tab race is acceptable, mid-show preview by an operator is the dominant case.
+- `FU-QUAL-PUSHDOWN-SESSION-ROUTING` — commit TBD (2026-04-24) — Dropped
+  `writeFixturePropertyToCueEdit` / `writeGroupPropertyToCueEdit` from the
+  [SurfaceActions.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceActions.kt)
+  interface; `DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty`
+  now call a private `activeCueEditSession()` that reads
+  `state.cueEditSessionRegistry.activeSession(projectId)?.session` and fans out
+  to the existing `upsertCueAssignment` path when a session is open. Router
+  [SurfaceInputRouter.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt)
+  drops its `cueEditSessionProvider` constructor param; `dispatchContinuous`
+  becomes a plain 2-arm `when` over `BindingTarget.FixtureProperty` /
+  `GroupProperty`. [State.kt](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt)
+  no longer wires a provider into the router. Flash press keeps hitting Layer 4
+  regardless of session (frontend parity) — that path was always outside the
+  removed router branch. Router tests that exercised session routing at the
+  router layer (3 tests) are deleted — the behaviour moves inside
+  `DefaultSurfaceActions`, which is state-coupled and exercised by hardware
+  validation (FU-MANUAL-CUEEDIT-HARDWARE). Remaining
+  [SurfaceInputRouterTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouterTest.kt)
+  is correspondingly simpler (no session parameter, no `CueEditSessionState`
+  import).
 - `FU-FE-PICKER-UX-POLISH` — commit e97a664 in lighting-react (2026-04-24) —
   Added a `preselectedTarget?: CueTarget | null` prop to both
   [EffectFlow.tsx](src/components/cues/editor/EffectFlow.tsx) and
