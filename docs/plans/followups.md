@@ -135,21 +135,6 @@ over a benchmark run should surface which dominates.
 
 ## Frontend polish
 
-### `FU-FE-PICKER-UX-POLISH` — Effect / Preset picker UX polish
-
-**Status**: Ready
-**Origin**: Cue-authoring Phase 2d, deferred 2026-04-21
-
-Inside `CueTargetDetail`, the Effects and Presets tabs still open `EffectFlow`
-/ `PresetPicker` at their target-picker step even though a card selection is
-already active. Redundant — the selection is known, the picker step shouldn't
-re-ask.
-
-**Fix shape**: extract `EffectConfigureStep` / `PresetPickStep` / `TimingFields`
-into `src/components/cues/editor/shared/` and drop the target-picker step
-when opened from a selected card. Keep the full flow for the non-selected-card
-entry path.
-
 ### `FU-FE-REBIND-INPLACE` — In-place "Rebind" UX for dead assignments
 
 **Status**: Trigger (operator feedback)
@@ -521,3 +506,14 @@ _Move items here as they land. Format:_
   exercises collapse on uniform values, fallback on override break / missing
   member / unknown group, mixed group + uncovered uv row, and empty-snapshot
   short-circuit.
+- `FU-FE-PICKER-UX-POLISH` — commit e97a664 in lighting-react (2026-04-24) —
+  Added a `preselectedTarget?: CueTarget | null` prop to both
+  [EffectFlow.tsx](src/components/cues/editor/EffectFlow.tsx) and
+  [PresetPicker.tsx](src/components/cues/editor/PresetPicker.tsx). When set
+  in add mode, the flow starts at the category / preset step with
+  `selectedTarget` pre-filled instead of re-asking for a target; back from
+  that step calls `onCancel` (no target-picker to return to).
+  [CueTargetDetail.tsx](src/components/cues/editor/CueTargetDetail.tsx)
+  passes its current `selection` directly (`TargetSelection` is
+  structurally `CueTarget`). The full target-picker flow is preserved for
+  any non-preselected entry path.
