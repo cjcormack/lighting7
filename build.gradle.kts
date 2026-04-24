@@ -5,6 +5,7 @@ val logback_version: String by project
 val postgres_version: String by project
 val exposed_version: String by project
 val hikaricp_version: String by project
+val embedded_postgres_version: String by project
 
 plugins {
     // Kotlin 2.2.x is required by ktmidi-jvm-desktop's transitive stdlib. Upgrading from
@@ -53,7 +54,19 @@ dependencies {
     implementation("io.ktor:ktor-server-netty")
     implementation("ch.qos.logback:logback-classic:$logback_version")
     testImplementation("io.ktor:ktor-server-test-host")
+    testImplementation("io.ktor:ktor-client-content-negotiation")
+    testImplementation("io.ktor:ktor-client-websockets")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
+    // Embedded Postgres for route-level integration tests. Downloads a real Postgres
+    // binary and manages its lifecycle in-JVM — no Docker daemon needed. Picked over
+    // Testcontainers because Testcontainers 1.21.x hardcodes Docker API 1.32, which
+    // Docker Engine 25+ and OrbStack both reject (minimum API 1.40).
+    testImplementation("io.zonky.test:embedded-postgres:$embedded_postgres_version")
+    testImplementation(platform("io.zonky.test.postgres:embedded-postgres-binaries-bom:17.6.0"))
+    testImplementation("io.zonky.test.postgres:embedded-postgres-binaries-darwin-arm64v8")
+    testImplementation("io.zonky.test.postgres:embedded-postgres-binaries-darwin-amd64")
+    testImplementation("io.zonky.test.postgres:embedded-postgres-binaries-linux-amd64")
+    testImplementation("io.zonky.test.postgres:embedded-postgres-binaries-linux-arm64v8")
     implementation("ch.bildspur:artnet4j:0.6.2")
 
     // MIDI control-surface transport (Phase 0 of plans/completed/control-surface-plan.md).

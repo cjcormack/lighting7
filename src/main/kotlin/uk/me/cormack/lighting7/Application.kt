@@ -27,6 +27,15 @@ fun Application.module() {
     val show = state.initializeShow()
     show.start()
 
+    moduleWithState(state)
+}
+
+/**
+ * Wire HTTP + routing + sockets over an externally-provided [State]. Tests use this
+ * to mount routes against an ephemeral Postgres without re-entering the heavyweight
+ * [State.initializeShow] bootstrap. Prod continues through [module].
+ */
+fun Application.moduleWithState(state: State) {
     configureHTTP()
     configureSockets(state)
     configureRouting(state)
