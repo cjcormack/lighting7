@@ -503,7 +503,7 @@ _Move items here as they land. Format:_
   [SurfaceInputRouterTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouterTest.kt)
   is correspondingly simpler (no session parameter, no `CueEditSessionState`
   import).
-- `FU-QUAL-TARGET-REF-SEALED` — (2026-04-24) — Introduced
+- `FU-QUAL-TARGET-REF-SEALED` — commit 8161820 (2026-04-24) — Introduced
   [TargetRef.kt](src/main/kotlin/uk/me/cormack/lighting7/models/TargetRef.kt):
   `sealed class TargetRef { Fixture(key); Group(key) }` with `discriminator` /
   `key` accessors and `TargetRef.of(type, key)` for parsing DB / DTO strings.
