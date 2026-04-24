@@ -5,14 +5,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 class ControllerTransaction(controllers: List<DmxController>) {
-    private data class UniverseState(
+    // Per-universe staging. Reads fall through to the controller's own `currentValues` for any
+    // channel not yet staged, so we don't pay an O(channels-per-universe) `toMutableMap()` copy
+    // per transaction — a hot-path win since the FX engine opens one transaction per tick.
+    private class UniverseState(
         val controller: DmxController,
-        val currentValues: MutableMap<Int, UByte>,
         val valuesToSet: MutableMap<Int, ChannelChange>,
     )
 
     private val universeState = controllers.associate {
-        it.universe to UniverseState(it, it.currentValues.toMutableMap(), mutableMapOf())
+        it.universe to UniverseState(it, mutableMapOf())
     }
 
     fun setValues(universe: Universe, valuesToSet: List<Pair<Int, ChannelChange>>) {
@@ -23,7 +25,6 @@ class ControllerTransaction(controllers: List<DmxController>) {
 
     fun setValue(universe: Universe, channelNo: Int, channelChange: ChannelChange) {
         checkNotNull(universeState[universe]).valuesToSet[channelNo] = channelChange
-        checkNotNull(universeState[universe]).currentValues[channelNo] = channelChange.newValue
     }
 
     fun setValue(universe: Universe, channelNo: Int, channelValue: UByte, fadeMs: Long = 0L) {
@@ -31,7 +32,9 @@ class ControllerTransaction(controllers: List<DmxController>) {
     }
 
     fun getValue(universe: Universe, channelNo: Int): UByte {
-        return checkNotNull(universeState[universe]).currentValues[channelNo] ?: 0u
+        val state = checkNotNull(universeState[universe])
+        state.valuesToSet[channelNo]?.let { return it.newValue }
+        return state.controller.getValue(channelNo)
     }
 
     /**
@@ -47,16 +50,19 @@ class ControllerTransaction(controllers: List<DmxController>) {
      * `runBlocking` cost and can compose this with other suspend work.
      */
     suspend fun applySuspend(): Map<Universe, Map<Int, UByte>> {
-        val pending = universeState.values.filter { it.valuesToSet.isNotEmpty() }
-        if (pending.isNotEmpty()) {
+        if (universeState.values.any { it.valuesToSet.isNotEmpty() }) {
             coroutineScope {
-                for (state in pending) {
+                for (state in universeState.values) {
+                    if (state.valuesToSet.isEmpty()) continue
                     launch { state.controller.setValuesSuspend(state.valuesToSet.toList()) }
                 }
             }
         }
 
-        return universeState.mapValues { it.value.valuesToSet.mapValues { valueToSet -> valueToSet.value.newValue } }
+        return universeState.mapValues { entry ->
+            val staged = entry.value.valuesToSet
+            if (staged.isEmpty()) emptyMap() else staged.mapValues { it.value.newValue }
+        }
     }
 
     fun <T: Any> use(block: (it: ControllerTransaction) -> T) {

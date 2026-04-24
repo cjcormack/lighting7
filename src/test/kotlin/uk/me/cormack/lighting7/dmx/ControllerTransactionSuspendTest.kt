@@ -45,4 +45,31 @@ class ControllerTransactionSuspendTest {
         assertTrue(result.getValue(u).isEmpty())
         assertTrue(c.writeLog.isEmpty())
     }
+
+    @Test
+    fun `getValue reads staged change before committing`() {
+        val u = Universe(0, 0)
+        val c = MockDmxController(u)
+        c.setValue(1, 10u)
+
+        val tx = ControllerTransaction(listOf(c))
+        assertEquals(10u.toUByte(), tx.getValue(u, 1))
+
+        tx.setValue(u, 1, 77u)
+        assertEquals(77u.toUByte(), tx.getValue(u, 1))
+        assertEquals(10u.toUByte(), c.getValue(1))
+
+        tx.setValue(u, 1, 99u)
+        assertEquals(99u.toUByte(), tx.getValue(u, 1))
+    }
+
+    @Test
+    fun `getValue falls through to live controller when not staged`() {
+        val u = Universe(0, 0)
+        val c = MockDmxController(u)
+        c.setValue(3, 123u)
+
+        val tx = ControllerTransaction(listOf(c))
+        assertEquals(123u.toUByte(), tx.getValue(u, 3))
+    }
 }

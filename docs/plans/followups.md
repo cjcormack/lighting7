@@ -99,21 +99,6 @@ around the open/close edge (both loops run on `Dispatchers.Default`).
 
 Without one of those, coordination cost > savings. Leave dormant.
 
-### `FU-PERF-FX-TICK-ALLOCS` — Reduce FxEngine per-tick allocation
-
-**Status**: Ready (profile → refactor)
-**Origin**: Cue-authoring Phase 5 baseline capture, 2026-04-22
-
-Benchmark baseline: ~600 µs p50 / ~4 ms p99 per beat tick, **~1.9 MB/tick
-allocation** on a 4×168 HexFixture rig with 336 effects. Allocation is the
-most surprising number — not an immediate correctness concern, but a real
-future optimisation target.
-
-**Hot spots to profile before refactoring**: `Layer3Resolver.compose*`
-list-building, `PropertyValue` boxing through the sealed hierarchy,
-`ChannelWrite` record allocation per channel per tick. JFR flight recording
-over a benchmark run should surface which dominates.
-
 ---
 
 ## Frontend polish
@@ -594,3 +579,35 @@ _Move items here as they land. Format:_
   semantic change — the resolver still emits only fixture-level keys
   post-expansion; the type now just carries the discriminator the surface
   layer already needed.
+- `FU-PERF-FX-TICK-ALLOCS` — commit TBD (2026-04-24) — On the
+  [FxEngineBenchmark](src/test/kotlin/uk/me/cormack/lighting7/fx/FxEngineBenchmark.kt)
+  rig (4 universes × 168 HexFixtures × 336 effects) cut p50 beat-tick latency
+  ~520µs → ~287µs and per-tick allocation ~1.97 MB → ~1.03 MB (both ~45–48%
+  down). Three changes: (1) in
+  [ControllerTransaction.kt](src/main/kotlin/uk/me/cormack/lighting7/dmx/ControllerTransaction.kt)
+  dropped the eager `currentValues.toMutableMap()` copy per transaction;
+  `getValue` now checks the staged `valuesToSet` first and falls through to
+  the live controller, killing an O(channels-per-universe × universes) copy
+  per tick. Also added a fast-path in `applySuspend` that skips the
+  coroutineScope when nothing is pending. (2) Added a per-transaction
+  `wrappedFixtureCache` in
+  [Fixtures.FixturesWithTransaction](src/main/kotlin/uk/me/cormack/lighting7/show/Fixtures.kt)
+  so repeated `untypedFixture` / `untypedGroupableFixture` lookups within a
+  tick reuse the cloned wrapper instead of re-cloning the fixture's 10+ DMX
+  property objects on every call — halves per-tick fixture-wrap allocation on
+  the reset + apply double-lookup pattern. (3) In
+  [LayerResolver.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/LayerResolver.kt)
+  built a `layer3Index: Map<String, Map<String, PropertyValue>>` alongside
+  `layer3State` so `fallbackFor` skips the compound `Layer3Resolver.Key`
+  allocation on every reset. Also restructured
+  `FxEngine.resetActiveProperties` in
+  [FxEngine.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/FxEngine.kt) to
+  drop the per-(fixture, property) `PropertyKey` data class + `buildList`
+  with composite-secondary targets, using a two-level `HashMap<String,
+  HashSet<String>>` dedupe that only fans out when `compositeTargets` is
+  non-null. New coverage in
+  [ControllerTransactionSuspendTest.kt](src/test/kotlin/uk/me/cormack/lighting7/dmx/ControllerTransactionSuspendTest.kt)
+  pins the lazy-read semantics (`getValue` returns staged writes before
+  commit, falls through to live controller otherwise); new coverage in
+  [FixturesWithTransactionTest.kt](src/test/kotlin/uk/me/cormack/lighting7/show/FixturesWithTransactionTest.kt)
+  asserts repeated lookups return the same wrapped instance.

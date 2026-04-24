@@ -31,14 +31,34 @@ class LayerResolver(
     @Volatile
     private var layer3State: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue> = emptyMap()
 
+    // Hot-path index keyed by fixtureKey → propertyName → value. Lets the per-tick reset path
+    // look up a Layer 3 contribution without allocating a compound `Layer3Resolver.Key` per
+    // call. Rebuilt atomically alongside `layer3State` in [applyAssignments].
+    @Volatile
+    private var layer3Index: Map<String, Map<String, Layer3Resolver.PropertyValue>> = emptyMap()
+
     /** Replace the Layer 3 state from the current set of assignments. Called on cue apply. */
     fun applyAssignments(assignments: List<Layer3Resolver.Assignment>) {
-        layer3State = if (assignments.isEmpty()) emptyMap() else layer3.resolve(assignments)
+        val composed = if (assignments.isEmpty()) emptyMap() else layer3.resolve(assignments)
+        layer3State = composed
+        layer3Index = buildIndex(composed)
+    }
+
+    private fun buildIndex(
+        composed: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue>,
+    ): Map<String, Map<String, Layer3Resolver.PropertyValue>> {
+        if (composed.isEmpty()) return emptyMap()
+        val idx = HashMap<String, HashMap<String, Layer3Resolver.PropertyValue>>()
+        for ((key, value) in composed) {
+            idx.getOrPut(key.targetKey) { HashMap() }[key.propertyName] = value
+        }
+        return idx
     }
 
     /** Clear the Layer 3 state — equivalent to "no cue contributing". */
     fun clearAssignments() {
         layer3State = emptyMap()
+        layer3Index = emptyMap()
     }
 
     /** Current snapshot; exposed for tests and diagnostics. */
@@ -53,9 +73,10 @@ class LayerResolver(
     fun fallbackFor(target: FxTarget, fixture: GroupableFixture, fixtureKey: String): FxOutput {
         // Phase 0 hot-path fast-path: when no cues contribute Layer 3 state, skip key
         // allocation entirely and go straight to Layer 4 / Layer 5.
-        val state = layer3State
-        if (state.isNotEmpty()) {
-            val l3 = state[Layer3Resolver.Key.fixture(fixtureKey, target.propertyName)]
+        val idx = layer3Index
+        if (idx.isNotEmpty()) {
+            val byProperty = idx[fixtureKey]
+            val l3 = byProperty?.get(target.propertyName)
             if (l3 != null) {
                 l3.asFxOutputFor(target)?.let { return it }
             }

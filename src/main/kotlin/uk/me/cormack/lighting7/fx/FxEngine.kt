@@ -1496,34 +1496,45 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         effects: List<FxInstance>,
     ) {
-        data class PropertyKey(val fixtureKey: String, val propertyName: String)
-
-        val seen = mutableSetOf<PropertyKey>()
+        // Two-level dedupe avoids allocating a compound-key data class per (fixture, property)
+        // tuple. On a 168-fixture × 2-property rig that's 336 avoided allocations per tick.
+        val seen = HashMap<String, HashSet<String>>()
 
         for (effect in effects) {
             if (!effect.isRunning) continue
 
             val keys = resolveEffectFixtureKeys(effect)
-
-            // Collect all targets: primary + composite secondary targets
-            val targets = buildList {
-                add(effect.target)
-                effect.compositeTargets?.values?.let { addAll(it) }
-            }
+            val primary = effect.target
+            val composite = effect.compositeTargets
 
             for (key in keys) {
-                for (target in targets) {
-                    if (!seen.add(PropertyKey(key, target.propertyName))) continue
-                    try {
-                        val fixture = fixturesWithTx.untypedGroupableFixture(key)
-                        if (allChannelsParked(target, fixture)) continue
-                        val fallback = layerResolver.fallbackFor(target, fixture, key)
-                        target.resetToFallback(fixture, fallback)
-                    } catch (_: Exception) {
-                        // Non-fatal — the effect application will also handle missing fixtures
+                val seenForKey = seen.getOrPut(key) { HashSet() }
+                if (seenForKey.add(primary.propertyName)) {
+                    resetOne(fixturesWithTx, key, primary)
+                }
+                if (composite != null) {
+                    for (target in composite.values) {
+                        if (seenForKey.add(target.propertyName)) {
+                            resetOne(fixturesWithTx, key, target)
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private fun resetOne(
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        fixtureKey: String,
+        target: FxTarget,
+    ) {
+        try {
+            val fixture = fixturesWithTx.untypedGroupableFixture(fixtureKey)
+            if (allChannelsParked(target, fixture)) return
+            val fallback = layerResolver.fallbackFor(target, fixture, fixtureKey)
+            target.resetToFallback(fixture, fallback)
+        } catch (_: Exception) {
+            // Non-fatal — the effect application will also handle missing fixtures
         }
     }
 

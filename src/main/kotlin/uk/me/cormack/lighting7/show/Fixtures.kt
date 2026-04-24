@@ -46,14 +46,26 @@ class Fixtures {
 
     class FixturesWithTransaction(@PublishedApi internal val baseFixtures: Fixtures, val transaction: ControllerTransaction) {
         val controllers: List<DmxController> get () = baseFixtures.controllers
-        val fixtures: List<Fixture> get() = baseFixtures.fixtures.map { it.withTransaction(transaction) }
+        val fixtures: List<Fixture> get() = baseFixtures.fixtures.map { wrappedFixture(it) }
 
         var customChangedChannels: Map<Universe, Map<Int, UByte>>? = null
+
+        // Per-transaction fixture wrapper cache. Without this, an FX tick that touches 168
+        // fixtures ends up allocating a fresh wrapped fixture per lookup — each wrap clones
+        // 10+ DMX property objects. Cached per key within the lifetime of this transaction.
+        // Not thread-safe: callers must hold `baseFixtures.registerLock` for the outer lookup,
+        // and a given `FixturesWithTransaction` is scoped to a single FX tick coroutine.
+        private val wrappedFixtureCache = HashMap<String, Fixture>()
+        private val wrappedElementCache = HashMap<String, GroupableFixture>()
+
+        private fun wrappedFixture(fixture: Fixture): Fixture =
+            wrappedFixtureCache.getOrPut(fixture.key) { fixture.withTransaction(transaction) }
 
         fun controller(universe: Universe): DmxController = baseFixtures.controller(universe)
 
         fun untypedFixture(key: String): Fixture = baseFixtures.registerLock.read {
-            checkNotNull(baseFixtures.fixtureRegister[key]?.withTransaction(transaction)) { "Fixture '$key' not found" }
+            val base = baseFixtures.fixtureRegister[key] ?: error("Fixture '$key' not found")
+            wrappedFixture(base)
         }
 
         /**
@@ -69,12 +81,14 @@ class Fixtures {
          * @throws IllegalStateException if no matching fixture or element is found
          */
         fun untypedGroupableFixture(key: String): GroupableFixture = baseFixtures.registerLock.read {
-            // First, try direct fixture lookup
-            baseFixtures.fixtureRegister[key]?.withTransaction(transaction)?.let { return@read it }
+            val base = baseFixtures.fixtureRegister[key]
+            if (base != null) return@read wrappedFixture(base)
 
-            // Try to resolve as an element key (e.g. "fixture-key.head-0" or "fixture-key.element-0")
-            baseFixtures.resolveElement(key)?.withTransaction(transaction)
-                ?: error("Fixture or element '$key' not found")
+            wrappedElementCache.getOrPut(key) {
+                val element = baseFixtures.resolveElement(key)
+                    ?: error("Fixture or element '$key' not found")
+                element.withTransaction(transaction)
+            }
         }
 
         inline fun <reified T: Fixture> fixture(key: String): T {
