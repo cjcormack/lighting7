@@ -133,18 +133,6 @@ author flow.
 `PropertyChannelWriter` (Phase 7) can drive live-preview of the proposed
 rebind — implementation is unblocked.
 
-### `FU-FE-PRESET-LIVE-PREVIEW` — "Preview on selection" live-apply for `PresetEditor`
-
-**Status**: Ready
-**Origin**: Cue-authoring Phase 3, unblocked by Phase 7 (2026-04-23)
-
-Apply the preset-in-progress to a scratch fixture selection inside the preset
-editor to test live. Was blocked on a property-level resolver;
-`PropertyChannelWriter` now provides exactly that.
-
-**Fix shape**: Layer-4 write fan-out across the scratch selection when the
-editor has a live preview active; toggle-off clear on editor close.
-
 ---
 
 ## Backend / composition model
@@ -509,6 +497,23 @@ _Move items here as they land. Format:_
   [SurfaceFeedbackPublisherTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisherTest.kt)
   cover the new paths (including the `AssignmentChanged event drives feedback
   to the new cue value` case which exercises the assignment-key index).
+- `FU-FE-PRESET-LIVE-PREVIEW` — lighting7 + lighting-react (2026-04-24) —
+  Added `POST /{projectId}/fx-presets/preview` and `DELETE /{projectId}/fx-presets/preview`
+  in [projectFxPresets.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectFxPresets.kt).
+  Each push atomically clears the project's prior preview Layer-4 writes (via the
+  existing `clearPresetToggleWrite`) and reapplies the in-progress draft using
+  `applyPresetLayer4Writes` with a synthetic preset id derived from the project key
+  hash. `swapPresetPreviewSlot` extracts the `ConcurrentHashMap.compute` lifecycle
+  so two concurrent pushes for the same project can't interleave; coverage in
+  [PresetPreviewSlotTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/PresetPreviewSlotTest.kt).
+  Frontend ships a `PresetLivePreview` panel inside `PresetEditor` (lighting-react
+  `src/components/presets/PresetLivePreview.tsx`) — operator toggles "Live Preview" on,
+  picks compatible fixtures (filtered by `preset.fixtureType`) and/or groups (unfiltered),
+  the panel debounces draft pushes at 80 ms and fires a clear on toggle-off / editor
+  unmount via the new `usePreviewPresetMutation` / `useClearPresetPreviewMutation`
+  RTK hooks. Effects-channel preview is intentionally out of scope — only Layer-4
+  property assignments land. Single preview slot per project (last-writer-wins);
+  multi-tab race is acceptable, mid-show preview by an operator is the dominant case.
 - `FU-FE-PICKER-UX-POLISH` — commit e97a664 in lighting-react (2026-04-24) —
   Added a `preselectedTarget?: CueTarget | null` prop to both
   [EffectFlow.tsx](src/components/cues/editor/EffectFlow.tsx) and

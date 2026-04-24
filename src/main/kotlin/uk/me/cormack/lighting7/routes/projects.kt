@@ -190,6 +190,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                 project.scripts.forEach { it.delete() }
                 project.controlSurfaceBindings.forEach { it.delete() }
                 state.controlSurfaceBindingService.invalidate(project.id.value)
+                clearPresetPreview(state, resource.id.toString())
                 project.delete()
 
                 DeleteResult.SUCCESS

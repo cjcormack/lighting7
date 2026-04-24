@@ -240,6 +240,29 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
         }
     }
 
+    post<FxPresetPreviewResource> { resource ->
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot preview presets in project '${p.name}' - only the current project can be previewed" },
+        ) {
+            val request = call.receive<PresetPreviewRequest>()
+            val response = applyPresetPreview(state, resource.parent.projectId, request)
+            call.respond(response)
+        }
+    }
+
+    delete<FxPresetPreviewResource> { resource ->
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot clear preview in project '${p.name}' - only the current project can be previewed" },
+        ) {
+            clearPresetPreview(state, resource.parent.projectId)
+            call.respond(HttpStatusCode.OK)
+        }
+    }
+
     // POST /{projectId}/fx-presets/{presetId}/toggle - Toggle preset on/off for targets
     post<ToggleFxPresetResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
@@ -292,6 +315,9 @@ data class CopyFxPresetResource(val parent: ProjectFxPresetsResource, val preset
 
 @Resource("/{presetId}/toggle")
 data class ToggleFxPresetResource(val parent: ProjectFxPresetsResource, val presetId: Int)
+
+@Resource("/preview")
+data class FxPresetPreviewResource(val parent: ProjectFxPresetsResource)
 
 // DTOs
 @Serializable
@@ -350,6 +376,22 @@ data class TogglePresetTarget(
 data class TogglePresetResponse(
     val action: String,  // "applied" or "removed"
     val effectCount: Int,
+)
+
+/**
+ * Complete desired state for the project's preview slot — replaces any prior preview
+ * writes. Empty `targets` (or `propertyAssignments`) collapses to a clear.
+ */
+@Serializable
+data class PresetPreviewRequest(
+    val propertyAssignments: List<FxPresetPropertyAssignmentDto> = emptyList(),
+    val palette: List<String> = emptyList(),
+    val targets: List<TogglePresetTarget> = emptyList(),
+)
+
+@Serializable
+data class PresetPreviewResponse(
+    val writeCount: Int,
 )
 
 // Helper
@@ -447,7 +489,7 @@ private fun isPresetActiveOnTarget(
  * Record of one Layer 4 channel assertion made by a preset toggle. Group-scoped preset
  * assignments expand to one entry per member fixture. `propertyName` is canonical form.
  */
-private data class PresetToggleWrite(
+internal data class PresetToggleWrite(
     val fixtureKey: String,
     val propertyName: String,
 )
@@ -462,6 +504,92 @@ private data class PresetToggleWrite(
  */
 private val presetToggleStates =
     java.util.concurrent.ConcurrentHashMap<Int, List<PresetToggleWrite>>()
+
+/**
+ * Per-project preview slot for the preset editor's "Live Preview" toggle. Holds the most
+ * recent [PresetPreviewRequest] alongside the [PresetToggleWrite]s it produced, so
+ * idempotent re-pushes (frontend draft churn at 60 Hz coalesces into a debounced 80 ms tick;
+ * if the operator pauses on a value the trailing tick still re-sends the same payload) can
+ * short-circuit before clearing and re-asserting any DMX channels.
+ *
+ * Keyed by raw `projectId` string (whatever the route resolved to). Visible for testing.
+ */
+internal data class PresetPreviewSlot(
+    val request: PresetPreviewRequest,
+    val writes: List<PresetToggleWrite>,
+)
+
+internal val presetPreviewStates =
+    java.util.concurrent.ConcurrentHashMap<String, PresetPreviewSlot>()
+
+/**
+ * Atomically swap the project's preview slot. If [request] equals the stored request the
+ * call is a no-op (returns the prior writes for the response count). Otherwise the prior
+ * writes are passed one-by-one to [clear], [install] computes the new writes, and the new
+ * `(request, writes)` pair replaces the slot. Empty new writes removes the entry entirely.
+ *
+ * Wrapped in [java.util.concurrent.ConcurrentHashMap.compute] so two concurrent pushes for
+ * the same project can't interleave their clear/install steps. Visible for testing — tests
+ * pass identity stand-ins for [clear] / [install] and inspect [presetPreviewStates].
+ */
+internal fun swapPresetPreviewSlot(
+    projectKey: String,
+    request: PresetPreviewRequest,
+    clear: (PresetToggleWrite) -> Unit,
+    install: () -> List<PresetToggleWrite>,
+): List<PresetToggleWrite> {
+    val installed = ArrayList<PresetToggleWrite>()
+    presetPreviewStates.compute(projectKey) { _, existing ->
+        if (existing != null && existing.request == request) {
+            installed.addAll(existing.writes)
+            return@compute existing
+        }
+        existing?.writes?.forEach(clear)
+        val next = install()
+        installed.addAll(next)
+        if (next.isEmpty()) null else PresetPreviewSlot(request, next)
+    }
+    return installed
+}
+
+/**
+ * Apply [request] as the project's active preview. Empty targets (or empty
+ * propertyAssignments) collapses to a clear. See [swapPresetPreviewSlot] for the
+ * concurrency + idempotency contract.
+ */
+internal fun applyPresetPreview(
+    state: State,
+    projectKey: String,
+    request: PresetPreviewRequest,
+): PresetPreviewResponse {
+    val writes = swapPresetPreviewSlot(
+        projectKey,
+        request,
+        clear = { clearPresetToggleWrite(state, it) },
+        install = {
+            if (request.targets.isEmpty() || request.propertyAssignments.isEmpty()) {
+                emptyList()
+            } else {
+                // Synthetic preset id keeps log lines distinct from real toggles.
+                val syntheticPresetId = -((projectKey.hashCode() and Int.MAX_VALUE).coerceAtLeast(1))
+                applyPresetLayer4Writes(
+                    state,
+                    presetId = syntheticPresetId,
+                    presetPropertyAssignments = request.propertyAssignments,
+                    targets = request.targets,
+                    presetPalette = request.palette.toPaletteColours(),
+                )
+            }
+        },
+    )
+    return PresetPreviewResponse(writeCount = writes.size)
+}
+
+/** Clear the project's active preview, if any. */
+internal fun clearPresetPreview(state: State, projectKey: String) {
+    val cleared = presetPreviewStates.remove(projectKey) ?: return
+    cleared.writes.forEach { clearPresetToggleWrite(state, it) }
+}
 
 /**
  * Toggle a preset's effects + property assignments on/off for the given targets.
