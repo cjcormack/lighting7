@@ -397,6 +397,15 @@ class FxEngine(
         }
     }
 
+    /**
+     * Snapshot the set of cue ids currently contributing Layer 3 assignments. Used by
+     * `snapshot-from-live` to read each active cue's pre-expansion DB rows and preserve the
+     * group-scoped shape in the captured state.
+     */
+    fun activeCueAssignmentIds(): Set<Int> = synchronized(cueAssignmentsLock) {
+        cueAssignments.keys.toSet()
+    }
+
     // --- Layer 4 property writes ---
     //
     // Sticky direct writes at property-value granularity. Callers (preset toggle, future REST

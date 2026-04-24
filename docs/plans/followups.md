@@ -181,24 +181,6 @@ editor has a live preview active; toggle-off clear on editor close.
 
 ## Backend / composition model
 
-### `FU-BE-GROUP-LAYER3-ROUNDTRIP` — Group-level Layer 3 assignments round-trip
-
-**Status**: Ready (decision needed first)
-**Origin**: Cross-plan — Control-surface Phase 6 + Cue-authoring cross-ref
-
-`routes/projectCues.kt::captureCurrentState` always emits `targetType="fixture"`
-rows (reads `layerResolver.currentLayer3State`, which is post-expansion).
-Phase 6's surface `writeGroupPropertyToCueEdit` writes `targetType="group"`
-rows directly. Both paths work, but `captureCurrentState` called after a
-surface edit to a group round-trips through as per-fixture rows rather than
-preserving the group shape.
-
-**Scope**:
-- Decide whether group-scoped assignments are first-class Layer 3 rows (they
-  are per DB schema; `CueEditSessionHandler` accepts them).
-- Align `captureCurrentState`: snapshot from the pre-expansion assignment
-  list on the cue, not from the resolver's expanded state.
-
 ### `FU-BE-PRESET-PER-ELEMENT` — Preset per-head / per-element assignments
 
 **Status**: Ready (scope audit needed)
@@ -519,3 +501,23 @@ _Move items here as they land. Format:_
   call `SurfaceFeedbackPublisher.onProjectChanged()` → assert the post-switch
   full-resync feedback flips to 7-bit 127 (live DMX 255), proving
   `sessionAssignments` was cleared.
+- `FU-BE-GROUP-LAYER3-ROUNDTRIP` — (2026-04-24) — Reworked
+  `captureCurrentState` in
+  [projectCues.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt)
+  to preserve group-scoped Layer 3 shape. Added
+  `FxEngine.activeCueAssignmentIds()` (snapshot of the cue-assignment map
+  keys). `captureCurrentState` now fetches each active cue's DB
+  `propertyAssignments` in a single transaction, collects every
+  `(groupKey, propertyName)` mentioned with `targetType="group"`, and
+  delegates to the pure `captureLayer3AssignmentsFromSnapshot` helper. That
+  helper emits one group row per hint iff all members share a single composed
+  value in `currentLayer3State`; any break in uniformity (cross-cue fixture
+  override, partial timed-preset) falls back to per-fixture rows. Composed
+  values remain authoritative — the DB rows only hint at which groups to try
+  to preserve, so HTP / LTP / crossfade still reflect the stage look.
+  Uncovered `currentLayer3State` entries (e.g. timed-preset fires not in DB)
+  still emit as `targetType="fixture"`. Unit coverage in
+  [CaptureLayer3AssignmentsTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/CaptureLayer3AssignmentsTest.kt)
+  exercises collapse on uniform values, fallback on override break / missing
+  member / unknown group, mixed group + uncovered uv row, and empty-snapshot
+  short-circuit.

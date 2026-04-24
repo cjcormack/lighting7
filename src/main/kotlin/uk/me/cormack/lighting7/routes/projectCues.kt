@@ -726,10 +726,9 @@ private data class CapturedState(
 )
 
 /**
- * Capture the current palette, active effects, and active Layer 3 property assignments from
- * the FX engine. Property assignments are read from [uk.me.cormack.lighting7.fx.LayerResolver.currentLayer3State]
- * — which already holds the fully-resolved-and-composed values from all active cues — and
- * emitted one row per (targetKey, propertyName) via [Layer3Resolver.PropertyValue.serialize].
+ * Capture live palette, active effects, and Layer 3 property assignments from the FX engine.
+ * Group-scoped assignments round-trip with `targetType="group"` intact when members share a
+ * single composed value — see [captureLayer3Assignments] for the shape-preservation rules.
  */
 private fun captureCurrentState(state: State): CapturedState {
     val currentPalette = state.show.fxEngine.getPalette().map { it.toSerializedString() }
@@ -771,23 +770,7 @@ private fun captureCurrentState(state: State): CapturedState {
         CuePresetApplicationDto(presetId = presetId, targets = targets)
     }
 
-    // Layer 3 state → property assignment rows. Key.targetKey is always a fixture key here
-    // (buildLayer3AssignmentsForCue expands groups to member rows before publishing), so the
-    // captured snapshot is fixture-scoped — "flatten live" rather than "preserve group shape".
-    // That's deliberate: the operator can re-grouping by hand when they paste into a cue, and
-    // the machinery has no way to know which group a live fixture-level contribution came from.
-    val layer3Snapshot = state.show.fxEngine.layerResolver.currentLayer3State
-    val propertyAssignments = layer3Snapshot.entries
-        .sortedWith(compareBy({ it.key.targetKey }, { it.key.propertyName }))
-        .mapIndexed { index, (key, value) ->
-            CuePropertyAssignmentDto(
-                targetType = "fixture",
-                targetKey = key.targetKey,
-                propertyName = key.propertyName,
-                value = value.serialize(),
-                sortOrder = index,
-            )
-        }
+    val propertyAssignments = captureLayer3Assignments(state)
 
     return CapturedState(
         palette = currentPalette,
@@ -795,6 +778,96 @@ private fun captureCurrentState(state: State): CapturedState {
         adHocEffects = adHocEffects,
         propertyAssignments = propertyAssignments,
     )
+}
+
+/**
+ * Layer 3 snapshot for `snapshot-from-live` / `/current-state`. Values come from the resolver
+ * ([uk.me.cormack.lighting7.fx.LayerResolver.currentLayer3State]) so HTP / LTP / crossfade
+ * composition is authoritative. Each active cue's DB rows contribute `(groupKey, propertyName)`
+ * hints: a hint collapses to a single group row iff every member's composed value matches;
+ * otherwise members fall through to per-fixture emission. Preserves operator-authored group
+ * shape after surface edits (Phase 6 `writeGroupPropertyToCueEdit`).
+ */
+private fun captureLayer3Assignments(state: State): List<CuePropertyAssignmentDto> {
+    val layer3Snapshot = state.show.fxEngine.layerResolver.currentLayer3State
+    if (layer3Snapshot.isEmpty()) return emptyList()
+
+    val activeCueIds = state.show.fxEngine.activeCueAssignmentIds()
+
+    val groupHints: Set<Pair<String, String>> = if (activeCueIds.isEmpty()) {
+        emptySet()
+    } else transaction(state.database) {
+        val hints = LinkedHashSet<Pair<String, String>>()
+        val cues = DaoCue.find { DaoCues.id inList activeCueIds }
+            .with(DaoCue::propertyAssignments)
+            .toList()
+        for (cue in cues) {
+            for (row in cue.propertyAssignments) {
+                if (row.targetType == "group") {
+                    hints.add(row.targetKey to canonicalPropertyName(row.propertyName))
+                }
+            }
+        }
+        hints
+    }
+
+    return captureLayer3AssignmentsFromSnapshot(layer3Snapshot, groupHints, state.show.fixtures)
+}
+
+/** Pure snapshot-collapse pass — extracted from [captureLayer3Assignments] for DB-less testing. */
+internal fun captureLayer3AssignmentsFromSnapshot(
+    layer3Snapshot: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue>,
+    groupHints: Set<Pair<String, String>>,
+    fixtures: uk.me.cormack.lighting7.show.Fixtures,
+): List<CuePropertyAssignmentDto> {
+    if (layer3Snapshot.isEmpty()) return emptyList()
+
+    val emitted = mutableListOf<CuePropertyAssignmentDto>()
+    val covered = HashSet<Pair<String, String>>() // (fixtureKey, propertyName)
+
+    for ((groupKey, propertyName) in groupHints) {
+        val members = try {
+            fixtures.untypedGroup(groupKey).fixtures.filterIsInstance<Fixture>()
+        } catch (_: IllegalStateException) { emptyList() }
+        if (members.isEmpty()) continue
+
+        val firstMember = members.first()
+        val firstMemberValue = layer3Snapshot[Layer3Resolver.Key(firstMember.key, propertyName)]
+            ?: continue
+        val uniform = members.all { member ->
+            member === firstMember ||
+                layer3Snapshot[Layer3Resolver.Key(member.key, propertyName)] == firstMemberValue
+        }
+        if (!uniform) continue
+
+        emitted.add(
+            CuePropertyAssignmentDto(
+                targetType = "group",
+                targetKey = groupKey,
+                propertyName = propertyName,
+                value = firstMemberValue.serialize(),
+                sortOrder = emitted.size,
+            )
+        )
+        for (member in members) covered.add(member.key to propertyName)
+    }
+
+    val fixtureRows = layer3Snapshot.entries
+        .filter { (key, _) -> (key.targetKey to key.propertyName) !in covered }
+        .sortedWith(compareBy({ it.key.targetKey }, { it.key.propertyName }))
+    for ((key, value) in fixtureRows) {
+        emitted.add(
+            CuePropertyAssignmentDto(
+                targetType = "fixture",
+                targetKey = key.targetKey,
+                propertyName = key.propertyName,
+                value = value.serialize(),
+                sortOrder = emitted.size,
+            )
+        )
+    }
+
+    return emitted
 }
 
 // ─── Entity helpers ─────────────────────────────────────────────────────
