@@ -195,4 +195,46 @@ class PersistedFixtureReferenceValidatorTest {
                 is AssignmentHealth.Ok,
         )
     }
+
+    // ── Preset element-scoped reference (per-head) ────────────────────────
+
+    @Test
+    fun `preset element-scoped pan on multi-head bar returns Ok`() {
+        // 14-channel SlenderBeam has 4 BasicHeads, each with pan/tilt — element-group
+        // descriptors include "pan" and "tilt" as common properties.
+        assertEquals(
+            AssignmentHealth.Ok,
+            PersistedFixtureReferenceValidator.validatePresetPropertyReference(
+                "slender-beam-bar-quad-14ch", "pan", elementKey = "head-0",
+            ),
+        )
+    }
+
+    @Test
+    fun `preset element-scoped position synthetic name validates via pan+tilt`() {
+        assertEquals(
+            AssignmentHealth.Ok,
+            PersistedFixtureReferenceValidator.validatePresetPropertyReference(
+                "slender-beam-bar-quad-14ch", "position", elementKey = "head-1",
+            ),
+        )
+    }
+
+    @Test
+    fun `preset element-scoped on single-head fixture returns MissingProperty`() {
+        // "hex" has no elements — no elementGroupProperties → any element-scoped
+        // assignment is dead.
+        val health = PersistedFixtureReferenceValidator.validatePresetPropertyReference(
+            "hex", "dimmer", elementKey = "head-0",
+        )
+        assertIs<AssignmentHealth.MissingProperty>(health)
+    }
+
+    @Test
+    fun `preset element-scoped unknown property on multi-head returns MissingProperty`() {
+        val health = PersistedFixtureReferenceValidator.validatePresetPropertyReference(
+            "slender-beam-bar-quad-14ch", "nonsense", elementKey = "head-0",
+        )
+        assertIs<AssignmentHealth.MissingProperty>(health)
+    }
 }

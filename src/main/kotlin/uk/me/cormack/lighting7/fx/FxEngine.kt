@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.*
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
@@ -416,12 +417,15 @@ class FxEngine(
     /**
      * Lay a [value] onto Layer 4 for [propertyName] of [fixture] and publish immediately.
      * Returns the resolved channel writes so callers can record them for later clearing.
+     *
+     * Accepts any [GroupableFixture] — a [Fixture] or a [FixtureElement]. For elements the
+     * Layer 3 publish key is the element's own key so subsequent reads see the write.
      */
     fun writeLayer4Property(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         propertyName: String,
         value: Layer3Resolver.PropertyValue,
-    ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4Write(fixture, propertyName) {
+    ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4Write(fixture.targetKey, propertyName) {
         PropertyChannelWriter.resolve(fixture, propertyName, value)
     }
 
@@ -438,17 +442,17 @@ class FxEngine(
 
     /**
      * Clear Layer 4 writes for [propertyName] on [fixture]. Channels cascade back to Layer 3
-     * (if a cue still asserts them) or Layer 5 baseline.
+     * (if a cue still asserts them) or Layer 5 baseline. Accepts any [GroupableFixture].
      */
     fun clearLayer4Property(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         propertyName: String,
     ): List<PropertyChannelResolver.ChannelWrite> {
         val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
         if (channels.isEmpty()) return channels
         for (c in channels) directWriteStore.clear(c.universe.universe, c.channel)
         synchronized(cueAssignmentsLock) {
-            publishLayer4ForKeys(setOf(Layer3Resolver.Key(fixture.key, propertyName)))
+            publishLayer4ForKeys(setOf(Layer3Resolver.Key(fixture.targetKey, propertyName)))
         }
         return channels
     }
@@ -465,7 +469,7 @@ class FxEngine(
 
     /** Single-fixture write scaffold — resolve via [perFixture], `put` each, publish the key. */
     private inline fun applyLayer4Write(
-        fixture: Fixture,
+        targetKey: String,
         propertyName: String,
         perFixture: () -> List<PropertyChannelResolver.ChannelWrite>,
     ): List<PropertyChannelResolver.ChannelWrite> {
@@ -473,7 +477,7 @@ class FxEngine(
         if (writes.isEmpty()) return writes
         for (w in writes) directWriteStore.put(w.universe.universe, w.channel, w.value)
         synchronized(cueAssignmentsLock) {
-            publishLayer4ForKeys(setOf(Layer3Resolver.Key(fixture.key, propertyName)))
+            publishLayer4ForKeys(setOf(Layer3Resolver.Key(targetKey, propertyName)))
         }
         return writes
     }

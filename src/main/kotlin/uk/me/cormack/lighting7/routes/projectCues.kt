@@ -20,13 +20,18 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.resolveComposition
+import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
+import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
+import kotlin.reflect.full.memberProperties
 
 private val logger = LoggerFactory.getLogger("projectCues")
 
@@ -1453,8 +1458,7 @@ internal fun buildLayer3AssignmentsForPreset(
 
     for (target in applyTargets) {
         val targetRef = target.target
-        // memberKeys is empty iff the target is a Fixture — used below as the fanout discriminator.
-        val memberKeys: List<String>
+        val memberFixtures: List<Fixture>
         val referenceFixture: Fixture
         when (targetRef) {
             is TargetRef.Group -> {
@@ -1469,7 +1473,7 @@ internal fun buildLayer3AssignmentsForPreset(
                     logger.warn("preset {} (cue {}): group '{}' has no Fixture members — skipping", presetId, cueId, targetRef.key)
                     continue
                 }
-                memberKeys = members.map { it.key }
+                memberFixtures = members
                 referenceFixture = members.first()
             }
             is TargetRef.Fixture -> {
@@ -1479,16 +1483,36 @@ internal fun buildLayer3AssignmentsForPreset(
                     logger.warn("preset {} (cue {}): fixture '{}' missing — skipping", presetId, cueId, targetRef.key)
                     continue
                 }
-                memberKeys = emptyList()
+                memberFixtures = emptyList()
             }
         }
 
         for (assignment in presetAssignments) {
             val canonical = canonicalPropertyName(assignment.propertyName)
-            val (category, override) = fixtureCategoryFor(referenceFixture, canonical) ?: run {
+            val elementKey = assignment.elementKey
+
+            // For element-scoped assignments, look up category + composition against the element
+            // class's annotated properties so mode-dependent element types (e.g. SlenderBeam
+            // 12CH vs 14CH vs 27CH) pick up the right metadata.
+            val referenceCategoryInfo: Pair<PropertyCategory, CompositionRule>? = if (elementKey != null) {
+                val referenceElement = findElement(referenceFixture, elementKey)
+                if (referenceElement == null) {
+                    logger.warn(
+                        "preset {} (cue {}): element '{}' not found on '{}' (or members) — skipping",
+                        presetId, cueId, elementKey, targetRef.key,
+                    )
+                    null
+                } else {
+                    elementCategoryFor(referenceElement, canonical)
+                }
+            } else {
+                fixtureCategoryFor(referenceFixture, canonical)
+            }
+            val (category, override) = referenceCategoryInfo ?: run {
                 logger.warn(
-                    "preset {} (cue {}): property '{}' not on '{}' — skipping",
+                    "preset {} (cue {}): property '{}' not on '{}'{} — skipping",
                     presetId, cueId, assignment.propertyName, targetRef.key,
+                    if (elementKey != null) " element '$elementKey'" else "",
                 )
                 continue
             }
@@ -1512,14 +1536,66 @@ internal fun buildLayer3AssignmentsForPreset(
                 value = parsed,
             )
 
-            if (memberKeys.isEmpty()) {
+            val isGroup = memberFixtures.isNotEmpty()
+            val fanout = memberFixtures.ifEmpty { listOf(referenceFixture) }
+            if (elementKey != null) {
+                for (fixture in fanout) {
+                    val element = findElement(fixture, elementKey)
+                    if (element == null) {
+                        logger.warn(
+                            "preset {} (cue {}): member '{}' has no element '{}' — skipping that member",
+                            presetId, cueId, fixture.key, elementKey,
+                        )
+                        continue
+                    }
+                    out.add(row(element.elementKey, isGroup = isGroup))
+                }
+            } else if (!isGroup) {
                 out.add(row(targetRef.key, isGroup = false))
             } else {
-                for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true))
+                for (member in fanout) out.add(row(member.key, isGroup = true))
             }
         }
     }
     return out
+}
+
+/**
+ * Resolve `elementKey` — either a full element key (`"bar-1.head-0"`) or a suffix
+ * (`"head-0"`) — against [fixture]. Returns null if [fixture] isn't multi-element or
+ * doesn't contain a matching element.
+ */
+private fun findElement(fixture: Fixture, elementKey: String): FixtureElement<*>? {
+    val multi = fixture as? MultiElementFixture<*> ?: return null
+    val fullKey = if (elementKey.startsWith("${fixture.key}.")) elementKey else "${fixture.key}.$elementKey"
+    return multi.elements.firstOrNull { it.elementKey == fullKey }
+}
+
+/**
+ * Element counterpart to [fixtureCategoryFor] — reflects on the element class's
+ * `@FixtureProperty` annotations, since elements aren't `Fixture`s and don't participate in
+ * the parent's [Fixture.fixtureProperties] catalogue.
+ */
+private fun elementCategoryFor(
+    element: FixtureElement<*>,
+    propertyName: String,
+): Pair<PropertyCategory, CompositionRule>? {
+    val canonical = canonicalPropertyName(propertyName)
+    if (canonical.equals("position", ignoreCase = true)) {
+        val pan = findElementPropertyAnnotation(element, "pan") ?: return null
+        findElementPropertyAnnotation(element, "tilt") ?: return null
+        return pan.category to pan.resolveComposition()
+    }
+    val ann = findElementPropertyAnnotation(element, canonical) ?: return null
+    return ann.category to ann.resolveComposition()
+}
+
+private fun findElementPropertyAnnotation(element: FixtureElement<*>, name: String): FixtureProperty? {
+    for (prop in element::class.memberProperties) {
+        if (prop.name != name) continue
+        return prop.annotations.filterIsInstance<FixtureProperty>().firstOrNull()
+    }
+    return null
 }
 
 // ─── Target resolution helpers ──────────────────────────────────────────

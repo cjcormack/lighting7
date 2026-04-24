@@ -436,8 +436,9 @@ internal fun DaoFxPreset.toPropertyAssignmentDtos(): List<FxPresetPropertyAssign
             value = it.value,
             fadeDurationMs = it.fadeDurationMs,
             sortOrder = it.sortOrder,
+            elementKey = it.elementKey,
             health = PersistedFixtureReferenceValidator.validatePresetPropertyReference(
-                fixtureTypeKey, it.propertyName,
+                fixtureTypeKey, it.propertyName, it.elementKey,
             ),
         )
     }
@@ -455,6 +456,7 @@ internal fun createPresetChildren(
             this.value = assignment.value
             this.fadeDurationMs = assignment.fadeDurationMs
             this.sortOrder = assignment.sortOrder
+            this.elementKey = assignment.elementKey
         }
     }
 }
@@ -698,7 +700,7 @@ private fun applyPresetLayer4Writes(
     val writes = ArrayList<PresetToggleWrite>(rows.size)
     for (row in rows) {
         val fixture = try {
-            state.show.fixtures.untypedFixture(row.targetKey)
+            state.show.fixtures.untypedGroupableFixture(row.targetKey)
         } catch (_: IllegalStateException) {
             continue
         }
@@ -713,7 +715,7 @@ private fun applyPresetLayer4Writes(
 /** Clear a single recorded Layer-4 assertion. Silently tolerates a stale record. */
 private fun clearPresetToggleWrite(state: State, write: PresetToggleWrite) {
     val fixture = try {
-        state.show.fixtures.untypedFixture(write.fixtureKey)
+        state.show.fixtures.untypedGroupableFixture(write.fixtureKey)
     } catch (_: IllegalStateException) {
         return
     }

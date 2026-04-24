@@ -53,15 +53,31 @@ object PersistedFixtureReferenceValidator {
      * keyed by `propertyName` only — so the check is against the preset's declared
      * [fixtureTypeKey]. An unknown type key is treated as valid rather than producing a
      * false positive — the preset will fail at apply time with its own warn log.
+     *
+     * When [elementKey] is non-null, the assignment targets an element on a multi-element
+     * fixture; validate against the element-group property descriptors instead of the
+     * fixture-level properties. These descriptors only include properties common to all
+     * elements, which matches the "apply to one head" semantics.
      */
     fun validatePresetPropertyReference(
         fixtureTypeKey: String,
         propertyName: String,
+        elementKey: String? = null,
     ): AssignmentHealth {
         val canonical = canonicalPropertyName(propertyName)
         val typeInfo = FixtureTypeRegistry.typeInfoForKey(fixtureTypeKey)
             ?: return AssignmentHealth.Ok
-        val matches = typeInfo.properties.any { it.name == canonical }
+        val matches = if (elementKey != null) {
+            val elementProps = typeInfo.elementGroupProperties
+                ?: return AssignmentHealth.MissingProperty(fixtureTypeKey, propertyName)
+            if (canonical.equals("position", ignoreCase = true)) {
+                elementProps.any { it.name == "pan" } && elementProps.any { it.name == "tilt" }
+            } else {
+                elementProps.any { it.name == canonical }
+            }
+        } else {
+            typeInfo.properties.any { it.name == canonical }
+        }
         return if (matches) AssignmentHealth.Ok
         else AssignmentHealth.MissingProperty(fixtureTypeKey, propertyName)
     }

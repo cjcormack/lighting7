@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.Fusion100SpotMkIIFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.LightstripFixture
+import uk.me.cormack.lighting7.fixture.dmx.SlenderBeamBarQuadFixture
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
 import kotlin.test.Test
@@ -211,6 +212,51 @@ class PropertyChannelWriterTest {
         )
         val channels = PropertyChannelWriter.channelsFor(fx, "position")
         assertEquals(setOf(1, 2), channels.map { it.channel }.toSet())
+    }
+
+    // ─── FixtureElement targeting (multi-element fixtures) ────────────────
+
+    @Test
+    fun `slider write on element routes to that element's channel`() {
+        // Mode14Ch: master dimmer = firstChannel (1), master strobe = firstChannel+1 (2),
+        // head 0 pan = 3, head 1 pan = 6, head 2 pan = 9, head 3 pan = 12.
+        val bar = SlenderBeamBarQuadFixture.Mode14Ch(universe, "bar-1", "Bar 1", firstChannel = 1)
+        val head1 = bar.head(1)
+        val writes = PropertyChannelWriter.resolve(
+            head1,
+            "pan",
+            Layer3Resolver.PropertyValue.Slider(128u),
+        )
+        assertEquals(1, writes.size)
+        val w = writes.single()
+        assertEquals(6, w.channel, "head 1 pan at firstChannel + 2 + (1 * 3) = 6")
+        assertEquals(128u.toUByte(), w.value)
+        assertEquals(PropertyCategory.PAN, w.category)
+    }
+
+    @Test
+    fun `position write on element emits both pan and tilt channels`() {
+        val bar = SlenderBeamBarQuadFixture.Mode14Ch(universe, "bar-1", "Bar 1", firstChannel = 1)
+        val head2 = bar.head(2)
+        val writes = PropertyChannelWriter.resolve(
+            head2,
+            "position",
+            Layer3Resolver.PropertyValue.Position(pan = 100u, tilt = 200u),
+        )
+        // Head 2 pan = firstChannel + 2 + (2 * 3) = 9; tilt = 10.
+        val byChannel = writes.associate { it.channel to it.value }
+        assertEquals(100u.toUByte(), byChannel[9])
+        assertEquals(200u.toUByte(), byChannel[10])
+    }
+
+    @Test
+    fun `channelsFor on element enumerates the element's channels`() {
+        val bar = SlenderBeamBarQuadFixture.Mode14Ch(universe, "bar-1", "Bar 1", firstChannel = 1)
+        val head0 = bar.head(0)
+        val channels = PropertyChannelWriter.channelsFor(head0, "tilt")
+        assertEquals(1, channels.size)
+        // Head 0 tilt = firstChannel + 2 + (0 * 3) + 1 = 4.
+        assertEquals(4, channels.single().channel)
     }
 
     // ─── Round-trip vs cue-apply pipeline ───────────────────────────────────

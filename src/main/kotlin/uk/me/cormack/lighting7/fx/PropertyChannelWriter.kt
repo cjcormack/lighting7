@@ -2,21 +2,26 @@ package uk.me.cormack.lighting7.fx
 
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
 import uk.me.cormack.lighting7.midi.PropertyChannelResolver
+import kotlin.reflect.KProperty1
+import kotlin.reflect.full.memberProperties
 
 /**
- * Resolves a typed [Layer3Resolver.PropertyValue] on a [Fixture] to the concrete DMX channels
- * that back it. Unlike [PropertyChannelResolver] (which scales 7-bit MIDI input and only
- * supports sliders/RGB), this writer accepts full-range `UByte` values plus the composite
+ * Resolves a typed [Layer3Resolver.PropertyValue] on a [GroupableFixture] to the concrete DMX
+ * channels that back it. Unlike [PropertyChannelResolver] (which scales 7-bit MIDI input and
+ * only supports sliders/RGB), this writer accepts full-range `UByte` values plus the composite
  * [Layer3Resolver.PropertyValue.Colour] / [Layer3Resolver.PropertyValue.Position] variants.
  *
  * Handles:
@@ -31,6 +36,10 @@ import uk.me.cormack.lighting7.midi.PropertyChannelResolver
  *
  * Unknown / unsupported property names and reflection failures return an empty list (logged
  * at debug). Callers treat empty as a silent no-op.
+ *
+ * Accepts both whole [Fixture]s (via their `@FixtureProperty`-catalogued members) and
+ * [FixtureElement]s (reflection on the element's own class — elements aren't
+ * [Fixture]s and don't participate in the parent's [Fixture.fixtureProperties] catalogue).
  */
 object PropertyChannelWriter {
     private val logger = LoggerFactory.getLogger(PropertyChannelWriter::class.java)
@@ -42,7 +51,7 @@ object PropertyChannelWriter {
      * type.
      */
     fun resolve(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         propertyName: String,
         value: Layer3Resolver.PropertyValue,
     ): List<PropertyChannelResolver.ChannelWrite> = when (value) {
@@ -59,17 +68,16 @@ object PropertyChannelWriter {
      * must ignore the value field on clear paths.
      */
     fun channelsFor(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         propertyName: String,
     ): List<PropertyChannelResolver.ChannelWrite> {
         if (propertyName.equals("position", ignoreCase = true)) {
             return resolvePosition(fixture, 0u, 0u)
         }
-        val property = fixture.fixtureProperty(propertyName) ?: return emptyList()
-        val raw = callProperty(fixture, propertyName) ?: return emptyList()
-        return when (raw) {
+        val resolved = resolveProperty(fixture, propertyName) ?: return emptyList()
+        return when (val raw = resolved.value) {
             is DmxSlider -> listOf(
-                PropertyChannelResolver.ChannelWrite(raw.universe, raw.channelNo, 0u, property.category)
+                PropertyChannelResolver.ChannelWrite(raw.universe, raw.channelNo, 0u, resolved.category)
             )
             is DmxColour -> buildList {
                 add(PropertyChannelResolver.ChannelWrite(raw.universe, raw.redSlider.channelNo, 0u, PropertyCategory.COLOUR))
@@ -87,35 +95,36 @@ object PropertyChannelWriter {
     }
 
     private fun resolveSlider(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         propertyName: String,
         value: UByte,
     ): List<PropertyChannelResolver.ChannelWrite> {
-        val property = fixture.fixtureProperty(propertyName) ?: run {
-            logger.debug("Property '{}' not found on fixture '{}'", propertyName, fixture.key)
+        val resolved = resolveProperty(fixture, propertyName) ?: run {
+            logger.debug("Property '{}' not found on fixture '{}'", propertyName, fixture.targetKey)
             return emptyList()
         }
-        val raw = callProperty(fixture, propertyName) ?: return emptyList()
+        val raw = resolved.value
         if (raw !is DmxSlider) {
             logger.debug(
                 "Slider value targeted non-slider property '{}' (type {}) on '{}'",
-                propertyName, raw::class.simpleName, fixture.key,
+                propertyName, raw::class.simpleName, fixture.targetKey,
             )
             return emptyList()
         }
-        return listOf(PropertyChannelResolver.ChannelWrite(raw.universe, raw.channelNo, value, property.category))
+        return listOf(PropertyChannelResolver.ChannelWrite(raw.universe, raw.channelNo, value, resolved.category))
     }
 
     private fun resolveSetting(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         propertyName: String,
         value: UByte,
     ): List<PropertyChannelResolver.ChannelWrite> {
-        val raw = callProperty(fixture, propertyName) ?: return emptyList()
+        val resolved = resolveProperty(fixture, propertyName) ?: return emptyList()
+        val raw = resolved.value
         if (raw !is DmxFixtureSetting<*>) {
             logger.debug(
                 "Setting value targeted non-setting property '{}' (type {}) on '{}'",
-                propertyName, raw::class.simpleName, fixture.key,
+                propertyName, raw::class.simpleName, fixture.targetKey,
             )
             return emptyList()
         }
@@ -123,15 +132,16 @@ object PropertyChannelWriter {
     }
 
     private fun resolveColour(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         propertyName: String,
         value: ExtendedColour,
     ): List<PropertyChannelResolver.ChannelWrite> {
-        val raw = callProperty(fixture, propertyName) ?: return emptyList()
+        val resolved = resolveProperty(fixture, propertyName) ?: return emptyList()
+        val raw = resolved.value
         if (raw !is DmxColour) {
             logger.debug(
                 "Colour value targeted non-colour property '{}' (type {}) on '{}'",
-                propertyName, raw::class.simpleName, fixture.key,
+                propertyName, raw::class.simpleName, fixture.targetKey,
             )
             return emptyList()
         }
@@ -146,7 +156,7 @@ object PropertyChannelWriter {
     }
 
     private fun resolvePosition(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         pan: UByte,
         tilt: UByte,
     ): List<PropertyChannelResolver.ChannelWrite> {
@@ -154,7 +164,7 @@ object PropertyChannelWriter {
         val panSlider = pos.pan as? DmxSlider
         val tiltSlider = pos.tilt as? DmxSlider
         if (panSlider == null || tiltSlider == null) {
-            logger.debug("Position on '{}' not backed by DMX sliders", fixture.key)
+            logger.debug("Position on '{}' not backed by DMX sliders", fixture.targetKey)
             return emptyList()
         }
         return listOf(
@@ -176,13 +186,43 @@ object PropertyChannelWriter {
         return PropertyChannelResolver.ChannelWrite(dmx.universe, dmx.channelNo, value, category)
     }
 
-    private fun callProperty(fixture: Fixture, propertyName: String): Any? {
-        val property = fixture.fixtureProperty(propertyName) ?: return null
-        return try {
-            property.classProperty.call(fixture)
-        } catch (e: Exception) {
-            logger.warn("Failed to read property '{}' on '{}': {}", propertyName, fixture.key, e.message)
-            null
+    /** Reflection result — the backing value and its declared category. */
+    private data class ResolvedProperty(val value: Any, val category: PropertyCategory)
+
+    /**
+     * Look up a property by name on [fixture], returning its current backing value and its
+     * [PropertyCategory]. Handles both [Fixture] (via the pre-built [Fixture.fixtureProperties]
+     * catalogue) and [FixtureElement] (ad-hoc reflection on the element class's
+     * `@FixtureProperty`-annotated members). Returns null if the property is absent or its
+     * backing value is null / reflection fails.
+     */
+    private fun resolveProperty(fixture: GroupableFixture, propertyName: String): ResolvedProperty? {
+        return when (fixture) {
+            is Fixture -> {
+                val property = fixture.fixtureProperty(propertyName) ?: return null
+                val raw = try {
+                    property.classProperty.call(fixture)
+                } catch (e: Exception) {
+                    logger.warn("Failed to read property '{}' on '{}': {}", propertyName, fixture.key, e.message)
+                    null
+                } ?: return null
+                ResolvedProperty(raw, property.category)
+            }
+            is FixtureElement<*> -> {
+                val entry = fixture::class.memberProperties
+                    .firstOrNull { it.name == propertyName && it.annotations.any { ann -> ann is FixtureProperty } }
+                    ?: return null
+                val ann = entry.annotations.filterIsInstance<FixtureProperty>().first()
+                val raw = try {
+                    @Suppress("UNCHECKED_CAST")
+                    (entry as KProperty1<Any, *>).call(fixture)
+                } catch (e: Exception) {
+                    logger.warn("Failed to read property '{}' on element '{}': {}", propertyName, fixture.elementKey, e.message)
+                    null
+                } ?: return null
+                ResolvedProperty(raw, ann.category)
+            }
+            else -> null
         }
     }
 }

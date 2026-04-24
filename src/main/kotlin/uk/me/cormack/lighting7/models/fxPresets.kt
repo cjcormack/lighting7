@@ -37,6 +37,17 @@ data class FxPresetPropertyAssignmentDto(
     val fadeDurationMs: Long? = null,
     val sortOrder: Int = 0,
     /**
+     * When non-null, the assignment targets a specific element within a multi-element
+     * fixture (e.g. a single head on a 4-head bar). The value is the element-local suffix
+     * part of the element's key — `"head-0"`, `"element-1"`, etc. — i.e. everything after
+     * the parent fixture's key and the dot separator. Null = applies to the whole fixture
+     * (every head of every targeted multi-element fixture, plus single-element fixtures).
+     *
+     * Resolution at apply time: the builder composes `${parentFixtureKey}.${elementKey}`
+     * and looks the element up via [uk.me.cormack.lighting7.show.Fixtures.untypedGroupableFixture].
+     */
+    val elementKey: String? = null,
+    /**
      * Validation status against the preset's declared `fixtureType`. Populated server-side
      * on read (see cue-authoring Phase 6); ignored on write. Default [AssignmentHealth.Ok]
      * keeps the apply-path / pseudo-cue builders working unchanged.
@@ -77,6 +88,7 @@ object DaoFxPresetPropertyAssignments : IntIdTable("fx_preset_property_assignmen
     val value = text("value")
     val fadeDurationMs = long("fade_duration_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
+    val elementKey = varchar("element_key", 255).nullable()
 }
 
 class DaoFxPresetPropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
@@ -87,4 +99,5 @@ class DaoFxPresetPropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
     var value by DaoFxPresetPropertyAssignments.value
     var fadeDurationMs by DaoFxPresetPropertyAssignments.fadeDurationMs
     var sortOrder by DaoFxPresetPropertyAssignments.sortOrder
+    var elementKey by DaoFxPresetPropertyAssignments.elementKey
 }

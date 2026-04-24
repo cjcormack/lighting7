@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fixture.dmx.SlenderBeamBarQuadFixture
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.Layer3Resolver
 import uk.me.cormack.lighting7.fx.PaletteCascade
@@ -210,5 +211,120 @@ class BuildLayer3AssignmentsForPresetTest {
                 applyTargets = emptyList(),
             ).isEmpty()
         )
+    }
+
+    // ─── Element-scoped (per-head) assignments ─────────────────────────
+
+    private fun fixturesWithTwoQuadBarsInAGroup(): Fixtures {
+        val fixtures = Fixtures()
+        fixtures.register {
+            val bar1 = addFixture(SlenderBeamBarQuadFixture.Mode14Ch(universe, "bar-1", "Bar 1", firstChannel = 1))
+            val bar2 = addFixture(SlenderBeamBarQuadFixture.Mode14Ch(universe, "bar-2", "Bar 2", firstChannel = 15))
+            createGroup<SlenderBeamBarQuadFixture.Mode14Ch>("bars") {
+                addSpread(listOf(bar1, bar2))
+            }
+        }
+        return fixtures
+    }
+
+    @Test
+    fun `element-scoped fixture target emits row keyed on element`() {
+        val fixtures = fixturesWithTwoQuadBarsInAGroup()
+        val out = buildLayer3AssignmentsForPreset(
+            fixtures, cueId, priority, presetId,
+            presetAssignments = listOf(
+                FxPresetPropertyAssignmentDto(propertyName = "pan", value = "200", elementKey = "head-1"),
+            ),
+            applyTargets = listOf(CueTargetDto(type = "fixture", key = "bar-1")),
+        )
+        assertEquals(1, out.size)
+        val row = out.single()
+        assertEquals("bar-1.head-1", row.targetKey)
+        assertEquals("pan", row.propertyName)
+        assertEquals(false, row.targetIsGroup)
+        val v = assertIs<Layer3Resolver.PropertyValue.Slider>(row.value)
+        assertEquals(200u.toUByte(), v.value)
+    }
+
+    @Test
+    fun `element-scoped group target expands to one row per member element`() {
+        val fixtures = fixturesWithTwoQuadBarsInAGroup()
+        val out = buildLayer3AssignmentsForPreset(
+            fixtures, cueId, priority, presetId,
+            presetAssignments = listOf(
+                FxPresetPropertyAssignmentDto(propertyName = "pan", value = "100", elementKey = "head-0"),
+            ),
+            applyTargets = listOf(CueTargetDto(type = "group", key = "bars")),
+        )
+        assertEquals(2, out.size)
+        assertTrue(out.all { it.targetIsGroup })
+        assertEquals(setOf("bar-1.head-0", "bar-2.head-0"), out.map { it.targetKey }.toSet())
+    }
+
+    @Test
+    fun `element-scoped assignment accepts full element-key path too`() {
+        val fixtures = fixturesWithTwoQuadBarsInAGroup()
+        val out = buildLayer3AssignmentsForPreset(
+            fixtures, cueId, priority, presetId,
+            presetAssignments = listOf(
+                FxPresetPropertyAssignmentDto(propertyName = "tilt", value = "50", elementKey = "bar-1.head-2"),
+            ),
+            applyTargets = listOf(CueTargetDto(type = "fixture", key = "bar-1")),
+        )
+        assertEquals(1, out.size)
+        assertEquals("bar-1.head-2", out.single().targetKey)
+    }
+
+    @Test
+    fun `element-scoped on non-multi-element fixture is skipped`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val out = buildLayer3AssignmentsForPreset(
+            fixtures, cueId, priority, presetId,
+            presetAssignments = listOf(
+                FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "100", elementKey = "head-0"),
+            ),
+            applyTargets = listOf(CueTargetDto(type = "fixture", key = "hex-1")),
+        )
+        assertTrue(out.isEmpty())
+    }
+
+    @Test
+    fun `element-scoped unknown element on one member, other member still emits`() {
+        // Mix a quad bar and a hex in the same group; preset targets element "head-0".
+        // The hex has no elements, so its row is skipped; the bar's head-0 row still emits.
+        val fixtures = Fixtures()
+        fixtures.register {
+            val bar = addFixture(SlenderBeamBarQuadFixture.Mode14Ch(universe, "bar-1", "Bar 1", firstChannel = 1))
+            val hex = addFixture(HexFixture(universe, "hex-1", "Hex 1", firstChannel = 100))
+            createGroup<uk.me.cormack.lighting7.fixture.Fixture>("mixed") {
+                add(bar)
+                add(hex)
+            }
+        }
+        val out = buildLayer3AssignmentsForPreset(
+            fixtures, cueId, priority, presetId,
+            presetAssignments = listOf(
+                FxPresetPropertyAssignmentDto(propertyName = "pan", value = "80", elementKey = "head-0"),
+            ),
+            applyTargets = listOf(CueTargetDto(type = "group", key = "mixed")),
+        )
+        assertEquals(1, out.size)
+        assertEquals("bar-1.head-0", out.single().targetKey)
+    }
+
+    @Test
+    fun `element-scoped with null elementKey keeps old fixture-level behaviour`() {
+        // Sanity: elementKey=null on an element-capable fixture goes straight to the parent,
+        // not any head. (Preserves backwards compatibility for existing presets.)
+        val fixtures = fixturesWithTwoQuadBarsInAGroup()
+        val out = buildLayer3AssignmentsForPreset(
+            fixtures, cueId, priority, presetId,
+            presetAssignments = listOf(
+                FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "128", elementKey = null),
+            ),
+            applyTargets = listOf(CueTargetDto(type = "fixture", key = "bar-1")),
+        )
+        assertEquals(1, out.size)
+        assertEquals("bar-1", out.single().targetKey)
     }
 }
