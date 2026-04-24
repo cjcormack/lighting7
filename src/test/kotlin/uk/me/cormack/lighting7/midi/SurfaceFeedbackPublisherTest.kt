@@ -605,6 +605,61 @@ class SurfaceFeedbackPublisherTest {
     }
 
     @Test
+    fun `project switch clears cue-edit session cache and falls back to live DMX`() = runBlocking {
+        // Begin a cue-edit session on project A (cue dimmer = 64 while live DMX = 255, so
+        // feedback tracks the cue). Simulate a project switch via onProjectChanged(): the
+        // session belongs to the previous project's cue, so the cached assignments must be
+        // dropped and the post-switch resync must reflect live DMX (255) rather than the
+        // stale 64.
+        val session = CueEditSessionState(
+            cueId = 1,
+            mode = CueEditMode.BLIND,
+            snapshot = listOf(
+                CuePropertyAssignmentDto(
+                    targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "64",
+                )
+            ),
+        )
+        val h = CueEditHarness(
+            listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))),
+        )
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            h.controller.setValue(1, 255u, 0)
+
+            h.beginSession(session)
+            yield()
+
+            // Sanity: cue value wins before the project switch.
+            val preCc = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()
+            assertTrue(preCc.isNotEmpty(), "Expected feedback after session Started event")
+            assertEquals(
+                PropertyChannelResolver.scaleDmxTo7Bit(64u),
+                preCc.last().value,
+                "Feedback should reflect cue value (64) before project switch",
+            )
+
+            h.recordingController.feedback.clear()
+            h.publisher.onProjectChanged()
+            yield()
+
+            val postCc = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()
+            assertTrue(postCc.isNotEmpty(), "Expected full resync after project change")
+            assertEquals(
+                PropertyChannelResolver.scaleDmxTo7Bit(255u),
+                postCc.last().value,
+                "Feedback must fall back to live DMX after project switch (cache cleared)",
+            )
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun `Session Ended restores DMX-derived feedback`() = runBlocking {
         val session = CueEditSessionState(
             cueId = 1,
