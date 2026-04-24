@@ -55,7 +55,7 @@ class LayerResolver(
         // allocation entirely and go straight to Layer 4 / Layer 5.
         val state = layer3State
         if (state.isNotEmpty()) {
-            val l3 = state[Layer3Resolver.Key(fixtureKey, target.propertyName)]
+            val l3 = state[Layer3Resolver.Key.fixture(fixtureKey, target.propertyName)]
             if (l3 != null) {
                 l3.asFxOutputFor(target)?.let { return it }
             }

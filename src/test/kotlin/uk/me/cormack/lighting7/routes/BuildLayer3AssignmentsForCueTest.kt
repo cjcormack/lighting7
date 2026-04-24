@@ -103,12 +103,12 @@ class BuildLayer3AssignmentsForCueTest {
         val resolved = Layer3Resolver().resolve(rows)
         assertEquals(
             Layer3Resolver.PropertyValue.Slider(50u),
-            resolved[Layer3Resolver.Key("hex-1", "dimmer")],
+            resolved[Layer3Resolver.Key.fixture("hex-1", "dimmer")],
             "fixture-level override wins",
         )
         assertEquals(
             Layer3Resolver.PropertyValue.Slider(150u),
-            resolved[Layer3Resolver.Key("hex-2", "dimmer")],
+            resolved[Layer3Resolver.Key.fixture("hex-2", "dimmer")],
             "unaffected member keeps group value",
         )
     }

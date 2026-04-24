@@ -452,7 +452,7 @@ class FxEngine(
         if (channels.isEmpty()) return channels
         for (c in channels) directWriteStore.clear(c.universe.universe, c.channel)
         synchronized(cueAssignmentsLock) {
-            publishLayer4ForKeys(setOf(Layer3Resolver.Key(fixture.targetKey, propertyName)))
+            publishLayer4ForKeys(setOf(Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)))
         }
         return channels
     }
@@ -477,7 +477,7 @@ class FxEngine(
         if (writes.isEmpty()) return writes
         for (w in writes) directWriteStore.put(w.universe.universe, w.channel, w.value)
         synchronized(cueAssignmentsLock) {
-            publishLayer4ForKeys(setOf(Layer3Resolver.Key(targetKey, propertyName)))
+            publishLayer4ForKeys(setOf(Layer3Resolver.Key.fixture(targetKey, propertyName)))
         }
         return writes
     }
@@ -499,7 +499,7 @@ class FxEngine(
             val result = perFixture(f)
             if (result.isEmpty()) continue
             all += result
-            keys += Layer3Resolver.Key(f.key, propertyName)
+            keys += Layer3Resolver.Key.fixture(f.key, propertyName)
         }
         if (keys.isNotEmpty()) {
             synchronized(cueAssignmentsLock) {

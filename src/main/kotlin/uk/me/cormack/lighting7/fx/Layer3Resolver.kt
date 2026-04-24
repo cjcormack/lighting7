@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.models.TargetRef
 import java.awt.Color
 
 /**
@@ -172,7 +173,7 @@ class Layer3Resolver {
         // Group by (targetKey, propertyName), then apply specificity (fixture beats group).
         val grouped = HashMap<Key, MutableList<Assignment>>()
         for (a in assignments) {
-            val key = Key(a.targetKey, a.propertyName)
+            val key = Key.fixture(a.targetKey, a.propertyName)
             grouped.getOrPut(key) { mutableListOf() }.add(a)
         }
 
@@ -190,8 +191,22 @@ class Layer3Resolver {
         return out
     }
 
-    /** Key for a resolved composition entry. */
-    data class Key(val targetKey: String, val propertyName: String)
+    /**
+     * Key for a ([target], [propertyName]) pair. Resolver output is always
+     * [TargetRef.Fixture] (group assignments are expanded upstream); pre-expansion callers
+     * may use [TargetRef.Group].
+     */
+    data class Key(val target: TargetRef, val propertyName: String) {
+        val targetKey: String get() = target.key
+
+        companion object {
+            fun fixture(fixtureKey: String, propertyName: String): Key =
+                Key(TargetRef.Fixture(fixtureKey), propertyName)
+
+            fun group(groupKey: String, propertyName: String): Key =
+                Key(TargetRef.Group(groupKey), propertyName)
+        }
+    }
 
     /**
      * Within a (targetKey, propertyName) bucket, drop group-expanded rows when any direct

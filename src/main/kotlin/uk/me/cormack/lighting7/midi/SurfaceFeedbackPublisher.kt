@@ -16,7 +16,6 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.Layer3Resolver
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
-import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
 import uk.me.cormack.lighting7.plugins.CueEditSessionState
 import uk.me.cormack.lighting7.show.Fixtures
@@ -137,10 +136,10 @@ class SurfaceFeedbackPublisher(
         /**
          * Secondary index of fixture / group continuous entries keyed by assignment identity —
          * lets [resyncEntriesMatching] skip the per-entry walk on the cue-edit hot path.
-         * Populated only for bindings whose target produces an [AssignmentKey]
+         * Populated only for bindings whose target produces a [Layer3Resolver.Key]
          * (FixtureProperty / GroupProperty); Flash / cueStack / blackout targets are absent.
          */
-        val continuousByAssignmentKey: Map<AssignmentKey, List<ContinuousEntry>>,
+        val continuousByAssignmentKey: Map<Layer3Resolver.Key, List<ContinuousEntry>>,
         val ledsByDisplay: Map<String, List<LedEntry>>,
         val flashByBindingId: Map<Int, LedEntry>,
         val blackoutLeds: List<LedEntry>,
@@ -158,13 +157,11 @@ class SurfaceFeedbackPublisher(
 
     /**
      * Per-target cached cue assignments for the active cue-edit session. Keyed by
-     * `(target, propertyName)` — matches [CuePropertyAssignmentDto] row identity.
-     * Empty when no session is active. Rebuilt on session start / mode change /
-     * discard; patched incrementally on single-assignment events.
+     * [Layer3Resolver.Key] — matches [CuePropertyAssignmentDto] row identity. Empty when
+     * no session is active. Rebuilt on session start / mode change / discard; patched
+     * incrementally on single-assignment events.
      */
-    internal data class AssignmentKey(val target: TargetRef, val propertyName: String)
-
-    private val sessionAssignments = AtomicReference<Map<AssignmentKey, String>>(emptyMap())
+    private val sessionAssignments = AtomicReference<Map<Layer3Resolver.Key, String>>(emptyMap())
 
     private val fixtureListener = object : FixturesChangeListener {
         override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) =
@@ -418,13 +415,13 @@ class SurfaceFeedbackPublisher(
                 resyncAllDevices()
             }
             is CueEditSessionRegistry.Event.AssignmentChanged -> {
-                val key = AssignmentKey(event.target, event.propertyName)
+                val key = Layer3Resolver.Key(event.target, event.propertyName)
                 val current = sessionAssignments.get()
                 sessionAssignments.set(current + (key to event.value))
                 resyncEntriesMatching(key)
             }
             is CueEditSessionRegistry.Event.AssignmentCleared -> {
-                val key = AssignmentKey(event.target, event.propertyName)
+                val key = Layer3Resolver.Key(event.target, event.propertyName)
                 val current = sessionAssignments.get()
                 if (key in current) {
                     sessionAssignments.set(current - key)
@@ -438,8 +435,8 @@ class SurfaceFeedbackPublisher(
         }
     }
 
-    private fun buildAssignmentMap(rows: List<CuePropertyAssignmentDto>): Map<AssignmentKey, String> =
-        rows.associate { AssignmentKey(it.target, it.propertyName) to it.value }
+    private fun buildAssignmentMap(rows: List<CuePropertyAssignmentDto>): Map<Layer3Resolver.Key, String> =
+        rows.associate { Layer3Resolver.Key(it.target, it.propertyName) to it.value }
 
     private fun resyncAllDevices() {
         for (displayKey in deviceMatcher.attached.value.keys) {
@@ -447,7 +444,7 @@ class SurfaceFeedbackPublisher(
         }
     }
 
-    private fun resyncEntriesMatching(key: AssignmentKey) {
+    private fun resyncEntriesMatching(key: Layer3Resolver.Key) {
         val entries = index.get().continuousByAssignmentKey[key] ?: return
         for (entry in entries) {
             sendContinuousFeedback(entry, computeValue7Bit(entry))
@@ -505,7 +502,7 @@ class SurfaceFeedbackPublisher(
         val profilesByKey = types().associateBy { it.typeKey }
         val byChannel = HashMap<Long, MutableList<ContinuousEntry>>()
         val continuousByDisplay = HashMap<String, MutableList<ContinuousEntry>>()
-        val continuousByAssignmentKey = HashMap<AssignmentKey, MutableList<ContinuousEntry>>()
+        val continuousByAssignmentKey = HashMap<Layer3Resolver.Key, MutableList<ContinuousEntry>>()
         val ledsByDisplay = HashMap<String, MutableList<LedEntry>>()
         val flashByBindingId = HashMap<Int, LedEntry>()
         val blackoutLeds = mutableListOf<LedEntry>()
@@ -561,7 +558,7 @@ class SurfaceFeedbackPublisher(
             Index(
                 byChannel = byChannel as Map<Long, List<ContinuousEntry>>,
                 continuousByDisplay = continuousByDisplay as Map<String, List<ContinuousEntry>>,
-                continuousByAssignmentKey = continuousByAssignmentKey as Map<AssignmentKey, List<ContinuousEntry>>,
+                continuousByAssignmentKey = continuousByAssignmentKey as Map<Layer3Resolver.Key, List<ContinuousEntry>>,
                 ledsByDisplay = ledsByDisplay as Map<String, List<LedEntry>>,
                 flashByBindingId = flashByBindingId,
                 blackoutLeds = blackoutLeds,
@@ -655,9 +652,9 @@ class SurfaceFeedbackPublisher(
         return PropertyChannelResolver.scaleWithinRangeTo7Bit(dmx, pc.min, pc.max)
     }
 
-    private fun assignmentKeyFor(entry: ContinuousEntry): AssignmentKey? = when (val t = entry.binding.target) {
-        is BindingTarget.FixtureProperty -> AssignmentKey(TargetRef.Fixture(t.fixtureKey), t.propertyName)
-        is BindingTarget.GroupProperty -> AssignmentKey(TargetRef.Group(t.groupName), t.propertyName)
+    private fun assignmentKeyFor(entry: ContinuousEntry): Layer3Resolver.Key? = when (val t = entry.binding.target) {
+        is BindingTarget.FixtureProperty -> Layer3Resolver.Key.fixture(t.fixtureKey, t.propertyName)
+        is BindingTarget.GroupProperty -> Layer3Resolver.Key.group(t.groupName, t.propertyName)
         else -> null
     }
 

@@ -42,7 +42,7 @@ class FxEngineCueAssignmentsTest {
         engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 180u)))
 
         val state = engine.layerResolver.currentLayer3State
-        val v = state[Layer3Resolver.Key("fx-1", "dimmer")]
+        val v = state[Layer3Resolver.Key.fixture("fx-1", "dimmer")]
         assertIs<Layer3Resolver.PropertyValue.Slider>(v)
         assertEquals(180u.toUByte(), v.value)
     }
@@ -53,7 +53,7 @@ class FxEngineCueAssignmentsTest {
         engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 100u)))
         engine.setCueAssignments(20, listOf(slider(cueId = 20, priority = 2, value = 200u)))
 
-        val v = engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "dimmer")]
+        val v = engine.layerResolver.currentLayer3State[Layer3Resolver.Key.fixture("fx-1", "dimmer")]
         assertIs<Layer3Resolver.PropertyValue.Slider>(v)
         assertEquals(200u.toUByte(), v.value)
     }
@@ -66,7 +66,7 @@ class FxEngineCueAssignmentsTest {
 
         engine.removeCueAssignments(20)
 
-        val v = engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "dimmer")]
+        val v = engine.layerResolver.currentLayer3State[Layer3Resolver.Key.fixture("fx-1", "dimmer")]
         assertIs<Layer3Resolver.PropertyValue.Slider>(v)
         assertEquals(100u.toUByte(), v.value, "only cue 10 remains")
     }
@@ -108,9 +108,9 @@ class FxEngineCueAssignmentsTest {
         engine.setCueAssignments(10, listOf(groupRow, memberA, memberB, overrideB))
 
         val state = engine.layerResolver.currentLayer3State
-        val a = state[Layer3Resolver.Key("hex-a", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val a = state[Layer3Resolver.Key.fixture("hex-a", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(100u.toUByte(), a.value, "member-A follows the group value via HTP max")
-        val b = state[Layer3Resolver.Key("hex-b", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val b = state[Layer3Resolver.Key.fixture("hex-b", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         // For HTP the override is max(100, 220) = 220 anyway; the critical invariant is that
         // the group-flagged duplicate row is not also added to the list for hex-b's key.
         assertEquals(220u.toUByte(), b.value)
@@ -121,7 +121,7 @@ class FxEngineCueAssignmentsTest {
         val engine = newEngine()
         engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 180u)))
         engine.removeEffectsForCue(10)
-        assertNull(engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "dimmer")])
+        assertNull(engine.layerResolver.currentLayer3State[Layer3Resolver.Key.fixture("fx-1", "dimmer")])
     }
 
     @Test
@@ -133,9 +133,9 @@ class FxEngineCueAssignmentsTest {
         engine.appendCueAssignments(10, listOf(uvRow))
 
         val state = engine.layerResolver.currentLayer3State
-        val dimmer = state[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val dimmer = state[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(100u.toUByte(), dimmer.value, "existing dimmer row survives append")
-        val uv = state[Layer3Resolver.Key("fx-1", "uv")] as Layer3Resolver.PropertyValue.Slider
+        val uv = state[Layer3Resolver.Key.fixture("fx-1", "uv")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(180u.toUByte(), uv.value, "appended uv row is composed")
     }
 
@@ -147,7 +147,7 @@ class FxEngineCueAssignmentsTest {
         val uvRow = slider(cueId = 10, priority = 1, propertyName = "uv", value = 180u)
         engine.appendCueAssignments(10, listOf(uvRow))
 
-        val uv = engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "uv")]
+        val uv = engine.layerResolver.currentLayer3State[Layer3Resolver.Key.fixture("fx-1", "uv")]
         assertIs<Layer3Resolver.PropertyValue.Slider>(uv)
         assertEquals(180u.toUByte(), uv.value)
     }
@@ -157,7 +157,7 @@ class FxEngineCueAssignmentsTest {
         val engine = newEngine()
         engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 100u)))
         engine.appendCueAssignments(10, emptyList())
-        val dimmer = engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "dimmer")]
+        val dimmer = engine.layerResolver.currentLayer3State[Layer3Resolver.Key.fixture("fx-1", "dimmer")]
         assertIs<Layer3Resolver.PropertyValue.Slider>(dimmer)
         assertEquals(100u.toUByte(), dimmer.value)
     }
@@ -172,8 +172,8 @@ class FxEngineCueAssignmentsTest {
         engine.removeCueAssignmentSubset(10, listOf(uvRow))
 
         val state = engine.layerResolver.currentLayer3State
-        assertNull(state[Layer3Resolver.Key("fx-1", "uv")], "uv row retracted")
-        val dimmer = state[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        assertNull(state[Layer3Resolver.Key.fixture("fx-1", "uv")], "uv row retracted")
+        val dimmer = state[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(100u.toUByte(), dimmer.value, "apply-time dimmer row survives subset removal")
     }
 
@@ -187,7 +187,7 @@ class FxEngineCueAssignmentsTest {
         engine.appendCueAssignments(10, listOf(row))
         engine.removeCueAssignmentSubset(10, listOf(row))
 
-        val dimmer = engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "dimmer")]
+        val dimmer = engine.layerResolver.currentLayer3State[Layer3Resolver.Key.fixture("fx-1", "dimmer")]
         assertIs<Layer3Resolver.PropertyValue.Slider>(dimmer)
         assertEquals(100u.toUByte(), dimmer.value, "one occurrence of the row still contributes")
     }
@@ -208,7 +208,7 @@ class FxEngineCueAssignmentsTest {
         // cue 99 has no assignments — removal must not touch cue 10.
         engine.removeCueAssignmentSubset(99, listOf(slider(cueId = 99, priority = 1, value = 200u)))
 
-        val dimmer = engine.layerResolver.currentLayer3State[Layer3Resolver.Key("fx-1", "dimmer")]
+        val dimmer = engine.layerResolver.currentLayer3State[Layer3Resolver.Key.fixture("fx-1", "dimmer")]
         assertIs<Layer3Resolver.PropertyValue.Slider>(dimmer)
         assertEquals(100u.toUByte(), dimmer.value)
     }
@@ -226,9 +226,9 @@ class FxEngineCueAssignmentsTest {
         engine.replaceCueAssignmentSubset(10, toRemove = listOf(firstFire), additions = listOf(secondFire))
 
         val state = engine.layerResolver.currentLayer3State
-        val dimmer = state[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val dimmer = state[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(100u.toUByte(), dimmer.value, "apply-time row preserved")
-        val uv = state[Layer3Resolver.Key("fx-1", "uv")] as Layer3Resolver.PropertyValue.Slider
+        val uv = state[Layer3Resolver.Key.fixture("fx-1", "uv")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(200u.toUByte(), uv.value, "second fire wins")
     }
 
@@ -247,9 +247,9 @@ class FxEngineCueAssignmentsTest {
 
         val state = engine.layerResolver.currentLayer3State
         // Dimmer still at 100 (apply-time row), uv at 180 (latest timed fire), no duplicates.
-        val dimmer = state[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val dimmer = state[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(100u.toUByte(), dimmer.value)
-        val uv = state[Layer3Resolver.Key("fx-1", "uv")] as Layer3Resolver.PropertyValue.Slider
+        val uv = state[Layer3Resolver.Key.fixture("fx-1", "uv")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(180u.toUByte(), uv.value)
     }
 }

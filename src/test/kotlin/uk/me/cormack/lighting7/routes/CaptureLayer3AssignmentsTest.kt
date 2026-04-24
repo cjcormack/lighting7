@@ -36,8 +36,8 @@ class CaptureLayer3AssignmentsTest {
     fun `no group hints - all rows emit as fixture`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val snapshot = mapOf(
-            Layer3Resolver.Key("hex-1", "dimmer") to slider(100u),
-            Layer3Resolver.Key("hex-2", "dimmer") to slider(200u),
+            Layer3Resolver.Key.fixture("hex-1", "dimmer") to slider(100u),
+            Layer3Resolver.Key.fixture("hex-2", "dimmer") to slider(200u),
         )
         val out = captureLayer3AssignmentsFromSnapshot(snapshot, emptySet(), fixtures)
         assertEquals(2, out.size)
@@ -50,8 +50,8 @@ class CaptureLayer3AssignmentsTest {
         // Operator wrote `targetType=group` at 150 via cueEdit; all members composed to 150.
         val fixtures = fixturesWithTwoHexesInAGroup()
         val snapshot = mapOf(
-            Layer3Resolver.Key("hex-1", "dimmer") to slider(150u),
-            Layer3Resolver.Key("hex-2", "dimmer") to slider(150u),
+            Layer3Resolver.Key.fixture("hex-1", "dimmer") to slider(150u),
+            Layer3Resolver.Key.fixture("hex-2", "dimmer") to slider(150u),
         )
         val hints = setOf("front-wash" to "dimmer")
         val out = captureLayer3AssignmentsFromSnapshot(snapshot, hints, fixtures)
@@ -70,8 +70,8 @@ class CaptureLayer3AssignmentsTest {
         // lossy group row.
         val fixtures = fixturesWithTwoHexesInAGroup()
         val snapshot = mapOf(
-            Layer3Resolver.Key("hex-1", "dimmer") to slider(50u),
-            Layer3Resolver.Key("hex-2", "dimmer") to slider(150u),
+            Layer3Resolver.Key.fixture("hex-1", "dimmer") to slider(50u),
+            Layer3Resolver.Key.fixture("hex-2", "dimmer") to slider(150u),
         )
         val hints = setOf("front-wash" to "dimmer")
         val out = captureLayer3AssignmentsFromSnapshot(snapshot, hints, fixtures)
@@ -89,7 +89,7 @@ class CaptureLayer3AssignmentsTest {
         // mid-edit). We can't emit group-front-wash unambiguously.
         val fixtures = fixturesWithTwoHexesInAGroup()
         val snapshot = mapOf(
-            Layer3Resolver.Key("hex-1", "dimmer") to slider(100u),
+            Layer3Resolver.Key.fixture("hex-1", "dimmer") to slider(100u),
         )
         val hints = setOf("front-wash" to "dimmer")
         val out = captureLayer3AssignmentsFromSnapshot(snapshot, hints, fixtures)
@@ -102,7 +102,7 @@ class CaptureLayer3AssignmentsTest {
     fun `unknown group hint silently skipped and fixture rows still emitted`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val snapshot = mapOf(
-            Layer3Resolver.Key("hex-1", "dimmer") to slider(100u),
+            Layer3Resolver.Key.fixture("hex-1", "dimmer") to slider(100u),
         )
         val hints = setOf("ghost-group" to "dimmer")
         val out = captureLayer3AssignmentsFromSnapshot(snapshot, hints, fixtures)
@@ -117,9 +117,9 @@ class CaptureLayer3AssignmentsTest {
         // timed-preset fire that isn't DB-tracked).
         val fixtures = fixturesWithTwoHexesInAGroup()
         val snapshot = mapOf(
-            Layer3Resolver.Key("hex-1", "dimmer") to slider(200u),
-            Layer3Resolver.Key("hex-2", "dimmer") to slider(200u),
-            Layer3Resolver.Key("hex-1", "uv") to slider(50u),
+            Layer3Resolver.Key.fixture("hex-1", "dimmer") to slider(200u),
+            Layer3Resolver.Key.fixture("hex-2", "dimmer") to slider(200u),
+            Layer3Resolver.Key.fixture("hex-1", "uv") to slider(50u),
         )
         val hints = setOf("front-wash" to "dimmer")
         val out = captureLayer3AssignmentsFromSnapshot(snapshot, hints, fixtures)
@@ -149,9 +149,9 @@ class CaptureLayer3AssignmentsTest {
     fun `sortOrder is dense zero-indexed`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val snapshot = mapOf(
-            Layer3Resolver.Key("hex-1", "dimmer") to slider(100u),
-            Layer3Resolver.Key("hex-2", "dimmer") to slider(100u),
-            Layer3Resolver.Key("hex-1", "uv") to slider(50u),
+            Layer3Resolver.Key.fixture("hex-1", "dimmer") to slider(100u),
+            Layer3Resolver.Key.fixture("hex-2", "dimmer") to slider(100u),
+            Layer3Resolver.Key.fixture("hex-1", "uv") to slider(50u),
         )
         val hints = setOf("front-wash" to "dimmer")
         val out = captureLayer3AssignmentsFromSnapshot(snapshot, hints, fixtures)

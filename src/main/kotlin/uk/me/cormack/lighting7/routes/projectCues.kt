@@ -837,11 +837,11 @@ internal fun captureLayer3AssignmentsFromSnapshot(
         if (members.isEmpty()) continue
 
         val firstMember = members.first()
-        val firstMemberValue = layer3Snapshot[Layer3Resolver.Key(firstMember.key, propertyName)]
+        val firstMemberValue = layer3Snapshot[Layer3Resolver.Key.fixture(firstMember.key, propertyName)]
             ?: continue
         val uniform = members.all { member ->
             member === firstMember ||
-                layer3Snapshot[Layer3Resolver.Key(member.key, propertyName)] == firstMemberValue
+                layer3Snapshot[Layer3Resolver.Key.fixture(member.key, propertyName)] == firstMemberValue
         }
         if (!uniform) continue
 

@@ -61,7 +61,7 @@ class Layer3ResolverTest {
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 100u),
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 180u),
         ))
-        val v = result[Layer3Resolver.Key("fx-1", "dimmer")]
+        val v = result[Layer3Resolver.Key.fixture("fx-1", "dimmer")]
         assertIs<Layer3Resolver.PropertyValue.Slider>(v)
         assertEquals(180u.toUByte(), v.value)
     }
@@ -73,7 +73,7 @@ class Layer3ResolverTest {
             slider(cueId = 1, priority = 1, fadeWeight = 0.5, value = 100u), // → 50 after scale
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 180u),
         ))
-        val v = result[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(180u.toUByte(), v.value)
     }
 
@@ -85,7 +85,7 @@ class Layer3ResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 0.0, value = 200u),
-        ))[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        ))[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(50u.toUByte(), v.value)
     }
 
@@ -94,7 +94,7 @@ class Layer3ResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 0.5, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 0.5, value = 200u),
-        ))[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        ))[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(125u.toUByte(), v.value)
     }
 
@@ -103,7 +103,7 @@ class Layer3ResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 0.0, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 200u),
-        ))[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        ))[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(200u.toUByte(), v.value)
     }
 
@@ -112,7 +112,7 @@ class Layer3ResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 100u),
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 180u),
-        ))[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        ))[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(180u.toUByte(), v.value)
     }
 
@@ -122,7 +122,7 @@ class Layer3ResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 0.5, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 0.5, value = 200u),
-        ))[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        ))[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(125u.toUByte(), v.value)
     }
 
@@ -140,7 +140,7 @@ class Layer3ResolverTest {
             value = Layer3Resolver.PropertyValue.Setting(200u),
         )
         val v = resolver.resolve(listOf(assignment1, assignment2))[
-            Layer3Resolver.Key("fx-1", "mode")
+            Layer3Resolver.Key.fixture("fx-1", "mode")
         ] as Layer3Resolver.PropertyValue.Setting
         assertEquals(130u.toUByte(), v.channelValue)
     }
@@ -152,7 +152,7 @@ class Layer3ResolverTest {
             colour(cueId = 1, priority = 1, fadeWeight = 1.0, red = 255, green = 0, blue = 0),
             colour(cueId = 2, priority = 2, fadeWeight = 1.0, red = 0, green = 0, blue = 255),
         ))
-        val v = result[Layer3Resolver.Key("fx-1", "rgbColour")] as Layer3Resolver.PropertyValue.Colour
+        val v = result[Layer3Resolver.Key.fixture("fx-1", "rgbColour")] as Layer3Resolver.PropertyValue.Colour
         assertEquals(Color(0, 0, 255), v.value.color)
     }
 
@@ -163,7 +163,7 @@ class Layer3ResolverTest {
             colour(cueId = 1, priority = 1, fadeWeight = 0.4, red = 255, green = 0, blue = 0),
             colour(cueId = 2, priority = 2, fadeWeight = 0.6, red = 0, green = 0, blue = 255),
         ))
-        val v = result[Layer3Resolver.Key("fx-1", "rgbColour")] as Layer3Resolver.PropertyValue.Colour
+        val v = result[Layer3Resolver.Key.fixture("fx-1", "rgbColour")] as Layer3Resolver.PropertyValue.Colour
         // Linear RGB: (1 - 0.6) * red + 0.6 * blue per channel.
         assertEquals(102, v.value.color.red, "red")
         assertEquals(0, v.value.color.green, "green")
@@ -178,7 +178,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.7, value = 200u,
                 category = PropertyCategory.PAN, propertyName = "pan"),
         ))
-        val v = result[Layer3Resolver.Key("fx-1", "pan")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[Layer3Resolver.Key.fixture("fx-1", "pan")] as Layer3Resolver.PropertyValue.Slider
         // outgoing 100 → incoming 200 at progress 0.7 → 100 + 100 * 0.7 = 170
         assertEquals(170u.toUByte(), v.value)
     }
@@ -197,7 +197,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.0, value = 200u,
                 category = PropertyCategory.PAN, propertyName = "pan"),
         ))
-        val v = result[Layer3Resolver.Key("fx-1", "pan")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[Layer3Resolver.Key.fixture("fx-1", "pan")] as Layer3Resolver.PropertyValue.Slider
         // progress 0 → 100 + (200 - 100) * 0 = 100 (outgoing value).
         assertEquals(100u.toUByte(), v.value)
     }
@@ -211,7 +211,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 200u,
                 category = PropertyCategory.PAN, propertyName = "pan"),
         ))
-        val v = result[Layer3Resolver.Key("fx-1", "pan")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[Layer3Resolver.Key.fixture("fx-1", "pan")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(200u.toUByte(), v.value)
     }
 
@@ -221,7 +221,7 @@ class Layer3ResolverTest {
             colour(cueId = 1, priority = 1, fadeWeight = 1.0, red = 255, green = 0, blue = 0),
             colour(cueId = 2, priority = 2, fadeWeight = 0.0, red = 0, green = 0, blue = 255),
         ))
-        val v = result[Layer3Resolver.Key("fx-1", "rgbColour")] as Layer3Resolver.PropertyValue.Colour
+        val v = result[Layer3Resolver.Key.fixture("fx-1", "rgbColour")] as Layer3Resolver.PropertyValue.Colour
         assertEquals(Color(255, 0, 0), v.value.color, "outgoing red dominates at progress 0")
     }
 
@@ -240,7 +240,7 @@ class Layer3ResolverTest {
                 value = Layer3Resolver.PropertyValue.Setting(50u),
             ),
         ))
-        val early = earlyIn[Layer3Resolver.Key("fx-1", "mode")] as Layer3Resolver.PropertyValue.Setting
+        val early = earlyIn[Layer3Resolver.Key.fixture("fx-1", "mode")] as Layer3Resolver.PropertyValue.Setting
         assertEquals(10u.toUByte(), early.channelValue, "below 50% should still be outgoing")
 
         val lateIn = resolver.resolve(listOf(
@@ -255,7 +255,7 @@ class Layer3ResolverTest {
                 value = Layer3Resolver.PropertyValue.Setting(50u),
             ),
         ))
-        val late = lateIn[Layer3Resolver.Key("fx-1", "mode")] as Layer3Resolver.PropertyValue.Setting
+        val late = lateIn[Layer3Resolver.Key.fixture("fx-1", "mode")] as Layer3Resolver.PropertyValue.Setting
         assertEquals(50u.toUByte(), late.channelValue, "at/above 50% should flip to incoming")
     }
 
@@ -266,7 +266,7 @@ class Layer3ResolverTest {
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 100u).copy(targetIsGroup = true),
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 200u).copy(targetIsGroup = false),
         ))
-        val v = result[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(200u.toUByte(), v.value, "fixture-level contributor wins")
     }
 
@@ -279,7 +279,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 50u)
                 .copy(compositionOverride = CompositionRule.LTP),
         ))
-        val v = result[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(50u.toUByte(), v.value, "LTP picks highest-priority (cueId 2 at 50) despite lower value")
     }
 
@@ -288,7 +288,7 @@ class Layer3ResolverTest {
         val result = resolver.resolve(listOf(
             slider(cueId = 1, priority = 5, fadeWeight = 0.2, value = 200u),
         ))
-        val v = result[Layer3Resolver.Key("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         // Single HTP contributor: max(200 * 0.2) = 40.
         assertEquals(40u.toUByte(), v.value)
     }
