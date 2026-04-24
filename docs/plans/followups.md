@@ -182,20 +182,6 @@ confirmation.
 
 ## Code quality
 
-### `FU-QUAL-KEY-CONVERGENCE` — `AssignmentKey` vs `Layer3Resolver.Key` convergence
-
-**Status**: Trigger (bigger refactor)
-**Origin**: Cross-plan — Control-surface Phase 6 + Cue-authoring cross-ref
-
-`Layer3Resolver.Key(targetKey, propertyName)` is targetType-agnostic because
-the resolver expands group rows to member rows upstream via `targetIsGroup`.
-Surfaces sit before that expansion, so they need the `targetType`
-discriminator.
-
-**Fix shape**: add targetType to `Layer3Resolver.Key` and thread it through
-the resolver — bigger than either plan's scope. Relates to
-`FU-QUAL-TARGET-REF-SEALED`; pairs naturally with it.
-
 ---
 
 ## Testing
@@ -580,3 +566,31 @@ _Move items here as they land. Format:_
   of scope for this backend landing — when added, it surfaces through the
   existing `elementGroupProperties` on `FixtureTypeInfo`; DTO already
   round-trips `elementKey`.
+- `FU-QUAL-KEY-CONVERGENCE` — commit 30dd0fc (2026-04-24) — Replaced
+  `Layer3Resolver.Key(targetKey: String, propertyName)` with
+  `Layer3Resolver.Key(target: TargetRef, propertyName)` in
+  [Layer3Resolver.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/Layer3Resolver.kt),
+  keeping `targetKey: String` as a computed accessor (`target.key`) so
+  existing read sites stayed untouched. Added
+  `Layer3Resolver.Key.fixture(fixtureKey, propertyName)` and
+  `.group(groupKey, propertyName)` companion factories — the former is the
+  dominant-case constructor for resolver output (post-expansion rows are
+  always `TargetRef.Fixture`). Updated internal `resolve()` plus every
+  construction site in `FxEngine` (`clearLayer4Property`,
+  `applyLayer4Write`, `applyLayer4GroupOperation`), `LayerResolver`
+  (`fallbackFor`), and `captureLayer3AssignmentsFromSnapshot` in
+  [projectCues.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt).
+  Deleted `SurfaceFeedbackPublisher.AssignmentKey` — it was structurally
+  identical `(target: TargetRef, propertyName: String)`; converged on
+  `Layer3Resolver.Key`, which correctly expresses `TargetRef.Group` for
+  pre-expansion surface routing alongside the resolver's own
+  `TargetRef.Fixture` output. Tests in
+  [Layer3ResolverTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/Layer3ResolverTest.kt),
+  [FxEngineCueAssignmentsTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/FxEngineCueAssignmentsTest.kt),
+  [CaptureLayer3AssignmentsTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/CaptureLayer3AssignmentsTest.kt),
+  and
+  [BuildLayer3AssignmentsForCueTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/BuildLayer3AssignmentsForCueTest.kt)
+  adopt `Layer3Resolver.Key.fixture(...)` at every site. No
+  semantic change — the resolver still emits only fixture-level keys
+  post-expansion; the type now just carries the discriminator the surface
+  layer already needed.
