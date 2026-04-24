@@ -151,19 +151,56 @@ class State(val config: ApplicationConfig) {
     /**
      * Per-project [GlobalScalerStateHolder] registry (Phase 9). Lives above the [Show]
      * lifecycle so Blackout / Grand Master state survives project switches within a
-     * session. Option A: ephemeral — not persisted across backend restarts. On every
-     * project activation the [Show] obtains (or creates) its project's holder here, and
-     * the show-scoped [uk.me.cormack.lighting7.midi.GlobalScalerState] reads through to
-     * it. A previously-toggled project retains its state across an A → B → A switch.
+     * session. On every project activation the [Show] obtains (or creates) its project's
+     * holder here, and the show-scoped [uk.me.cormack.lighting7.midi.GlobalScalerState]
+     * reads through to it. A previously-toggled project retains its state across an
+     * A → B → A switch.
+     *
+     * Each holder is write-through to `project_scaler_states` so state also survives a
+     * backend restart.
      */
     private val scalerHolders = java.util.concurrent.ConcurrentHashMap<Int, GlobalScalerStateHolder>()
 
     /**
-     * Return the [GlobalScalerStateHolder] for [projectId], creating a fresh one on first
-     * access. Thread-safe; called by [Show] during construction.
+     * Return the [GlobalScalerStateHolder] for [projectId], creating one on first access.
+     * On creation, loads the persisted state from `project_scaler_states` (or defaults if
+     * no row exists) and wires a write-through callback so subsequent toggles upsert the
+     * row. Thread-safe; called by [Show] during construction.
      */
     fun scalerHolderFor(projectId: Int): GlobalScalerStateHolder =
-        scalerHolders.computeIfAbsent(projectId) { GlobalScalerStateHolder() }
+        scalerHolders.computeIfAbsent(projectId) {
+            GlobalScalerStateHolder(
+                initial = loadProjectScalerState(projectId),
+                persist = { snapshot -> saveProjectScalerState(projectId, snapshot) },
+            )
+        }
+
+    private fun loadProjectScalerState(projectId: Int): ProjectScalerStateSnapshot =
+        transaction(database) {
+            DaoProjectScalerState.find { DaoProjectScalerStates.project eq projectId }
+                .firstOrNull()
+                ?.toSnapshot()
+                ?: ProjectScalerStateSnapshot()
+        }
+
+    private fun saveProjectScalerState(projectId: Int, snapshot: ProjectScalerStateSnapshot) {
+        transaction(database) {
+            val project = DaoProject.findById(projectId) ?: return@transaction
+            val existing = DaoProjectScalerState
+                .find { DaoProjectScalerStates.project eq projectId }
+                .firstOrNull()
+            if (existing != null) {
+                existing.blackout = snapshot.blackout
+                existing.grandMaster = snapshot.grandMaster
+            } else {
+                DaoProjectScalerState.new {
+                    this.project = project
+                    this.blackout = snapshot.blackout
+                    this.grandMaster = snapshot.grandMaster
+                }
+            }
+        }
+    }
 
     /**
      * Phase 6 cue-edit session registry. Each WebSocket connection that runs `cueEdit.*`
@@ -333,6 +370,7 @@ class State(val config: ApplicationConfig) {
                 DaoParkedChannels, DaoFxDefinitions,
                 DaoShowEntries,
                 DaoControlSurfaceBindings,
+                DaoProjectScalerStates,
             )
 
             // Migration: drop old unique index on (project_id, name) since we now use (project_id, fixture_type, name)

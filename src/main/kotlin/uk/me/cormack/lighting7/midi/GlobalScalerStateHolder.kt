@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.midi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import uk.me.cormack.lighting7.models.ProjectScalerStateSnapshot
 
 /**
  * Per-project holder for the two global transmit-time scalers (Blackout, Grand Master).
@@ -13,14 +14,20 @@ import kotlinx.coroutines.flow.asStateFlow
  * the current show's controllers; when the show is re-created on project switch, a fresh
  * [GlobalScalerState] is constructed against the same holder and state is preserved.
  *
- * State is in-memory only — not persisted across backend restarts.
+ * Cross-restart persistence is opt-in via [initial] (for seeding from a persisted row) and
+ * [persist] (a write-through callback fired on every actual state change).
+ * [uk.me.cormack.lighting7.state.State.scalerHolderFor] wires the callback to a
+ * `project_scaler_states` DB row; tests construct holders without persistence.
  */
-class GlobalScalerStateHolder {
+class GlobalScalerStateHolder(
+    initial: ProjectScalerStateSnapshot = ProjectScalerStateSnapshot(),
+    private val persist: (ProjectScalerStateSnapshot) -> Unit = {},
+) {
 
-    private val _blackoutEnabled = MutableStateFlow(false)
+    private val _blackoutEnabled = MutableStateFlow(initial.blackout)
     val blackoutEnabled: StateFlow<Boolean> = _blackoutEnabled.asStateFlow()
 
-    private val _grandMasterEnabled = MutableStateFlow(true)
+    private val _grandMasterEnabled = MutableStateFlow(initial.grandMaster)
     val grandMasterEnabled: StateFlow<Boolean> = _grandMasterEnabled.asStateFlow()
 
     /**
@@ -30,6 +37,7 @@ class GlobalScalerStateHolder {
     fun setBlackout(enabled: Boolean): Boolean {
         if (_blackoutEnabled.value == enabled) return false
         _blackoutEnabled.value = enabled
+        notifyPersist()
         return true
     }
 
@@ -37,6 +45,7 @@ class GlobalScalerStateHolder {
     fun setGrandMaster(enabled: Boolean): Boolean {
         if (_grandMasterEnabled.value == enabled) return false
         _grandMasterEnabled.value = enabled
+        notifyPersist()
         return true
     }
 
@@ -44,6 +53,7 @@ class GlobalScalerStateHolder {
     fun toggleBlackout(): Boolean {
         val next = !_blackoutEnabled.value
         _blackoutEnabled.value = next
+        notifyPersist()
         return next
     }
 
@@ -51,6 +61,14 @@ class GlobalScalerStateHolder {
     fun toggleGrandMaster(): Boolean {
         val next = !_grandMasterEnabled.value
         _grandMasterEnabled.value = next
+        notifyPersist()
         return next
+    }
+
+    private fun notifyPersist() {
+        persist(ProjectScalerStateSnapshot(
+            blackout = _blackoutEnabled.value,
+            grandMaster = _grandMasterEnabled.value,
+        ))
     }
 }

@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.midi
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.models.ProjectScalerStateSnapshot
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -162,5 +163,59 @@ class GlobalScalerStateTest {
 
         scaler.toggleGrandMaster()
         assertFalse(holder.grandMasterEnabled.value)
+    }
+
+    @Test
+    fun `holder seeds initial state from constructor args (restart rehydration)`() {
+        val holder = GlobalScalerStateHolder(
+            initial = ProjectScalerStateSnapshot(blackout = true, grandMaster = false),
+        )
+        assertTrue(holder.blackoutEnabled.value)
+        assertFalse(holder.grandMasterEnabled.value)
+    }
+
+    @Test
+    fun `persist callback fires on every effective state change`() {
+        val calls = mutableListOf<ProjectScalerStateSnapshot>()
+        val holder = GlobalScalerStateHolder(persist = { calls += it })
+
+        // Actual change → persist called.
+        holder.setBlackout(true)
+        assertEquals(listOf(ProjectScalerStateSnapshot(blackout = true, grandMaster = true)), calls)
+
+        // No-op write → persist not called.
+        holder.setBlackout(true)
+        assertEquals(1, calls.size)
+
+        // Grand Master flip captures the current blackout alongside the new value.
+        holder.setGrandMaster(false)
+        assertEquals(ProjectScalerStateSnapshot(blackout = true, grandMaster = false), calls.last())
+
+        // Toggles also persist the post-toggle state.
+        holder.toggleBlackout()
+        assertEquals(ProjectScalerStateSnapshot(blackout = false, grandMaster = false), calls.last())
+        holder.toggleGrandMaster()
+        assertEquals(ProjectScalerStateSnapshot(blackout = false, grandMaster = true), calls.last())
+
+        assertEquals(4, calls.size)
+    }
+
+    @Test
+    fun `persist callback fires through the GlobalScalerState facade wrapping a persistent holder`() {
+        val (fixtures, _) = registry()
+        val calls = mutableListOf<ProjectScalerStateSnapshot>()
+        val holder = GlobalScalerStateHolder(persist = { calls += it })
+        val scaler = GlobalScalerState(fixtures, holder)
+        scaler.attach()
+
+        scaler.setBlackout(true)
+        scaler.setGrandMaster(false)
+        assertEquals(
+            listOf(
+                ProjectScalerStateSnapshot(blackout = true, grandMaster = true),
+                ProjectScalerStateSnapshot(blackout = true, grandMaster = false),
+            ),
+            calls,
+        )
     }
 }

@@ -137,32 +137,6 @@ on each `Assignment`.
 **Blocker**: needs a real moving-head fixture on the test rig to validate the
 behaviour visually and tune the "pre-apply window" threshold empirically.
 
-### `FU-BE-SCALER-PERSISTENCE` — Cross-restart scaler persistence (Phase 9 option B)
-
-**Status**: Trigger (operator ask)
-**Origin**: Control-surface Phase 9 design, deferred 2026-04-23
-
-Phase 9 shipped option A: `GlobalScalerState` is project-scoped, survives
-project switches within a session. Backend restart resets Blackout / Grand
-Master on every project (intended).
-
-Option B, deferred, persists scaler state across restarts via a single-row DB
-table per project:
-```sql
-project_scaler_state(project_id, blackout BOOLEAN, grand_master BOOLEAN)
-```
-
-**Shape when picked up**: `State.scalerHolderFor(projectId)` loads from DB on
-first access; `GlobalScalerStateHolder.setBlackout` / `setGrandMaster` write
-through via `transaction(state.database)`. Exposed
-`SchemaUtils.createMissingTablesAndColumns` picks up the new table on next
-boot — no migration file.
-
-**Trigger to revisit**: operator asks to preserve Blackout across a backend
-restart (e.g. remote-restart during a show). Without that signal, preserving
-across session-restart is a behaviour change that warrants explicit user
-confirmation.
-
 ---
 
 ## Code quality
@@ -579,6 +553,26 @@ _Move items here as they land. Format:_
   semantic change — the resolver still emits only fixture-level keys
   post-expansion; the type now just carries the discriminator the surface
   layer already needed.
+- `FU-BE-SCALER-PERSISTENCE` — commit TBD (2026-04-24) — Added
+  [DaoProjectScalerStates](../../src/main/kotlin/uk/me/cormack/lighting7/models/projectScalerStates.kt)
+  (`project_scaler_states(project_id UNIQUE, blackout BOOLEAN default false,
+  grand_master BOOLEAN default true)`) and registered it in
+  `SchemaUtils.createMissingTablesAndColumns` so it materialises on next boot
+  with no explicit migration. Widened
+  [GlobalScalerStateHolder](../../src/main/kotlin/uk/me/cormack/lighting7/midi/GlobalScalerStateHolder.kt)
+  with optional `initialBlackout` / `initialGrandMaster` constructor args and
+  a `persist: (Boolean, Boolean) -> Unit` write-through callback fired on every
+  actual state change (skipped on no-op writes via the existing equality
+  guard). [State.scalerHolderFor](../../src/main/kotlin/uk/me/cormack/lighting7/state/State.kt)
+  now seeds the holder from the persisted row on first access (defaults
+  `false` / `true` when absent) and wires `persist` to an upsert against
+  `DaoProjectScalerStates` inside `transaction(state.database)`. Tests added
+  to [GlobalScalerStateTest.kt](../../src/test/kotlin/uk/me/cormack/lighting7/midi/GlobalScalerStateTest.kt)
+  cover (a) seeded initial state (restart rehydration), (b) persist fires on
+  every mutation path including toggles and carries the current counterpart
+  value, (c) no-op writes skip persist, (d) mutations routed through
+  `GlobalScalerState.setBlackout` / `setGrandMaster` still reach the persist
+  callback.
 - `FU-PERF-FX-TICK-ALLOCS` — commit a0d5a8c (2026-04-24) — On the
   [FxEngineBenchmark](src/test/kotlin/uk/me/cormack/lighting7/fx/FxEngineBenchmark.kt)
   rig (4 universes × 168 HexFixtures × 336 effects) cut p50 beat-tick latency
