@@ -497,7 +497,7 @@ _Move items here as they land. Format:_
   RTK hooks. Effects-channel preview is intentionally out of scope — only Layer-4
   property assignments land. Single preview slot per project (last-writer-wins);
   multi-tab race is acceptable, mid-show preview by an operator is the dominant case.
-- `FU-QUAL-PUSHDOWN-SESSION-ROUTING` — commit TBD (2026-04-24) — Dropped
+- `FU-QUAL-PUSHDOWN-SESSION-ROUTING` — commit 379a845 (2026-04-24) — Dropped
   `writeFixturePropertyToCueEdit` / `writeGroupPropertyToCueEdit` from the
   [SurfaceActions.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceActions.kt)
   interface; `DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty`
