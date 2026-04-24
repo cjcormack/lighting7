@@ -346,18 +346,6 @@ how jittery the allocation counter + `measureNanoTime` numbers are on the
 actual CI runner. Without that variance study, a fixed threshold will either
 flake constantly or fail to catch real regressions.
 
-### `FU-TEST-PROJECT-SWITCH-CUEEDIT` — Project switch during open cueEdit session
-
-**Status**: Ready
-**Origin**: Control-surface Phase 6 efficiency review
-
-`SurfaceFeedbackPublisher.onProjectChanged()` now clears `sessionAssignments`
-(fixed during simplification pass), but no test covers the scenario: begin
-edit on project A → switch to project B → verify cache is empty, feedback
-falls back to live DMX.
-
-**Scope**: add an integration test.
-
 ### `FU-TEST-MULTI-CONN-CUEEDIT` — Multi-connection cueEdit conflict
 
 **Status**: Blocked (awaiting cue-authoring semantics)
@@ -467,8 +455,8 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
 
-- `FU-BE-PALETTE-CASCADE` — 2026-04-23 — Introduced `PaletteCascade(preset,
-  cue, global)` in [Layer3Resolver.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/Layer3Resolver.kt)
+- `FU-BE-PALETTE-CASCADE` — commit 3181784 (2026-04-23) — Introduced
+  `PaletteCascade(preset, cue, global)` in [Layer3Resolver.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/Layer3Resolver.kt)
   with an `effective` property that picks the most-specific non-empty scope.
   Extended `Layer3Resolver.parseAssignmentValue` with an optional
   `palette: List<ExtendedColour>` that routes colour values through
@@ -492,7 +480,7 @@ _Move items here as they land. Format:_
   bypass;
   [BuildLayer3AssignmentsForCueTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/BuildLayer3AssignmentsForCueTest.kt)
   asserts cue-palette application and no-palette → white fallback.
-- `FU-BE-PRESET-FIXTURE-TYPE-NOTNULL` — 2026-04-23 — Dropped `.nullable()` on
+- `FU-BE-PRESET-FIXTURE-TYPE-NOTNULL` — commit 83ae4d3 (2026-04-23) — Dropped `.nullable()` on
   `DaoFxPresets.fixtureType` and added `migrateFxPresetsFixtureTypeNotNull` to
   [State.kt](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt): inspects
   `information_schema`, deletes any legacy NULL-type presets (plus their
@@ -502,7 +490,7 @@ _Move items here as they land. Format:_
   and the `lightFixtures` / `lightGroups` compatibility filters to non-nullable
   now that the column can't be null; required `fixtureType` in the `create_fx_preset`
   AI tool schema. Dropped the now-obsolete "preset with null fixtureType" test.
-- `FU-BE-TIMED-PRESETS-LAYER3` — 2026-04-23 — Added
+- `FU-BE-TIMED-PRESETS-LAYER3` — commit ce5304c (2026-04-23) — Added
   `FxEngine.appendCueAssignments(cueId, additions)` and
   `removeCueAssignmentSubset(cueId, toRemove)` (structural-equality
   one-per-element remove). Wired `CueTriggerManager`'s timed-preset fire path
@@ -514,10 +502,20 @@ _Move items here as they land. Format:_
   `activateTimedEffectsForCue` now takes a `priority: Int` parameter (passed
   from `cueDerivedPriority(cueData)` at both call sites) so timed and
   apply-time rows share composition priority.
-- `FU-FE-EXT-COLOUR-CHANNELS` — 2026-04-23 — Added W/A/UV sliders to
+- `FU-FE-EXT-COLOUR-CHANNELS` — commit 53a96a0 in lighting-react + b39f1f2
+  (docs) in lighting7 (2026-04-23) — Added W/A/UV sliders to
   `ColourPickerPopover` (lighting-react), gated on
   `ColourPropertyDescriptor.whiteChannel` / `amberChannel` / `uvChannel`
   presence. Writes route through existing `useUpdateFixtureColour` /
   `useUpdateGroupColour` hooks unchanged. Both `PropertyVisualizers` (fixture)
   and `GroupPropertyVisualizers` (group) pass current `w` / `a` / `uv` values
   so the popover reflects live state.
+- `FU-TEST-PROJECT-SWITCH-CUEEDIT` — commit ef3cf29 (2026-04-24) — Added
+  integration test in
+  [SurfaceFeedbackPublisherTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisherTest.kt)
+  (`project switch clears cue-edit session cache and falls back to live DMX`)
+  that drives the scenario: begin a cueEdit session on project A (cue
+  `dimmer=64` while live DMX=255, so feedback tracks the cue at 7-bit 32) →
+  call `SurfaceFeedbackPublisher.onProjectChanged()` → assert the post-switch
+  full-resync feedback flips to 7-bit 127 (live DMX 255), proving
+  `sessionAssignments` was cleared.
