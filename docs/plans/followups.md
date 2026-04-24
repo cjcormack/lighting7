@@ -99,23 +99,6 @@ around the open/close edge (both loops run on `Dispatchers.Default`).
 
 Without one of those, coordination cost > savings. Leave dormant.
 
-### `FU-PERF-REGISTRY-INDICES` — Secondary indices for registry + feedback publisher
-
-**Status**: Trigger (binding growth)
-**Origin**: Control-surface Phase 6 efficiency review
-
-- `CueEditSessionRegistry.activeSession(projectId)` — O(N) scan over
-  `sessions.values`. N ≤ 1 in practice; a `ConcurrentHashMap<Int, Entry>`
-  keyed by projectId (kept in lockstep with the handle-keyed map) makes it
-  O(1).
-- `SurfaceFeedbackPublisher.resyncEntriesMatching(key)` walks every
-  `continuousByDisplay` entry on every assignment change. With one device +
-  ≤50 controls this is trivial; a secondary
-  `Map<AssignmentKey, List<ContinuousEntry>>` built in `rebuildIndex()` would
-  make it O(1).
-
-**Trigger to revisit**: when binding counts grow materially.
-
 ### `FU-PERF-FX-TICK-ALLOCS` — Reduce FxEngine per-tick allocation
 
 **Status**: Ready (profile → refactor)
@@ -506,6 +489,26 @@ _Move items here as they land. Format:_
   exercises collapse on uniform values, fallback on override break / missing
   member / unknown group, mixed group + uncovered uv row, and empty-snapshot
   short-circuit.
+- `FU-PERF-REGISTRY-INDICES` — commit _pending_ (2026-04-24) — Added secondary
+  index `sessionsByProject: ConcurrentHashMap<Int, Entry>` to
+  [CueEditSessionRegistry.kt](src/main/kotlin/uk/me/cormack/lighting7/plugins/CueEditSessionRegistry.kt),
+  kept in lockstep with the handle-keyed `sessions` map under a single
+  `mutationLock` critical section on register / unregister. `activeSession` now
+  does a direct `sessionsByProject[projectId]` lookup instead of the prior
+  `sessions.values.firstOrNull { ... }` scan. Added
+  `continuousByAssignmentKey: Map<AssignmentKey, List<ContinuousEntry>>` to the
+  `Index` snapshot in
+  [SurfaceFeedbackPublisher.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisher.kt),
+  populated in `rebuildIndex()` from the pre-existing `assignmentKeyFor(entry)`
+  helper; `resyncEntriesMatching(key)` now iterates that index's pre-filtered
+  list instead of walking every `continuousByDisplay` entry and filtering with
+  `entryMatchesAssignmentKey`. `entryMatchesAssignmentKey` deleted — the
+  secondary index subsumes its role. Existing
+  [CueEditSessionRegistryTest.kt](src/test/kotlin/uk/me/cormack/lighting7/plugins/CueEditSessionRegistryTest.kt)
+  and
+  [SurfaceFeedbackPublisherTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisherTest.kt)
+  cover the new paths (including the `AssignmentChanged event drives feedback
+  to the new cue value` case which exercises the assignment-key index).
 - `FU-FE-PICKER-UX-POLISH` — commit e97a664 in lighting-react (2026-04-24) —
   Added a `preselectedTarget?: CueTarget | null` prop to both
   [EffectFlow.tsx](src/components/cues/editor/EffectFlow.tsx) and

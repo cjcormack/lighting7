@@ -133,13 +133,20 @@ class SurfaceFeedbackPublisher(
     private data class Index(
         val byChannel: Map<Long, List<ContinuousEntry>>,
         val continuousByDisplay: Map<String, List<ContinuousEntry>>,
+        /**
+         * Secondary index of fixture / group continuous entries keyed by assignment identity —
+         * lets [resyncEntriesMatching] skip the per-entry walk on the cue-edit hot path.
+         * Populated only for bindings whose target produces an [AssignmentKey]
+         * (FixtureProperty / GroupProperty); Flash / cueStack / blackout targets are absent.
+         */
+        val continuousByAssignmentKey: Map<AssignmentKey, List<ContinuousEntry>>,
         val ledsByDisplay: Map<String, List<LedEntry>>,
         val flashByBindingId: Map<Int, LedEntry>,
         val blackoutLeds: List<LedEntry>,
         val grandMasterLeds: List<LedEntry>,
     ) {
         companion object {
-            val EMPTY = Index(emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyList(), emptyList())
+            val EMPTY = Index(emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyList(), emptyList())
         }
     }
 
@@ -440,28 +447,11 @@ class SurfaceFeedbackPublisher(
     }
 
     private fun resyncEntriesMatching(key: AssignmentKey) {
-        for (entries in index.get().continuousByDisplay.values) {
-            for (entry in entries) {
-                if (entryMatchesAssignmentKey(entry, key)) {
-                    sendContinuousFeedback(entry, computeValue7Bit(entry))
-                }
-            }
+        val entries = index.get().continuousByAssignmentKey[key] ?: return
+        for (entry in entries) {
+            sendContinuousFeedback(entry, computeValue7Bit(entry))
         }
     }
-
-    /**
-     * True if [entry]'s binding target corresponds to [key]. Group bindings match group-scoped
-     * assignments; fixture bindings match fixture-scoped assignments. Any other target type
-     * (cue stack, flash, blackout…) never matches.
-     */
-    private fun entryMatchesAssignmentKey(entry: ContinuousEntry, key: AssignmentKey): Boolean =
-        when (val target = entry.binding.target) {
-            is BindingTarget.FixtureProperty ->
-                key.targetType == "fixture" && key.targetKey == target.fixtureKey && key.propertyName == target.propertyName
-            is BindingTarget.GroupProperty ->
-                key.targetType == "group" && key.targetKey == target.groupName && key.propertyName == target.propertyName
-            else -> false
-        }
 
     /**
      * Convert a cue's assignment value string to the 7-bit feedback position for [entry]'s
@@ -514,6 +504,7 @@ class SurfaceFeedbackPublisher(
         val profilesByKey = types().associateBy { it.typeKey }
         val byChannel = HashMap<Long, MutableList<ContinuousEntry>>()
         val continuousByDisplay = HashMap<String, MutableList<ContinuousEntry>>()
+        val continuousByAssignmentKey = HashMap<AssignmentKey, MutableList<ContinuousEntry>>()
         val ledsByDisplay = HashMap<String, MutableList<LedEntry>>()
         val flashByBindingId = HashMap<Int, LedEntry>()
         val blackoutLeds = mutableListOf<LedEntry>()
@@ -543,6 +534,9 @@ class SurfaceFeedbackPublisher(
                         byChannel.getOrPut(packChannelKey(primary.universe.universe, primary.channel)) { mutableListOf() }
                             .add(entry)
                         continuousByDisplay.getOrPut(displayKey) { mutableListOf() }.add(entry)
+                        assignmentKeyFor(entry)?.let { key ->
+                            continuousByAssignmentKey.getOrPut(key) { mutableListOf() }.add(entry)
+                        }
                     }
                 }
                 if (control is ButtonDescriptor && control.ledFeedback != LedFeedback.NONE) {
@@ -566,6 +560,7 @@ class SurfaceFeedbackPublisher(
             Index(
                 byChannel = byChannel as Map<Long, List<ContinuousEntry>>,
                 continuousByDisplay = continuousByDisplay as Map<String, List<ContinuousEntry>>,
+                continuousByAssignmentKey = continuousByAssignmentKey as Map<AssignmentKey, List<ContinuousEntry>>,
                 ledsByDisplay = ledsByDisplay as Map<String, List<LedEntry>>,
                 flashByBindingId = flashByBindingId,
                 blackoutLeds = blackoutLeds,

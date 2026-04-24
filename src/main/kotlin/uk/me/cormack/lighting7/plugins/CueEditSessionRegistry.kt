@@ -72,6 +72,19 @@ class CueEditSessionRegistry {
 
     private val sessions = ConcurrentHashMap<Any, Entry>()
 
+    /**
+     * Secondary index mirroring [sessions] keyed by projectId so [activeSession] is O(1).
+     * Kept in lockstep with [sessions] under [mutationLock] — both maps are updated in a
+     * single critical section on register / unregister. The cue-authoring layer rejects
+     * overlapping `beginEdit` calls, so N ≤ 1 per project; if two handles do race and land
+     * on the same projectId, this index tracks the most-recent registration (the older one
+     * still lives in [sessions] but won't be surfaced by [activeSession], matching the
+     * prior behaviour's "ConcurrentHashMap iteration order" non-guarantee).
+     */
+    private val sessionsByProject = ConcurrentHashMap<Int, Entry>()
+
+    private val mutationLock = Any()
+
     private val _events = MutableSharedFlow<Event>(
         extraBufferCapacity = 64,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -85,34 +98,49 @@ class CueEditSessionRegistry {
      */
     fun register(handle: Any, projectId: Int, session: CueEditSessionState) {
         val entry = Entry(projectId, session)
-        val previous = sessions.put(handle, entry)
-        val event: Event = when {
-            previous == null -> Event.Started(projectId, session)
-            previous.projectId != projectId ||
-                previous.session.mode != session.mode ||
-                previous.session.cueId != session.cueId ||
-                previous.session.cueStackId != session.cueStackId ||
-                previous.session.snapshot !== session.snapshot -> Event.ModeChanged(projectId, session)
-            else -> return  // same session, no event
+        val event: Event = synchronized(mutationLock) {
+            val previous = sessions[handle]
+            if (previous != null &&
+                previous.projectId == projectId &&
+                previous.session.mode == session.mode &&
+                previous.session.cueId == session.cueId &&
+                previous.session.cueStackId == session.cueStackId &&
+                previous.session.snapshot === session.snapshot
+            ) {
+                return  // same session, no event, no map churn
+            }
+            sessions[handle] = entry
+            if (previous != null && previous.projectId != projectId) {
+                // This handle's project changed — drop the stale secondary-index entry only if
+                // we're still the tracked one (another handle may have since overwritten it).
+                sessionsByProject.remove(previous.projectId, previous)
+            }
+            sessionsByProject[projectId] = entry
+            if (previous == null) Event.Started(projectId, session)
+            else Event.ModeChanged(projectId, session)
         }
         _events.tryEmit(event)
     }
 
     /** Remove the session for [handle]. Emits [Event.Ended] if an entry was present. */
     fun unregister(handle: Any): Entry? {
-        val removed = sessions.remove(handle) ?: return null
+        val removed = synchronized(mutationLock) {
+            val r = sessions.remove(handle) ?: return null
+            // Only drop the secondary-index entry if it still points at this handle's session;
+            // a concurrent register for the same project may have already overwritten it.
+            sessionsByProject.remove(r.projectId, r)
+            r
+        }
         _events.tryEmit(Event.Ended(removed.projectId, removed.session.cueId))
         return removed
     }
 
     /**
-     * Any currently-active session matching [projectId]. Picks a deterministic entry when
-     * multiple sessions exist — ConcurrentHashMap doesn't guarantee iteration order, but the
-     * cue-authoring layer rejects overlapping `beginEdit` calls, so in practice there is at
-     * most one session per project at any moment.
+     * Any currently-active session matching [projectId]. O(1) lookup via [sessionsByProject];
+     * the cue-authoring layer rejects overlapping `beginEdit` calls, so in practice there is
+     * at most one session per project at any moment.
      */
-    fun activeSession(projectId: Int): Entry? =
-        sessions.values.firstOrNull { it.projectId == projectId }
+    fun activeSession(projectId: Int): Entry? = sessionsByProject[projectId]
 
     fun notifyAssignmentChanged(
         projectId: Int,
