@@ -15,7 +15,11 @@ import uk.me.cormack.lighting7.fx.AssignmentHealth
 data class CueTargetDto(
     val type: String,
     val key: String,
-)
+) {
+    constructor(target: TargetRef) : this(target.discriminator, target.key)
+
+    val target: TargetRef get() = TargetRef.of(type, key)
+}
 
 @Serializable
 data class CuePresetApplicationDto(
@@ -47,7 +51,9 @@ data class CuePropertyAssignmentDto(
      * code paths that don't resolve health stay serialisable unchanged.
      */
     val health: AssignmentHealth = AssignmentHealth.Ok,
-)
+) {
+    val target: TargetRef get() = TargetRef.of(targetType, targetKey)
+}
 
 @Serializable
 data class CueAdHocEffectDto(
@@ -68,7 +74,9 @@ data class CueAdHocEffectDto(
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
     val sortOrder: Int = 0,
-)
+) {
+    val target: TargetRef get() = TargetRef.of(targetType, targetKey)
+}
 
 // ─── Cue types ──────────────────────────────────────────────────────────
 
@@ -179,6 +187,14 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var cue by DaoCue referencedOn DaoCueAdHocEffects.cue
     var targetType by DaoCueAdHocEffects.targetType
     var targetKey by DaoCueAdHocEffects.targetKey
+
+    var target: TargetRef
+        get() = TargetRef.of(targetType, targetKey)
+        set(value) {
+            targetType = value.discriminator
+            targetKey = value.key
+        }
+
     var effectType by DaoCueAdHocEffects.effectType
     var category by DaoCueAdHocEffects.category
     var propertyName by DaoCueAdHocEffects.propertyName
@@ -218,4 +234,11 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
     var value by DaoCuePropertyAssignments.value
     var fadeDurationMs by DaoCuePropertyAssignments.fadeDurationMs
     var sortOrder by DaoCuePropertyAssignments.sortOrder
+
+    var target: TargetRef
+        get() = TargetRef.of(targetType, targetKey)
+        set(value) {
+            targetType = value.discriminator
+            targetKey = value.key
+        }
 }

@@ -368,9 +368,13 @@ data class TogglePresetRequest(
 
 @Serializable
 data class TogglePresetTarget(
-    val type: String,  // "group" or "fixture"
-    val key: String,   // group name or fixture key
-)
+    val type: String,
+    val key: String,
+) {
+    constructor(target: TargetRef) : this(target.discriminator, target.key)
+
+    val target: TargetRef get() = TargetRef.of(type, key)
+}
 
 @Serializable
 data class TogglePresetResponse(
@@ -474,13 +478,11 @@ private fun normalizeEffectName(name: String): String {
 private fun isPresetActiveOnTarget(
     engine: FxEngine,
     presetId: Int,
-    targetType: String,
-    targetKey: String,
+    target: TargetRef,
 ): Boolean {
-    val activeEffects = if (targetType == "group") {
-        engine.getEffectsForGroup(targetKey)
-    } else {
-        engine.getEffectsForFixture(targetKey)
+    val activeEffects = when (target) {
+        is TargetRef.Group -> engine.getEffectsForGroup(target.key)
+        is TargetRef.Fixture -> engine.getEffectsForFixture(target.key)
     }
     return activeEffects.any { it.presetId == presetId }
 }
@@ -617,10 +619,9 @@ internal fun togglePresetOnTargets(
         // Resolve each target's current preset-tagged effects once — used by both the
         // allActive check and the remove loop. Avoids two `getEffectsFor*` calls per target.
         val presetEffectsByTarget = targets.map { target ->
-            val active = if (target.type == "group") {
-                engine.getEffectsForGroup(target.key)
-            } else {
-                engine.getEffectsForFixture(target.key)
+            val active = when (target.target) {
+                is TargetRef.Group -> engine.getEffectsForGroup(target.key)
+                is TargetRef.Fixture -> engine.getEffectsForFixture(target.key)
             }
             active.filter { it.presetId == presetId }
         }
@@ -730,17 +731,20 @@ private fun resolveTarget(
     target: TogglePresetTarget,
     presetEffect: FxPresetEffectDto
 ): FxTarget? {
-    return if (target.type == "group") {
-        val group = state.show.fixtures.untypedGroup(target.key)
-        val propertyName = presetEffect.propertyName
-            ?: resolvePresetEffectProperty(presetEffect, group.detectCapabilities())
-            ?: return null
-        createGroupTarget(group.name, propertyName, group)
-    } else {
-        val propertyName = presetEffect.propertyName
-            ?: resolvePresetEffectPropertyForFixture(presetEffect, target.key, state)
-            ?: return null
-        createFixtureTarget(target.key, propertyName, state)
+    return when (target.target) {
+        is TargetRef.Group -> {
+            val group = state.show.fixtures.untypedGroup(target.key)
+            val propertyName = presetEffect.propertyName
+                ?: resolvePresetEffectProperty(presetEffect, group.detectCapabilities())
+                ?: return null
+            createGroupTarget(group.name, propertyName, group)
+        }
+        is TargetRef.Fixture -> {
+            val propertyName = presetEffect.propertyName
+                ?: resolvePresetEffectPropertyForFixture(presetEffect, target.key, state)
+                ?: return null
+            createFixtureTarget(target.key, propertyName, state)
+        }
     }
 }
 

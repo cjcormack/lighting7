@@ -200,20 +200,6 @@ confirmation.
 
 ## Code quality
 
-### `FU-QUAL-TARGET-REF-SEALED` — Replace stringly-typed `"fixture"` / `"group"` with a sealed type
-
-**Status**: Ready (large scope — dedicated pass)
-**Origin**: Cross-plan — Control-surface Phase 6 + Cue-authoring cross-ref
-
-Pervasive: `CueTargetDto.type`, `CuePropertyAssignmentDto.targetType`, DB
-columns, `resolveTargetForCue` switch-on-string logic in
-`routes/projectCues.kt`. A sealed `TargetRef.Fixture(key) | Group(key)` would
-be type-safe but touches many files. Phase 6's `AssignmentKey` inherits the
-convention.
-
-**Scope**: dedicated cleanup pass, not in-flight with feature work. Relates to
-`FU-QUAL-KEY-CONVERGENCE`.
-
 ### `FU-QUAL-KEY-CONVERGENCE` — `AssignmentKey` vs `Layer3Resolver.Key` convergence
 
 **Status**: Trigger (bigger refactor)
@@ -517,6 +503,47 @@ _Move items here as they land. Format:_
   [SurfaceInputRouterTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouterTest.kt)
   is correspondingly simpler (no session parameter, no `CueEditSessionState`
   import).
+- `FU-QUAL-TARGET-REF-SEALED` — (2026-04-24) — Introduced
+  [TargetRef.kt](src/main/kotlin/uk/me/cormack/lighting7/models/TargetRef.kt):
+  `sealed class TargetRef { Fixture(key); Group(key) }` with `discriminator` /
+  `key` accessors and `TargetRef.of(type, key)` for parsing DB / DTO strings.
+  Wire format stays unchanged — DTOs (`CueTargetDto`, `CuePropertyAssignmentDto`,
+  `CueAdHocEffectDto`, `TogglePresetTarget`) keep their `targetType: String` +
+  `targetKey: String` fields and gain a `target: TargetRef` computed property
+  plus a `constructor(target: TargetRef)` convenience. DAO entities
+  (`DaoCuePropertyAssignment`, `DaoCueAdHocEffect`) gain a `var target: TargetRef`
+  with a setter that mirrors into the underlying varchar columns. Internal
+  branch logic converts from `when/if (... == "group")` over the string to
+  `when (ref) { is TargetRef.Fixture -> ...; is TargetRef.Group -> ... }` in
+  [projectCues.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt)
+  (`buildLayer3AssignmentsForCue`, `buildLayer3AssignmentsForPreset`,
+  `buildStompOverlapFromAssignments`, `captureLayer3Assignments`,
+  `resolveTargetForCue`),
+  [projectFxPresets.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectFxPresets.kt)
+  (`isPresetActiveOnTarget`, `resolveTarget`, toggle preset flow), and
+  [AiTools.kt](src/main/kotlin/uk/me/cormack/lighting7/ai/AiTools.kt)
+  (`executeClearEffects`). Event payloads in
+  [CueEditSessionRegistry.kt](src/main/kotlin/uk/me/cormack/lighting7/plugins/CueEditSessionRegistry.kt)
+  (`Event.AssignmentChanged` / `AssignmentCleared`) now carry a `target: TargetRef`
+  in place of the prior `targetType` / `targetKey` pair; ditto
+  `SurfaceFeedbackPublisher.AssignmentKey`. `CueEditSessionHandler.setProperty` /
+  `setPropertyForSession` / `clearAssignment` now take `target: TargetRef`;
+  [Sockets.kt](src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt)
+  converts from the WS message's still-stringly-typed `targetType` / `targetKey`
+  at the entry point. `DefaultSurfaceActions` likewise parses to `TargetRef` at
+  the call site. `PersistedFixtureReferenceValidator.validateTargetedReference`
+  now takes `target: TargetRef`; callers in
+  [BindingHealthEvaluator.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/BindingHealthEvaluator.kt)
+  and `toDtoWithHealth` in
+  [projectCues.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt)
+  adapted accordingly. Tests updated:
+  [PersistedFixtureReferenceValidatorTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidatorTest.kt),
+  [CueEditSessionRegistryTest.kt](src/test/kotlin/uk/me/cormack/lighting7/plugins/CueEditSessionRegistryTest.kt),
+  [SurfaceFeedbackPublisherTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisherTest.kt).
+  DB columns stay as `varchar(50)`; JSON wire format unchanged; frontend needs
+  no changes. `FxTargetRef` (in `fx/FxTarget.kt`) left as-is — it's an
+  fx-target-specific type with richer semantics (property mapping, blend
+  modes).
 - `FU-FE-PICKER-UX-POLISH` — commit e97a664 in lighting-react (2026-04-24) —
   Added a `preselectedTarget?: CueTarget | null` prop to both
   [EffectFlow.tsx](src/components/cues/editor/EffectFlow.tsx) and

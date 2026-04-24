@@ -228,12 +228,13 @@ class AiTools(private val state: State) {
         var totalRemoved = 0
         for (target in targets) {
             val obj = target.jsonObject
-            val type = obj["type"]!!.jsonPrimitive.content
-            val key = obj["key"]!!.jsonPrimitive.content
-            totalRemoved += if (type == "group") {
-                state.show.fxEngine.removeEffectsForGroup(key)
-            } else {
-                state.show.fxEngine.removeEffectsForFixture(key)
+            val ref = TargetRef.ofOrNull(
+                obj["type"]!!.jsonPrimitive.content,
+                obj["key"]!!.jsonPrimitive.content,
+            ) ?: continue
+            totalRemoved += when (ref) {
+                is TargetRef.Group -> state.show.fxEngine.removeEffectsForGroup(ref.key)
+                is TargetRef.Fixture -> state.show.fxEngine.removeEffectsForFixture(ref.key)
             }
         }
 

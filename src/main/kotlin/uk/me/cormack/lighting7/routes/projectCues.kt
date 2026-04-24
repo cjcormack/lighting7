@@ -803,7 +803,7 @@ private fun captureLayer3Assignments(state: State): List<CuePropertyAssignmentDt
             .toList()
         for (cue in cues) {
             for (row in cue.propertyAssignments) {
-                if (row.targetType == "group") {
+                if (row.targetType == TargetRef.Group.TYPE) {
                     hints.add(row.targetKey to canonicalPropertyName(row.propertyName))
                 }
             }
@@ -842,7 +842,7 @@ internal fun captureLayer3AssignmentsFromSnapshot(
 
         emitted.add(
             CuePropertyAssignmentDto(
-                targetType = "group",
+                targetType = TargetRef.Group.TYPE,
                 targetKey = groupKey,
                 propertyName = propertyName,
                 value = firstMemberValue.serialize(),
@@ -858,7 +858,7 @@ internal fun captureLayer3AssignmentsFromSnapshot(
     for ((key, value) in fixtureRows) {
         emitted.add(
             CuePropertyAssignmentDto(
-                targetType = "fixture",
+                targetType = TargetRef.Fixture.TYPE,
                 targetKey = key.targetKey,
                 propertyName = key.propertyName,
                 value = value.serialize(),
@@ -927,7 +927,7 @@ internal fun DaoCuePropertyAssignment.toDtoWithHealth(fixtures: uk.me.cormack.li
     val base = toDto()
     return base.copy(
         health = PersistedFixtureReferenceValidator.validateTargetedReference(
-            fixtures, base.targetType, base.targetKey, base.propertyName,
+            fixtures, base.target, base.propertyName,
         ),
     )
 }
@@ -1113,7 +1113,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // so a stack GO'ing the same dead cue on every beat doesn't flood the logs.
     val deadRows = cueData.propertyAssignments.filter {
         PersistedFixtureReferenceValidator.validateTargetedReference(
-            state.show.fixtures, it.targetType, it.targetKey, it.propertyName,
+            state.show.fixtures, it.target, it.propertyName,
         ) != AssignmentHealth.Ok
     }
     if (deadRows.isNotEmpty()) {
@@ -1214,7 +1214,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // 3. Spawn immediate preset effects from the data loaded above.
     for (ip in immediatePresets) {
         for (target in ip.targets) {
-            val toggleTarget = TogglePresetTarget(type = target.type, key = target.key)
+            val toggleTarget = TogglePresetTarget(target.target)
             for (presetEffect in ip.effects) {
                 val fxTarget = try {
                     resolveTargetForCue(state, toggleTarget, presetEffect)
@@ -1234,7 +1234,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // 4. Apply immediate ad-hoc effects
     // (Timed ad-hoc effects with delayMs/intervalMs are handled by CueTriggerManager)
     for (adHoc in cueData.adHocEffects.filter { it.delayMs == null && it.intervalMs == null }) {
-        val target = TogglePresetTarget(type = adHoc.targetType, key = adHoc.targetKey)
+        val target = TogglePresetTarget(adHoc.target)
         val presetEffectDto = FxPresetEffectDto(
             effectType = adHoc.effectType,
             category = adHoc.category,
@@ -1284,16 +1284,19 @@ internal fun buildStompOverlapFromAssignments(
     val out = HashSet<FxEngine.PropertyKey>()
     for (assignment in cueData.propertyAssignments) {
         val canonical = canonicalPropertyName(assignment.propertyName)
-        if (assignment.targetType == "group") {
-            out.add(FxEngine.PropertyKey(assignment.targetKey, canonical))
-            val members = try {
-                fixtures.untypedGroup(assignment.targetKey).fixtures
-            } catch (_: IllegalStateException) { emptyList() }
-            for (member in members) {
-                if (member is Fixture) out.add(FxEngine.PropertyKey(member.key, canonical))
+        when (val target = assignment.target) {
+            is TargetRef.Group -> {
+                out.add(FxEngine.PropertyKey(target.key, canonical))
+                val members = try {
+                    fixtures.untypedGroup(target.key).fixtures
+                } catch (_: IllegalStateException) { emptyList() }
+                for (member in members) {
+                    if (member is Fixture) out.add(FxEngine.PropertyKey(member.key, canonical))
+                }
             }
-        } else {
-            out.add(FxEngine.PropertyKey(assignment.targetKey, canonical))
+            is TargetRef.Fixture -> {
+                out.add(FxEngine.PropertyKey(target.key, canonical))
+            }
         }
     }
     return out
@@ -1348,41 +1351,46 @@ internal fun buildLayer3AssignmentsForCue(
 
     for (assignment in cueData.propertyAssignments) {
         val canonical = canonicalPropertyName(assignment.propertyName)
+        val target = assignment.target
 
         // Resolve a reference fixture for category lookup and, for groups, the member keys.
+        // memberKeys is empty iff the target is a Fixture — used below as the fanout discriminator.
         val memberKeys: List<String>
         val referenceFixture: Fixture
-        if (assignment.targetType == "group") {
-            val group = try {
-                fixtures.untypedGroup(assignment.targetKey)
-            } catch (_: IllegalStateException) {
-                logger.warn("cue {}: group '{}' missing — skipping assignment for {}", cueData.cueId, assignment.targetKey, assignment.propertyName)
-                continue
+        when (target) {
+            is TargetRef.Group -> {
+                val group = try {
+                    fixtures.untypedGroup(target.key)
+                } catch (_: IllegalStateException) {
+                    logger.warn("cue {}: group '{}' missing — skipping assignment for {}", cueData.cueId, target.key, assignment.propertyName)
+                    continue
+                }
+                val members = group.fixtures.filterIsInstance<Fixture>()
+                if (members.isEmpty()) {
+                    logger.warn("cue {}: group '{}' has no Fixture members — skipping assignment", cueData.cueId, target.key)
+                    continue
+                }
+                memberKeys = members.map { it.key }
+                referenceFixture = members.first()
             }
-            val members = group.fixtures.filterIsInstance<Fixture>()
-            if (members.isEmpty()) {
-                logger.warn("cue {}: group '{}' has no Fixture members — skipping assignment", cueData.cueId, assignment.targetKey)
-                continue
+            is TargetRef.Fixture -> {
+                referenceFixture = try {
+                    fixtures.untypedFixture(target.key)
+                } catch (_: IllegalStateException) {
+                    logger.warn("cue {}: fixture '{}' missing — skipping assignment for {}", cueData.cueId, target.key, assignment.propertyName)
+                    continue
+                }
+                memberKeys = emptyList()
             }
-            memberKeys = members.map { it.key }
-            referenceFixture = members.first()
-        } else {
-            referenceFixture = try {
-                fixtures.untypedFixture(assignment.targetKey)
-            } catch (_: IllegalStateException) {
-                logger.warn("cue {}: fixture '{}' missing — skipping assignment for {}", cueData.cueId, assignment.targetKey, assignment.propertyName)
-                continue
-            }
-            memberKeys = emptyList()
         }
 
         val (category, override) = fixtureCategoryFor(referenceFixture, canonical) ?: run {
-            logger.warn("cue {}: property '{}' not found on '{}' — skipping", cueData.cueId, assignment.propertyName, assignment.targetKey)
+            logger.warn("cue {}: property '{}' not found on '{}' — skipping", cueData.cueId, assignment.propertyName, target.key)
             continue
         }
 
         val parsed = Layer3Resolver.parseAssignmentValue(category, canonical, assignment.value, effectivePalette) ?: run {
-            logger.warn("cue {}: invalid value '{}' for {}.{} — skipping", cueData.cueId, assignment.value, assignment.targetKey, assignment.propertyName)
+            logger.warn("cue {}: invalid value '{}' for {}.{} — skipping", cueData.cueId, assignment.value, target.key, assignment.propertyName)
             continue
         }
 
@@ -1400,13 +1408,13 @@ internal fun buildLayer3AssignmentsForCue(
             value = parsed,
         )
 
-        if (assignment.targetType == "group") {
+        if (memberKeys.isEmpty()) {
+            out.add(row(target.key, isGroup = false))
+        } else {
             // Emit only per-member rows; the group-level key isn't a resolvable fixture at
             // publish time. Mark these as targetIsGroup=true so a direct fixture-level row
             // for the same member overrides via [Layer3Resolver.applySpecificity].
             for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true))
-        } else {
-            out.add(row(assignment.targetKey, isGroup = false))
         }
     }
     return out
@@ -1444,30 +1452,35 @@ internal fun buildLayer3AssignmentsForPreset(
     val out = ArrayList<Layer3Resolver.Assignment>(presetAssignments.size * applyTargets.size * 2)
 
     for (target in applyTargets) {
+        val targetRef = target.target
+        // memberKeys is empty iff the target is a Fixture — used below as the fanout discriminator.
         val memberKeys: List<String>
         val referenceFixture: Fixture
-        if (target.type == "group") {
-            val group = try {
-                fixtures.untypedGroup(target.key)
-            } catch (_: IllegalStateException) {
-                logger.warn("preset {} (cue {}): group '{}' missing — skipping", presetId, cueId, target.key)
-                continue
+        when (targetRef) {
+            is TargetRef.Group -> {
+                val group = try {
+                    fixtures.untypedGroup(targetRef.key)
+                } catch (_: IllegalStateException) {
+                    logger.warn("preset {} (cue {}): group '{}' missing — skipping", presetId, cueId, targetRef.key)
+                    continue
+                }
+                val members = group.fixtures.filterIsInstance<Fixture>()
+                if (members.isEmpty()) {
+                    logger.warn("preset {} (cue {}): group '{}' has no Fixture members — skipping", presetId, cueId, targetRef.key)
+                    continue
+                }
+                memberKeys = members.map { it.key }
+                referenceFixture = members.first()
             }
-            val members = group.fixtures.filterIsInstance<Fixture>()
-            if (members.isEmpty()) {
-                logger.warn("preset {} (cue {}): group '{}' has no Fixture members — skipping", presetId, cueId, target.key)
-                continue
+            is TargetRef.Fixture -> {
+                referenceFixture = try {
+                    fixtures.untypedFixture(targetRef.key)
+                } catch (_: IllegalStateException) {
+                    logger.warn("preset {} (cue {}): fixture '{}' missing — skipping", presetId, cueId, targetRef.key)
+                    continue
+                }
+                memberKeys = emptyList()
             }
-            memberKeys = members.map { it.key }
-            referenceFixture = members.first()
-        } else {
-            referenceFixture = try {
-                fixtures.untypedFixture(target.key)
-            } catch (_: IllegalStateException) {
-                logger.warn("preset {} (cue {}): fixture '{}' missing — skipping", presetId, cueId, target.key)
-                continue
-            }
-            memberKeys = emptyList()
         }
 
         for (assignment in presetAssignments) {
@@ -1475,14 +1488,14 @@ internal fun buildLayer3AssignmentsForPreset(
             val (category, override) = fixtureCategoryFor(referenceFixture, canonical) ?: run {
                 logger.warn(
                     "preset {} (cue {}): property '{}' not on '{}' — skipping",
-                    presetId, cueId, assignment.propertyName, target.key,
+                    presetId, cueId, assignment.propertyName, targetRef.key,
                 )
                 continue
             }
             val parsed = Layer3Resolver.parseAssignmentValue(category, canonical, assignment.value, effectivePalette) ?: run {
                 logger.warn(
                     "preset {} (cue {}): invalid value '{}' for {}.{} — skipping",
-                    presetId, cueId, assignment.value, target.key, assignment.propertyName,
+                    presetId, cueId, assignment.value, targetRef.key, assignment.propertyName,
                 )
                 continue
             }
@@ -1499,10 +1512,10 @@ internal fun buildLayer3AssignmentsForPreset(
                 value = parsed,
             )
 
-            if (target.type == "group") {
-                for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true))
+            if (memberKeys.isEmpty()) {
+                out.add(row(targetRef.key, isGroup = false))
             } else {
-                out.add(row(target.key, isGroup = false))
+                for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true))
             }
         }
     }
@@ -1516,17 +1529,20 @@ internal fun resolveTargetForCue(
     target: TogglePresetTarget,
     presetEffect: FxPresetEffectDto,
 ): FxTarget? {
-    return if (target.type == "group") {
-        val group = state.show.fixtures.untypedGroup(target.key)
-        val propertyName = presetEffect.propertyName
-            ?: resolvePresetEffectPropertyForCue(presetEffect, group.detectCapabilities())
-            ?: return null
-        createGroupTargetForCue(group.name, propertyName, group)
-    } else {
-        val propertyName = presetEffect.propertyName
-            ?: resolvePresetEffectPropertyForFixtureInCue(presetEffect)
-            ?: return null
-        createFixtureTargetForCue(target.key, propertyName, state)
+    return when (target.target) {
+        is TargetRef.Group -> {
+            val group = state.show.fixtures.untypedGroup(target.key)
+            val propertyName = presetEffect.propertyName
+                ?: resolvePresetEffectPropertyForCue(presetEffect, group.detectCapabilities())
+                ?: return null
+            createGroupTargetForCue(group.name, propertyName, group)
+        }
+        is TargetRef.Fixture -> {
+            val propertyName = presetEffect.propertyName
+                ?: resolvePresetEffectPropertyForFixtureInCue(presetEffect)
+                ?: return null
+            createFixtureTargetForCue(target.key, propertyName, state)
+        }
     }
 }
 

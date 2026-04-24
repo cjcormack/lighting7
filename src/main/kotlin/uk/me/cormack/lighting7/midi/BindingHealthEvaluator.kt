@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.midi
 
 import uk.me.cormack.lighting7.fx.AssignmentHealth
 import uk.me.cormack.lighting7.fx.PersistedFixtureReferenceValidator
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 
 /**
@@ -40,14 +41,12 @@ object BindingHealthEvaluator {
     fun evaluate(target: BindingTarget, context: Context): AssignmentHealth = when (target) {
         is BindingTarget.FixtureProperty -> PersistedFixtureReferenceValidator.validateTargetedReference(
             fixtures = context.fixtures,
-            targetType = "fixture",
-            targetKey = target.fixtureKey,
+            target = TargetRef.Fixture(target.fixtureKey),
             propertyName = target.propertyName,
         )
         is BindingTarget.GroupProperty -> PersistedFixtureReferenceValidator.validateTargetedReference(
             fixtures = context.fixtures,
-            targetType = "group",
-            targetKey = target.groupName,
+            target = TargetRef.Group(target.groupName),
             propertyName = target.propertyName,
         )
         is BindingTarget.CueStackGo -> checkStack(target.stackId, context)

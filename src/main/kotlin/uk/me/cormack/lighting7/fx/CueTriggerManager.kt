@@ -315,7 +315,7 @@ class CueTriggerManager(
     ) {
         if (presetEffects.isEmpty()) return
         for (target in targets) {
-            val toggleTarget = TogglePresetTarget(type = target.type, key = target.key)
+            val toggleTarget = TogglePresetTarget(target.target)
             for (presetEffect in presetEffects) {
                 val fxTarget = try {
                     resolveTargetForCue(state, toggleTarget, presetEffect)
@@ -342,7 +342,7 @@ class CueTriggerManager(
         cueStackId: Int?,
         effectIds: MutableList<Long>,
     ) {
-        val toggleTarget = TogglePresetTarget(type = effect.targetType, key = effect.targetKey)
+        val toggleTarget = TogglePresetTarget(effect.target)
         val presetEffect = FxPresetEffectDto(
             effectType = effect.effectType,
             category = effect.category,

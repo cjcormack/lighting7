@@ -192,7 +192,7 @@ class CueStackManager(
             } ?: continue
 
             for (target in presetApp.targets) {
-                val toggleTarget = TogglePresetTarget(type = target.type, key = target.key)
+                val toggleTarget = TogglePresetTarget(target.target)
                 for (presetEffect in presetEffects) {
                     val fxTarget = try {
                         resolveTargetForCue(state, toggleTarget, presetEffect)
@@ -212,7 +212,7 @@ class CueStackManager(
 
         // Apply immediate ad-hoc effects
         for (adHoc in immediateAdHoc) {
-            val target = TogglePresetTarget(type = adHoc.targetType, key = adHoc.targetKey)
+            val target = TogglePresetTarget(adHoc.target)
             val presetEffectDto = FxPresetEffectDto(
                 effectType = adHoc.effectType,
                 category = adHoc.category,

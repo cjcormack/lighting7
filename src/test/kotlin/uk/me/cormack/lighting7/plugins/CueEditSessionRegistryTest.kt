@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.TargetRef
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -104,10 +105,10 @@ class CueEditSessionRegistryTest {
     fun `notifyAssignmentChanged fires AssignmentChanged event`() = runBlocking {
         val registry = CueEditSessionRegistry()
         val event = nextEvent(registry) {
-            registry.notifyAssignmentChanged(projectId, 12, "fixture", "hex-1", "dimmer", "200")
+            registry.notifyAssignmentChanged(projectId, 12, TargetRef.Fixture("hex-1"), "dimmer", "200")
         }
         assertTrue(event is CueEditSessionRegistry.Event.AssignmentChanged)
-        assertEquals("hex-1", event.targetKey)
+        assertEquals(TargetRef.Fixture("hex-1"), event.target)
         assertEquals("200", event.value)
     }
 

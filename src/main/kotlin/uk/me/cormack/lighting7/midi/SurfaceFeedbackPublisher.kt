@@ -16,6 +16,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.Layer3Resolver
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
 import uk.me.cormack.lighting7.plugins.CueEditSessionState
 import uk.me.cormack.lighting7.show.Fixtures
@@ -157,11 +158,11 @@ class SurfaceFeedbackPublisher(
 
     /**
      * Per-target cached cue assignments for the active cue-edit session. Keyed by
-     * `(targetType, targetKey, propertyName)` — matches [CuePropertyAssignmentDto] row
-     * identity. Empty when no session is active. Rebuilt on session start / mode change /
+     * `(target, propertyName)` — matches [CuePropertyAssignmentDto] row identity.
+     * Empty when no session is active. Rebuilt on session start / mode change /
      * discard; patched incrementally on single-assignment events.
      */
-    internal data class AssignmentKey(val targetType: String, val targetKey: String, val propertyName: String)
+    internal data class AssignmentKey(val target: TargetRef, val propertyName: String)
 
     private val sessionAssignments = AtomicReference<Map<AssignmentKey, String>>(emptyMap())
 
@@ -417,13 +418,13 @@ class SurfaceFeedbackPublisher(
                 resyncAllDevices()
             }
             is CueEditSessionRegistry.Event.AssignmentChanged -> {
-                val key = AssignmentKey(event.targetType, event.targetKey, event.propertyName)
+                val key = AssignmentKey(event.target, event.propertyName)
                 val current = sessionAssignments.get()
                 sessionAssignments.set(current + (key to event.value))
                 resyncEntriesMatching(key)
             }
             is CueEditSessionRegistry.Event.AssignmentCleared -> {
-                val key = AssignmentKey(event.targetType, event.targetKey, event.propertyName)
+                val key = AssignmentKey(event.target, event.propertyName)
                 val current = sessionAssignments.get()
                 if (key in current) {
                     sessionAssignments.set(current - key)
@@ -438,7 +439,7 @@ class SurfaceFeedbackPublisher(
     }
 
     private fun buildAssignmentMap(rows: List<CuePropertyAssignmentDto>): Map<AssignmentKey, String> =
-        rows.associate { AssignmentKey(it.targetType, it.targetKey, it.propertyName) to it.value }
+        rows.associate { AssignmentKey(it.target, it.propertyName) to it.value }
 
     private fun resyncAllDevices() {
         for (displayKey in deviceMatcher.attached.value.keys) {
@@ -655,8 +656,8 @@ class SurfaceFeedbackPublisher(
     }
 
     private fun assignmentKeyFor(entry: ContinuousEntry): AssignmentKey? = when (val t = entry.binding.target) {
-        is BindingTarget.FixtureProperty -> AssignmentKey("fixture", t.fixtureKey, t.propertyName)
-        is BindingTarget.GroupProperty -> AssignmentKey("group", t.groupName, t.propertyName)
+        is BindingTarget.FixtureProperty -> AssignmentKey(TargetRef.Fixture(t.fixtureKey), t.propertyName)
+        is BindingTarget.GroupProperty -> AssignmentKey(TargetRef.Group(t.groupName), t.propertyName)
         else -> null
     }
 

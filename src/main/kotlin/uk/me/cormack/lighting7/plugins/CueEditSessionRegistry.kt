@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.TargetRef
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -43,8 +44,7 @@ class CueEditSessionRegistry {
         data class AssignmentChanged(
             val projectId: Int,
             val cueId: Int,
-            val targetType: String,
-            val targetKey: String,
+            val target: TargetRef,
             val propertyName: String,
             val value: String,
         ) : Event()
@@ -53,8 +53,7 @@ class CueEditSessionRegistry {
         data class AssignmentCleared(
             val projectId: Int,
             val cueId: Int,
-            val targetType: String,
-            val targetKey: String,
+            val target: TargetRef,
             val propertyName: String,
         ) : Event()
 
@@ -145,22 +144,20 @@ class CueEditSessionRegistry {
     fun notifyAssignmentChanged(
         projectId: Int,
         cueId: Int,
-        targetType: String,
-        targetKey: String,
+        target: TargetRef,
         propertyName: String,
         value: String,
     ) {
-        _events.tryEmit(Event.AssignmentChanged(projectId, cueId, targetType, targetKey, propertyName, value))
+        _events.tryEmit(Event.AssignmentChanged(projectId, cueId, target, propertyName, value))
     }
 
     fun notifyAssignmentCleared(
         projectId: Int,
         cueId: Int,
-        targetType: String,
-        targetKey: String,
+        target: TargetRef,
         propertyName: String,
     ) {
-        _events.tryEmit(Event.AssignmentCleared(projectId, cueId, targetType, targetKey, propertyName))
+        _events.tryEmit(Event.AssignmentCleared(projectId, cueId, target, propertyName))
     }
 
     fun notifyAssignmentsReloaded(

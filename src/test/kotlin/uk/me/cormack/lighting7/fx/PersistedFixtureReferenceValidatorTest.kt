@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,7 +37,7 @@ class PersistedFixtureReferenceValidatorTest {
         assertEquals(
             AssignmentHealth.Ok,
             PersistedFixtureReferenceValidator.validateTargetedReference(
-                fixtures, "fixture", "hex-1", "dimmer",
+                fixtures, TargetRef.Fixture("hex-1"), "dimmer",
             ),
         )
     }
@@ -47,7 +48,7 @@ class PersistedFixtureReferenceValidatorTest {
         assertEquals(
             AssignmentHealth.Ok,
             PersistedFixtureReferenceValidator.validateTargetedReference(
-                fixtures, "group", "front-wash", "rgbColour",
+                fixtures, TargetRef.Group("front-wash"), "rgbColour",
             ),
         )
     }
@@ -58,13 +59,13 @@ class PersistedFixtureReferenceValidatorTest {
         assertEquals(
             AssignmentHealth.Ok,
             PersistedFixtureReferenceValidator.validateTargetedReference(
-                fixtures, "fixture", "hex-1", "colour",
+                fixtures, TargetRef.Fixture("hex-1"), "colour",
             ),
         )
         assertEquals(
             AssignmentHealth.Ok,
             PersistedFixtureReferenceValidator.validateTargetedReference(
-                fixtures, "fixture", "hex-1", "color",
+                fixtures, TargetRef.Fixture("hex-1"), "color",
             ),
         )
     }
@@ -73,7 +74,7 @@ class PersistedFixtureReferenceValidatorTest {
     fun `unknown fixture returns MissingFixture carrying the looked-up key`() {
         val fixtures = fixturesWithHexGroup()
         val health = PersistedFixtureReferenceValidator.validateTargetedReference(
-            fixtures, "fixture", "hex-renamed", "dimmer",
+            fixtures, TargetRef.Fixture("hex-renamed"), "dimmer",
         )
         val missing = assertIs<AssignmentHealth.MissingFixture>(health)
         assertEquals("hex-renamed", missing.fixtureKey)
@@ -83,7 +84,7 @@ class PersistedFixtureReferenceValidatorTest {
     fun `unknown group returns MissingGroup`() {
         val fixtures = fixturesWithHexGroup()
         val health = PersistedFixtureReferenceValidator.validateTargetedReference(
-            fixtures, "group", "non-existent", "dimmer",
+            fixtures, TargetRef.Group("non-existent"), "dimmer",
         )
         val missing = assertIs<AssignmentHealth.MissingGroup>(health)
         assertEquals("non-existent", missing.groupName)
@@ -93,7 +94,7 @@ class PersistedFixtureReferenceValidatorTest {
     fun `fixture exists but property removed returns MissingProperty`() {
         val fixtures = fixturesWithHexGroup()
         val health = PersistedFixtureReferenceValidator.validateTargetedReference(
-            fixtures, "fixture", "hex-1", "nonsenseProperty",
+            fixtures, TargetRef.Fixture("hex-1"), "nonsenseProperty",
         )
         val missing = assertIs<AssignmentHealth.MissingProperty>(health)
         assertEquals("hex-1", missing.targetKey)
@@ -104,7 +105,7 @@ class PersistedFixtureReferenceValidatorTest {
     fun `group-level missing property returns MissingProperty referencing the group key`() {
         val fixtures = fixturesWithHexGroup()
         val health = PersistedFixtureReferenceValidator.validateTargetedReference(
-            fixtures, "group", "front-wash", "nonsense",
+            fixtures, TargetRef.Group("front-wash"), "nonsense",
         )
         val missing = assertIs<AssignmentHealth.MissingProperty>(health)
         assertEquals("front-wash", missing.targetKey)
@@ -120,7 +121,7 @@ class PersistedFixtureReferenceValidatorTest {
         assertEquals(
             AssignmentHealth.Ok,
             PersistedFixtureReferenceValidator.validateTargetedReference(
-                beforeRename, "fixture", "hex-1", "dimmer",
+                beforeRename, TargetRef.Fixture("hex-1"), "dimmer",
             ),
         )
 
@@ -128,7 +129,7 @@ class PersistedFixtureReferenceValidatorTest {
             register { addFixture(HexFixture(universe, "hex-renamed", "Hex 1", firstChannel = 1)) }
         }
         val deadHealth = PersistedFixtureReferenceValidator.validateTargetedReference(
-            afterRename, "fixture", "hex-1", "dimmer",
+            afterRename, TargetRef.Fixture("hex-1"), "dimmer",
         )
         assertIs<AssignmentHealth.MissingFixture>(deadHealth)
 
@@ -136,7 +137,7 @@ class PersistedFixtureReferenceValidatorTest {
         assertEquals(
             AssignmentHealth.Ok,
             PersistedFixtureReferenceValidator.validateTargetedReference(
-                afterRename, "fixture", "hex-renamed", "dimmer",
+                afterRename, TargetRef.Fixture("hex-renamed"), "dimmer",
             ),
         )
     }

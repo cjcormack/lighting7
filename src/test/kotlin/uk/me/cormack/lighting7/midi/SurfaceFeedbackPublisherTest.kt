@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.CueEditMode
 import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
 import uk.me.cormack.lighting7.plugins.CueEditSessionState
@@ -589,7 +590,7 @@ class SurfaceFeedbackPublisherTest {
             h.recordingController.feedback.clear()
 
             // Edit: set dimmer to 200.
-            h.registry.notifyAssignmentChanged(projectId, 1, "fixture", "hex-1", "dimmer", "200")
+            h.registry.notifyAssignmentChanged(projectId, 1, TargetRef.Fixture("hex-1"), "dimmer", "200")
             yield()
 
             val cc = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()

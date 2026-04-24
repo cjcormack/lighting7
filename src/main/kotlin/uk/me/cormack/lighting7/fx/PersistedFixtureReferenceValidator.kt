@@ -2,10 +2,11 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 
 /**
- * Shared validator for persisted `(targetType, targetKey, propertyName)` references.
+ * Shared validator for persisted `(target, propertyName)` references.
  *
  * Used by cue Phase 6 property-assignment diagnostics today; control-surface Phase 7 will
  * wrap the same functions for binding validation. Stateless — callers supply the current
@@ -14,37 +15,35 @@ import uk.me.cormack.lighting7.show.Fixtures
 object PersistedFixtureReferenceValidator {
 
     /**
-     * Validate a cue or binding reference against the currently-loaded patch. Used for
-     * target-bearing assignments: `targetType` is `"fixture"` or `"group"`, `targetKey` is
-     * the fixture key or group name. Returns [AssignmentHealth.Ok] iff the target exists
-     * and exposes [propertyName] as a known annotated property (including the synthetic
-     * `"position"` compound and `"colour"` / `"color"` → `rgbColour` aliases).
+     * Validate a cue or binding reference against the currently-loaded patch. Returns
+     * [AssignmentHealth.Ok] iff the target exists and exposes [propertyName] as a known
+     * annotated property (including the synthetic `"position"` compound and
+     * `"colour"` / `"color"` → `rgbColour` aliases).
      */
     fun validateTargetedReference(
         fixtures: Fixtures,
-        targetType: String,
-        targetKey: String,
+        target: TargetRef,
         propertyName: String,
     ): AssignmentHealth {
         val canonical = canonicalPropertyName(propertyName)
-        val referenceFixture: Fixture = when (targetType) {
-            "group" -> {
+        val referenceFixture: Fixture = when (target) {
+            is TargetRef.Group -> {
                 val group = try {
-                    fixtures.untypedGroup(targetKey)
+                    fixtures.untypedGroup(target.key)
                 } catch (_: IllegalStateException) {
-                    return AssignmentHealth.MissingGroup(targetKey)
+                    return AssignmentHealth.MissingGroup(target.key)
                 }
                 group.fixtures.filterIsInstance<Fixture>().firstOrNull()
-                    ?: return AssignmentHealth.MissingGroup(targetKey)
+                    ?: return AssignmentHealth.MissingGroup(target.key)
             }
-            else -> try {
-                fixtures.untypedFixture(targetKey)
+            is TargetRef.Fixture -> try {
+                fixtures.untypedFixture(target.key)
             } catch (_: IllegalStateException) {
-                return AssignmentHealth.MissingFixture(targetKey)
+                return AssignmentHealth.MissingFixture(target.key)
             }
         }
         if (!fixtureSupportsProperty(referenceFixture, canonical)) {
-            return AssignmentHealth.MissingProperty(targetKey, propertyName)
+            return AssignmentHealth.MissingProperty(target.key, propertyName)
         }
         return AssignmentHealth.Ok
     }

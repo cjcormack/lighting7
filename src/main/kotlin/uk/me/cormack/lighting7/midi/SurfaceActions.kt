@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.fx.DirectWriteStore
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.CueEditSessionHandler
 import uk.me.cormack.lighting7.plugins.CueEditSessionState
 import uk.me.cormack.lighting7.show.Fixtures
@@ -80,7 +81,7 @@ class DefaultSurfaceActions(
         }
         val session = activeCueEditSession()
         if (session != null) {
-            upsertCueAssignment(session, "fixture", fixtureKey, fixture, propertyName, midiValue7Bit)
+            upsertCueAssignment(session, TargetRef.Fixture(fixtureKey), fixture, propertyName, midiValue7Bit)
             return
         }
         val writes = directWriteStore.putProperty(fixture, propertyName, midiValue7Bit)
@@ -101,7 +102,7 @@ class DefaultSurfaceActions(
                 logger.debug("Surface cueEdit write: group '{}' has no fixture members", groupName)
                 return
             }
-            upsertCueAssignment(session, "group", groupName, first, propertyName, midiValue7Bit)
+            upsertCueAssignment(session, TargetRef.Group(groupName), first, propertyName, midiValue7Bit)
             return
         }
         val writes = directWriteStore.putGroupProperty(group, propertyName, midiValue7Bit)
@@ -125,8 +126,7 @@ class DefaultSurfaceActions(
 
     private fun upsertCueAssignment(
         session: CueEditSessionState,
-        targetType: String,
-        targetKey: String,
+        target: TargetRef,
         serialiserFixture: Fixture,
         propertyName: String,
         midiValue7Bit: UByte,
@@ -136,15 +136,14 @@ class DefaultSurfaceActions(
         ) ?: run {
             logger.debug(
                 "Surface cueEdit write: {} property '{}' on '{}' not serialisable",
-                targetType, propertyName, targetKey,
+                target.discriminator, propertyName, target.key,
             )
             return
         }
         CueEditSessionHandler.setPropertyForSession(
             state = state,
             session = session,
-            targetType = targetType,
-            targetKey = targetKey,
+            target = target,
             propertyName = propertyName,
             value = valueStr,
         )

@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
@@ -312,15 +313,14 @@ object CueEditSessionHandler {
 
     /**
      * Delete one property assignment from the open cue. Matches by
-     * `(targetType, targetKey, propertyName)`; silently succeeds if no row matches (idempotent).
+     * `(target, propertyName)`; silently succeeds if no row matches (idempotent).
      * In `LIVE` mode, republishes Layer 3 so the channel releases to the layer below.
      */
     fun clearAssignment(
         state: State,
         sessionRef: AtomicReference<CueEditSessionState?>,
         cueId: Int,
-        targetType: String,
-        targetKey: String,
+        target: TargetRef,
         propertyName: String,
     ): OutMessage {
         val session = sessionRef.get()
@@ -332,8 +332,8 @@ object CueEditSessionHandler {
             transaction(state.database) {
                 val cue = DaoCue.findById(cueId) ?: error("Cue not found")
                 val row = cue.propertyAssignments.firstOrNull {
-                    it.targetType == targetType &&
-                        it.targetKey == targetKey &&
+                    it.targetType == target.discriminator &&
+                        it.targetKey == target.key &&
                         it.propertyName == propertyName
                 }
                 row?.delete()
@@ -346,10 +346,10 @@ object CueEditSessionHandler {
         if (applyData != null) republishLayer3(state, cueId, applyData)
 
         state.cueEditSessionRegistry.notifyAssignmentCleared(
-            state.projectManager.currentProject.id.value, cueId, targetType, targetKey, propertyName,
+            state.projectManager.currentProject.id.value, cueId, target, propertyName,
         )
         state.show.fixtures.cueListChanged()
-        return CueEditAssignmentClearedOutMessage(cueId, targetType, targetKey, propertyName)
+        return CueEditAssignmentClearedOutMessage(cueId, target.discriminator, target.key, propertyName)
     }
 
     /**
@@ -375,15 +375,14 @@ object CueEditSessionHandler {
     }
 
     /**
-     * Upsert a property assignment for (targetType, targetKey, propertyName) = value. In
-     * `LIVE` mode, republish the cue's Layer 3 state so the change is visible immediately.
+     * Upsert a property assignment for (target, propertyName) = value. In `LIVE` mode,
+     * republish the cue's Layer 3 state so the change is visible immediately.
      */
     fun setProperty(
         state: State,
         sessionRef: AtomicReference<CueEditSessionState?>,
         cueId: Int,
-        targetType: String,
-        targetKey: String,
+        target: TargetRef,
         propertyName: String,
         value: String,
     ): OutMessage {
@@ -391,7 +390,7 @@ object CueEditSessionHandler {
         if (session == null || session.cueId != cueId) {
             return CueEditErrorOutMessage(cueId, "No active cueEdit session for this cue")
         }
-        return setPropertyForSession(state, session, targetType, targetKey, propertyName, value)
+        return setPropertyForSession(state, session, target, propertyName, value)
     }
 
     /**
@@ -403,15 +402,14 @@ object CueEditSessionHandler {
     fun setPropertyForSession(
         state: State,
         session: CueEditSessionState,
-        targetType: String,
-        targetKey: String,
+        target: TargetRef,
         propertyName: String,
         value: String,
     ): OutMessage {
         val cueId = session.cueId
         val upserted = CuePropertyAssignmentDto(
-            targetType = targetType,
-            targetKey = targetKey,
+            targetType = target.discriminator,
+            targetKey = target.key,
             propertyName = propertyName,
             value = value,
         )
@@ -428,10 +426,10 @@ object CueEditSessionHandler {
         if (applyData != null) republishLayer3(state, cueId, applyData)
 
         state.cueEditSessionRegistry.notifyAssignmentChanged(
-            state.projectManager.currentProject.id.value, cueId, targetType, targetKey, propertyName, value,
+            state.projectManager.currentProject.id.value, cueId, target, propertyName, value,
         )
         state.show.fixtures.cueListChanged()
-        return CueEditAssignmentChangedOutMessage(cueId, targetType, targetKey, propertyName, value)
+        return CueEditAssignmentChangedOutMessage(cueId, target.discriminator, target.key, propertyName, value)
     }
 
     /**
@@ -461,8 +459,7 @@ object CueEditSessionHandler {
         return when (resolved) {
             is ResolvedChannel.SingleProperty -> setProperty(
                 state, sessionRef, cueId,
-                targetType = "fixture",
-                targetKey = resolved.fixtureKey,
+                target = TargetRef.Fixture(resolved.fixtureKey),
                 propertyName = resolved.propertyName,
                 value = level.toString(),
             )
@@ -602,7 +599,7 @@ object CueEditSessionHandler {
 
             if (presetEffects != null) {
                 for (target in targets) {
-                    val toggleTarget = TogglePresetTarget(type = target.type, key = target.key)
+                    val toggleTarget = TogglePresetTarget(target.target)
                     for (presetEffect in presetEffects) {
                         val fxTarget = try {
                             resolveTargetForCue(state, toggleTarget, presetEffect)
@@ -668,7 +665,7 @@ object CueEditSessionHandler {
         }
 
         if (applyData != null && effect.delayMs == null && effect.intervalMs == null) {
-            val target = TogglePresetTarget(type = effect.targetType, key = effect.targetKey)
+            val target = TogglePresetTarget(effect.target)
             val presetEffectDto = FxPresetEffectDto(
                 effectType = effect.effectType,
                 category = effect.category,

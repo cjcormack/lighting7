@@ -33,6 +33,7 @@ import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
 import uk.me.cormack.lighting7.midi.SoftTakeoverStateMachine
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.state.State
 import java.util.*
@@ -1067,11 +1068,13 @@ fun Application.configureSockets(state: State) {
                             )
                         }
                         is CueEditSetPropertyInMessage -> {
+                            val target = TargetRef.ofOrNull(message.targetType, message.targetKey)
                             sendSerialized<OutMessage>(
-                                CueEditSessionHandler.setProperty(
+                                if (target == null) CueEditErrorOutMessage(
+                                    message.cueId, "Unknown targetType '${message.targetType}'",
+                                ) else CueEditSessionHandler.setProperty(
                                     state, cueEditSessionRef, message.cueId,
-                                    message.targetType, message.targetKey,
-                                    message.propertyName, message.value,
+                                    target, message.propertyName, message.value,
                                 )
                             )
                         }
@@ -1086,10 +1089,13 @@ fun Application.configureSockets(state: State) {
                             )
                         }
                         is CueEditClearAssignmentInMessage -> {
+                            val target = TargetRef.ofOrNull(message.targetType, message.targetKey)
                             sendSerialized<OutMessage>(
-                                CueEditSessionHandler.clearAssignment(
+                                if (target == null) CueEditErrorOutMessage(
+                                    message.cueId, "Unknown targetType '${message.targetType}'",
+                                ) else CueEditSessionHandler.clearAssignment(
                                     state, cueEditSessionRef, message.cueId,
-                                    message.targetType, message.targetKey, message.propertyName,
+                                    target, message.propertyName,
                                 )
                             )
                         }
