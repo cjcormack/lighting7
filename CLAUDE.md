@@ -26,6 +26,13 @@ A professional stage/event lighting control system built in Kotlin using Ktor. C
 2. Configure PostgreSQL connection settings
 3. Set project name
 
+### Pre-commit checks
+
+This project has no Makefile — the global `make commit-check` rule does not
+apply. `./gradlew test` is the equivalent pre-commit check. A recent green
+run earlier in the same session is sufficient; you do not need to re-run it
+just before `git commit` if nothing has changed since.
+
 ## Project Structure
 
 ```
