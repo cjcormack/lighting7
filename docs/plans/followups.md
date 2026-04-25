@@ -767,7 +767,7 @@ _Move items here as they land. Format:_
   all three perf queries poll cleanly at 2 s with 200 OK, ArtNet table
   populates from real universe data, cueEdit and MIDI empty states
   render as expected with no console errors.
-- `FU-TEST-COREMIDI-INIT-DEADLOCK` — uncommitted (2026-04-25) — Reorder
+- `FU-TEST-COREMIDI-INIT-DEADLOCK` — commit 19fa952 (2026-04-25) — Reorder
   fix already landed in `FU-PERF-INSTRUMENT-MIDI` (b01d4b3) — the
   `addNotificationListener` call now precedes `midiRegistry.start(...)` in
   [State.initializeShow](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt),
