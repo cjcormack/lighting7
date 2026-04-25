@@ -118,42 +118,6 @@ author flow.
 `PropertyChannelWriter` (Phase 7) can drive live-preview of the proposed
 rebind — implementation is unblocked.
 
-### `FU-FE-PERF-DASHBOARD` — Surface `/api/rest/perf/*` data in the frontend
-
-**Status**: Trigger (after second perf endpoint settles)
-**Origin**: Surfaced 2026-04-25 alongside `FU-PERF-INSTRUMENT-CUEEDIT`. The
-backend now exposes `GET /api/rest/perf/artnet-rates` and
-`GET /api/rest/perf/cueedit-histogram`, but no frontend view consumes them —
-operators must `curl` the endpoints directly to read p50/p95/p99 or per-universe
-ArtNet packet rates.
-
-That's acceptable today (perf data is harness-driven, scraped post-run by the
-operator running the flood) but won't scale: any future "is the show pipeline
-healthy right now?" check requires a JSON-aware terminal. A live-show operator
-shouldn't have to leave the UI to answer it.
-
-**Fix shape**: a `Diagnostics` / `Performance` route in `lighting-react` —
-sibling to `/surfaces`. Initial scope:
-- ArtNet panel: per-universe table (subnet, universe, packets/sec, total).
-  Polled at 2 s — slow enough to not pressure the backend, fast enough to see
-  effect-load spikes.
-- cueEdit panel: live + last-session histogram. Bar chart of bucket counts
-  with p50/p95/p99/max as overlay markers; "session active" indicator.
-  Polled at 2 s while session is active; final snapshot held when inactive.
-- Empty-state copy on each panel pointing to the relevant
-  [followups.md](docs/plans/followups.md) item ("no ArtNet universes — mock
-  show", "no cueEdit session — open one to populate").
-
-Add RTK Query endpoints `useGetArtNetRatesQuery` / `useGetCueEditHistogramQuery`
-in the existing `lighting-react/src/store/api/` slice. No new state shape — both
-endpoints are read-only polled GETs.
-
-**Trigger to revisit**: a third perf endpoint lands (likely
-`FU-PERF-INSTRUMENT-MIDI`), at which point per-endpoint curl friction crosses
-the threshold to justify a unified view. Building the dashboard for two
-endpoints today is borderline; three+ is clearly worth it. Until then, the
-existing curl-and-jq workflow is fine for the harness operator.
-
 ---
 
 ## Backend / composition model
@@ -834,3 +798,42 @@ _Move items here as they land. Format:_
   adds three cases (empty snapshot, surfaced buckets, POST reset zeroing).
   Unblocks end-to-end interpretation of `MidiFloodHarness` output and
   quantitative `FU-MANUAL-SUSPEND-PATH` validation.
+- `FU-FE-PERF-DASHBOARD` — commit 73f11bb in lighting-react (2026-04-25) — Added a
+  `Diagnostics` route in `lighting-react` consuming all three
+  `/api/rest/perf/*` endpoints (`artnet-rates`, `cueedit-histogram`,
+  `midi-latency`). New
+  [perf.ts](../../../lighting-react/src/store/perf.ts) RTK Query slice
+  injects `useGetArtNetRatesQuery` / `useGetCueEditHistogramQuery` /
+  `useGetMidiLatencyQuery` / `useResetMidiLatencyMutation` into the
+  shared `restApi`; all three queries polled at 2 s — slow enough not to
+  pressure the backend, fast enough to see effect-load spikes. Added a
+  new `'PerfMidi'` tag in
+  [restApi.ts](../../../lighting-react/src/store/restApi.ts) so the
+  `POST /perf/midi-latency/reset` mutation invalidates the MIDI query
+  immediately rather than waiting for the next 2 s tick.
+  Route component
+  [Diagnostics.tsx](../../../lighting-react/src/routes/Diagnostics.tsx)
+  renders three cards: ArtNet panel (per-universe table: subnet,
+  universe, packets/sec, total), cueEdit panel (live snapshot while
+  `sessionActive`, falling back to `lastSessionEnded` when idle), and
+  MIDI panel (per-stage latency table — count / p50 / p95 / p99 / max
+  per `ingressContinuous` / `ingressButton` / `egressMotor` /
+  `egressLed` — plus per-port CC rates and a Reset button since MIDI
+  has no per-session boundary). The cueEdit histogram view trims
+  leading/trailing zero-count log2 buckets to focus on the active
+  range, surfaces count / mean / p50 / p95 / p99 / max inline, and
+  renders a horizontal bar chart of bucket counts with bucket-bound
+  labels (`formatNanos` switches between ns / µs / ms / s). Empty-state
+  copy on each panel covers the harness flow ("patch a non-mock
+  universe" / "open a cue editor in Live mode and adjust a bound
+  fader" / "connect a control surface"). Wired the route into
+  [App.tsx](../../../lighting-react/src/App.tsx) at
+  `/projects/:projectId/diagnostics` (with a `/diagnostics` redirect to
+  the current project, mirroring the `/surfaces` pattern) and into the
+  shared
+  [navigation.ts](../../../lighting-react/src/navigation.ts) registry as
+  a `live`-group entry with `Activity` icon and `visibility: "always"`
+  (the perf endpoints are process-global — they don't need an active
+  project to return data). Type-check passes; in-browser smoke test
+  blocked by the same Node 18 / Vite issue called out in
+  `FU-TEST-VITE-BUILD`.
