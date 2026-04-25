@@ -191,69 +191,6 @@ resolution, but there's no Phase 6 test that two WS connections racing on
 **Unblock by**: confirming exact semantics with cue-authoring owners, then
 add the test.
 
-### `FU-TEST-COREMIDI-INIT-DEADLOCK` — Full-suite hang in `initializeShow` ↔ `MidiDeviceRegistry` poll
-
-**Status**: Ready
-**Origin**: Surfaced 2026-04-25 while running `./gradlew test` for
-`FU-PERF-INSTRUMENT-MIDI` — full suite wedged ~18 minutes; targeted runs of
-the same integration tests pass in 30 s. Reproduces only when several
-integration test classes run sequentially in the same Test Worker JVM.
-
-**Symptom**: a Test Worker thread blocks indefinitely at
-[State.kt:351](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt:351)
-inside `registerCoreMidiChangeListener` →
-`CoreMidiDeviceProvider.addNotificationListener`, waiting on the
-`CoreMidiDeviceProvider` class lock. A `jstack` shows the lock is held by a
-`MidiDeviceRegistry-poll` coroutine running
-[MidiDeviceRegistry.tickLocked](src/main/kotlin/uk/me/cormack/lighting7/midi/MidiDeviceRegistry.kt:152)
-→ `MidiSystem.getMidiDeviceInfo` → `JSSecurityManager.getProviders` →
-`ServiceLoader` → `CoreMidiDeviceProvider.<init>` (which itself wants the
-class lock again under `getSystemMidiDeviceInfo`). Two threads, opposite
-acquisition orders for the `CoreMidiDeviceProvider` class lock and the
-`JSSecurityManager` class lock — classic AB/BA deadlock.
-
-The race window opens because [State.initializeShow](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt:282)
-starts the registry's poll loop *before* calling `registerCoreMidiChangeListener`:
-
-```
-midiRegistry.start(GlobalScope)        // spawns the poll loop
-deviceMatcher.start(GlobalScope)
-midiLearnSessionManager.start(GlobalScope)
-surfaceFeedbackPublisher.start(GlobalScope)
-surfaceInputRouter.start(GlobalScope)
-registerCoreMidiChangeListener()       // races first poll tick
-```
-
-Production survives because (a) tests rarely run more than one integration
-class in a session, and (b) on a real boot the listener add usually wins
-before the first poll tick fires. Test runs accumulate ~10× registries (one
-per `RouteIntegrationTest` subclass) in the same JVM, and `initializeShow`
-leaks the `GlobalScope` poll loops between tests (no `State.shutdown` exists
-— see scope-limits note on `FU-TEST-HTTP-ROUNDTRIP`). Eventually two of those
-loops + one `addNotificationListener` interleave wrong.
-
-**Fix shape options**:
-- Serialise initialisation: call `registerCoreMidiChangeListener` *before*
-  `midiRegistry.start`. The notification listener add doesn't depend on the
-  poll loop; reordering removes the race entirely.
-- Stop leaking poll loops: give `State` a `shutdown()` that cancels the
-  GlobalScope-rooted jobs and wire it to JUnit `@AfterClass` in
-  `RouteIntegrationTest`. Independently good — also kills the Hikari pool
-  leak called out in `FU-TEST-HTTP-ROUNDTRIP`.
-- Defensive: guard `tickLocked` against entering `MidiSystem.getMidiDeviceInfo`
-  while a class-init is in progress (hard to check without internal hooks).
-
-Reordering (option 1) is the cheap immediate fix; the shutdown hook (option 2)
-is the proper one. Both should land. Detect future regressions by adding
-`@Test(timeout = 60_000)` to the `RouteIntegrationTest` base — currently a
-hung integration class drags out a `gradlew test` run for the configured
-worker idle timeout (~30 min on this host).
-
-**Why now**: every integration-test author hits this once they add a third
-integration class. Subsequent landings have hand-waved past it by running
-targeted `--tests`; that workaround silently disables `make commit-check`-style
-gating. Cheap fix, high leverage.
-
 ---
 
 ## Manual hardware validation
@@ -830,6 +767,32 @@ _Move items here as they land. Format:_
   all three perf queries poll cleanly at 2 s with 200 OK, ArtNet table
   populates from real universe data, cueEdit and MIDI empty states
   render as expected with no console errors.
+- `FU-TEST-COREMIDI-INIT-DEADLOCK` — uncommitted (2026-04-25) — Reorder
+  fix already landed in `FU-PERF-INSTRUMENT-MIDI` (b01d4b3) — the
+  `addNotificationListener` call now precedes `midiRegistry.start(...)` in
+  [State.initializeShow](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt),
+  closing the AB/BA window directly. This landing adds the durable second
+  half: `State.shutdown()` cancels the `projectChangedFlow` collector and
+  walks each surface class's existing `stop()` / `close()` in reverse-startup
+  order (input → feedback → learn → matcher → registry), then closes the
+  show and drains the Hikari pool (the previously-untracked
+  `HikariDataSource` is now retained in a private nullable field so
+  `dataSource.close()` can run — Exposed's `Database.connect()` doesn't
+  surface the underlying datasource itself). Idempotent via a `shutdownDone`
+  flag; every step is `runCatching`-wrapped so a partially-initialised State
+  (e.g. `initializeShow` never called) tears down without throwing.
+  [RouteIntegrationTest.tearDownIntegrationTest](src/test/kotlin/uk/me/cormack/lighting7/testsupport/RouteIntegrationTest.kt)
+  now calls `state.shutdown()` instead of the prior pair of
+  `runCatching { state.show.fxEngine.stop() }` / `state.show.close()` —
+  the new path subsumes both. Added a base-class
+  `@get:Rule val testTimeout: Timeout = Timeout.seconds(60)` so any future
+  hang fails the offending test loudly instead of dragging `gradlew test`
+  out for the worker idle timeout. Verified: `./gradlew test` finishes green
+  in ~43s (full suite ran end-to-end without wedging — same suite that
+  previously hung ~18 minutes when run after the targeted integration
+  tests). CoreMIDI4J listener removal not attempted; `addNotificationListener`
+  has no remove counterpart in the codebase, and on tests the leaked
+  callbacks fire only on hot-plug events that don't occur in CI.
 - `FU-TEST-VITE-BUILD` — validated 2026-04-25 — `npm run build` (which
   runs `tsc && vite build`) is clean on Node 24.12 LTS:
   2344 modules transformed, dist artefacts emitted, no errors. Only

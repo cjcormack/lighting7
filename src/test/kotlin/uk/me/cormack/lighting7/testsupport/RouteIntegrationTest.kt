@@ -8,6 +8,8 @@ import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assume
 import org.junit.Before
+import org.junit.Rule
+import org.junit.rules.Timeout
 import uk.me.cormack.lighting7.moduleWithState
 import uk.me.cormack.lighting7.state.State
 
@@ -36,6 +38,15 @@ fun ApplicationTestBuilder.jsonClient(): HttpClient =
  */
 abstract class RouteIntegrationTest {
 
+    /**
+     * Per-test wall-clock cap so a hung integration test fails loudly instead of
+     * dragging `gradlew test` out for the worker idle timeout (~30 min on this host).
+     * 60 s is well above the slowest legitimate route round-trip in this suite. See
+     * `FU-TEST-COREMIDI-INIT-DEADLOCK`.
+     */
+    @get:Rule
+    val testTimeout: Timeout = Timeout.seconds(60)
+
     protected lateinit var state: State
     protected var projectId: Int = 0
 
@@ -52,8 +63,7 @@ abstract class RouteIntegrationTest {
     @After
     fun tearDownIntegrationTest() {
         if (::state.isInitialized) {
-            runCatching { state.show.fxEngine.stop() }
-            runCatching { state.show.close() }
+            runCatching { state.shutdown() }
         }
     }
 }

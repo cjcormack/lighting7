@@ -10,6 +10,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.fx.CueTriggerManager
@@ -39,8 +40,13 @@ import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
 private val logger = LoggerFactory.getLogger("State")
 
 class State(val config: ApplicationConfig) {
+    // Exposed's `Database.connect()` doesn't surface the underlying datasource, so the
+    // reference is kept here for [shutdown] to drain the pool.
+    private var dataSource: HikariDataSource? = null
     val database = initDatabase()
     val projectManager = ProjectManager(config, database) { this }
+
+    private var projectChangedJob: Job? = null
 
     /**
      * AI service for Claude-powered lighting control.
@@ -295,7 +301,7 @@ class State(val config: ApplicationConfig) {
         attachBindingHealthListener()
         // Re-attach the feedback publisher to the new show's fixture listener on project
         // switch so motor / LED drive follows the composition model of the active project.
-        GlobalScope.launch {
+        projectChangedJob = GlobalScope.launch {
             projectManager.projectChangedFlow.collect {
                 surfaceFeedbackPublisher.onProjectChanged()
                 attachBindingHealthListener()
@@ -305,6 +311,34 @@ class State(val config: ApplicationConfig) {
             }
         }
         return show
+    }
+
+    /**
+     * Tear down everything [initializeShow] started: cancel the project-changed
+     * collector, stop the surface stack in reverse-startup order, close the show, and
+     * drain the Hikari pool. Idempotent — safe to call multiple times and even when
+     * `initializeShow` was never called.
+     *
+     * Primary caller is `RouteIntegrationTest`; leaking the per-State GlobalScope
+     * pollers between tests previously deadlocked the full suite via CoreMIDI4J
+     * class-init contention. See `FU-TEST-COREMIDI-INIT-DEADLOCK`.
+     */
+    fun shutdown() {
+        val ds = dataSource ?: return
+        dataSource = null
+
+        runCatching { projectChangedJob?.cancel() }
+        projectChangedJob = null
+
+        runCatching { surfaceInputRouter.stop() }
+        runCatching { surfaceFeedbackPublisher.stop() }
+        runCatching { midiLearnSessionManager.stop() }
+        runCatching { deviceMatcher.stop() }
+        runCatching { midiRegistry.close() }
+
+        runCatching { projectManager.show.close() }
+
+        runCatching { ds.close() }
     }
 
     /**
@@ -367,18 +401,18 @@ class State(val config: ApplicationConfig) {
         val url = config.property("postgres.url").getString()
         val username = config.property("postgres.username").getString()
         val password = config.property("postgres.password").getString()
-        val database = Database.connect(
-            HikariDataSource(HikariConfig().apply {
-                driverClassName = "org.postgresql.Driver"
-                jdbcUrl = url
-                this@apply.username = username
-                this@apply.password = password
-                this@apply.maximumPoolSize = 8
-                isAutoCommit = false
-                transactionIsolation = "TRANSACTION_REPEATABLE_READ"
-                validate()
-            })
-        )
+        val ds = HikariDataSource(HikariConfig().apply {
+            driverClassName = "org.postgresql.Driver"
+            jdbcUrl = url
+            this@apply.username = username
+            this@apply.password = password
+            this@apply.maximumPoolSize = 8
+            isAutoCommit = false
+            transactionIsolation = "TRANSACTION_REPEATABLE_READ"
+            validate()
+        })
+        dataSource = ds
+        val database = Database.connect(ds)
 
         transaction(database) {
             // Create tables - order matters for FK constraints
