@@ -297,6 +297,7 @@ class Fixtures {
                 when (controller) {
                     is ArtNetController -> controller.registerListener(listener)
                     is MockDmxController -> {} // Mock doesn't need listeners
+                    is AsyncTestDmxController -> {} // Test fake doesn't need listeners
                 }
 
                 controllerRegister[controllerKey] = controller
@@ -338,6 +339,7 @@ class Fixtures {
                     when (controller) {
                         is ArtNetController -> controller.unregisterListener(checkNotNull(controllerChannelChangeListeners[controllerKey]))
                         is MockDmxController -> {} // Mock doesn't need listeners
+                        is AsyncTestDmxController -> {} // Test fake doesn't need listeners
                     }
                 }
 

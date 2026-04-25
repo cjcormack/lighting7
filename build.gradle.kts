@@ -96,13 +96,16 @@ dependencies {
 
 tasks.test {
     // Forward opt-in test flags to the forked test JVM. `fx.benchmark` gates the
-    // FxEngineBenchmark harness (skipped by default; takes ~10 s when enabled).
-    val benchmarkFlag = System.getProperty("fx.benchmark")
-    if (benchmarkFlag != null) {
-        systemProperty("fx.benchmark", benchmarkFlag)
-        // Always rerun + stream stdout when the benchmark is requested, otherwise Gradle's
+    // FxEngineBenchmark harness; `dmx.benchmark` gates the DMX setValues benchmark.
+    // Both are skipped by default and run for ~10 s when enabled.
+    val fxBenchmarkFlag = System.getProperty("fx.benchmark")
+    val dmxBenchmarkFlag = System.getProperty("dmx.benchmark")
+    if (fxBenchmarkFlag != null) systemProperty("fx.benchmark", fxBenchmarkFlag)
+    if (dmxBenchmarkFlag != null) systemProperty("dmx.benchmark", dmxBenchmarkFlag)
+    if (fxBenchmarkFlag != null || dmxBenchmarkFlag != null) {
+        // Always rerun + stream stdout when a benchmark is requested, otherwise Gradle's
         // up-to-date check swallows the numbers and the test runner's default stdout policy
-        // hides the [beat]/[wall] println lines.
+        // hides the println summary lines.
         outputs.upToDateWhen { false }
         testLogging {
             showStandardStreams = true

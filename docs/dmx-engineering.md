@@ -357,6 +357,24 @@ coalesces most double-transmits and the coordination cost (shared `AtomicReferen
 around the open-close edge) isn't a clear win. Tracked as a future consideration in
 [fx-engineering.md §Future Considerations](fx-engineering.md#future-considerations).
 
+### Benchmarking
+
+`BenchmarkSetValues` (in `src/test/kotlin/uk/me/cormack/lighting7/dmx/`) is a track-only
+micro-benchmark that times `ControllerTransaction.apply()` vs `applySuspend()` against a
+4-universe rig (128 channel writes per universe per iteration). It drives an
+`AsyncTestDmxController` that mirrors `ArtNetController`'s per-channel conflated consumer
++ ack-roundtrip pattern without UDP — `MockDmxController.setValuesSuspend` falls through
+to the synchronous body and would silently flatter both paths.
+
+Skipped by default; opt in with:
+
+```
+./gradlew test --tests "uk.me.cormack.lighting7.dmx.BenchmarkSetValues" -Ddmx.benchmark=true
+```
+
+Output is `[blocking]` / `[suspend]` summary lines on stdout. A fail-on-regression gate is
+deferred to `FU-TEST-FX-BENCH-CI-GATE` pending a variance study.
+
 ## Timing Characteristics
 
 | Parameter | Value | Notes |

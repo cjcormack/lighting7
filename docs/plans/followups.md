@@ -145,26 +145,6 @@ behaviour visually and tune the "pre-apply window" threshold empirically.
 
 ## Testing
 
-### `FU-TEST-DMX-FX-BENCH-HARNESS` — DMX/FX micro-benchmark harness
-
-**Status**: Trigger (next perf-sensitive DMX/FX change)
-**Origin**: Control-surface Phase 8 exit criterion, 2026-04-23
-
-Phase 8 proposed `BenchmarkSetValues.kt` in `src/test/kotlin/…/dmx/`
-synthesising a "burst of 512 channel writes across 4 universes" workload and
-recording the blocking-vs-suspend delta. `MockDmxController.setValuesSuspend`
-is synchronous (delegates to the sync body), so benchmarking against the mock
-shows no difference between the two paths — meaningful numbers need a
-coroutine-aware test controller that mimics `ArtNetController`'s per-channel
-conflated consumer loop without opening a UDP socket. Non-trivial to build
-well.
-
-**Trigger to revisit**: build alongside the next perf-sensitive DMX/FX change
-that would benefit from regression coverage — another `setValues` refactor, a
-new effect-engine hot path, or an operator-reported lag investigation.
-Premature to build speculatively without a concrete workload to calibrate
-against.
-
 ### `FU-TEST-FX-BENCH-CI-GATE` — `FxEngineBenchmark` CI regression gate
 
 **Status**: Trigger (variance study)
@@ -263,6 +243,22 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
 
+- `FU-TEST-DMX-FX-BENCH-HARNESS` — commit <pending> (2026-04-25) — Added
+  [`AsyncTestDmxController`](src/main/kotlin/uk/me/cormack/lighting7/dmx/AsyncTestDmxController.kt),
+  a coroutine-aware `DmxController` test fake that mirrors
+  `ArtNetController`'s per-channel conflated consumer + ack-roundtrip loop
+  without UDP — `MockDmxController.setValuesSuspend` falls through to the
+  sync body and would silently flatter both paths. New track-only
+  [`BenchmarkSetValues`](src/test/kotlin/uk/me/cormack/lighting7/dmx/BenchmarkSetValues.kt)
+  drives a 4-universe rig (128 writes per universe per iteration =
+  512 total) through `ControllerTransaction.apply()` vs `applySuspend()`,
+  prints `[blocking]` / `[suspend]` summary lines (p50/p99/mean/allocBytes),
+  and gates on a 1 s p99 floor only. Banked infrastructure — no concrete
+  perf change in flight; the harness is calibration-ready for the next
+  `setValues` refactor. Skipped by default; opt in via `-Ddmx.benchmark=true`
+  ([`build.gradle.kts`](build.gradle.kts) forwards the flag alongside
+  `fx.benchmark`). ±20% regression gate stays deferred to
+  `FU-TEST-FX-BENCH-CI-GATE`.
 - `FU-BE-PALETTE-CASCADE` — commit 3181784 (2026-04-23) — Introduced
   `PaletteCascade(preset, cue, global)` in [Layer3Resolver.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/Layer3Resolver.kt)
   with an `effective` property that picks the most-specific non-empty scope.
