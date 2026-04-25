@@ -243,7 +243,7 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
 
-- `FU-TEST-DMX-FX-BENCH-HARNESS` — commit <pending> (2026-04-25) — Added
+- `FU-TEST-DMX-FX-BENCH-HARNESS` — commit 6e1222e (2026-04-25) — Added
   [`AsyncTestDmxController`](src/main/kotlin/uk/me/cormack/lighting7/dmx/AsyncTestDmxController.kt),
   a coroutine-aware `DmxController` test fake that mirrors
   `ArtNetController`'s per-channel conflated consumer + ack-roundtrip loop
