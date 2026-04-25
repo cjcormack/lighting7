@@ -45,6 +45,15 @@ data class CuePropertyAssignmentDto(
     val fadeDurationMs: Long? = null,
     val sortOrder: Int = 0,
     /**
+     * Move-in-dark: only meaningful when [propertyName] is `"position"`. When true and the
+     * outgoing cue ends with intensity 0 on the same fixture, the resolver pre-applies this
+     * position across the whole crossfade rather than linearly blending pan/tilt — the head
+     * moves while dark and is already aimed when the incoming dimmer comes up. Ignored for
+     * all other property categories. See `docs/lighting-composition-model.md` §"Crossfade
+     * behaviour".
+     */
+    val moveInDark: Boolean = false,
+    /**
      * Validation status of this row against the live patch. Populated server-side on read
      * (see Phase 6 dead-reference diagnostics); ignored on write — the server never trusts
      * client-supplied health. Defaults to [AssignmentHealth.Ok] so snapshots and apply-path
@@ -222,6 +231,7 @@ object DaoCuePropertyAssignments : IntIdTable("cue_property_assignments") {
     val value = text("value")
     val fadeDurationMs = long("fade_duration_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
+    val moveInDark = bool("move_in_dark").default(false)
 }
 
 class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
@@ -234,6 +244,7 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
     var value by DaoCuePropertyAssignments.value
     var fadeDurationMs by DaoCuePropertyAssignments.fadeDurationMs
     var sortOrder by DaoCuePropertyAssignments.sortOrder
+    var moveInDark by DaoCuePropertyAssignments.moveInDark
 
     var target: TargetRef
         get() = TargetRef.of(targetType, targetKey)

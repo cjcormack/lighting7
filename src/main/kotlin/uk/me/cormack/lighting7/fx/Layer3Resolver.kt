@@ -62,8 +62,11 @@ class Layer3Resolver {
      * @property compositionOverride per-property override from `@FixtureProperty(composition = …)`.
      *   Use [CompositionRule.UNSET] to inherit from [category].
      * @property value the asserted value, type tagged.
-     * @property moveInDark if true and this is a position property, the resolver may pre-apply
-     *   this value during an outgoing cue's fade-out when intensity reaches 0.
+     * @property moveInDark if true and this is a position property, the resolver pre-applies
+     *   this value across the entire crossfade (instead of linearly blending pan/tilt) when an
+     *   outgoing-or-parallel cue from a different [cueId] asserts a [PropertyCategory.DIMMER]
+     *   contributor with value 0 on the same target. Ignored for non-position properties. See
+     *   [computeMoveInDarkArmed] / `docs/lighting-composition-model.md` §"Crossfade behaviour".
      */
     data class Assignment(
         val cueId: Int,
@@ -170,6 +173,10 @@ class Layer3Resolver {
     fun resolve(assignments: List<Assignment>): Map<Key, PropertyValue> {
         if (assignments.isEmpty()) return emptyMap()
 
+        // Pre-pass: determine which fixture targets have a moveInDark Position assignment
+        // armed by an outgoing dimmer asserting value 0. See [computeMoveInDarkArmed].
+        val moveInDarkArmed = computeMoveInDarkArmed(assignments)
+
         // Group by (targetKey, propertyName), then apply specificity (fixture beats group).
         val grouped = HashMap<Key, MutableList<Assignment>>()
         for (a in assignments) {
@@ -184,11 +191,44 @@ class Layer3Resolver {
             val rule = effective.first().let { it.compositionOverride.takeUnless { it == CompositionRule.UNSET } ?: it.category.defaultComposition }
             out[key] = when (rule) {
                 CompositionRule.HTP -> composeHtp(effective)
-                CompositionRule.LTP -> composeLtp(effective)
-                CompositionRule.UNSET -> composeLtp(effective) // defensive
+                CompositionRule.LTP -> composeLtp(effective, moveInDarkArmed)
+                CompositionRule.UNSET -> composeLtp(effective, moveInDarkArmed) // defensive
             }
         }
         return out
+    }
+
+    /**
+     * Returns the fixture targets for which a `moveInDark`-flagged `position` row should snap
+     * to the incoming value across the whole crossfade. A target arms when the flagged row is
+     * accompanied by a *different* cue's [PropertyCategory.DIMMER] contributor with value 0
+     * on the same target; the different-cue requirement excludes self-arming, which the LTP
+     * fallback already handles. Empty set is the common case (no flagged rows).
+     */
+    private fun computeMoveInDarkArmed(assignments: List<Assignment>): Set<String> {
+        // Collect candidate fixture targets: those with at least one moveInDark position row.
+        // Tracks per-target the set of cueIds that asserted the flag, so we can exclude them
+        // when scanning for an outgoing dark dimmer.
+        var candidates: HashMap<String, MutableSet<Int>>? = null
+        for (a in assignments) {
+            if (a.moveInDark && a.propertyName.equals("position", ignoreCase = true)) {
+                val map = candidates ?: HashMap<String, MutableSet<Int>>().also { candidates = it }
+                map.getOrPut(a.targetKey) { HashSet() }.add(a.cueId)
+            }
+        }
+        val candidateMap = candidates ?: return emptySet()
+
+        val armed = HashSet<String>()
+        for (a in assignments) {
+            if (a.category != PropertyCategory.DIMMER) continue
+            val candidateCueIds = candidateMap[a.targetKey] ?: continue
+            if (a.cueId in candidateCueIds) continue
+            val slider = a.value as? PropertyValue.Slider ?: continue
+            if (slider.value.toInt() == 0) {
+                armed.add(a.targetKey)
+            }
+        }
+        return armed
     }
 
     /**
@@ -290,12 +330,29 @@ class Layer3Resolver {
      * - Sliders: linear interpolation.
      * - Colour: RGB-linear via [blendExtendedColours].
      * - Settings: snap at 50% fade progress.
-     * - Position: linear pan/tilt (moveInDark handled upstream at cue apply time).
+     * - Position: linear pan/tilt by default. When the bucket's targetKey is in
+     *   [moveInDarkArmed], snap directly to the [Assignment.moveInDark] contributor's
+     *   value across the entire crossfade — the head moves while dark and is already
+     *   aimed when the incoming cue's dimmer comes up. Arming is precomputed by
+     *   [computeMoveInDarkArmed] from cross-property dimmer-category contributors.
      *
      * When only one contributor is present, its value is returned unchanged regardless of
      * fadeWeight — the incoming-cue fade-in is handled at the caller / cue-apply level, not here.
      */
-    private fun composeLtp(contributors: List<Assignment>): PropertyValue {
+    private fun composeLtp(contributors: List<Assignment>, moveInDarkArmed: Set<String> = emptySet()): PropertyValue {
+        // Snap before the winner-by-priority logic: at fade start the outgoing cue wins on
+        // fadeWeight tie-break and would short-circuit to outgoing.value, but moveInDark
+        // wants the incoming position immediately.
+        val firstContributor = contributors.first()
+        if (firstContributor.value is PropertyValue.Position &&
+            firstContributor.targetKey in moveInDarkArmed
+        ) {
+            val moveInDark = contributors
+                .filter { it.moveInDark && it.value is PropertyValue.Position }
+                .maxByOrNull { it.priority }
+            if (moveInDark != null) return moveInDark.value
+        }
+
         // Winner = highest priority; tie-break = highest fade weight (more recent).
         val winner = contributors.maxWithOrNull(
             compareBy<Assignment>({ it.priority }, { it.fadeWeight })

@@ -49,6 +49,27 @@ class Layer3ResolverTest {
         value = Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(red, green, blue))),
     )
 
+    private fun position(
+        cueId: Int,
+        priority: Int,
+        fadeWeight: Double,
+        targetKey: String = "head-1",
+        pan: UByte,
+        tilt: UByte,
+        moveInDark: Boolean = false,
+        targetIsGroup: Boolean = false,
+    ) = Layer3Resolver.Assignment(
+        cueId = cueId,
+        priority = priority,
+        fadeWeight = fadeWeight,
+        targetKey = targetKey,
+        targetIsGroup = targetIsGroup,
+        propertyName = "position",
+        category = PropertyCategory.PAN,
+        value = Layer3Resolver.PropertyValue.Position(pan, tilt),
+        moveInDark = moveInDark,
+    )
+
     @Test
     fun `empty input yields empty output`() {
         assertTrue(resolver.resolve(emptyList()).isEmpty())
@@ -291,6 +312,159 @@ class Layer3ResolverTest {
         val v = result[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
         // Single HTP contributor: max(200 * 0.2) = 40.
         assertEquals(40u.toUByte(), v.value)
+    }
+
+    // ─── moveInDark ───────────────────────────────────────────────────────
+
+    /**
+     * Outgoing cue ends dark + incoming cue's position has `moveInDark = true` →
+     * Position snaps to the incoming value across the entire crossfade rather than
+     * blending pan/tilt linearly.
+     *
+     * Models a cue→cue crossfade where outgoing(cueId=1) holds dimmer=0 + position=(64,64)
+     * and incoming(cueId=2) ramps to dimmer=255 + position=(192,192) with moveInDark.
+     */
+    @Test
+    fun `moveInDark — outgoing dimmer 0 + incoming flag → snap at fade start`() {
+        val result = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 1.0, targetKey = "head-1", value = 0u),
+            position(cueId = 1, priority = 1, fadeWeight = 1.0, pan = 64u, tilt = 64u),
+            slider(cueId = 2, priority = 2, fadeWeight = 0.0, targetKey = "head-1", value = 255u),
+            position(cueId = 2, priority = 2, fadeWeight = 0.0, pan = 192u, tilt = 192u, moveInDark = true),
+        ))
+        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        assertEquals(192u.toUByte(), v.pan, "snap to incoming pan at fade start")
+        assertEquals(192u.toUByte(), v.tilt, "snap to incoming tilt at fade start")
+    }
+
+    @Test
+    fun `moveInDark — snap holds at mid-fade and end-fade`() {
+        // mid-fade: both per-row fadeWeights = 0.5 (FxEngine has multiplied by per-cue weight).
+        val mid = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 0.5, targetKey = "head-1", value = 0u),
+            position(cueId = 1, priority = 1, fadeWeight = 0.5, pan = 64u, tilt = 64u),
+            slider(cueId = 2, priority = 2, fadeWeight = 0.5, targetKey = "head-1", value = 255u),
+            position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 192u, tilt = 192u, moveInDark = true),
+        ))
+        val midPos = mid[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        assertEquals(192u.toUByte(), midPos.pan, "snap holds at progress 0.5")
+        assertEquals(192u.toUByte(), midPos.tilt, "snap holds at progress 0.5")
+
+        // end-of-fade just before outgoing is removed.
+        val late = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 0.01, targetKey = "head-1", value = 0u),
+            position(cueId = 1, priority = 1, fadeWeight = 0.01, pan = 64u, tilt = 64u),
+            slider(cueId = 2, priority = 2, fadeWeight = 0.99, targetKey = "head-1", value = 255u),
+            position(cueId = 2, priority = 2, fadeWeight = 0.99, pan = 192u, tilt = 192u, moveInDark = true),
+        ))
+        val latePos = late[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        assertEquals(192u.toUByte(), latePos.pan, "snap holds at progress 0.99")
+        assertEquals(192u.toUByte(), latePos.tilt, "snap holds at progress 0.99")
+    }
+
+    /** Outgoing dimmer = 0 but incoming has no flag → existing linear blend. */
+    @Test
+    fun `moveInDark — outgoing dimmer 0 but no flag → linear blend`() {
+        val result = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 1.0, targetKey = "head-1", value = 0u),
+            position(cueId = 1, priority = 1, fadeWeight = 1.0, pan = 0u, tilt = 0u),
+            slider(cueId = 2, priority = 2, fadeWeight = 0.0, targetKey = "head-1", value = 255u),
+            position(cueId = 2, priority = 2, fadeWeight = 0.0, pan = 200u, tilt = 200u, moveInDark = false),
+        ))
+        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        // At fade start the outgoing wins (priority tie-break by fadeWeight) and `winner.fadeWeight >= 1.0`
+        // returns winner.value → outgoing position (0,0).
+        assertEquals(0u.toUByte(), v.pan)
+        assertEquals(0u.toUByte(), v.tilt)
+    }
+
+    /** Outgoing dimmer ends bright (e.g. 200) + incoming flag → safety check rejects → linear blend. */
+    @Test
+    fun `moveInDark — outgoing dimmer bright vetoes the snap`() {
+        val result = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 0.5, targetKey = "head-1", value = 200u),
+            position(cueId = 1, priority = 1, fadeWeight = 0.5, pan = 0u, tilt = 0u),
+            slider(cueId = 2, priority = 2, fadeWeight = 0.5, targetKey = "head-1", value = 255u),
+            position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 200u, tilt = 200u, moveInDark = true),
+        ))
+        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        // Linear blend at progress 0.5: pan = 0 + (200 - 0) * 0.5 = 100. (winner = incoming on priority.)
+        assertEquals(100u.toUByte(), v.pan)
+        assertEquals(100u.toUByte(), v.tilt)
+    }
+
+    /**
+     * No outgoing dimmer row asserted by the outgoing cue (the cue doesn't touch dimmer).
+     * Defensive: don't snap unless we proved the outgoing ends dark.
+     */
+    @Test
+    fun `moveInDark — no outgoing dimmer row → linear blend`() {
+        val result = resolver.resolve(listOf(
+            position(cueId = 1, priority = 1, fadeWeight = 0.5, pan = 0u, tilt = 0u),
+            position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 200u, tilt = 200u, moveInDark = true),
+        ))
+        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        assertEquals(100u.toUByte(), v.pan, "no dimmer evidence → linear blend at 0.5")
+        assertEquals(100u.toUByte(), v.tilt)
+    }
+
+    /**
+     * Self-arming guard: a single cue asserting its own dimmer = 0 + moveInDark position
+     * does *not* trigger the snap on its own (the snap is meant to handle a crossfade with a
+     * separate outgoing cue, not single-cue activation). When the cue runs alone, only the
+     * winner's position is returned regardless — so this scenario is also visually correct.
+     */
+    @Test
+    fun `moveInDark — self-cue dimmer 0 does not arm`() {
+        val result = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 1.0, targetKey = "head-1", value = 0u),
+            position(cueId = 1, priority = 1, fadeWeight = 1.0, pan = 100u, tilt = 100u, moveInDark = true),
+        ))
+        // Single Position contributor → winner.value returned directly. Position(100,100).
+        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        assertEquals(100u.toUByte(), v.pan)
+        assertEquals(100u.toUByte(), v.tilt)
+    }
+
+    /**
+     * Group expansion: a group-level moveInDark position assignment fanned to two member rows
+     * with the same group's dimmer=0 also fanned out. Each member arms independently and
+     * snaps to incoming.
+     */
+    @Test
+    fun `moveInDark — group-expanded position snaps per member`() {
+        val result = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 1.0, targetKey = "head-1", value = 0u).copy(targetIsGroup = true),
+            slider(cueId = 1, priority = 1, fadeWeight = 1.0, targetKey = "head-2", value = 0u).copy(targetIsGroup = true),
+            position(cueId = 1, priority = 1, fadeWeight = 1.0, targetKey = "head-1", pan = 0u, tilt = 0u, targetIsGroup = true),
+            position(cueId = 1, priority = 1, fadeWeight = 1.0, targetKey = "head-2", pan = 0u, tilt = 0u, targetIsGroup = true),
+            slider(cueId = 2, priority = 2, fadeWeight = 0.3, targetKey = "head-1", value = 255u).copy(targetIsGroup = true),
+            slider(cueId = 2, priority = 2, fadeWeight = 0.3, targetKey = "head-2", value = 255u).copy(targetIsGroup = true),
+            position(cueId = 2, priority = 2, fadeWeight = 0.3, targetKey = "head-1", pan = 220u, tilt = 220u, moveInDark = true, targetIsGroup = true),
+            position(cueId = 2, priority = 2, fadeWeight = 0.3, targetKey = "head-2", pan = 220u, tilt = 220u, moveInDark = true, targetIsGroup = true),
+        ))
+        val h1 = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        val h2 = result[Layer3Resolver.Key.fixture("head-2", "position")] as Layer3Resolver.PropertyValue.Position
+        assertEquals(220u.toUByte(), h1.pan)
+        assertEquals(220u.toUByte(), h2.pan)
+    }
+
+    /**
+     * One outgoing cue asserts dimmer=0 (cueId=1) and a parallel cue at lower priority
+     * asserts dimmer=255 (cueId=3). The presence of *any* non-self dimmer=0 contributor
+     * arms the snap — matches the spec's reading of "outgoing ends dark".
+     */
+    @Test
+    fun `moveInDark — any non-self dimmer 0 arms even with a parallel bright cue`() {
+        val result = resolver.resolve(listOf(
+            slider(cueId = 1, priority = 1, fadeWeight = 0.5, targetKey = "head-1", value = 0u),
+            slider(cueId = 3, priority = 0, fadeWeight = 1.0, targetKey = "head-1", value = 255u),
+            position(cueId = 1, priority = 1, fadeWeight = 0.5, pan = 0u, tilt = 0u),
+            position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 200u, tilt = 200u, moveInDark = true),
+        ))
+        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        assertEquals(200u.toUByte(), v.pan, "armed by cueId=1's dimmer=0")
+        assertEquals(200u.toUByte(), v.tilt)
     }
 
     // ─── parseAssignmentValue ─────────────────────────────────────────────

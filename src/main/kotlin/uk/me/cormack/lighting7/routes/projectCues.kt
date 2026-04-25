@@ -364,6 +364,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     value = assignment.value
                     fadeDurationMs = assignment.fadeDurationMs
                     sortOrder = assignment.sortOrder
+                    moveInDark = assignment.moveInDark
                 }
             }
             for (effect in sourceCue.adHocEffects) {
@@ -921,6 +922,7 @@ internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
     value = value,
     fadeDurationMs = fadeDurationMs,
     sortOrder = sortOrder,
+    moveInDark = moveInDark,
 )
 
 /**
@@ -1065,6 +1067,7 @@ internal fun createCueChildren(
             value = assignment.value
             fadeDurationMs = assignment.fadeDurationMs
             sortOrder = assignment.sortOrder
+            moveInDark = assignment.moveInDark
         }
     }
     for (trigger in triggers) {
@@ -1411,6 +1414,7 @@ internal fun buildLayer3AssignmentsForCue(
             category = category,
             compositionOverride = override,
             value = parsed,
+            moveInDark = assignment.moveInDark,
         )
 
         if (memberKeys.isEmpty()) {
