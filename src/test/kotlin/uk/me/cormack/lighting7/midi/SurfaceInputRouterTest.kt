@@ -2,6 +2,8 @@ package uk.me.cormack.lighting7.midi
 
 import uk.me.cormack.lighting7.fx.AssignmentHealth
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
+import uk.me.cormack.lighting7.perf.MidiLatencyStage
+import uk.me.cormack.lighting7.perf.MidiLatencyTracker
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -23,6 +25,7 @@ class SurfaceInputRouterTest {
         bindings: List<ControlSurfaceBindingService.ResolvedBinding>,
         bankState: ActiveBankState = ActiveBankState(),
         flashTracker: FlashStateTracker = FlashStateTracker(),
+        latencyTracker: MidiLatencyTracker = MidiLatencyTracker(),
     ): SurfaceInputRouter {
         val bindingService = ControlSurfaceBindingService(FakeDatabase.instance)
         bindingService.seedCacheForTest(projectId, bindings)
@@ -38,6 +41,7 @@ class SurfaceInputRouterTest {
             flashTracker = flashTracker,
             projectIdProvider = { projectId },
             actions = actions,
+            latencyTracker = latencyTracker,
         )
     }
 
@@ -311,6 +315,42 @@ class SurfaceInputRouterTest {
         assertEquals(2, actions.calls.size)
         assertEquals(RecordedCall.FlashFixtureRelease("hex-1", "dimmer"), actions.calls.last())
         assertFalse(flashTracker.isActive(1))
+    }
+
+    @Test
+    fun `latency tracker records a sample on continuous dispatch`() {
+        val actions = RecordingActions()
+        val tracker = MidiLatencyTracker()
+        val router = buildRouter(
+            actions,
+            listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))),
+            latencyTracker = tracker,
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
+        assertEquals(1, tracker.bucket(MidiLatencyStage.INGRESS_CONTINUOUS).count)
+        assertEquals(0, tracker.bucket(MidiLatencyStage.INGRESS_BUTTON).count)
+    }
+
+    @Test
+    fun `latency tracker records button press and release into INGRESS_BUTTON`() {
+        val actions = RecordingActions()
+        val tracker = MidiLatencyTracker()
+        val flash = BindingTarget.Flash(BindingTarget.FixtureProperty("hex-1", "dimmer"), max = 255)
+        val router = buildRouter(actions, listOf(binding(1, "btn-2", flash)), latencyTracker = tracker)
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 17, velocity = 0u))
+        assertEquals(2, tracker.bucket(MidiLatencyStage.INGRESS_BUTTON).count)
+    }
+
+    @Test
+    fun `latency tracker is not invoked when no binding resolves`() {
+        val actions = RecordingActions()
+        val tracker = MidiLatencyTracker()
+        val router = buildRouter(actions, emptyList(), latencyTracker = tracker)
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
+        assertEquals(0, tracker.bucket(MidiLatencyStage.INGRESS_CONTINUOUS).count)
+        assertEquals(0, tracker.bucket(MidiLatencyStage.INGRESS_BUTTON).count)
     }
 }
 

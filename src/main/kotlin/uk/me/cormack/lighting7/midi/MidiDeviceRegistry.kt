@@ -5,6 +5,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 
@@ -74,6 +75,32 @@ class MidiDeviceRegistry(
 
     /** Returns the open controller for a handle's display key, or null if not open. */
     fun controllerFor(displayKey: String): MidiController? = controllers[displayKey]
+
+    /**
+     * Snapshot of per-port inbound + outbound CC rate counters across every currently-open
+     * controller. Used by the perf endpoint to surface fader-flood traffic without a MIDI
+     * sniffer.
+     */
+    fun portCcRates(): List<PortCcRates> = controllers.values.map {
+        PortCcRates(
+            displayKey = it.handle.displayKey,
+            displayName = it.handle.displayName,
+            inboundCcPerSec = it.inboundCcRate.packetsPerSecond(),
+            inboundCcTotal = it.inboundCcRate.total,
+            outboundCcPerSec = it.outboundCcRate.packetsPerSecond(),
+            outboundCcTotal = it.outboundCcRate.total,
+        )
+    }.sortedBy { it.displayKey }
+
+    @Serializable
+    data class PortCcRates(
+        val displayKey: String,
+        val displayName: String,
+        val inboundCcPerSec: Double,
+        val inboundCcTotal: Long,
+        val outboundCcPerSec: Double,
+        val outboundCcTotal: Long,
+    )
 
     /**
      * Replace the underlying [MidiAccessSource] and run an immediate enumeration pass.

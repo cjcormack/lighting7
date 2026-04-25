@@ -28,6 +28,7 @@ import uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher
 import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.perf.CueEditLatencyTracker
+import uk.me.cormack.lighting7.perf.MidiLatencyTracker
 import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
@@ -220,6 +221,14 @@ class State(val config: ApplicationConfig) {
     val cueEditLatencyTracker: CueEditLatencyTracker by lazy { CueEditLatencyTracker() }
 
     /**
+     * Per-process MIDI surface hot-path histogram registry. Buckets covering ingress (router →
+     * dispatch) and egress (feedback publisher → controller) stages — see
+     * [SurfaceInputRouter] / [SurfaceFeedbackPublisher] for the recording sites. Read via
+     * `GET /api/rest/perf/midi-latency`; reset via `POST /api/rest/perf/midi-latency/reset`.
+     */
+    val midiLatencyTracker: MidiLatencyTracker by lazy { MidiLatencyTracker() }
+
+    /**
      * Phase 4 feedback driver. Observes the composition model + flash / scaler state and
      * pushes motor / ring / LED feedback back to attached surfaces. Also hosts touch and
      * soft-takeover state consulted by [surfaceInputRouter].
@@ -238,6 +247,7 @@ class State(val config: ApplicationConfig) {
                 cueEditSessionRegistry.activeSession(projectId)?.session
             },
             cueEditEvents = cueEditSessionRegistry.events,
+            latencyTracker = midiLatencyTracker,
         )
     }
 
@@ -259,6 +269,7 @@ class State(val config: ApplicationConfig) {
             projectIdProvider = { projectManager.currentProject.id.value },
             actions = DefaultSurfaceActions(this),
             feedbackHooks = surfaceFeedbackPublisher,
+            latencyTracker = midiLatencyTracker,
         )
     }
 
@@ -270,12 +281,17 @@ class State(val config: ApplicationConfig) {
     @OptIn(DelicateCoroutinesApi::class)
     fun initializeShow(): Show {
         val show = projectManager.initialize()
+        // Add the CoreMIDI4J notification listener BEFORE starting the registry's poll loop.
+        // The poll loop calls into MidiSystem.getMidiDeviceInfo, which acquires the
+        // CoreMidiDeviceProvider class lock via a ServiceLoader → JSSecurityManager path; if a
+        // poll tick races registerCoreMidiChangeListener (which also wants that lock), the two
+        // can deadlock under JVM-internal lock ordering. See FU-TEST-COREMIDI-INIT-DEADLOCK.
+        registerCoreMidiChangeListener()
         midiRegistry.start(GlobalScope)
         deviceMatcher.start(GlobalScope)
         midiLearnSessionManager.start(GlobalScope)
         surfaceFeedbackPublisher.start(GlobalScope)
         surfaceInputRouter.start(GlobalScope)
-        registerCoreMidiChangeListener()
         attachBindingHealthListener()
         // Re-attach the feedback publisher to the new show's fixture listener on project
         // switch so motor / LED drive follows the composition model of the active project.

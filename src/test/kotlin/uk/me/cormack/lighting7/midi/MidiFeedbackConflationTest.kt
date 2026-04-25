@@ -130,4 +130,67 @@ class MidiFeedbackConflationTest {
         controller.flushForTest()
         assertEquals(0, target.sent.size)
     }
+
+    @Test
+    fun `outbound CC rate counter records each distinct CC sent`() {
+        val target = RecordingSendTarget()
+        val controller = makeController(target)
+        try {
+            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(0, 7, 10u))
+            controller.flushForTest()
+            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(0, 7, 20u))
+            controller.sendFeedback(MidiFeedbackMessage.NoteOnFeedback(0, 60, 127u))
+            controller.flushForTest()
+            // 2 CC sends + 1 note. Note is NOT counted.
+            assertEquals(2, controller.outboundCcRate.total)
+        } finally {
+            controller.close()
+        }
+    }
+
+    @Test
+    fun `outbound CC rate counter ignores delta-suppressed sends`() {
+        val target = RecordingSendTarget()
+        val controller = makeController(target)
+        try {
+            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(0, 7, 64u))
+            controller.flushForTest()
+            // Same value re-queued: delta suppression skips the wire send AND the counter bump.
+            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(0, 7, 64u))
+            controller.flushForTest()
+            assertEquals(1, controller.outboundCcRate.total)
+        } finally {
+            controller.close()
+        }
+    }
+
+    @Test
+    fun `inbound CC rate counter records control change events from the input parser`() {
+        val target = RecordingSendTarget()
+        var listener: ((ByteArray, Int, Int) -> Unit)? = null
+        val source = object : MidiInputSource {
+            override fun setListener(l: (ByteArray, Int, Int) -> Unit) { listener = l }
+            override fun close() {}
+        }
+        @OptIn(DelicateCoroutinesApi::class)
+        val controller = KtMidiController(
+            handle = makeHandle(),
+            sendTarget = target,
+            inputSource = source,
+            transmitIntervalMs = 3_600_000L,
+            parentScope = GlobalScope,
+        )
+        try {
+            val emit: (ByteArray) -> Unit = { bytes -> listener?.invoke(bytes, 0, bytes.size) }
+            // CC: status 0xB0, cc=7, value=64.
+            emit(byteArrayOf(0xB0.toByte(), 0x07, 0x40))
+            // NoteOn: status 0x90, note=60, vel=127 — should NOT count toward CC rate.
+            emit(byteArrayOf(0x90.toByte(), 0x3C, 0x7F))
+            // CC again at a different value.
+            emit(byteArrayOf(0xB0.toByte(), 0x07, 0x20))
+            assertEquals(2, controller.inboundCcRate.total)
+        } finally {
+            controller.close()
+        }
+    }
 }

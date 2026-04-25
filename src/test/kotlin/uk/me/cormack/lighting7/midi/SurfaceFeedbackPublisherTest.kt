@@ -44,6 +44,8 @@ class SurfaceFeedbackPublisherTest {
         val feedback = CopyOnWriteArrayList<MidiFeedbackMessage>()
         val invalidations = CopyOnWriteArrayList<MidiControlKey>()
         override val input = kotlinx.coroutines.flow.MutableSharedFlow<MidiInputEvent>()
+        override val inboundCcRate = uk.me.cormack.lighting7.dmx.PacketRateCounter()
+        override val outboundCcRate = uk.me.cormack.lighting7.dmx.PacketRateCounter()
         override fun sendFeedback(message: MidiFeedbackMessage) { feedback += message }
         override fun invalidateFeedbackCache(key: MidiControlKey) { invalidations += key }
         override fun close() {}

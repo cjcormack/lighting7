@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.midi
 
 import kotlinx.coroutines.flow.SharedFlow
+import uk.me.cormack.lighting7.dmx.PacketRateCounter
 
 /**
  * Transport-layer abstraction for a single connected MIDI device. Mirrors the shape of
@@ -18,6 +19,15 @@ import kotlinx.coroutines.flow.SharedFlow
 interface MidiController {
     val handle: MidiDeviceHandle
     val input: SharedFlow<MidiInputEvent>
+
+    /**
+     * Per-port sliding-window counters for inbound / outbound Control Change traffic.
+     * Recorded by the transport implementation; surfaced via [MidiDeviceRegistry.portCcRates]
+     * for the perf endpoint. Sysex / NoteOn / NoteOff are not counted — the diagnostic target
+     * is fader-flood traffic.
+     */
+    val inboundCcRate: PacketRateCounter
+    val outboundCcRate: PacketRateCounter
 
     /**
      * Queue a feedback message for transmission. Multiple messages targeting the same

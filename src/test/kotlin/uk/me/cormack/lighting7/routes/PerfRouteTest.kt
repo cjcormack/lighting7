@@ -2,10 +2,12 @@ package uk.me.cormack.lighting7.routes
 
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.post
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import org.junit.Test
 import uk.me.cormack.lighting7.perf.CueEditHistogramSnapshot
+import uk.me.cormack.lighting7.perf.MidiLatencyStage
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
@@ -62,5 +64,51 @@ class PerfRouteTest : RouteIntegrationTest() {
         assertFalse(body.sessionActive)
         val last = assertNotNull(body.lastSessionEnded)
         assertEquals(3, last.count)
+    }
+
+    @Test
+    fun `GET midi-latency returns zeroed histograms and no ports for fresh state`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val resp = client.get("/api/rest/perf/midi-latency")
+
+        assertEquals(HttpStatusCode.OK, resp.status)
+        val body = resp.body<MidiLatencyResponse>()
+        assertEquals(30, body.windowSeconds)
+        assertEquals(MidiLatencyStage.entries.size, body.histograms.buckets.size)
+        assertTrue(body.histograms.buckets.values.all { it.count == 0L })
+        assertTrue(body.ports.isEmpty(), "no MIDI controllers open in test setup")
+    }
+
+    @Test
+    fun `GET midi-latency surfaces recorded buckets`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        state.midiLatencyTracker.measure(MidiLatencyStage.INGRESS_CONTINUOUS) { /* no-op */ }
+        state.midiLatencyTracker.record(MidiLatencyStage.EGRESS_MOTOR, 12_345)
+
+        val resp = client.get("/api/rest/perf/midi-latency")
+
+        assertEquals(HttpStatusCode.OK, resp.status)
+        val body = resp.body<MidiLatencyResponse>()
+        assertEquals(1, body.histograms.buckets[MidiLatencyStage.INGRESS_CONTINUOUS.wireName]?.count)
+        assertEquals(1, body.histograms.buckets[MidiLatencyStage.EGRESS_MOTOR.wireName]?.count)
+    }
+
+    @Test
+    fun `POST midi-latency reset zeroes recorded buckets`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        state.midiLatencyTracker.record(MidiLatencyStage.INGRESS_CONTINUOUS, 1_000)
+        state.midiLatencyTracker.record(MidiLatencyStage.INGRESS_CONTINUOUS, 2_000)
+
+        val resp = client.post("/api/rest/perf/midi-latency/reset")
+        assertEquals(HttpStatusCode.NoContent, resp.status)
+
+        val after = client.get("/api/rest/perf/midi-latency").body<MidiLatencyResponse>()
+        assertEquals(0, after.histograms.buckets[MidiLatencyStage.INGRESS_CONTINUOUS.wireName]?.count)
     }
 }

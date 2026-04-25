@@ -99,57 +99,6 @@ around the open/close edge (both loops run on `Dispatchers.Default`).
 
 Without one of those, coordination cost > savings. Leave dormant.
 
-### `FU-PERF-INSTRUMENT-MIDI` — End-to-end MIDI input + feedback latency histograms
-
-**Status**: Ready
-**Origin**: Surfaced 2026-04-25 alongside `FU-PERF-INSTRUMENT-CUEEDIT` while
-wiring the cueEdit hot-path histogram. The cueEdit tracker measures
-`setPropertyForSession` body cost only; the surrounding MIDI ingress + feedback
-emission stages are still un-instrumented.
-
-The fader hot path has three observable stages today, only the middle one is timed:
-1. **Ingress** — libremidi input flow → `SurfaceInputRouter.dispatchContinuous`
-   ([SurfaceInputRouter.kt:204](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt))
-   → binding resolve + flash/touch/soft-takeover gating → `DefaultSurfaceActions`.
-   Adds binding lookup, `ActiveBankState` consult, and `FlashStateTracker` /
-   `SurfaceFeedbackPublisher` hooks per CC. Untimed.
-2. **Apply** — `setPropertyForSession` (instrumented by `FU-PERF-INSTRUMENT-CUEEDIT`)
-   *or* the Layer 4 fallback (`writeFixtureProperty`, in-memory + UDP).
-3. **Egress** — `SurfaceFeedbackPublisher` resync / motor drive
-   ([SurfaceFeedbackPublisher.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisher.kt))
-   → libremidi output. Untimed; under heavy fader load this can backpressure the
-   MIDI thread (see `FU-MANUAL-SUSPEND-PATH`).
-
-Without ingress / egress timings the operator-facing question "is the *whole*
-fader→stage→motor loop slow, or just the DB write?" can't be answered — the
-cueEdit histogram only sees stage 2. A flooded fader run could show
-`setPropertyForSession` p99 = 2 ms but a perceptible lag if stage 1 or 3 is
-serialising.
-
-**Fix shape**: reuse `LatencyHistogram` (lifted out of `cueEditLatencyTracker`
-into a generic per-process registry — `state.midiLatencyTracker` exposing
-`ingressContinuous`, `ingressButton`, `egressMotor`, `egressLed` named buckets).
-Wrap each entry-point body with `tracker.measure("ingressContinuous")`. Roll
-the JSON shape into `GET /api/rest/perf/midi-latency` (mirroring
-`/perf/cueedit-histogram` and `/perf/artnet-rates`). Reset semantics: rolling
-window or operator-driven via `POST /perf/midi-latency/reset` — a per-session
-boundary doesn't naturally exist for MIDI.
-
-Bonus: per-port inbound + outbound CC rate counters (reuse `PacketRateCounter`
-shape) in [MidiDeviceRegistry.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/MidiDeviceRegistry.kt) —
-exposes which device is actually emitting traffic during a flood without
-attaching a MIDI sniffer.
-
-**Why now**: the `MidiFloodHarness`
-([MidiFloodHarness.kt](src/test/kotlin/uk/me/cormack/lighting7/perf/MidiFloodHarness.kt))
-already drives the full pipeline at 100 Hz; it currently only measures backend
-DB cost via the cueEdit histogram. Adding ingress + egress timings unlocks the
-same harness as a full-loop diagnostic with no new test infrastructure.
-
-**Unblocks**: end-to-end interpretation of `MidiFloodHarness` output;
-`FU-MANUAL-SUSPEND-PATH` validation (currently relies on jstack — egress
-histogram p99 would surface motor backpressure quantitatively).
-
 ---
 
 ## Frontend polish
@@ -287,6 +236,69 @@ Node 16.x on the development machine at landing time blocked `vite build`;
 `tsc --noEmit` passed. Subsequent landings have worked around this. Confirm
 a clean prod build once Node is upgraded — nothing structural is known to
 fail, but the check hasn't run cleanly in a while.
+
+### `FU-TEST-COREMIDI-INIT-DEADLOCK` — Full-suite hang in `initializeShow` ↔ `MidiDeviceRegistry` poll
+
+**Status**: Ready
+**Origin**: Surfaced 2026-04-25 while running `./gradlew test` for
+`FU-PERF-INSTRUMENT-MIDI` — full suite wedged ~18 minutes; targeted runs of
+the same integration tests pass in 30 s. Reproduces only when several
+integration test classes run sequentially in the same Test Worker JVM.
+
+**Symptom**: a Test Worker thread blocks indefinitely at
+[State.kt:351](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt:351)
+inside `registerCoreMidiChangeListener` →
+`CoreMidiDeviceProvider.addNotificationListener`, waiting on the
+`CoreMidiDeviceProvider` class lock. A `jstack` shows the lock is held by a
+`MidiDeviceRegistry-poll` coroutine running
+[MidiDeviceRegistry.tickLocked](src/main/kotlin/uk/me/cormack/lighting7/midi/MidiDeviceRegistry.kt:152)
+→ `MidiSystem.getMidiDeviceInfo` → `JSSecurityManager.getProviders` →
+`ServiceLoader` → `CoreMidiDeviceProvider.<init>` (which itself wants the
+class lock again under `getSystemMidiDeviceInfo`). Two threads, opposite
+acquisition orders for the `CoreMidiDeviceProvider` class lock and the
+`JSSecurityManager` class lock — classic AB/BA deadlock.
+
+The race window opens because [State.initializeShow](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt:282)
+starts the registry's poll loop *before* calling `registerCoreMidiChangeListener`:
+
+```
+midiRegistry.start(GlobalScope)        // spawns the poll loop
+deviceMatcher.start(GlobalScope)
+midiLearnSessionManager.start(GlobalScope)
+surfaceFeedbackPublisher.start(GlobalScope)
+surfaceInputRouter.start(GlobalScope)
+registerCoreMidiChangeListener()       // races first poll tick
+```
+
+Production survives because (a) tests rarely run more than one integration
+class in a session, and (b) on a real boot the listener add usually wins
+before the first poll tick fires. Test runs accumulate ~10× registries (one
+per `RouteIntegrationTest` subclass) in the same JVM, and `initializeShow`
+leaks the `GlobalScope` poll loops between tests (no `State.shutdown` exists
+— see scope-limits note on `FU-TEST-HTTP-ROUNDTRIP`). Eventually two of those
+loops + one `addNotificationListener` interleave wrong.
+
+**Fix shape options**:
+- Serialise initialisation: call `registerCoreMidiChangeListener` *before*
+  `midiRegistry.start`. The notification listener add doesn't depend on the
+  poll loop; reordering removes the race entirely.
+- Stop leaking poll loops: give `State` a `shutdown()` that cancels the
+  GlobalScope-rooted jobs and wire it to JUnit `@AfterClass` in
+  `RouteIntegrationTest`. Independently good — also kills the Hikari pool
+  leak called out in `FU-TEST-HTTP-ROUNDTRIP`.
+- Defensive: guard `tickLocked` against entering `MidiSystem.getMidiDeviceInfo`
+  while a class-init is in progress (hard to check without internal hooks).
+
+Reordering (option 1) is the cheap immediate fix; the shutdown hook (option 2)
+is the proper one. Both should land. Detect future regressions by adding
+`@Test(timeout = 60_000)` to the `RouteIntegrationTest` base — currently a
+hung integration class drags out a `gradlew test` run for the configured
+worker idle timeout (~30 min on this host).
+
+**Why now**: every integration-test author hits this once they add a third
+integration class. Subsequent landings have hand-waved past it by running
+targeted `--tests`; that workaround silently disables `make commit-check`-style
+gating. Cheap fix, high leverage.
 
 ---
 
@@ -775,3 +787,50 @@ _Move items here as they land. Format:_
   `lastSessionEnded` after a synthetic begin → measure ×3 → end cycle.
   Unblocks `FU-PERF-COALESCE-WRITES` and `FU-PERF-HEX-FORMAT-ALLOC` —
   the trigger condition for both ("profile first") is now answerable.
+- `FU-PERF-INSTRUMENT-MIDI` — commit _pending_ (2026-04-25) — Added
+  [MidiLatencyTracker.kt](src/main/kotlin/uk/me/cormack/lighting7/perf/MidiLatencyTracker.kt)
+  with `enum MidiLatencyStage(val wireName)` covering the four named buckets
+  (`INGRESS_CONTINUOUS`/`INGRESS_BUTTON`/`EGRESS_MOTOR`/`EGRESS_LED`); the
+  tracker pre-allocates one [LatencyHistogram] per stage in an
+  ordinal-indexed `Array`. `inline fun <T> measure(stage, block)` — array
+  index + `System.nanoTime()` pair, no map lookup, no lambda allocation on the
+  ~100 Hz hot path. Threaded through
+  [State.midiLatencyTracker](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt)
+  into both [SurfaceInputRouter](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt)
+  (wraps `dispatchContinuous` in `INGRESS_CONTINUOUS`; `dispatchButtonPress` /
+  `dispatchButtonRelease` in `INGRESS_BUTTON`) and
+  [SurfaceFeedbackPublisher](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisher.kt)
+  (wraps `controller.sendFeedback` in `EGRESS_MOTOR` / `EGRESS_LED`). Tracker
+  parameter is non-null with a default `MidiLatencyTracker()` — no opt-out
+  needed; tests construct their own. Added `inboundCcRate` / `outboundCcRate:
+  PacketRateCounter` to the `MidiController` interface;
+  [KtMidiController](src/main/kotlin/uk/me/cormack/lighting7/midi/KtMidiController.kt)
+  records inbound on each parsed `MidiInputEvent.ControlChange` and outbound
+  on each `MidiFeedbackMessage.ControlChangeFeedback` that survives delta
+  suppression — sysex / NoteOn / NoteOff are not counted.
+  [MidiDeviceRegistry.portCcRates](src/main/kotlin/uk/me/cormack/lighting7/midi/MidiDeviceRegistry.kt)
+  exposes a per-port `@Serializable PortCcRates` snapshot returned directly by
+  the route (mirroring the `UniversePacketStats` pattern). New
+  [GET /api/rest/perf/midi-latency](src/main/kotlin/uk/me/cormack/lighting7/routes/perf.kt)
+  returns `{ windowSeconds, histograms: {wireName → snapshot}, ports }`;
+  `POST .../reset` zeroes every bucket (operator-driven; no per-session
+  boundary exists for MIDI). Bucket keys sorted alphabetically by `wireName`.
+  Adjacent: reordered `registerCoreMidiChangeListener()` before
+  `midiRegistry.start(...)` in
+  [State.initializeShow](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt)
+  to close a poll-loop ↔ listener-add deadlock that hung the full test suite —
+  see `FU-TEST-COREMIDI-INIT-DEADLOCK`. Coverage:
+  [MidiLatencyTrackerTest.kt](src/test/kotlin/uk/me/cormack/lighting7/perf/MidiLatencyTrackerTest.kt)
+  pins pre-allocated buckets, alphabetic snapshot ordering, reset semantics,
+  exception-records-still-counted, and `record(stage, nanos)` accepts
+  pre-measured durations;
+  [MidiFeedbackConflationTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/MidiFeedbackConflationTest.kt)
+  adds three cases (outbound CC counted, delta-suppressed sends not counted,
+  inbound CC parsed-and-counted while NoteOn skipped);
+  [SurfaceInputRouterTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouterTest.kt)
+  adds three cases (`INGRESS_CONTINUOUS` on fader CC, `INGRESS_BUTTON` on
+  press + release, no recording when binding misses);
+  [PerfRouteTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/PerfRouteTest.kt)
+  adds three cases (empty snapshot, surfaced buckets, POST reset zeroing).
+  Unblocks end-to-end interpretation of `MidiFloodHarness` output and
+  quantitative `FU-MANUAL-SUSPEND-PATH` validation.

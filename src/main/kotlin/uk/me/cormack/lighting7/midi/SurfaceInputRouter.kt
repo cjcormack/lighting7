@@ -7,6 +7,8 @@ import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.AssignmentHealth
 import uk.me.cormack.lighting7.fx.describeAssignmentHealth
+import uk.me.cormack.lighting7.perf.MidiLatencyStage
+import uk.me.cormack.lighting7.perf.MidiLatencyTracker
 import java.util.Collections
 import java.util.LinkedHashMap
 import java.util.concurrent.ConcurrentHashMap
@@ -47,6 +49,8 @@ class SurfaceInputRouter(
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
     /** Consulted for touch suppression + soft takeover. Null disables both. */
     private val feedbackHooks: SurfaceFeedbackHooks? = null,
+    /** Records per-stage wall-clock duration of `dispatchContinuous` / `dispatchButton*`. */
+    private val latencyTracker: MidiLatencyTracker = MidiLatencyTracker(),
 ) {
     companion object {
         private val logger = LoggerFactory.getLogger(SurfaceInputRouter::class.java)
@@ -149,17 +153,23 @@ class SurfaceInputRouter(
                 if (!accepted) return
                 val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
                 if (isDeadBinding(binding)) return
-                dispatchContinuous(binding, match.value7Bit)
+                latencyTracker.measure(MidiLatencyStage.INGRESS_CONTINUOUS) {
+                    dispatchContinuous(binding, match.value7Bit)
+                }
             }
             is ResolvedInput.ButtonPress -> {
                 val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
                 if (isDeadBinding(binding)) return
-                dispatchButtonPress(deviceTypeKey, binding)
+                latencyTracker.measure(MidiLatencyStage.INGRESS_BUTTON) {
+                    dispatchButtonPress(deviceTypeKey, binding)
+                }
             }
             is ResolvedInput.ButtonRelease -> {
                 val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
                 if (isDeadBinding(binding)) return
-                dispatchButtonRelease(binding)
+                latencyTracker.measure(MidiLatencyStage.INGRESS_BUTTON) {
+                    dispatchButtonRelease(binding)
+                }
                 feedbackHooks?.onButtonRelease(displayKey, match.controlId)
             }
             is ResolvedInput.Touch -> {

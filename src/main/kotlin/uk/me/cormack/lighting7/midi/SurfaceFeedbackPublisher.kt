@@ -15,6 +15,8 @@ import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.Layer3Resolver
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
+import uk.me.cormack.lighting7.perf.MidiLatencyStage
+import uk.me.cormack.lighting7.perf.MidiLatencyTracker
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
 import uk.me.cormack.lighting7.plugins.CueEditSessionState
@@ -97,6 +99,8 @@ class SurfaceFeedbackPublisher(
     private val cueEditSessionProvider: ((Int) -> CueEditSessionState?)? = null,
     /** When provided, [start] subscribes to keep the session-assignments cache in sync. */
     private val cueEditEvents: SharedFlow<CueEditSessionRegistry.Event>? = null,
+    /** Records per-stage wall-clock duration of motor / LED egress writes. */
+    private val latencyTracker: MidiLatencyTracker = MidiLatencyTracker(),
 ) : SurfaceFeedbackHooks {
 
     companion object {
@@ -678,7 +682,9 @@ class SurfaceFeedbackPublisher(
                 value7Bit.toInt(), cc,
             )
         }
-        controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(channel, cc, value7Bit))
+        latencyTracker.measure(MidiLatencyStage.EGRESS_MOTOR) {
+            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(channel, cc, value7Bit))
+        }
     }
 
     private fun sendLed(entry: LedEntry, on: Boolean) {
@@ -688,6 +694,6 @@ class SurfaceFeedbackPublisher(
         } else {
             MidiFeedbackMessage.NoteOffFeedback(entry.control.channel, entry.control.note, 0u)
         }
-        controller.sendFeedback(msg)
+        latencyTracker.measure(MidiLatencyStage.EGRESS_LED) { controller.sendFeedback(msg) }
     }
 }

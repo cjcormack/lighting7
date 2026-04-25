@@ -7,6 +7,7 @@ import kotlinx.coroutines.channels.ticker
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import uk.me.cormack.lighting7.dmx.PacketRateCounter
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -46,6 +47,9 @@ class KtMidiController internal constructor(
     )
     override val input: SharedFlow<MidiInputEvent> = _input.asSharedFlow()
 
+    override val inboundCcRate: PacketRateCounter = PacketRateCounter()
+    override val outboundCcRate: PacketRateCounter = PacketRateCounter()
+
     private val parser = MidiMessageParser()
 
     private val perKeyChannels = ConcurrentHashMap<MidiControlKey, Channel<MidiFeedbackMessage>>()
@@ -60,6 +64,7 @@ class KtMidiController internal constructor(
     init {
         inputSource?.setListener { bytes, offset, length ->
             parser.parse(bytes, offset, length) { event ->
+                if (event is MidiInputEvent.ControlChange) inboundCcRate.record()
                 _input.tryEmit(event)
             }
         }
@@ -141,6 +146,7 @@ class KtMidiController internal constructor(
             val previous = lastSentBytes[key]
             if (previous != null && previous.contentEquals(bytes)) continue
             target.send(bytes)
+            if (message is MidiFeedbackMessage.ControlChangeFeedback) outboundCcRate.record()
             lastSentBytes[key] = bytes
         }
     }
