@@ -245,6 +245,7 @@ object CueEditSessionHandler {
         }
 
         state.cueEditSessionRegistry.register(handle, state.projectManager.currentProject.id.value, newSession)
+        state.cueEditLatencyTracker.onBeginEdit()
         return CueEditSessionStartedOutMessage(cueId, mode.name)
     }
 
@@ -369,6 +370,7 @@ object CueEditSessionHandler {
         }
         sessionRef.set(null)
         state.cueEditSessionRegistry.unregister(handle)
+        state.cueEditLatencyTracker.onEndEdit()
 
         if (session.mode == CueEditMode.LIVE) releaseLiveSession(state, session)
         return CueEditSessionEndedOutMessage(cueId)
@@ -405,7 +407,7 @@ object CueEditSessionHandler {
         target: TargetRef,
         propertyName: String,
         value: String,
-    ): OutMessage {
+    ): OutMessage = state.cueEditLatencyTracker.measure {
         val cueId = session.cueId
         val upserted = CuePropertyAssignmentDto(
             targetType = target.discriminator,
@@ -420,7 +422,7 @@ object CueEditSessionHandler {
                 if (session.mode == CueEditMode.LIVE) buildCueApplyData(cue) else null
             }
         } catch (e: Exception) {
-            return CueEditErrorOutMessage(cueId, "Persist failed: ${e.message}")
+            return@measure CueEditErrorOutMessage(cueId, "Persist failed: ${e.message}")
         }
 
         if (applyData != null) republishLayer3(state, cueId, applyData)
@@ -429,7 +431,7 @@ object CueEditSessionHandler {
             state.projectManager.currentProject.id.value, cueId, target, propertyName, value,
         )
         state.show.fixtures.cueListChanged()
-        return CueEditAssignmentChangedOutMessage(cueId, target.discriminator, target.key, propertyName, value)
+        CueEditAssignmentChangedOutMessage(cueId, target.discriminator, target.key, propertyName, value)
     }
 
     /**
@@ -708,6 +710,7 @@ object CueEditSessionHandler {
     ) {
         val session = sessionRef.getAndSet(null) ?: return
         state.cueEditSessionRegistry.unregister(handle)
+        state.cueEditLatencyTracker.onEndEdit()
         if (session.mode == CueEditMode.LIVE) {
             runCatching { releaseLiveSession(state, session) }
         }

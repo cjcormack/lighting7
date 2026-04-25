@@ -23,11 +23,17 @@ internal fun Route.routeApiRestPerf(state: State) {
                 }
             call.respond(ArtNetRatesResponse(windowSeconds = 30, universes = universes))
         }
+        get<CueEditHistogram> {
+            call.respond(state.cueEditLatencyTracker.snapshot())
+        }
     }
 }
 
 @Resource("/artnet-rates")
 data object ArtNetRates
+
+@Resource("/cueedit-histogram")
+data object CueEditHistogram
 
 @Serializable
 data class UniversePacketStats(

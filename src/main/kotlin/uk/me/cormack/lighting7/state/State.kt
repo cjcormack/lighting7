@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
 import uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher
 import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.perf.CueEditLatencyTracker
 import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
@@ -209,6 +210,14 @@ class State(val config: ApplicationConfig) {
      * [SurfaceFeedbackPublisher] can drive motors from the cue's Layer 3 value.
      */
     val cueEditSessionRegistry: CueEditSessionRegistry by lazy { CueEditSessionRegistry() }
+
+    /**
+     * Per-process timing histogram for [uk.me.cormack.lighting7.plugins.CueEditSessionHandler.setPropertyForSession].
+     * Reset on `cueEdit.beginEdit`; snapshot frozen on `cueEdit.endEdit`. Read via
+     * `GET /api/rest/perf/cueedit-histogram` — drives the
+     * `MidiFloodHarness` profiling step that gates `FU-PERF-COALESCE-WRITES`.
+     */
+    val cueEditLatencyTracker: CueEditLatencyTracker by lazy { CueEditLatencyTracker() }
 
     /**
      * Phase 4 feedback driver. Observes the composition model + flash / scaler state and

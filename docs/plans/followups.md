@@ -99,34 +99,56 @@ around the open/close edge (both loops run on `Dispatchers.Default`).
 
 Without one of those, coordination cost > savings. Leave dormant.
 
-### `FU-PERF-INSTRUMENT-CUEEDIT` — `setPropertyForSession` timing histograms
+### `FU-PERF-INSTRUMENT-MIDI` — End-to-end MIDI input + feedback latency histograms
 
 **Status**: Ready
-**Origin**: Phase B drain plan item 1, surfaced 2026-04-24 while building
-`MidiFloodHarness` (`src/test/kotlin/uk/me/cormack/lighting7/perf/MidiFloodHarness.kt`).
+**Origin**: Surfaced 2026-04-25 alongside `FU-PERF-INSTRUMENT-CUEEDIT` while
+wiring the cueEdit hot-path histogram. The cueEdit tracker measures
+`setPropertyForSession` body cost only; the surrounding MIDI ingress + feedback
+emission stages are still un-instrumented.
 
-The MIDI flood harness produces a sustained 100 Hz CC stream into a bound cueEdit
-fader, but the corresponding server-side cost is unobservable today —
-`CueEditSessionHandler.setPropertyForSession` runs a Hikari borrow + Exposed
-transaction + Layer 3 republish per call with no instrumentation. Without
-per-call timings, the harness CSV (emit timestamps only) is just a load
-generator; the operator-facing question "is the fader hot path actually slow?"
-can't be answered.
+The fader hot path has three observable stages today, only the middle one is timed:
+1. **Ingress** — libremidi input flow → `SurfaceInputRouter.dispatchContinuous`
+   ([SurfaceInputRouter.kt:204](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt))
+   → binding resolve + flash/touch/soft-takeover gating → `DefaultSurfaceActions`.
+   Adds binding lookup, `ActiveBankState` consult, and `FlashStateTracker` /
+   `SurfaceFeedbackPublisher` hooks per CC. Untimed.
+2. **Apply** — `setPropertyForSession` (instrumented by `FU-PERF-INSTRUMENT-CUEEDIT`)
+   *or* the Layer 4 fallback (`writeFixtureProperty`, in-memory + UDP).
+3. **Egress** — `SurfaceFeedbackPublisher` resync / motor drive
+   ([SurfaceFeedbackPublisher.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisher.kt))
+   → libremidi output. Untimed; under heavy fader load this can backpressure the
+   MIDI thread (see `FU-MANUAL-SUSPEND-PATH`).
 
-**Fix shape**: a small in-process histogram (HdrHistogram or a hand-rolled
-log-bucket counter — no need for a metrics library yet) wrapping the body of
-`setPropertyForSession`, plus a `/api/rest/perf/cueedit-histogram` GET that
-dumps p50/p95/p99/max + bucket counts. Reset per-session. Publish the snapshot
-on cueEdit `endEdit` so the harness operator can scrape it via curl after a run.
+Without ingress / egress timings the operator-facing question "is the *whole*
+fader→stage→motor loop slow, or just the DB write?" can't be answered — the
+cueEdit histogram only sees stage 2. A flooded fader run could show
+`setPropertyForSession` p99 = 2 ms but a perceptible lag if stage 1 or 3 is
+serialising.
 
-**Why now**: blocks meaningful interpretation of `MidiFloodHarness` output, which
-in turn is the profiling step `FU-PERF-COALESCE-WRITES` calls out as its
-prerequisite ("profile first"). Without this, the trigger condition for
-`FU-PERF-COALESCE-WRITES` can't fire.
+**Fix shape**: reuse `LatencyHistogram` (lifted out of `cueEditLatencyTracker`
+into a generic per-process registry — `state.midiLatencyTracker` exposing
+`ingressContinuous`, `ingressButton`, `egressMotor`, `egressLed` named buckets).
+Wrap each entry-point body with `tracker.measure("ingressContinuous")`. Roll
+the JSON shape into `GET /api/rest/perf/midi-latency` (mirroring
+`/perf/cueedit-histogram` and `/perf/artnet-rates`). Reset semantics: rolling
+window or operator-driven via `POST /perf/midi-latency/reset` — a per-session
+boundary doesn't naturally exist for MIDI.
 
-**Unblocks**: `FU-PERF-COALESCE-WRITES`, `FU-PERF-HEX-FORMAT-ALLOC` (the colour
-serialize allocation lives inside the same hot path; a per-call timing
-histogram makes the format-allocation cost visible).
+Bonus: per-port inbound + outbound CC rate counters (reuse `PacketRateCounter`
+shape) in [MidiDeviceRegistry.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/MidiDeviceRegistry.kt) —
+exposes which device is actually emitting traffic during a flood without
+attaching a MIDI sniffer.
+
+**Why now**: the `MidiFloodHarness`
+([MidiFloodHarness.kt](src/test/kotlin/uk/me/cormack/lighting7/perf/MidiFloodHarness.kt))
+already drives the full pipeline at 100 Hz; it currently only measures backend
+DB cost via the cueEdit histogram. Adding ingress + egress timings unlocks the
+same harness as a full-loop diagnostic with no new test infrastructure.
+
+**Unblocks**: end-to-end interpretation of `MidiFloodHarness` output;
+`FU-MANUAL-SUSPEND-PATH` validation (currently relies on jstack — egress
+histogram p99 would surface motor backpressure quantitatively).
 
 ---
 
@@ -146,6 +168,42 @@ author flow.
 **Trigger to revisit**: operator feedback asks for it.
 `PropertyChannelWriter` (Phase 7) can drive live-preview of the proposed
 rebind — implementation is unblocked.
+
+### `FU-FE-PERF-DASHBOARD` — Surface `/api/rest/perf/*` data in the frontend
+
+**Status**: Trigger (after second perf endpoint settles)
+**Origin**: Surfaced 2026-04-25 alongside `FU-PERF-INSTRUMENT-CUEEDIT`. The
+backend now exposes `GET /api/rest/perf/artnet-rates` and
+`GET /api/rest/perf/cueedit-histogram`, but no frontend view consumes them —
+operators must `curl` the endpoints directly to read p50/p95/p99 or per-universe
+ArtNet packet rates.
+
+That's acceptable today (perf data is harness-driven, scraped post-run by the
+operator running the flood) but won't scale: any future "is the show pipeline
+healthy right now?" check requires a JSON-aware terminal. A live-show operator
+shouldn't have to leave the UI to answer it.
+
+**Fix shape**: a `Diagnostics` / `Performance` route in `lighting-react` —
+sibling to `/surfaces`. Initial scope:
+- ArtNet panel: per-universe table (subnet, universe, packets/sec, total).
+  Polled at 2 s — slow enough to not pressure the backend, fast enough to see
+  effect-load spikes.
+- cueEdit panel: live + last-session histogram. Bar chart of bucket counts
+  with p50/p95/p99/max as overlay markers; "session active" indicator.
+  Polled at 2 s while session is active; final snapshot held when inactive.
+- Empty-state copy on each panel pointing to the relevant
+  [followups.md](docs/plans/followups.md) item ("no ArtNet universes — mock
+  show", "no cueEdit session — open one to populate").
+
+Add RTK Query endpoints `useGetArtNetRatesQuery` / `useGetCueEditHistogramQuery`
+in the existing `lighting-react/src/store/api/` slice. No new state shape — both
+endpoints are read-only polled GETs.
+
+**Trigger to revisit**: a third perf endpoint lands (likely
+`FU-PERF-INSTRUMENT-MIDI`), at which point per-endpoint curl friction crosses
+the threshold to justify a unified view. Building the dashboard for two
+endpoints today is borderline; three+ is clearly worth it. Until then, the
+existing curl-and-jq workflow is fine for the harness operator.
 
 ---
 
@@ -679,3 +737,41 @@ _Move items here as they land. Format:_
   DTO-level route tests, no `State.shutdown` for clean coroutine teardown
   (known-leaky GlobalScope pollers from `initializeShow` tolerated), no
   Hikari pool close in tearDown (3 tests × 8 connections acceptable).
+- `FU-PERF-INSTRUMENT-CUEEDIT` — commit TBD (2026-04-25) — Added
+  [LatencyHistogram.kt](src/main/kotlin/uk/me/cormack/lighting7/perf/LatencyHistogram.kt):
+  lock-free log2-bucketed nanosecond histogram (`AtomicLongArray` per bucket +
+  `AtomicLong` count / sum / max with CAS-update on max). Default 32 buckets
+  cover [1 ns, ~4.29 s); observations beyond the top bucket pile into bucket
+  31 but `maxNanos` still tracks the actual peak. `percentileNanos(p)` walks
+  buckets cumulatively and returns the right bound of the bucket holding the
+  target observation, capped by `maxNanos` so the top bucket never reports an
+  inflated value. Wrapped in
+  [CueEditLatencyTracker.kt](src/main/kotlin/uk/me/cormack/lighting7/perf/CueEditLatencyTracker.kt):
+  one tracker per [State](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt);
+  `onBeginEdit` resets the live histogram and flips `sessionActive`, `measure {}`
+  records each call's wall-clock duration (records on exception too — a failed
+  transaction is part of what the operator wants to see), `onEndEdit` freezes
+  a snapshot to `lastSessionEnded`. Wired into
+  [CueEditSessionHandler](src/main/kotlin/uk/me/cormack/lighting7/plugins/CueEditSession.kt):
+  `beginEdit` calls `onBeginEdit` after the apply succeeds (so a failed
+  Live-apply doesn't reset the histogram); `setPropertyForSession`'s body
+  runs inside `measure { }` so both call sites (WS `cueEdit.setProperty` and
+  the MIDI fader path through `DefaultSurfaceActions`) record uniformly;
+  `endEdit` and `endSessionOnDisconnect` both call `onEndEdit` so a closed
+  WebSocket still freezes the snapshot. New `GET /api/rest/perf/cueedit-histogram`
+  in [perf.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/perf.kt) returns
+  `{ sessionActive, live, lastSessionEnded }` — the harness operator scrapes
+  this after a `MidiFloodHarness` flood + endEdit to read p50/p95/p99/max
+  + per-bucket counts. Unit coverage in
+  [LatencyHistogramTest.kt](src/test/kotlin/uk/me/cormack/lighting7/perf/LatencyHistogramTest.kt)
+  pins log2 bucket placement, percentile cumulative walk + max-capped right
+  bound, top-bucket overflow, reset semantics, and concurrent-record count
+  preservation; in
+  [CueEditLatencyTrackerTest.kt](src/test/kotlin/uk/me/cormack/lighting7/perf/CueEditLatencyTrackerTest.kt)
+  asserts the begin → measure → end lifecycle, the next-begin reset
+  preserving lastSessionEnded, and that a throwing block still records;
+  in [PerfRouteTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/PerfRouteTest.kt)
+  asserts the empty-snapshot pre-session case and the surfaced
+  `lastSessionEnded` after a synthetic begin → measure ×3 → end cycle.
+  Unblocks `FU-PERF-COALESCE-WRITES` and `FU-PERF-HEX-FORMAT-ALLOC` —
+  the trigger condition for both ("profile first") is now answerable.
