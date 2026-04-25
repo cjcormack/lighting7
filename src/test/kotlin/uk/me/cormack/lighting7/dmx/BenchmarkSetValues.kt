@@ -1,9 +1,9 @@
 package uk.me.cormack.lighting7.dmx
 
-import com.sun.management.ThreadMXBean
 import kotlinx.coroutines.runBlocking
 import org.junit.Assume
-import java.lang.management.ManagementFactory
+import uk.me.cormack.lighting7.bench.allocatedBytes
+import uk.me.cormack.lighting7.bench.summarize
 import kotlin.system.measureNanoTime
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -73,30 +73,6 @@ class BenchmarkSetValues {
                 tx.setValue(universe, FIRST_CHANNEL + i, ChannelChange(v, fadeMs = 0L))
             }
         }
-    }
-
-    private fun allocatedBytes(): Long {
-        val bean = ManagementFactory.getThreadMXBean() as? ThreadMXBean ?: return -1L
-        if (!bean.isThreadAllocatedMemorySupported) return -1L
-        if (!bean.isThreadAllocatedMemoryEnabled) bean.isThreadAllocatedMemoryEnabled = true
-        @Suppress("DEPRECATION")
-        val tid = Thread.currentThread().id
-        return bean.getThreadAllocatedBytes(tid)
-    }
-
-    private data class Stats(val p50Ns: Long, val p99Ns: Long, val meanNs: Long, val bytesPerIter: Long)
-
-    private fun summarize(label: String, timings: LongArray, allocBytes: Long): Stats {
-        val sorted = timings.copyOf().also { it.sort() }
-        val p50 = sorted[sorted.size / 2]
-        val p99 = sorted[((sorted.size * 99) / 100).coerceAtMost(sorted.size - 1)]
-        val mean = sorted.sum() / sorted.size
-        val perIter = if (allocBytes >= 0) allocBytes / sorted.size else -1L
-        println(
-            "[$label] iters=${sorted.size} p50=${p50 / 1_000}µs p99=${p99 / 1_000}µs " +
-                "mean=${mean / 1_000}µs allocBytes/iter=$perIter",
-        )
-        return Stats(p50, p99, mean, perIter)
     }
 
     @Test

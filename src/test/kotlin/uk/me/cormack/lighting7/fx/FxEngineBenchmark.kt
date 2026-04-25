@@ -1,7 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
-import com.sun.management.ThreadMXBean
 import org.junit.Assume
+import uk.me.cormack.lighting7.bench.allocatedBytes
+import uk.me.cormack.lighting7.bench.summarize
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.CompositionRule
@@ -10,7 +11,6 @@ import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fx.effects.SineWave
 import uk.me.cormack.lighting7.fx.effects.StaticValue
 import uk.me.cormack.lighting7.show.Fixtures
-import java.lang.management.ManagementFactory
 import kotlin.system.measureNanoTime
 import kotlin.test.Test
 
@@ -127,30 +127,6 @@ class FxEngineBenchmark {
         )
     }
 
-    private fun allocatedBytes(): Long {
-        val bean = ManagementFactory.getThreadMXBean() as? ThreadMXBean ?: return -1L
-        if (!bean.isThreadAllocatedMemorySupported) return -1L
-        if (!bean.isThreadAllocatedMemoryEnabled) bean.isThreadAllocatedMemoryEnabled = true
-        @Suppress("DEPRECATION")
-        val tid = Thread.currentThread().id
-        return bean.getThreadAllocatedBytes(tid)
-    }
-
-    private data class Stats(val p50Ns: Long, val p99Ns: Long, val meanNs: Long, val bytesPerTick: Long, val tickCount: Int)
-
-    private fun summarize(label: String, timings: LongArray, allocBytes: Long): Stats {
-        val sorted = timings.copyOf().also { it.sort() }
-        val p50 = sorted[sorted.size / 2]
-        val p99 = sorted[((sorted.size * 99) / 100).coerceAtMost(sorted.size - 1)]
-        val mean = sorted.sum() / sorted.size
-        val perTick = if (allocBytes >= 0) allocBytes / sorted.size else -1L
-        println(
-            "[$label] ticks=${sorted.size} p50=${p50 / 1_000}µs p99=${p99 / 1_000}µs " +
-                "mean=${mean / 1_000}µs allocBytes/tick=$perTick",
-        )
-        return Stats(p50, p99, mean, perTick, sorted.size)
-    }
-
     @Test
     fun `beat and wall-clock tick throughput`() {
         Assume.assumeTrue(
@@ -180,7 +156,7 @@ class FxEngineBenchmark {
         }
         val beatAlloc = allocatedBytes().takeIf { it >= 0 && beatAllocBefore >= 0 }
             ?.let { it - beatAllocBefore } ?: -1L
-        val beatStats = summarize("beat", beatTimings, beatAlloc)
+        val beatStats = summarize("beat", beatTimings, beatAlloc, sampleName = "tick")
 
         // Wall-clock measurement.
         val wallTimings = LongArray(WALL_CLOCK_TICKS)
@@ -190,7 +166,7 @@ class FxEngineBenchmark {
         }
         val wallAlloc = allocatedBytes().takeIf { it >= 0 && wallAllocBefore >= 0 }
             ?.let { it - wallAllocBefore } ?: -1L
-        val wallStats = summarize("wall", wallTimings, wallAlloc)
+        val wallStats = summarize("wall", wallTimings, wallAlloc, sampleName = "tick")
 
         // Track-only: no hard assertion. A future pass turns these prints into a committed
         // baseline + ±20% regression gate. For now, a trivial floor assertion catches obvious
