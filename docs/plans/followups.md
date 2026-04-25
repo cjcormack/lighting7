@@ -787,7 +787,7 @@ _Move items here as they land. Format:_
   `lastSessionEnded` after a synthetic begin → measure ×3 → end cycle.
   Unblocks `FU-PERF-COALESCE-WRITES` and `FU-PERF-HEX-FORMAT-ALLOC` —
   the trigger condition for both ("profile first") is now answerable.
-- `FU-PERF-INSTRUMENT-MIDI` — commit _pending_ (2026-04-25) — Added
+- `FU-PERF-INSTRUMENT-MIDI` — commit b01d4b3 (2026-04-25) — Added
   [MidiLatencyTracker.kt](src/main/kotlin/uk/me/cormack/lighting7/perf/MidiLatencyTracker.kt)
   with `enum MidiLatencyStage(val wireName)` covering the four named buckets
   (`INGRESS_CONTINUOUS`/`INGRESS_BUTTON`/`EGRESS_MOTOR`/`EGRESS_LED`); the
