@@ -128,32 +128,6 @@ prerequisite ("profile first"). Without this, the trigger condition for
 serialize allocation lives inside the same hot path; a per-call timing
 histogram makes the format-allocation cost visible).
 
-### `FU-PERF-INSTRUMENT-ARTNET` — Per-universe ArtNet packet-rate counters
-
-**Status**: Ready
-**Origin**: Phase B drain plan item 2, surfaced 2026-04-24 while building
-`EffectStormHarness` (`src/test/kotlin/uk/me/cormack/lighting7/perf/EffectStormHarness.kt`).
-
-`FU-PERF-FRAME-TXN-UNIFY`'s trigger condition is "sustained ArtNet packet rate
-above ~40 pkts/sec per universe under effect load." Today there's no way to
-measure that — `ArtNetController.runTransmissionChannel` sends packets, but the
-count is not exposed. The effect-storm harness can drive sustained add/remove
-churn against the FX engine, but without per-universe counters the trigger
-condition for `FU-PERF-FRAME-TXN-UNIFY` is unobservable.
-
-**Fix shape**: `AtomicLong` per universe (or a single `ConcurrentHashMap<Universe, AtomicLong>`)
-incremented in `ArtNetController.sendCurrentValues()` after each successful
-UDP send. Add a `/api/rest/perf/artnet-rates` GET that returns
-`{universe → packetsPerSec}` averaged over the last N seconds (30 s window
-plenty). Cheap — one atomic per packet on a path that already does I/O.
-
-**Unblocks**: `FU-PERF-FRAME-TXN-UNIFY`. Also useful as a generic perf signal —
-any future change to the DMX transmission pipeline (throttle, coalesce, batch)
-benefits from the same counter.
-
-**Note**: this is monitoring-only. It does not change packet behaviour, so no
-risk of regressing on-stage output.
-
 ---
 
 ## Frontend polish
@@ -645,6 +619,30 @@ _Move items here as they land. Format:_
   commit, falls through to live controller otherwise); new coverage in
   [FixturesWithTransactionTest.kt](src/test/kotlin/uk/me/cormack/lighting7/show/FixturesWithTransactionTest.kt)
   asserts repeated lookups return the same wrapped instance.
+- `FU-PERF-INSTRUMENT-ARTNET` — commit 0d19fad (2026-04-25) — Added
+  [PacketRateCounter.kt](src/main/kotlin/uk/me/cormack/lighting7/dmx/PacketRateCounter.kt):
+  lock-free 30-bucket sliding-window counter (one bucket per second, keyed by
+  `epochSecond % windowSeconds`); stale buckets CAS-reset before increment so
+  a wrap-around doesn't carry yesterday's count into the new second. The
+  in-progress second is excluded from the rate average — partial counts would
+  otherwise depress p99 readings. Wired into
+  [ArtNetController.sendCurrentValues](src/main/kotlin/uk/me/cormack/lighting7/dmx/ArtNetController.kt)
+  with one `record()` call after each successful `broadcastDmx` /
+  `unicastDmx`; exposed as `packetsPerSecond: Double` and
+  `totalPacketsSent: Long` properties on the controller. New
+  [perf.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/perf.kt) route
+  registers `GET /api/rest/perf/artnet-rates`, filtering
+  `state.show.fixtures.controllers` to `ArtNetController` instances and
+  returning `{ windowSeconds, universes: [{subnet, universe, packetsPerSec,
+  totalPackets}, …] }`. Mock-only test setups return an empty `universes`
+  list so the endpoint stays well-formed in tests. Unit coverage in
+  [PacketRateCounterTest.kt](src/test/kotlin/uk/me/cormack/lighting7/dmx/PacketRateCounterTest.kt)
+  exercises stale-bucket reset on wrap-around (the load-bearing case for
+  correctness — `t=100` and `t=130` collide on `% 30`), bucket-out-of-window
+  exclusion, partial-window readings, and concurrent-record total
+  preservation. Route coverage in
+  [PerfRouteTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/PerfRouteTest.kt)
+  asserts the empty-mock-show contract.
 - `FU-TEST-HTTP-ROUNDTRIP` — commit 4245a7d (2026-04-24) — Added
   `src/test/kotlin/uk/me/cormack/lighting7/testsupport/` harness
   ([EmbeddedTestPostgres.kt](src/test/kotlin/uk/me/cormack/lighting7/testsupport/EmbeddedTestPostgres.kt),
