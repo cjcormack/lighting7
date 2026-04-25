@@ -348,3 +348,15 @@ For deeper technical details, see the docs in `docs/`:
 - [WebSocket Protocol](docs/websocket-engineering.md) - Real-time client communication, message types, update flow
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, multi-element fixtures
+
+## Follow-ups
+
+[`docs/plans/followups.md`](docs/plans/followups.md) tracks dormant work — all
+open items are Trigger-gated, Blocked, or Manual. Don't poll it routinely.
+**Open it only when your current change might fire a listed trigger** (e.g.,
+touching FX tick loops, ArtNet output paths, shared `AssignmentHealth` UI,
+cueEdit session routing, or anything that adds a 6th consumer of fixture/group
+property lookup). Grep the file's `### `FU-…`` headers + `**Trigger to
+revisit**` lines first; only read full bodies for matches. If a trigger fires,
+flag it inline (or promote the item to Ready) rather than silently working
+around it.
