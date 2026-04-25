@@ -24,50 +24,6 @@ self-contained so a Claude Code session can pick up one item cold.
 
 ## Performance
 
-### `FU-PERF-COALESCE-WRITES` — Coalesce per-target cue-edit writes on the fader hot path
-
-**Status**: Trigger (profile first)
-**Origin**: Control-surface Phase 6, 2026-04-23
-
-A bound fader during an open `cueEdit` session runs
-`CueEditSessionHandler.setPropertyForSession` per inbound MIDI CC event —
-potentially 100 transactions/second on the MIDI input coroutine (Hikari borrow,
-Exposed transaction, lazy-load of `propertyAssignments`, `upsertAssignment`,
-`buildCueApplyData`, `republishLayer3`, registry resync). Layer 4 fallback
-(`writeFixtureProperty`) is pure in-memory + UDP, orders of magnitude cheaper.
-
-**Mitigation options**:
-- **Coalesce**: debounce per `(cueId, targetType, targetKey, propertyName)` so
-  only the last value in a ~10 ms window is persisted. Per-target coroutine
-  with a conflated channel.
-- **Off-thread dispatch**: dedicated single-consumer coroutine so the MIDI
-  input loop never blocks on a DB transaction. Cheaper than debouncing (no
-  drop-intermediate) but doesn't reduce total work.
-- **Batch at transaction boundary**: per-session dispatcher groups N writes
-  into one transaction. Harder — the handler also republishes Layer 3 per
-  write.
-
-Recommended first step: **coalesce + off-thread**. 10–20 ms debounce in a
-per-target actor on `Dispatchers.IO`. Acceptable sacrifice: mid-move values
-don't all hit the DB (only endpoints + ~50 Hz samples).
-
-**Trigger to revisit**: profile first. Operators probably don't wiggle faders
-at 100 Hz for minutes on end; Hikari + Exposed on local Postgres may be fast
-enough for show-scale operation.
-
-### `FU-PERF-HEX-FORMAT-ALLOC` — `String.format` allocation per colour cueEdit write
-
-**Status**: Trigger (after `FU-PERF-COALESCE-WRITES`)
-**Origin**: Control-surface Phase 6, 2026-04-23
-
-Routed through `Layer3Resolver.PropertyValue.Colour.serialize()` →
-`ExtendedColour.toSerializedString()` → `Color.toHexString()`. Each fader move
-on a colour binding allocates a Formatter + intermediate strings. Low priority
-— dwarfed by `FU-PERF-COALESCE-WRITES`.
-
-**Fix shape**: micro-benchmark first, then replace with a lookup table (e.g.
-`val HEX = Array(256) { "%02x".format(it) }`).
-
 ### `FU-PERF-FRAME-TXN-UNIFY` — FX beat + wall-clock frame-transaction unification
 
 **Status**: Trigger (event-driven)
@@ -92,7 +48,10 @@ around the open/close edge (both loops run on `Dispatchers.Default`).
 - Operator reports visible flicker / double-stepping on a fixture where beat
   and wall-clock effects share a universe.
 - Profiling shows sustained ArtNet packet rate above ~40 pkts/sec per universe
-  under effect load (indicates the 25 ms throttle is being bypassed).
+  under effect load (indicates the 25 ms throttle is being bypassed). This is
+  now directly observable on the Diagnostics dashboard via
+  `GET /api/rest/perf/artnet-rates` (`FU-PERF-INSTRUMENT-ARTNET`, 0d19fad) —
+  no profiling pass required to detect.
 - A future effect category pushes wall-clock density high enough that the tick
   windows overlap frequently (current 50 Hz wall-clock + ~120 Hz beat worst-
   case doesn't).
@@ -243,6 +202,42 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
 
+- `FU-PERF-COALESCE-WRITES` — cancelled 2026-04-25 — Profiled the cueEdit
+  hot path via new opt-in
+  [`CueEditProfileTest`](../../src/test/kotlin/uk/me/cormack/lighting7/perf/CueEditProfileTest.kt)
+  (gated on `-Dcueedit.profile=true`, forwarded by
+  [build.gradle.kts](../../build.gradle.kts) alongside `dmx.benchmark` /
+  `fx.benchmark`). Test extends `RouteIntegrationTest`, patches a
+  `HexFixture`, opens a Live cueEdit session over WS, and drives a 6000-event
+  flood across four sub-profiles inline (ramp / wiggle / colour-ramp /
+  burst — mixed `dimmer` slider + `rgbColour` to exercise both the SQL
+  upsert hot path and the `ExtendedColour.toSerializedString` →
+  `Color.toHexString` allocation path that
+  `FU-PERF-HEX-FORMAT-ALLOC` would have targeted). Histogram scraped from
+  `GET /api/rest/perf/cueedit-histogram` after `endEdit`. Drain coroutine
+  signals `sessionEnded` via a `CompletableDeferred` so the post-flood
+  handshake doesn't race the in-flight ack backlog. Made
+  `RouteIntegrationTest.testTimeout` open so the profile harness can extend
+  the per-test cap to 300 s. Result on a clean Hikari + embedded-Postgres
+  rig: **count=6000 p50=524µs p95=2097µs p99=2097µs max=17.3ms mean=617µs**
+  — well under the 5 ms p99 threshold from the decision criteria. Hikari +
+  Exposed on local Postgres is fast enough for show-scale operation; the
+  "operators probably don't wiggle faders at 100 Hz for minutes on end"
+  hypothesis is confirmed. No coalescer needed; existing CONFLATED + signal
+  pattern in `KtMidiController` / `ArtNetController` stays the precedent
+  for any future flood-path optimisation. Distribution shape
+  (54% ≤524µs, 40% ≤1ms, 5% ≤2.1ms, <1% above 2.1ms, single 17ms outlier)
+  shows the path is well-behaved with no GC pathology under load.
+- `FU-PERF-HEX-FORMAT-ALLOC` — cancelled 2026-04-25 — Was gated on
+  `FU-PERF-COALESCE-WRITES` ("low priority — dwarfed by COALESCE-WRITES");
+  with that cancelled, this becomes a tiny micro-allocation chasing a
+  non-bottleneck. The same 6000-event profile (1000 events through the
+  colour serialize path) lands inside the same fast distribution as the
+  slider path — no measurable colour-vs-slider gap to chase. The
+  `String.format` allocation in
+  [Effect.kt:247](../../src/main/kotlin/uk/me/cormack/lighting7/fx/Effect.kt:247)
+  stays as-is; if a future workload ever surfaces it, the lookup-table fix
+  shape is sketched in the original slug body.
 - `FU-TEST-DMX-FX-BENCH-HARNESS` — commit 6e1222e (2026-04-25) — Added
   [`AsyncTestDmxController`](src/main/kotlin/uk/me/cormack/lighting7/dmx/AsyncTestDmxController.kt),
   a coroutine-aware `DmxController` test fake that mirrors

@@ -2,10 +2,6 @@ package uk.me.cormack.lighting7.routes
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
-import io.ktor.client.plugins.websocket.WebSockets
-import io.ktor.client.plugins.websocket.receiveDeserialized
 import io.ktor.client.plugins.websocket.sendSerialized
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.get
@@ -15,8 +11,6 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import io.ktor.serialization.kotlinx.KotlinxWebsocketSerializationConverter
-import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.testing.testApplication
 import org.junit.Test
 import uk.me.cormack.lighting7.plugins.CueEditAssignmentChangedOutMessage
@@ -26,9 +20,9 @@ import uk.me.cormack.lighting7.plugins.CueEditSessionEndedOutMessage
 import uk.me.cormack.lighting7.plugins.CueEditSessionStartedOutMessage
 import uk.me.cormack.lighting7.plugins.CueEditSetPropertyInMessage
 import uk.me.cormack.lighting7.plugins.InMessage
-import uk.me.cormack.lighting7.plugins.OutMessage
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
-import uk.me.cormack.lighting7.testsupport.TestJson
+import uk.me.cormack.lighting7.testsupport.awaitOfType
+import uk.me.cormack.lighting7.testsupport.createWsClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -43,12 +37,7 @@ class HttpRoundTripTest : RouteIntegrationTest() {
     @Test
     fun `patch then cueEdit then snapshot-from-live then GET round-trips through HTTP + WS`() = testApplication {
         mountTestApp(state)
-        val client = createClient {
-            install(ContentNegotiation) { json(TestJson) }
-            install(WebSockets) {
-                contentConverter = KotlinxWebsocketSerializationConverter(TestJson)
-            }
-        }
+        val client = createWsClient()
 
         // Universe 0 is pre-seeded as MOCK so DbFixtureLoader instantiates
         // MockDmxController (no UDP socket, no GlobalScope coroutines).
@@ -132,17 +121,5 @@ class HttpRoundTripTest : RouteIntegrationTest() {
         }
         assertEquals(HttpStatusCode.Created, resp.status, "create cue '$name' body: ${resp.bodyAsText()}")
         return resp.body<CueDetails>().id
-    }
-
-    /**
-     * Read inbound frames until one deserializes as [T], discarding intervening
-     * messages (initial channelMapping, fxState, palette, beatSync, …).
-     */
-    private suspend inline fun <reified T : OutMessage> DefaultClientWebSocketSession.awaitOfType(): T {
-        repeat(100) {
-            val msg = receiveDeserialized<OutMessage>()
-            if (msg is T) return msg
-        }
-        error("Never saw ${T::class.simpleName} after 100 frames")
     }
 }

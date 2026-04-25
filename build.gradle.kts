@@ -96,13 +96,17 @@ dependencies {
 
 tasks.test {
     // Forward opt-in test flags to the forked test JVM. `fx.benchmark` gates the
-    // FxEngineBenchmark harness; `dmx.benchmark` gates the DMX setValues benchmark.
-    // Both are skipped by default and run for ~10 s when enabled.
+    // FxEngineBenchmark harness; `dmx.benchmark` gates the DMX setValues benchmark;
+    // `cueedit.profile` gates the cueEdit setProperty profile harness. All three are
+    // skipped by default; the first two run for ~10 s when enabled, the cueEdit profile
+    // for up to a few minutes (driving 6000 events through Embedded Postgres).
     val fxBenchmarkFlag = System.getProperty("fx.benchmark")
     val dmxBenchmarkFlag = System.getProperty("dmx.benchmark")
+    val cueEditProfileFlag = System.getProperty("cueedit.profile")
     if (fxBenchmarkFlag != null) systemProperty("fx.benchmark", fxBenchmarkFlag)
     if (dmxBenchmarkFlag != null) systemProperty("dmx.benchmark", dmxBenchmarkFlag)
-    if (fxBenchmarkFlag != null || dmxBenchmarkFlag != null) {
+    if (cueEditProfileFlag != null) systemProperty("cueedit.profile", cueEditProfileFlag)
+    if (fxBenchmarkFlag != null || dmxBenchmarkFlag != null || cueEditProfileFlag != null) {
         // Always rerun + stream stdout when a benchmark is requested, otherwise Gradle's
         // up-to-date check swallows the numbers and the test runner's default stdout policy
         // hides the println summary lines.

@@ -42,10 +42,11 @@ abstract class RouteIntegrationTest {
      * Per-test wall-clock cap so a hung integration test fails loudly instead of
      * dragging `gradlew test` out for the worker idle timeout (~30 min on this host).
      * 60 s is well above the slowest legitimate route round-trip in this suite. See
-     * `FU-TEST-COREMIDI-INIT-DEADLOCK`.
+     * `FU-TEST-COREMIDI-INIT-DEADLOCK`. Opt-in profile harnesses (e.g. CueEditProfileTest)
+     * override this with a longer cap.
      */
     @get:Rule
-    val testTimeout: Timeout = Timeout.seconds(60)
+    open val testTimeout: Timeout = Timeout.seconds(60)
 
     protected lateinit var state: State
     protected var projectId: Int = 0
