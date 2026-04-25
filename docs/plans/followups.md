@@ -191,16 +191,6 @@ resolution, but there's no Phase 6 test that two WS connections racing on
 **Unblock by**: confirming exact semantics with cue-authoring owners, then
 add the test.
 
-### `FU-TEST-VITE-BUILD` — Frontend `vite build` validation
-
-**Status**: Blocked (Node upgrade)
-**Origin**: Cue-authoring Phase 6, 2026-04-22
-
-Node 16.x on the development machine at landing time blocked `vite build`;
-`tsc --noEmit` passed. Subsequent landings have worked around this. Confirm
-a clean prod build once Node is upgraded — nothing structural is known to
-fail, but the check hasn't run cleanly in a while.
-
 ### `FU-TEST-COREMIDI-INIT-DEADLOCK` — Full-suite hang in `initializeShow` ↔ `MidiDeviceRegistry` poll
 
 **Status**: Ready
@@ -834,6 +824,18 @@ _Move items here as they land. Format:_
   [navigation.ts](../../../lighting-react/src/navigation.ts) registry as
   a `live`-group entry with `Activity` icon and `visibility: "always"`
   (the perf endpoints are process-global — they don't need an active
-  project to return data). Type-check passes; in-browser smoke test
-  blocked by the same Node 18 / Vite issue called out in
-  `FU-TEST-VITE-BUILD`.
+  project to return data). Type-check passes; smoke-tested in-browser
+  against a running backend — `/diagnostics` redirect resolves to the
+  current project, the live-group sidebar entry highlights when active,
+  all three perf queries poll cleanly at 2 s with 200 OK, ArtNet table
+  populates from real universe data, cueEdit and MIDI empty states
+  render as expected with no console errors.
+- `FU-TEST-VITE-BUILD` — validated 2026-04-25 — `npm run build` (which
+  runs `tsc && vite build`) is clean on Node 24.12 LTS:
+  2344 modules transformed, dist artefacts emitted, no errors. Only
+  output is the informational "chunk > 500 kB" code-splitting hint —
+  unchanged from prior runs, not a regression. The Node 16.x → 24.x
+  bump on the dev machine resolved the original blocker; the wider
+  shell-init issue (Bash subshells inheriting an older Node from PATH
+  even after `nvm alias default lts/*`) is sidestepped by sourcing
+  `~/.nvm/nvm.sh` in the launch.json invocation.
