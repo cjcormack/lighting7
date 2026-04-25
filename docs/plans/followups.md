@@ -4,6 +4,11 @@ Consolidated follow-up items from the completed cue-authoring-unification and
 control-surface plans (Phases 0–9 landed through 2026-04-23). Each entry is
 self-contained so a Claude Code session can pick up one item cold.
 
+> **Status (2026-04-25)**: Active backlog drained. Every open item is
+> **Trigger-gated**, **Blocked**, or **Manual** — nothing is in **Ready**. Do
+> not poll this doc; consult it only when your current work might fire a
+> listed trigger (CLAUDE.md → "Follow-ups" explains when to look).
+
 ## How to use
 
 - **Pick items by slug ID** (e.g. `FU-PERF-COALESCE-WRITES`). Slugs are stable —
@@ -77,24 +82,46 @@ author flow.
 `PropertyChannelWriter` (Phase 7) can drive live-preview of the proposed
 rebind — implementation is unblocked.
 
+### `FU-FE-HEALTH-BADGE` — Shared `<HealthBadge>` for AssignmentHealth
+
+**Status**: Trigger (4th display surface)
+**Origin**: `moveInDark` row-list editor, 2026-04-25
+
+`AssignmentHealth` is now rendered in three places:
+[`DeadAssignmentsBanner.tsx`](https://github.com/cjcormack/lighting-react/blob/main/src/components/cues/editor/DeadAssignmentsBanner.tsx),
+[`DeadPresetAssignmentsBanner.tsx`](https://github.com/cjcormack/lighting-react/blob/main/src/components/presets/DeadPresetAssignmentsBanner.tsx),
+and `PropertyAssignmentsList.tsx`. All three use `describeHealth()` from
+`lib/healthDescriptor.ts` for the label, but each wraps it in its own
+`<Badge>` / `<Alert>` markup. Worth extracting a small `<HealthBadge
+health={...} />` once a fourth surface needs it (likely candidates: cue
+detail sheet, surface bindings list).
+
+**Trigger to revisit**: a new UI surface needs to render `AssignmentHealth` —
+extract then rather than now. Three call sites with stable display patterns
+isn't enough to overcome the cost of the abstraction.
+
+### `FU-FE-USE-TARGET-PROPERTIES` — Shared hook for fixture/group property lookup
+
+**Status**: Trigger (next consumer)
+**Origin**: `moveInDark` row-list editor, 2026-04-25
+
+`PropertyAssignmentsList.tsx::useTargetProperties` fetches a fixture's or
+group's available properties via `useFixtureListQuery` / `useGroupPropertiesQuery`
+and maps to a uniform shape. The same fetch-and-map pattern appears in
+`FixtureContent.tsx`, `GroupCard.tsx`, `PresetEditor.tsx`,
+`PresetLivePreview.tsx`, and the busking target panel — each one re-doing the
+property categorization inline. Extract a `useTargetProperties(selection)` hook
+in `src/hooks/` returning a flat `AvailableProperty[]` (and ideally a
+categorized variant for surfaces that need colour/dimmer/position grouping).
+
+**Trigger to revisit**: the next time a sixth consumer needs the same lookup,
+or a property-shape change forces a multi-file edit. Today's three
+implementations are stable; pulling them together is mechanical churn that
+risks breaking visual regressions until the next consumer pays for itself.
+
 ---
 
 ## Backend / composition model
-
-### `FU-BE-MOVE-IN-DARK` — `moveInDark` during outgoing fade
-
-**Status**: Blocked (needs moving-head fixture on test rig)
-**Origin**: Cue-authoring spec'd Phase 1, not yet implemented
-
-Current linear-interp crossfade path handles basic position fades. The
-"pre-apply incoming position during outgoing fade when outgoing intensity is
-0 at end" affordance (spec'd in
-[lighting-composition-model.md](../lighting-composition-model.md)) is still
-deferred. Scope small — `Layer3Resolver` already knows the `moveInDark` flag
-on each `Assignment`.
-
-**Blocker**: needs a real moving-head fixture on the test rig to validate the
-behaviour visually and tune the "pre-apply window" threshold empirically.
 
 ---
 
@@ -202,6 +229,32 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
 
+- `FU-BE-MOVE-IN-DARK` — commit 0593d81 (2026-04-25) — Layer3 position
+  snap during outgoing fade. Hardware blocker cleared by
+  `Fusion100SpotMkIIFixture` modes 8CH/15CH (both `WithDimmer` +
+  `WithPosition`). Schema: new `move_in_dark` column on
+  `cue_property_assignments` (default false), `moveInDark: Boolean` on
+  `CuePropertyAssignmentDto` plumbed through every DAO↔DTO conversion site.
+  Detection lives inside `Layer3Resolver.resolve()` via a new
+  `computeMoveInDarkArmed` pre-pass: a fixture target arms when a Position
+  contributor with the flag is accompanied by a *different* cue's
+  DIMMER-category contributor with value 0 on the same target (the
+  different-cue requirement excludes self-arming, which the LTP fallback
+  already handles correctly). Snap branch runs at the top of `composeLtp`
+  *before* the winner-by-priority logic — at fade start the outgoing cue
+  wins on the `fadeWeight` tie-break and would otherwise short-circuit to
+  outgoing.value. 7 new test cases in `Layer3ResolverTest` cover
+  snap-at-start/mid/end, no-flag baseline, bright-dimmer veto,
+  no-dimmer-row defensive, self-cue guard, group-expansion per-member, and
+  parallel bright-cue. Frontend (lighting-react) ships a new "Assignments"
+  tab in `CueTargetDetail` with a per-row editor (value + fade override +
+  delete) and a "Move in dark" checkbox visible only on `position` rows;
+  authored at the cue level and saved through the existing PUT path.
+  Browser-verified end-to-end: UI toggle → PUT → DB column → GET → reopen
+  → checkbox state restored. Stage-behaviour validation on the moving head
+  remains for the operator (3-cue stack with a dark cue between two
+  position-different cues, slow fade, `moveInDark = true` on the second
+  position row → head should be aimed for the entire fade-up).
 - `FU-PERF-COALESCE-WRITES` — cancelled 2026-04-25 — Profiled the cueEdit
   hot path via new opt-in
   [`CueEditProfileTest`](../../src/test/kotlin/uk/me/cormack/lighting7/perf/CueEditProfileTest.kt)
