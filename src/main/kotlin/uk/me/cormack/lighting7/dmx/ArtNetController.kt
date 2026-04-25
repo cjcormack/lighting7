@@ -30,6 +30,11 @@ class ArtNetController(override val universe: Universe, val address: String? = n
 
     private val listeners = ArrayList<ChannelChangeListener>()
 
+    private val packetCounter = PacketRateCounter()
+
+    val packetsPerSecond: Double get() = packetCounter.packetsPerSecond()
+    val totalPacketsSent: Long get() = packetCounter.total
+
     init {
         artnet.start()
 
@@ -297,6 +302,7 @@ class ArtNetController(override val universe: Universe, val address: String? = n
         } else {
             artnet.unicastDmx(address, universe.subnet, universe.universe, dmxData)
         }
+        packetCounter.record()
 
         if (changes.isNotEmpty()) {
             listeners.forEach {

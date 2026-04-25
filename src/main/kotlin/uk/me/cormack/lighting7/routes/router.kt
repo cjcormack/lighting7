@@ -23,6 +23,7 @@ fun Application.configureRouting(state: State) {
             routeApiRestGroups(state)
             routeApiRestAiChat(state)
             routeApiRestControlSurfaceTypes(state)
+            routeApiRestPerf(state)
         }
 
         routeKotlinCompilerServer(state)
