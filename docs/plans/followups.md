@@ -737,7 +737,7 @@ _Move items here as they land. Format:_
   DTO-level route tests, no `State.shutdown` for clean coroutine teardown
   (known-leaky GlobalScope pollers from `initializeShow` tolerated), no
   Hikari pool close in tearDown (3 tests × 8 connections acceptable).
-- `FU-PERF-INSTRUMENT-CUEEDIT` — commit TBD (2026-04-25) — Added
+- `FU-PERF-INSTRUMENT-CUEEDIT` — commit 1607d91 (2026-04-25) — Added
   [LatencyHistogram.kt](src/main/kotlin/uk/me/cormack/lighting7/perf/LatencyHistogram.kt):
   lock-free log2-bucketed nanosecond histogram (`AtomicLongArray` per bucket +
   `AtomicLong` count / sum / max with CAS-update on max). Default 32 buckets
