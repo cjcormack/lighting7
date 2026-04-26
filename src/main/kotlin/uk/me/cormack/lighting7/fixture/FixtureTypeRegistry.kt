@@ -28,6 +28,7 @@ object FixtureTypeRegistry {
      */
     private val fixtureClasses: List<KClass<out Fixture>> = listOf(
         Fusion100SpotMkIIFixture::class,
+        GenericDimmerFixture::class,
         HazerFixture::class,
         HexFixture::class,
         LaserworldCS1000RGBMk3Fixture::class,

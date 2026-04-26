@@ -575,6 +575,7 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 
 | Class | Type Key | Channels | Traits |
 |-------|----------|----------|--------|
+| `GenericDimmerFixture` | generic-dimmer | 1 | Dimmer |
 | `HexFixture` | hex | 12 | Dimmer, Colour, UV, Strobe |
 | `WhexFixture` | whex | 12 | Dimmer, Colour (RGBW variant) |
 | `QuadBarFixture` | quadbar | 1 | Settings only (show modes) |

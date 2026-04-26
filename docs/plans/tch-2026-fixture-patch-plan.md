@@ -29,13 +29,14 @@ Related docs:
 
 ## Status
 
-**Next action**: Most [Open Questions](#open-questions) are answered (2026-04-26 ChamSys
-session — Q1, Q3, Q4, Q6, Q7). Q2 (Robe ColorSpot 575 mode) and the China 2-Cell Blinder
-personality are still pending a second ChamSys pass; Q5 (personality export method) is
-resolved — we transcribe `EDIT HEAD` screenshots into Markdown under
-`Manuals/personalities/` because the on-disk `.hed` and `heads.all` are obfuscated.
-Start with [Tier 0](#tier-0--generic-1-channel-dimmer-fixture) (smallest, unblocks all
-the conventional patches in one go).
+**Next action**: Tier 0 is done (2026-04-26). Most [Open Questions](#open-questions) are
+answered (2026-04-26 ChamSys session — Q1, Q3, Q4, Q6, Q7). Q2 (Robe ColorSpot 575 mode)
+and the China 2-Cell Blinder personality are still pending a second ChamSys pass; Q5
+(personality export method) is resolved — we transcribe `EDIT HEAD` screenshots into
+Markdown under `Manuals/personalities/` because the on-disk `.hed` and `heads.all` are
+obfuscated. Next session: pick [Tier 1](#tier-1--simple-manual-backed-batch) (three
+manual-backed fixtures, no open questions block it) or [Tier 2](#tier-2--orbit-70-moving-head)
+(highest-quantity DMX fixture).
 
 **Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
 `fixture_patches` rows still need creating once the classes exist — tracked separately in
@@ -214,16 +215,21 @@ the conventional patches in one go).
 
 **Goal**: One fixture class covering all 19 conventional patches.
 
-- [ ] Create `src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/GenericDimmerFixture.kt`
+**Status: DONE (2026-04-26).** Class added, registered, tested, docs updated, full test
+suite green.
+
+- [x] Create `src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/GenericDimmerFixture.kt`
   - 1 channel, `WithDimmer` only.
   - `@FixtureType("generic-dimmer", manufacturer = "Generic", model = "Single-channel dimmer")`.
-- [ ] Verify `FixtureTypeRegistry` picks it up automatically (registry is reflection-driven —
-  no manual registration needed if the class lives under `fixture/dmx/`).
-- [ ] Add a unit test mirroring an existing simple-fixture test (channel write through
-  transaction round-trips).
-- [ ] Update `docs/fixtures-engineering.md` — add the new fixture to the "Existing Fixture
+- [x] Verify `FixtureTypeRegistry` picks it up. **Correction to plan**: the registry is
+  *not* reflection-driven; `fixtureClasses` in `FixtureTypeRegistry.kt` is an explicit list,
+  so `GenericDimmerFixture::class` had to be added to it. Confirmed via the existing
+  `instantiateByTypeKey works for all registered types` test.
+- [x] Add a unit test (channel write through transaction round-trips):
+  `src/test/kotlin/.../fixture/dmx/GenericDimmerFixtureTest.kt`.
+- [x] Update `docs/fixtures-engineering.md` — added to the "Existing Fixture
   Implementations" table at the bottom.
-- [ ] Run `./gradlew test`.
+- [x] Run `./gradlew test` — `BUILD SUCCESSFUL`.
 
 ---
 
