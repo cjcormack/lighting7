@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Patch — Stage Setup, Position, Beam & Gel</title>
+  <meta name="viewport" content="width=1440" />
+  <link rel="stylesheet" href="patch.css" />
+  <link rel="stylesheet" href="patch-mobile.css" />
+  <link rel="stylesheet" href="stage-view.css" />
+  <link rel="stylesheet" href="stage-toggle.css" />
+  <style>
+    body { background: #1a1a1d; min-height: 100vh; }
+    .pin {
+      width: 100%; height: 100%; display: block;
+    }
+    /* Each desktop artboard hosts its own scaled patch app at a fixed size */
+    .desk-frame {
+      width: 1100px; height: 720px;
+      border-radius: 10px; overflow: hidden;
+      background: #0a0a0b;
+      box-shadow: 0 20px 60px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04);
+    }
+    /* Notes inside artboards */
+    .lede {
+      max-width: 920px;
+      font-family: var(--sans, system-ui, sans-serif);
+      color: #d8d8dc; font-size: 14px; line-height: 1.55;
+      background: #18181b; padding: 18px 22px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.06);
+    }
+    .lede h2 { margin: 0 0 6px; font-size: 18px; color: #fff; font-weight: 600; }
+    .lede p { margin: 6px 0 0; color: #b3b3b8; }
+    .lede ul { margin: 8px 0 0; padding-left: 18px; }
+    .lede ul li { margin: 3px 0; color: #b3b3b8; }
+    .lede code {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 3px; font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <template id="__bundler_thumbnail">
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <rect width="200" height="200" fill="#1f4dde"/>
+      <g transform="translate(60,52)" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round">
+        <path d="M0 0 h80"/>
+        <path d="M16 0 v18"/>
+        <path d="M40 0 v18"/>
+        <path d="M64 0 v18"/>
+        <circle cx="40" cy="60" r="22" fill="rgba(255,220,140,.55)" stroke="rgba(255,220,140,.9)"/>
+      </g>
+    </svg>
+  </template>
+
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="ios-frame.jsx"></script>
+  <script type="text/babel" src="patch-data.jsx"></script>
+  <script type="text/babel" src="patch-bits.jsx"></script>
+  <script type="text/babel" src="patch-desktop.jsx"></script>
+  <script type="text/babel" src="patch-mobile.jsx"></script>
+  <script type="text/babel" src="stage-view.jsx"></script>
+  <script type="text/babel" src="stage-mobile.jsx"></script>
+  <script type="text/babel" src="stage-toggle.jsx"></script>
+  <script type="text/babel" src="stage-mobile-toggle.jsx"></script>
+
+  <script type="text/babel" data-presets="env,react">
+    function App() {
+      return (
+        <DesignCanvas>
+          <DCSection id="intro" title="Patch · Stage Setup + Stage Toggle" subtitle="Patch panel additions, plus a global Stage toggle from the topbar (available anywhere in the app).">
+            <DCArtboard id="lede" label="Notes" width={960} height={300}>
+              <div className="lede">
+                <h2>Two parallel explorations</h2>
+                <p><strong>Patch panel additions</strong> (Position, Beam, Gel) — three layouts of the new fields inside the Patch fixture sheet. Below those, three explorations of how the <strong>Stage toggle</strong> behaves when triggered from the topbar icon (no longer a sidebar entry — available on any page).</p>
+                <ul>
+                  <li><strong>A — Drop-down strip.</strong> Thin horizontal strip below the topbar. Compact, page stays visible, scrollable cards. Closest to the screenshot reference.</li>
+                  <li><strong>B — Slide-down panel.</strong> Half-height stage map drops in; underlying page is pushed/squished below.</li>
+                  <li><strong>C — Full overlay.</strong> Stage takes over the entire content area; sidebar and topbar remain so you can dismiss anytime.</li>
+                </ul>
+                <p style={{marginTop: 10, fontSize: 12.5, color: "#8d8d96"}}>Each variation has three artboards: <strong>closed</strong> (default), <strong>open</strong>, <strong>open with a fixture selected</strong> showing the inspector strip. Mobile uses a floating topbar trigger that opens a full-screen Stage overlay.</p>
+              </div>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="desktop" title="Desktop" subtitle="Full app shell · side panel docked right">
+            <DCArtboard id="A-desk" label="A · Inline stage map" width={1100} height={720}>
+              <div className="desk-frame"><PvVariationA fixtureId="spot-l" /></div>
+            </DCArtboard>
+            <DCArtboard id="B-desk" label="B · Numeric XY pad" width={1100} height={720}>
+              <div className="desk-frame"><PvVariationB fixtureId="spot-r" /></div>
+            </DCArtboard>
+            <DCArtboard id="C-desk" label="C · Position-driven (Generic Dimmer)" width={1100} height={720}>
+              <div className="desk-frame"><PvVariationC fixtureId="sdff" /></div>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="stage-toggle-A" title="Stage Toggle · A — Drop-down strip" subtitle="Topbar icon → thin strip of fixture cards drops below topbar (page stays visible)">
+            <DCArtboard id="A1-closed" label="Closed (default)" width={1100} height={720}>
+              <div className="desk-frame">
+                <StageToggleHost mode="strip" defaultOpen={false}>
+                  <PvChrome />
+                </StageToggleHost>
+              </div>
+            </DCArtboard>
+            <DCArtboard id="A2-open" label="Open · strip pushes content" width={1100} height={720}>
+              <div className="desk-frame">
+                <StageToggleHost mode="strip" defaultOpen={true}>
+                  <PvChrome />
+                </StageToggleHost>
+              </div>
+            </DCArtboard>
+            <DCArtboard id="A3-selected" label="Open · fixture selected (inspector below)" width={1100} height={720}>
+              <div className="desk-frame">
+                <StageToggleHost mode="strip" defaultOpen={true} defaultSelectedId="hex3">
+                  <PvChrome />
+                </StageToggleHost>
+              </div>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="stage-toggle-B" title="Stage Toggle · B — Slide-down panel" subtitle="Topbar icon → half-height stage map slides down; page squished below">
+            <DCArtboard id="B1-closed" label="Closed" width={1100} height={720}>
+              <div className="desk-frame">
+                <StageToggleHost mode="panel" defaultOpen={false}>
+                  <PvChrome />
+                </StageToggleHost>
+              </div>
+            </DCArtboard>
+            <DCArtboard id="B2-open" label="Open · panel pushed down" width={1100} height={720}>
+              <div className="desk-frame">
+                <StageToggleHost mode="panel" defaultOpen={true}>
+                  <PvChrome />
+                </StageToggleHost>
+              </div>
+            </DCArtboard>
+            <DCArtboard id="B3-selected" label="Open · fixture selected" width={1100} height={720}>
+              <div className="desk-frame">
+                <StageToggleHost mode="panel" defaultOpen={true} defaultSelectedId="hex3">
+                  <PvChrome />
+                </StageToggleHost>
+              </div>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="stage-toggle-C" title="Stage Toggle · C — Full overlay" subtitle="Topbar icon → stage covers the whole content area (sidebar + topbar still visible)">
+            <DCArtboard id="C1-closed" label="Closed" width={1100} height={720}>
+              <div className="desk-frame">
+                <StageToggleHost mode="overlay" defaultOpen={false}>
+                  <PvChrome />
+                </StageToggleHost>
+              </div>
+            </DCArtboard>
+            <DCArtboard id="C2-open" label="Open · full overlay" width={1100} height={720}>
+              <div className="desk-frame">
+                <StageToggleHost mode="overlay" defaultOpen={true}>
+                  <PvChrome />
+                </StageToggleHost>
+              </div>
+            </DCArtboard>
+            <DCArtboard id="C3-selected" label="Open · fixture selected (inspector at bottom)" width={1100} height={720}>
+              <div className="desk-frame">
+                <StageToggleHost mode="overlay" defaultOpen={true} defaultSelectedId="hex3">
+                  <PvChrome />
+                </StageToggleHost>
+              </div>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="stage-mob" title="Stage Toggle · Mobile" subtitle="Floating topbar icon → full-screen Stage overlay">
+            <DCArtboard id="MA-closed" label="Closed (Patch List)" width={420} height={900}>
+              <IOSDevice dark={true} width={402} height={874}>
+                <MobileStageToggleHost defaultOpen={false}>
+                  <div className="pvm-mount"><PvmPatchList /></div>
+                </MobileStageToggleHost>
+              </IOSDevice>
+            </DCArtboard>
+            <DCArtboard id="MB-open" label="Open · full-screen stage" width={420} height={900}>
+              <IOSDevice dark={true} width={402} height={874}>
+                <MobileStageToggleHost defaultOpen={true}>
+                  <div className="pvm-mount"><PvmPatchList /></div>
+                </MobileStageToggleHost>
+              </IOSDevice>
+            </DCArtboard>
+            <DCArtboard id="MC-selected" label="Open · fixture selected (sheet)" width={420} height={900}>
+              <IOSDevice dark={true} width={402} height={874}>
+                <MobileStageToggleHost defaultOpen={true} defaultSelectedId="hex3">
+                  <div className="pvm-mount"><PvmPatchList /></div>
+                </MobileStageToggleHost>
+              </IOSDevice>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="mobile" title="Patch Sheet · Mobile (iOS)" subtitle="Full-screen Patch Fixture sheet">
+            <DCArtboard id="A-mob" label="A · Drag-on-stage map" width={420} height={900}>
+              <IOSDevice dark={true} width={402} height={874}>
+                <div className="pvm-mount"><PvmVariationA /></div>
+              </IOSDevice>
+            </DCArtboard>
+            <DCArtboard id="B-mob" label="B · Numeric XY pad" width={420} height={900}>
+              <IOSDevice dark={true} width={402} height={874}>
+                <div className="pvm-mount"><PvmVariationB /></div>
+              </IOSDevice>
+            </DCArtboard>
+            <DCArtboard id="C-mob" label="C · Position-driven · Generic Dimmer" width={420} height={900}>
+              <IOSDevice dark={true} width={402} height={874}>
+                <div className="pvm-mount"><PvmVariationC /></div>
+              </IOSDevice>
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
