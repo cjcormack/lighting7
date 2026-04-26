@@ -5,10 +5,8 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
-import kotlin.math.roundToInt
 
 /**
  * Equinox Scantastic 4 (EQLED55) - A 4-head LED scanner bar.
@@ -76,27 +74,6 @@ sealed class Scantastic4Fixture(
     enum class SoundActive(override val level: UByte) : DmxFixtureSettingValue {
         OFF(0u),
         ON(128u);
-    }
-
-    // ============================================
-    // Strobe Implementation
-    // ============================================
-
-    /**
-     * Strobe control. 0 = no strobe, 1-255 = strobe slow to fast.
-     */
-    class StrobeChannel(
-        transaction: ControllerTransaction?,
-        universe: Universe,
-        channelNo: Int
-    ) : DmxSlider(transaction, universe, channelNo), Strobe {
-        override fun fullOn() {
-            value = 0u
-        }
-
-        override fun strobe(intensity: UByte) {
-            value = intensity
-        }
     }
 
     // ============================================
@@ -182,7 +159,10 @@ sealed class Scantastic4Fixture(
         val shutter = DmxFixtureSetting(transaction, universe, firstChannel, Shutter.entries.toTypedArray())
 
         @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
-        override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
+        override val strobe = BandedStrobeChannel(
+            transaction, universe, firstChannel + 1,
+            strobeMin = 0u, strobeMax = 255u,
+        )
 
         @FixtureProperty("Colour/pattern selector 1", category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.SECONDARY)
         val colourPattern1 = DmxSlider(transaction, universe, firstChannel + 2)
@@ -288,7 +268,10 @@ sealed class Scantastic4Fixture(
         val shutter = DmxFixtureSetting(transaction, universe, firstChannel, Shutter.entries.toTypedArray())
 
         @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
-        override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
+        override val strobe = BandedStrobeChannel(
+            transaction, universe, firstChannel + 1,
+            strobeMin = 0u, strobeMax = 255u,
+        )
 
         @FixtureProperty("Colour/pattern selector 1", category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.SECONDARY)
         val colourPattern1 = DmxSlider(transaction, universe, firstChannel + 2)

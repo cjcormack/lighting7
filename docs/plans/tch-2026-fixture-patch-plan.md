@@ -30,10 +30,9 @@ Related docs:
 ## Status
 
 **Next action**: All fixture-class tiers (0–8) are done (2026-04-26). All
-[Open Questions](#open-questions) are answered. The only remaining patch work
-is [Tier 9](#tier-9--db-patch-rows) (DB patch rows / universe configs).
-[Tier 10](#tier-10--shared-bandedstrobechannel-refactor) is an independent
-refactor surfaced by the Tier 8 simplify pass — can run any time.
+[Open Questions](#open-questions) are answered. [Tier 10](#tier-10--shared-bandedstrobechannel-refactor)
+done (2026-04-26). The only remaining patch work is
+[Tier 9](#tier-9--db-patch-rows) (DB patch rows / universe configs).
 
 **Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
 `fixture_patches` rows still need creating once the classes exist — tracked separately in
@@ -573,6 +572,22 @@ Two ways to do this:
 
 ## Tier 10 — Shared `BandedStrobeChannel` refactor
 
+**Status: DONE (2026-04-26).** New shared class
+[`BandedStrobeChannel.kt`](../../src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/BandedStrobeChannel.kt)
+landed and 14 fixtures collapsed onto it. Three fixtures
+(`Fusion100SpotMkII`, `LedLightbar12Pixel`, `SlenderBeamBarQuad`) keep a
+thin subclass that overrides `strobe(0)` to short-circuit to `fullOn()`,
+preserving the original quirk where intensity 0 means "no strobe." Two
+fixtures (`MartinMac250`, `RobeColorSpot575`) pass `max = strobeMax` to
+keep their slider-clamp safety; their `lampOn()` / `lampOff()` / `reset()`
+methods plus the band/level constants moved to the Mode-class companion
+since the standalone `StrobeChannel` was deleted. Per-fixture tests were
+updated to point at the new constant locations. `WhexFixture.DmxStrobe`
+was intentionally left as-is — the formula `(255F / 245F * intensity)`
+appears inverted (mirror image of [HexFixture](../../src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/HexFixture.kt)
+which uses `(245F / 255F * intensity)`); preserving "no behaviour change"
+trumped the visible bug, so a separate fix is wanted before refactoring.
+
 **Goal**: Collapse the ~12 near-identical `StrobeChannel` inner classes scattered
 across the fixture codebase into a single shared abstraction.
 
@@ -632,17 +647,19 @@ explicit `lampOn()` / `lampOff()` / `reset()` methods.
 
 **Approach**:
 
-- [ ] Add `BandedStrobeChannel` next to `DmxSlider.kt` in `fixture/dmx/`.
-- [ ] Replace each fixture's `StrobeChannel` inner class with either a direct
+- [x] Add `BandedStrobeChannel` next to `DmxSlider.kt` in `fixture/dmx/`.
+- [x] Replace each fixture's `StrobeChannel` inner class with either a direct
       `BandedStrobeChannel(...)` call site (most fixtures) or a thin subclass
-      (MartinMac250 — to keep its lamp/reset methods).
-- [ ] Each fixture's existing `STROBE_MIN` / `STROBE_MAX` companion constants
-      stay where they are (they are still authoritative personality data) —
-      delete only the duplicated `class StrobeChannel(...)` definition.
-- [ ] Update each fixture's per-fixture test to construct the new strobe class
+      (MartinMac250 keeps its lamp/reset methods on the Mode4Ch companion;
+      Fusion100Spot / LedLightbar12Pixel / SlenderBeamBarQuad subclass
+      `BandedStrobeChannel` to preserve their `strobe(0) → fullOn()` quirk).
+- [x] Each fixture's existing `STROBE_MIN` / `STROBE_MAX` companion constants
+      moved out of the deleted `StrobeChannel` class onto the parent fixture
+      class (or its Mode-class companion); names unchanged. Tests updated to
+      point at the new locations.
+- [x] Update each fixture's per-fixture test to construct the new strobe class
       with the band constants and confirm the same channel writes.
-- [ ] `./gradlew test`. The diff should be roughly net-negative ~150 lines
-      across the fixture/test code.
+- [x] `./gradlew test` — `BUILD SUCCESSFUL`.
 
 **Out of scope**:
 

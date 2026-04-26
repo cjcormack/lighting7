@@ -4,11 +4,9 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
-import kotlin.math.roundToInt
 
 /**
  * Martin MAC 250 — discharge moving-head spot (original variant).
@@ -50,62 +48,6 @@ sealed class MartinMac250Fixture(
         // TODO: MODE_2 (11, "Mode 2 (11-channel)")
         // TODO: MODE_3 (13, "Mode 3 (13-channel)")
         MODE_4(13, "Mode 4 (13-channel, extended)"),
-    }
-
-    /**
-     * Channel 1 — shutter / strobe / lamp / reset.
-     *
-     * Full band layout from the personality:
-     * - 000–019 Closed
-     * - 020–049 Open
-     * - 050–072 Strobe F→S
-     * - 080–099 Pulse Open
-     * - 100–119 Pulse Close
-     * - 128–207 Random strobe / open / close variants
-     * - 208–217 Reset
-     * - 228–237 Lamp On
-     * - 248–255 Lamp Off
-     *
-     * The [Strobe] interface only exposes the safe band (0–[STROBE_BAND_MAX]). The
-     * underlying [DmxSlider] is clamped to that range, so neither [Strobe] nor
-     * raw `value` writes can wander into Reset/Lamp territory. The pulse and
-     * random-strobe bands are not exposed — call them with raw transaction
-     * writes if a script needs them.
-     *
-     * Lamp on/off and reset are explicit methods on [Mode4Ch] that bypass the
-     * slider clamp.
-     */
-    class StrobeChannel(
-        transaction: ControllerTransaction?,
-        universe: Universe,
-        channelNo: Int,
-    ) : DmxSlider(transaction, universe, channelNo, max = STROBE_BAND_MAX), Strobe {
-        override fun fullOn() {
-            value = OPEN_DEFAULT
-        }
-
-        override fun strobe(intensity: UByte) {
-            val span = (STROBE_BAND_MAX - STROBE_BAND_MIN).toFloat()
-            value = ((span / 255F * intensity.toFloat()).roundToInt() + STROBE_BAND_MIN.toInt()).toUByte()
-        }
-
-        companion object {
-            /** Default open value (mid of 020–049 Open band). */
-            const val OPEN_DEFAULT: UByte = 35u
-
-            /** Lower bound of the strobe band (050–072). */
-            const val STROBE_BAND_MIN: UByte = 50u
-
-            /**
-             * Upper bound of the strobe band; also the slider clamp, so neither
-             * `Strobe` nor raw `value` writes can wander into Reset/Lamp bands.
-             */
-            const val STROBE_BAND_MAX: UByte = 72u
-
-            const val RESET_LEVEL: UByte = 208u
-            const val LAMP_ON_LEVEL: UByte = 228u
-            const val LAMP_OFF_LEVEL: UByte = 248u
-        }
     }
 
     /**
@@ -234,8 +176,29 @@ sealed class MartinMac250Fixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode4Ch =
             Mode4Ch(this, transaction)
 
+        /**
+         * Channel 1 — shutter / strobe / lamp / reset.
+         *
+         * Full personality bands: 000–019 Closed, 020–049 Open, 050–072
+         * Strobe F→S, 080–099 Pulse Open, 100–119 Pulse Close, 128–207
+         * Random strobe variants, 208–217 Reset, 228–237 Lamp On,
+         * 248–255 Lamp Off.
+         *
+         * Only the safe band (0–[STROBE_BAND_MAX]) is reachable through the
+         * [WithStrobe] property — the underlying slider's `max` clamp keeps
+         * raw `value` writes from straying into Reset/Lamp territory. Pulse
+         * and random-strobe bands are reachable only via raw transaction
+         * writes. Lamp on/off and reset are explicit methods on this class
+         * that bypass the slider clamp.
+         */
         @FixtureProperty(category = PropertyCategory.STROBE)
-        override val strobe = StrobeChannel(transaction, universe, firstChannel)
+        override val strobe = BandedStrobeChannel(
+            transaction, universe, firstChannel,
+            strobeMin = STROBE_BAND_MIN,
+            strobeMax = STROBE_BAND_MAX,
+            fullOnValue = OPEN_DEFAULT,
+            max = STROBE_BAND_MAX,
+        )
 
         @FixtureProperty(category = PropertyCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 1)
@@ -294,7 +257,7 @@ sealed class MartinMac250Fixture(
          * stagger the calls. Not FX-targetable by design.
          */
         fun lampOn() {
-            nonNullTransaction.setValue(universe, firstChannel, StrobeChannel.LAMP_ON_LEVEL)
+            nonNullTransaction.setValue(universe, firstChannel, LAMP_ON_LEVEL)
         }
 
         /**
@@ -303,7 +266,7 @@ sealed class MartinMac250Fixture(
          * re-struck. Not FX-targetable by design.
          */
         fun lampOff() {
-            nonNullTransaction.setValue(universe, firstChannel, StrobeChannel.LAMP_OFF_LEVEL)
+            nonNullTransaction.setValue(universe, firstChannel, LAMP_OFF_LEVEL)
         }
 
         /**
@@ -311,7 +274,26 @@ sealed class MartinMac250Fixture(
          * shutter channel. Not FX-targetable by design.
          */
         fun reset() {
-            nonNullTransaction.setValue(universe, firstChannel, StrobeChannel.RESET_LEVEL)
+            nonNullTransaction.setValue(universe, firstChannel, RESET_LEVEL)
+        }
+
+        companion object {
+            /** Default open value (mid of 020–049 Open band). */
+            const val OPEN_DEFAULT: UByte = 35u
+
+            /** Lower bound of the strobe band (050–072). */
+            const val STROBE_BAND_MIN: UByte = 50u
+
+            /**
+             * Upper bound of the strobe band; also the slider clamp, so
+             * neither [WithStrobe] writes nor raw `value` writes can
+             * wander into Reset/Lamp bands.
+             */
+            const val STROBE_BAND_MAX: UByte = 72u
+
+            const val RESET_LEVEL: UByte = 208u
+            const val LAMP_ON_LEVEL: UByte = 228u
+            const val LAMP_OFF_LEVEL: UByte = 248u
         }
     }
 }

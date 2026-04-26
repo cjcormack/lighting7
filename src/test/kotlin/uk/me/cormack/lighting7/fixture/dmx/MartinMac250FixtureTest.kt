@@ -31,7 +31,7 @@ class MartinMac250FixtureTest {
 
         transaction.apply()
 
-        assertEquals(MartinMac250Fixture.StrobeChannel.OPEN_DEFAULT, controller.getValue(1))
+        assertEquals(MartinMac250Fixture.Mode4Ch.OPEN_DEFAULT, controller.getValue(1))
         assertEquals(200u.toUByte(), controller.getValue(2))
         assertEquals(176u.toUByte(), controller.getValue(3))
         assertEquals(40u.toUByte(), controller.getValue(4))
@@ -54,20 +54,20 @@ class MartinMac250FixtureTest {
 
         fixture.strobe.strobe(0u)
         transaction.apply()
-        assertEquals(MartinMac250Fixture.StrobeChannel.STROBE_BAND_MIN, controller.getValue(1))
+        assertEquals(MartinMac250Fixture.Mode4Ch.STROBE_BAND_MIN, controller.getValue(1))
 
         fixture.strobe.strobe(255u)
         transaction.apply()
-        assertEquals(MartinMac250Fixture.StrobeChannel.STROBE_BAND_MAX, controller.getValue(1))
+        assertEquals(MartinMac250Fixture.Mode4Ch.STROBE_BAND_MAX, controller.getValue(1))
 
         fixture.strobe.fullOn()
         transaction.apply()
-        assertEquals(MartinMac250Fixture.StrobeChannel.OPEN_DEFAULT, controller.getValue(1))
+        assertEquals(MartinMac250Fixture.Mode4Ch.OPEN_DEFAULT, controller.getValue(1))
 
         // Raw value writes are clamped to the strobe-band max — Reset/Lamp bands unreachable.
         fixture.strobe.value = 250u
         transaction.apply()
-        assertEquals(MartinMac250Fixture.StrobeChannel.STROBE_BAND_MAX, controller.getValue(1))
+        assertEquals(MartinMac250Fixture.Mode4Ch.STROBE_BAND_MAX, controller.getValue(1))
     }
 
     @Test

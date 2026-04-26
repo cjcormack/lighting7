@@ -4,13 +4,11 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
-import kotlin.math.roundToInt
 
 /**
  * Gear4music Orbit-70 — 7 × 10W RGBW LED mini moving head.
@@ -38,45 +36,6 @@ sealed class Gear4MusicOrbit70Fixture(
     ) : DmxChannelMode {
         // TODO: MODE_9CH (9, "9-Channel")
         MODE_13CH(13, "13-Channel"),
-    }
-
-    /**
-     * Channel 7 — strobe / shutter band layout from the manual:
-     * - 000–007 LEDs off
-     * - 008–015 LED quick start
-     * - 016–131 strobe slow → fast
-     * - 132–139 LED quick start
-     * - 140–181 slow start, quick close (pulse)
-     * - 182–189 LED quick start
-     * - 190–231 quick start, slow close (pulse)
-     * - 232–239 LED quick start
-     * - 240–247 random flash
-     * - 248–255 LED open switch (full on)
-     *
-     * The [Strobe] interface only exposes the linear strobe band (016–131)
-     * and the LED-open band (248–255). Pulse, quick-start and random-flash
-     * bands are reachable by writing the raw channel value if a script
-     * needs them.
-     */
-    class StrobeChannel(
-        transaction: ControllerTransaction?,
-        universe: Universe,
-        channelNo: Int,
-    ) : DmxSlider(transaction, universe, channelNo), Strobe {
-        override fun fullOn() {
-            value = LED_OPEN
-        }
-
-        override fun strobe(intensity: UByte) {
-            val span = (STROBE_MAX - STROBE_MIN).toFloat()
-            value = ((span / 255F * intensity.toFloat()).roundToInt() + STROBE_MIN.toInt()).toUByte()
-        }
-
-        companion object {
-            const val STROBE_MIN: UByte = 16u
-            const val STROBE_MAX: UByte = 131u
-            const val LED_OPEN: UByte = 248u
-        }
     }
 
     /**
@@ -150,8 +109,22 @@ sealed class Gear4MusicOrbit70Fixture(
         @FixtureProperty(category = PropertyCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
+        /**
+         * Channel 7 — strobe / shutter. Personality bands:
+         * 000–007 LEDs off, 008–015 quick start, 016–131 strobe slow→fast,
+         * 132–139 quick start, 140–181 pulse (slow→quick close), 182–189 quick
+         * start, 190–231 pulse (quick→slow close), 232–239 quick start,
+         * 240–247 random flash, 248–255 LED open (full on).
+         *
+         * Only the linear strobe band (016–131) and the LED-open band
+         * (248–255) are exposed via [WithStrobe]. Pulse, quick-start and
+         * random-flash bands are reachable by writing the raw channel value.
+         */
         @FixtureProperty(category = PropertyCategory.STROBE)
-        override val strobe = StrobeChannel(transaction, universe, firstChannel + 6)
+        override val strobe = BandedStrobeChannel(
+            transaction, universe, firstChannel + 6,
+            strobeMin = STROBE_MIN, strobeMax = STROBE_MAX, fullOnValue = LED_OPEN,
+        )
 
         @FixtureProperty(category = PropertyCategory.COLOUR)
         override val rgbColour = DmxColour(
@@ -171,5 +144,11 @@ sealed class Gear4MusicOrbit70Fixture(
         val program = DmxFixtureSetting(
             transaction, universe, firstChannel + 12, Program.entries.toTypedArray(),
         )
+
+        companion object {
+            const val STROBE_MIN: UByte = 16u
+            const val STROBE_MAX: UByte = 131u
+            const val LED_OPEN: UByte = 248u
+        }
     }
 }

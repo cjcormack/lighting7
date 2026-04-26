@@ -4,13 +4,11 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
-import kotlin.math.roundToInt
 
 /**
  * IMG Stageline Wash-42LED (Monacor 38.7740) — 7 × 10W RGBW LED moving head wash.
@@ -36,40 +34,6 @@ sealed class ImgStageLineWash42LedFixture(
     ) : DmxChannelMode {
         // TODO: MODE_8CH (8, "8-Channel")
         MODE_13CH(13, "13-Channel"),
-    }
-
-    /**
-     * Channel 6 layout (shared dimmer + strobe + open):
-     * - 0–[DIM_MAX]      dimmer dark → bright (0–7 reads as dark, 8–134 ramps)
-     * - [STROBE_MIN]–[STROBE_MAX] strobe slow → fast
-     * - [FULL_ON]–255   max brightness (overrides dimmer)
-     *
-     * Modelled as two properties on the same channel: a [DmxSlider] dimmer
-     * clamped to 0–[DIM_MAX], and a [Strobe] that writes the strobe band on
-     * `strobe(intensity)` and the "max brightness" band on `fullOn()`.
-     * Setting the strobe overrides the dimmer; this matches how the fixture
-     * behaves at the DMX level.
-     */
-    class StrobeChannel(
-        transaction: ControllerTransaction?,
-        universe: Universe,
-        channelNo: Int,
-    ) : DmxSlider(transaction, universe, channelNo), Strobe {
-        override fun fullOn() {
-            value = FULL_ON
-        }
-
-        override fun strobe(intensity: UByte) {
-            val span = (STROBE_MAX - STROBE_MIN).toFloat()
-            value = ((span / 255F * intensity.toFloat()).roundToInt() + STROBE_MIN.toInt()).toUByte()
-        }
-
-        companion object {
-            const val DIM_MAX: UByte = 134u
-            const val STROBE_MIN: UByte = 135u
-            const val STROBE_MAX: UByte = 239u
-            const val FULL_ON: UByte = 240u
-        }
     }
 
     /** Channel 11 — colour macros. 0–7 hands control back to channels 7–10 (direct RGBW). */
@@ -176,13 +140,28 @@ sealed class ImgStageLineWash42LedFixture(
         @FixtureProperty("Pan/tilt movement speed (fast → slow)", category = PropertyCategory.SPEED)
         val movementSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
+        /**
+         * Channel 6 (shared dimmer + strobe + open):
+         * - 0–[DIM_MAX]              dimmer dark → bright (0–7 reads as dark, 8–134 ramps)
+         * - [STROBE_MIN]–[STROBE_MAX] strobe slow → fast
+         * - [FULL_ON]–255            max brightness (overrides dimmer)
+         *
+         * Modelled as two properties on the same channel: a [DmxSlider] dimmer
+         * clamped to 0–[DIM_MAX], and a [BandedStrobeChannel] that writes the
+         * strobe band on `strobe(intensity)` and the "max brightness" value on
+         * `fullOn()`. Setting the strobe overrides the dimmer; this matches
+         * how the fixture behaves at the DMX level.
+         */
         @FixtureProperty(category = PropertyCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(
-            transaction, universe, firstChannel + 5, max = StrobeChannel.DIM_MAX,
+            transaction, universe, firstChannel + 5, max = DIM_MAX,
         )
 
         @FixtureProperty(category = PropertyCategory.STROBE)
-        override val strobe = StrobeChannel(transaction, universe, firstChannel + 5)
+        override val strobe = BandedStrobeChannel(
+            transaction, universe, firstChannel + 5,
+            strobeMin = STROBE_MIN, strobeMax = STROBE_MAX, fullOnValue = FULL_ON,
+        )
 
         @FixtureProperty(category = PropertyCategory.COLOUR)
         override val rgbColour = DmxColour(
@@ -207,5 +186,12 @@ sealed class ImgStageLineWash42LedFixture(
         val program = DmxFixtureSetting(
             transaction, universe, firstChannel + 12, Program.entries.toTypedArray(),
         )
+
+        companion object {
+            const val DIM_MAX: UByte = 134u
+            const val STROBE_MIN: UByte = 135u
+            const val STROBE_MAX: UByte = 239u
+            const val FULL_ON: UByte = 240u
+        }
     }
 }

@@ -5,10 +5,8 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
-import kotlin.math.roundToInt
 
 /**
  * Kam Liteobar 252 — three-cell LED bar (RGB only).
@@ -66,31 +64,6 @@ class KamLiteobar252Fixture(
     }
 
     /**
-     * Channel 2 strobe. Personality lists `001–255 Strobe S>F` with no
-     * sub-bands — modelled like the Varytec Easymove: 0 = constant on
-     * (no strobe), 1–255 = slow → fast.
-     */
-    class StrobeChannel(
-        transaction: ControllerTransaction?,
-        universe: Universe,
-        channelNo: Int,
-    ) : DmxSlider(transaction, universe, channelNo), Strobe {
-        override fun fullOn() {
-            value = 0u
-        }
-
-        override fun strobe(intensity: UByte) {
-            val span = (STROBE_MAX - STROBE_MIN).toFloat()
-            value = ((span / 255F * intensity.toFloat()).roundToInt() + STROBE_MIN.toInt()).toUByte()
-        }
-
-        companion object {
-            const val STROBE_MIN: UByte = 1u
-            const val STROBE_MAX: UByte = 255u
-        }
-    }
-
-    /**
      * One of three RGB cells (CH3–5, CH6–8, CH9–11). Each cell exposes
      * [WithColour] independently so it can be FX-targeted via the
      * [MultiElementFixture] elements list.
@@ -126,8 +99,16 @@ class KamLiteobar252Fixture(
         transaction, universe, firstChannel, Macro.entries.toTypedArray(),
     )
 
+    /**
+     * Channel 2 strobe. Personality lists `001–255 Strobe S>F` with no
+     * sub-bands — modelled like the Varytec Easymove: 0 = constant on
+     * (no strobe), 1–255 = slow → fast.
+     */
     @FixtureProperty(category = PropertyCategory.STROBE)
-    override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
+    override val strobe = BandedStrobeChannel(
+        transaction, universe, firstChannel + 1,
+        strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,
+    )
 
     override val elements: List<Cell> = (0 until 3).map { idx ->
         Cell(idx, transaction, firstChannel + 2 + (idx * 3))
@@ -138,5 +119,10 @@ class KamLiteobar252Fixture(
     fun cell(index: Int): Cell {
         require(index in 0 until 3) { "Cell index must be 0-2, got $index" }
         return elements[index]
+    }
+
+    companion object {
+        const val STROBE_MIN: UByte = 1u
+        const val STROBE_MAX: UByte = 255u
     }
 }

@@ -54,11 +54,11 @@ class China2CellLedBlinderFixtureTest {
 
         fixture.strobe.strobe(0u)
         transaction.apply()
-        assertEquals(China2CellLedBlinderFixture.StrobeChannel.STROBE_MIN, controller.getValue(2))
+        assertEquals(China2CellLedBlinderFixture.STROBE_MIN, controller.getValue(2))
 
         fixture.strobe.strobe(255u)
         transaction.apply()
-        assertEquals(China2CellLedBlinderFixture.StrobeChannel.STROBE_MAX, controller.getValue(2))
+        assertEquals(China2CellLedBlinderFixture.STROBE_MAX, controller.getValue(2))
 
         fixture.strobe.fullOn()
         transaction.apply()

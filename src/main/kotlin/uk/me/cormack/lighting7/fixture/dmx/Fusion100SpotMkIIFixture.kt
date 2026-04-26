@@ -4,11 +4,9 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
-import kotlin.math.roundToInt
 
 /**
  * Equinox Fusion 100 Spot MKII - A compact moving head spot fixture.
@@ -146,32 +144,6 @@ sealed class Fusion100SpotMkIIFixture(
         HIGH_SPEED_MOTOR_MOVEMENT(51u),
         LOW_SPEED_MOTOR_MOVEMENT(151u),
         RESET(251u);
-    }
-
-    // ============================================
-    // Strobe Implementation
-    // ============================================
-
-    /**
-     * Strobe control for the Fusion 100 Spot MKII (15CH mode CH7).
-     * 0-9 = blackout/off, 10-245 = strobe slow to fast, 246-255 = LED on.
-     */
-    class StrobeChannel(
-        transaction: ControllerTransaction?,
-        universe: Universe,
-        channelNo: Int
-    ) : DmxSlider(transaction, universe, channelNo), Strobe {
-        override fun fullOn() {
-            value = 246u
-        }
-
-        override fun strobe(intensity: UByte) {
-            value = if (intensity == 0u.toUByte()) {
-                246u // full on
-            } else {
-                ((235F / 255F * intensity.toFloat()).roundToInt() + 10).toUByte()
-            }
-        }
     }
 
     // ============================================
@@ -340,8 +312,17 @@ sealed class Fusion100SpotMkIIFixture(
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel + 5)
 
+        /**
+         * 15CH mode CH7 strobe. 0–9 = blackout/off, 10–245 = strobe slow →
+         * fast, 246–255 = LED on. `strobe(0)` short-circuits to `fullOn()`
+         * to preserve "intensity 0 = no strobe, keep LED open."
+         */
         @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
-        override val strobe = StrobeChannel(transaction, universe, firstChannel + 6)
+        override val strobe = BandedStrobeChannel(
+            transaction, universe, firstChannel + 6,
+            strobeMin = 10u, strobeMax = 245u, fullOnValue = 246u,
+            zeroIntensityIsFullOn = true,
+        )
 
         @FixtureProperty("Colour", category = PropertyCategory.COLOUR)
         val colour = DmxFixtureSetting(transaction, universe, firstChannel + 7, Colour.entries.toTypedArray())

@@ -94,11 +94,11 @@ class ShehdsLed19RgbwFixtureTest {
 
         fixture.strobe.strobe(0u)
         transaction.apply()
-        assertEquals(ShehdsLed19RgbwFixture.StrobeChannel.STROBE_MIN, controller.getValue(8))
+        assertEquals(ShehdsLed19RgbwFixture.STROBE_MIN, controller.getValue(8))
 
         fixture.strobe.strobe(255u)
         transaction.apply()
-        assertEquals(ShehdsLed19RgbwFixture.StrobeChannel.STROBE_MAX, controller.getValue(8))
+        assertEquals(ShehdsLed19RgbwFixture.STROBE_MAX, controller.getValue(8))
 
         fixture.strobe.fullOn()
         transaction.apply()

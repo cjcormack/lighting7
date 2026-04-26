@@ -4,11 +4,9 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
-import kotlin.math.roundToInt
 
 /**
  * Robe ColorSpot 575 AT — discharge moving-head spot with CMY-free dual
@@ -49,55 +47,6 @@ sealed class RobeColorSpot575Fixture(
         MODE_2(19, "Mode 2 (19-channel)"),
         // TODO: MODE_3 (29, "Mode 3 (29-channel)")
         // TODO: MODE_4 (21, "Mode 4 (21-channel)")
-    }
-
-    /**
-     * Channel 18 — shutter / strobe.
-     *
-     * Bands (from the Robe DMX chart):
-     * - 000–031 Shutter closed
-     * - 032–063 No function (shutter open)
-     * - 064–095 Strobe slow→fast
-     * - 096–127 No function (shutter open)
-     * - 128–143 Opening pulse in sequences slow→fast
-     * - 144–159 Closing pulse in sequences fast→slow
-     * - 160–191 No function (shutter open)
-     * - 192–223 Random strobe slow→fast
-     * - 224–255 No function (shutter open)
-     *
-     * The [Strobe] interface clamps the slider to 0–[STROBE_BAND_MAX] (95u),
-     * so neither the [Strobe] API nor raw `value` writes can wander into
-     * the pulse / random-strobe bands. Pulse and random-strobe are
-     * reachable only via raw transaction writes.
-     */
-    class StrobeChannel(
-        transaction: ControllerTransaction?,
-        universe: Universe,
-        channelNo: Int,
-    ) : DmxSlider(transaction, universe, channelNo, max = STROBE_BAND_MAX), Strobe {
-        override fun fullOn() {
-            value = OPEN_DEFAULT
-        }
-
-        override fun strobe(intensity: UByte) {
-            val span = (STROBE_BAND_MAX - STROBE_BAND_MIN).toFloat()
-            value = ((span / 255F * intensity.toFloat()).roundToInt() + STROBE_BAND_MIN.toInt()).toUByte()
-        }
-
-        companion object {
-            /** Default open value (mid of 032–063 Open band; matches MagicQ locate). */
-            const val OPEN_DEFAULT: UByte = 35u
-
-            /** Lower bound of the strobe band (064–095). */
-            const val STROBE_BAND_MIN: UByte = 64u
-
-            /**
-             * Upper bound of the strobe band; also the slider clamp, so neither
-             * `Strobe` nor raw `value` writes can wander into the pulse or
-             * random-strobe bands above.
-             */
-            const val STROBE_BAND_MAX: UByte = 95u
-        }
     }
 
     /**
@@ -372,8 +321,24 @@ sealed class RobeColorSpot575Fixture(
         @FixtureProperty("Focus", category = PropertyCategory.OTHER)
         val focus: Slider = DmxSlider(transaction, universe, firstChannel + 16)
 
+        /**
+         * Channel 18 — shutter / strobe (clamped to the safe band 0–[STROBE_BAND_MAX]).
+         *
+         * Personality bands: 000–031 closed, 032–063 open, 064–095 strobe,
+         * 096–127 open, 128–143 opening pulse, 144–159 closing pulse, 160–191
+         * open, 192–223 random strobe, 224–255 open. The slider's `max` clamp
+         * prevents [WithStrobe] writes — and raw `value` writes — from straying
+         * into the pulse/random bands above 95; reach those only via raw
+         * transaction writes.
+         */
         @FixtureProperty(category = PropertyCategory.STROBE)
-        override val strobe = StrobeChannel(transaction, universe, firstChannel + 17)
+        override val strobe = BandedStrobeChannel(
+            transaction, universe, firstChannel + 17,
+            strobeMin = STROBE_BAND_MIN,
+            strobeMax = STROBE_BAND_MAX,
+            fullOnValue = OPEN_DEFAULT,
+            max = STROBE_BAND_MAX,
+        )
 
         @FixtureProperty(category = PropertyCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 18)
@@ -444,6 +409,19 @@ sealed class RobeColorSpot575Fixture(
         }
 
         companion object {
+            /** Default open value (mid of 032–063 Open band; matches MagicQ locate). */
+            const val OPEN_DEFAULT: UByte = 35u
+
+            /** Lower bound of the strobe band (064–095). */
+            const val STROBE_BAND_MIN: UByte = 64u
+
+            /**
+             * Upper bound of the strobe band; also the slider clamp, so
+             * neither [WithStrobe] writes nor raw `value` writes can
+             * wander into the pulse or random-strobe bands above.
+             */
+            const val STROBE_BAND_MAX: UByte = 95u
+
             const val LAMP_ON_LEVEL: UByte = 130u
             const val PAN_TILT_RESET_LEVEL: UByte = 140u
             const val COLOUR_RESET_LEVEL: UByte = 150u

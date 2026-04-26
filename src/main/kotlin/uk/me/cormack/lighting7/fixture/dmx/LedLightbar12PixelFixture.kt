@@ -5,12 +5,10 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
-import kotlin.math.roundToInt
 
 /**
  * Showtec LED Lightbar 12 Pixel - A 12-pixel RGBW LED bar fixture.
@@ -167,26 +165,19 @@ sealed class LedLightbar12PixelFixture(
     // ============================================
 
     /**
-     * Strobe control for modes that support it.
-     * 0-1 = off, 2-255 = strobe slow to fast (0-20Hz)
+     * Strobe for modes that support it. 0–1 = off, 2–255 = slow → fast
+     * (0–20 Hz). `strobe(0)` short-circuits to `fullOn()` to preserve
+     * "intensity 0 = no strobe."
      */
     class StrobeChannel(
         transaction: ControllerTransaction?,
         universe: Universe,
-        channelNo: Int
-    ) : DmxSlider(transaction, universe, channelNo), Strobe {
-        override fun fullOn() {
-            value = 0u
-        }
-
-        override fun strobe(intensity: UByte) {
-            value = if (intensity == 0u.toUByte()) {
-                0u
-            } else {
-                ((253F / 255F * intensity.toFloat()).roundToInt() + 2).toUByte()
-            }
-        }
-    }
+        channelNo: Int,
+    ) : BandedStrobeChannel(
+        transaction, universe, channelNo,
+        strobeMin = 2u, strobeMax = 255u,
+        zeroIntensityIsFullOn = true,
+    )
 
     // ============================================
     // Pixel/Section Element Classes

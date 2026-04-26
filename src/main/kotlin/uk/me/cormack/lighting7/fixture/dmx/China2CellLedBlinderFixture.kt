@@ -6,10 +6,8 @@ import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
-import kotlin.math.roundToInt
 
 /**
  * China 2-Cell LED Blinder — variable-white audience blinder with two
@@ -49,32 +47,6 @@ class China2CellLedBlinderFixture(
 
     override fun withTransaction(transaction: ControllerTransaction): China2CellLedBlinderFixture =
         China2CellLedBlinderFixture(this, transaction)
-
-    /**
-     * Channel 2 strobe. Personality lists `000–010 Open` and `011–255
-     * Strobe S>F` — the open band is wider than the typical 0–0.
-     * `fullOn()` writes 0; `strobe(intensity)` linearly maps onto the
-     * 011–255 band.
-     */
-    class StrobeChannel(
-        transaction: ControllerTransaction?,
-        universe: Universe,
-        channelNo: Int,
-    ) : DmxSlider(transaction, universe, channelNo), Strobe {
-        override fun fullOn() {
-            value = 0u
-        }
-
-        override fun strobe(intensity: UByte) {
-            val span = (STROBE_MAX - STROBE_MIN).toFloat()
-            value = ((span / 255F * intensity.toFloat()).roundToInt() + STROBE_MIN.toInt()).toUByte()
-        }
-
-        companion object {
-            const val STROBE_MIN: UByte = 11u
-            const val STROBE_MAX: UByte = 255u
-        }
-    }
 
     /**
      * Channel 3 — built-in programs. Within each band the level controls
@@ -131,7 +103,10 @@ class China2CellLedBlinderFixture(
     override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel)
 
     @FixtureProperty(category = PropertyCategory.STROBE)
-    override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
+    override val strobe = BandedStrobeChannel(
+        transaction, universe, firstChannel + 1,
+        strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,
+    )
 
     @FixtureProperty("Built-in program", category = PropertyCategory.SETTING)
     val program = DmxFixtureSetting(
@@ -154,5 +129,14 @@ class China2CellLedBlinderFixture(
     fun cell(index: Int): Cell {
         require(index in 0 until 2) { "Cell index must be 0-1, got $index" }
         return elements[index]
+    }
+
+    companion object {
+        /**
+         * Channel 2 strobe band. Personality lists `000–010 Open` and `011–255
+         * Strobe S>F` — the open band is wider than the typical 0–0.
+         */
+        const val STROBE_MIN: UByte = 11u
+        const val STROBE_MAX: UByte = 255u
     }
 }

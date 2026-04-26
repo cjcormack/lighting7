@@ -55,7 +55,7 @@ class RobeColorSpot575FixtureTest {
         assertEquals(100u.toUByte(), controller.getValue(15))
         assertEquals(80u.toUByte(), controller.getValue(16))
         assertEquals(70u.toUByte(), controller.getValue(17))
-        assertEquals(RobeColorSpot575Fixture.StrobeChannel.OPEN_DEFAULT, controller.getValue(18))
+        assertEquals(RobeColorSpot575Fixture.Mode2Ch.OPEN_DEFAULT, controller.getValue(18))
         assertEquals(220u.toUByte(), controller.getValue(19))
     }
 
@@ -67,20 +67,20 @@ class RobeColorSpot575FixtureTest {
 
         fixture.strobe.strobe(0u)
         transaction.apply()
-        assertEquals(RobeColorSpot575Fixture.StrobeChannel.STROBE_BAND_MIN, controller.getValue(18))
+        assertEquals(RobeColorSpot575Fixture.Mode2Ch.STROBE_BAND_MIN, controller.getValue(18))
 
         fixture.strobe.strobe(255u)
         transaction.apply()
-        assertEquals(RobeColorSpot575Fixture.StrobeChannel.STROBE_BAND_MAX, controller.getValue(18))
+        assertEquals(RobeColorSpot575Fixture.Mode2Ch.STROBE_BAND_MAX, controller.getValue(18))
 
         fixture.strobe.fullOn()
         transaction.apply()
-        assertEquals(RobeColorSpot575Fixture.StrobeChannel.OPEN_DEFAULT, controller.getValue(18))
+        assertEquals(RobeColorSpot575Fixture.Mode2Ch.OPEN_DEFAULT, controller.getValue(18))
 
         // Raw value writes are clamped to the strobe-band max — pulse / random-strobe bands unreachable.
         fixture.strobe.value = 200u
         transaction.apply()
-        assertEquals(RobeColorSpot575Fixture.StrobeChannel.STROBE_BAND_MAX, controller.getValue(18))
+        assertEquals(RobeColorSpot575Fixture.Mode2Ch.STROBE_BAND_MAX, controller.getValue(18))
     }
 
     @Test

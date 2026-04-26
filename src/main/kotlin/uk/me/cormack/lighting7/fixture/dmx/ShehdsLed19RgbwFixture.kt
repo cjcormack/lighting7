@@ -6,13 +6,11 @@ import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
-import kotlin.math.roundToInt
 
 /**
  * Shehds LED Beam+Wash 19 × 15W RGBW Zoom — moving-head wash with motorised zoom.
@@ -45,32 +43,6 @@ sealed class ShehdsLed19RgbwFixture(
     ) : DmxChannelMode {
         MODE_16CH(16, "16-Channel"),
         MODE_24CH(24, "24-Channel"),
-    }
-
-    /**
-     * Strobe channel. Manual lists only "0–255 Strobe" with no value bands.
-     *
-     * Modelled like the Varytec Easymove: 0 = LED constant on (no strobe;
-     * dimmer is in charge of brightness), 1–255 = strobe slow → fast.
-     */
-    class StrobeChannel(
-        transaction: ControllerTransaction?,
-        universe: Universe,
-        channelNo: Int,
-    ) : DmxSlider(transaction, universe, channelNo), Strobe {
-        override fun fullOn() {
-            value = 0u
-        }
-
-        override fun strobe(intensity: UByte) {
-            val span = (STROBE_MAX - STROBE_MIN).toFloat()
-            value = ((span / 255F * intensity.toFloat()).roundToInt() + STROBE_MIN.toInt()).toUByte()
-        }
-
-        companion object {
-            const val STROBE_MIN: UByte = 1u
-            const val STROBE_MAX: UByte = 255u
-        }
     }
 
     /**
@@ -203,7 +175,10 @@ sealed class ShehdsLed19RgbwFixture(
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 6)
 
         @FixtureProperty(category = PropertyCategory.STROBE)
-        override val strobe = StrobeChannel(transaction, universe, firstChannel + 7)
+        override val strobe = BandedStrobeChannel(
+            transaction, universe, firstChannel + 7,
+            strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,
+        )
 
         override val elements: List<Zone> = (0 until 3).map { idx ->
             Zone(idx, transaction, firstChannel + 8 + (idx * 4))
@@ -301,7 +276,10 @@ sealed class ShehdsLed19RgbwFixture(
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
         @FixtureProperty(category = PropertyCategory.STROBE)
-        override val strobe = StrobeChannel(transaction, universe, firstChannel + 6)
+        override val strobe = BandedStrobeChannel(
+            transaction, universe, firstChannel + 6,
+            strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,
+        )
 
         @FixtureProperty(category = PropertyCategory.COLOUR)
         override val rgbColour = DmxColour(
@@ -335,5 +313,15 @@ sealed class ShehdsLed19RgbwFixture(
         val reset = DmxFixtureSetting(
             transaction, universe, firstChannel + 15, Reset.entries.toTypedArray(),
         )
+    }
+
+    companion object {
+        /**
+         * Strobe band — manual lists only "0–255 Strobe" with no value bands.
+         * Modelled like the Varytec Easymove: 0 = LED constant on (no strobe),
+         * 1–255 = strobe slow → fast.
+         */
+        const val STROBE_MIN: UByte = 1u
+        const val STROBE_MAX: UByte = 255u
     }
 }

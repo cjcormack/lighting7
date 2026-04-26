@@ -66,11 +66,11 @@ class KamLiteobar252FixtureTest {
 
         fixture.strobe.strobe(0u)
         transaction.apply()
-        assertEquals(KamLiteobar252Fixture.StrobeChannel.STROBE_MIN, controller.getValue(2))
+        assertEquals(KamLiteobar252Fixture.STROBE_MIN, controller.getValue(2))
 
         fixture.strobe.strobe(255u)
         transaction.apply()
-        assertEquals(KamLiteobar252Fixture.StrobeChannel.STROBE_MAX, controller.getValue(2))
+        assertEquals(KamLiteobar252Fixture.STROBE_MAX, controller.getValue(2))
 
         fixture.strobe.fullOn()
         transaction.apply()

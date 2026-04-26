@@ -3,14 +3,12 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
-import kotlin.math.roundToInt
 
 @FixtureType("hex", manufacturer = "Chauvet", model = "Freedom Par Hex")
 class HexFixture(
@@ -36,19 +34,6 @@ class HexFixture(
     )
 
     override fun withTransaction(transaction: ControllerTransaction): HexFixture = HexFixture(this, transaction)
-
-    /**
-     * DMX strobe implementation with channel mapping for this fixture.
-     */
-    class DmxStrobe(transaction: ControllerTransaction?, universe: Universe, channelNo: Int): DmxSlider(transaction, universe, channelNo), Strobe {
-        override fun fullOn() {
-            this.value = 0u
-        }
-
-        override fun strobe(intensity: UByte) {
-            this.value = ((245F / 255F * intensity.toFloat()).roundToInt() + 10).toUByte()
-        }
-    }
 
     enum class ProgramMode(override val level: UByte) : DmxFixtureSettingValue {
         NONE(0u),
@@ -86,7 +71,10 @@ class HexFixture(
     override val uv = DmxSlider(transaction, universe, firstChannel + 6)
 
     @FixtureProperty(category = PropertyCategory.STROBE)
-    override val strobe = DmxStrobe(transaction, universe, firstChannel + 7)
+    override val strobe = BandedStrobeChannel(
+        transaction, universe, firstChannel + 7,
+        strobeMin = 10u, strobeMax = 255u,
+    )
 
     @FixtureProperty(category = PropertyCategory.SETTING)
     val mode = DmxFixtureSetting(transaction, universe, firstChannel + 9, ProgramMode.entries.toTypedArray())

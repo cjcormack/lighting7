@@ -4,12 +4,10 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
-import kotlin.math.roundToInt
 
 /**
  * ADJ Fog Fury Jett — vertical fog blaster with 12 × 3W RGBA LEDs.
@@ -40,31 +38,6 @@ sealed class AdjFogFuryJettFixture(
         // TODO: MODE_3CH (3, "3-Channel (Fog + colour macros + strobe)")
         // TODO: MODE_5CH (5, "5-Channel (Fog + RGBA)")
         MODE_7CH(7, "7-Channel (Fog + RGBA + Strobe + Dimmer)"),
-    }
-
-    /**
-     * Channel 6 strobe band layout from the manual:
-     * - 0–31   off
-     * - 32–95  strobe slow → fast
-     * - 96–159 pulse effect
-     * - 160–255 random strobe slow → fast
-     *
-     * The [Strobe] interface only exposes the linear strobe band (32–95).
-     * Pulse and random-strobe bands are reachable by writing the raw channel
-     * value if a script needs them.
-     */
-    class StrobeChannel(
-        transaction: ControllerTransaction?,
-        universe: Universe,
-        channelNo: Int,
-    ) : DmxSlider(transaction, universe, channelNo), Strobe {
-        override fun fullOn() {
-            value = 0u
-        }
-
-        override fun strobe(intensity: UByte) {
-            value = ((63F / 255F * intensity.toFloat()).roundToInt() + 32).toUByte()
-        }
     }
 
     /**
@@ -112,8 +85,21 @@ sealed class AdjFogFuryJettFixture(
         @FixtureProperty(category = PropertyCategory.AMBER, bundleWithColour = true)
         override val amber: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
+        /**
+         * Channel 6 strobe band layout from the manual:
+         * - 0–31    off
+         * - 32–95   strobe slow → fast
+         * - 96–159  pulse effect
+         * - 160–255 random strobe slow → fast
+         *
+         * Only the linear strobe band (32–95) is exposed; pulse and random-
+         * strobe bands are reachable by writing the raw channel value.
+         */
         @FixtureProperty(category = PropertyCategory.STROBE)
-        override val strobe = StrobeChannel(transaction, universe, firstChannel + 5)
+        override val strobe = BandedStrobeChannel(
+            transaction, universe, firstChannel + 5,
+            strobeMin = 32u, strobeMax = 95u,
+        )
 
         @FixtureProperty(category = PropertyCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 6)

@@ -4,11 +4,9 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
-import kotlin.math.roundToInt
 
 /**
  * Varytec Easymove XL 60 Spot — single-LED moving-head spot fixture.
@@ -97,36 +95,6 @@ sealed class VarytecEasymoveXl60SpotFixture(
     }
 
     /**
-     * Channel 6 — electronic strobe.
-     *
-     * 0 = no strobe (LED constant on, brightness controlled by the dimmer
-     * channel), 1–255 = slow → fast strobe. There is no separate "lamp on"
-     * band — the dimmer is the only brightness control on this fixture.
-     *
-     * - [fullOn]: writes 0 (strobe disabled, dimmer in charge of brightness).
-     * - [strobe]: linearly maps the input 0–255 onto the strobe band 1–255.
-     */
-    class StrobeChannel(
-        transaction: ControllerTransaction?,
-        universe: Universe,
-        channelNo: Int,
-    ) : DmxSlider(transaction, universe, channelNo), Strobe {
-        override fun fullOn() {
-            value = 0u
-        }
-
-        override fun strobe(intensity: UByte) {
-            val span = (STROBE_MAX - STROBE_MIN).toFloat()
-            value = ((span / 255F * intensity.toFloat()).roundToInt() + STROBE_MIN.toInt()).toUByte()
-        }
-
-        companion object {
-            const val STROBE_MIN: UByte = 1u
-            const val STROBE_MAX: UByte = 255u
-        }
-    }
-
-    /**
      * 11-channel mode — the only personality the fixture exposes.
      *
      * - Ch 1: Pan (coarse, 630°).
@@ -183,8 +151,15 @@ sealed class VarytecEasymoveXl60SpotFixture(
         )
         val goboSpin: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
+        /**
+         * Channel 6 — electronic strobe. 0 = no strobe (LED constant on,
+         * dimmer in charge of brightness), 1–255 = slow → fast.
+         */
         @FixtureProperty(category = PropertyCategory.STROBE)
-        override val strobe = StrobeChannel(transaction, universe, firstChannel + 5)
+        override val strobe = BandedStrobeChannel(
+            transaction, universe, firstChannel + 5,
+            strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,
+        )
 
         @FixtureProperty(category = PropertyCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 6)
@@ -202,5 +177,10 @@ sealed class VarytecEasymoveXl60SpotFixture(
         val reset = DmxFixtureSetting(
             transaction, universe, firstChannel + 10, Reset.entries.toTypedArray(),
         )
+
+        companion object {
+            const val STROBE_MIN: UByte = 1u
+            const val STROBE_MAX: UByte = 255u
+        }
     }
 }
