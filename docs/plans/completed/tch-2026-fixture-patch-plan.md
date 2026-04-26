@@ -1,7 +1,7 @@
 # TCH 2026 Fixture Patch — Plan & Handover
 
 > **Document status: PLANNING (2026-04-26).** Analysis complete; no code written yet.
-> Source patch list: [Manuals/TCH_2026_.pdf](../../Manuals/TCH_2026_.pdf) (exported from ChamSys MagicVis 2026-04-19).
+> Source patch list: [Manuals/TCH_2026_.pdf](../../../Manuals/TCH_2026_.pdf) (exported from ChamSys MagicVis 2026-04-19).
 
 ## How to use this document
 
@@ -17,26 +17,28 @@ ChamSys cross-checks tractable.
   entry criteria, manual references, and verification steps.
 
 Related docs:
-- [docs/fixtures-engineering.md](../fixtures-engineering.md) — fixture/trait architecture and
+- [docs/fixtures-engineering.md](../../fixtures-engineering.md) — fixture/trait architecture and
   the "Adding a New DMX Fixture" recipe. **Every fixture class follows this recipe; the tiers
   below only call out fixture-specific deviations.**
-- [docs/patch-system-engineering.md](../patch-system-engineering.md) — DB tables and how
+- [docs/patch-system-engineering.md](../../patch-system-engineering.md) — DB tables and how
   `FixtureTypeRegistry` keys feed the patch UI.
 - Reference for multi-mode pattern:
-  [src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/Fusion100SpotMkIIFixture.kt](../../src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/Fusion100SpotMkIIFixture.kt).
+  [src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/Fusion100SpotMkIIFixture.kt](../../../src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/Fusion100SpotMkIIFixture.kt).
 
 ---
 
 ## Status
 
-**Next action**: All fixture-class tiers (0–8) are done (2026-04-26). All
-[Open Questions](#open-questions) are answered. [Tier 10](#tier-10--shared-bandedstrobechannel-refactor)
-done (2026-04-26). The only remaining patch work is
-[Tier 9](#tier-9--db-patch-rows) (DB patch rows / universe configs).
+**All tiers done (2026-04-26).** Fixture classes (Tiers 0–8), shared
+`BandedStrobeChannel` refactor (Tier 10), and the DB patch rows
+(Tier 9) are all complete. Project 9 ("The Commemoration Hall") has
+50 patches across 4 universes seeded by
+[`scripts/tch-2026-patch.sh`](../../../scripts/tch-2026-patch.sh).
 
-**Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
-`fixture_patches` rows still need creating once the classes exist — tracked separately in
-[Tier 9](#tier-9--db-patch-rows).
+**Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs were
+auto-created by the patch endpoint with `controllerType=ARTNET` and
+`address=null` (broadcast); set per-universe addresses in the UI if a
+specific ArtNet node IP is needed.
 
 ---
 
@@ -54,7 +56,7 @@ done (2026-04-26). The only remaining patch work is
   `WithDimmer`) covers all faces, fresnels, profiles, PARs, RING R/G/B, house lights, non-dim
   circuits, and the 1-ch hazer. Identity is carried by the patch row's `key`/`displayName`,
   not the class.
-- **The 2-ch [HazerFixture.kt](../../src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/HazerFixture.kt)
+- **The 2-ch [HazerFixture.kt](../../../src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/HazerFixture.kt)
   is unrelated** to the single-channel `HAZER` at `01-512` in this patch. Don't try to merge
   them — the existing class stays as-is for fixtures that have separate haze and fan channels.
 - **Enum order matches DMX levels.** Comment any non-obvious split points (e.g. "indexed vs
@@ -69,7 +71,7 @@ done (2026-04-26). The only remaining patch work is
 > Update this section in-place with the answers; don't open follow-ups for these.
 
 1. **Martin "Mode 4" — which MAC 250 variant?** The patched span is 13 channels
-   (`01-173` → `01-186`). Manual: [Manuals/UM_MAC250_EN_D.PDF](../../Manuals/UM_MAC250_EN_D.PDF)
+   (`01-173` → `01-186`). Manual: [Manuals/UM_MAC250_EN_D.PDF](../../../Manuals/UM_MAC250_EN_D.PDF)
    (MAC 250 Krypton). Confirm:
    - Is this MAC 250 Krypton, Entour, Wash, or Entour-Krypton?
    - Does ChamSys' "Mode 4" map to the manual's 13-channel "Mode 4 (extended)" personality, or
@@ -80,12 +82,12 @@ done (2026-04-26). The only remaining patch work is
      is for the wrong variant. The MAC 250+ has a byte-identical Mode 4 layout (only the +'s
      Mode 3 diverged in the lamp-ballast refresh), so a MAC 250+ user manual is a valid
      human-readable reference. Full channel map and value ranges are captured in
-     [Manuals/personalities/Martin_Mac250_Mode4.md](../../Manuals/personalities/Martin_Mac250_Mode4.md).
+     [Manuals/personalities/Martin_Mac250_Mode4.md](../../../Manuals/personalities/Martin_Mac250_Mode4.md).
 
 2. **Robe ColorSpot 575 AT "Mode 2" — channel count?** Patched at 19-channel intervals
    (`01-202` → `01-221`). Manuals:
-   [User_manual_ColorSpot_575_AT.pdf](../../Manuals/User_manual_ColorSpot_575_AT.pdf),
-   [ColorSpot_575_AT_DMX_charts.pdf](../../Manuals/ColorSpot_575_AT_DMX_charts.pdf).
+   [User_manual_ColorSpot_575_AT.pdf](../../../Manuals/User_manual_ColorSpot_575_AT.pdf),
+   [ColorSpot_575_AT_DMX_charts.pdf](../../../Manuals/ColorSpot_575_AT_DMX_charts.pdf).
    - Confirm Mode 2 = 19ch (vs Mode 1 standard / Mode 3 reduced).
    - **Answer (2026-04-26):** Confirmed. ChamSys personality `Robe,Spot575,Mode 2`,
      19 channels. The DMX chart's Mode 2 column matches the MagicQ `EDIT HEAD`
@@ -93,12 +95,12 @@ done (2026-04-26). The only remaining patch work is
      16-bit pan/tilt + P/T speed + Control + Col 1 + Col 2 + static gobo +
      rotating gobo + gobo rot + prism + prism rot + frost + iris + zoom + focus
      + shutter + dimmer. Full layout in
-     [Manuals/personalities/Robe_ColorSpot575AT_Mode2.md](../../Manuals/personalities/Robe_ColorSpot575AT_Mode2.md).
+     [Manuals/personalities/Robe_ColorSpot575AT_Mode2.md](../../../Manuals/personalities/Robe_ColorSpot575AT_Mode2.md).
 
 3. **ETC Source 4 Revolution "Base Frame" — exact mode/channel count?** Patched at
    `02-001` and `02-101` (100ch spacing — almost certainly just clean addressing, not actual
    channel count). Manual:
-   [S4_Revolution_User_Manual_RevE.pdf](../../Manuals/S4_Revolution_User_Manual_RevE.pdf).
+   [S4_Revolution_User_Manual_RevE.pdf](../../../Manuals/S4_Revolution_User_Manual_RevE.pdf).
    "Base Frame" likely means the chassis without the optional Framing Shutter or Iris module.
    - Which personality is this fixture set to? (e.g. "Standard 14ch", "Standard + Framing
      26ch", etc.)
@@ -112,7 +114,7 @@ done (2026-04-26). The only remaining patch work is
      `15ch` (15ch), `Base Module` (23ch), `Base Frame` (31ch — the patched mode).
 
 4. **Shehds LED19x15W RGBW — 24ch personality.** Patched at 24ch intervals. Manual
-   [19颗调焦4合1染色灯(16-24CH)最新.pdf](../../Manuals/19颗调焦4合1染色灯(16-24CH)最新.pdf)
+   [19颗调焦4合1染色灯(16-24CH)最新.pdf](../../../Manuals/19颗调焦4合1染色灯(16-24CH)最新.pdf)
    covers both 16ch and 24ch modes.
    - Confirm 24ch = the per-pixel mode, and 16ch = global RGBW + macros.
    - Does ChamSys split this into 19 individual RGBW pixels in 24ch mode, or treat it as one
@@ -129,7 +131,7 @@ done (2026-04-26). The only remaining patch work is
    Gear4Music SOL Party 12B, China 2-Cell LED Blinder), we need DMX charts. Easiest options
    in order:
    - Export `.fxt` personality files from MagicQ/MagicVis (`Setup → Patch → Export` or via
-     the personality editor). Drop them into [Manuals/](../../Manuals/) (or a new
+     the personality editor). Drop them into [Manuals/](../../../Manuals/) (or a new
      `Manuals/personalities/` subfolder).
    - Open the personality in MagicQ's "Edit Head" view and screenshot each channel's settings.
    - Last resort: paste the channel map as text in the relevant Tier section below.
@@ -139,12 +141,12 @@ done (2026-04-26). The only remaining patch work is
      obfuscated (high-bit-set bytes, no readable strings), so direct file capture is a dead
      end. The UI is the only readable source.
    - **Files added:**
-     - [Manuals/personalities/Martin_Mac250_Mode4.md](../../Manuals/personalities/Martin_Mac250_Mode4.md)
-     - [Manuals/personalities/ETC_Source4Rev_BaseFrame.md](../../Manuals/personalities/ETC_Source4Rev_BaseFrame.md)
-     - [Manuals/personalities/Robe_ColorSpot575AT_Mode2.md](../../Manuals/personalities/Robe_ColorSpot575AT_Mode2.md)
-     - [Manuals/personalities/Kam_Liteobar252_11ch.md](../../Manuals/personalities/Kam_Liteobar252_11ch.md)
-     - [Manuals/personalities/Gear4Music_SOLParty12B_8ch.md](../../Manuals/personalities/Gear4Music_SOLParty12B_8ch.md)
-     - [Manuals/personalities/China_2CellLEDBlind_8ch.md](../../Manuals/personalities/China_2CellLEDBlind_8ch.md)
+     - [Manuals/personalities/Martin_Mac250_Mode4.md](../../../Manuals/personalities/Martin_Mac250_Mode4.md)
+     - [Manuals/personalities/ETC_Source4Rev_BaseFrame.md](../../../Manuals/personalities/ETC_Source4Rev_BaseFrame.md)
+     - [Manuals/personalities/Robe_ColorSpot575AT_Mode2.md](../../../Manuals/personalities/Robe_ColorSpot575AT_Mode2.md)
+     - [Manuals/personalities/Kam_Liteobar252_11ch.md](../../../Manuals/personalities/Kam_Liteobar252_11ch.md)
+     - [Manuals/personalities/Gear4Music_SOLParty12B_8ch.md](../../../Manuals/personalities/Gear4Music_SOLParty12B_8ch.md)
+     - [Manuals/personalities/China_2CellLEDBlind_8ch.md](../../../Manuals/personalities/China_2CellLEDBlind_8ch.md)
 
 6. **Kam "Liteobar 252" — model spelling.** ChamSys lists `Liteobar252`. The actual product is
    probably the **Kam LightBar 252** or **LiteBar 252**. Confirm exact product name + DMX mode
@@ -167,7 +169,7 @@ done (2026-04-26). The only remaining patch work is
      8 channels split: master Dimmer (HTP) + Strobe + Prog + Prog Speed + 2 cells × (WW, CW).
      Cell 2's WW/CW are flagged `Indep yes` in ChamSys so the desk's fan-spread doesn't
      accidentally affect it. Full layout in
-     [Manuals/personalities/China_2CellLEDBlind_8ch.md](../../Manuals/personalities/China_2CellLEDBlind_8ch.md).
+     [Manuals/personalities/China_2CellLEDBlind_8ch.md](../../../Manuals/personalities/China_2CellLEDBlind_8ch.md).
 
 ---
 
@@ -177,15 +179,15 @@ done (2026-04-26). The only remaining patch work is
 
 | # | Manufacturer / Model | Mode | Qty | Manual | Tier |
 |---|----------------------|------|-----|--------|------|
-| 1 | ADJ Fog Fury Jett | 7ch | 1 | [download_215302.pdf](../../Manuals/download_215302.pdf) | [Tier 1](#tier-1--simple-manual-backed-batch) |
-| 2 | Equinox Twin Shot MKII | 3ch | 2 | [EQLED406_Manual.pdf](../../Manuals/EQLED406_Manual.pdf) | [Tier 1](#tier-1--simple-manual-backed-batch) |
-| 3 | ImgStageLine Wash-42LED | 13ch | 2 | [WASH-42LED@BDA.pdf](../../Manuals/WASH-42LED@BDA.pdf) | [Tier 1](#tier-1--simple-manual-backed-batch) |
-| 4 | Gear4Music Orbit-70 | 13ch | 6 | [download_399717.pdf](../../Manuals/download_399717.pdf) | [Tier 2](#tier-2--orbit-70-moving-head) |
-| 5 | Varytec Easymove XL 60 Spot | 11ch | 2 | [246811_manual.pdf](../../Manuals/246811_manual.pdf) | [Tier 3](#tier-3--easymove-xl-60-moving-head) |
-| 6 | Shehds LED19x15W RGBW | 24ch | 4 | [19颗调焦4合1染色灯(16-24CH)最新.pdf](../../Manuals/19颗调焦4合1染色灯(16-24CH)最新.pdf) | [Tier 4](#tier-4--shehds-led19x15w-rgbw) |
-| 7 | Martin MAC 250 | "Mode 4" (13ch) | 2 | [UM_MAC250_EN_D.PDF](../../Manuals/UM_MAC250_EN_D.PDF) | [Tier 5](#tier-5--martin-mac-250) |
-| 8 | Robe ColorSpot 575 AT | Mode 2 (19ch) | 4 | [User_manual_ColorSpot_575_AT.pdf](../../Manuals/User_manual_ColorSpot_575_AT.pdf) + [ColorSpot_575_AT_DMX_charts.pdf](../../Manuals/ColorSpot_575_AT_DMX_charts.pdf) | [Tier 6](#tier-6--robe-colorspot-575-at) |
-| 9 | ETC Source 4 Revolution | Base Frame | 2 | [S4_Revolution_User_Manual_RevE.pdf](../../Manuals/S4_Revolution_User_Manual_RevE.pdf) | [Tier 7](#tier-7--source-4-revolution) |
+| 1 | ADJ Fog Fury Jett | 7ch | 1 | [download_215302.pdf](../../../Manuals/download_215302.pdf) | [Tier 1](#tier-1--simple-manual-backed-batch) |
+| 2 | Equinox Twin Shot MKII | 3ch | 2 | [EQLED406_Manual.pdf](../../../Manuals/EQLED406_Manual.pdf) | [Tier 1](#tier-1--simple-manual-backed-batch) |
+| 3 | ImgStageLine Wash-42LED | 13ch | 2 | [WASH-42LED@BDA.pdf](../../../Manuals/WASH-42LED@BDA.pdf) | [Tier 1](#tier-1--simple-manual-backed-batch) |
+| 4 | Gear4Music Orbit-70 | 13ch | 6 | [download_399717.pdf](../../../Manuals/download_399717.pdf) | [Tier 2](#tier-2--orbit-70-moving-head) |
+| 5 | Varytec Easymove XL 60 Spot | 11ch | 2 | [246811_manual.pdf](../../../Manuals/246811_manual.pdf) | [Tier 3](#tier-3--easymove-xl-60-moving-head) |
+| 6 | Shehds LED19x15W RGBW | 24ch | 4 | [19颗调焦4合1染色灯(16-24CH)最新.pdf](../../../Manuals/19颗调焦4合1染色灯(16-24CH)最新.pdf) | [Tier 4](#tier-4--shehds-led19x15w-rgbw) |
+| 7 | Martin MAC 250 | "Mode 4" (13ch) | 2 | [UM_MAC250_EN_D.PDF](../../../Manuals/UM_MAC250_EN_D.PDF) | [Tier 5](#tier-5--martin-mac-250) |
+| 8 | Robe ColorSpot 575 AT | Mode 2 (19ch) | 4 | [User_manual_ColorSpot_575_AT.pdf](../../../Manuals/User_manual_ColorSpot_575_AT.pdf) + [ColorSpot_575_AT_DMX_charts.pdf](../../../Manuals/ColorSpot_575_AT_DMX_charts.pdf) | [Tier 6](#tier-6--robe-colorspot-575-at) |
+| 9 | ETC Source 4 Revolution | Base Frame | 2 | [S4_Revolution_User_Manual_RevE.pdf](../../../Manuals/S4_Revolution_User_Manual_RevE.pdf) | [Tier 7](#tier-7--source-4-revolution) |
 | 10 | Kam Liteobar 252 | 11ch | 2 | none | [Tier 8](#tier-8--reverse-engineered-fixtures) |
 | 11 | Gear4Music SOL Party 12B | 8ch | 2 | none | [Tier 8](#tier-8--reverse-engineered-fixtures) |
 | 12 | China 2-Cell LED Blinder | 8ch | 2 | none | [Tier 8](#tier-8--reverse-engineered-fixtures) |
@@ -251,7 +253,7 @@ re-runs green in isolation; unrelated to this tier.)
 
 **Entry criteria**: Tier 0 done. No open questions block this tier.
 
-- [x] **ADJ Fog Fury Jett** (7ch) — [manual](../../Manuals/download_215302.pdf)
+- [x] **ADJ Fog Fury Jett** (7ch) — [manual](../../../Manuals/download_215302.pdf)
   - Implemented as `sealed class AdjFogFuryJettFixture` with `Mode7Ch` only; the four
     other personalities (1/2/3/5) are left as `// TODO` enum entries per the locked
     decision. Manual reread changed the trait shape: ch1 is a fog trigger (not a dimmer),
@@ -261,12 +263,12 @@ re-runs green in isolation; unrelated to this tier.)
     random-strobe (160–255) are reachable as raw channel writes but not exposed via
     `Strobe`.
 - [x] **Equinox Twin Shot MKII** (3ch confetti launcher, EQLED406) —
-  [manual](../../Manuals/EQLED406_Manual.pdf)
+  [manual](../../../Manuals/EQLED406_Manual.pdf)
   - Implemented as a single-mode `EquinoxTwinShotMkIIFixture`. Three plain `Slider`
     properties (`output1`, `output2`, `master`) all categorised `OTHER`. **No traits**
     — by design, so FX engine cannot accidentally fire confetti pods. Doc comment
     captures the safety reasoning.
-- [x] **ImgStageLine Wash-42LED** (13ch) — [manual](../../Manuals/WASH-42LED@BDA.pdf)
+- [x] **ImgStageLine Wash-42LED** (13ch) — [manual](../../../Manuals/WASH-42LED@BDA.pdf)
   - Implemented as `sealed class ImgStageLineWash42LedFixture` with `Mode13Ch` only;
     `MODE_8CH` is left as a `// TODO`. Manual reread upgraded the plan's guess: this
     is actually a 7×10W RGBW **moving head** wash (540°/180°), not just RGBW + strobe.
@@ -291,7 +293,7 @@ suite green.
 
 **Entry criteria**: Tier 0 done.
 
-- [x] Read the manual end-to-end: [download_399717.pdf](../../Manuals/download_399717.pdf).
+- [x] Read the manual end-to-end: [download_399717.pdf](../../../Manuals/download_399717.pdf).
   Two personalities (9CH / 13CH); 13CH is the patched mode. 7×10W RGBW LEDs.
 - [x] Implemented as `sealed class Gear4MusicOrbit70Fixture` with `Mode13Ch` only;
   `MODE_9CH` is left as a `// TODO` per the locked decision.
@@ -320,7 +322,7 @@ suite green.
 
 **Entry criteria**: Tier 0 done.
 
-- [x] Read [246811_manual.pdf](../../Manuals/246811_manual.pdf) — section 5.1 has the DMX
+- [x] Read [246811_manual.pdf](../../../Manuals/246811_manual.pdf) — section 5.1 has the DMX
   channel list. Confirmed single-mode 11ch fixture.
 - [x] Implemented as `sealed class VarytecEasymoveXl60SpotFixture` with only `Mode11Ch`,
   matching the rest of the codebase even though the manual lists no other personalities.
@@ -350,7 +352,7 @@ docs updated, full test suite green.
 **Architecture confirmed**: 24ch is **three RGBW zones**, not global RGBW (correcting the
 original OQ4 answer). Modelled as `MultiElementFixture<Zone>` with 3 elements.
 
-- [x] Manual: [19颗调焦4合1染色灯(16-24CH)最新.pdf](../../Manuals/19颗调焦4合1染色灯(16-24CH)最新.pdf).
+- [x] Manual: [19颗调焦4合1染色灯(16-24CH)最新.pdf](../../../Manuals/19颗调焦4合1染色灯(16-24CH)最新.pdf).
   Channel charts on pages 13–14 are bilingual enough that no translation was needed —
   channel names like "Red1 Dimmer" / "White3 Dimmer" map straight across.
 - [x] `sealed class ShehdsLed19RgbwFixture` with `Mode.MODE_16CH` and `Mode.MODE_24CH`.
@@ -386,9 +388,9 @@ suite green.
 wheel + single gobo wheel, no CMY mixing. Personality key `Martin,Mac250,Mode 4`.
 
 **Authoritative reference**:
-[Manuals/personalities/Martin_Mac250_Mode4.md](../../Manuals/personalities/Martin_Mac250_Mode4.md)
+[Manuals/personalities/Martin_Mac250_Mode4.md](../../../Manuals/personalities/Martin_Mac250_Mode4.md)
 — full channel layout, defaults, and DMX value ranges captured from MagicQ's `EDIT HEAD`.
-The bundled [UM_MAC250_EN_D.PDF](../../Manuals/UM_MAC250_EN_D.PDF) is the **wrong manual**
+The bundled [UM_MAC250_EN_D.PDF](../../../Manuals/UM_MAC250_EN_D.PDF) is the **wrong manual**
 (it's for the Krypton variant); a MAC 250+ user manual would be a valid human-readable
 reference if needed (Mode 4 layout is shared with the +).
 
@@ -427,14 +429,14 @@ on Col 2 — there is **no CMY mixing** on this fixture, despite the plan's
 earlier guess.
 
 **Authoritative reference**:
-[Manuals/personalities/Robe_ColorSpot575AT_Mode2.md](../../Manuals/personalities/Robe_ColorSpot575AT_Mode2.md)
+[Manuals/personalities/Robe_ColorSpot575AT_Mode2.md](../../../Manuals/personalities/Robe_ColorSpot575AT_Mode2.md)
 — full 19-channel layout. The MagicQ `VIEW RANGES` capture (ch 5–9
 screenshotted) was spot-checked against the bundled Robe DMX chart Mode 2
 column and they agree exactly; channels 10–19 use the chart directly.
 
 - [x] Manuals:
-  [User_manual_ColorSpot_575_AT.pdf](../../Manuals/User_manual_ColorSpot_575_AT.pdf) +
-  [ColorSpot_575_AT_DMX_charts.pdf](../../Manuals/ColorSpot_575_AT_DMX_charts.pdf).
+  [User_manual_ColorSpot_575_AT.pdf](../../../Manuals/User_manual_ColorSpot_575_AT.pdf) +
+  [ColorSpot_575_AT_DMX_charts.pdf](../../../Manuals/ColorSpot_575_AT_DMX_charts.pdf).
 - [x] `sealed class RobeColorSpot575Fixture` with `MODE_2` (19ch) implemented;
   Modes 1 / 3 / 4 left as `// TODO` enum entries per the locked decision.
 - [x] Traits: `WithDimmer` (ch 19, HTP), `WithPosition` (16-bit pan/tilt at
@@ -474,12 +476,12 @@ Frame" meant chassis-without-modules was inverted. Other library personalities f
 reference: `Base` (14ch), `Base Iris` (15ch), `15ch` (15ch), `Base Module` (23ch).
 
 **Authoritative reference**:
-[Manuals/personalities/ETC_Source4Rev_BaseFrame.md](../../Manuals/personalities/ETC_Source4Rev_BaseFrame.md)
+[Manuals/personalities/ETC_Source4Rev_BaseFrame.md](../../../Manuals/personalities/ETC_Source4Rev_BaseFrame.md)
 — full 31-channel layout captured from MagicQ's `EDIT HEAD`. Only ch 8 (Zoom),
 ch 13 (Gel Scroller) and ch 15 (Iris) had `VIEW RANGES` detail; all other channels
 are continuous controls without documented value bands.
 
-- [x] Manual: [S4_Revolution_User_Manual_RevE.pdf](../../Manuals/S4_Revolution_User_Manual_RevE.pdf).
+- [x] Manual: [S4_Revolution_User_Manual_RevE.pdf](../../../Manuals/S4_Revolution_User_Manual_RevE.pdf).
 - [x] Captured the personality into `Manuals/personalities/ETC_Source4Rev_BaseFrame.md`
   (`VIEW CHANS` for all 31 channels; `VIEW RANGES` for ch 8 Zoom, ch 13 Gel Scroller,
   ch 15 Iris). The other channels had no `VIEW RANGES` detail and are modelled as
@@ -522,7 +524,7 @@ no manuals, all driven from a transcribed ChamSys personality):
 
 - [x] **Kam Liteobar 252** (11ch). Three RGB cells + master macro + strobe.
   No manual; personality
-  [Kam_Liteobar252_11ch.md](../../Manuals/personalities/Kam_Liteobar252_11ch.md).
+  [Kam_Liteobar252_11ch.md](../../../Manuals/personalities/Kam_Liteobar252_11ch.md).
   Modelled as `MultiElementFixture<Cell>` with 3 RGB cells. No `WithDimmer` —
   the fixture has no continuous master dimmer; brightness comes from the cell
   RGB values themselves and the macro channel must be in `DIMMER_1` /
@@ -531,7 +533,7 @@ no manuals, all driven from a transcribed ChamSys personality):
   levels (BLACK_OUT/DIMMER_1/DIMMER_2/COL_FLASH/COL_CHANGE/COL_FLOW/DREAM_FLOW).
 - [x] **Gear4Music SOL Party 12B** (8ch). Single global RGB party bar.
   No manual; personality
-  [Gear4Music_SOLParty12B_8ch.md](../../Manuals/personalities/Gear4Music_SOLParty12B_8ch.md).
+  [Gear4Music_SOLParty12B_8ch.md](../../../Manuals/personalities/Gear4Music_SOLParty12B_8ch.md).
   Single-mode `Gear4MusicSolParty12BFixture` with `WithDimmer` + `WithColour`.
   No strobe channel, no pan/tilt. Built-in colour wheel (ch 2) modelled as a
   19-entry `DmxFixtureColourSettingValue` enum with hex previews; `ALL_COL`
@@ -539,7 +541,7 @@ no manuals, all driven from a transcribed ChamSys personality):
   Plain sliders for Int Mode, Col Speed, FX.
 - [x] **China 2-Cell LED Blinder** (8ch). Variable-white blinder (warm + cold,
   no RGB). No manual; personality
-  [China_2CellLEDBlind_8ch.md](../../Manuals/personalities/China_2CellLEDBlind_8ch.md).
+  [China_2CellLEDBlind_8ch.md](../../../Manuals/personalities/China_2CellLEDBlind_8ch.md).
   Single-mode `China2CellLedBlinderFixture` with `WithDimmer` (ch 1, HTP) +
   `WithStrobe` (ch 2) + `MultiElementFixture<Cell>` with 2 cells. Each cell
   has a Warm White and a Cold White slider — both `PropertyCategory.WHITE`,
@@ -552,28 +554,58 @@ no manuals, all driven from a transcribed ChamSys personality):
 
 ## Tier 9 — DB patch rows
 
-**Goal**: Translate the TCH_2026 patch list into actual `fixture_patches` and
-`universe_configs` rows so the show can load.
+**Status: DONE (2026-04-26).** 50 patches seeded into project 9
+("The Commemoration Hall") via REST. All 50 instantiate correctly at
+runtime (`/api/rest/fixture/list` returns 50 with no errors); 6 groups
+auto-created (ADV1 / ADV2 / LX1 / LX2 / LX3 / Pipe 1FOH).
 
-**Entry criteria**: All preceding tiers done. All `FixtureTypeRegistry` keys exist.
+**Approach taken**: Option 1 (REST API). The seeding script is
+[`scripts/tch-2026-patch.sh`](../../../scripts/tch-2026-patch.sh) — a bash
+wrapper around `curl` that POSTs to
+`/api/rest/project/{PROJECT_ID}/patches`. Idempotent: re-running treats
+"channel overlap with own key" / "duplicate key" as skips, so the script
+is safe to re-run after the show is partially patched.
 
-Two ways to do this:
-1. **Via REST API**: script the inserts using `POST /api/rest/project/{projectId}/patches`
-   with the full list. Reproducible, version-controllable.
-2. **Via the React patch UI**: hand-entered. Slower but works for one-offs.
+**What got patched** (from
+[Manuals/TCH_2026_.pdf](../../../Manuals/TCH_2026_.pdf)):
 
-- [ ] Confirm with the user which approach (recommend option 1 for ~70 fixtures).
-- [ ] If option 1: write a one-shot Kotlin or shell script under `scripts/` that POSTs the
-  patches. Keep it idempotent (skip if `key` already exists).
-- [ ] Verify in the UI that all fixtures load and respond to channel writes.
-- [ ] Smoke-test a sample from each fixture type at the venue when possible.
+| Universe | Type | Count |
+|----------|------|-------|
+| 1 | DMX-controlled fixtures + 17 single-channel dimmers | 44 |
+| 2 | ETC Source 4 Revolution (Base Frame, 31ch) | 2 |
+| 4 | House lights (1ch) | 3 |
+| 5 | Equinox Twin Shot MKII (3ch) | 1 |
+
+Position column from the MagicVis export was used as the group name where
+present (ADV1 / ADV2 / LX1 / LX2 / LX3 / Pipe 1FOH); fixtures with no
+listed Position were left ungrouped. Universe configs were auto-created
+with `controllerType=ARTNET` and `address=null` (broadcast).
+
+**Plan deviation**: head 57 (ADJ Fog Fury Jett 7ch) is listed in the
+MagicVis export but with **no DMX address** — it appears unpatched in the
+visualizer. The fixture class exists (Tier 1), so it can be patched via the
+UI later. The script intentionally skips it; an inline comment in the
+script explains why.
+
+- [x] User chose Option 1 (REST API script) — see chat history 2026-04-26.
+- [x] Script written: [`scripts/tch-2026-patch.sh`](../../../scripts/tch-2026-patch.sh).
+      Idempotent: treats overlap-with-own-key as a skip. Run with
+      `PROJECT_ID=9 ./scripts/tch-2026-patch.sh`.
+- [x] Run against project 9 — 50 patches created, 4 universe configs
+      auto-created, 6 groups auto-created. Re-run reports `created=0
+      skipped=50 failed=0`.
+- [x] Verified at runtime: `/api/rest/fixture/list` returns 50 fixtures
+      with no errors; capability mix matches expectations
+      (dimmer=46 / position=22 / strobe=24 / colour=16 / multi-element=8).
+- [ ] Smoke-test a sample from each fixture type at the venue (deferred to
+      first venue setup; not blocking).
 
 ---
 
 ## Tier 10 — Shared `BandedStrobeChannel` refactor
 
 **Status: DONE (2026-04-26).** New shared class
-[`BandedStrobeChannel.kt`](../../src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/BandedStrobeChannel.kt)
+[`BandedStrobeChannel.kt`](../../../src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/BandedStrobeChannel.kt)
 landed and 14 fixtures collapsed onto it. Three fixtures
 (`Fusion100SpotMkII`, `LedLightbar12Pixel`, `SlenderBeamBarQuad`) keep a
 thin subclass that overrides `strobe(0)` to short-circuit to `fullOn()`,
@@ -584,7 +616,7 @@ methods plus the band/level constants moved to the Mode-class companion
 since the standalone `StrobeChannel` was deleted. Per-fixture tests were
 updated to point at the new constant locations. `WhexFixture.DmxStrobe`
 was intentionally left as-is — the formula `(255F / 245F * intensity)`
-appears inverted (mirror image of [HexFixture](../../src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/HexFixture.kt)
+appears inverted (mirror image of [HexFixture](../../../src/main/kotlin/uk/me/cormack/lighting7/fixture/dmx/HexFixture.kt)
 which uses `(245F / 255F * intensity)`); preserving "no behaviour change"
 trumped the visible bug, so a separate fix is wanted before refactoring.
 
