@@ -29,14 +29,14 @@ Related docs:
 
 ## Status
 
-**Next action**: Tier 0 is done (2026-04-26). Most [Open Questions](#open-questions) are
-answered (2026-04-26 ChamSys session — Q1, Q3, Q4, Q6, Q7). Q2 (Robe ColorSpot 575 mode)
-and the China 2-Cell Blinder personality are still pending a second ChamSys pass; Q5
-(personality export method) is resolved — we transcribe `EDIT HEAD` screenshots into
+**Next action**: Tiers 0 and 1 are done (2026-04-26). Most [Open Questions](#open-questions)
+are answered (2026-04-26 ChamSys session — Q1, Q3, Q4, Q6, Q7). Q2 (Robe ColorSpot 575
+mode) and the China 2-Cell Blinder personality are still pending a second ChamSys pass;
+Q5 (personality export method) is resolved — we transcribe `EDIT HEAD` screenshots into
 Markdown under `Manuals/personalities/` because the on-disk `.hed` and `heads.all` are
-obfuscated. Next session: pick [Tier 1](#tier-1--simple-manual-backed-batch) (three
-manual-backed fixtures, no open questions block it) or [Tier 2](#tier-2--orbit-70-moving-head)
-(highest-quantity DMX fixture).
+obfuscated. Next session: pick [Tier 2](#tier-2--orbit-70-moving-head) (highest-quantity
+DMX fixture, no open questions block it) or [Tier 3](#tier-3--easymove-xl-60-moving-head)
+(another single moving-head fixture).
 
 **Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
 `fixture_patches` rows still need creating once the classes exist — tracked separately in
@@ -237,23 +237,39 @@ suite green.
 
 **Goal**: Three small manual-backed fixtures in one session.
 
+**Status: DONE (2026-04-26).** All three classes added, registered, tested, docs updated,
+fixture-targeted test suite green. (One pre-existing flake in `PacketRateCounterTest`
+re-runs green in isolation; unrelated to this tier.)
+
 **Entry criteria**: Tier 0 done. No open questions block this tier.
 
-- [ ] **ADJ Fog Fury Jett** (7ch) — [manual](../../Manuals/download_215302.pdf)
-  - Likely channels: dimmer/output, optional DMX-mode fan/timer settings. Treat as
-    `WithDimmer` plus a `DmxFixtureSetting` for any sound/auto modes.
-- [ ] **Equinox Twin Shot MKII** (3ch confetti launcher, EQLED406) —
+- [x] **ADJ Fog Fury Jett** (7ch) — [manual](../../Manuals/download_215302.pdf)
+  - Implemented as `sealed class AdjFogFuryJettFixture` with `Mode7Ch` only; the four
+    other personalities (1/2/3/5) are left as `// TODO` enum entries per the locked
+    decision. Manual reread changed the trait shape: ch1 is a fog trigger (not a dimmer),
+    ch2–5 are RGBA, ch6 is strobe, ch7 is the master dimmer. Final traits:
+    `WithDimmer`, `WithColour`, `WithAmber`, `WithStrobe` + a plain `fog: Slider`
+    (`PropertyCategory.OTHER`). Strobe band is 32–95 only — pulse (96–159) and
+    random-strobe (160–255) are reachable as raw channel writes but not exposed via
+    `Strobe`.
+- [x] **Equinox Twin Shot MKII** (3ch confetti launcher, EQLED406) —
   [manual](../../Manuals/EQLED406_Manual.pdf)
-  - 3 channels = master + fire-left + fire-right (verify against manual). No `WithDimmer` if
-    it's purely a fire trigger; expose `Slider` per channel and let scripts treat it as a
-    momentary trigger.
-  - **Safety note**: this is a pyrotechnic-adjacent device. Document in the class doccomment
-    that random FX should not target the trigger channels.
-- [ ] **ImgStageLine Wash-42LED** (13ch) — [manual](../../Manuals/WASH-42LED@BDA.pdf)
-  - 13ch is most likely RGBW + strobe + macros. Use `WithDimmer`, `WithColour`, `WithStrobe`.
-- [ ] Tests for each (one per fixture is fine).
-- [ ] Update `docs/fixtures-engineering.md` table.
-- [ ] `./gradlew test`.
+  - Implemented as a single-mode `EquinoxTwinShotMkIIFixture`. Three plain `Slider`
+    properties (`output1`, `output2`, `master`) all categorised `OTHER`. **No traits**
+    — by design, so FX engine cannot accidentally fire confetti pods. Doc comment
+    captures the safety reasoning.
+- [x] **ImgStageLine Wash-42LED** (13ch) — [manual](../../Manuals/WASH-42LED@BDA.pdf)
+  - Implemented as `sealed class ImgStageLineWash42LedFixture` with `Mode13Ch` only;
+    `MODE_8CH` is left as a `// TODO`. Manual reread upgraded the plan's guess: this
+    is actually a 7×10W RGBW **moving head** wash (540°/180°), not just RGBW + strobe.
+    Final traits: `WithDimmer`, `WithColour`, `WithWhite`, `WithStrobe`, `WithPosition`
+    (with separate fine-pan/fine-tilt sliders). Ch6 is shared dimmer+strobe — the
+    `dimmer` clamps to 0–134 (the dim band), `strobe.fullOn()` writes 240 (the
+    "max-brightness" band that overrides the dimmer), and `strobe.strobe(intensity)`
+    maps into 135–239.
+- [x] Tests for each (one or two `assertEquals` per fixture).
+- [x] Update `docs/fixtures-engineering.md` table.
+- [x] `./gradlew test`.
 
 ---
 

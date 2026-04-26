@@ -575,8 +575,11 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 
 | Class | Type Key | Channels | Traits |
 |-------|----------|----------|--------|
+| `AdjFogFuryJettFixture.Mode7Ch` | adj-fog-fury-jett-7ch | 7 | Dimmer, Colour, Amber, Strobe (+ fog trigger slider) |
+| `EquinoxTwinShotMkIIFixture` | equinox-twin-shot-mkii | 3 | None — pyro-adjacent, plain trigger sliders only |
 | `GenericDimmerFixture` | generic-dimmer | 1 | Dimmer |
 | `HexFixture` | hex | 12 | Dimmer, Colour, UV, Strobe |
+| `ImgStageLineWash42LedFixture.Mode13Ch` | imgstageline-wash-42led-13ch | 13 | Dimmer, Colour, White, Strobe, Position |
 | `WhexFixture` | whex | 12 | Dimmer, Colour (RGBW variant) |
 | `QuadBarFixture` | quadbar | 1 | Settings only (show modes) |
 | `LightstripFixture` | lightstrip | 3 | Colour |
