@@ -40,6 +40,7 @@ object FixtureTypeRegistry {
         LightstripFixture::class,
         MartinMac250Fixture::class,
         Scantastic4Fixture::class,
+        ShehdsLed19RgbwFixture::class,
         SlenderBeamBarQuadFixture::class,
         StarClusterFixture::class,
         UVFixture::class,

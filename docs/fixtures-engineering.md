@@ -587,6 +587,8 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `LightstripFixture` | lightstrip | 3 | Colour |
 | `StarClusterFixture` | starcluster | 2 | Dimmer, Settings |
 | `ScantasticFixture` | scantastic | 17 | Settings (scanner effects) |
+| `ShehdsLed19RgbwFixture.Mode16Ch` | shehds-led19-rgbw-16ch | 16 | Dimmer, Colour, White, Strobe, Position |
+| `ShehdsLed19RgbwFixture.Mode24Ch` | shehds-led19-rgbw-24ch | 24 | Dimmer, Strobe, Position, MultiElementFixture (3 RGBW zones) |
 | `UVFixture` | uv | 2 | Dimmer, Settings |
 | `HazerFixture` | hazer | 2 | Sliders (haze, fan) |
 | `FusionSpotFixture` | fusionspot | 14 | Dimmer, Colour, pan/tilt |

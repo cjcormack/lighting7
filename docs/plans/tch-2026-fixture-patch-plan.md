@@ -29,13 +29,13 @@ Related docs:
 
 ## Status
 
-**Next action**: Tiers 0, 1, 2, 3 and 5 are done (2026-04-26). Most [Open Questions](#open-questions)
+**Next action**: Tiers 0, 1, 2, 3, 4 and 5 are done (2026-04-26). Most [Open Questions](#open-questions)
 are answered (2026-04-26 ChamSys session — Q1, Q3, Q4, Q6, Q7). Q2 (Robe ColorSpot 575
 mode) and the China 2-Cell Blinder personality are still pending a second ChamSys pass;
 Q5 (personality export method) is resolved — we transcribe `EDIT HEAD` screenshots into
 Markdown under `Manuals/personalities/` because the on-disk `.hed` and `heads.all` are
-obfuscated. Next session: pick [Tier 4](#tier-4--shehds-led19x15w-rgbw) (Shehds 24ch RGBW
-— OQ4 already answered) or [Tier 7](#tier-7--source-4-revolution) (S4 Revolution Base Frame
+obfuscated. Next session: pick [Tier 6](#tier-6--robe-colorspot-575-at) (Robe 575 — needs
+OQ2 answered first) or [Tier 7](#tier-7--source-4-revolution) (S4 Revolution Base Frame
 — still needs the personality capture before implementation).
 
 **Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
@@ -118,12 +118,13 @@ obfuscated. Next session: pick [Tier 4](#tier-4--shehds-led19x15w-rgbw) (Shehds 
    - Confirm 24ch = the per-pixel mode, and 16ch = global RGBW + macros.
    - Does ChamSys split this into 19 individual RGBW pixels in 24ch mode, or treat it as one
      fixture? (Affects whether we need `MultiElementFixture` or just a flat property list.)
-   - **Answer (2026-04-26):** ChamSys personality `Shehds,LED19x15wRGBW,24ch` is a **single
-     24-channel head, not per-pixel** — 19 LEDs × RGBW would require 76+ channels for true
-     per-pixel control, so 24ch is global RGBW + macros + zoom/strobe/dimmer. ChamSys treats
-     it as one fixture (one row in the personality library). **No `MultiElementFixture`
-     needed** — flat property list is correct. The presumption that 24ch = per-pixel mode
-     was wrong.
+   - **Answer (2026-04-26):** Confirmed not per-pixel for 19 LEDs (would need 76+ channels).
+     The original answer also presumed "global RGBW + macros" — **incorrect**. Reading the
+     bundled manual's 24ch chart shows `Red1/Green1/Blue1/White1` (CH9–12), `Red2…` (CH13–16),
+     `Red3…` (CH17–20): **three RGBW zones**, not one global RGBW. ChamSys treats it as one
+     personality entry, but the underlying fixture has three independently-addressable RGBW
+     zones. Modelled as `MultiElementFixture<Zone>` with 3 elements (matching
+     `SlenderBeamBarQuadFixture`). 16ch mode collapses to a single global RGBW.
 
 5. **ChamSys personality export.** For the three unmanualed fixtures (Kam Liteobar 252,
    Gear4Music SOL Party 12B, China 2-Cell LED Blinder), we need DMX charts. Easiest options
@@ -334,16 +335,36 @@ suite green.
 
 ## Tier 4 — Shehds LED19x15W RGBW
 
-**Entry criteria**: [Open question 4](#open-questions) answered.
+**Status: DONE (2026-04-26).** Class added (both 16ch and 24ch modes), registered, tested,
+docs updated, full test suite green.
 
-- [ ] Manual: [19颗调焦4合1染色灯(16-24CH)最新.pdf](../../Manuals/19颗调焦4合1染色灯(16-24CH)最新.pdf).
-  Translate the channel chart from Chinese (model the structure on `SlenderBeamBarQuadFixture`).
-- [ ] `sealed class ShehdsLed19RgbwFixture` with `Mode.MODE_16CH` and `Mode.MODE_24CH`.
-- [ ] Implement Mode 24Ch first (the patched mode). Per-pixel control depends on the answer
-  to OQ4 — if 24ch is per-pixel for 19 LEDs, this needs `MultiElementFixture<Pixel>`.
-- [ ] Implement Mode 16Ch as well if straightforward; otherwise leave a TODO.
-- [ ] Tests.
-- [ ] `./gradlew test`.
+**Entry criteria**: [OQ4](#open-questions) answered (2026-04-26).
+
+**Architecture confirmed**: 24ch is **three RGBW zones**, not global RGBW (correcting the
+original OQ4 answer). Modelled as `MultiElementFixture<Zone>` with 3 elements.
+
+- [x] Manual: [19颗调焦4合1染色灯(16-24CH)最新.pdf](../../Manuals/19颗调焦4合1染色灯(16-24CH)最新.pdf).
+  Channel charts on pages 13–14 are bilingual enough that no translation was needed —
+  channel names like "Red1 Dimmer" / "White3 Dimmer" map straight across.
+- [x] `sealed class ShehdsLed19RgbwFixture` with `Mode.MODE_16CH` and `Mode.MODE_24CH`.
+- [x] Mode 24Ch (the patched mode): `WithDimmer`, `WithPosition`, `WithStrobe`, plus
+  `MultiElementFixture<Zone>` with 3 zones. Each `Zone` is a `FixtureElement` with
+  `WithColour` + `WithWhite`. Master pan/tilt + speed + zoom + dimmer + strobe live on
+  the parent (CH1–8); zones drive CH9–20; programs/program speed/control mode/reset
+  live on CH21–24.
+- [x] Mode 16Ch: collapses to a single global RGBW. `WithDimmer`, `WithColour`, `WithWhite`,
+  `WithStrobe`, `WithPosition`. Notable wrinkle: 16ch puts zoom **after** the RGBW block
+  (CH12) whereas 24ch puts zoom **before** the dimmer (CH6) — the layouts are not just
+  truncations of each other.
+- [x] Strobe channel: manual lists only "0–255 Strobe" with no value bands. Modelled
+  Varytec-style: 0 = no strobe (LED constant on), 1–255 = slow → fast.
+- [x] Reset channel: modelled as a discrete two-state `DmxFixtureSetting<Reset>`
+  (NO_FUNCTION / RESET) so accidental FX writes can't trigger a head reset.
+- [x] Programs: enum with the seven documented bands (Preset/Jump/Gradient/Pulse/Auto1/2/3).
+  Same DMX values across both modes despite slightly different band labels (16ch calls
+  the last three "Effect modes", 24ch calls them "Auto modes").
+- [x] Tests for both modes (channel layout, multi-element zone keys, strobe band semantics).
+- [x] `./gradlew test` — `BUILD SUCCESSFUL`.
 
 ---
 
