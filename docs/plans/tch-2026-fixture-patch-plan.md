@@ -29,14 +29,14 @@ Related docs:
 
 ## Status
 
-**Next action**: Tiers 0, 1, 2, 3, 4 and 5 are done (2026-04-26). Most [Open Questions](#open-questions)
+**Next action**: Tiers 0, 1, 2, 3, 4, 5 and 7 are done (2026-04-26). Most [Open Questions](#open-questions)
 are answered (2026-04-26 ChamSys session — Q1, Q3, Q4, Q6, Q7). Q2 (Robe ColorSpot 575
 mode) and the China 2-Cell Blinder personality are still pending a second ChamSys pass;
 Q5 (personality export method) is resolved — we transcribe `EDIT HEAD` screenshots into
 Markdown under `Manuals/personalities/` because the on-disk `.hed` and `heads.all` are
-obfuscated. Next session: pick [Tier 6](#tier-6--robe-colorspot-575-at) (Robe 575 — needs
-OQ2 answered first) or [Tier 7](#tier-7--source-4-revolution) (S4 Revolution Base Frame
-— still needs the personality capture before implementation).
+obfuscated. Next session: [Tier 6](#tier-6--robe-colorspot-575-at) (Robe 575 — needs
+OQ2 answered first) or [Tier 8](#tier-8--reverse-engineered-fixtures) (the three
+unmanualed fixtures — needs the China 2-Cell Blinder personality captured first).
 
 **Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
 `fixture_patches` rows still need creating once the classes exist — tracked separately in
@@ -141,6 +141,7 @@ OQ2 answered first) or [Tier 7](#tier-7--source-4-revolution) (S4 Revolution Bas
      end. The UI is the only readable source.
    - **Files added:**
      - [Manuals/personalities/Martin_Mac250_Mode4.md](../../Manuals/personalities/Martin_Mac250_Mode4.md)
+     - [Manuals/personalities/ETC_Source4Rev_BaseFrame.md](../../Manuals/personalities/ETC_Source4Rev_BaseFrame.md)
      - _More to follow as additional fixtures are captured._
 
 6. **Kam "Liteobar 252" — model spelling.** ChamSys lists `Liteobar252`. The actual product is
@@ -426,6 +427,9 @@ reference if needed (Mode 4 layout is shared with the +).
 
 ## Tier 7 — Source 4 Revolution
 
+**Status: DONE (2026-04-26).** Class added (Base Frame 31ch only), registered, tested,
+docs updated.
+
 **Entry criteria**: [OQ3](#open-questions) answered (2026-04-26).
 
 **Personality confirmed**: ChamSys `ETC,Source4Rev,Base Frame` = **31 channels**, i.e.
@@ -433,17 +437,39 @@ chassis WITH the Framing Shutter module installed. The plan's earlier guess that
 Frame" meant chassis-without-modules was inverted. Other library personalities for cross-
 reference: `Base` (14ch), `Base Iris` (15ch), `15ch` (15ch), `Base Module` (23ch).
 
-- [ ] Manual: [S4_Revolution_User_Manual_RevE.pdf](../../Manuals/S4_Revolution_User_Manual_RevE.pdf).
-- [ ] Capture the personality from MagicQ's `EDIT HEAD` (`VIEW CHANS` + `VIEW RANGES`) into
-  `Manuals/personalities/ETC_Source4Rev_BaseFrame.md` before implementing — same approach as
-  the Mac 250 capture.
-- [ ] `sealed class Source4RevolutionFixture` with the personalities ChamSys lists (Base,
-  Base Iris, 15ch, Base Module, Base Frame). Implement Base Frame; leave others as
-  `// TODO` enum entries.
-- [ ] This is a discharge fixture (HMI 700) — same lamp/shutter/dimmer caution as Robe and
-  the MAC 250: lamp on/off and reset bands must not be FX-targetable.
-- [ ] Tests.
-- [ ] `./gradlew test`.
+**Authoritative reference**:
+[Manuals/personalities/ETC_Source4Rev_BaseFrame.md](../../Manuals/personalities/ETC_Source4Rev_BaseFrame.md)
+— full 31-channel layout captured from MagicQ's `EDIT HEAD`. Only ch 8 (Zoom),
+ch 13 (Gel Scroller) and ch 15 (Iris) had `VIEW RANGES` detail; all other channels
+are continuous controls without documented value bands.
+
+- [x] Manual: [S4_Revolution_User_Manual_RevE.pdf](../../Manuals/S4_Revolution_User_Manual_RevE.pdf).
+- [x] Captured the personality into `Manuals/personalities/ETC_Source4Rev_BaseFrame.md`
+  (`VIEW CHANS` for all 31 channels; `VIEW RANGES` for ch 8 Zoom, ch 13 Gel Scroller,
+  ch 15 Iris). The other channels had no `VIEW RANGES` detail and are modelled as
+  plain sliders.
+- [x] `sealed class Source4RevolutionFixture` with `BASE_FRAME` (31ch) implemented;
+  Base / Base Iris / 15ch / Base Module left as `// TODO` enum entries per the locked
+  decision.
+- [x] Traits: `WithDimmer` (ch 1, mechanical douser), `WithPosition` (16-bit pan ch 2/3
+  + tilt ch 4/5). No `WithStrobe` (no shutter channel in this personality). No
+  `WithColour` (colour comes from the discrete gel scroller).
+- [x] `DmxFixtureSetting<GelFrame>` for ch 13 with the 14-frame band layout. Generic
+  `FRAME_0..FRAME_13` names since the personality capture has no actual gel colour
+  labels — venue gel string maps frame index → colour.
+- [x] Plain `Slider` for ch 6 (Media Frame), ch 7 (Focus), ch 8 (Zoom), ch 9–11
+  (Focus / Col / Beam fade times), ch 15 (Iris), ch 16/17/18/19 (FB beam wheel
+  pos/func/rot 16-bit), ch 20/21/22/23 (RB beam wheel pos/func/rot 16-bit), ch
+  24–31 (4 framing shutters × pos+rot).
+- [x] **Plan deviation**: Reset (ch 12) and Reserved (ch 14) are NOT exposed as
+  `@FixtureProperty`. The earlier plan called for "lamp on/off and reset bands must
+  not be FX-targetable" with the assumption this was a discharge fixture; the
+  captured personality has no lamp-control bands at all (the Source 4 Revolution
+  uses an HPL tungsten lamp, not HMI), and Reset's band layout was not captured.
+  Both channels default to 0 and stay there unless a script writes raw values via
+  the controller transaction.
+- [x] Tests for the channel layout and the gel scroller band levels.
+- [x] `./gradlew test` — `BUILD SUCCESSFUL`.
 
 ---
 

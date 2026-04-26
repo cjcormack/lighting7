@@ -42,6 +42,7 @@ object FixtureTypeRegistry {
         Scantastic4Fixture::class,
         ShehdsLed19RgbwFixture::class,
         SlenderBeamBarQuadFixture::class,
+        Source4RevolutionFixture::class,
         StarClusterFixture::class,
         UVFixture::class,
         VarytecEasymoveXl60SpotFixture::class,
