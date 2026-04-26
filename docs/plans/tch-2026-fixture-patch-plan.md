@@ -29,13 +29,11 @@ Related docs:
 
 ## Status
 
-**Next action**: Tiers 0, 1, 2, 3, 4, 5, 7 and 8 are done (2026-04-26). All
-[Open Questions](#open-questions) except Q2 are answered. The only remaining
-fixture-class tier is [Tier 6](#tier-6--robe-colorspot-575-at) (Robe ColorSpot 575 AT) —
-gated on OQ2 (capture the Mode 2 personality from MagicQ). After Tier 6, the only
-remaining patch work is [Tier 9](#tier-9--db-patch-rows) (DB patch rows / universe
-configs). [Tier 10](#tier-10--shared-bandedstrobechannel-refactor) is an
-independent refactor surfaced by the Tier 8 simplify pass — can run any time.
+**Next action**: All fixture-class tiers (0–8) are done (2026-04-26). All
+[Open Questions](#open-questions) are answered. The only remaining patch work
+is [Tier 9](#tier-9--db-patch-rows) (DB patch rows / universe configs).
+[Tier 10](#tier-10--shared-bandedstrobechannel-refactor) is an independent
+refactor surfaced by the Tier 8 simplify pass — can run any time.
 
 **Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
 `fixture_patches` rows still need creating once the classes exist — tracked separately in
@@ -90,10 +88,13 @@ independent refactor surfaced by the Tier 8 simplify pass — can run any time.
    [User_manual_ColorSpot_575_AT.pdf](../../Manuals/User_manual_ColorSpot_575_AT.pdf),
    [ColorSpot_575_AT_DMX_charts.pdf](../../Manuals/ColorSpot_575_AT_DMX_charts.pdf).
    - Confirm Mode 2 = 19ch (vs Mode 1 standard / Mode 3 reduced).
-   - **Answer:** _Pending._ 2026-04-26 grep of `headindex.csv` for `^robe,(colou?r.?spot|cspot)`
-     filtered to `575` returned no rows — Robe is filed under a different name in this
-     ChamSys library. Next pass: `grep -iE '^robe,' headindex.csv` (full Robe list) or open
-     the patched fixture in `EDIT HEAD` and capture the personality directly.
+   - **Answer (2026-04-26):** Confirmed. ChamSys personality `Robe,Spot575,Mode 2`,
+     19 channels. The DMX chart's Mode 2 column matches the MagicQ `EDIT HEAD`
+     capture exactly for ch 5–9 (the screenshotted ranges). Channel layout:
+     16-bit pan/tilt + P/T speed + Control + Col 1 + Col 2 + static gobo +
+     rotating gobo + gobo rot + prism + prism rot + frost + iris + zoom + focus
+     + shutter + dimmer. Full layout in
+     [Manuals/personalities/Robe_ColorSpot575AT_Mode2.md](../../Manuals/personalities/Robe_ColorSpot575AT_Mode2.md).
 
 3. **ETC Source 4 Revolution "Base Frame" — exact mode/channel count?** Patched at
    `02-001` and `02-101` (100ch spacing — almost certainly just clean addressing, not actual
@@ -141,6 +142,7 @@ independent refactor surfaced by the Tier 8 simplify pass — can run any time.
    - **Files added:**
      - [Manuals/personalities/Martin_Mac250_Mode4.md](../../Manuals/personalities/Martin_Mac250_Mode4.md)
      - [Manuals/personalities/ETC_Source4Rev_BaseFrame.md](../../Manuals/personalities/ETC_Source4Rev_BaseFrame.md)
+     - [Manuals/personalities/Robe_ColorSpot575AT_Mode2.md](../../Manuals/personalities/Robe_ColorSpot575AT_Mode2.md)
      - [Manuals/personalities/Kam_Liteobar252_11ch.md](../../Manuals/personalities/Kam_Liteobar252_11ch.md)
      - [Manuals/personalities/Gear4Music_SOLParty12B_8ch.md](../../Manuals/personalities/Gear4Music_SOLParty12B_8ch.md)
      - [Manuals/personalities/China_2CellLEDBlind_8ch.md](../../Manuals/personalities/China_2CellLEDBlind_8ch.md)
@@ -415,18 +417,48 @@ reference if needed (Mode 4 layout is shared with the +).
 
 ## Tier 6 — Robe ColorSpot 575 AT
 
-**Entry criteria**: [Open question 2](#open-questions) answered.
+**Status: DONE (2026-04-26).** Class added (Mode 2 19ch only), registered, tested,
+docs updated, full test suite green.
 
-- [ ] Manuals:
+**Entry criteria**: [OQ2](#open-questions) answered (2026-04-26).
+
+**Personality confirmed**: ChamSys `Robe,Spot575,Mode 2` = 19 channels. The
+fixture has dual colour wheels (Col 1 + Col 2) with deep / corrective filters
+on Col 2 — there is **no CMY mixing** on this fixture, despite the plan's
+earlier guess.
+
+**Authoritative reference**:
+[Manuals/personalities/Robe_ColorSpot575AT_Mode2.md](../../Manuals/personalities/Robe_ColorSpot575AT_Mode2.md)
+— full 19-channel layout. The MagicQ `VIEW RANGES` capture (ch 5–9
+screenshotted) was spot-checked against the bundled Robe DMX chart Mode 2
+column and they agree exactly; channels 10–19 use the chart directly.
+
+- [x] Manuals:
   [User_manual_ColorSpot_575_AT.pdf](../../Manuals/User_manual_ColorSpot_575_AT.pdf) +
   [ColorSpot_575_AT_DMX_charts.pdf](../../Manuals/ColorSpot_575_AT_DMX_charts.pdf).
-- [ ] `sealed class RobeColorSpot575Fixture` with both Mode 1 and Mode 2; implement Mode 2.
-- [ ] Discharge lamp, so include lamp on/off / shutter / dimmer logic carefully — note the
-  difference between mechanical shutter and electronic dimmer in the manual.
-- [ ] Traits: `WithDimmer`, `WithPosition`, `WithStrobe`. CMY mixing +
-  colour wheel; gobo wheel(s); prism; focus; iris; frost.
-- [ ] Tests.
-- [ ] `./gradlew test`.
+- [x] `sealed class RobeColorSpot575Fixture` with `MODE_2` (19ch) implemented;
+  Modes 1 / 3 / 4 left as `// TODO` enum entries per the locked decision.
+- [x] Traits: `WithDimmer` (ch 19, HTP), `WithPosition` (16-bit pan/tilt at
+  ch 1/2 + 3/4), `WithStrobe` (ch 18 — `StrobeChannel` clamps the slider to
+  `STROBE_BAND_MAX = 95u`, so neither `Strobe` API nor raw `value` writes can
+  wander into the pulse-open/pulse-close/random-strobe bands above 95).
+- [x] Discharge-lamp safety: lamp on/off + the seven reset bands all live on
+  **channel 6 (Control)**, not the shutter channel as on the MAC 250. Channel 6
+  is intentionally NOT exposed as `@FixtureProperty`. Explicit methods
+  (`lampOn()`, `lampOff()`, `reset()`, `resetPanTilt()`, `resetColour()`,
+  `resetGobo()`, `resetDimmer()`, `resetFocusZoomFrost()`, `resetIrisPrism()`)
+  bypass the property system and write directly via the transaction.
+- [x] `DmxFixtureSetting<DmxFixtureColourSettingValue>` for ch 7 (Col 1) and
+  ch 8 (Col 2) with hex preview swatches.
+- [x] `DmxFixtureSetting` enums for ch 9 (`StaticGobo` with shake variants +
+  scroll), ch 10 (`RotGobo` with index/rotate/shake variants + scroll), and
+  ch 12 (`Prism` with 16 macros).
+- [x] Plain `Slider` for ch 5 (P/T Speed), ch 11 (Gobo rotation — semantics
+  depend on ch 10 mode), ch 13 (Prism rotation), ch 14 (Frost), ch 15 (Iris),
+  ch 16 (Zoom), ch 17 (Focus).
+- [x] Tests for the channel layout, the strobe-band semantics + clamp, and
+  the lamp/reset family methods.
+- [x] `./gradlew test` — `BUILD SUCCESSFUL`.
 
 ---
 
@@ -567,6 +599,9 @@ differing only in the `STROBE_MIN` / `STROBE_MAX` band constants and the
 - `Scantastic4Fixture.StrobeChannel`
 - `MartinMac250Fixture.StrobeChannel` (50u..72u, fullOn = 35u — note slider is
   also `max`-clamped to 72u for safety; the new abstraction must support that)
+- `RobeColorSpot575Fixture.StrobeChannel` (64u..95u, fullOn = 35u — slider also
+  `max`-clamped to 95u so neither raw `value` writes nor `Strobe` calls can
+  wander into the pulse / random-strobe bands)
 - `LedLightbar12PixelFixture.StrobeChannel`
 - `AdjFogFuryJettFixture.StrobeChannel` (32u..95u, fullOn = 0u)
 

@@ -42,6 +42,7 @@ object FixtureTypeRegistry {
         LedLightbar12PixelFixture::class,
         LightstripFixture::class,
         MartinMac250Fixture::class,
+        RobeColorSpot575Fixture::class,
         Scantastic4Fixture::class,
         ShehdsLed19RgbwFixture::class,
         SlenderBeamBarQuadFixture::class,

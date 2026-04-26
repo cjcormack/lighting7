@@ -585,6 +585,7 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `ImgStageLineWash42LedFixture.Mode13Ch` | imgstageline-wash-42led-13ch | 13 | Dimmer, Colour, White, Strobe, Position |
 | `KamLiteobar252Fixture` | kam-liteobar-252-11ch | 11 | Strobe, MultiElementFixture (3 RGB cells + macro modes) |
 | `MartinMac250Fixture.Mode4Ch` | martin-mac-250-mode-4 | 13 | Dimmer, Position, Strobe (+ colour/gobo/prism wheels, lamp/reset methods) |
+| `RobeColorSpot575Fixture.Mode2Ch` | robe-color-spot-575-mode-2 | 19 | Dimmer, Position, Strobe (+ dual colour wheels, static/rotating gobos, prism, frost, iris, zoom, focus, lamp/reset methods) |
 | `WhexFixture` | whex | 12 | Dimmer, Colour (RGBW variant) |
 | `QuadBarFixture` | quadbar | 1 | Settings only (show modes) |
 | `LightstripFixture` | lightstrip | 3 | Colour |
