@@ -29,9 +29,13 @@ Related docs:
 
 ## Status
 
-**Next action**: User to answer [Open Questions](#open-questions) in ChamSys, then start with
-[Tier 0](#tier-0--generic-1-channel-dimmer-fixture) (smallest, unblocks all the conventional
-patches in one go).
+**Next action**: Most [Open Questions](#open-questions) are answered (2026-04-26 ChamSys
+session — Q1, Q3, Q4, Q6, Q7). Q2 (Robe ColorSpot 575 mode) and the China 2-Cell Blinder
+personality are still pending a second ChamSys pass; Q5 (personality export method) is
+resolved — we transcribe `EDIT HEAD` screenshots into Markdown under
+`Manuals/personalities/` because the on-disk `.hed` and `heads.all` are obfuscated.
+Start with [Tier 0](#tier-0--generic-1-channel-dimmer-fixture) (smallest, unblocks all
+the conventional patches in one go).
 
 **Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
 `fixture_patches` rows still need creating once the classes exist — tracked separately in
@@ -73,14 +77,23 @@ patches in one go).
    - Is this MAC 250 Krypton, Entour, Wash, or Entour-Krypton?
    - Does ChamSys' "Mode 4" map to the manual's 13-channel "Mode 4 (extended)" personality, or
      something else?
-   - **Answer:**
+   - **Answer (2026-04-26):** This is the **original MAC 250** (not Krypton/Entour/Wash/Beam/+).
+     ChamSys personality key `Martin,Mac250,Mode 4`, 13 channels. Identifiable by the channel
+     layout: single colour wheel + single gobo wheel, no CMY mixing. The Krypton manual we have
+     is for the wrong variant. The MAC 250+ has a byte-identical Mode 4 layout (only the +'s
+     Mode 3 diverged in the lamp-ballast refresh), so a MAC 250+ user manual is a valid
+     human-readable reference. Full channel map and value ranges are captured in
+     [Manuals/personalities/Martin_Mac250_Mode4.md](../../Manuals/personalities/Martin_Mac250_Mode4.md).
 
 2. **Robe ColorSpot 575 AT "Mode 2" — channel count?** Patched at 19-channel intervals
    (`01-202` → `01-221`). Manuals:
    [User_manual_ColorSpot_575_AT.pdf](../../Manuals/User_manual_ColorSpot_575_AT.pdf),
    [ColorSpot_575_AT_DMX_charts.pdf](../../Manuals/ColorSpot_575_AT_DMX_charts.pdf).
    - Confirm Mode 2 = 19ch (vs Mode 1 standard / Mode 3 reduced).
-   - **Answer:**
+   - **Answer:** _Pending._ 2026-04-26 grep of `headindex.csv` for `^robe,(colou?r.?spot|cspot)`
+     filtered to `575` returned no rows — Robe is filed under a different name in this
+     ChamSys library. Next pass: `grep -iE '^robe,' headindex.csv` (full Robe list) or open
+     the patched fixture in `EDIT HEAD` and capture the personality directly.
 
 3. **ETC Source 4 Revolution "Base Frame" — exact mode/channel count?** Patched at
    `02-001` and `02-101` (100ch spacing — almost certainly just clean addressing, not actual
@@ -90,7 +103,13 @@ patches in one go).
    - Which personality is this fixture set to? (e.g. "Standard 14ch", "Standard + Framing
      26ch", etc.)
    - Are the framing shutters physically installed at TCH or not?
-   - **Answer:**
+   - **Answer (2026-04-26):** ChamSys personality `ETC,Source4Rev,Base Frame` is **31 channels**,
+     not the 14ch/26ch range originally guessed. The plan's interpretation was inverted —
+     "Base Frame" in ChamSys means **chassis WITH Framing Shutter module installed**, a
+     17-channel jump over the 14ch `Base` personality (4 shutters × insert+rotate + extras).
+     So framing shutters ARE addressed in the patch, and the fixture class needs to model
+     them. Other ETC Source4Rev personalities in the library: `Base` (14ch), `Base Iris` (15ch),
+     `15ch` (15ch), `Base Module` (23ch), `Base Frame` (31ch — the patched mode).
 
 4. **Shehds LED19x15W RGBW — 24ch personality.** Patched at 24ch intervals. Manual
    [19颗调焦4合1染色灯(16-24CH)最新.pdf](../../Manuals/19颗调焦4合1染色灯(16-24CH)最新.pdf)
@@ -98,7 +117,12 @@ patches in one go).
    - Confirm 24ch = the per-pixel mode, and 16ch = global RGBW + macros.
    - Does ChamSys split this into 19 individual RGBW pixels in 24ch mode, or treat it as one
      fixture? (Affects whether we need `MultiElementFixture` or just a flat property list.)
-   - **Answer:**
+   - **Answer (2026-04-26):** ChamSys personality `Shehds,LED19x15wRGBW,24ch` is a **single
+     24-channel head, not per-pixel** — 19 LEDs × RGBW would require 76+ channels for true
+     per-pixel control, so 24ch is global RGBW + macros + zoom/strobe/dimmer. ChamSys treats
+     it as one fixture (one row in the personality library). **No `MultiElementFixture`
+     needed** — flat property list is correct. The presumption that 24ch = per-pixel mode
+     was wrong.
 
 5. **ChamSys personality export.** For the three unmanualed fixtures (Kam Liteobar 252,
    Gear4Music SOL Party 12B, China 2-Cell LED Blinder), we need DMX charts. Easiest options
@@ -108,17 +132,33 @@ patches in one go).
      `Manuals/personalities/` subfolder).
    - Open the personality in MagicQ's "Edit Head" view and screenshot each channel's settings.
    - Last resort: paste the channel map as text in the relevant Tier section below.
-   - **Method chosen:**
+   - **Method chosen:** Markdown transcription of MagicQ's `EDIT HEAD` → `VIEW CHANS` and
+     `VIEW RANGES` screens, dropped into `Manuals/personalities/`. Tried the file-export
+     path first: MagicQ's per-head `.hed` files and the consolidated `heads.all` are both
+     obfuscated (high-bit-set bytes, no readable strings), so direct file capture is a dead
+     end. The UI is the only readable source.
    - **Files added:**
+     - [Manuals/personalities/Martin_Mac250_Mode4.md](../../Manuals/personalities/Martin_Mac250_Mode4.md)
+     - _More to follow as additional fixtures are captured._
 
 6. **Kam "Liteobar 252" — model spelling.** ChamSys lists `Liteobar252`. The actual product is
    probably the **Kam LightBar 252** or **LiteBar 252**. Confirm exact product name + DMX mode
    (the channel count is 11ch).
-   - **Answer:**
+   - **Answer (2026-04-26):** ChamSys's marketing-name field for this entry is empty, so we
+     have no clean retail-product name to confirm. Use what ChamSys gives us:
+     `manufacturer = "Kam"`, `model = "Liteobar 252"`, mode `11ch`. Personality key
+     `Kam_Liteobar252_11ch`. Not worth chasing the marketing name further — the
+     `@FixtureType` annotation will use ChamSys's spelling for consistency with the patch.
 
 7. **Gear4Music "SOLParty12B" — confirm model.** Likely the Gear4Music SOL Party Bar 12 B (an
    8-channel LED party bar). Confirm exact product name.
-   - **Answer:**
+   - **Answer (2026-04-26):** Confirmed. ChamSys personality `Gear4Music,SOLParty12B,8ch`,
+     marketing-name field gives long form `SOL Party 12B`. 8 channels.
+
+8. **China 2-Cell LED Blinder — personality details.** Patched at 8ch intervals.
+   - **Answer:** _Pending._ 2026-04-26 grep of `headindex.csv` for blinders matching the 8ch
+     count returned no obvious match (the only blinder hit was an Elation 2-channel fixture).
+     Next pass: open the patched fixture in `EDIT HEAD` and capture the personality.
 
 ---
 
@@ -265,14 +305,31 @@ follow the manual's naming.
 
 ## Tier 5 — Martin MAC 250
 
-**Entry criteria**: [Open question 1](#open-questions) answered.
+**Entry criteria**: [OQ1](#open-questions) answered (2026-04-26).
 
-- [ ] Manual: [UM_MAC250_EN_D.PDF](../../Manuals/UM_MAC250_EN_D.PDF). Pick the variant the user
-  confirms.
-- [ ] `sealed class MartinMac250Fixture` with the four DMX modes from the manual; implement
-  the patched mode (likely `MODE_4`).
-- [ ] Traits: `WithDimmer`, `WithPosition`, `WithStrobe`. Colour wheel +
-  CMY-or-colour-macro `DmxFixtureSetting`s; gobo wheel; effect/prism wheel.
+**Variant confirmed**: original MAC 250, not Krypton/Entour/Wash/Beam/+. Single colour
+wheel + single gobo wheel, no CMY mixing. Personality key `Martin,Mac250,Mode 4`.
+
+**Authoritative reference**:
+[Manuals/personalities/Martin_Mac250_Mode4.md](../../Manuals/personalities/Martin_Mac250_Mode4.md)
+— full channel layout, defaults, and DMX value ranges captured from MagicQ's `EDIT HEAD`.
+The bundled [UM_MAC250_EN_D.PDF](../../Manuals/UM_MAC250_EN_D.PDF) is the **wrong manual**
+(it's for the Krypton variant); a MAC 250+ user manual would be a valid human-readable
+reference if needed (Mode 4 layout is shared with the +).
+
+- [ ] `sealed class MartinMac250Fixture` with all four DMX modes (9/11/13/13 channels —
+  Mode 1, Mode 2, Mode 3, Mode 4). Implement Mode 4 (the patched mode); leave Mode 1–3 as
+  `// TODO` enum entries with a doc comment pointing at this plan.
+- [ ] Traits: `WithDimmer` (ch 2, HTP), `WithStrobe` (ch 1 — strobe band 50–72 only;
+  guard lamp on/off bands 228–255 and reset 208–217 from FX targeting), `WithPosition`
+  (16-bit pan/tilt at ch 8/9 + 10/11).
+- [ ] `DmxFixtureSetting<DmxFixtureColourSettingValue>` for ch 3 (colour wheel) with hex
+  preview swatches per the indexed-colour table.
+- [ ] `DmxFixtureSetting` enums for ch 4 (Gobo, with shake variants), ch 7 (Prism), ch 12
+  (P/T Speed band), ch 13 (Speed FX).
+- [ ] Plain `Slider` for ch 5 (Rotate) and ch 6 (Focus).
+- [ ] Explicit methods (not FX-targetable) for `lampOn()`, `lampOff()`, `reset()` —
+  these live on the shutter channel and must not be hit by random output.
 - [ ] Tests.
 - [ ] `./gradlew test`.
 
@@ -297,14 +354,22 @@ follow the manual's naming.
 
 ## Tier 7 — Source 4 Revolution
 
-**Entry criteria**: [Open question 3](#open-questions) answered.
+**Entry criteria**: [OQ3](#open-questions) answered (2026-04-26).
+
+**Personality confirmed**: ChamSys `ETC,Source4Rev,Base Frame` = **31 channels**, i.e.
+chassis WITH the Framing Shutter module installed. The plan's earlier guess that "Base
+Frame" meant chassis-without-modules was inverted. Other library personalities for cross-
+reference: `Base` (14ch), `Base Iris` (15ch), `15ch` (15ch), `Base Module` (23ch).
 
 - [ ] Manual: [S4_Revolution_User_Manual_RevE.pdf](../../Manuals/S4_Revolution_User_Manual_RevE.pdf).
-- [ ] `sealed class Source4RevolutionFixture` with the personalities the manual lists. The
-  fixture supports interchangeable modules (Iris, Framing Shutter), each adding channels.
-- [ ] Implement the "Base Frame" personality the user confirmed in OQ3. Leave other modes as
-  `// TODO` enum entries with a doc comment pointing at this plan.
-- [ ] This is a discharge fixture (HMI 700) — same lamp/shutter/dimmer caution as Robe.
+- [ ] Capture the personality from MagicQ's `EDIT HEAD` (`VIEW CHANS` + `VIEW RANGES`) into
+  `Manuals/personalities/ETC_Source4Rev_BaseFrame.md` before implementing — same approach as
+  the Mac 250 capture.
+- [ ] `sealed class Source4RevolutionFixture` with the personalities ChamSys lists (Base,
+  Base Iris, 15ch, Base Module, Base Frame). Implement Base Frame; leave others as
+  `// TODO` enum entries.
+- [ ] This is a discharge fixture (HMI 700) — same lamp/shutter/dimmer caution as Robe and
+  the MAC 250: lamp on/off and reset bands must not be FX-targetable.
 - [ ] Tests.
 - [ ] `./gradlew test`.
 
