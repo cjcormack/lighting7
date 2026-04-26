@@ -38,6 +38,7 @@ object FixtureTypeRegistry {
         LaserworldCS1000RGBMk3Fixture::class,
         LedLightbar12PixelFixture::class,
         LightstripFixture::class,
+        MartinMac250Fixture::class,
         Scantastic4Fixture::class,
         SlenderBeamBarQuadFixture::class,
         StarClusterFixture::class,

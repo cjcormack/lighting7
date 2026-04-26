@@ -29,13 +29,14 @@ Related docs:
 
 ## Status
 
-**Next action**: Tiers 0, 1, 2 and 3 are done (2026-04-26). Most [Open Questions](#open-questions)
+**Next action**: Tiers 0, 1, 2, 3 and 5 are done (2026-04-26). Most [Open Questions](#open-questions)
 are answered (2026-04-26 ChamSys session — Q1, Q3, Q4, Q6, Q7). Q2 (Robe ColorSpot 575
 mode) and the China 2-Cell Blinder personality are still pending a second ChamSys pass;
 Q5 (personality export method) is resolved — we transcribe `EDIT HEAD` screenshots into
 Markdown under `Manuals/personalities/` because the on-disk `.hed` and `heads.all` are
-obfuscated. Next session: pick [Tier 5](#tier-5--martin-mac-250) (MAC 250 with personality
-already captured) — Tier 4 needs no further OQs but is a larger fixture.
+obfuscated. Next session: pick [Tier 4](#tier-4--shehds-led19x15w-rgbw) (Shehds 24ch RGBW
+— OQ4 already answered) or [Tier 7](#tier-7--source-4-revolution) (S4 Revolution Base Frame
+— still needs the personality capture before implementation).
 
 **Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
 `fixture_patches` rows still need creating once the classes exist — tracked separately in
@@ -348,6 +349,9 @@ suite green.
 
 ## Tier 5 — Martin MAC 250
 
+**Status: DONE (2026-04-26).** Class added, registered, tested, docs updated, full test
+suite green.
+
 **Entry criteria**: [OQ1](#open-questions) answered (2026-04-26).
 
 **Variant confirmed**: original MAC 250, not Krypton/Entour/Wash/Beam/+. Single colour
@@ -360,21 +364,25 @@ The bundled [UM_MAC250_EN_D.PDF](../../Manuals/UM_MAC250_EN_D.PDF) is the **wron
 (it's for the Krypton variant); a MAC 250+ user manual would be a valid human-readable
 reference if needed (Mode 4 layout is shared with the +).
 
-- [ ] `sealed class MartinMac250Fixture` with all four DMX modes (9/11/13/13 channels —
-  Mode 1, Mode 2, Mode 3, Mode 4). Implement Mode 4 (the patched mode); leave Mode 1–3 as
-  `// TODO` enum entries with a doc comment pointing at this plan.
-- [ ] Traits: `WithDimmer` (ch 2, HTP), `WithStrobe` (ch 1 — strobe band 50–72 only;
-  guard lamp on/off bands 228–255 and reset 208–217 from FX targeting), `WithPosition`
-  (16-bit pan/tilt at ch 8/9 + 10/11).
-- [ ] `DmxFixtureSetting<DmxFixtureColourSettingValue>` for ch 3 (colour wheel) with hex
-  preview swatches per the indexed-colour table.
-- [ ] `DmxFixtureSetting` enums for ch 4 (Gobo, with shake variants), ch 7 (Prism), ch 12
-  (P/T Speed band), ch 13 (Speed FX).
-- [ ] Plain `Slider` for ch 5 (Rotate) and ch 6 (Focus).
-- [ ] Explicit methods (not FX-targetable) for `lampOn()`, `lampOff()`, `reset()` —
-  these live on the shutter channel and must not be hit by random output.
-- [ ] Tests.
-- [ ] `./gradlew test`.
+- [x] `sealed class MartinMac250Fixture` with `MODE_4` (13ch) implemented; Mode 1, 2, 3
+  left as `// TODO` enum entries per the locked decision.
+- [x] Traits: `WithDimmer` (ch 2), `WithStrobe` (ch 1 — `StrobeChannel` clamps the slider
+  to `STROBE_MAX = 72`, so neither `Strobe` API nor raw `value` writes can wander into
+  the Reset/Lamp bands), `WithPosition` (16-bit pan/tilt at ch 8/9 + 10/11).
+- [x] `DmxFixtureSetting<DmxFixtureColourSettingValue>` for ch 3 with hex preview swatches
+  on the indexed colours.
+- [x] `DmxFixtureSetting` enums for ch 4 (`Gobo` with shake variants + scroll) and ch 7
+  (`Prism` with macros).
+  - **Plan deviation**: ch 12 (P/T Speed) and ch 13 (Effect speed) modelled as plain
+    `Slider`s, not enums — the personality capture explicitly notes "no `VIEW RANGES`
+    entries beyond the implicit 0–255" for both. The earlier checklist's expectation of
+    enums was a guess.
+- [x] Plain `Slider` for ch 5 (Gobo rotation) and ch 6 (Focus).
+- [x] Explicit `lampOn()`, `lampOff()`, `reset()` on `Mode4Ch` that bypass the strobe
+  slider's clamp — they write directly via the transaction. Not FX-targetable.
+- [x] Tests for the channel layout, the strobe-band semantics + clamp, and the lamp/reset
+  methods.
+- [x] `./gradlew test` — `BUILD SUCCESSFUL`.
 
 ---
 
