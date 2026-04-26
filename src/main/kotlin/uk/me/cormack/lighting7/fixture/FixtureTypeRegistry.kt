@@ -30,6 +30,7 @@ object FixtureTypeRegistry {
         AdjFogFuryJettFixture::class,
         EquinoxTwinShotMkIIFixture::class,
         Fusion100SpotMkIIFixture::class,
+        Gear4MusicOrbit70Fixture::class,
         GenericDimmerFixture::class,
         HazerFixture::class,
         HexFixture::class,

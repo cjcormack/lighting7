@@ -29,14 +29,14 @@ Related docs:
 
 ## Status
 
-**Next action**: Tiers 0 and 1 are done (2026-04-26). Most [Open Questions](#open-questions)
+**Next action**: Tiers 0, 1 and 2 are done (2026-04-26). Most [Open Questions](#open-questions)
 are answered (2026-04-26 ChamSys session — Q1, Q3, Q4, Q6, Q7). Q2 (Robe ColorSpot 575
 mode) and the China 2-Cell Blinder personality are still pending a second ChamSys pass;
 Q5 (personality export method) is resolved — we transcribe `EDIT HEAD` screenshots into
 Markdown under `Manuals/personalities/` because the on-disk `.hed` and `heads.all` are
-obfuscated. Next session: pick [Tier 2](#tier-2--orbit-70-moving-head) (highest-quantity
-DMX fixture, no open questions block it) or [Tier 3](#tier-3--easymove-xl-60-moving-head)
-(another single moving-head fixture).
+obfuscated. Next session: pick [Tier 3](#tier-3--easymove-xl-60-moving-head) (another
+single moving-head fixture, no open questions block it) or [Tier 5](#tier-5--martin-mac-250)
+(MAC 250 with personality already captured).
 
 **Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
 `fixture_patches` rows still need creating once the classes exist — tracked separately in
@@ -278,16 +278,25 @@ re-runs green in isolation; unrelated to this tier.)
 **Goal**: The Gear4Music Orbit-70 (13ch). Highest-quantity DMX fixture (6 patched), so worth
 its own session.
 
+**Status: DONE (2026-04-26).** Class added, registered, tested, docs updated, full test
+suite green.
+
 **Entry criteria**: Tier 0 done.
 
-- [ ] Read the manual end-to-end: [download_399717.pdf](../../Manuals/download_399717.pdf).
-  Pay attention to the channel chart and any pan/tilt range specs.
-- [ ] Implement as a single-mode fixture (no `MultiModeFixtureFamily` needed unless the
-  manual exposes more modes — verify first).
-- [ ] Traits: `WithDimmer`, `WithColour`, `WithPosition`, `WithStrobe` if present.
-- [ ] Likely needs `DmxFixtureSetting` enums for built-in macros / colour macros / sound mode.
-- [ ] Test.
-- [ ] `./gradlew test`.
+- [x] Read the manual end-to-end: [download_399717.pdf](../../Manuals/download_399717.pdf).
+  Two personalities (9CH / 13CH); 13CH is the patched mode. 7×10W RGBW LEDs.
+- [x] Implemented as `sealed class Gear4MusicOrbit70Fixture` with `Mode13Ch` only;
+  `MODE_9CH` is left as a `// TODO` per the locked decision.
+- [x] Final traits: `WithDimmer`, `WithColour`, `WithWhite`, `WithStrobe`, `WithPosition`
+  (with separate fine-pan/fine-tilt sliders). Ch7 is the strobe/shutter channel —
+  `strobe.fullOn()` writes 248 (LED open switch) and `strobe.strobe(intensity)` maps
+  into 016–131 (linear strobe band). Pulse, quick-start and random-flash bands are
+  reachable as raw channel writes but not exposed via `Strobe`.
+- [x] `Program` enum on ch13 covers the documented bands (4 program variants + reset).
+  Sound-active mode (240–255 in the 9CH personality) is omitted — not documented for 13CH.
+- [x] Ch12 (static colour select) is a plain `Slider` since the manual gives no value bands.
+- [x] Tests for the channel layout and the strobe band semantics.
+- [x] `./gradlew test` — `BUILD SUCCESSFUL`.
 
 **Note**: ChamSys lists the model as `Orbit70WLEDHead`. Don't take that name literally —
 follow the manual's naming.
