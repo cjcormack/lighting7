@@ -28,13 +28,16 @@ object FixtureTypeRegistry {
      */
     private val fixtureClasses: List<KClass<out Fixture>> = listOf(
         AdjFogFuryJettFixture::class,
+        China2CellLedBlinderFixture::class,
         EquinoxTwinShotMkIIFixture::class,
         Fusion100SpotMkIIFixture::class,
         Gear4MusicOrbit70Fixture::class,
+        Gear4MusicSolParty12BFixture::class,
         GenericDimmerFixture::class,
         HazerFixture::class,
         HexFixture::class,
         ImgStageLineWash42LedFixture::class,
+        KamLiteobar252Fixture::class,
         LaserworldCS1000RGBMk3Fixture::class,
         LedLightbar12PixelFixture::class,
         LightstripFixture::class,

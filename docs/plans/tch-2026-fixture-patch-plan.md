@@ -29,14 +29,13 @@ Related docs:
 
 ## Status
 
-**Next action**: Tiers 0, 1, 2, 3, 4, 5 and 7 are done (2026-04-26). Most [Open Questions](#open-questions)
-are answered (2026-04-26 ChamSys session — Q1, Q3, Q4, Q6, Q7). Q2 (Robe ColorSpot 575
-mode) and the China 2-Cell Blinder personality are still pending a second ChamSys pass;
-Q5 (personality export method) is resolved — we transcribe `EDIT HEAD` screenshots into
-Markdown under `Manuals/personalities/` because the on-disk `.hed` and `heads.all` are
-obfuscated. Next session: [Tier 6](#tier-6--robe-colorspot-575-at) (Robe 575 — needs
-OQ2 answered first) or [Tier 8](#tier-8--reverse-engineered-fixtures) (the three
-unmanualed fixtures — needs the China 2-Cell Blinder personality captured first).
+**Next action**: Tiers 0, 1, 2, 3, 4, 5, 7 and 8 are done (2026-04-26). All
+[Open Questions](#open-questions) except Q2 are answered. The only remaining
+fixture-class tier is [Tier 6](#tier-6--robe-colorspot-575-at) (Robe ColorSpot 575 AT) —
+gated on OQ2 (capture the Mode 2 personality from MagicQ). After Tier 6, the only
+remaining patch work is [Tier 9](#tier-9--db-patch-rows) (DB patch rows / universe
+configs). [Tier 10](#tier-10--shared-bandedstrobechannel-refactor) is an
+independent refactor surfaced by the Tier 8 simplify pass — can run any time.
 
 **Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
 `fixture_patches` rows still need creating once the classes exist — tracked separately in
@@ -142,7 +141,9 @@ unmanualed fixtures — needs the China 2-Cell Blinder personality captured firs
    - **Files added:**
      - [Manuals/personalities/Martin_Mac250_Mode4.md](../../Manuals/personalities/Martin_Mac250_Mode4.md)
      - [Manuals/personalities/ETC_Source4Rev_BaseFrame.md](../../Manuals/personalities/ETC_Source4Rev_BaseFrame.md)
-     - _More to follow as additional fixtures are captured._
+     - [Manuals/personalities/Kam_Liteobar252_11ch.md](../../Manuals/personalities/Kam_Liteobar252_11ch.md)
+     - [Manuals/personalities/Gear4Music_SOLParty12B_8ch.md](../../Manuals/personalities/Gear4Music_SOLParty12B_8ch.md)
+     - [Manuals/personalities/China_2CellLEDBlind_8ch.md](../../Manuals/personalities/China_2CellLEDBlind_8ch.md)
 
 6. **Kam "Liteobar 252" — model spelling.** ChamSys lists `Liteobar252`. The actual product is
    probably the **Kam LightBar 252** or **LiteBar 252**. Confirm exact product name + DMX mode
@@ -159,9 +160,13 @@ unmanualed fixtures — needs the China 2-Cell Blinder personality captured firs
      marketing-name field gives long form `SOL Party 12B`. 8 channels.
 
 8. **China 2-Cell LED Blinder — personality details.** Patched at 8ch intervals.
-   - **Answer:** _Pending._ 2026-04-26 grep of `headindex.csv` for blinders matching the 8ch
-     count returned no obvious match (the only blinder hit was an Elation 2-channel fixture).
-     Next pass: open the patched fixture in `EDIT HEAD` and capture the personality.
+   - **Answer (2026-04-26):** Captured from MagicQ `EDIT HEAD`. ChamSys personality key
+     `China,2CellLEDBlind,8ch` (manufacturer field is the literal string `China`). Variable-
+     white blinder, not RGB: each cell has independent warm-white + cold-white channels.
+     8 channels split: master Dimmer (HTP) + Strobe + Prog + Prog Speed + 2 cells × (WW, CW).
+     Cell 2's WW/CW are flagged `Indep yes` in ChamSys so the desk's fan-spread doesn't
+     accidentally affect it. Full layout in
+     [Manuals/personalities/China_2CellLEDBlind_8ch.md](../../Manuals/personalities/China_2CellLEDBlind_8ch.md).
 
 ---
 
@@ -475,17 +480,42 @@ are continuous controls without documented value bands.
 
 ## Tier 8 — Reverse-engineered fixtures
 
-**Entry criteria**: [Open question 5](#open-questions) answered (i.e., DMX charts captured
-from ChamSys).
+**Status: DONE (2026-04-26).** All three personalities captured, three classes
+added, registered, tested, docs updated, full test suite green.
 
-Three small fixtures, batched into one session because they're all similar shape:
+**Entry criteria**: [Open questions 5, 6, 7, 8](#open-questions) all answered
+(2026-04-26).
 
-- [ ] **Kam Liteobar 252** (11ch) — see OQ6 for product name confirmation.
-- [ ] **Gear4Music SOL Party 12B** (8ch) — see OQ7.
-- [ ] **China 2-Cell LED Blinder** (8ch) — likely 2-cell architecture: per-cell dimmer + RGB
-  or warm-white. Use `MultiElementFixture<Cell>` if confirmed.
-- [ ] Tests for each.
-- [ ] `./gradlew test`.
+Three small fixtures, batched into one session — all similar shape (small,
+no manuals, all driven from a transcribed ChamSys personality):
+
+- [x] **Kam Liteobar 252** (11ch). Three RGB cells + master macro + strobe.
+  No manual; personality
+  [Kam_Liteobar252_11ch.md](../../Manuals/personalities/Kam_Liteobar252_11ch.md).
+  Modelled as `MultiElementFixture<Cell>` with 3 RGB cells. No `WithDimmer` —
+  the fixture has no continuous master dimmer; brightness comes from the cell
+  RGB values themselves and the macro channel must be in `DIMMER_1` /
+  `DIMMER_2` (041–120) for cells to be visible. `WithStrobe` on the parent.
+  Macro modelled as `DmxFixtureSetting<Macro>` with the seven band-start
+  levels (BLACK_OUT/DIMMER_1/DIMMER_2/COL_FLASH/COL_CHANGE/COL_FLOW/DREAM_FLOW).
+- [x] **Gear4Music SOL Party 12B** (8ch). Single global RGB party bar.
+  No manual; personality
+  [Gear4Music_SOLParty12B_8ch.md](../../Manuals/personalities/Gear4Music_SOLParty12B_8ch.md).
+  Single-mode `Gear4MusicSolParty12BFixture` with `WithDimmer` + `WithColour`.
+  No strobe channel, no pan/tilt. Built-in colour wheel (ch 2) modelled as a
+  19-entry `DmxFixtureColourSettingValue` enum with hex previews; `ALL_COL`
+  (000–039) is the "off" band where manual RGB on ch 5/6/7 takes over.
+  Plain sliders for Int Mode, Col Speed, FX.
+- [x] **China 2-Cell LED Blinder** (8ch). Variable-white blinder (warm + cold,
+  no RGB). No manual; personality
+  [China_2CellLEDBlind_8ch.md](../../Manuals/personalities/China_2CellLEDBlind_8ch.md).
+  Single-mode `China2CellLedBlinderFixture` with `WithDimmer` (ch 1, HTP) +
+  `WithStrobe` (ch 2) + `MultiElementFixture<Cell>` with 2 cells. Each cell
+  has a Warm White and a Cold White slider — both `PropertyCategory.WHITE`,
+  no `WithWhite` trait (using it on one would imply asymmetry). Strobe band
+  is 011–255 (the `Open` band is 0–10). Programs as a 7-entry enum.
+- [x] Tests for each.
+- [x] `./gradlew test` — `BUILD SUCCESSFUL`.
 
 ---
 
@@ -506,3 +536,82 @@ Two ways to do this:
   patches. Keep it idempotent (skip if `key` already exists).
 - [ ] Verify in the UI that all fixtures load and respond to channel writes.
 - [ ] Smoke-test a sample from each fixture type at the venue when possible.
+
+---
+
+## Tier 10 — Shared `BandedStrobeChannel` refactor
+
+**Goal**: Collapse the ~12 near-identical `StrobeChannel` inner classes scattered
+across the fixture codebase into a single shared abstraction.
+
+**Entry criteria**: None — independent of the patching tiers. Can run any time
+after Tier 8. Tier 9 does not depend on this and vice versa.
+
+**Background** — surfaced by the simplify pass during Tier 8 (2026-04-26): every
+fixture that exposes `WithStrobe` defines its own `class StrobeChannel(...) :
+DmxSlider(...), Strobe` whose `strobe(intensity)` body is the byte-identical
+expression
+`((span / 255F * intensity.toFloat()).roundToInt() + STROBE_MIN.toInt()).toUByte()`,
+differing only in the `STROBE_MIN` / `STROBE_MAX` band constants and the
+`fullOn()` value. Known instances at time of writing:
+
+- `KamLiteobar252Fixture.StrobeChannel` (1u..255u, fullOn = 0u)
+- `China2CellLedBlinderFixture.StrobeChannel` (11u..255u, fullOn = 0u)
+- `Gear4MusicOrbit70Fixture.StrobeChannel` (16u..131u, fullOn = 248u)
+- `ShehdsLed19RgbwFixture.StrobeChannel` (1u..255u, fullOn = 0u)
+- `VarytecEasymoveXl60SpotFixture.StrobeChannel` (1u..255u, fullOn = 0u)
+- `ImgStageLineWash42LedFixture.StrobeChannel` (135u..239u, fullOn = 240u)
+- `HexFixture.DmxStrobe` (10u..255u, fullOn = 0u)
+- `SlenderBeamBarQuadFixture.StrobeChannel` (8u..255u, fullOn = 0u)
+- `Fusion100SpotMkIIFixture.StrobeChannel`
+- `Scantastic4Fixture.StrobeChannel`
+- `MartinMac250Fixture.StrobeChannel` (50u..72u, fullOn = 35u — note slider is
+  also `max`-clamped to 72u for safety; the new abstraction must support that)
+- `LedLightbar12PixelFixture.StrobeChannel`
+- `AdjFogFuryJettFixture.StrobeChannel` (32u..95u, fullOn = 0u)
+
+**Proposed API** (open class so MartinMac250's safety clamp can extend it):
+```kotlin
+open class BandedStrobeChannel(
+    transaction: ControllerTransaction?,
+    universe: Universe,
+    channelNo: Int,
+    private val strobeMin: UByte,
+    private val strobeMax: UByte,
+    private val fullOnValue: UByte = 0u,
+    max: UByte = 255u,
+) : DmxSlider(transaction, universe, channelNo, max = max), Strobe {
+    override fun fullOn() { value = fullOnValue }
+    override fun strobe(intensity: UByte) {
+        val span = (strobeMax - strobeMin).toFloat()
+        value = ((span / 255F * intensity.toFloat()).roundToInt() + strobeMin.toInt()).toUByte()
+    }
+}
+```
+
+The MartinMac250 case (slider `max`-clamped for safety so neither raw `value`
+writes nor `Strobe` calls can wander into Reset/Lamp bands) is preserved by
+passing `max = STROBE_BAND_MAX` to the base constructor and keeping
+`MartinMac250Fixture.StrobeChannel` as a thin subclass that exposes the
+explicit `lampOn()` / `lampOff()` / `reset()` methods.
+
+**Approach**:
+
+- [ ] Add `BandedStrobeChannel` next to `DmxSlider.kt` in `fixture/dmx/`.
+- [ ] Replace each fixture's `StrobeChannel` inner class with either a direct
+      `BandedStrobeChannel(...)` call site (most fixtures) or a thin subclass
+      (MartinMac250 — to keep its lamp/reset methods).
+- [ ] Each fixture's existing `STROBE_MIN` / `STROBE_MAX` companion constants
+      stay where they are (they are still authoritative personality data) —
+      delete only the duplicated `class StrobeChannel(...)` definition.
+- [ ] Update each fixture's per-fixture test to construct the new strobe class
+      with the band constants and confirm the same channel writes.
+- [ ] `./gradlew test`. The diff should be roughly net-negative ~150 lines
+      across the fixture/test code.
+
+**Out of scope**:
+
+- Renaming / re-organising existing `STROBE_MIN` / `STROBE_MAX` companion
+  objects — leave them on the fixture class for documentation purposes.
+- Touching strobe band semantics (which DMX values are reachable). This is
+  purely a code-organisation refactor, not a behaviour change.

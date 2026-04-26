@@ -576,11 +576,14 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | Class | Type Key | Channels | Traits |
 |-------|----------|----------|--------|
 | `AdjFogFuryJettFixture.Mode7Ch` | adj-fog-fury-jett-7ch | 7 | Dimmer, Colour, Amber, Strobe (+ fog trigger slider) |
+| `China2CellLedBlinderFixture` | china-2-cell-led-blinder-8ch | 8 | Dimmer, Strobe, MultiElementFixture (2 WW/CW cells + programs) |
 | `EquinoxTwinShotMkIIFixture` | equinox-twin-shot-mkii | 3 | None — pyro-adjacent, plain trigger sliders only |
 | `Gear4MusicOrbit70Fixture.Mode13Ch` | gear4music-orbit-70-13ch | 13 | Dimmer, Colour, White, Strobe, Position |
+| `Gear4MusicSolParty12BFixture` | gear4music-sol-party-12b-8ch | 8 | Dimmer, Colour (+ colour-wheel macros, FX slider) |
 | `GenericDimmerFixture` | generic-dimmer | 1 | Dimmer |
 | `HexFixture` | hex | 12 | Dimmer, Colour, UV, Strobe |
 | `ImgStageLineWash42LedFixture.Mode13Ch` | imgstageline-wash-42led-13ch | 13 | Dimmer, Colour, White, Strobe, Position |
+| `KamLiteobar252Fixture` | kam-liteobar-252-11ch | 11 | Strobe, MultiElementFixture (3 RGB cells + macro modes) |
 | `MartinMac250Fixture.Mode4Ch` | martin-mac-250-mode-4 | 13 | Dimmer, Position, Strobe (+ colour/gobo/prism wheels, lamp/reset methods) |
 | `WhexFixture` | whex | 12 | Dimmer, Colour (RGBW variant) |
 | `QuadBarFixture` | quadbar | 1 | Settings only (show modes) |
