@@ -176,6 +176,13 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
     // PUT /{projectId}/patches/{patchId} — partial update.
     // Keys absent from the JSON body are left unchanged; for the nullable
     // stage-metadata fields, an explicit JSON null clears the value.
+    //
+    // The runtime Fixtures registry is rebuilt via [DbFixtureLoader] only when
+    // a key the loader actually reads (typeKey, displayName, startChannel,
+    // group membership, …) was touched. Metadata-only edits (stageX/Y, gel,
+    // beam, rigging position) skip the rebuild — Phase 2's drag-to-place UI
+    // PUTs once per ~300 ms drag flush, and a full rebuild per flush would
+    // tear down and recreate every controller and fixture for no benefit.
     put<ProjectPatchResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val body = call.receive<JsonObject>()
@@ -254,7 +261,8 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 return@withProject
             }
 
-            if (state.isCurrentProject(project)) {
+            val touchedRebuildKey = body.keys.any { it !in METADATA_ONLY_PUT_KEYS }
+            if (touchedRebuildKey && state.isCurrentProject(project)) {
                 DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database)
             }
             state.show.fixtures.patchListChanged()
@@ -343,6 +351,22 @@ data class CreatePatchRequest(
     val riggingPosition: String? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
+)
+
+/**
+ * PUT body keys that are pure patch metadata — present on `fixture_patches`
+ * but not consumed by [DbFixtureLoader] when constructing runtime fixtures
+ * (the loader reads them into its `PatchData` projection only to surface them
+ * via REST). A PUT that only touches these keys can skip the rebuild. Adding a
+ * key to this set is only safe if the loader ignores it during fixture
+ * instantiation.
+ */
+private val METADATA_ONLY_PUT_KEYS = setOf(
+    "stageX",
+    "stageY",
+    "riggingPosition",
+    "beamAngleDeg",
+    "gelCode",
 )
 
 // Helpers

@@ -19,7 +19,9 @@ import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -29,8 +31,9 @@ import kotlin.test.assertTrue
  *   →  GET /patches/{id}  →  PUT /patches/{id} (clear via null)
  *   →  GET /patches/{id}.
  *
- * Also exercises the validation paths (out-of-range stageX, beamAngleDeg) and the
- * normalisation of `riggingPosition` (uppercase) and `gelCode` (trim).
+ * Also exercises the validation paths (out-of-range stageX, beamAngleDeg), the
+ * normalisation of `riggingPosition` (uppercase) and `gelCode` (trim), and the
+ * "metadata-only PUT skips the fixture-loader rebuild" optimisation.
  */
 class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
 
@@ -206,5 +209,69 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         assertNotNull(hex, "hex fixture type expected in registry")
         assertEquals(false, hex.acceptsBeamAngle)
         assertEquals(false, hex.acceptsGel)
+    }
+
+    /**
+     * Phase 2 will debounce-PUT stage coordinates on every drag flush. The PUT
+     * route must skip [uk.me.cormack.lighting7.show.DbFixtureLoader.loadFixtures]
+     * — and the controller/fixture rebuild it triggers — when a body only
+     * touches metadata-only keys. We assert this observationally: a metadata-
+     * only PUT must leave the same `Fixture` instance in the registry, while a
+     * PUT that also touches `displayName` (a loader-consumed field) must swap
+     * it for a fresh instance.
+     */
+    @Test
+    fun `metadata-only PUT skips fixtures registry rebuild while loader-key PUT triggers it`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val createResp = client.post("/api/rest/project/$projectId/patches") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePatchRequest(
+                    universe = 0,
+                    fixtureTypeKey = "generic-dimmer",
+                    key = "dim-rebuild",
+                    name = "Rebuild Probe",
+                    startChannel = 10,
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, createResp.status, createResp.bodyAsText())
+        val patchId = createResp.body<FixturePatchDto>().id
+
+        val before = state.show.fixtures.untypedFixture("dim-rebuild")
+
+        val metaPut = client.put("/api/rest/project/$projectId/patches/$patchId") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject {
+                put("stageX", JsonPrimitive(40.0))
+                put("stageY", JsonPrimitive(60.0))
+                put("riggingPosition", JsonPrimitive("LX2"))
+            })
+        }
+        assertEquals(HttpStatusCode.OK, metaPut.status, metaPut.bodyAsText())
+
+        val afterMetaPut = state.show.fixtures.untypedFixture("dim-rebuild")
+        assertSame(
+            before,
+            afterMetaPut,
+            "metadata-only PUT must reuse the same runtime fixture — DbFixtureLoader rebuild was skipped",
+        )
+
+        val displayPut = client.put("/api/rest/project/$projectId/patches/$patchId") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject {
+                put("displayName", JsonPrimitive("Rebuild Probe Renamed"))
+            })
+        }
+        assertEquals(HttpStatusCode.OK, displayPut.status, displayPut.bodyAsText())
+
+        val afterDisplayPut = state.show.fixtures.untypedFixture("dim-rebuild")
+        assertNotSame(
+            afterMetaPut,
+            afterDisplayPut,
+            "PUT touching displayName (a loader-consumed field) must trigger a rebuild",
+        )
     }
 }
