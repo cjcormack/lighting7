@@ -62,6 +62,8 @@ object FixtureTypeRegistry {
         val capabilities: List<String>,
         val properties: List<PropertyDescriptor>,
         val elementGroupProperties: List<GroupPropertyDescriptor>?,
+        val acceptsBeamAngle: Boolean,
+        val acceptsGel: Boolean,
     )
 
     /**
@@ -256,6 +258,8 @@ object FixtureTypeRegistry {
                 capabilities = capabilities,
                 properties = properties,
                 elementGroupProperties = elementGroupProperties,
+                acceptsBeamAngle = annotation.acceptsBeamAngle,
+                acceptsGel = annotation.acceptsGel,
             )
         )
     }

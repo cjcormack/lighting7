@@ -11,6 +11,12 @@ import io.ktor.server.resources.delete
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.double
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
@@ -30,6 +36,22 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     .map { it.toDto() }
             }
             call.respond(patches)
+        }
+    }
+
+    // GET /{projectId}/patches/{patchId} - Get a single patch
+    get<ProjectPatchResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val dto = transaction(state.database) {
+                val patch = DaoFixturePatch.findById(resource.patchId) ?: return@transaction null
+                if (patch.project.id != project.id) return@transaction null
+                patch.toDto()
+            }
+            if (dto == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Patch not found"))
+            } else {
+                call.respond(dto)
+            }
         }
     }
 
@@ -59,6 +81,18 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 ))
                 return@withProject
             }
+
+            val stageError = validateStageMetadata(
+                stageX = request.stageX,
+                stageY = request.stageY,
+                beamAngleDeg = request.beamAngleDeg,
+            )
+            if (stageError != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(stageError))
+                return@withProject
+            }
+            val normalisedRiggingPosition = normaliseRiggingPosition(request.riggingPosition)
+            val normalisedGelCode = normaliseGelCode(request.gelCode)
 
             val result = transaction(state.database) {
                 // Find or create universe config
@@ -108,6 +142,11 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.displayName = request.name
                     this.startChannel = request.startChannel
                     this.sortOrder = maxSortOrder + 1
+                    this.stageX = request.stageX
+                    this.stageY = request.stageY
+                    this.riggingPosition = normalisedRiggingPosition
+                    this.beamAngleDeg = request.beamAngleDeg
+                    this.gelCode = normalisedGelCode
                 }
 
                 // Assign to group if specified
@@ -134,10 +173,25 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
         }
     }
 
-    // PUT /{projectId}/patches/{patchId} - Update a patch
+    // PUT /{projectId}/patches/{patchId} — partial update.
+    // Keys absent from the JSON body are left unchanged; for the nullable
+    // stage-metadata fields, an explicit JSON null clears the value.
     put<ProjectPatchResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
-            val request = call.receive<UpdatePatchRequest>()
+            val body = call.receive<JsonObject>()
+
+            // Range-check stage metadata before opening the transaction so a bad
+            // request fails with a 400 instead of rolling back a write.
+            val stageError = validateStageMetadata(
+                stageX = body["stageX"].nullableDouble(),
+                stageY = body["stageY"].nullableDouble(),
+                beamAngleDeg = body["beamAngleDeg"].nullableInt(),
+            )
+            if (stageError != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(stageError))
+                return@withProject
+            }
+
             val result = transaction(state.database) {
                 val patch = DaoFixturePatch.findById(resource.patchId)
                     ?: return@transaction Pair<FixturePatchDto?, String?>(null, "Patch not found")
@@ -146,9 +200,8 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     return@transaction Pair<FixturePatchDto?, String?>(null, "Patch not found")
                 }
 
-                request.displayName?.let { patch.displayName = it }
-                request.key?.let { newKey ->
-                    // Check uniqueness
+                body["displayName"].nullableString()?.let { patch.displayName = it }
+                body["key"].nullableString()?.let { newKey ->
                     val existing = DaoFixturePatch.find {
                         (DaoFixturePatches.project eq project.id) and (DaoFixturePatches.key eq newKey)
                     }.firstOrNull()
@@ -157,18 +210,26 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     }
                     patch.key = newKey
                 }
-                request.startChannel?.let { patch.startChannel = it }
+                body["startChannel"].nullableInt()?.let { patch.startChannel = it }
 
-                // Handle group changes
-                request.removeFromGroupId?.let { groupId ->
+                if ("stageX" in body) patch.stageX = body["stageX"].nullableDouble()
+                if ("stageY" in body) patch.stageY = body["stageY"].nullableDouble()
+                if ("beamAngleDeg" in body) patch.beamAngleDeg = body["beamAngleDeg"].nullableInt()
+                if ("riggingPosition" in body) {
+                    patch.riggingPosition = normaliseRiggingPosition(body["riggingPosition"].nullableString())
+                }
+                if ("gelCode" in body) {
+                    patch.gelCode = normaliseGelCode(body["gelCode"].nullableString())
+                }
+
+                body["removeFromGroupId"].nullableInt()?.let { groupId ->
                     DaoFixtureGroupMember.find {
                         (DaoFixtureGroupMembers.fixturePatch eq patch.id) and
                             (DaoFixtureGroupMembers.group eq groupId)
                     }.forEach { it.delete() }
                 }
-                request.addToGroup?.let { groupName ->
+                body["addToGroup"].nullableString()?.let { groupName ->
                     val group = findOrCreateGroup(project, groupName)
-                    // Only add if not already a member
                     val alreadyMember = DaoFixtureGroupMember.find {
                         (DaoFixtureGroupMembers.fixturePatch eq patch.id) and
                             (DaoFixtureGroupMembers.group eq group.id)
@@ -255,6 +316,11 @@ data class FixturePatchDto(
     val subnet: Int,
     val sortOrder: Int,
     val groups: List<FixturePatchGroupRef>,
+    val stageX: Double? = null,
+    val stageY: Double? = null,
+    val riggingPosition: String? = null,
+    val beamAngleDeg: Int? = null,
+    val gelCode: String? = null,
 )
 
 @Serializable
@@ -272,20 +338,16 @@ data class CreatePatchRequest(
     val startChannel: Int,
     val address: String? = null,
     val groupName: String? = null,
-)
-
-@Serializable
-data class UpdatePatchRequest(
-    val displayName: String? = null,
-    val key: String? = null,
-    val startChannel: Int? = null,
-    val addToGroup: String? = null,
-    val removeFromGroupId: Int? = null,
+    val stageX: Double? = null,
+    val stageY: Double? = null,
+    val riggingPosition: String? = null,
+    val beamAngleDeg: Int? = null,
+    val gelCode: String? = null,
 )
 
 // Helpers
 private fun DaoFixturePatch.toDto(): FixturePatchDto {
-    val typeInfo = FixtureTypeRegistry.allTypes.find { it.typeKey == fixtureTypeKey }
+    val typeInfo = FixtureTypeRegistry.typeInfoForKey(fixtureTypeKey)
     val groupRefs = DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq this@toDto.id }
         .map { FixturePatchGroupRef(id = it.group.id.value, name = it.group.name) }
     return FixturePatchDto(
@@ -302,8 +364,59 @@ private fun DaoFixturePatch.toDto(): FixturePatchDto {
         subnet = universeConfig.subnet,
         sortOrder = sortOrder,
         groups = groupRefs,
+        stageX = stageX,
+        stageY = stageY,
+        riggingPosition = riggingPosition,
+        beamAngleDeg = beamAngleDeg,
+        gelCode = gelCode,
     )
 }
+
+/**
+ * Range-check the numeric stage-metadata fields. Returns the first error message,
+ * or null if every field is acceptable. Trim/uppercase normalisation for the
+ * string fields lives in [normaliseRiggingPosition] / [normaliseGelCode].
+ */
+private fun validateStageMetadata(
+    stageX: Double?,
+    stageY: Double?,
+    beamAngleDeg: Int?,
+): String? {
+    if (stageX != null && (stageX < 0.0 || stageX > 100.0)) {
+        return "stageX must be between 0.0 and 100.0"
+    }
+    if (stageY != null && (stageY < 0.0 || stageY > 100.0)) {
+        return "stageY must be between 0.0 and 100.0"
+    }
+    if (beamAngleDeg != null && (beamAngleDeg < 2 || beamAngleDeg > 120)) {
+        return "beamAngleDeg must be between 2 and 120"
+    }
+    return null
+}
+
+private fun normaliseRiggingPosition(raw: String?): String? {
+    val trimmed = raw?.trim() ?: return null
+    if (trimmed.isEmpty()) return null
+    return trimmed.uppercase().take(50)
+}
+
+private fun normaliseGelCode(raw: String?): String? {
+    val trimmed = raw?.trim() ?: return null
+    if (trimmed.isEmpty()) return null
+    return trimmed.take(20)
+}
+
+// Tri-state JSON-element extractors for partial updates: a missing key and an
+// explicit JSON null both yield Kotlin null; callers that need to tell those
+// apart can guard with `"key" in body` first.
+private fun JsonElement?.nullableString(): String? =
+    if (this == null || this is JsonNull) null else jsonPrimitive.content
+
+private fun JsonElement?.nullableInt(): Int? =
+    if (this == null || this is JsonNull) null else jsonPrimitive.int
+
+private fun JsonElement?.nullableDouble(): Double? =
+    if (this == null || this is JsonNull) null else jsonPrimitive.double
 
 /**
  * Find or create a fixture group by name within a project.

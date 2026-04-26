@@ -15,7 +15,13 @@ import uk.me.cormack.lighting7.fixture.trait.WithDimmer
  * PARs, single-colour LED rings, house lights, non-dim circuits, and 1-channel hazers. The
  * specific role is carried by the patch row's `key`/`displayName`, not the class.
  */
-@FixtureType("generic-dimmer", manufacturer = "Generic", model = "Single-channel dimmer")
+@FixtureType(
+    "generic-dimmer",
+    manufacturer = "Generic",
+    model = "Single-channel dimmer",
+    acceptsBeamAngle = true,
+    acceptsGel = true,
+)
 class GenericDimmerFixture(
     universe: Universe,
     key: String,

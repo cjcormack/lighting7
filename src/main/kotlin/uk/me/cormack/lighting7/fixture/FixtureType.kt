@@ -5,5 +5,7 @@ package uk.me.cormack.lighting7.fixture
 annotation class FixtureType(
     val typeKey: String,
     val manufacturer: String = "",
-    val model: String = ""
+    val model: String = "",
+    val acceptsBeamAngle: Boolean = false,
+    val acceptsGel: Boolean = false,
 )

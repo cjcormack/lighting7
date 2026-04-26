@@ -13,6 +13,11 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
     val displayName = varchar("display_name", 255)
     val startChannel = integer("start_channel")
     val sortOrder = integer("sort_order").default(0)
+    val stageX = double("stage_x").nullable()
+    val stageY = double("stage_y").nullable()
+    val riggingPosition = varchar("rigging_position", 50).nullable()
+    val beamAngleDeg = integer("beam_angle_deg").nullable()
+    val gelCode = varchar("gel_code", 20).nullable()
 
     init {
         uniqueIndex(project, key)
@@ -29,4 +34,9 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var displayName by DaoFixturePatches.displayName
     var startChannel by DaoFixturePatches.startChannel
     var sortOrder by DaoFixturePatches.sortOrder
+    var stageX by DaoFixturePatches.stageX
+    var stageY by DaoFixturePatches.stageY
+    var riggingPosition by DaoFixturePatches.riggingPosition
+    var beamAngleDeg by DaoFixturePatches.beamAngleDeg
+    var gelCode by DaoFixturePatches.gelCode
 }

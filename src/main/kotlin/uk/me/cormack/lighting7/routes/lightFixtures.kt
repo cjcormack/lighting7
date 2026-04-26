@@ -150,6 +150,8 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                     capabilities = info.capabilities,
                     properties = info.properties,
                     elementGroupProperties = info.elementGroupProperties,
+                    acceptsBeamAngle = info.acceptsBeamAngle,
+                    acceptsGel = info.acceptsGel,
                 )
             })
         }
@@ -312,4 +314,6 @@ data class FixtureTypeDetails(
     val capabilities: List<String>,
     val properties: List<PropertyDescriptor>,
     val elementGroupProperties: List<GroupPropertyDescriptor>?,
+    val acceptsBeamAngle: Boolean = false,
+    val acceptsGel: Boolean = false,
 )

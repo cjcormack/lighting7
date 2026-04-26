@@ -33,7 +33,20 @@ object DbFixtureLoader {
 
             val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
                 .orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC)
-                .map { PatchData(it.key, it.displayName, it.fixtureTypeKey, it.startChannel, it.universeConfig.id.value) }
+                .map {
+                    PatchData(
+                        key = it.key,
+                        displayName = it.displayName,
+                        fixtureTypeKey = it.fixtureTypeKey,
+                        startChannel = it.startChannel,
+                        universeConfigId = it.universeConfig.id.value,
+                        stageX = it.stageX,
+                        stageY = it.stageY,
+                        riggingPosition = it.riggingPosition,
+                        beamAngleDeg = it.beamAngleDeg,
+                        gelCode = it.gelCode,
+                    )
+                }
 
             val groups = DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }
                 .map { group ->
@@ -110,6 +123,11 @@ object DbFixtureLoader {
         val fixtureTypeKey: String,
         val startChannel: Int,
         val universeConfigId: Int,
+        val stageX: Double?,
+        val stageY: Double?,
+        val riggingPosition: String?,
+        val beamAngleDeg: Int?,
+        val gelCode: String?,
     )
 
     private data class GroupMemberData(
