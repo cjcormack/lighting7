@@ -42,6 +42,7 @@ object FixtureTypeRegistry {
         SlenderBeamBarQuadFixture::class,
         StarClusterFixture::class,
         UVFixture::class,
+        VarytecEasymoveXl60SpotFixture::class,
         WhexFixture::class,
     )
 

@@ -29,14 +29,13 @@ Related docs:
 
 ## Status
 
-**Next action**: Tiers 0, 1 and 2 are done (2026-04-26). Most [Open Questions](#open-questions)
+**Next action**: Tiers 0, 1, 2 and 3 are done (2026-04-26). Most [Open Questions](#open-questions)
 are answered (2026-04-26 ChamSys session — Q1, Q3, Q4, Q6, Q7). Q2 (Robe ColorSpot 575
 mode) and the China 2-Cell Blinder personality are still pending a second ChamSys pass;
 Q5 (personality export method) is resolved — we transcribe `EDIT HEAD` screenshots into
 Markdown under `Manuals/personalities/` because the on-disk `.hed` and `heads.all` are
-obfuscated. Next session: pick [Tier 3](#tier-3--easymove-xl-60-moving-head) (another
-single moving-head fixture, no open questions block it) or [Tier 5](#tier-5--martin-mac-250)
-(MAC 250 with personality already captured).
+obfuscated. Next session: pick [Tier 5](#tier-5--martin-mac-250) (MAC 250 with personality
+already captured) — Tier 4 needs no further OQs but is a larger fixture.
 
 **Universes in use**: 1, 2, 4, 5 (universe 3 unused). Universe configs and individual
 `fixture_patches` rows still need creating once the classes exist — tracked separately in
@@ -307,15 +306,28 @@ follow the manual's naming.
 
 **Goal**: Varytec Easymove XL 60 Spot (11ch).
 
+**Status: DONE (2026-04-26).** Class added, registered, tested, docs updated, full test
+suite green.
+
 **Entry criteria**: Tier 0 done.
 
-- [ ] Read [246811_manual.pdf](../../Manuals/246811_manual.pdf) — section 5.1 has the DMX
-  channel list.
-- [ ] Single-mode fixture (verify in manual).
-- [ ] Likely traits: `WithDimmer`, `WithPosition`, `WithStrobe`. May have a colour wheel
-  rather than RGB mixing — use `DmxFixtureSetting<Colour>` not `WithColour` if so.
-- [ ] Test.
-- [ ] `./gradlew test`.
+- [x] Read [246811_manual.pdf](../../Manuals/246811_manual.pdf) — section 5.1 has the DMX
+  channel list. Confirmed single-mode 11ch fixture.
+- [x] Implemented as `sealed class VarytecEasymoveXl60SpotFixture` with only `Mode11Ch`,
+  matching the rest of the codebase even though the manual lists no other personalities.
+- [x] Final traits: `WithDimmer`, `WithPosition` (with separate fine-pan/fine-tilt sliders),
+  `WithStrobe`. Confirmed white-LED engine — no `WithColour` (colour wheel only). The
+  colour wheel is exposed as a `DmxFixtureSetting<Colour>` with seven indexed positions
+  + open + forward/reverse rainbow rotation. The manual gives no specific colour for each
+  index, so `colourPreview` is left null on every entry.
+- [x] Channel 5 (gobo spin) is a plain `Slider` since the manual gives only continuous
+  forward/reverse bands. Channel 11 (reset) is modelled as a two-state
+  `DmxFixtureSetting<Reset>` (NO_FUNCTION/RESET) so an FX can't accidentally trigger a
+  head reset by writing a random value to the channel.
+- [x] Strobe channel: 0 = no strobe (LED constant on), 1–255 = slow → fast. `fullOn()`
+  writes 0; `strobe(intensity)` linearly maps 0–255 onto the 1–255 band.
+- [x] Tests for the channel layout and strobe band semantics.
+- [x] `./gradlew test` — `BUILD SUCCESSFUL`.
 
 ---
 
