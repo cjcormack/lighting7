@@ -64,6 +64,7 @@ object FixtureTypeRegistry {
         val elementGroupProperties: List<GroupPropertyDescriptor>?,
         val acceptsBeamAngle: Boolean,
         val acceptsGel: Boolean,
+        val gelCompactDisplay: CompactDisplayRole,
     )
 
     /**
@@ -260,6 +261,7 @@ object FixtureTypeRegistry {
                 elementGroupProperties = elementGroupProperties,
                 acceptsBeamAngle = annotation.acceptsBeamAngle,
                 acceptsGel = annotation.acceptsGel,
+                gelCompactDisplay = annotation.gelCompactDisplay,
             )
         )
     }

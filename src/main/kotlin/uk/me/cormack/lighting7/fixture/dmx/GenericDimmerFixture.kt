@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.CompactDisplayRole
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
@@ -21,6 +22,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithDimmer
     model = "Single-channel dimmer",
     acceptsBeamAngle = true,
     acceptsGel = true,
+    gelCompactDisplay = CompactDisplayRole.SECONDARY,
 )
 class GenericDimmerFixture(
     universe: Universe,

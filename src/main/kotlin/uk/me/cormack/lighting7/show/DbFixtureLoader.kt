@@ -93,6 +93,11 @@ object DbFixtureLoader {
                 )
                 addFixture(fixture)
                 fixtureByKey[patch.key] = fixture
+
+                setPatchMetadata(
+                    patch.key,
+                    Fixtures.FixturePatchMetadata(gelCode = patch.gelCode),
+                )
             }
 
             // 3. Create groups

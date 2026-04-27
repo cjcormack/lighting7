@@ -53,7 +53,8 @@ internal fun Fixture.details(fixtures: Fixtures, compatiblePresetIds: List<Int> 
                 elementGroupProperties = this.generateElementGroupPropertyDescriptors(),
                 mode = modeInfo,
                 capabilities = capabilities,
-                compatiblePresetIds = compatiblePresetIds
+                compatiblePresetIds = compatiblePresetIds,
+                gelCode = fixtures.patchMetadataFor(this.key)?.gelCode,
             )
         }
         is HueFixture -> {
@@ -152,6 +153,7 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                     elementGroupProperties = info.elementGroupProperties,
                     acceptsBeamAngle = info.acceptsBeamAngle,
                     acceptsGel = info.acceptsGel,
+                    gelCompactDisplay = info.gelCompactDisplay.serialized(),
                 )
             })
         }
@@ -198,7 +200,8 @@ data class DmxFixtureDetails(
     val elementGroupProperties: List<GroupPropertyDescriptor>?,
     val mode: ModeInfo?,
     val capabilities: List<String>,
-    override val compatiblePresetIds: List<Int> = emptyList()
+    override val compatiblePresetIds: List<Int> = emptyList(),
+    val gelCode: String? = null,
 ): FixtureDetails
 
 @Serializable
@@ -316,4 +319,5 @@ data class FixtureTypeDetails(
     val elementGroupProperties: List<GroupPropertyDescriptor>?,
     val acceptsBeamAngle: Boolean = false,
     val acceptsGel: Boolean = false,
+    val gelCompactDisplay: String? = null,
 )

@@ -32,6 +32,15 @@ class Fixtures {
     private val fixtureRegister: MutableMap<String, Fixture> = mutableMapOf()
     private val groupRegister: MutableMap<String, FixtureGroup<*>> = mutableMapOf()
 
+    /**
+     * Patch fields not consumed during fixture instantiation but needed by REST consumers,
+     * cached here so [Fixture.details] can return them without re-querying the DB.
+     */
+    data class FixturePatchMetadata(
+        val gelCode: String?,
+    )
+    private val patchMetadataRegister: MutableMap<String, FixturePatchMetadata> = mutableMapOf()
+
     // Channel-to-fixture mapping: "universe:channel" -> ChannelMapping
     data class ChannelMapping(
         val fixtureKey: String,
@@ -229,6 +238,15 @@ class Fixtures {
             .map { it.name }
     }
 
+    fun patchMetadataFor(fixtureKey: String): FixturePatchMetadata? = registerLock.read {
+        patchMetadataRegister[fixtureKey]
+    }
+
+    /** Used by the metadata-only PUT fast path to refresh the cache without a fixtures rebuild. */
+    fun setPatchMetadata(fixtureKey: String, metadata: FixturePatchMetadata): Unit = registerLock.write {
+        patchMetadataRegister[fixtureKey] = metadata
+    }
+
     fun presetListChanged() {
         changeListeners.forEach {
             it.presetListChanged()
@@ -284,6 +302,8 @@ class Fixtures {
          * Create and register a typed fixture group using a DSL builder.
          */
         fun <T : GroupableFixture> createGroup(name: String, block: GroupBuilder<T>.() -> Unit): FixtureGroup<T>
+
+        fun setPatchMetadata(fixtureKey: String, metadata: FixturePatchMetadata)
     }
 
     fun register(removeUnused: Boolean = true, block: FixtureRegisterer.() -> Unit) {
@@ -331,6 +351,10 @@ class Fixtures {
                 val group = GroupBuilder<T>(name).apply(block).build()
                 return addGroup(group)
             }
+
+            override fun setPatchMetadata(fixtureKey: String, metadata: FixturePatchMetadata) {
+                patchMetadataRegister[fixtureKey] = metadata
+            }
         }
 
         registerLock.write {
@@ -347,6 +371,7 @@ class Fixtures {
                 fixtureRegister.clear()
                 groupRegister.clear()
                 channelMappings.clear()
+                patchMetadataRegister.clear()
             }
 
             block(registerer)

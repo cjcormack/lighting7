@@ -203,12 +203,77 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         assertNotNull(genericDimmer, "Generic Dimmer fixture type must be registered")
         assertTrue(genericDimmer.acceptsBeamAngle, "generic-dimmer should accept a beam angle")
         assertTrue(genericDimmer.acceptsGel, "generic-dimmer should accept a gel")
+        assertEquals(
+            "secondary",
+            genericDimmer.gelCompactDisplay,
+            "generic-dimmer should render its gel as the compact-card secondary display",
+        )
 
         // A non-conventional fixture (e.g. the LED Hex) must default to false on both flags.
         val hex = types.firstOrNull { it.typeKey == "hex" }
         assertNotNull(hex, "hex fixture type expected in registry")
         assertEquals(false, hex.acceptsBeamAngle)
         assertEquals(false, hex.acceptsGel)
+        assertNull(hex.gelCompactDisplay, "non-gel fixtures must not opt into gel compact display")
+    }
+
+    /**
+     * The runtime `Fixture` instance is created from a patch row but does not itself carry
+     * `gelCode`. The fixture-details endpoint must surface the gel via the patch-metadata
+     * cache populated by [uk.me.cormack.lighting7.show.DbFixtureLoader] (full rebuild path)
+     * and kept in sync by the metadata-only PUT (fast path).
+     */
+    @Test
+    fun `fixture details endpoint surfaces gelCode through both rebuild and metadata-only paths`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val createResp = client.post("/api/rest/project/$projectId/patches") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePatchRequest(
+                    universe = 0,
+                    fixtureTypeKey = "generic-dimmer",
+                    key = "dim-gel",
+                    name = "Gel Probe",
+                    startChannel = 20,
+                    gelCode = "L201",
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, createResp.status, createResp.bodyAsText())
+        val patchId = createResp.body<FixturePatchDto>().id
+
+        // POST goes through the full DbFixtureLoader rebuild — gelCode should be cached
+        // and surfaced on the fixture details DTO.
+        val afterCreate = client.get("/api/rest/fixture/dim-gel").body<DmxFixtureDetails>()
+        assertEquals("L201", afterCreate.gelCode)
+
+        val before = state.show.fixtures.untypedFixture("dim-gel")
+
+        // Metadata-only PUT changes the gel — must NOT rebuild fixtures, but the cached
+        // gelCode must update and the next GET must reflect it.
+        val putGel = client.put("/api/rest/project/$projectId/patches/$patchId") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("gelCode", JsonPrimitive("R26")) })
+        }
+        assertEquals(HttpStatusCode.OK, putGel.status, putGel.bodyAsText())
+
+        val after = state.show.fixtures.untypedFixture("dim-gel")
+        assertSame(before, after, "gelCode-only PUT must reuse the same runtime fixture")
+
+        val afterPut = client.get("/api/rest/fixture/dim-gel").body<DmxFixtureDetails>()
+        assertEquals("R26", afterPut.gelCode, "metadata-only PUT must update the cached gelCode")
+
+        // Clearing the gel via JSON null must propagate through the cache too.
+        val putClear = client.put("/api/rest/project/$projectId/patches/$patchId") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("gelCode", JsonNull) })
+        }
+        assertEquals(HttpStatusCode.OK, putClear.status, putClear.bodyAsText())
+
+        val afterClear = client.get("/api/rest/fixture/dim-gel").body<DmxFixtureDetails>()
+        assertNull(afterClear.gelCode)
     }
 
     /**

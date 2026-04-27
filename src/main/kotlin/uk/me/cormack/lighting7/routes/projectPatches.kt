@@ -24,6 +24,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.DbFixtureLoader
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 
 internal fun Route.routeApiRestProjectPatches(state: State) {
@@ -264,6 +265,12 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             val touchedRebuildKey = body.keys.any { it !in METADATA_ONLY_PUT_KEYS }
             if (touchedRebuildKey && state.isCurrentProject(project)) {
                 DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database)
+            } else if (state.isCurrentProject(project)) {
+                // Metadata-only edits skip the rebuild, so refresh the cache directly.
+                state.show.fixtures.setPatchMetadata(
+                    patchDto!!.key,
+                    Fixtures.FixturePatchMetadata(gelCode = patchDto.gelCode),
+                )
             }
             state.show.fixtures.patchListChanged()
 
