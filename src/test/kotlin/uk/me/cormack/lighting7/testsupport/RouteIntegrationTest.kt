@@ -6,7 +6,6 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.testing.ApplicationTestBuilder
 import kotlinx.serialization.json.Json
 import org.junit.After
-import org.junit.Assume
 import org.junit.Before
 import org.junit.Rule
 import org.junit.rules.Timeout
@@ -33,8 +32,8 @@ fun ApplicationTestBuilder.jsonClient(): HttpClient =
 
 /**
  * Base class for tests that drive real REST routes through [testApplication].
- * Spins up one project-and-show per test against the shared [EmbeddedTestPostgres],
- * resetting the schema each time for hermetic isolation.
+ * Spins up one project-and-show per test against [IntegrationTestDb], rotating
+ * to a fresh SQLite file each time for hermetic isolation.
  */
 abstract class RouteIntegrationTest {
 
@@ -53,8 +52,7 @@ abstract class RouteIntegrationTest {
 
     @Before
     fun setUpIntegrationTest() {
-        Assume.assumeTrue("Embedded Postgres unavailable — skipping", EmbeddedTestPostgres.isAvailable())
-        EmbeddedTestPostgres.resetSchema()
+        IntegrationTestDb.reset()
         state = State(testAppConfig())
         projectId = seedMinimalProject(state)
         state.initializeShow()

@@ -1,6 +1,5 @@
 package uk.me.cormack.lighting7.state
 
-import io.ktor.server.config.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -16,7 +15,6 @@ import uk.me.cormack.lighting7.show.Show
  * Manages project lifecycle including loading, switching, and tracking the current project.
  */
 class ProjectManager(
-    private val config: ApplicationConfig,
     private val database: Database,
     private val stateProvider: () -> State
 ) {
@@ -38,29 +36,20 @@ class ProjectManager(
     )
 
     /**
-     * Initialize project manager on startup.
-     * Finds current project from DB, falls back to config for migration.
+     * Initialize project manager on startup. Picks the project flagged `isCurrent`,
+     * falling back to the first project in the DB, and auto-creates a `Default`
+     * project on a brand-new install so the show can boot before the user has
+     * created anything via the API.
      */
     fun initialize(): Show {
         val project = transaction(database) {
-            // Try to find a project marked as current
-            var current = DaoProject.find { DaoProjects.isCurrent eq true }.firstOrNull()
-
-            if (current == null) {
-                // Migration: find by config project name and mark as current
-                val configProjectName = config.property("lighting.projectName").getString()
-                current = DaoProject.find { DaoProjects.name eq configProjectName }.firstOrNull()
-
-                if (current != null) {
-                    current.isCurrent = true
-                } else {
-                    throw IllegalStateException(
-                        "No current project found and config project '$configProjectName' not found in database"
-                    )
+            DaoProject.find { DaoProjects.isCurrent eq true }.firstOrNull()
+                ?: DaoProject.all().firstOrNull()?.also { it.isCurrent = true }
+                ?: DaoProject.new {
+                    name = "Default"
+                    description = null
+                    isCurrent = true
                 }
-            }
-
-            current
         }
 
         _currentProject = project

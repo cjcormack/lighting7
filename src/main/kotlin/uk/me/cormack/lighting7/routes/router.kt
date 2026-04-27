@@ -7,6 +7,7 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.resources.*
 import io.ktor.server.routing.*
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.state.optionalString
 import java.io.File
 
 fun Application.configureRouting(state: State) {
@@ -28,8 +29,17 @@ fun Application.configureRouting(state: State) {
 
         routeKotlinCompilerServer(state)
 
-        staticFiles("/", File("/Users/chris/Development/Personal/lighting-react/dist/")) {
-            default("index.html")
+        // Frontend bundle: prefer a configured on-disk dist/ for dev, otherwise serve the
+        // copy baked into the JAR by Gradle's copyFrontend task.
+        val configuredStaticPath = state.config.optionalString("frontend.staticPath")
+        if (configuredStaticPath != null) {
+            staticFiles("/", File(configuredStaticPath)) {
+                default("index.html")
+            }
+        } else {
+            staticResources("/", "static") {
+                default("index.html")
+            }
         }
     }
 }

@@ -13,49 +13,48 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.state.optionalString
 
-val kotlinCompilerServerClient = HttpClient(CIO) {
-    install(Logging)
-    install(ContentEncoding) {
-        deflate(1.0F)
-        gzip(0.9F)
-    }
-    defaultRequest {
-        url("http://localhost:8321/")
-    }
-}
+private const val DEFAULT_COMPILER_SERVER_URL = "http://localhost:8321/"
 
 internal fun Route.routeKotlinCompilerServer(state: State) {
+    val baseUrl = state.config.optionalString("compilerServer.url") ?: DEFAULT_COMPILER_SERVER_URL
+
+    val client = HttpClient(CIO) {
+        install(Logging)
+        install(ContentEncoding) {
+            deflate(1.0F)
+            gzip(0.9F)
+        }
+        defaultRequest {
+            url(baseUrl)
+        }
+    }
+
     route("/kotlin-compiler-server/api/{version}/compiler/{action}") {
-        handleKotlinCompilerServerRequest()
+        handleKotlinCompilerServerRequest(client)
     }
 
     route("/kotlin-compiler-server/versions") {
-        handleKotlinCompilerServerRequest()
+        handleKotlinCompilerServerRequest(client)
     }
 }
 
-private fun Route.handleKotlinCompilerServerRequest() {
+private fun Route.handleKotlinCompilerServerRequest(client: HttpClient) {
     handle {
         val path = call.request.path().removePrefix("/kotlin-compiler-server/")
-
-        val action = call.parameters["action"]
-        if (action == "run") {
-            // TODO handle locally and create a compatible response
-            proxyKotlinCompileServerRequest(call, path)
-        } else {
-            proxyKotlinCompileServerRequest(call, path)
-        }
+        proxyKotlinCompileServerRequest(client, call, path)
     }
 }
 
 private suspend fun proxyKotlinCompileServerRequest(
+    client: HttpClient,
     call: RoutingCall,
     path: String,
 ) {
     val requestBody = call.receive<ByteArray>()
 
-    val resp = kotlinCompilerServerClient.request {
+    val resp = client.request {
         method = call.request.httpMethod
         url {
             this.appendPathSegments(path)

@@ -28,3 +28,6 @@ out/
 /nbdist/
 /.nb-gradle/
 /local.conf
+
+# Frontend bundle staged into the classpath by Gradle's copyFrontend task.
+src/main/resources/static/

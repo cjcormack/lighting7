@@ -7,6 +7,7 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import org.slf4j.LoggerFactory
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
@@ -44,7 +45,7 @@ class State(val config: ApplicationConfig) {
     // reference is kept here for [shutdown] to drain the pool.
     private var dataSource: HikariDataSource? = null
     val database = initDatabase()
-    val projectManager = ProjectManager(config, database) { this }
+    val projectManager = ProjectManager(database) { this }
 
     private var projectChangedJob: Job? = null
 
@@ -398,17 +399,15 @@ class State(val config: ApplicationConfig) {
     }
 
     private fun initDatabase(): Database {
-        val url = config.property("postgres.url").getString()
-        val username = config.property("postgres.username").getString()
-        val password = config.property("postgres.password").getString()
+        val dbPath = config.optionalString("database.path")
+            ?: appDataDir().resolve("lighting7.db").toString()
         val ds = HikariDataSource(HikariConfig().apply {
-            driverClassName = "org.postgresql.Driver"
-            jdbcUrl = url
-            this@apply.username = username
-            this@apply.password = password
-            this@apply.maximumPoolSize = 8
+            driverClassName = "org.sqlite.JDBC"
+            jdbcUrl = "jdbc:sqlite:$dbPath"
+            // SQLite has a single writer; a multi-connection pool produces SQLITE_BUSY under load.
+            maximumPoolSize = 1
             isAutoCommit = false
-            transactionIsolation = "TRANSACTION_REPEATABLE_READ"
+            transactionIsolation = "TRANSACTION_SERIALIZABLE"
             validate()
         })
         dataSource = ds
@@ -432,57 +431,41 @@ class State(val config: ApplicationConfig) {
                 DaoProjectScalerStates,
             )
 
-            // Migration: drop old unique index on (project_id, name) since we now use (project_id, fixture_type, name)
+            // Drops a legacy index name; both PG and SQLite accept `DROP INDEX IF EXISTS`.
             exec("DROP INDEX IF EXISTS fx_presets_project_id_name")
 
-            // Partial unique index: cue_number must be unique per stack for STANDARD cues
+            // Partial unique index: cue_number must be unique per stack for STANDARD cues.
+            // SQLite supports partial indexes with the same syntax.
             exec("""
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_cue_number_per_stack
                     ON cues (cue_stack_id, cue_number)
                     WHERE cue_number IS NOT NULL AND cue_type = 'STANDARD'
             """.trimIndent())
 
-            // Migration: merge show sessions into projects (entries now belong to project directly)
-            migrateDropShowSessions()
+            // Historical schema-evolution migrations. These query `information_schema` and
+            // use ALTER TABLE syntax that PostgreSQL accepts but SQLite does not. SQLite
+            // installs are fresh-start (no PG → SQLite data import), so the latest schema
+            // produced by `createMissingTablesAndColumns` already matches the post-migration
+            // shape.
+            if (database.dialect is PostgreSQLDialect) {
+                migrateDropShowSessions()
+                migrateProjectActiveEntryFk()
+                migrateApplyPresetTriggers()
+                migrateTriggerTypes()
+                migrateFxDefinitionsDropBuiltin()
+                migrateFxPresetsFixtureTypeNotNull()
+                migrateDropScriptBasedMode()
+                migrateDropScenesAndChases()
+                migrateDropRunLoop()
+                migrateDropTrackChangedScript()
 
-            // Deferrable FK from projects.active_entry_id → show_entries.id
-            // (circular reference: entries also reference projects, so this FK must be deferrable)
-            migrateProjectActiveEntryFk()
-
-            // Migration: convert APPLY_PRESET triggers to preset applications with timing
-            migrateApplyPresetTriggers()
-
-            // Migration: collapse DELAYED/RECURRING trigger types into ACTIVATION with timing fields
-            migrateTriggerTypes()
-
-            // Migration: built-in FX definitions now come from bundled .fx.kts resource files,
-            // so the is_builtin column is no longer needed and project_id should be non-nullable.
-            migrateFxDefinitionsDropBuiltin()
-
-            // Migration: tighten fx_presets.fixture_type to NOT NULL
-            migrateFxPresetsFixtureTypeNotNull()
-
-            // Migration: drop script-based configuration mode columns from projects table
-            migrateDropScriptBasedMode()
-
-            // Migration: drop scenes table and related columns (superseded by FX engine)
-            migrateDropScenesAndChases()
-
-            // Migration: drop run loop columns from projects (superseded by FX cue system)
-            migrateDropRunLoop()
-
-            // Migration: drop track changed script column from projects (music sync removed)
-            migrateDropTrackChangedScript()
-
-            // Migration: convert legacy StaticValue / StaticSetting ad-hoc effects into
-            // first-class CuePropertyAssignment rows (Layer 3). Idempotent — becomes a no-op
-            // once the rows are gone.
-            val summary = LegacyStaticEffectMigration.run(this)
-            if (summary.converted > 0 || summary.skipped > 0) {
-                logger.info(
-                    "LegacyStaticEffectMigration: converted {} row(s), skipped {} row(s)",
-                    summary.converted, summary.skipped,
-                )
+                val summary = LegacyStaticEffectMigration.run(this)
+                if (summary.converted > 0 || summary.skipped > 0) {
+                    logger.info(
+                        "LegacyStaticEffectMigration: converted {} row(s), skipped {} row(s)",
+                        summary.converted, summary.skipped,
+                    )
+                }
             }
         }
 

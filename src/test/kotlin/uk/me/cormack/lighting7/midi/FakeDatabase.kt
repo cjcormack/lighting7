@@ -12,10 +12,8 @@ import org.jetbrains.exposed.sql.Database
 internal object FakeDatabase {
     val instance: Database by lazy {
         Database.connect(
-            url = "jdbc:postgresql://fake-database-for-unit-tests/doesnotmatter",
-            driver = "org.postgresql.Driver",
-            user = "fake",
-            password = "fake",
+            url = "jdbc:sqlite::memory:",
+            driver = "org.sqlite.JDBC",
         )
     }
 }
