@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.state
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.config.*
+import java.io.Closeable
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Transaction
@@ -48,6 +49,14 @@ class State(val config: ApplicationConfig) {
     val projectManager = ProjectManager(database) { this }
 
     private var projectChangedJob: Job? = null
+
+    // Stored here so [shutdown] can close JmDNS as part of the same teardown sequence
+    // that drains the rest of the show; ownership lives with Application bootstrap.
+    private var mdnsRegistration: Closeable? = null
+
+    fun attachMdns(closeable: Closeable) {
+        mdnsRegistration = closeable
+    }
 
     /**
      * AI service for Claude-powered lighting control.
@@ -336,6 +345,9 @@ class State(val config: ApplicationConfig) {
         runCatching { midiLearnSessionManager.stop() }
         runCatching { deviceMatcher.stop() }
         runCatching { midiRegistry.close() }
+
+        runCatching { mdnsRegistration?.close() }
+        mdnsRegistration = null
 
         runCatching { projectManager.show.close() }
 

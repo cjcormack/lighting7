@@ -7,7 +7,7 @@ Source design: [`/Users/chris/Downloads/lighting7-windows-distribution.md`](file
 | Phase | State | Notes |
 | ----- | ----- | ----- |
 | 1 — Foundation (SQLite, config, bundled frontend) | ✅ Complete | All route integration tests run on SQLite; React bundle staged into the JAR by Gradle. |
-| 2 — Self-contained runtime (fat JAR, child compiler server, mDNS, tray launcher) | ☐ Not started | Depends on phase 1. |
+| 2 — Self-contained runtime (fat JAR, child compiler server, mDNS, tray launcher) | 🟡 Build-side complete | All Gradle + JVM work landed, build / test / shadowJar / launcher subproject all green; smoke-verified backend boots from `lighting7.jar` and mDNS registers as `lighting7-<host>`. End-to-end `:launcher:run` and Windows VM checks deferred to user. |
 | 3 — Packaging (jlink + jpackage, Win + Mac installers) | ☐ Not started | Mechanical once 1 & 2 are solid. |
 
 Tick items off as they land. When a phase is fully complete, flip its row to ✅ and add a short note pointing at the merge commit / PR.
@@ -86,42 +86,46 @@ Existing HOCON `local.conf` loading is fine; just add keys and stop hardcoding p
 
 ### 2.1 Shadow / fat JAR for main backend
 
-- [ ] Add `id("com.gradleup.shadow") version "8.3.x"` to [`build.gradle.kts`](../../build.gradle.kts) plugins. Configure `shadowJar`: archive name `lighting7.jar`, mainClass `uk.me.cormack.lighting7.ApplicationKt`, `mergeServiceFiles()` (Logback, Exposed dialects, Hikari).
-- [ ] Smoke test: `./gradlew shadowJar && java -jar build/libs/lighting7.jar` runs the backend standalone on Mac.
+- [x] Add `id("com.gradleup.shadow") version "8.3.x"` to [`build.gradle.kts`](../../build.gradle.kts) plugins. Configure `shadowJar`: archive name `lighting7.jar`, `mergeServiceFiles()` (Logback, Exposed dialects, Hikari, CoreMIDI4J `MidiDeviceProvider`). *(Used 8.3.5; mainClass is inherited from the Ktor plugin's `application { }` block, no override needed.)*
+- [x] Smoke test: `./gradlew shadowJar && java -jar build/libs/lighting7.jar` runs the backend standalone on Mac. *(128 MB jar; HTTP listener up at ~9s, mDNS registers `lighting7-<host>._http._tcp.local.` on port 8413.)*
 
 ### 2.2 kotlin-compiler-server fat JAR
 
-The user maintains a JetBrains fork. This phase doesn't modify it; it just integrates with its JAR output.
+The user maintains a JetBrains fork. The fork tree is pristine on disk; the existing [`build-kotlin-compiler-server.sh`](../../build-kotlin-compiler-server.sh) applies sed patches at build time. The new Gradle task mirrors that flow for `bootJar` instead of Docker.
 
-- [ ] New Gradle property `kotlinCompilerServerPath` (default `../kotlin-compiler-server/build/libs/`).
-- [ ] New `assembleCompilerServer` task — shells out `./gradlew bootJar` in that directory, then copies the resulting fat JAR to `build/distributions/kotlin-compiler-server.jar`. Override the path via `gradle.properties` if the fork lives elsewhere.
-- [ ] Verify: `java -jar kotlin-compiler-server.jar --server.port=8321 --server.address=127.0.0.1` runs standalone, accepts requests from the main backend's existing proxy.
+- [x] New Gradle property `kotlinCompilerServerPath` (default `../kotlin-compiler-server`). *(Points at the fork root, not `build/libs/` — the task needs to invoke `./gradlew bootJar` from there.)*
+- [x] New `assembleCompilerServer` task chain — `checkCompilerServerClean` → `stageCompilerServerLightingJar` → `applyCompilerServerPatches` → `runCompilerServerBootJar` → `assembleCompilerServer` (copies `build/libs/*.jar` to `build/distributions/kotlin-compiler-server.jar`). Each patch-applying task is `finalizedBy(revertCompilerServerPatches)` so the fork tree is restored even if `bootJar` fails.
+- [ ] Verify: `java -jar kotlin-compiler-server.jar --server.port=8321 --server.address=127.0.0.1` runs standalone, accepts requests from the main backend's existing proxy. *(Manual; deferred to user — task wiring is in place but we haven't run an end-to-end fork build yet.)*
 
 ### 2.3 mDNS registration (JmDNS)
 
-- [ ] Add `org.jmdns:jmdns:3.5.12` to [`build.gradle.kts`](../../build.gradle.kts).
-- [ ] New `src/main/kotlin/uk/me/cormack/lighting7/state/MdnsService.kt` — thin wrapper: `register(port: Int, name: String): Closeable`. Service type `_http._tcp.local.`, default name `lighting7-${hostname}` (lowercased, sanitized for DNS), TXT record `path=/`. Hostname via `InetAddress.getLocalHost().hostName`.
-- [ ] Wire into [`Application.kt:27-28`](../../src/main/kotlin/uk/me/cormack/lighting7/Application.kt#L27) — register **after** `show.start()` returns, before `moduleWithState()`. Store the `Closeable` in `State` so [`State.shutdown()`](../../src/main/kotlin/uk/me/cormack/lighting7/state/State.kt#L326) closes it during graceful shutdown.
-- [ ] Config keys: `mdns.enabled` (default true), `mdns.name` (empty = derive from hostname).
-- [ ] Verify with `dns-sd -B _http._tcp` on Mac, Bonjour Browser on iPad.
+- [x] Add `org.jmdns:jmdns:3.5.12` to [`build.gradle.kts`](../../build.gradle.kts).
+- [x] New [`MdnsService.kt`](../../src/main/kotlin/uk/me/cormack/lighting7/state/MdnsService.kt) — `register(port, name): MdnsService` returning a `Closeable`. Service type `_http._tcp.local.`, derived name `lighting7-<sanitized-host>`, TXT record `path=/`.
+- [x] Wired into [`Application.kt`](../../src/main/kotlin/uk/me/cormack/lighting7/Application.kt) `registerMdns()` between `show.start()` and `moduleWithState(state)`. State stores the handle via `attachMdns()` and closes it in [`State.shutdown()`](../../src/main/kotlin/uk/me/cormack/lighting7/state/State.kt).
+- [x] Config keys `mdns.enabled` (default true) and `mdns.name` (empty = derive from hostname) — added to [`example.local.conf`](../../example.local.conf).
+- [ ] Verify with `dns-sd -B _http._tcp` on Mac, Bonjour Browser on iPad. *(Manual; deferred to user.)*
 
 ### 2.4 System tray launcher (new module)
 
-- [ ] New Gradle subproject [`launcher/`](../../launcher) (sibling to existing source). Pure JDK deps (`java.awt.SystemTray`, no third-party libs).
-- [ ] Entry point `LauncherMain.kt`:
-    1. Resolve bundled JRE path (relative to the launcher JAR location — works inside jpackage layout in phase 3, also runnable from Gradle output for testing).
-    2. Spawn `kotlin-compiler-server.jar` as a child `Process` bound to `127.0.0.1:8321`. Capture stdout/stderr to `<appDataDir>/logs/compiler-server.log`.
-    3. Spawn `lighting7.jar` as a child `Process`. Capture to `logs/lighting7.log`.
-    4. Poll `http://localhost:8413/` (HEAD) until 200 or timeout (~30 s).
+- [x] New Gradle subproject [`launcher/`](../../launcher) — pure JDK deps. `kotlin("jvm") + application` plugins; `kotlin-compiler-server.jar` and `lighting7.jar` paths injected via `-D<jarname>=...` system properties from `:launcher:run`.
+- [x] Entry point [`LauncherMain.kt`](../../launcher/src/main/kotlin/uk/me/cormack/lighting7/launcher/LauncherMain.kt):
+    1. Resolve `java.home/bin/java` (the JRE running the launcher itself; in phase 3 jpackage points this at the trimmed runtime).
+    2. Spawn `kotlin-compiler-server.jar` as a child `Process` bound to `127.0.0.1:8321`, log to `<appDataDir>/logs/compiler-server.log`.
+    3. Spawn `lighting7.jar` working in `appDataDir()`, log to `logs/lighting7.log`.
+    4. Poll `http://localhost:8413/` via `java.net.http.HttpClient` until 200 or 30 s.
     5. `Desktop.getDesktop().browse(URI("http://localhost:8413/"))`.
-    6. Build tray icon with menu: **Open**, **Copy LAN URL** (`http://<mdns-name>.local:8413`), **View Logs** (opens `<appDataDir>/logs/` in Explorer/Finder), **Quit**.
-- [ ] Quit handler: `process.destroy()` on both children, wait up to 5 s, then `destroyForcibly()`. JVM shutdown hook for the same path.
-- [ ] Launcher reads the same `local.conf` as the backend so ports/paths are configured in one place.
-- [ ] Mac quirk to verify: `SystemTray.isSupported()` returns true on macOS but the icon goes in the menu bar — confirm it renders sensibly. Fallback: "headless" mode (no tray, just spawn children + open browser; quit via Activity Monitor / Cmd-Q on the JVM process).
+    6. Build tray icon (placeholder PNG at `launcher/src/main/resources/lighting7.png`) with **Open**, **Copy LAN URL**, **View Logs**, **Quit**.
+- [x] Quit handler: `process.destroy()` → wait 5 s → `destroyForcibly()` (in [`ChildProcess.kt`](../../launcher/src/main/kotlin/uk/me/cormack/lighting7/launcher/ChildProcess.kt). JVM shutdown hook stops both children. Children spawn with stdin redirected to `Redirect.DISCARD` so they don't zombie if the parent dies.
+- [ ] Launcher reads the same `local.conf` as the backend. *(Skipped — Phase 2 launcher takes only JAR paths via system properties; the launcher doesn't need to read the HOCON config to make a port choice yet. Revisit in phase 3 if jpackage needs a single user-editable port.)*
+- [ ] Mac menu-bar quirk: `SystemTray.isSupported()` returns true on macOS but the icon goes in the menu bar — confirm renders sensibly. Headless fallback handled by `installTray`. *(Manual; deferred to user.)*
 
 ### 2.5 Phase 2 verification
 
-- [ ] On Mac: `./gradlew :launcher:run` (after `shadowJar` and `assembleCompilerServer`). Both child JVMs start, browser opens, tray icon appears. iPad on LAN reaches `http://lighting7-<hostname>.local:8413/`. Quit from tray → `ps aux | grep java` returns nothing.
+- [x] `./gradlew shadowJar` produces a `build/libs/lighting7.jar` with merged service files.
+- [x] `./gradlew :launcher:build` compiles cleanly.
+- [x] `./gradlew test` — full suite green against SQLite.
+- [x] `java -jar build/libs/lighting7.jar` boots the backend standalone, mDNS line confirmed in logs.
+- [ ] On Mac: `./gradlew :launcher:run` (after `shadowJar` and `assembleCompilerServer`). Both child JVMs start, browser opens, tray icon appears. iPad on LAN reaches `http://lighting7-<hostname>.local:8413/`. Quit from tray → `ps aux | grep java` returns nothing. *(Manual; deferred to user. Requires the kotlin-compiler-server fork to be in a clean git state so the assembleCompilerServer task can patch / revert.)*
 - [ ] Repeat on a Windows machine or VM (still requires JDK installed at this stage — phase 3 removes that requirement).
 
 **Phase 2 critical files:** [`build.gradle.kts`](../../build.gradle.kts), [`settings.gradle.kts`](../../settings.gradle.kts) (new module), new `launcher/` subproject (`build.gradle.kts`, `LauncherMain.kt`, `TrayMenu.kt`, `ChildProcess.kt`), new [`MdnsService.kt`](../../src/main/kotlin/uk/me/cormack/lighting7/state/MdnsService.kt), [`Application.kt:24-30`](../../src/main/kotlin/uk/me/cormack/lighting7/Application.kt#L24), [`State.kt shutdown()`](../../src/main/kotlin/uk/me/cormack/lighting7/state/State.kt#L326).

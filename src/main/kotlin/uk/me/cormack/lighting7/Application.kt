@@ -5,7 +5,9 @@ import io.ktor.server.netty.*
 import uk.me.cormack.lighting7.plugins.configureHTTP
 import uk.me.cormack.lighting7.plugins.configureSockets
 import uk.me.cormack.lighting7.routes.configureRouting
+import uk.me.cormack.lighting7.state.MdnsService
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.state.optionalString
 
 fun main(argv: Array<String>) {
     val args = mutableListOf("-config=application.conf")
@@ -27,7 +29,20 @@ fun Application.module() {
     val show = state.initializeShow()
     show.start()
 
+    registerMdns(state)
+
     moduleWithState(state)
+}
+
+private fun Application.registerMdns(state: State) {
+    val enabled = state.config.optionalString("mdns.enabled")?.toBooleanStrictOrNull() ?: true
+    if (!enabled) return
+
+    val port = environment.config.property("ktor.deployment.port").getString().toInt()
+    val name = state.config.optionalString("mdns.name") ?: MdnsService.deriveServiceName()
+    runCatching { MdnsService.register(port, name) }
+        .onSuccess { state.attachMdns(it) }
+        .onFailure { log.warn("mDNS registration failed: {}", it.message) }
 }
 
 /**

@@ -3,3 +3,5 @@ plugins {
 }
 
 rootProject.name = "Lighting7"
+
+include("launcher")
