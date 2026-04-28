@@ -72,19 +72,26 @@ jobs:
           }
           Write-Host "jmods/ found at $jmodsPath."
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      # The kotlin-compiler-server fork's daemon JVM resolver needs to find the
-      # JDK 17 install. Hosted-toolcache paths aren't in Gradle's default JDK
-      # discovery list, so point at them via env vars set by setup-java.
-      - name: Register JDK install paths for Gradle toolchain discovery
+      # Gradle's daemon JVM resolver (incubating) only scans standard install paths
+      # on Windows — `C:\Program Files\Java\*` etc. — and does not consult
+      # `org.gradle.java.installations.*` properties. Junction JDK 17 into a
+      # discoverable location so the kotlin-compiler-server fork's daemon JVM
+      # requirement is satisfied.
+      - name: Make JDK 17 discoverable to Gradle daemon JVM resolver
         shell: pwsh
         run: |
-          $propsFile = Join-Path $env:USERPROFILE ".gradle\gradle.properties"
-          New-Item -ItemType Directory -Force -Path (Split-Path $propsFile) | Out-Null
-          Add-Content -Path $propsFile -Value "org.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_24_X64"
-          Get-Content $propsFile
+          $src = $env:JAVA_HOME_17_X64
+          $dst = "C:\Program Files\Java\liberica-jdk-17"
+          New-Item -ItemType Directory -Force -Path "C:\Program Files\Java" | Out-Null
+          if (-not (Test-Path $dst)) {
+            cmd /c mklink /J "`"$dst`"" "`"$src`""
+            if ($LASTEXITCODE -ne 0) { throw "mklink failed with exit code $LASTEXITCODE" }
+          }
+          Write-Host "Linked $dst -> $src"
+          Get-ChildItem "C:\Program Files\Java"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Resolve effective installer version
         shell: pwsh
