@@ -1,0 +1,102 @@
+name: Windows build
+
+# Manual-only. Produces a Windows x86_64 .msi installer via `gradlew packageWindows`.
+# When dispatched against a `v*` tag with create_release=true, also publishes a
+# GitHub Release with the .msi attached.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Installer version (passed to -PjpackageAppVersion). Ignored if dispatched against a v* tag — tag name minus the 'v' is used instead."
+        type: string
+        default: "1.0.0"
+      create_release:
+        description: "Create/update a GitHub Release with the .msi attached. Only honored when dispatched against a v* tag."
+        type: boolean
+        default: false
+      kotlin_compiler_server_ref:
+        description: "Ref (tag/branch/commit) of JetBrains/kotlin-compiler-server to check out. The build's sed patches assume a 2.1.21-compatible tree."
+        type: string
+        default: "2.1.21"
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout lighting7
+        uses: actions/checkout@v4
+
+      - name: Checkout lighting-react
+        uses: actions/checkout@v4
+        with:
+          repository: cjcormack/lighting-react
+          path: lighting-react
+
+      - name: Checkout kotlin-compiler-server
+        uses: actions/checkout@v4
+        with:
+          repository: JetBrains/kotlin-compiler-server
+          ref: ${{ inputs.kotlin_compiler_server_ref }}
+          path: kotlin-compiler-server
+
+      - name: Set up JDK 24 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "24"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve effective installer version
+        shell: pwsh
+        run: |
+          $refName = "${{ github.ref_name }}"
+          $isTag = "${{ github.ref_type }}" -eq "tag" -and $refName.StartsWith("v")
+          if ($isTag) {
+            $version = $refName.Substring(1)
+            Write-Host "Tag dispatch detected; using version '$version' from tag (input version ignored)."
+          } else {
+            $version = "${{ inputs.version }}"
+            Write-Host "Non-tag dispatch; using version '$version' from input."
+            if ("${{ inputs.create_release }}" -eq "true") {
+              Write-Host "::warning::create_release=true was set but ref is not a v* tag; the Release step will be skipped."
+            }
+          }
+          "EFFECTIVE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build Windows MSI
+        shell: pwsh
+        run: |
+          .\gradlew.bat packageWindows `
+            "-PlightingReactPath=./lighting-react" `
+            "-PkotlinCompilerServerPath=./kotlin-compiler-server" `
+            "-PjpackageAppVersion=$env:EFFECTIVE_VERSION" `
+            --no-daemon --stacktrace
+
+      - name: Upload .msi as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighting7-windows-msi
+          path: build/installers/*.msi
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish GitHub Release (tag dispatches only)
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && inputs.create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: build/installers/*.msi
+          draft: true
+          fail_on_unmatched_files: true
