@@ -14,7 +14,14 @@ import kotlin.system.exitProcess
 
 private const val BACKEND_PORT = 8413
 private const val COMPILER_PORT = 8321
-private const val READINESS_TIMEOUT_MS = 30_000L
+
+// Override on slow hosts (e.g. x64 JRE under Windows-on-ARM emulation) via
+// `-Dlighting7.readinessTimeoutMs=…` or the `LIGHTING7_READINESS_TIMEOUT_MS` env var.
+private val READINESS_TIMEOUT_MS: Long = run {
+    val raw = System.getProperty("lighting7.readinessTimeoutMs")
+        ?: System.getenv("LIGHTING7_READINESS_TIMEOUT_MS")
+    raw?.toLongOrNull()?.takeIf { it > 0 } ?: 60_000L
+}
 
 /** Marker used to resolve the launcher's own JAR / classpath via [Class.protectionDomain]. */
 internal object LauncherMarker
