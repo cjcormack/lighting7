@@ -284,7 +284,15 @@ tasks.register("assembleCompilerServer") {
     }
 
     val outputFile = compilerServerOutput.get().asFile
-    outputs.file(outputFile)
+    // The doLast block reads bootJar's output jar and the fork's `2.1.21*/` lib dirs;
+    // declare them as inputs so this task is properly UP-TO-DATE-checked and the 38 MB
+    // recursive copy gets skipped when nothing has changed since the last run.
+    inputs.files(fileTree(compilerServerDir) {
+        include("build/libs/*.jar")
+        include("2.1.21*/**")
+    })
+    // outputs.dir covers both the bootJar copy and the staged lib dirs.
+    outputs.dir(outputFile.parentFile)
 
     doLast {
         val libsDir = compilerServerDir.resolve("build/libs")
@@ -300,8 +308,174 @@ tasks.register("assembleCompilerServer") {
         outputFile.parentFile.mkdirs()
         jar.copyTo(outputFile, overwrite = true)
         logger.lifecycle("Copied ${jar.name} → ${outputFile.relativeTo(rootDir)}")
+
+        // application.properties pins the runtime library dirs to `2.1.21[-js|-wasm|…]`. Other
+        // top-level `2.x.y/` directories in the fork (e.g. `2.3.0/` for the compiler-server's
+        // own version) are build-time artefacts the runtime never reads — skip them.
+        val libDirs = compilerServerDir.listFiles { f ->
+            f.isDirectory && f.name.startsWith("2.1.21")
+        } ?: emptyArray()
+        require(libDirs.isNotEmpty()) {
+            "Expected `2.1.21[-js|-wasm|…]` library directories in $compilerServerDir after bootJar — none found. The fork's :dependencies:copy* tasks should produce them."
+        }
+        libDirs.forEach { src ->
+            val dest = File(outputFile.parentFile, src.name)
+            dest.deleteRecursively()
+            src.copyRecursively(dest)
+            logger.lifecycle("Copied ${src.name}/ → ${dest.relativeTo(rootDir)}/")
+        }
     }
 }
+
+// ─── Phase 3: jlink trimmed runtime + jpackage installers ──────────────
+// Module list: we lean on the `java.se` aggregate plus a handful of jdk.* extras
+// Spring Boot / JNDI / TLS need rather than auto-discovering with jdeps. jdeps
+// doesn't walk Spring Boot's BOOT-INF/lib/ nested-jar layout in the
+// kotlin-compiler-server fat jar, so any auto-discovery would still have to be
+// merged with a generous safety baseline. Refining the module set is a follow-up
+// if the runtime is too large in practice (currently ~59 MB compressed).
+
+val jlinkModules = listOf(
+    "java.se",
+    "jdk.crypto.ec",
+    "jdk.unsupported",
+    "jdk.zipfs",
+    "jdk.localedata",
+)
+
+val hostOs = org.gradle.internal.os.OperatingSystem.current()
+val runtimeOsLabel = when {
+    hostOs.isMacOsX -> "mac"
+    hostOs.isWindows -> "windows"
+    else -> "linux"
+}
+val runtimeOutputDir = layout.buildDirectory.dir("runtime-$runtimeOsLabel")
+val jpackageInputDir = layout.buildDirectory.dir("jpackage-input")
+val installersDir = layout.buildDirectory.dir("installers")
+
+val javaHome = System.getProperty("java.home")
+val jdkBin = { exe: String -> "$javaHome/bin/" + if (hostOs.isWindows) "$exe.exe" else exe }
+
+// jpackage requires the major in --app-version to be ≥ 1, so we can't pass the project's
+// in-development `0.0.1` directly. Override via `-PjpackageAppVersion=...` for releases.
+val jpackageAppVersion: String = (findProperty("jpackageAppVersion") as String?) ?: "1.0.0"
+
+val buildRuntime = tasks.register<Exec>("buildRuntime") {
+    description = "Run jlink to produce a trimmed JRE for the host OS at build/runtime-<os>/."
+    group = "distribution"
+
+    val jmodsDir = file("$javaHome/jmods")
+    require(jmodsDir.isDirectory) {
+        "Expected jmods/ at $jmodsDir; jlink needs the host JDK's modules. Run with a JDK, not a JRE."
+    }
+
+    inputs.property("modules", jlinkModules.joinToString(","))
+    inputs.property("javaHome", javaHome)
+    outputs.dir(runtimeOutputDir)
+
+    // jlink refuses to write into an existing directory. doFirst runs only when the
+    // task actually executes (not when up-to-date), so this doesn't defeat caching.
+    doFirst { runtimeOutputDir.get().asFile.deleteRecursively() }
+
+    commandLine(
+        jdkBin("jlink"),
+        "--module-path", jmodsDir.absolutePath,
+        "--add-modules", jlinkModules.joinToString(","),
+        "--output", runtimeOutputDir.get().asFile.absolutePath,
+        "--strip-debug",
+        "--no-header-files",
+        "--no-man-pages",
+        "--compress=zip-6",
+    )
+}
+
+val stageJpackageInput = tasks.register<Copy>("stageJpackageInput") {
+    description = "Stage launcher.jar + lighting7.jar + kotlin-compiler-server.jar (+ kotlin lib dirs) into build/jpackage-input/."
+    group = "distribution"
+
+    dependsOn(tasks.shadowJar, ":launcher:shadowJar", "assembleCompilerServer")
+
+    from(tasks.shadowJar) { include("lighting7.jar") }
+    from(rootProject.layout.buildDirectory.file("distributions/kotlin-compiler-server.jar"))
+    from(project(":launcher").layout.buildDirectory.file("libs/launcher.jar"))
+    // assembleCompilerServer stages 2.1.21/ (and friends) next to the jar in
+    // build/distributions/. Forward them so the launcher's compiler-server child can
+    // resolve them relative to its workingDir at runtime.
+    from(rootProject.layout.buildDirectory.dir("distributions")) {
+        include("2.1.21*/**")
+    }
+    into(jpackageInputDir)
+}
+
+tasks.named<Delete>("clean") {
+    delete(layout.buildDirectory.dir("runtime-mac"))
+    delete(layout.buildDirectory.dir("runtime-windows"))
+    delete(layout.buildDirectory.dir("runtime-linux"))
+    delete(jpackageInputDir)
+    delete(installersDir)
+}
+
+fun registerJpackageTask(
+    name: String,
+    type: String,
+    hostMatches: Boolean,
+    iconFile: File,
+    extraArgs: List<String>,
+) {
+    tasks.register<Exec>(name) {
+        description = "Build a $type installer at build/installers/. Host-only — runs on the matching OS."
+        group = "distribution"
+        onlyIf {
+            if (!hostMatches) {
+                logger.warn("Skipping $name: jpackage --type $type only works on its target OS (current host: ${hostOs.name}).")
+                false
+            } else {
+                true
+            }
+        }
+        dependsOn(stageJpackageInput, buildRuntime)
+        inputs.dir(jpackageInputDir)
+        inputs.dir(runtimeOutputDir)
+        outputs.dir(installersDir)
+
+        val iconExists = iconFile.exists()
+        if (iconExists) inputs.file(iconFile)
+
+        doFirst { installersDir.get().asFile.mkdirs() }
+
+        val args = mutableListOf(
+            jdkBin("jpackage"),
+            "--type", type,
+            "--name", "lighting7",
+            "--app-version", jpackageAppVersion,
+            "--vendor", "Chris Cormack",
+            "--input", jpackageInputDir.get().asFile.absolutePath,
+            "--main-jar", "launcher.jar",
+            "--main-class", "uk.me.cormack.lighting7.launcher.LauncherMainKt",
+            "--runtime-image", runtimeOutputDir.get().asFile.absolutePath,
+            "--dest", installersDir.get().asFile.absolutePath,
+        )
+        args += extraArgs
+        if (iconExists) args += listOf("--icon", iconFile.absolutePath)
+        commandLine(args)
+    }
+}
+
+registerJpackageTask(
+    name = "packageMac",
+    type = "pkg",
+    hostMatches = hostOs.isMacOsX,
+    iconFile = rootProject.file("assets/lighting7.icns"),
+    extraArgs = emptyList(),
+)
+
+registerJpackageTask(
+    name = "packageWindows",
+    type = "msi",
+    hostMatches = hostOs.isWindows,
+    iconFile = rootProject.file("assets/lighting7.ico"),
+    extraArgs = listOf("--win-menu", "--win-shortcut", "--win-dir-chooser"),
+)
 
 tasks.test {
     // Forward opt-in test flags to the forked test JVM. `fx.benchmark` gates the

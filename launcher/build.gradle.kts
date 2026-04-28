@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm") version "2.2.21"
     application
+    id("com.gradleup.shadow") version "8.3.5"
 }
 
 kotlin {
@@ -32,4 +33,26 @@ tasks.named<JavaExec>("run") {
     // child by passing the bare filename through `System.getProperty`.
     systemProperty("lighting7.jar", rootProject.layout.buildDirectory.file("libs/lighting7.jar").get().asFile.absolutePath)
     systemProperty("kotlin-compiler-server.jar", rootProject.layout.buildDirectory.file("distributions/kotlin-compiler-server.jar").get().asFile.absolutePath)
+}
+
+// Phase 3 packaging: jpackage's --input wants exactly one launcher.jar. The shadow
+// plugin merges kotlin-stdlib (the only non-JDK dep) into a single self-contained
+// jar so the install layout stays to three flat jars. mergeServiceFiles() mirrors
+// the root shadowJar config — kept in sync if launcher ever picks up SPI deps.
+tasks.shadowJar {
+    archiveFileName.set("launcher.jar")
+    mergeServiceFiles()
+}
+
+// LauncherMain.ensureDefaultConfig() reads `/default-local.conf` from the launcher
+// classpath on first install. Generate it from the canonical example.local.conf
+// at the repo root so the two files can't drift.
+val stageDefaultConfig = tasks.register<Copy>("stageDefaultConfig") {
+    from(rootProject.file("example.local.conf"))
+    into(layout.buildDirectory.dir("generated/resources/default-config"))
+    rename { "default-local.conf" }
+}
+
+sourceSets.main {
+    resources.srcDir(stageDefaultConfig)
 }

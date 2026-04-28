@@ -36,9 +36,12 @@ class ChildProcess(val name: String, val process: Process) {
             val pb = ProcessBuilder(cmd)
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
-                // Detach the child's stdin so it can't block waiting on a parent JVM
-                // that has died (would otherwise turn into a zombie under jpackage).
-                .redirectInput(ProcessBuilder.Redirect.DISCARD)
+                // Inherit the parent's (likely null) stdin. `Redirect.DISCARD` is output-only
+                // and throws `IllegalArgumentException: Redirect invalid for reading: WRITE`
+                // when passed to `redirectInput`. INHERIT is fine here: when the launcher
+                // is launched from Finder, stdin is already null; when launched from a
+                // terminal during dev, our Java children don't read stdin anyway.
+                .redirectInput(ProcessBuilder.Redirect.INHERIT)
             if (workingDir != null) pb.directory(workingDir.toFile())
             return ChildProcess(name, pb.start())
         }

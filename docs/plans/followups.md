@@ -125,6 +125,30 @@ risks breaking visual regressions until the next consumer pays for itself.
 
 ---
 
+## Distribution
+
+### `FU-DIST-ICONS` — Real macOS / Windows installer icons
+
+**Status**: Ready
+**Origin**: Windows-distribution Phase 3, 2026-04-28
+
+`packageMac` / `packageWindows` pass `--icon` only when `assets/lighting7.icns`
+or `assets/lighting7.ico` exists. Today neither does, so jpackage falls back
+to its default Java cup icon for the dock / taskbar / installer.
+
+**Scope**: design (or commission) a 1024×1024 source PNG for lighting7, then
+generate `assets/lighting7.icns` (macOS) and `assets/lighting7.ico` (Windows,
+multi-resolution embed: 16/32/48/64/128/256). `iconutil` produces `.icns`
+from an `iconset` directory; ImageMagick `convert` produces `.ico`. Drop both
+files at `assets/`; `packageMac` and `packageWindows` pick them up on the
+next run with no Gradle changes.
+
+The existing `launcher/src/main/resources/lighting7.png` is the tray-icon
+placeholder and is too small / not OS-icon-shaped — use it as inspiration,
+not as the source PNG.
+
+---
+
 ## Code quality
 
 ---
@@ -209,6 +233,38 @@ row, open MIDI Learn, wiggle the physical fader → binding appears. Switch
 banks via the `BankSwitcher` → matrix rows update. Validates the Phase 5 UI
 + Phase 3/4 wiring against real hardware edges (debounce, device-side bank
 events, motor drive under load).
+
+### `FU-MANUAL-DIST-INSTALL` — End-to-end installer validation on Mac + Windows
+
+**Status**: Manual
+**Origin**: Windows-distribution Phases 1–3, 2026-04-28
+
+All three phases of the Windows-distribution plan are build-side green —
+backend boots from `lighting7.jar` on the trimmed JRE, `packageMac`
+produces a 337 MB `.pkg` with the right install layout, the launcher's
+`ensureDefaultConfig` writes `local.conf` on first launch. What's never
+been exercised end-to-end:
+
+- **Mac**: install `lighting7-1.0.0.pkg` on a clean machine (or wipe
+  `/Applications/lighting7.app` + `~/Library/Application Support/lighting7`
+  first). Double-click → tray icon appears in the menu bar, browser opens
+  to `localhost:8413`, iPad on the same Wi-Fi reaches
+  `http://lighting7-<hostname>.local:8413/`, Quit from tray leaves no
+  `java` processes (`pgrep -f lighting7`).
+- **Windows**: `gradlew.bat packageWindows` on a Windows host →
+  install `.msi` on a clean Windows VM with no JDK. Same checks plus:
+  `%APPDATA%\lighting7\` is writable for the launcher's first-run
+  `local.conf`, mDNS resolves from the iPad (Bonjour-on-Windows ships
+  with iTunes / Apple Software Update; without it, JmDNS is the
+  responder), Windows Defender doesn't quarantine `lighting7.exe`.
+- **Smoke checklist** in either install: BPM tap, fixture patch CRUD,
+  run a cue, edit a script in the embedded editor (covers the
+  compiler-server child process), iPad WebSocket reconnects after a
+  brief Wi-Fi drop.
+
+10–20 minutes per OS. Failures here likely surface as concrete engineering
+items (jlink module gaps, mDNS edge cases, Windows path quirks); promote
+those to dedicated `FU-DIST-*` follow-ups before fixing.
 
 ### `FU-MANUAL-DEAD-ASSIGNMENTS` — Dead-assignment banner live rig (Phase 6)
 

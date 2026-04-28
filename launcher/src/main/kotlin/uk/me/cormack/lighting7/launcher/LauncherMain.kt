@@ -1,12 +1,14 @@
 package uk.me.cormack.lighting7.launcher
 
 import java.awt.Desktop
+import java.io.PrintStream
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.time.Duration
 import kotlin.system.exitProcess
 
@@ -18,12 +20,18 @@ private const val READINESS_TIMEOUT_MS = 30_000L
 internal object LauncherMarker
 
 fun main() {
+    // Redirect launcher stdout/stderr to a log file before any other work — when
+    // launched from Finder the .app's stdout/stderr go nowhere, so any pre-spawn
+    // crash (e.g. a bad ProcessBuilder argument) is otherwise silent.
+    val dataDir = appDataDir()
+    val logsDir = dataDir.resolve("logs").also { Files.createDirectories(it) }
+    redirectLauncherIo(logsDir.resolve("launcher.log"))
+
     val backendJar = resolveJar("lighting7.jar")
     val compilerJar = resolveJar("kotlin-compiler-server.jar")
     val javaBin = resolveJavaExecutable()
 
-    val dataDir = appDataDir()
-    val logsDir = dataDir.resolve("logs").also { Files.createDirectories(it) }
+    ensureDefaultConfig(dataDir)
 
     println("lighting7 launcher")
     println("  java        = $javaBin")
@@ -32,6 +40,12 @@ fun main() {
     println("  data dir    = $dataDir")
     println("  logs dir    = $logsDir")
 
+    // The compiler server's bundled logback config writes `./logs/spring-boot-logger.log`
+    // relative to its CWD, so the CWD has to be writable. Use a per-user dir under
+    // appDataDir; pass absolute paths to the kotlin library directories so they resolve
+    // regardless of CWD (the lib dirs themselves stay read-only inside the install bundle).
+    val compilerWorkDir = dataDir.resolve("compiler-server").also { Files.createDirectories(it) }
+    val compilerLibsDir = compilerJar.parent
     val compiler = ChildProcess.spawn(
         name = "kotlin-compiler-server",
         java = javaBin,
@@ -39,7 +53,14 @@ fun main() {
         args = listOf(
             "--server.port=$COMPILER_PORT",
             "--server.address=127.0.0.1",
+            "--libraries.folder.jvm=${compilerLibsDir.resolve("2.1.21")}",
+            "--libraries.folder.js=${compilerLibsDir.resolve("2.1.21-js")}",
+            "--libraries.folder.wasm=${compilerLibsDir.resolve("2.1.21-wasm")}",
+            "--libraries.folder.compose-wasm=${compilerLibsDir.resolve("2.1.21-compose-wasm")}",
+            "--libraries.folder.compose-wasm-compiler-plugins=${compilerLibsDir.resolve("2.1.21-compose-wasm-compiler-plugins")}",
+            "--libraries.folder.compiler-plugins=${compilerLibsDir.resolve("2.1.21-compiler-plugins")}",
         ),
+        workingDir = compilerWorkDir,
         logFile = logsDir.resolve("compiler-server.log"),
     )
 
@@ -84,6 +105,30 @@ fun main() {
     println("${dead.name} exited (code=${dead.exitValue}) — stopping the rest.")
     children.forEach { runCatching { it.stop() } }
     exitProcess(1)
+}
+
+private fun redirectLauncherIo(logFile: Path) {
+    val stream = PrintStream(
+        Files.newOutputStream(logFile, StandardOpenOption.CREATE, StandardOpenOption.APPEND),
+        true,
+    )
+    System.setOut(stream)
+    System.setErr(stream)
+}
+
+/**
+ * Bootstrap a writable `local.conf` next to the SQLite DB on first launch. The backend's
+ * `EngineMain -config=local.conf` is resolved against its working directory, which we
+ * set to [appDataDir] for the backend child — so `dataDir/local.conf` is what loads at
+ * runtime. After a clean install the file is missing; copy the bundled default once.
+ */
+private fun ensureDefaultConfig(dataDir: Path) {
+    val target = dataDir.resolve("local.conf")
+    if (Files.exists(target)) return
+    val resource = LauncherMarker::class.java.getResourceAsStream("/default-local.conf")
+        ?: error("Missing /default-local.conf resource in launcher classpath")
+    resource.use { Files.copy(it, target) }
+    println("Wrote default config to $target")
 }
 
 /**
