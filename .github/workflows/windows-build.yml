@@ -49,15 +49,19 @@ jobs:
           ref: ${{ inputs.kotlin_compiler_server_ref }}
           path: kotlin-compiler-server
 
-      # Liberica ships `jmods/`; Temurin's Windows JDK distribution does not, and
-      # `jlink` (used by buildRuntime) requires the host JDK's jmods directory.
-      - name: Set up JDK 24 (Liberica)
+      # JDK 24 is the primary JDK for the lighting7 build (Liberica ships `jmods/`,
+      # which Temurin's Windows distribution does not, and `jlink` needs them).
+      # JDK 17 is required by the kotlin-compiler-server fork's daemon JVM
+      # (pinned in its gradle/gradle-daemon-jvm.properties).
+      - name: Set up JDKs (17 + 24, Liberica)
         uses: actions/setup-java@v4
         with:
           distribution: liberica
-          java-version: "24"
+          java-version: |
+            17
+            24
 
-      - name: Verify jmods are present
+      - name: Verify jmods are present (JDK 24)
         shell: pwsh
         run: |
           $jmodsPath = Join-Path $env:JAVA_HOME "jmods"
@@ -70,6 +74,17 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      # The kotlin-compiler-server fork's daemon JVM resolver needs to find the
+      # JDK 17 install. Hosted-toolcache paths aren't in Gradle's default JDK
+      # discovery list, so point at them via env vars set by setup-java.
+      - name: Register JDK install paths for Gradle toolchain discovery
+        shell: pwsh
+        run: |
+          $propsFile = Join-Path $env:USERPROFILE ".gradle\gradle.properties"
+          New-Item -ItemType Directory -Force -Path (Split-Path $propsFile) | Out-Null
+          Add-Content -Path $propsFile -Value "org.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_24_X64"
+          Get-Content $propsFile
 
       - name: Resolve effective installer version
         shell: pwsh
