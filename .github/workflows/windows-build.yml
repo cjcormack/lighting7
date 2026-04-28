@@ -49,11 +49,24 @@ jobs:
           ref: ${{ inputs.kotlin_compiler_server_ref }}
           path: kotlin-compiler-server
 
-      - name: Set up JDK 24 (Temurin)
+      # Liberica ships `jmods/`; Temurin's Windows JDK distribution does not, and
+      # `jlink` (used by buildRuntime) requires the host JDK's jmods directory.
+      - name: Set up JDK 24 (Liberica)
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: liberica
           java-version: "24"
+
+      - name: Verify jmods are present
+        shell: pwsh
+        run: |
+          $jmodsPath = Join-Path $env:JAVA_HOME "jmods"
+          if (-not (Test-Path $jmodsPath)) {
+            Write-Host "::error::jmods/ not found at $jmodsPath — jlink will fail. JAVA_HOME contents:"
+            Get-ChildItem $env:JAVA_HOME
+            exit 1
+          }
+          Write-Host "jmods/ found at $jmodsPath."
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
