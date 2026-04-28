@@ -250,6 +250,15 @@ val runCompilerServerBootJar = tasks.register<Exec>("runCompilerServerBootJar") 
     onlyIf { compilerServerDir.exists() }
     val isWindows = org.gradle.internal.os.OperatingSystem.current().isWindows
     commandLine(if (isWindows) "gradlew.bat" else "./gradlew", "bootJar")
+
+    // The fork pins its daemon JVM to Java 17 via gradle/gradle-daemon-jvm.properties.
+    // When the parent build runs on JDK 24+ (required for jpackage), the fork's daemon
+    // resolution can't find a matching JDK on hosts where JDK 17 isn't on a default
+    // search path (e.g. GitHub-hosted Windows runners). Let CI point this Exec at the
+    // right JDK with `-PkotlinCompilerServerJavaHome=...`; locally, JAVA_HOME is fine.
+    findProperty("kotlinCompilerServerJavaHome")?.toString()?.let { javaHomeOverride ->
+        environment("JAVA_HOME", javaHomeOverride)
+    }
 }
 
 val revertCompilerServerPatches = tasks.register<Exec>("revertCompilerServerPatches") {

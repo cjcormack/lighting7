@@ -72,24 +72,6 @@ jobs:
           }
           Write-Host "jmods/ found at $jmodsPath."
 
-      # Gradle's daemon JVM resolver (incubating) only scans standard install paths
-      # on Windows — `C:\Program Files\Java\*` etc. — and does not consult
-      # `org.gradle.java.installations.*` properties. Junction JDK 17 into a
-      # discoverable location so the kotlin-compiler-server fork's daemon JVM
-      # requirement is satisfied.
-      - name: Make JDK 17 discoverable to Gradle daemon JVM resolver
-        shell: pwsh
-        run: |
-          $src = $env:JAVA_HOME_17_X64
-          $dst = "C:\Program Files\Java\liberica-jdk-17"
-          New-Item -ItemType Directory -Force -Path "C:\Program Files\Java" | Out-Null
-          if (-not (Test-Path $dst)) {
-            cmd /c mklink /J "`"$dst`"" "`"$src`""
-            if ($LASTEXITCODE -ne 0) { throw "mklink failed with exit code $LASTEXITCODE" }
-          }
-          Write-Host "Linked $dst -> $src"
-          Get-ChildItem "C:\Program Files\Java"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
@@ -116,6 +98,7 @@ jobs:
           .\gradlew.bat packageWindows `
             "-PlightingReactPath=./lighting-react" `
             "-PkotlinCompilerServerPath=./kotlin-compiler-server" `
+            "-PkotlinCompilerServerJavaHome=$env:JAVA_HOME_17_X64" `
             "-PjpackageAppVersion=$env:EFFECTIVE_VERSION" `
             --no-daemon --stacktrace
 
