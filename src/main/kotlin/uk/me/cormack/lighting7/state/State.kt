@@ -25,7 +25,9 @@ import uk.me.cormack.lighting7.midi.DeviceMatcher
 import uk.me.cormack.lighting7.midi.FlashStateTracker
 import uk.me.cormack.lighting7.midi.GlobalScalerStateHolder
 import uk.me.cormack.lighting7.midi.LibreMidiAccessSource
+import uk.me.cormack.lighting7.midi.MidiAccessSource
 import uk.me.cormack.lighting7.midi.MidiDeviceRegistry
+import uk.me.cormack.lighting7.midi.NoOpMidiAccessSource
 import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
 import uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher
 import uk.me.cormack.lighting7.midi.SurfaceInputRouter
@@ -88,7 +90,12 @@ class State(val config: ApplicationConfig) {
     // periodic recreation leaks observers into libremidi's shared Arena and eventually breaks
     // input on open controllers. See registerCoreMidiChangeListener().
     val midiRegistry: MidiDeviceRegistry by lazy {
-        MidiDeviceRegistry(access = LibreMidiAccessSource())
+        val access: MidiAccessSource = runCatching { LibreMidiAccessSource() }
+            .getOrElse {
+                logger.warn("Native MIDI backend (libremidi) failed to load — control surfaces disabled.", it)
+                NoOpMidiAccessSource()
+            }
+        MidiDeviceRegistry(access = access)
     }
 
     /**
