@@ -4,6 +4,8 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.config.*
 import java.io.Closeable
+import java.nio.file.Path
+import java.nio.file.Paths
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Transaction
@@ -52,6 +54,17 @@ class State(val config: ApplicationConfig) {
     val projectManager = ProjectManager(database) { this }
 
     private var projectChangedJob: Job? = null
+
+    /**
+     * Root directory under which per-project cloud-sync working trees live, one per
+     * `{projectUuid}/repo/`. Defaults to `<appDataDir>/sync` and is overridable via
+     * `sync.workingTreeRoot` in `local.conf` (handy for tests and for users who want
+     * the repo on a different volume). Resolved once per [State] so a misconfigured
+     * path fails loudly at startup.
+     */
+    val syncWorkingTreeRoot: Path = config.optionalString("sync.workingTreeRoot")
+        ?.let { Paths.get(it) }
+        ?: appDataDir().resolve("sync")
 
     // Stored here so [shutdown] can close JmDNS as part of the same teardown sequence
     // that drains the rest of the show; ownership lives with Application bootstrap.
@@ -450,6 +463,7 @@ class State(val config: ApplicationConfig) {
                 DaoControlSurfaceBindings,
                 DaoProjectScalerStates,
                 DaoInstalls, DaoMachineOverrides,
+                DaoSyncConfigs,
             )
 
             // Drops a legacy index name; both PG and SQLite accept `DROP INDEX IF EXISTS`.

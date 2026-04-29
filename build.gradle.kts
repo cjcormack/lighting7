@@ -91,6 +91,11 @@ dependencies {
     // mDNS (Bonjour) advertisement so iPad / LAN clients reach the backend at
     // `lighting7-<hostname>.local:8413` without entering an IP. See MdnsService.kt.
     implementation("org.jmdns:jmdns:3.5.12")
+
+    // JGit for the cloud-sync per-project working tree (phase 3 of plans/cloud-sync.md).
+    // Pinned to the last 6.x release on Maven Central — the 7.x line bumps to JDK 17+
+    // which we already meet, but keeps a smaller transitive footprint on jlink runtimes.
+    implementation("org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r")
 }
 
 // ─── Frontend bundling ─────────────────────────────────────────────────

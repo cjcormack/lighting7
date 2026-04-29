@@ -286,10 +286,13 @@ tables/columns has implications for sync correctness — read
    `sync/dto/SyncDtos.kt` must carry the field. Consider whether the
    change needs a `formatVersion` bump and a migration. Extend the
    round-trip test in `src/test/kotlin/.../sync/ProjectRoundTripTest.kt`.
-3. **Machine-local** (per-rig values like controller IPs) → don't add to
-   the sync DTO. Add to the `machine_overrides` table via the
+3. **Machine-local** (per-rig values like controller IPs, sync config) →
+   don't add to the sync DTO. Add to the `machine_overrides` table via the
    `sync/Overrides.kt` helper (see `Overrides.resolveUniverseAddress` /
-   `setUniverseAddress` for the precedent).
+   `setUniverseAddress` for the precedent), or — if the field is logically
+   wholly machine-local rather than a per-record override (e.g. the cloud
+   sync config table `sync_configs`) — give it its own local-only table.
+   Either way, never wire it through `ProjectExporter` / `ProjectImporter`.
 4. **Transient runtime state** → leave out of `ProjectExporter` /
    `ProjectImporter` entirely and document why.
 
@@ -385,7 +388,7 @@ For deeper technical details, see the docs in `docs/`:
 - [WebSocket Protocol](docs/websocket-engineering.md) - Real-time client communication, message types, update flow
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, multi-element fixtures
-- [Cloud Sync](docs/sync-engineering.md) - Canonical JSON contract, UUID identity, manual export/import (Phase 1 of the cloud-sync plan)
+- [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow (Phases 1–3 of the cloud-sync plan)
 
 ## Follow-ups
 

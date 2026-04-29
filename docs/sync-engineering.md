@@ -5,20 +5,21 @@ design and rationale live in [`docs/plans/cloud-sync.md`](plans/cloud-sync.md);
 this doc captures the contracts and operational details that current code
 relies on so that future contributors don't reinvent them.
 
-The subsystem ships in eight phases (see the design doc). **Today, Phases 1
-and 2 are in-tree** — UUID columns, canonical JSON, manual export/import,
-and the install-identity / `machine_override` tables that move per-rig
-fields out of the synced graph. Sections in this doc that pertain to
-Phase 3+ are marked *Forward-looking* and describe the contract those phases
-are expected to land against, not anything that runs yet.
+The subsystem ships in eight phases (see the design doc). **Today, Phases 1,
+2, and 3 are in-tree** — UUID columns, canonical JSON, manual export/import,
+the install-identity / `machine_override` tables that move per-rig fields
+out of the synced graph, and a per-project local git working tree with a
+"Take snapshot" REST flow. Sections in this doc that pertain to Phase 4+
+are marked *Forward-looking* and describe the contract those phases are
+expected to land against, not anything that runs yet.
 
 ## Architecture overview
 
 The eventual delivery mechanism is a per-project GitHub repo — each install
 keeps a working tree under `appDataDir()/sync/{projectUuid}/repo/`, pushes and
-pulls via JGit, and resolves conflicts in the UI. Phase 1 is the file format
-that those phases will commit, fetched from disk via local export/import
-buttons rather than git.
+pulls via JGit, and resolves conflicts in the UI. Phase 1 defined the file
+format. Phase 3 puts a real on-disk JGit-backed working tree behind it so
+every change can be captured as a local commit; phase 4 adds the remote.
 
 The repo split is:
 
@@ -203,23 +204,131 @@ case, not multi-master sync. Import:
    `transaction(state.database) { … }` — any FK or validation failure
    rolls back atomically.
 
+## Working tree (Phase 3)
+
+Each project gets its own per-UUID JGit working tree at
+`<state.syncWorkingTreeRoot>/{projectUuid}/repo/`. The default root is
+`appDataDir().resolve("sync")` (so `~/Library/Application Support/lighting7/sync/…`
+on macOS); override via the `sync.workingTreeRoot` knob in `local.conf` to
+point at a different volume or, in tests, at a temp directory.
+
+Two metadata files live at the working-tree root and are written-once by
+[`SyncWorkingTree.ensureInitialised`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SyncWorkingTree.kt):
+
+* **`.gitignore`** — excludes OS junk (`.DS_Store`, `Thumbs.db`, `desktop.ini`).
+* **`.gitattributes`** — `* text=auto eol=lf`. This is load-bearing: without
+  it, a Windows install committing into the same repo as a macOS install
+  would produce a diff for every file on first push.
+
+The repo is initialised with `--initial-branch=main` so HEAD points at
+`refs/heads/main` from the unborn state — JGit's default is `master`
+regardless of the host's git config, which would surprise anyone running
+`git log` on the result.
+
+### Wipe-then-export idempotent strategy
+
+Snapshots use a wipe-then-re-export approach in
+[`SnapshotEngine`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SnapshotEngine.kt):
+
+1. Open or init the repo via `SyncWorkingTree.ensureInitialised`.
+2. **Delete** every file under the working tree except `.git/`,
+   `.gitignore`, `.gitattributes` (`SyncWorkingTree.cleanTrackedFiles`).
+3. Re-run `ProjectExporter.export(projectId, path)` to repopulate the
+   tree from the current DB state.
+4. `git add -A` (modelled by `JGitClient.addAll`, which combines
+   `AddCommand` for new/modified files with `RmCommand` for missing
+   tracked files).
+5. If `git status` is clean (nothing staged), short-circuit and return
+   `SnapshotResult.NoChanges`. Otherwise, commit.
+
+The wipe is what makes deletions surface: if a cue stack is deleted from
+the DB and we only re-ran the exporter without the wipe, the stale
+`cueStacks/{uuid}.json` would linger and `git status` would report no
+change. The wipe + re-export forces the tree to mirror the DB exactly,
+so deletions show up as removed files in the next commit.
+
+### Snapshot commit format
+
+Author identity comes from the `installs` row:
+
+* **author/committer name**: `friendlyName`
+* **author/committer email**: `{shortInstallUuid}@lighting7.local` where
+  `shortInstallUuid` is the first 8 hex chars of the install UUID.
+
+Commit message format: `{friendlyName}: {summary} [install:{shortUuid}]`,
+where `summary` is the user-supplied message or, if absent,
+`Snapshot {ISO-8601 timestamp}`. The `[install:{shortUuid}]` suffix is the
+attribution marker that future cloud-sync phases will use to thread
+multi-install history together — keep the format stable.
+
+### `sync_configs` table
+
+```
+sync_configs
+  id PK
+  project_id FK -> projects (UNIQUE)
+  repo_url VARCHAR? NULL          -- populated in phase 4
+  branch VARCHAR DEFAULT 'main'
+  enabled BOOLEAN DEFAULT false   -- toggled in phase 4
+  auto_sync_enabled BOOLEAN DEFAULT false
+  auto_sync_interval_ms LONG? NULL
+  last_synced_sha VARCHAR? NULL   -- last successful push sha (phase 4+)
+  last_synced_at_ms LONG? NULL
+```
+
+Phase 3 reads/writes only `branch`. The other fields exist so the form on
+`/projects/{id}/sync` can collect remote details ahead of phase 4, but the
+backend ignores them today. The table is **machine-local** — never
+serialised to the cloud repo (storing PATs or remote URLs in synced JSON
+would be a credential leak waiting to happen).
+
+The `sync_configs` row for a project is created lazily on first read by
+`ensureSyncConfig` in
+[`routes/cloudSync.kt`](../src/main/kotlin/uk/me/cormack/lighting7/routes/cloudSync.kt),
+so the UI form always has data to render even on the very first visit.
+
+### REST surface
+
+All endpoints live under `/api/rest/project/{projectId}/sync/...`:
+
+* `GET /config` / `PUT /config` — read or update the `sync_configs` row.
+* `GET /status` — `{ workingTreePath, hasRepo, head: CommitInfo?, dirty }`.
+* `POST /snapshot` — body `{ message?: string }`. Returns
+  `{ noChanges, workingTreePath, commit: CommitInfo? }`.
+* `GET /log?limit=50` — recent `CommitInfo[]` from `git log`.
+
+JGit calls are blocking and run inside `withContext(Dispatchers.IO) {…}`;
+the snapshot engine wraps that boundary itself, route handlers wrap their
+own log/status calls.
+
 ## Sync session lifecycle (forward-looking)
 
-Phase 3+ introduces a `sync_session` row that survives a crash mid-sync. The
-state machine is `FETCHING → CONFLICTS_PENDING → APPLYING → DONE/FAILED`.
-Phase 1 has no equivalent because there's no remote — export/import are
-single shots that either succeed or roll back, no resumable state.
+Phase 5+ introduces a `sync_session` row that survives a crash mid-sync.
+The state machine is `FETCHING → CONFLICTS_PENDING → APPLYING → DONE/FAILED`.
+Phase 3 has no equivalent because there's no remote — snapshot is a single
+shot that either commits or short-circuits, no resumable state.
 
 ## Operational notes
 
 * **Default export path**: `appDataDir().resolve("exports").resolve(projectUuid)`
   (`~/Library/Application Support/lighting7/exports/{projectUuid}/` on macOS).
   Caller-supplied paths are honoured verbatim.
+* **Default sync working-tree path**: `appDataDir().resolve("sync")`,
+  per-project at `<root>/{projectUuid}/repo/`. Override via
+  `sync.workingTreeRoot = "/some/path"` in `local.conf`. Tests pass an
+  explicit value to keep snapshots out of the user's real `appDataDir`.
+* **JGit version**: pinned to `org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r`
+  in `build.gradle.kts`. The 7.x line bumps to JDK 17+ which we already meet,
+  but 6.10 has a smaller transitive footprint on the jlink runtime used by
+  the Windows distribution.
 * **DB**: SQLite on the lighting7 install path.
 * **Tests**: `src/test/kotlin/uk/me/cormack/lighting7/sync/` covers
   canonical-JSON determinism, round-trip byte-identity, UUID-collision /
   name-collision refusal, FK-resolution failure rollback, machine-local
-  field stripping, and `isCurrent` reset.
+  field stripping, `isCurrent` reset, JGit init/commit/log smoke tests,
+  working-tree clean preserving metadata files, and snapshot end-to-end
+  (commit on first run, no-op on second, deletion surfaces in the next
+  commit).
 
 ## How to add a new synced field
 
