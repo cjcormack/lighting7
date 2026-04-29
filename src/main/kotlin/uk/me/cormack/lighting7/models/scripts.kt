@@ -11,6 +11,7 @@ object DaoScripts : IntIdTable("scripts") {
     val script = text("script")
     val project = reference("project_id", DaoProjects)
     val scriptType = enumerationByName<ScriptType>("script_type", 50).default(ScriptType.GENERAL)
+    val uuid = uuid("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, name)
@@ -24,4 +25,5 @@ class DaoScript(id: EntityID<Int>) : IntEntity(id) {
     var script by DaoScripts.script
     var project by DaoProject referencedOn DaoScripts.project
     var scriptType by DaoScripts.scriptType
+    var uuid by DaoScripts.uuid
 }

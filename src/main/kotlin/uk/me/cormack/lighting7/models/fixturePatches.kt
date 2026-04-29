@@ -18,6 +18,7 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
     val riggingPosition = varchar("rigging_position", 50).nullable()
     val beamAngleDeg = integer("beam_angle_deg").nullable()
     val gelCode = varchar("gel_code", 20).nullable()
+    val uuid = uuid("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, key)
@@ -39,4 +40,5 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var riggingPosition by DaoFixturePatches.riggingPosition
     var beamAngleDeg by DaoFixturePatches.beamAngleDeg
     var gelCode by DaoFixturePatches.gelCode
+    var uuid by DaoFixturePatches.uuid
 }

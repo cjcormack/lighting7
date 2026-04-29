@@ -62,6 +62,7 @@ object DaoCueTriggers : IntIdTable("cue_triggers") {
     val randomWindowMs = long("random_window_ms").nullable()
     val script = reference("script_id", DaoScripts)
     val sortOrder = integer("sort_order").default(0)
+    val uuid = uuid("uuid").autoGenerate()
 }
 
 class DaoCueTrigger(id: EntityID<Int>) : IntEntity(id) {
@@ -74,4 +75,5 @@ class DaoCueTrigger(id: EntityID<Int>) : IntEntity(id) {
     var randomWindowMs by DaoCueTriggers.randomWindowMs
     var script by DaoScript referencedOn DaoCueTriggers.script
     var sortOrder by DaoCueTriggers.sortOrder
+    var uuid by DaoCueTriggers.uuid
 }

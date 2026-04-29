@@ -14,6 +14,7 @@ object DaoCueSlots : IntIdTable("cue_slots") {
     val slotIndex = integer("slot_index")
     val cue = optReference("cue_id", DaoCues, onDelete = ReferenceOption.CASCADE)
     val cueStack = optReference("cue_stack_id", DaoCueStacks, onDelete = ReferenceOption.CASCADE)
+    val uuid = uuid("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, page, slotIndex)
@@ -28,4 +29,5 @@ class DaoCueSlot(id: EntityID<Int>) : IntEntity(id) {
     var slotIndex by DaoCueSlots.slotIndex
     var cue by DaoCue optionalReferencedOn DaoCueSlots.cue
     var cueStack by DaoCueStack optionalReferencedOn DaoCueSlots.cueStack
+    var uuid by DaoCueSlots.uuid
 }

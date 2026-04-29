@@ -62,6 +62,7 @@ object DaoFxPresets : IntIdTable("fx_presets") {
     val fixtureType = varchar("fixture_type", 255)
     val effects = json<List<FxPresetEffectDto>>("effects", Json)
     val palette = json<List<String>>("palette", Json).default(emptyList())
+    val uuid = uuid("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, fixtureType, name)
@@ -77,6 +78,7 @@ class DaoFxPreset(id: EntityID<Int>) : IntEntity(id) {
     var fixtureType by DaoFxPresets.fixtureType
     var effects by DaoFxPresets.effects
     var palette by DaoFxPresets.palette
+    var uuid by DaoFxPresets.uuid
     val propertyAssignments by DaoFxPresetPropertyAssignment referrersOn DaoFxPresetPropertyAssignments.preset
 }
 
@@ -89,6 +91,7 @@ object DaoFxPresetPropertyAssignments : IntIdTable("fx_preset_property_assignmen
     val fadeDurationMs = long("fade_duration_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
     val elementKey = varchar("element_key", 255).nullable()
+    val uuid = uuid("uuid").autoGenerate()
 }
 
 class DaoFxPresetPropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
@@ -100,4 +103,5 @@ class DaoFxPresetPropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
     var fadeDurationMs by DaoFxPresetPropertyAssignments.fadeDurationMs
     var sortOrder by DaoFxPresetPropertyAssignments.sortOrder
     var elementKey by DaoFxPresetPropertyAssignments.elementKey
+    var uuid by DaoFxPresetPropertyAssignments.uuid
 }

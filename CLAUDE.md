@@ -269,6 +269,44 @@ Key tables:
 - `DaoProjects` - Project definitions
 - `DaoScripts` - Lighting script source code
 
+## Database changes and cloud sync
+
+Cloud sync (see [`docs/sync-engineering.md`](docs/sync-engineering.md))
+serialises most of the project graph as canonical JSON. Adding or modifying
+tables/columns has implications for sync correctness — read
+`docs/sync-engineering.md` before changing the schema.
+
+**Decision tree for any DB change:**
+
+1. **Is the new table/column part of a project's portable show content,
+   machine-local state, or transient runtime state?**
+2. **Portable** → must have a `uuid` column, must round-trip through
+   canonical JSON, must be added to the sync allow-list in
+   `state/UuidBackfill.kt` and to the appropriate sync DTO in
+   `sync/dto/SyncDtos.kt`. Consider whether the change needs a
+   `formatVersion` bump and a migration. Extend the round-trip test in
+   `src/test/kotlin/.../sync/ProjectRoundTripTest.kt`.
+3. **Machine-local** (per-rig values like controller IPs) → don't add to
+   the sync DTO. From Phase 2, add to the `machine_override` table; until
+   then, strip the field at export time (see `DaoUniverseConfigs.address`
+   for the precedent).
+4. **Transient runtime state** → leave off the sync allow-list entirely
+   and document why.
+
+**Specific rules:**
+
+* New tables default to **not synced** until explicitly added to the
+  `SYNCED_TABLES` list in `state/UuidBackfill.kt` — don't rely on
+  auto-discovery.
+* Reordering existing fields in a synced DTO is a non-issue — the
+  canonical JSON serialiser sorts keys alphabetically.
+* Renaming a JSON field, removing a field, or changing FK targets on a
+  synced table is a `formatVersion` change. Removing a required field is
+  a `minReader` bump.
+* Updates to `docs/sync-engineering.md` are required when adding a
+  synced table, changing the JSON layout, or changing the conflict
+  semantics.
+
 ## Common Development Tasks
 
 ### Adding a New Fixture Type
@@ -348,6 +386,7 @@ For deeper technical details, see the docs in `docs/`:
 - [WebSocket Protocol](docs/websocket-engineering.md) - Real-time client communication, message types, update flow
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, multi-element fixtures
+- [Cloud Sync](docs/sync-engineering.md) - Canonical JSON contract, UUID identity, manual export/import (Phase 1 of the cloud-sync plan)
 
 ## Follow-ups
 

@@ -11,6 +11,7 @@ object DaoUniverseConfigs : IntIdTable("universe_configs") {
     val universe = integer("universe")
     val controllerType = varchar("controller_type", 20).default("ARTNET")
     val address = varchar("address", 255).nullable()
+    val uuid = uuid("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, subnet, universe)
@@ -25,6 +26,7 @@ class DaoUniverseConfig(id: EntityID<Int>) : IntEntity(id) {
     var universe by DaoUniverseConfigs.universe
     var controllerType by DaoUniverseConfigs.controllerType
     var address by DaoUniverseConfigs.address
+    var uuid by DaoUniverseConfigs.uuid
 
     val fixturePatches by DaoFixturePatch referrersOn DaoFixturePatches.universeConfig
 }

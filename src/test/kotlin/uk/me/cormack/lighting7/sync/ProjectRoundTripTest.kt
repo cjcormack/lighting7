@@ -1,0 +1,328 @@
+package uk.me.cormack.lighting7.sync
+
+import org.jetbrains.exposed.sql.transactions.transaction
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
+import uk.me.cormack.lighting7.fx.EffectMode
+import uk.me.cormack.lighting7.fx.FxOutputType
+import uk.me.cormack.lighting7.fx.TimingSource
+import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCuePresetApplication
+import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueSlot
+import uk.me.cormack.lighting7.models.DaoCueStack
+import uk.me.cormack.lighting7.models.DaoCueTrigger
+import uk.me.cormack.lighting7.models.DaoFixtureGroup
+import uk.me.cormack.lighting7.models.DaoFixtureGroupMember
+import uk.me.cormack.lighting7.models.DaoFixturePatch
+import uk.me.cormack.lighting7.models.DaoFxDefinition
+import uk.me.cormack.lighting7.models.DaoFxPreset
+import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
+import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoScript
+import uk.me.cormack.lighting7.models.DaoShowEntry
+import uk.me.cormack.lighting7.models.DaoUniverseConfig
+import uk.me.cormack.lighting7.models.FxPresetEffectDto
+import uk.me.cormack.lighting7.models.TriggerType
+import uk.me.cormack.lighting7.scripts.ScriptType
+import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
+import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
+import uk.me.cormack.lighting7.testsupport.testAppConfig
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+/**
+ * Phase 1 verification: build a project, export it, wipe the DB, import it, re-export, and
+ * assert byte-for-byte identical output. This exercises FK-by-UUID rewriting, canonical
+ * determinism, and topological insert order in one scenario.
+ */
+class ProjectRoundTripTest {
+
+    private lateinit var state: State
+    private lateinit var exportDirA: Path
+    private lateinit var exportDirB: Path
+
+    @Before
+    fun setUp() {
+        IntegrationTestDb.reset()
+        state = State(testAppConfig())
+        exportDirA = Files.createTempDirectory("sync-export-a-")
+        exportDirB = Files.createTempDirectory("sync-export-b-")
+    }
+
+    @After
+    fun tearDown() {
+        runCatching { state.shutdown() }
+        runCatching { exportDirA.toFile().deleteRecursively() }
+        runCatching { exportDirB.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun `round-trip preserves project byte-for-byte`() {
+        val projectId = seedRichProject(state)
+
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+
+        assertExportsEqual(exportDirA, exportDirB)
+    }
+
+    @Test
+    fun `import refuses duplicate project UUID`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        // Project still exists in the DB; importing the same export must refuse.
+        val ex = assertFailsWith<ImportError> {
+            ProjectImporter(state).import(exportDirA, nameOverride = "different-name")
+        }
+        assertEquals(io.ktor.http.HttpStatusCode.Conflict, ex.status)
+        assertTrue(ex.message?.contains("UUID") == true)
+    }
+
+    @Test
+    fun `import refuses on name collision`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+        // Re-create a project with the same name but a different UUID — name collision.
+        transaction(state.database) {
+            DaoProject.new {
+                name = "round-trip-rich"
+                description = "blocker"
+                isCurrent = false
+            }
+        }
+        val ex = assertFailsWith<ImportError> {
+            ProjectImporter(state).import(exportDirA, nameOverride = null)
+        }
+        assertEquals(io.ktor.http.HttpStatusCode.Conflict, ex.status)
+    }
+
+    @Test
+    fun `universe config exporter strips machine-local address field`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val universeDir = exportDirA.resolve("universeConfigs")
+        val first = Files.list(universeDir).use { it.findFirst().get() }
+        val text = Files.readString(first)
+        // address is the machine-local IP per docs/plans/cloud-sync.md — must never be in JSON.
+        assertFalse(text.contains("\"address\""), "address field leaked into export: $text")
+        // Round-trips without trouble — the DTO doesn't have an address field at all.
+        canonicalDecode(UniverseConfigJson.serializer(), text)
+    }
+
+    @Test
+    fun `import forces isCurrent false even if source project was current`() {
+        // The seeded project is current. Export it, wipe, import — imported project must NOT
+        // be marked current; otherwise importing would silently reassign which project the user
+        // is operating on.
+        val projectId = seedRichProject(state)
+        transaction(state.database) {
+            DaoProject.findById(projectId)!!.isCurrent = true
+        }
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            assertEquals(false, DaoProject.findById(imported.projectId)!!.isCurrent)
+        }
+    }
+
+    @Test
+    fun `import with bad cue stack reference rolls back atomically`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+
+        // Corrupt one cue's cueStackUuid so FK resolution fails mid-import.
+        val cueDir = exportDirA.resolve("cues")
+        val firstCue = Files.list(cueDir).use { it.findFirst().get() }
+        val original = Files.readString(firstCue)
+        val corrupt = original.replace(
+            Regex("\"cueStackUuid\": \"[0-9a-f-]+\""),
+            "\"cueStackUuid\": \"00000000-0000-0000-0000-000000000000\""
+        )
+        Files.writeString(firstCue, corrupt)
+
+        val ex = assertFailsWith<ImportError> {
+            ProjectImporter(state).import(exportDirA, nameOverride = null)
+        }
+        assertEquals(io.ktor.http.HttpStatusCode.BadRequest, ex.status)
+        // No partial state — the project that would have been inserted must be absent.
+        transaction(state.database) {
+            assertEquals(0, DaoProject.all().count(),
+                "import that errored mid-flight should leave DB empty")
+        }
+    }
+
+    private fun wipeDatabase() {
+        // Reset to a fresh SQLite file and rebuild the State / schema. Simpler than DELETE
+        // cascade because the FK graph is wide; the test just needs an empty DB.
+        runCatching { state.shutdown() }
+        IntegrationTestDb.reset()
+        state = State(testAppConfig())
+    }
+
+    private fun assertExportsEqual(a: Path, b: Path) {
+        val filesA = walk(a)
+        val filesB = walk(b)
+        assertEquals(filesA.keys, filesB.keys, "export file sets differ")
+        filesA.forEach { (rel, contentA) ->
+            val contentB = filesB.getValue(rel)
+            assertEquals(contentA, contentB, "byte mismatch in $rel")
+        }
+    }
+
+    private fun walk(root: Path): Map<String, String> {
+        val out = mutableMapOf<String, String>()
+        Files.walk(root).use { stream ->
+            stream.filter(Files::isRegularFile).forEach { p ->
+                out[root.relativize(p).toString()] = Files.readString(p)
+            }
+        }
+        return out
+    }
+
+    private fun seedRichProject(state: State): Int = transaction(state.database) {
+        val project = DaoProject.new {
+            name = "round-trip-rich"
+            description = "exercises every synced table"
+            isCurrent = true
+        }
+
+        // 2 universes, 4 patches, 2 groups
+        val u0 = DaoUniverseConfig.new {
+            this.project = project
+            subnet = 0; universe = 0; controllerType = "MOCK"; address = "10.0.0.1"
+        }
+        val u1 = DaoUniverseConfig.new {
+            this.project = project
+            subnet = 0; universe = 1; controllerType = "MOCK"; address = null
+        }
+        val patches = (1..4).map { i ->
+            DaoFixturePatch.new {
+                this.project = project
+                universeConfig = if (i <= 2) u0 else u1
+                fixtureTypeKey = "hex-fixture"
+                key = "hex-$i"; displayName = "Hex $i"; startChannel = i * 10; sortOrder = i
+            }
+        }
+        val groupA = DaoFixtureGroup.new { this.project = project; name = "front-wash" }
+        DaoFixtureGroupMember.new {
+            group = groupA; fixturePatch = patches[0]; sortOrder = 0
+        }
+        DaoFixtureGroupMember.new {
+            group = groupA; fixturePatch = patches[1]; sortOrder = 1; panOffset = 30.0
+        }
+        val groupB = DaoFixtureGroup.new { this.project = project; name = "back-wash" }
+        DaoFixtureGroupMember.new {
+            group = groupB; fixturePatch = patches[2]; sortOrder = 0
+        }
+
+        // 2 scripts
+        val script1 = DaoScript.new {
+            this.project = project; name = "intro"; script = "// hello\nfixture(\"hex-1\")"
+            scriptType = ScriptType.GENERAL
+        }
+        DaoScript.new {
+            this.project = project; name = "fx-pack"; script = "// fx defs"
+            scriptType = ScriptType.FX_DEFINITION
+        }
+
+        // 1 fx definition
+        DaoFxDefinition.new {
+            this.project = project
+            effectId = "custom-flicker"; name = "Custom Flicker"
+            category = "dimmer"; outputType = FxOutputType.SLIDER
+            effectMode = EffectMode.STANDARD
+            script = "// effect"
+            timingSource = TimingSource.BEAT
+            compatibleProperties = listOf("dimmer")
+        }
+
+        // 1 fx preset with property assignments
+        val preset = DaoFxPreset.new {
+            this.project = project
+            name = "warm-pulse"; fixtureType = "hex-fixture"
+            description = "warm pulse"
+            effects = listOf(
+                FxPresetEffectDto(
+                    effectType = "Pulse", category = "dimmer",
+                    propertyName = "dimmer", beatDivision = 0.5,
+                    blendMode = "OVERRIDE", distribution = "LINEAR",
+                )
+            )
+            palette = listOf("#ff8800")
+        }
+        DaoFxPresetPropertyAssignment.new {
+            this.preset = preset; propertyName = "dimmer"; value = "200"; sortOrder = 0
+        }
+
+        // 2 cue stacks, 3 cues, with property assignments + ad-hoc + preset apps + triggers
+        val stack1 = DaoCueStack.new {
+            this.project = project; name = "show-1"; palette = emptyList(); loop = false
+        }
+        val stack2 = DaoCueStack.new {
+            this.project = project; name = "show-2"; palette = emptyList(); loop = true
+        }
+        val cue1 = DaoCue.new {
+            this.project = project; name = "open"; cueStack = stack1; sortOrder = 0
+            palette = listOf("#000000"); fadeDurationMs = 1000L
+        }
+        DaoCuePropertyAssignment.new {
+            cue = cue1; targetType = "fixture"; targetKey = "hex-1"
+            propertyName = "dimmer"; value = "255"; sortOrder = 0
+        }
+        DaoCueAdHocEffect.new {
+            cue = cue1; targetType = "fixture"; targetKey = "hex-1"
+            effectType = "Pulse"; category = "dimmer"; beatDivision = 0.5
+            blendMode = "OVERRIDE"; distribution = "LINEAR"
+            parameters = emptyMap()
+        }
+        DaoCuePresetApplication.new {
+            cue = cue1; this.preset = preset; targets = emptyList()
+        }
+        DaoCueTrigger.new {
+            cue = cue1; this.script = script1
+            triggerType = TriggerType.ACTIVATION; sortOrder = 0
+        }
+        DaoCue.new {
+            this.project = project; name = "build"; cueStack = stack1; sortOrder = 1
+            palette = emptyList()
+        }
+        DaoCue.new {
+            this.project = project; name = "finale"; cueStack = stack2; sortOrder = 0
+            palette = emptyList()
+        }
+
+        // show entries (1 stack reference + 1 marker)
+        val entry1 = DaoShowEntry.new {
+            this.project = project; cueStack = stack1; entryType = "STACK"; sortOrder = 0
+        }
+        DaoShowEntry.new {
+            this.project = project; entryType = "MARKER"; sortOrder = 1; label = "intermission"
+        }
+
+        // cue slot
+        DaoCueSlot.new {
+            this.project = project; page = 1; slotIndex = 1; cue = cue1
+        }
+
+        // Wire up activeEntryId now that show entries exist.
+        project.activeEntryId = entry1.id.value
+        project.id.value
+    }
+}

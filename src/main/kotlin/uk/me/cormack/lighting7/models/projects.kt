@@ -17,6 +17,7 @@ object DaoProjects: IntIdTable("projects") {
     // Plain integer to avoid circular FK with DaoShowEntries.
     // The deferrable FK constraint is added via manual SQL in State.kt.
     val activeEntryId = integer("active_entry_id").nullable()
+    val uuid = uuid("uuid").autoGenerate()
 }
 
 class DaoProject(id: EntityID<Int>) : IntEntity(id) {
@@ -26,6 +27,7 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     var description by DaoProjects.description
     var isCurrent by DaoProjects.isCurrent
     var activeEntryId by DaoProjects.activeEntryId
+    var uuid by DaoProjects.uuid
 
     val scripts by DaoScript referrersOn DaoScripts.project
     val showEntries by DaoShowEntry referrersOn DaoShowEntries.project

@@ -23,6 +23,7 @@ object DaoFxDefinitions : IntIdTable("fx_definitions") {
     val project = reference("project_id", DaoProjects)
     val defaultStepTiming = bool("default_step_timing").default(false)
     val timingSource = enumerationByName<TimingSource>("timing_source", 20).default(TimingSource.BEAT)
+    val uuid = uuid("uuid").autoGenerate()
 }
 
 class DaoFxDefinition(id: EntityID<Int>) : IntEntity(id) {
@@ -39,4 +40,5 @@ class DaoFxDefinition(id: EntityID<Int>) : IntEntity(id) {
     var project by DaoProject referencedOn DaoFxDefinitions.project
     var defaultStepTiming by DaoFxDefinitions.defaultStepTiming
     var timingSource by DaoFxDefinitions.timingSource
+    var uuid by DaoFxDefinitions.uuid
 }

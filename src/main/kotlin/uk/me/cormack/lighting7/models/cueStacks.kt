@@ -14,6 +14,7 @@ object DaoCueStacks : IntIdTable("cue_stacks") {
     val project = reference("project_id", DaoProjects)
     val palette = json<List<String>>("palette", Json)
     val loop = bool("loop").default(false)
+    val uuid = uuid("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, name)
@@ -27,5 +28,6 @@ class DaoCueStack(id: EntityID<Int>) : IntEntity(id) {
     var project by DaoProject referencedOn DaoCueStacks.project
     var palette by DaoCueStacks.palette
     var loop by DaoCueStacks.loop
+    var uuid by DaoCueStacks.uuid
     val cues by DaoCue optionalReferrersOn DaoCues.cueStack
 }

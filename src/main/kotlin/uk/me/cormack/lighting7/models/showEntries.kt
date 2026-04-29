@@ -17,6 +17,7 @@ object DaoShowEntries : IntIdTable("show_entries") {
     val entryType = varchar("entry_type", 20).default("STACK")
     val sortOrder = integer("sort_order")
     val label = varchar("label", 255).nullable()
+    val uuid = uuid("uuid").autoGenerate()
 }
 
 class DaoShowEntry(id: EntityID<Int>) : IntEntity(id) {
@@ -27,4 +28,5 @@ class DaoShowEntry(id: EntityID<Int>) : IntEntity(id) {
     var entryType by DaoShowEntries.entryType
     var sortOrder by DaoShowEntries.sortOrder
     var label by DaoShowEntries.label
+    var uuid by DaoShowEntries.uuid
 }

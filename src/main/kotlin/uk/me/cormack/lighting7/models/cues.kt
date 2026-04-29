@@ -114,6 +114,7 @@ object DaoCues : IntIdTable("cues") {
      * source. See `docs/lighting-composition-model.md` §"Stomp".
      */
     val stomp = bool("stomp").default(false)
+    val uuid = uuid("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, name)
@@ -137,6 +138,7 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var notes by DaoCues.notes
     var cueType by DaoCues.cueType
     var stomp by DaoCues.stomp
+    var uuid by DaoCues.uuid
     val presetApplications by DaoCuePresetApplication referrersOn DaoCuePresetApplications.cue
     val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue
     val propertyAssignments by DaoCuePropertyAssignment referrersOn DaoCuePropertyAssignments.cue
@@ -153,6 +155,7 @@ object DaoCuePresetApplications : IntIdTable("cue_preset_applications") {
     val intervalMs = long("interval_ms").nullable()
     val randomWindowMs = long("random_window_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
+    val uuid = uuid("uuid").autoGenerate()
 }
 
 class DaoCuePresetApplication(id: EntityID<Int>) : IntEntity(id) {
@@ -165,6 +168,7 @@ class DaoCuePresetApplication(id: EntityID<Int>) : IntEntity(id) {
     var intervalMs by DaoCuePresetApplications.intervalMs
     var randomWindowMs by DaoCuePresetApplications.randomWindowMs
     var sortOrder by DaoCuePresetApplications.sortOrder
+    var uuid by DaoCuePresetApplications.uuid
 }
 
 // ─── Cue Ad-Hoc Effects table ──────────────────────────────────────────
@@ -188,6 +192,7 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
     val intervalMs = long("interval_ms").nullable()
     val randomWindowMs = long("random_window_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
+    val uuid = uuid("uuid").autoGenerate()
 }
 
 class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
@@ -219,6 +224,7 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var intervalMs by DaoCueAdHocEffects.intervalMs
     var randomWindowMs by DaoCueAdHocEffects.randomWindowMs
     var sortOrder by DaoCueAdHocEffects.sortOrder
+    var uuid by DaoCueAdHocEffects.uuid
 }
 
 // ─── Cue Property Assignments table ────────────────────────────────────
@@ -232,6 +238,7 @@ object DaoCuePropertyAssignments : IntIdTable("cue_property_assignments") {
     val fadeDurationMs = long("fade_duration_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
     val moveInDark = bool("move_in_dark").default(false)
+    val uuid = uuid("uuid").autoGenerate()
 }
 
 class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
@@ -245,6 +252,7 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
     var fadeDurationMs by DaoCuePropertyAssignments.fadeDurationMs
     var sortOrder by DaoCuePropertyAssignments.sortOrder
     var moveInDark by DaoCuePropertyAssignments.moveInDark
+    var uuid by DaoCuePropertyAssignments.uuid
 
     var target: TargetRef
         get() = TargetRef.of(targetType, targetKey)

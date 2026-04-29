@@ -38,6 +38,8 @@ object DaoControlSurfaceBindings : IntIdTable("control_surface_bindings") {
 
     val sortOrder = integer("sort_order").default(0)
 
+    val uuid = uuid("uuid").autoGenerate()
+
     init {
         uniqueIndex("uq_surface_binding_slot", project, deviceTypeKey, controlId, bank)
     }
@@ -54,6 +56,7 @@ class DaoControlSurfaceBinding(id: EntityID<Int>) : IntEntity(id) {
     var targetPayload by DaoControlSurfaceBindings.targetPayload
     var takeoverPolicy by DaoControlSurfaceBindings.takeoverPolicy
     var sortOrder by DaoControlSurfaceBindings.sortOrder
+    var uuid by DaoControlSurfaceBindings.uuid
 }
 
 /**
