@@ -236,6 +236,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectShow(state)
         routeApiRestProjectSurfaceBindings(state)
         routeApiRestProjectExport(state)
+        routeApiRestProjectMachineOverrides(state)
 
         // POST /{id}/clone - Clone a project with all scripts
         post<CloneProjectResource> { resource ->

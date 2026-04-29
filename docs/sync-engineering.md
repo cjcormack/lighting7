@@ -5,11 +5,12 @@ design and rationale live in [`docs/plans/cloud-sync.md`](plans/cloud-sync.md);
 this doc captures the contracts and operational details that current code
 relies on so that future contributors don't reinvent them.
 
-The subsystem ships in eight phases (see the design doc). **Today, only Phase
-1 is in-tree** — UUID columns, canonical JSON, and a manual export/import
-workflow. Sections in this doc that pertain to Phase 2+ are marked
-*Forward-looking* and describe the contract those phases are expected to land
-against, not anything that runs yet.
+The subsystem ships in eight phases (see the design doc). **Today, Phases 1
+and 2 are in-tree** — UUID columns, canonical JSON, manual export/import,
+and the install-identity / `machine_override` tables that move per-rig
+fields out of the synced graph. Sections in this doc that pertain to
+Phase 3+ are marked *Forward-looking* and describe the contract those phases
+are expected to land against, not anything that runs yet.
 
 ## Architecture overview
 
@@ -24,9 +25,11 @@ The repo split is:
 * **Portable** (synced, lives in JSON): show content — cues, presets, fixture
   patches, scripts, etc.
 * **Machine-local** (never synced): controller IPs and similar per-rig
-  configuration. Phase 1 handles this for `DaoUniverseConfigs.address` by
-  stripping the field at export time. Phase 2 introduces a generic
-  `machine_override` table.
+  configuration. From Phase 2, the canonical storage is the
+  `machine_overrides` table accessed via the `Overrides` helper. The
+  legacy `DaoUniverseConfigs.address` column is retained in the schema
+  but is unused — a one-shot startup migration moves any prior values
+  into `machine_overrides` and nulls the column.
 * **Transient runtime state** (never synced): grand master / blackout state,
   AI conversation history, parked DMX channels.
 
@@ -38,7 +41,7 @@ lives directly under the export folder:
 ```
 formatVersion.json
 project.json
-installs.json                  # empty in Phase 1; Phase 2 populates
+installs.json                  # populated with the local install's identity (Phase 2)
 showEntries/{uuid}.json
 cueStacks/{uuid}.json
 cues/{uuid}.json               # carries cueStackUuid (nullable)
@@ -135,14 +138,49 @@ three-way diff.
 
 ## Machine-local data
 
-Phase 1 strips `DaoUniverseConfigs.address` from the export DTO — the field
-is the controller IP, which is per-rig. On import, `address` is left null;
-the operator restores it via the existing universe-configs UI (or, from
-Phase 2, via the generic `machine_override` table).
+Per-rig fields (controller IPs and similar) live in the `machine_overrides`
+table — keyed by `(projectId, tableName, recordUuid, fieldName)` with a
+canonically-encoded `valueJson`. Reads and writes go through the
+`Overrides` helper in
+[`sync/Overrides.kt`](../src/main/kotlin/uk/me/cormack/lighting7/sync/Overrides.kt),
+which serialises strings via the same `canonicalEncode` /
+`canonicalDecode` pair used for synced documents.
+
+The universe-configs route is the only Phase 2 consumer:
+`PUT /api/rest/project/{id}/universe-configs/{configId}` with `address` in
+the body upserts the override; `GET` reads it back via
+`Overrides.resolveUniverseAddress`. Runtime DMX output picks up the value
+in [`DbFixtureLoader`](../src/main/kotlin/uk/me/cormack/lighting7/show/DbFixtureLoader.kt).
+
+The legacy `DaoUniverseConfigs.address` column is retained for schema
+compatibility but is no longer the source of truth — a one-shot startup
+migration in `State.initDatabase` moves any pre-Phase-2 values into
+`machine_overrides` and nulls the column. A future phase can drop it.
+
+The exporter never serialises override values: machine-local fields stay
+in the local SQLite DB by construction. On import, no override rows are
+created — the operator re-enters per-rig values via the universe-configs
+UI on the importing machine.
 
 This is the precedent for any future per-install field. The decision tree
 in `CLAUDE.md` §"Database changes and cloud sync" guides which side of the
 portable/machine-local line a new field falls on.
+
+## Install identity
+
+Each install carries a stable identity — one row in the `installs` table,
+bootstrapped on first DB init by
+[`State.ensureInstallRow`](../src/main/kotlin/uk/me/cormack/lighting7/state/State.kt)
+with `friendlyName` defaulting to the system hostname. The user can rename
+it via `PUT /api/rest/install`; the UUID is immutable.
+
+The exporter writes the local install's identity into `installs.json` so
+exported folders carry a "produced by" stamp for human readers and for
+future cloud-sync attribution. Phase 1 wrote an empty stub; Phase 2 fills
+it. The importer treats `installs.json` as informational — it doesn't
+copy the foreign install's identity into the local install row.
+
+The install row is machine-local; it never leaves the local SQLite DB.
 
 ## Project import semantics
 
@@ -183,15 +221,17 @@ single shots that either succeed or roll back, no resumable state.
   name-collision refusal, FK-resolution failure rollback, machine-local
   field stripping, and `isCurrent` reset.
 
-## How to add a new synced field (Phase 1)
+## How to add a new synced field
 
 1. Add the column to the relevant DAO file.
 2. Decide portable vs. machine-local using the CLAUDE.md decision tree.
 3. **Portable**: add the field to the matching DTO in `sync/dto/SyncDtos.kt`,
    pass it through `ProjectExporter` and `ProjectImporter`, and extend the
    round-trip test to assert it survives.
-4. **Machine-local**: don't touch the sync DTO. From Phase 2, add it to
-   `machine_override` instead.
+4. **Machine-local**: don't put it in the sync DTO at all. Read and write it
+   through the `Overrides` helper (`sync/Overrides.kt`); add a typed
+   convenience accessor there if more than one call site needs it. The
+   field never appears in exported JSON.
 5. If the change isn't covered by `explicitNulls = false` /
    `encodeDefaults = false` (i.e. it's a required field with no default),
    that's a `formatVersion` bump — see "Format versioning".

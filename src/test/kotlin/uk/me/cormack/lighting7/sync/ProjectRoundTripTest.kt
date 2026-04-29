@@ -27,7 +27,9 @@ import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.FxPresetEffectDto
 import uk.me.cormack.lighting7.models.TriggerType
 import uk.me.cormack.lighting7.scripts.ScriptType
+import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.testAppConfig
@@ -110,6 +112,21 @@ class ProjectRoundTripTest {
     }
 
     @Test
+    fun `installs json contains the local install identity on export`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val installsFile = exportDirA.resolve("installs.json")
+        val installs = canonicalDecode(InstallsJson.serializer(), Files.readString(installsFile))
+        val (localUuid, localFriendlyName) = transaction(state.database) {
+            val row = DaoInstall.all().first()
+            row.uuid.toString() to row.friendlyName
+        }
+        assertEquals(1, installs.installs.size, "exactly one local install entry expected")
+        assertEquals(localFriendlyName, installs.installs[localUuid])
+    }
+
+    @Test
     fun `universe config exporter strips machine-local address field`() {
         val projectId = seedRichProject(state)
         ProjectExporter(state).export(projectId, exportDirA)
@@ -182,6 +199,19 @@ class ProjectRoundTripTest {
         assertEquals(filesA.keys, filesB.keys, "export file sets differ")
         filesA.forEach { (rel, contentA) ->
             val contentB = filesB.getValue(rel)
+            // installs.json reflects the *source* install, which legitimately differs across the
+            // DB reset wipeDatabase() does between export A and B (a fresh install row is
+            // bootstrapped with a new UUID). Round-trip portability is about the project graph,
+            // not the metadata stamp. Verify shape only: one entry, valid UUID, non-blank name.
+            if (rel == "installs.json") {
+                val installsB = canonicalDecode(InstallsJson.serializer(), contentB)
+                assertEquals(1, installsB.installs.size, "installs.json must contain one entry")
+                installsB.installs.forEach { (uuid, name) ->
+                    java.util.UUID.fromString(uuid)
+                    assertTrue(name.isNotBlank(), "installs.json friendlyName must be non-blank")
+                }
+                return@forEach
+            }
             assertEquals(contentA, contentB, "byte mismatch in $rel")
         }
     }
@@ -203,15 +233,17 @@ class ProjectRoundTripTest {
             isCurrent = true
         }
 
-        // 2 universes, 4 patches, 2 groups
+        // 2 universes, 4 patches, 2 groups. The address is now machine-local (Phase 2 cloud sync)
+        // and lives in machine_overrides — set via Overrides.setUniverseAddress, not on the column.
         val u0 = DaoUniverseConfig.new {
             this.project = project
-            subnet = 0; universe = 0; controllerType = "MOCK"; address = "10.0.0.1"
+            subnet = 0; universe = 0; controllerType = "MOCK"
         }
         val u1 = DaoUniverseConfig.new {
             this.project = project
-            subnet = 0; universe = 1; controllerType = "MOCK"; address = null
+            subnet = 0; universe = 1; controllerType = "MOCK"
         }
+        Overrides.setUniverseAddress(project.id.value, u0.uuid, "10.0.0.1")
         val patches = (1..4).map { i ->
             DaoFixturePatch.new {
                 this.project = project

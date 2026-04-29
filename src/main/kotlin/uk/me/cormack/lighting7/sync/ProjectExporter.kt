@@ -4,6 +4,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.fx.ParameterInfo
+import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
@@ -71,7 +72,16 @@ class ProjectExporter(private val state: State) {
             Files.createDirectories(targetDir)
 
             writeJson(targetDir.resolve("formatVersion.json"), FormatVersionJson.serializer(), FormatVersionJson())
-            writeJson(targetDir.resolve("installs.json"), InstallsJson.serializer(), InstallsJson())
+            // installs.json is the registry of installs that have written to this repo. Today we
+            // record only the local install; once cloud sync lands, git history merges entries
+            // from peers.
+            val installs = DaoInstall.all()
+                .associate { it.uuid.toString() to it.friendlyName }
+            writeJson(
+                targetDir.resolve("installs.json"),
+                InstallsJson.serializer(),
+                InstallsJson(installs = installs),
+            )
             writeJson(
                 targetDir.resolve("project.json"),
                 ProjectJson.serializer(),

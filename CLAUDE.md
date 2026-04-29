@@ -281,23 +281,22 @@ tables/columns has implications for sync correctness — read
 1. **Is the new table/column part of a project's portable show content,
    machine-local state, or transient runtime state?**
 2. **Portable** → must have a `uuid` column, must round-trip through
-   canonical JSON, must be added to the sync allow-list in
-   `state/UuidBackfill.kt` and to the appropriate sync DTO in
-   `sync/dto/SyncDtos.kt`. Consider whether the change needs a
-   `formatVersion` bump and a migration. Extend the round-trip test in
-   `src/test/kotlin/.../sync/ProjectRoundTripTest.kt`.
+   canonical JSON, must be wired through both `ProjectExporter` and
+   `ProjectImporter`, and the appropriate sync DTO in
+   `sync/dto/SyncDtos.kt` must carry the field. Consider whether the
+   change needs a `formatVersion` bump and a migration. Extend the
+   round-trip test in `src/test/kotlin/.../sync/ProjectRoundTripTest.kt`.
 3. **Machine-local** (per-rig values like controller IPs) → don't add to
-   the sync DTO. From Phase 2, add to the `machine_override` table; until
-   then, strip the field at export time (see `DaoUniverseConfigs.address`
-   for the precedent).
-4. **Transient runtime state** → leave off the sync allow-list entirely
-   and document why.
+   the sync DTO. Add to the `machine_overrides` table via the
+   `sync/Overrides.kt` helper (see `Overrides.resolveUniverseAddress` /
+   `setUniverseAddress` for the precedent).
+4. **Transient runtime state** → leave out of `ProjectExporter` /
+   `ProjectImporter` entirely and document why.
 
 **Specific rules:**
 
-* New tables default to **not synced** until explicitly added to the
-  `SYNCED_TABLES` list in `state/UuidBackfill.kt` — don't rely on
-  auto-discovery.
+* New tables default to **not synced** until explicitly wired into
+  `ProjectExporter` and `ProjectImporter` — don't rely on auto-discovery.
 * Reordering existing fields in a synced DTO is a non-issue — the
   canonical JSON serialiser sorts keys alphabetically.
 * Renaming a JSON field, removing a field, or changing FK targets on a

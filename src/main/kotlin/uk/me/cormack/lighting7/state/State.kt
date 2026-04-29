@@ -39,6 +39,7 @@ import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.sync.Overrides
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
 
 private val logger = LoggerFactory.getLogger("State")
@@ -448,6 +449,7 @@ class State(val config: ApplicationConfig) {
                 DaoShowEntries,
                 DaoControlSurfaceBindings,
                 DaoProjectScalerStates,
+                DaoInstalls, DaoMachineOverrides,
             )
 
             // Drops a legacy index name; both PG and SQLite accept `DROP INDEX IF EXISTS`.
@@ -486,11 +488,51 @@ class State(val config: ApplicationConfig) {
                     )
                 }
             }
+
+            ensureInstallRow()
+            migrateUniverseAddressesToOverrides()
         }
 
         return database
     }
 
+}
+
+/**
+ * Bootstraps the singleton install identity. On first launch creates one row with `friendlyName`
+ * defaulting to the system hostname (or "lighting7" if hostname lookup fails). Idempotent.
+ */
+private fun Transaction.ensureInstallRow() {
+    if (DaoInstall.all().firstOrNull() != null) return
+    val hostname = runCatching { java.net.InetAddress.getLocalHost().hostName }
+        .getOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?: "lighting7"
+    DaoInstall.new {
+        friendlyName = hostname
+        createdAtMs = System.currentTimeMillis()
+    }
+    logger.info("Created install identity row with friendlyName='{}'", hostname)
+}
+
+/**
+ * One-time migration: move per-install controller IPs out of `universe_configs.address` into
+ * `machine_overrides`. The legacy column stays in the schema (SQLite drop is awkward) but is
+ * never written after this — the source of truth is `sync/Overrides.kt`. Idempotent: only acts
+ * on rows whose `address` is non-null. `setUniverseAddress` upserts so a stale partial-migration
+ * row gets overwritten cleanly.
+ */
+private fun Transaction.migrateUniverseAddressesToOverrides() {
+    val toMigrate = DaoUniverseConfig.find { DaoUniverseConfigs.address.isNotNull() }.toList()
+    if (toMigrate.isEmpty()) return
+    var migrated = 0
+    for (config in toMigrate) {
+        val ip = config.address ?: continue
+        Overrides.setUniverseAddress(config.project.id.value, config.uuid, ip)
+        config.address = null
+        migrated++
+    }
+    logger.info("Migrated {} universe_configs.address row(s) into machine_overrides", migrated)
 }
 
 /**

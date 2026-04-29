@@ -10,6 +10,7 @@ import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.sync.Overrides
 
 /**
  * Loads fixtures, controllers, and groups from DB records into the runtime Fixtures registry.
@@ -29,7 +30,10 @@ object DbFixtureLoader {
 
             val configs = DaoUniverseConfig.find { DaoUniverseConfigs.project eq project.id }
                 .orderBy(DaoUniverseConfigs.universe to SortOrder.ASC)
-                .map { UniverseConfigData(it.id.value, it.subnet, it.universe, it.controllerType, it.address) }
+                .map {
+                    val address = Overrides.resolveUniverseAddress(project.id.value, it.uuid)
+                    UniverseConfigData(it.id.value, it.subnet, it.universe, it.controllerType, address)
+                }
 
             val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
                 .orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC)

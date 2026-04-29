@@ -15,6 +15,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.Overrides
 
 internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
     // GET /{projectId}/universe-configs - List universe configs
@@ -23,7 +24,7 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
             val configs = transaction(state.database) {
                 DaoUniverseConfig.find { DaoUniverseConfigs.project eq project.id }
                     .orderBy(DaoUniverseConfigs.universe to SortOrder.ASC)
-                    .map { it.toDto() }
+                    .map { it.toDto(project.id.value) }
             }
             call.respond(configs)
         }
@@ -37,10 +38,14 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
                 val config = DaoUniverseConfig.findById(resource.configId) ?: return@transaction null
                 if (config.project.id != project.id) return@transaction null
 
-                request.address?.let { config.address = it.ifBlank { null } }
+                // Address is machine-local — written through `Overrides`; the legacy `address`
+                // column on DaoUniverseConfigs is retained but unused.
+                request.address?.let {
+                    Overrides.setUniverseAddress(project.id.value, config.uuid, it.ifBlank { null })
+                }
                 request.controllerType?.let { config.controllerType = it }
 
-                config.toDto()
+                config.toDto(project.id.value)
             }
 
             if (config == null) {
@@ -65,6 +70,11 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
             val deleted = transaction(state.database) {
                 val config = DaoUniverseConfig.findById(resource.configId) ?: return@transaction false
                 if (config.project.id != project.id) return@transaction false
+
+                // Drop any machine-local override (e.g. controller IP) for this universe before
+                // the row goes away — overrides FK to the project, not the universe row, so
+                // they'd otherwise linger as orphan rows keyed by a now-vanished UUID.
+                Overrides.setUniverseAddress(project.id.value, config.uuid, null)
 
                 // Delete patches in this universe first
                 config.fixturePatches.forEach { patch ->
@@ -118,11 +128,11 @@ data class UpdateUniverseConfigRequest(
 )
 
 // Helpers
-private fun DaoUniverseConfig.toDto() = UniverseConfigDto(
+private fun DaoUniverseConfig.toDto(projectId: Int) = UniverseConfigDto(
     id = id.value,
     subnet = subnet,
     universe = universe,
     controllerType = controllerType,
-    address = address,
+    address = Overrides.resolveUniverseAddress(projectId, uuid),
     patchCount = fixturePatches.count().toInt(),
 )

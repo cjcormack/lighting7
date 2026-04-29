@@ -25,6 +25,7 @@ fun Application.configureRouting(state: State) {
             routeApiRestAiChat(state)
             routeApiRestControlSurfaceTypes(state)
             routeApiRestPerf(state)
+            routeApiRestInstall(state)
         }
 
         routeKotlinCompilerServer(state)
