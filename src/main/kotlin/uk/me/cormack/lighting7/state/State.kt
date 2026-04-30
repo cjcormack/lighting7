@@ -46,6 +46,7 @@ import uk.me.cormack.lighting7.sync.Overrides
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.CredentialStore
 import uk.me.cormack.lighting7.sync.auth.CredentialStoreFactory
+import uk.me.cormack.lighting7.sync.auth.oauth.BundledOAuthCredentials
 import uk.me.cormack.lighting7.sync.auth.oauth.OAuthGitHubClient
 import uk.me.cormack.lighting7.sync.auth.oauth.OAuthTokenProvider
 import uk.me.cormack.lighting7.sync.auth.oauth.OAuthTokenStore
@@ -115,17 +116,41 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
-     * GitHub OAuth HTTP client. Null if `sync.oauth.github.clientId` is unset — the UI
+     * GitHub OAuth HTTP client. Null when neither `local.conf` nor the build-time
+     * bundled credentials supply a complete `(clientId, clientSecret)` pair — the UI
      * then offers PAT-only auth. Owns a Ktor CIO engine; closed in [shutdown].
+     *
+     * Resolution order (treated as atomic pairs — we never mix clientId from one
+     * source with clientSecret from another, since they belong to different GitHub
+     * Apps):
+     *  1. `sync.oauth.github.{clientId, clientSecret}` from `local.conf`.
+     *  2. [BundledOAuthCredentials], baked in at build time by GitHub Actions for
+     *     installer distributions (see `-PghOauthClientId` / `-PghOauthClientSecret`
+     *     in `build.gradle.kts`).
      */
     val oauthGitHubClient: OAuthGitHubClient? by lazy {
-        val clientId = config.optionalString("sync.oauth.github.clientId") ?: return@lazy null
-        val clientSecret = config.optionalString("sync.oauth.github.clientSecret")
-        if (clientSecret.isNullOrBlank()) {
-            logger.warn("sync.oauth.github.clientId is set but clientSecret is blank — disabling OAuth path.")
-            return@lazy null
+        val pair = resolveOAuthCredentialPair() ?: return@lazy null
+        OAuthGitHubClient(clientId = pair.first, clientSecret = pair.second)
+    }
+
+    private fun resolveOAuthCredentialPair(): Pair<String, String>? {
+        val configId = config.optionalString("sync.oauth.github.clientId")
+        val configSecret = config.optionalString("sync.oauth.github.clientSecret")
+        if (!configId.isNullOrBlank() && !configSecret.isNullOrBlank()) {
+            return configId to configSecret
         }
-        OAuthGitHubClient(clientId = clientId, clientSecret = clientSecret)
+        if (!configId.isNullOrBlank() && configSecret.isNullOrBlank()) {
+            logger.warn(
+                "sync.oauth.github.clientId is set in local.conf but clientSecret is blank — " +
+                    "ignoring local.conf and falling back to bundled credentials if present.",
+            )
+        }
+        val bundledId = BundledOAuthCredentials.GITHUB_CLIENT_ID
+        val bundledSecret = BundledOAuthCredentials.GITHUB_CLIENT_SECRET
+        if (bundledId.isNotBlank() && bundledSecret.isNotBlank()) {
+            return bundledId to bundledSecret
+        }
+        return null
     }
 
     /** Public base URL the user's browser hits to reach this install (for OAuth callbacks). */

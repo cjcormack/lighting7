@@ -501,12 +501,52 @@ polling.
 
 ```hocon
 sync.oauth.github {
-    clientId      = ""    # blank disables OAuth — UI offers PAT only
+    clientId      = ""    # blank → fall back to bundled credentials (see below)
     clientSecret  = ""    # sensitive; treat local.conf as a secret file
     publicBaseUrl = ""    # default "http://localhost:8413"; appended with
                           # /api/rest/oauth/github/callback
 }
 ```
+
+`clientId` and `clientSecret` resolve as an atomic pair through
+[`State.resolveOAuthCredentialPair`](../src/main/kotlin/uk/me/cormack/lighting7/state/State.kt):
+
+1. If `local.conf` provides both, use that pair.
+2. Otherwise, if `BundledOAuthCredentials` (generated at build time) provides
+   both, use that pair.
+3. Otherwise OAuth is disabled and the UI offers PAT-only auth.
+
+We never mix `clientId` from one source with `clientSecret` from another —
+they belong to different GitHub Apps and pairing them across sources would
+produce an invalid client.
+
+##### Build-time bundled credentials
+
+Installer distributions (the Windows .msi built by `.github/workflows/windows-build.yml`)
+can't ship a `local.conf` with secrets, so the workflow injects credentials
+from repository secrets via Gradle properties:
+
+```bash
+./gradlew packageWindows \
+  -PghOauthClientId=$GH_OAUTH_CLIENT_ID \
+  -PghOauthClientSecret=$GH_OAUTH_CLIENT_SECRET
+```
+
+The `generateBundledOAuthCredentials` task writes
+`build/generated/source/oauth/main/kotlin/.../BundledOAuthCredentials.kt`
+with the values as `const val` strings; that file is on the main source set's
+classpath, so the values end up in `lighting7.jar` and the resulting .msi.
+Local builds leave the props empty (the file generates with empty strings)
+and rely on `local.conf` as before.
+
+The repository secrets are `LIGHTING7_GH_OAUTH_CLIENT_ID` and
+`LIGHTING7_GH_OAUTH_CLIENT_SECRET`. The credentials end up in the binary;
+that's the standard "public client" trade-off for OAuth desktop apps where
+PKCE isn't available (GitHub doesn't support PKCE on OAuth/GitHub Apps).
+Mitigations: a GitHub App is scoped per-install (a leaked secret can't
+pivot beyond what each user explicitly authorised), permissions are kept
+minimal, and rotation is fast (regenerate the App's client_secret →
+re-run the workflow → ship a new installer).
 
 GitHub App registration steps (one-time, by the install operator):
 

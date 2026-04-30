@@ -92,14 +92,26 @@ jobs:
           }
           "EFFECTIVE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      # GitHub OAuth credentials for the install-wide "Connect GitHub" flow.
+      # Stored as repository secrets so they're never in git. Build-time
+      # injection (see `generateBundledOAuthCredentials` in build.gradle.kts)
+      # bakes them into the .msi as a fallback for when local.conf doesn't
+      # supply them. If the secrets are unset (e.g. a fork running this
+      # workflow without configuring them), the .msi just ships with the
+      # OAuth path disabled and only the PAT path is available — no failure.
       - name: Build Windows MSI
         shell: pwsh
+        env:
+          GH_OAUTH_CLIENT_ID: ${{ secrets.LIGHTING7_GH_OAUTH_CLIENT_ID }}
+          GH_OAUTH_CLIENT_SECRET: ${{ secrets.LIGHTING7_GH_OAUTH_CLIENT_SECRET }}
         run: |
           .\gradlew.bat packageWindows `
             "-PlightingReactPath=./lighting-react" `
             "-PkotlinCompilerServerPath=./kotlin-compiler-server" `
             "-PkotlinCompilerServerJavaHome=$env:JAVA_HOME_17_X64" `
             "-PjpackageAppVersion=$env:EFFECTIVE_VERSION" `
+            "-PghOauthClientId=$env:GH_OAUTH_CLIENT_ID" `
+            "-PghOauthClientSecret=$env:GH_OAUTH_CLIENT_SECRET" `
             --no-daemon --stacktrace
 
       - name: Upload .msi as workflow artifact
