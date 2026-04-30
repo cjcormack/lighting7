@@ -558,6 +558,20 @@ data class CloudSyncFailedOutMessage(
     val message: String,
 ) : OutMessage()
 
+/**
+ * Emitted when [uk.me.cormack.lighting7.sync.RemoteSyncEngine.runSync] finds a Diverged
+ * history with at least one EDIT_EDIT conflict and persists a `sync_session` row. The
+ * frontend's `<ConflictPanel>` reacts by fetching the conflict list and asking the user
+ * to pick `LOCAL` / `REMOTE` per record.
+ */
+@Serializable
+@SerialName("cloudSyncConflictsPending")
+data class CloudSyncConflictsPendingOutMessage(
+    val projectId: Int,
+    val sessionId: Int,
+    val conflictCount: Int,
+) : OutMessage()
+
 class SocketConnection(val session: WebSocketServerSession) {
     companion object {
         val lastId = AtomicInteger(0)

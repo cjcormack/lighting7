@@ -500,6 +500,7 @@ class State(val config: ApplicationConfig) {
                 DaoProjectScalerStates,
                 DaoInstalls, DaoMachineOverrides,
                 DaoSyncConfigs,
+                DaoSyncStates, DaoSyncSessions, DaoSyncSessionConflicts,
             )
 
             // Drops a legacy index name; both PG and SQLite accept `DROP INDEX IF EXISTS`.

@@ -104,6 +104,37 @@ object JGitClient {
         }
     }
 
+    /**
+     * Create a commit whose parents are HEAD plus [extraParentSha]. Used by the
+     * cloud-sync auto-merge path — the resulting commit needs the remote tip (HEAD
+     * after `resetHard`) and the original local snapshot tip as both parents so
+     * `git log --graph` reflects the merge.
+     *
+     * Implemented by writing `MERGE_HEAD` and then running a normal `CommitCommand` —
+     * the command picks `MERGE_HEAD` up automatically and adds it as a second parent
+     * (and clears it on success). Mirrors `git merge`'s wire behaviour without any of
+     * its tree-merge logic; we've already produced the merged tree on disk.
+     */
+    fun commitWithParents(
+        repo: Repository,
+        authorName: String,
+        authorEmail: String,
+        message: String,
+        extraParentSha: String,
+    ): CommitInfo {
+        val extraId = repo.resolve(extraParentSha)
+            ?: error("Cannot resolve parent ref $extraParentSha for merge commit")
+        repo.writeMergeHeads(listOf(extraId))
+        Git(repo).use { git ->
+            return git.commit()
+                .setAuthor(authorName, authorEmail)
+                .setCommitter(authorName, authorEmail)
+                .setMessage(message)
+                .call()
+                .toCommitInfo()
+        }
+    }
+
     /** HEAD's commit info, or null on an unborn repo (before the first commit). */
     fun head(repo: Repository): CommitInfo? {
         val headRef = repo.exactRef("HEAD") ?: return null
@@ -276,6 +307,42 @@ object JGitClient {
             }
         }
         return null
+    }
+
+    /**
+     * Walk every blob reachable from [ref] and return `(repo-relative path → UTF-8 contents)`.
+     * Returns an empty map if [ref] is unborn / can't be resolved. Used by
+     * [uk.me.cormack.lighting7.sync.RecordHasher] to snapshot a whole commit's tree
+     * without checking it out into the working tree.
+     */
+    fun walkTree(repo: Repository, ref: String): Map<String, String> {
+        val commitId = repo.resolve(ref) ?: return emptyMap()
+        val out = mutableMapOf<String, String>()
+        RevWalk(repo).use { walk ->
+            val commit = walk.parseCommit(commitId)
+            TreeWalk(repo).use { tree ->
+                tree.addTree(commit.tree)
+                tree.isRecursive = true
+                while (tree.next()) {
+                    val loader = repo.open(tree.getObjectId(0))
+                    val bytes = ByteArrayOutputStream().also { loader.copyTo(it) }
+                    out[tree.pathString] = bytes.toString(Charsets.UTF_8)
+                }
+            }
+        }
+        return out
+    }
+
+    /** Find the merge-base between [a] and [b] (the common ancestor commit), or null if none. */
+    fun mergeBase(repo: Repository, a: String, b: String): String? {
+        val aId = repo.resolve(a) ?: return null
+        val bId = repo.resolve(b) ?: return null
+        RevWalk(repo).use { walk ->
+            walk.revFilter = org.eclipse.jgit.revwalk.filter.RevFilter.MERGE_BASE
+            walk.markStart(walk.parseCommit(aId))
+            walk.markStart(walk.parseCommit(bId))
+            return walk.next()?.name
+        }
     }
 
     private fun countAhead(repo: Repository, head: ObjectId, base: ObjectId): Int {

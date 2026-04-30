@@ -336,7 +336,7 @@ Each phase ships standalone value and is independently testable.
 | 2 | Install identity (`install` table) + `machine_override` table + UI | Friendly install name editable; ArtNet IP override per universe. |
 | 3 | Local git wiring (JGit, working tree, `sync_config`) | "Commit snapshot" button; user can browse commit history locally. |
 | 4 | Remote push/pull (no conflicts) + PAT storage + `formatVersion` | Solo-multi-machine use case works end-to-end. |
-| 5 | `sync_state` + three-way diff + flat conflict list (LOCAL/REMOTE only) | True multi-master support, minimal UX. |
+| 5 ✅ | `sync_state` + three-way diff + flat conflict list (LOCAL/REMOTE only) | True multi-master support, minimal UX. |
 | 6 | Conflict-resolution UX (three-pane diff, MANUAL edit, resume-after-crash) | Polished conflict resolution. |
 | 7 | Tombstones, EDIT_DELETE / DELETE_EDIT conflicts, push-rejected retry | Correctness corners. |
 | 8 | Auto-sync, log feed polish, attribution rendering, history browser | Quality of life. |

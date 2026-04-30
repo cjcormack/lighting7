@@ -24,19 +24,31 @@ import uk.me.cormack.lighting7.plugins.CloudSyncFailedOutMessage
 import uk.me.cormack.lighting7.plugins.CloudSyncStartedOutMessage
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.CommitInfo
+import uk.me.cormack.lighting7.sync.ConflictResolution
+import uk.me.cormack.lighting7.sync.ConflictSession
 import uk.me.cormack.lighting7.sync.JGitClient
 import uk.me.cormack.lighting7.sync.RemoteSyncEngine
+import uk.me.cormack.lighting7.sync.ResolutionEntry
+import uk.me.cormack.lighting7.sync.SessionState
 import uk.me.cormack.lighting7.sync.SnapshotEngine
 import uk.me.cormack.lighting7.sync.SnapshotResponse
+import uk.me.cormack.lighting7.sync.SyncErrorCode
 import uk.me.cormack.lighting7.sync.SyncException
+import uk.me.cormack.lighting7.sync.SyncOutcome
 import uk.me.cormack.lighting7.sync.SyncRunResult
 import uk.me.cormack.lighting7.sync.SyncWorkingTree
 import uk.me.cormack.lighting7.sync.toHttpStatus
+import java.util.UUID
 
 /**
- * Cloud-sync REST endpoints. All endpoints are local-only — no remote, no PAT, no
- * conflict resolution yet (see `docs/sync-engineering.md`). JGit calls block, so
- * route handlers wrap them in `withContext(Dispatchers.IO)`.
+ * Cloud-sync REST endpoints.
+ *
+ * Phase 4 shipped configuration, snapshots, status, log, credentials, and a single-shot
+ * `/sync/run` endpoint. Phase 5 layers on the conflict-session lifecycle:
+ * `/sync/conflicts` (read), `/sync/resolve` (mark each conflict LOCAL/REMOTE),
+ * `/sync/apply` (commit + push the resolved tree), `/sync/abort` (drop the session).
+ *
+ * JGit calls block; route handlers wrap them in `withContext(Dispatchers.IO)`.
  */
 internal fun Route.routeApiRestProjectCloudSync(state: State) {
     val workingTree = SyncWorkingTree(state)
@@ -94,10 +106,24 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
     }
 
     post<ProjectSyncSnapshotResource> { resource ->
-        // receiveNullable returns null on an empty body without swallowing real
-        // deserialisation errors the way `runCatching { receive() }` would.
         val request = call.receiveNullable<TakeSnapshotRequest>() ?: TakeSnapshotRequest()
         withProject(state, resource.parent.projectId) { project ->
+            // Refuse to take a snapshot while a conflict session is open — the snapshot
+            // would race the canonical-JSON the resolution UI is showing.
+            val activeSessionId = transaction(state.database) {
+                ConflictSession.findActive(project.id.value)?.id?.value
+            }
+            if (activeSessionId != null) {
+                call.respond(
+                    HttpStatusCode.Conflict,
+                    SyncErrorResponse(
+                        "Cannot take a snapshot while conflict session #$activeSessionId is open. " +
+                            "Apply or abort it first.",
+                        SyncErrorCode.SESSION_PENDING.name,
+                    ),
+                )
+                return@withProject
+            }
             val install = transaction(state.database) {
                 DaoInstall.all().firstOrNull()?.let { it.uuid to it.friendlyName }
                     ?: error("Install row missing — `ensureInstallRow` should have created it on startup.")
@@ -177,6 +203,115 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                 call.respond(e.code.toHttpStatus(), SyncErrorResponse(e.message ?: e.code.name, e.code.name))
                 return@withProject
             }
+            // A CONFLICTS_PENDING run emits its own bespoke message from the engine;
+            // don't double-fire `cloudSyncDone` for that case.
+            if (result.outcome != SyncOutcome.CONFLICTS_PENDING) {
+                state.emitCloudSyncEvent(
+                    CloudSyncDoneOutMessage(
+                        projectId = project.id.value,
+                        outcome = result.outcome.name,
+                        headSha = result.headSha,
+                        pushed = result.pushed,
+                        pulled = result.pulled,
+                        replaced = result.replaced,
+                        message = result.message,
+                    ),
+                )
+            }
+            call.respond(result)
+        }
+    }
+
+    // ─── Phase 5 conflict-session endpoints ────────────────────────────
+
+    get<ProjectSyncConflictsResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val response = transaction(state.database) {
+                val session = ConflictSession.findActive(project.id.value)
+                    ?: return@transaction ConflictsResponse(activeSession = false)
+                val conflicts = ConflictSession.listConflicts(session).map { c ->
+                    ConflictDto(
+                        tableName = c.tableName,
+                        recordUuid = c.recordUuid.toString(),
+                        conflictKind = c.conflictKind,
+                        resolution = c.resolution,
+                        localJson = c.localJson,
+                        remoteJson = c.remoteJson,
+                        baseJson = c.baseJson,
+                    )
+                }
+                ConflictsResponse(
+                    activeSession = true,
+                    sessionId = session.id.value,
+                    state = session.state,
+                    localSha = session.localSha,
+                    remoteSha = session.remoteSha,
+                    baseSha = session.baseSha,
+                    errorMessage = session.errorMessage,
+                    conflicts = conflicts,
+                )
+            }
+            call.respond(response)
+        }
+    }
+
+    post<ProjectSyncResolveResource> { resource ->
+        val request = call.receive<ResolveRequest>()
+        // Validate body before opening a transaction. Bad-choice and bad-UUID are
+        // body-shape errors, not session-state errors, so they don't go through
+        // SyncException's status mapping.
+        val parsed = mutableListOf<ResolutionEntry>()
+        for (entry in request.resolutions) {
+            val choice = entry.resolution
+            if (choice != null && choice != ConflictResolution.LOCAL.name && choice != ConflictResolution.REMOTE.name) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Resolution must be 'LOCAL' or 'REMOTE' (or null to clear)."))
+                return@post
+            }
+            val uuid = runCatching { UUID.fromString(entry.recordUuid) }.getOrNull() ?: continue
+            parsed.add(ResolutionEntry(entry.tableName, uuid, choice))
+        }
+        withProject(state, resource.parent.projectId) { project ->
+            try {
+                transaction(state.database) {
+                    val session = ConflictSession.findActive(project.id.value)
+                        ?: throw SyncException(SyncErrorCode.SESSION_NOT_FOUND, "No active conflict session.")
+                    if (session.state != SessionState.CONFLICTS_PENDING.name) {
+                        throw SyncException(SyncErrorCode.SESSION_NOT_FOUND, "Session is not in CONFLICTS_PENDING state.")
+                    }
+                    ConflictSession.resolve(session, parsed)
+                }
+                call.respond(HttpStatusCode.NoContent)
+            } catch (e: SyncException) {
+                call.respond(e.code.toHttpStatus(), SyncErrorResponse(e.message ?: e.code.name, e.code.name))
+            }
+        }
+    }
+
+    post<ProjectSyncApplyResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val install = transaction(state.database) {
+                DaoInstall.all().firstOrNull()?.let { it.uuid to it.friendlyName }
+                    ?: error("Install row missing — `ensureInstallRow` should have created it on startup.")
+            }
+            state.emitCloudSyncEvent(CloudSyncStartedOutMessage(project.id.value))
+            val result = try {
+                remoteSyncEngine.applySession(
+                    projectId = project.id.value,
+                    projectUuid = project.uuid,
+                    installUuid = install.first,
+                    installFriendlyName = install.second,
+                )
+            } catch (e: SyncException) {
+                state.emitCloudSyncEvent(
+                    CloudSyncFailedOutMessage(
+                        projectId = project.id.value,
+                        errorCode = e.code.name,
+                        message = e.message ?: e.code.name,
+                    ),
+                )
+                call.respond(e.code.toHttpStatus(), SyncErrorResponse(e.message ?: e.code.name, e.code.name))
+                return@withProject
+            }
             state.emitCloudSyncEvent(
                 CloudSyncDoneOutMessage(
                     projectId = project.id.value,
@@ -188,6 +323,18 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                     message = result.message,
                 ),
             )
+            call.respond(result)
+        }
+    }
+
+    post<ProjectSyncAbortResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val result = try {
+                remoteSyncEngine.abortSession(project.id.value, project.uuid)
+            } catch (e: SyncException) {
+                call.respond(e.code.toHttpStatus(), SyncErrorResponse(e.message ?: e.code.name, e.code.name))
+                return@withProject
+            }
             call.respond(result)
         }
     }
@@ -216,6 +363,18 @@ data class ProjectSyncCredentialsResource(val parent: ProjectSyncResource)
 
 @Resource("/run")
 data class ProjectSyncRunResource(val parent: ProjectSyncResource)
+
+@Resource("/conflicts")
+data class ProjectSyncConflictsResource(val parent: ProjectSyncResource)
+
+@Resource("/resolve")
+data class ProjectSyncResolveResource(val parent: ProjectSyncResource)
+
+@Resource("/apply")
+data class ProjectSyncApplyResource(val parent: ProjectSyncResource)
+
+@Resource("/abort")
+data class ProjectSyncAbortResource(val parent: ProjectSyncResource)
 
 @Serializable
 data class SyncConfigDto(
@@ -259,6 +418,46 @@ data class SyncStatusResponse(
 @Serializable
 data class TakeSnapshotRequest(
     val message: String? = null,
+)
+
+/**
+ * Response shape for `GET /sync/conflicts`. When `activeSession=false`, the other fields
+ * are absent — the UI uses this to render an empty conflict panel (or hide it entirely).
+ */
+@Serializable
+data class ConflictsResponse(
+    val activeSession: Boolean,
+    val sessionId: Int? = null,
+    val state: String? = null,
+    val localSha: String? = null,
+    val remoteSha: String? = null,
+    val baseSha: String? = null,
+    val errorMessage: String? = null,
+    val conflicts: List<ConflictDto> = emptyList(),
+)
+
+@Serializable
+data class ConflictDto(
+    val tableName: String,
+    val recordUuid: String,
+    val conflictKind: String,
+    /** `LOCAL` / `REMOTE` once the user has chosen, otherwise null. */
+    val resolution: String?,
+    /** Phase 6 will use these for the three-pane diff; Phase 5 leaves them unrendered. */
+    val localJson: String?,
+    val remoteJson: String?,
+    val baseJson: String?,
+)
+
+@Serializable
+data class ResolveRequest(val resolutions: List<ResolveEntry>)
+
+@Serializable
+data class ResolveEntry(
+    val tableName: String,
+    val recordUuid: String,
+    /** `LOCAL` / `REMOTE` / null (clear). */
+    val resolution: String?,
 )
 
 /**

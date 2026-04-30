@@ -230,12 +230,14 @@ class RemoteSyncEngineTest {
     }
 
     @Test
-    fun `force-push on diverged history surfaces FORCE_PUSHED with replaced count`() {
+    fun `diverged history with disjoint changes auto-merges (Phase 5)`() {
         val projectId = seedMinimalProject(state)
         configureSync(projectId, bareRepo.toUri().toString())
         runSync(projectId)
 
-        // Add a stranger commit to the remote (simulating "machine B pushed something").
+        // Stranger commit on the remote — adds a non-record file that the diff ignores.
+        // The point is to give us a remote tip that's strictly ahead of our last sync,
+        // so when we add a divergent local change we'll classify as `Diverged`.
         val strangerWorkdir = Files.createTempDirectory("lighting7-stranger-")
         try {
             JGitClient.init(strangerWorkdir).use { repo ->
@@ -253,7 +255,9 @@ class RemoteSyncEngineTest {
             runCatching { strangerWorkdir.toFile().deleteRecursively() }
         }
 
-        // Locally, change the DB so we have a divergent local commit too.
+        // Locally, change the DB so we have a divergent local commit too. Phase 5
+        // auto-merges since the changes touch disjoint records (the stranger added a
+        // non-record file; we added a new cue stack).
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             DaoCueStack.new {
@@ -264,9 +268,14 @@ class RemoteSyncEngineTest {
         }
 
         val result = runSync(projectId)
-        assertEquals(SyncOutcome.FORCE_PUSHED, result.outcome)
-        assertTrue(result.replaced >= 1, "replaced should reflect the stranger commit")
-        assertNotEquals(0, result.pushed)
+        assertEquals(SyncOutcome.MERGED, result.outcome)
+        assertEquals(0, result.replaced, "Phase 5 must not drop remote commits")
+
+        // Local cue stack must survive the merge (we chose TakeLocal for it via the diff).
+        val stackNames = transaction(state.database) {
+            DaoProject.findById(projectId)!!.cueStacks.map { it.name }.toSet()
+        }
+        assertTrue("Local Stack" in stackNames, "Auto-merge should preserve local-only records")
     }
 
     @Test

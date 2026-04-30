@@ -5,13 +5,13 @@ design and rationale live in [`docs/plans/cloud-sync.md`](plans/cloud-sync.md);
 this doc captures the contracts and operational details that current code
 relies on so that future contributors don't reinvent them.
 
-The subsystem ships in eight phases (see the design doc). **Today, Phases 1,
-2, and 3 are in-tree** — UUID columns, canonical JSON, manual export/import,
-the install-identity / `machine_override` tables that move per-rig fields
-out of the synced graph, and a per-project local git working tree with a
-"Take snapshot" REST flow. Sections in this doc that pertain to Phase 4+
-are marked *Forward-looking* and describe the contract those phases are
-expected to land against, not anything that runs yet.
+The subsystem ships in eight phases (see the design doc). **Today, Phases 1
+through 5 are in-tree** — UUID columns, canonical JSON, manual export/import,
+the install-identity / `machine_override` tables, a per-project local git
+working tree, remote push/pull with PAT credentials, and the multi-master
+three-way diff with a flat conflict-resolution flow. Sections marked
+*Forward-looking* describe the contract Phase 6+ work is expected to land
+against, not anything that runs yet.
 
 ## Architecture overview
 
@@ -295,11 +295,20 @@ so the UI form always has data to render even on the very first visit.
 
 All endpoints live under `/api/rest/project/{projectId}/sync/...`:
 
-* `GET /config` / `PUT /config` — read or update the `sync_configs` row.
-* `GET /status` — `{ workingTreePath, hasRepo, head: CommitInfo?, dirty }`.
-* `POST /snapshot` — body `{ message?: string }`. Returns
-  `{ noChanges, workingTreePath, commit: CommitInfo? }`.
-* `GET /log?limit=50` — recent `CommitInfo[]` from `git log`.
+| Method | Path | What it does |
+|---|---|---|
+| GET | `/config` | `sync_configs` row + `tokenPresent` |
+| PUT | `/config` | Update `repo_url` / `branch` / `enabled` |
+| PUT | `/credentials` | Store a PAT against the configured `repo_url` |
+| DELETE | `/credentials` | Clear the stored PAT |
+| GET | `/status` | `{ workingTreePath, hasRepo, head, dirty }` |
+| GET | `/log?limit=50` | Recent `CommitInfo[]` |
+| POST | `/snapshot` | Take a snapshot commit (refused while session active) |
+| POST | `/run` | Run the full pipeline (returns `CONFLICTS_PENDING` if same-record conflicts) |
+| GET | `/conflicts` | Active session + flat conflict list |
+| POST | `/resolve` | Set `LOCAL` / `REMOTE` per record |
+| POST | `/apply` | Apply resolutions, commit, push |
+| POST | `/abort` | Drop the active session |
 
 JGit calls are blocking and run inside `withContext(Dispatchers.IO) {…}`;
 the snapshot engine wraps that boundary itself, route handlers wrap their
@@ -355,18 +364,17 @@ serialise:
 | `RemoteAhead(n)` | `resetHard origin/{branch}` + `replaceFromWorkingTree` | `FAST_FORWARDED`, `pulled = n` |
 | `Diverged(a, b)` | **force push** | `FORCE_PUSHED`, `pushed = a`, `replaced = b` |
 
-### Force-push policy on divergence
+### Diverged history → three-way diff (Phase 5)
 
-Phase 4 deliberately collapses true conflict resolution: when both sides have
-new commits since the last `lastSyncedSha`, the local side **wins** via a force
-push, dropping `b` remote commits. The UI surfaces this with a warning toast
-and the `replaced` count so the user notices that work was overwritten.
+Phase 4 force-pushed on divergence and silently dropped peer commits. **Phase 5
+replaces that branch** with a record-level three-way diff and (where
+necessary) a user-driven conflict-resolution flow. Force-push is gone from
+the engine; the only ways to advance HEAD are now no-op, regular push,
+fast-forward, auto-merge, or post-resolution merge — all linear or two-parent
+merges, never history-rewriting.
 
-This is acceptable for the **solo-multi-machine** case the phase targets — the
-user driving sync is the only writer, so divergence only happens via operator
-error (forgetting to sync before working on machine B). It is **not** an
-acceptable answer for true multi-master use; phase 5 introduces the three-way
-diff and conflict-resolution UX that replaces this branch.
+See [Three-way diff](#three-way-diff-phase-5) and [Sync session lifecycle
+(Phase 5)](#sync-session-lifecycle-phase-5) below for the contract.
 
 ### Pull → DB
 
@@ -442,16 +450,142 @@ for v1 (low value vs. the round trip it adds on every set-PAT).
 
 [jk]: https://github.com/javakeyring/java-keyring
 
-## Sync session lifecycle (forward-looking)
+## Three-way diff (Phase 5)
 
-Phase 5+ introduces a `sync_session` row that survives a crash mid-sync.
-The state machine is `FETCHING → CONFLICTS_PENDING → APPLYING → DONE/FAILED`.
-Phase 4 has no equivalent because the only persisted state across a
-crash is `sync_configs.lastSyncedSha`/`lastSyncedAtMs`, written
-post-success. A crash mid-pipeline leaves the working tree in whatever state
-it was in (snapshot may or may not have committed) and the DB unmodified
-beyond what the importer's transaction has done — re-running `Sync now`
-recovers cleanly.
+Implemented by [`ThreeWayDiff`](../src/main/kotlin/uk/me/cormack/lighting7/sync/ThreeWayDiff.kt)
+and the surrounding [`RecordHasher`](../src/main/kotlin/uk/me/cormack/lighting7/sync/RecordHasher.kt).
+
+For every record on either side, the engine computes a SHA-256 hash of its
+canonical JSON (or, for scripts, the canonical concatenation of meta + body)
+and consults the per-record `sync_state` row to determine the relationship
+between local, remote, and the last-known shared base.
+
+### `RecordKey` & hashing
+
+* `RecordKey(tableName, uuid)` — `tableName` is the export folder name
+  (`"cues"`, `"cueStacks"`, `"scripts"`, …) and matches the string used by
+  the `machine_overrides` row.
+* For most tables, the JSON file at `{tableName}/{uuid}.json` is one record.
+  For **scripts**, `RecordKey("scripts", uuid)` covers both `scripts/{uuid}.kts`
+  and `scripts/{uuid}.meta.json`; the hash is over their deterministic
+  concatenation so a body-only edit bumps the hash.
+* Top-level metadata (`formatVersion.json`, `project.json`, `installs.json`,
+  `.gitignore`, `.gitattributes`) isn't a record and isn't part of the diff.
+
+### Outcome matrix
+
+| Local present? | Remote present? | sync_state | Hash relations | Outcome |
+|---|---|---|---|---|
+| yes | yes | any | `local == remote` | `NoOp` |
+| yes | yes | yes | `local == base, remote ≠ base` | `TakeRemote` |
+| yes | yes | yes | `remote == base, local ≠ base` | `TakeLocal` |
+| yes | yes | none | `local == remote` | `NoOp` |
+| yes | yes | none | `local ≠ remote` | `Conflict (EDIT_EDIT)` |
+| yes | yes | yes | `local ≠ base, remote ≠ base, local ≠ remote` | `Conflict (EDIT_EDIT)` |
+| yes | no | any | — | `TakeLocal` (Phase 5: tombstone-blind) |
+| no | yes | any | — | `TakeRemote` (Phase 5: tombstone-blind) |
+| no | no | yes | — | `NoOp` (orphan; bootstrap GCs it) |
+
+The "no shared base" rows cover the **first sync after upgrading from
+Phase 4**: until `bootstrapSyncStateAtHead` populates `sync_state` for the
+first time, every disagreement is conservatively a conflict, surfacing in
+the UI rather than silently picking a side.
+
+### Auto-merge (no conflicts)
+
+When `Diverged` produces zero conflicts, the engine merges automatically:
+
+1. `resetHard origin/{branch}` — working tree now matches remote tip.
+2. For each `TakeLocal` outcome, write the local snapshot's bytes (one or
+   two files) over the remote tree.
+3. `ProjectImporter.replaceFromWorkingTree` updates the local DB to match.
+4. `git add -A`, then commit using `Repository.writeMergeHeads(localSha)` so
+   JGit's `CommitCommand` produces a real two-parent merge commit
+   (`origin tip` × `local snapshot tip`).
+5. Regular `push` — we're now strictly ahead of remote.
+6. `bootstrapSyncStateAtHead` walks the new HEAD and rewrites every
+   `sync_state` row.
+
+If step 2 produces no tree-level diff (everything was `TakeRemote`), step 4
+is skipped and HEAD remains at remote tip — equivalent to a fast-forward.
+
+### Sync-state bootstrap
+
+`bootstrapSyncStateAtHead(projectId, sha)` runs at the end of every terminal
+outcome that advances HEAD: `NO_OP`, `PUSHED`, `FAST_FORWARDED`, and the
+post-merge / post-apply paths. It deletes every `sync_state` row for the
+project and re-creates one row per record on disk at `sha`. This is the
+**bootstrap** path: the very first Phase-5 sync on a Phase-4 working tree
+finds zero rows and seeds them all.
+
+The deliberate corollary: **the first sync after upgrade can't tell prior
+local edits from remote ones**, so any disagreement at that moment surfaces
+as a conflict. The engineering trade-off is one extra round of operator
+attention immediately after upgrade in exchange for never silently dropping
+peer work.
+
+## Sync session lifecycle (Phase 5)
+
+Phase 5 ships the persistent half of the design's session state machine —
+`CONFLICTS_PENDING → APPLYING → DONE/FAILED/ABORTED` — backed by
+`sync_session` and `sync_session_conflict` rows. The `FETCHING` state and
+crash-resume on startup are deliberately deferred to Phase 6: they require
+recovery UX that's not yet built.
+
+```
+runSync                ┌──── no conflicts ───────► auto-merge → push
+   │                   │                              │
+   │  Diverged ────► three-way diff                  ▼
+   │                   │                          DONE (no session)
+   │                   │
+   │                   └─── conflicts ──► sync_session(CONFLICTS_PENDING)
+   │                                            │       │
+   │                                       resolve   abort
+   │                                            ▼       ▼
+   │                                          apply   sync_session(ABORTED)
+   │                                            ▼
+   │                                  sync_session(APPLYING)
+   │                                            ▼
+   │                                       autoMerge
+   │                                            ▼
+   │                                  sync_session(DONE)
+```
+
+Tables (machine-local, never serialised):
+
+| Table | What it carries |
+|---|---|
+| `sync_state` | One row per `(project, table, uuid)`: `last_synced_sha` / `last_synced_hash`. Rebuilt by `bootstrapSyncStateAtHead` after every advance. |
+| `sync_session` | One row per session: `state`, `local_sha`, `remote_sha`, `base_sha`, `error_message`. Historical `DONE`/`FAILED`/`ABORTED` rows accumulate as audit trail. |
+| `sync_session_conflict` | One row per conflicting record in the session: `conflict_kind` (`EDIT_EDIT` only in Phase 5), `resolution` (`LOCAL`/`REMOTE`/null), and the canonical-JSON snapshots (`local_json` / `remote_json` / `base_json`) captured at session-open time so resolution remains stable across stale fetches. |
+
+Only one **active** session per project is allowed — defined as
+`state IN (CONFLICTS_PENDING, APPLYING)`. While a session is active:
+
+* `runSync` returns 409 `SESSION_PENDING` — apply or abort first.
+* `snapshot` returns 409 `SESSION_PENDING` — a snapshot would race the
+  `local_json` data the resolution UI is showing.
+* `apply` is allowed once every conflict has a `LOCAL` or `REMOTE`
+  resolution; otherwise 422 `UNRESOLVED_CONFLICTS`. If local HEAD has moved
+  since the session opened (e.g. another process snuck in a snapshot), 409
+  `SESSION_STALE` and the user must abort and re-run.
+* `abort` deletes the conflict rows, marks the session `ABORTED`, and
+  hard-resets the working tree to `local_sha`. Local DB is untouched (we
+  never wrote to it for a conflict path).
+
+The **apply** path runs the same auto-merge code as the no-conflicts branch;
+the user's resolutions override each conflicting record's outcome. The
+resulting commit's message is `Resolve …` instead of `Merge …` so it's
+distinguishable in `git log`.
+
+### Known gap until Phase 7
+
+Without tombstones, "local has X but remote doesn't" is treated as
+`TakeLocal` even when the truth is "remote deleted X since last sync".
+Concretely: a record deleted on machine A may be **resurrected** on the next
+sync from machine B that still has it. The conflict UI surfaces a banner
+explaining this, and Phase 7 fixes it by introducing tombstone files and
+the `EDIT_DELETE` / `DELETE_EDIT` conflict kinds.
 
 ## Operational notes
 
