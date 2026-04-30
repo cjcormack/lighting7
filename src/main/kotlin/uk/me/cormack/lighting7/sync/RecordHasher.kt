@@ -60,7 +60,7 @@ object RecordHasher {
             val tableName = path.substring(0, firstSlash)
             val rest = path.substring(firstSlash + 1)
 
-            if (tableName == "scripts") {
+            if (isMultiFileTable(tableName)) {
                 val parsed = parseScriptFilename(rest) ?: continue
                 when (parsed.second) {
                     ScriptKind.META -> scriptMetas[parsed.first] = path to content
@@ -94,6 +94,14 @@ object RecordHasher {
         }
         return out
     }
+
+    /**
+     * True if [tableName]'s records span more than one file on disk (e.g. scripts have
+     * a `.kts` body + `.meta.json` sidecar). Single source of truth — callers like the
+     * MANUAL-edit gate in the sync routes use this to decide whether a record can be
+     * round-tripped through a single-textarea editor.
+     */
+    fun isMultiFileTable(tableName: String): Boolean = tableName == "scripts"
 
     /** Hex-encoded SHA-256 of the UTF-8 bytes of [content]. Mirrors the precedent in
      *  [uk.me.cormack.lighting7.show.Show.cacheKey]. */

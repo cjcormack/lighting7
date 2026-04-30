@@ -77,6 +77,14 @@ sealed class DiffOutcome {
     object TakeLocal : DiffOutcome()
     object TakeRemote : DiffOutcome()
     data class Conflict(val kind: ConflictKind) : DiffOutcome()
+
+    /**
+     * Phase 6 MANUAL resolution: write [content] to the record's file path verbatim instead
+     * of choosing local or remote. Never produced by [ThreeWayDiff.compute] — it's only
+     * synthesised in [uk.me.cormack.lighting7.sync.RemoteSyncEngine.applyMergeFromSession]
+     * from the user's stored manual edit.
+     */
+    data class TakeManual(val content: String) : DiffOutcome()
 }
 
 /**

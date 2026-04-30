@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.sync.CommitInfo
 import uk.me.cormack.lighting7.sync.ConflictResolution
 import uk.me.cormack.lighting7.sync.ConflictSession
 import uk.me.cormack.lighting7.sync.JGitClient
+import uk.me.cormack.lighting7.sync.RecordHasher
 import uk.me.cormack.lighting7.sync.RemoteSyncEngine
 import uk.me.cormack.lighting7.sync.ResolutionEntry
 import uk.me.cormack.lighting7.sync.SessionState
@@ -238,6 +239,8 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                         localJson = c.localJson,
                         remoteJson = c.remoteJson,
                         baseJson = c.baseJson,
+                        manualValueJson = c.manualValueJson,
+                        manualEditAllowed = isManualEditAllowed(c.tableName),
                     )
                 }
                 ConflictsResponse(
@@ -263,12 +266,38 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
         val parsed = mutableListOf<ResolutionEntry>()
         for (entry in request.resolutions) {
             val choice = entry.resolution
-            if (choice != null && choice != ConflictResolution.LOCAL.name && choice != ConflictResolution.REMOTE.name) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Resolution must be 'LOCAL' or 'REMOTE' (or null to clear)."))
+            if (choice != null &&
+                choice != ConflictResolution.LOCAL.name &&
+                choice != ConflictResolution.REMOTE.name &&
+                choice != ConflictResolution.MANUAL.name
+            ) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse("Resolution must be 'LOCAL', 'REMOTE', or 'MANUAL' (or null to clear)."),
+                )
                 return@post
             }
+            if (choice == ConflictResolution.MANUAL.name) {
+                if (entry.manualValueJson == null) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorResponse("MANUAL resolution requires manualValueJson."),
+                    )
+                    return@post
+                }
+                if (!isManualEditAllowed(entry.tableName)) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorResponse(
+                            "MANUAL editing is not yet supported for ${entry.tableName} records " +
+                                "(multi-file layout). Choose LOCAL or REMOTE instead.",
+                        ),
+                    )
+                    return@post
+                }
+            }
             val uuid = runCatching { UUID.fromString(entry.recordUuid) }.getOrNull() ?: continue
-            parsed.add(ResolutionEntry(entry.tableName, uuid, choice))
+            parsed.add(ResolutionEntry(entry.tableName, uuid, choice, entry.manualValueJson))
         }
         withProject(state, resource.parent.projectId) { project ->
             try {
@@ -441,12 +470,16 @@ data class ConflictDto(
     val tableName: String,
     val recordUuid: String,
     val conflictKind: String,
-    /** `LOCAL` / `REMOTE` once the user has chosen, otherwise null. */
+    /** `LOCAL` / `REMOTE` / `MANUAL` once the user has chosen, otherwise null. */
     val resolution: String?,
-    /** Phase 6 will use these for the three-pane diff; Phase 5 leaves them unrendered. */
+    /** Phase 6 three-pane diff source: side-by-side renderings of mine / theirs / common ancestor. */
     val localJson: String?,
     val remoteJson: String?,
     val baseJson: String?,
+    /** Saved MANUAL replacement payload, if any — null when the user hasn't chosen MANUAL. */
+    val manualValueJson: String? = null,
+    /** False for multi-file records (e.g. scripts) — Phase 6 only allows MANUAL on single-file records. */
+    val manualEditAllowed: Boolean = true,
 )
 
 @Serializable
@@ -456,9 +489,20 @@ data class ResolveRequest(val resolutions: List<ResolveEntry>)
 data class ResolveEntry(
     val tableName: String,
     val recordUuid: String,
-    /** `LOCAL` / `REMOTE` / null (clear). */
+    /** `LOCAL` / `REMOTE` / `MANUAL` / null (clear). */
     val resolution: String?,
+    /** Required when `resolution = MANUAL`; ignored otherwise. */
+    val manualValueJson: String? = null,
 )
+
+/**
+ * Multi-file records (currently scripts) can't round-trip through the single-textarea
+ * MANUAL editor, so MANUAL is rejected for them and the UI must hide the option.
+ * Defers to [RecordHasher.isMultiFileTable] so the multi-file table list lives in one
+ * place.
+ */
+private fun isManualEditAllowed(tableName: String): Boolean =
+    !RecordHasher.isMultiFileTable(tableName)
 
 /**
  * Lazily create the per-project `sync_configs` row on first read. Mirrors the

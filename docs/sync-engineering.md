@@ -6,12 +6,13 @@ this doc captures the contracts and operational details that current code
 relies on so that future contributors don't reinvent them.
 
 The subsystem ships in eight phases (see the design doc). **Today, Phases 1
-through 5 are in-tree** — UUID columns, canonical JSON, manual export/import,
+through 6 are in-tree** — UUID columns, canonical JSON, manual export/import,
 the install-identity / `machine_override` tables, a per-project local git
-working tree, remote push/pull with PAT credentials, and the multi-master
-three-way diff with a flat conflict-resolution flow. Sections marked
-*Forward-looking* describe the contract Phase 6+ work is expected to land
-against, not anything that runs yet.
+working tree, remote push/pull with PAT credentials, the multi-master
+three-way diff with a flat conflict-resolution flow, plus Phase 6's polished
+conflict UX: **MANUAL** resolution (per-record JSON edit) and crash recovery
+for sessions caught mid-apply. Sections marked *Forward-looking* describe the
+contract Phase 7+ work is expected to land against, not anything that runs yet.
 
 ## Architecture overview
 
@@ -677,7 +678,7 @@ Tables (machine-local, never serialised):
 |---|---|
 | `sync_state` | One row per `(project, table, uuid)`: `last_synced_sha` / `last_synced_hash`. Rebuilt by `bootstrapSyncStateAtHead` after every advance. |
 | `sync_session` | One row per session: `state`, `local_sha`, `remote_sha`, `base_sha`, `error_message`. Historical `DONE`/`FAILED`/`ABORTED` rows accumulate as audit trail. |
-| `sync_session_conflict` | One row per conflicting record in the session: `conflict_kind` (`EDIT_EDIT` only in Phase 5), `resolution` (`LOCAL`/`REMOTE`/null), and the canonical-JSON snapshots (`local_json` / `remote_json` / `base_json`) captured at session-open time so resolution remains stable across stale fetches. |
+| `sync_session_conflict` | One row per conflicting record in the session: `conflict_kind` (`EDIT_EDIT` only in Phase 5), `resolution` (`LOCAL`/`REMOTE`/`MANUAL`/null), `manual_value_json` (Phase 6, populated when `resolution = MANUAL`), and the canonical-JSON snapshots (`local_json` / `remote_json` / `base_json`) captured at session-open time so resolution remains stable across stale fetches. |
 
 Only one **active** session per project is allowed — defined as
 `state IN (CONFLICTS_PENDING, APPLYING)`. While a session is active:
@@ -706,6 +707,63 @@ Concretely: a record deleted on machine A may be **resurrected** on the next
 sync from machine B that still has it. The conflict UI surfaces a banner
 explaining this, and Phase 7 fixes it by introducing tombstone files and
 the `EDIT_DELETE` / `DELETE_EDIT` conflict kinds.
+
+## MANUAL resolution (Phase 6)
+
+Phase 5 only let the user pick whole-record `LOCAL` or `REMOTE`. Phase 6 adds a
+third option: **MANUAL** — supply the replacement payload directly. Useful when
+neither side is right but the user can hand-merge the JSON.
+
+* **Storage.** A new `manual_value_json` column on `sync_session_conflict`
+  carries the user's edit. It's populated only when `resolution = MANUAL`;
+  switching the resolution back to `LOCAL` / `REMOTE` clears the column so a
+  stale draft can never sneak through `apply`.
+* **Apply.** During `applyMergeFromSession`, MANUAL outcomes are surfaced as a
+  new [`DiffOutcome.TakeManual(content)`](../src/main/kotlin/uk/me/cormack/lighting7/sync/ThreeWayDiff.kt)
+  variant. `autoMerge` overlays `content` verbatim onto the working-tree path
+  the record would normally occupy, then runs the same
+  `replaceFromWorkingTree` + commit + push pipeline as `LOCAL` / `REMOTE`.
+* **Single-file restriction.** Phase 6 only allows MANUAL on records that
+  serialise to a single file — i.e. everything except `scripts`, which is split
+  into `scripts/{uuid}.kts` + `scripts/{uuid}.meta.json`. The route layer
+  rejects MANUAL for `scripts` with HTTP 400 and the conflict DTO carries a
+  `manualEditAllowed: Boolean` flag so the UI can hide the option for those
+  rows. A richer per-table editor for scripts is on the Phase 7+ list.
+* **Validation.** `POST /sync/resolve` rejects MANUAL with a missing
+  `manualValueJson` (400). `POST /sync/apply` re-checks at apply time and
+  raises `UNRESOLVED_CONFLICTS` if a row has somehow ended up MANUAL with
+  null content.
+
+The resolution choice + saved manual content round-trip through
+`GET /sync/conflicts` so the UI can re-render a half-typed draft if the user
+navigates away and back.
+
+## Crash recovery (Phase 6)
+
+The `applyMergeFromSession` pipeline isn't a single atomic transaction — the
+DB importer commits before the git commit + push. A crash mid-apply can
+therefore leave the local DB partly merged without a corresponding remote
+push, so a naive resume would either re-do work that already landed in the
+DB or push something the remote already has.
+
+Phase 6's policy: on every [`State`](../src/main/kotlin/uk/me/cormack/lighting7/state/State.kt)
+construction (i.e. process startup), [`ConflictSession.recoverFromCrash`](../src/main/kotlin/uk/me/cormack/lighting7/sync/ConflictSession.kt)
+demotes any `APPLYING` session to `FAILED` with an explanatory error message.
+The user's recovery path is the existing `POST /sync/abort` (which resets the
+working tree to `local_sha` and clears the conflict rows) followed by another
+`POST /sync/run` — the three-way diff naturally reconciles whatever shape the
+partial apply produced.
+
+`CONFLICTS_PENDING` sessions are deliberately **not** demoted: at that point
+the DB and working tree are still consistent and the user can pick up where
+they left off via the same `/conflicts` and `/apply` endpoints they'd have
+used before the crash.
+
+The `FETCHING` enum value is reserved on `SessionState` against a future
+phase that opens a session row at the start of `runSync` (so a crash mid-fetch
+is observable), but Phase 6 doesn't write `FETCHING` rows — `runSync` is
+mutex-locked and a crash mid-fetch leaves no row at all. Reserving the value
+now means Phase 7+ can adopt it without a schema migration.
 
 ## Operational notes
 

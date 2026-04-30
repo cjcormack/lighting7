@@ -320,12 +320,30 @@ class RemoteSyncEngine(
         JGitClient.resetHard(repo, remoteRef)
         val workingTreePath = repo.workTree.toPath()
 
-        // Overlay local-wins records onto the remote-tip working tree.
+        // Overlay local-wins and manually-edited records onto the remote-tip working
+        // tree. For MANUAL we look up the file paths from the local snapshot — the user
+        // can only manually edit a record that already existed locally.
         for ((key, outcome) in outcomes) {
-            if (outcome !is DiffOutcome.TakeLocal) continue
-            val snapshot = localSnapshots[key] ?: continue
-            for ((relPath, content) in snapshot.files) {
-                writeWorkingTreeFile(workingTreePath, relPath, content)
+            when (outcome) {
+                is DiffOutcome.TakeLocal -> {
+                    val snapshot = localSnapshots[key] ?: continue
+                    for ((relPath, content) in snapshot.files) {
+                        writeWorkingTreeFile(workingTreePath, relPath, content)
+                    }
+                }
+                is DiffOutcome.TakeManual -> {
+                    val snapshot = localSnapshots[key]
+                        ?: error("MANUAL resolution for $key but no local snapshot to anchor it")
+                    val paths = snapshot.files.keys
+                    if (paths.size != 1) {
+                        error(
+                            "MANUAL resolution for $key spans ${paths.size} files; " +
+                                "Phase 6 only supports single-file records",
+                        )
+                    }
+                    writeWorkingTreeFile(workingTreePath, paths.single(), outcome.content)
+                }
+                else -> Unit
             }
         }
 
@@ -390,7 +408,14 @@ class RemoteSyncEngine(
                 )
             }
             val resolutions = ConflictSession.listConflicts(session).associate { c ->
-                RecordKey(c.tableName, c.recordUuid) to (c.resolution ?: error("allResolved guard violated"))
+                val choice = c.resolution ?: error("allResolved guard violated")
+                if (choice == ConflictResolution.MANUAL.name && c.manualValueJson == null) {
+                    throw SyncException(
+                        SyncErrorCode.UNRESOLVED_CONFLICTS,
+                        "Conflict ${c.tableName}/${c.recordUuid} is marked MANUAL but has no replacement content.",
+                    )
+                }
+                RecordKey(c.tableName, c.recordUuid) to ResolutionChoice(choice, c.manualValueJson)
             }
             session.state = SessionState.APPLYING.name
             ApplyView(
@@ -467,10 +492,14 @@ class RemoteSyncEngine(
         )
         val mergedOutcomes = baseOutcomes.toMutableMap()
         for ((key, choice) in view.resolutions) {
-            mergedOutcomes[key] = when (choice) {
+            mergedOutcomes[key] = when (choice.resolution) {
                 ConflictResolution.LOCAL.name -> DiffOutcome.TakeLocal
                 ConflictResolution.REMOTE.name -> DiffOutcome.TakeRemote
-                else -> error("Unexpected resolution: $choice")
+                ConflictResolution.MANUAL.name -> DiffOutcome.TakeManual(
+                    choice.manualValueJson
+                        ?: error("MANUAL resolution for $key missing manualValueJson at apply time"),
+                )
+                else -> error("Unexpected resolution: ${choice.resolution}")
             }
         }
 
@@ -572,15 +601,21 @@ class RemoteSyncEngine(
         }
     }
 
-    /** Internal struct passed from the DB-read step into the IO-bound apply step. */
+    /**
+     * Internal struct passed from the DB-read step into the IO-bound apply step. Holds the
+     * resolution choice plus, for MANUAL, the user-edited content. Carrying both here means
+     * the IO step doesn't need to revisit the DB for manual payloads.
+     */
     private data class ApplyView(
         val sessionId: Int,
         val localSha: String,
         val remoteSha: String,
         val branch: String,
         val repoUrl: String,
-        val resolutions: Map<RecordKey, String>,
+        val resolutions: Map<RecordKey, ResolutionChoice>,
     )
+
+    private data class ResolutionChoice(val resolution: String, val manualValueJson: String?)
 
     companion object {
         const val REMOTE_NAME = "origin"

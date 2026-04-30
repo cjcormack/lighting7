@@ -41,6 +41,7 @@ import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.sync.ConflictSession
 import uk.me.cormack.lighting7.sync.Overrides
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.CredentialStore
@@ -61,6 +62,11 @@ class State(val config: ApplicationConfig) {
     private var dataSource: HikariDataSource? = null
     val database = initDatabase()
     val projectManager = ProjectManager(database) { this }
+
+    init {
+        // Must run after initDatabase so the sync_session table exists.
+        ConflictSession.recoverFromCrash(this)
+    }
 
     private var projectChangedJob: Job? = null
 

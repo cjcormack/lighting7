@@ -6,13 +6,16 @@ import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.IntIdTable
 
 /**
- * One conflicting record inside a [DaoSyncSession]. Phase 5 only ever populates
- * `conflictKind = "EDIT_EDIT"`; `EDIT_DELETE` / `DELETE_EDIT` arrive with tombstone
- * support in Phase 7.
+ * One conflicting record inside a [DaoSyncSession]. Today `conflictKind` is always
+ * `"EDIT_EDIT"`; `EDIT_DELETE` / `DELETE_EDIT` arrive with tombstone support later.
  *
  * `localJson` / `remoteJson` / `baseJson` snapshot the canonical-JSON contents at
  * session-open time so resolution remains stable even if the working tree moves
- * underneath us. Phase 6's three-pane diff renders straight from these columns.
+ * underneath us — the three-pane diff renders straight from these columns.
+ *
+ * `manualValueJson` carries the user-edited replacement payload when `resolution =
+ * MANUAL`; the apply path overlays it verbatim onto the working tree. Single-file
+ * records only — multi-file records (scripts) reject MANUAL at the route layer.
  *
  * Machine-local — never serialised.
  */
@@ -24,11 +27,13 @@ object DaoSyncSessionConflicts : IntIdTable("sync_session_conflict") {
     val recordUuid = uuid("record_uuid")
     /** `EDIT_EDIT` only in Phase 5. */
     val conflictKind = varchar("conflict_kind", 32)
-    /** `LOCAL`, `REMOTE`, or null (unresolved). */
+    /** `LOCAL`, `REMOTE`, `MANUAL`, or null (unresolved). */
     val resolution = varchar("resolution", 16).nullable()
     val localJson = text("local_json").nullable()
     val remoteJson = text("remote_json").nullable()
     val baseJson = text("base_json").nullable()
+    /** User-edited replacement content. Required when `resolution = MANUAL`; null otherwise. */
+    val manualValueJson = text("manual_value_json").nullable()
 
     init {
         uniqueIndex(session, targetTable, recordUuid)
@@ -46,4 +51,5 @@ class DaoSyncSessionConflict(id: EntityID<Int>) : IntEntity(id) {
     var localJson by DaoSyncSessionConflicts.localJson
     var remoteJson by DaoSyncSessionConflicts.remoteJson
     var baseJson by DaoSyncSessionConflicts.baseJson
+    var manualValueJson by DaoSyncSessionConflicts.manualValueJson
 }
