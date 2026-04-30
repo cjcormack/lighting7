@@ -132,8 +132,12 @@ Phase 1 writes `1` for both. Rules for future phases:
   `formatVersion`.
 * Truly breaking change → bump both `formatVersion` and `minReader`.
 
-On import, an export with `formatVersion > 1` is rejected (HTTP 422). When
-Phase 5+ migrations land, they live at
+On import (manual fresh-import or post-pull replace), an export with
+`formatVersion > 1` is rejected (HTTP 422). On pull (cloud-sync phase 4), the
+remote `formatVersion.json` is read straight from the fetched git ref
+**before** the working tree is touched (see "Pre-pull formatVersion check"
+under [Remote sync (Phase 4)](#remote-sync-phase-4)) so a too-new repo can't
+corrupt the local working tree. When Phase 5+ migrations land, they live at
 `sync/migrations/V{n}_to_V{n+1}.kt` and run before the importer's
 three-way diff.
 
@@ -301,12 +305,153 @@ JGit calls are blocking and run inside `withContext(Dispatchers.IO) {…}`;
 the snapshot engine wraps that boundary itself, route handlers wrap their
 own log/status calls.
 
+## Remote sync (Phase 4)
+
+Phase 4 turns the local-only working tree into a sharing surface: one project,
+one GitHub repo, push and pull via [JGit][jgit]. The user clicks **Sync now**
+on `/projects/{id}/sync` and a single REST endpoint —
+`POST /api/rest/project/{id}/sync/run` — owns the entire pipeline.
+
+### `sync/run` pipeline
+
+Implemented by
+[`RemoteSyncEngine`](../src/main/kotlin/uk/me/cormack/lighting7/sync/RemoteSyncEngine.kt).
+Inside `Dispatchers.IO`, holding a per-project mutex so concurrent clicks
+serialise:
+
+1. **Validate config**: `sync_configs.repoUrl` non-blank, `enabled = true`. Else
+   400 with `REPO_URL_MISSING` / `SYNC_DISABLED`.
+2. **Resolve PAT** via the [credential store](#auth--credential-storage). Else
+   401 with `MISSING_PAT`.
+3. **Snapshot** local DB → working tree → commit (reuses the phase 3
+   `SnapshotEngine` verbatim — every sync starts by capturing whatever changes
+   the user has made since the last snapshot).
+4. **Configure remote** (`origin` → `repoUrl`). Idempotent and rewrites the URL
+   if a typo was corrected.
+5. **Fetch** `origin/{branch}` with auth. JGit treats "remote exists but branch
+   doesn't" as a transport error; we sniff the message and treat it as
+   `RemoteAbsent` so the first sync into a fresh repo works.
+6. **Pre-pull format check**: read `formatVersion.json` *from the fetched ref*
+   (without checking out) via `JGitClient.readBlob`. If the remote's
+   `formatVersion > SUPPORTED_FORMAT_VERSION`, abort with `FORMAT_TOO_NEW`. The
+   working tree and DB are untouched.
+7. **Classify** the relationship between local HEAD and `origin/{branch}` via
+   `JGitClient.classify`, which returns one of `Equal`, `RemoteAbsent`,
+   `LocalAhead(n)`, `RemoteAhead(n)`, `Diverged(ahead, behind)`.
+8. **Reconcile** based on classification (table below).
+9. **Update `sync_configs`**: `lastSyncedSha = HEAD-after-sync`,
+   `lastSyncedAtMs = now`.
+10. **Hot-reload show** if the just-pulled project happens to be the active
+    one — `ProjectManager.switchProject(currentId)` tears down + rebuilds the
+    show so fixtures, cues, etc. reflect the new DB state immediately.
+
+### History classification → action
+
+| Relation | Action | Outcome |
+|---|---|---|
+| `Equal` | nothing | `NO_OP` |
+| `RemoteAbsent` | regular push (creates the remote branch) | `PUSHED` |
+| `LocalAhead(n)` | regular push | `PUSHED`, `pushed = n` |
+| `RemoteAhead(n)` | `resetHard origin/{branch}` + `replaceFromWorkingTree` | `FAST_FORWARDED`, `pulled = n` |
+| `Diverged(a, b)` | **force push** | `FORCE_PUSHED`, `pushed = a`, `replaced = b` |
+
+### Force-push policy on divergence
+
+Phase 4 deliberately collapses true conflict resolution: when both sides have
+new commits since the last `lastSyncedSha`, the local side **wins** via a force
+push, dropping `b` remote commits. The UI surfaces this with a warning toast
+and the `replaced` count so the user notices that work was overwritten.
+
+This is acceptable for the **solo-multi-machine** case the phase targets — the
+user driving sync is the only writer, so divergence only happens via operator
+error (forgetting to sync before working on machine B). It is **not** an
+acceptable answer for true multi-master use; phase 5 introduces the three-way
+diff and conflict-resolution UX that replaces this branch.
+
+### Pull → DB
+
+A fast-forward step changes the working tree on disk. The DB has to follow.
+We use [`ProjectImporter.replaceFromWorkingTree`](../src/main/kotlin/uk/me/cormack/lighting7/sync/ProjectImporter.kt)
+inside one transaction:
+
+* Validate `project.json`'s UUID matches the existing `DaoProject.uuid` —
+  refuse to clobber a different project by accident.
+* Cascade-delete every child row (cues + their preset/property/effect/trigger
+  children, cue stacks, fxPresets, fxDefinitions, scripts, fixture patches,
+  groups, universe configs, etc.) using the same FK-safe order as the
+  project-delete flow in `routes/projects.kt`.
+* Re-run the per-table import loops binding everything to the existing
+  project row, preserving its int `id` so non-synced FKs (`machine_overrides`,
+  `sync_configs`) survive.
+* Update the project's `name` + `description` from JSON; `isCurrent`, `uuid`,
+  `activeEntryId` are left alone.
+
+`machine_overrides` survive because they're keyed by `(projectId,
+recordUuid, fieldName)` and `recordUuid` is preserved across re-import. The
+user's per-rig ArtNet IPs stay put when remote changes land.
+
+[jgit]: https://www.eclipse.org/jgit/
+
+### Pre-pull `formatVersion.json` check
+
+The check has to happen **before** the working tree is moved. If we
+fast-forwarded first, a too-new repo would corrupt the working tree before we
+could refuse — and the working tree is what the next snapshot+import cycle
+reads. So `JGitClient.readBlob(repo, "refs/remotes/origin/{branch}",
+"formatVersion.json")` reads the version straight from the fetched git
+object, no checkout required. If too new, abort and the working tree is left
+as-is.
+
+## Auth / credential storage
+
+GitHub Personal Access Tokens are credentials and don't belong in
+`local.conf` (which can be checked into the user's dotfiles repo) or in the
+synced DB. The
+[`CredentialStore`](../src/main/kotlin/uk/me/cormack/lighting7/sync/auth/CredentialStore.kt)
+interface abstracts storage; phase 4 ships two implementations:
+
+| Backend | Used when | Notes |
+|---|---|---|
+| `KeyringCredentialStore` | `sync.credentialStore = "keychain"` (default) | macOS Security framework, libsecret on Linux, Windows Credential Manager — wrapped by [java-keyring][jk] (which uses JNA under the hood). Service name `lighting7`, account = the repo URL. |
+| `FileCredentialStore` | `sync.credentialStore = "file"` *or* keychain init failed | AES-GCM-encrypted JSON at `<appDataDir>/credentials.enc`. Key derived from the install UUID + the machine hostname (single SHA-256 round). Defeats casual file-copy leaks; not a real secret store. |
+
+The factory ([`CredentialStoreFactory`](../src/main/kotlin/uk/me/cormack/lighting7/sync/auth/CredentialStoreFactory.kt))
+falls back from keychain to file silently if the native backend isn't
+available (typical on a headless Linux box). The fallback is logged at WARN
+so the choice isn't completely invisible.
+
+Tokens are keyed per-`repoUrl` so two projects pointing at different
+remotes hold different PATs. Changing a project's `repoUrl` invalidates the
+old PAT lookup; the user has to re-enter the token under the new URL.
+
+REST surface (additions in phase 4):
+
+* `PUT /api/rest/project/{id}/sync/credentials` — body `{ pat }`. The repo
+  URL must be set first; the PAT is keyed against it.
+* `DELETE /api/rest/project/{id}/sync/credentials` — clears the entry. No-op
+  if none exists.
+* `GET /api/rest/project/{id}/sync/config` returns `tokenPresent: Boolean` so
+  the UI can render "✓ stored" without round-tripping the secret.
+
+The PAT itself is **never** sent to the client. Rotation = clear + re-enter.
+
+GitHub PAT scope: `repo` is required for private repos. The phase 4 backend
+relies on JGit surfacing a 401 on push/fetch if the scope is missing; a
+proactive scope-validation request is in the phase 4 plan but out of scope
+for v1 (low value vs. the round trip it adds on every set-PAT).
+
+[jk]: https://github.com/javakeyring/java-keyring
+
 ## Sync session lifecycle (forward-looking)
 
 Phase 5+ introduces a `sync_session` row that survives a crash mid-sync.
 The state machine is `FETCHING → CONFLICTS_PENDING → APPLYING → DONE/FAILED`.
-Phase 3 has no equivalent because there's no remote — snapshot is a single
-shot that either commits or short-circuits, no resumable state.
+Phase 4 has no equivalent because the only persisted state across a
+crash is `sync_configs.lastSyncedSha`/`lastSyncedAtMs`, written
+post-success. A crash mid-pipeline leaves the working tree in whatever state
+it was in (snapshot may or may not have committed) and the DB unmodified
+beyond what the importer's transaction has done — re-running `Sync now`
+recovers cleanly.
 
 ## Operational notes
 
@@ -321,6 +466,14 @@ shot that either commits or short-circuits, no resumable state.
   in `build.gradle.kts`. The 7.x line bumps to JDK 17+ which we already meet,
   but 6.10 has a smaller transitive footprint on the jlink runtime used by
   the Windows distribution.
+* **java-keyring version**: pinned to
+  `com.github.javakeyring:java-keyring:1.0.4`. Brings JNA in transitively;
+  no separate JNA dep is declared. Used by the cloud-sync phase 4
+  credential store.
+* **Credential file path**: when `sync.credentialStore = "file"` (or the
+  keychain backend isn't available), PATs are stored at
+  `<appDataDir>/credentials.enc`. The file is created with permissions
+  `0600` on POSIX filesystems.
 * **DB**: SQLite on the lighting7 install path.
 * **Tests**: `src/test/kotlin/uk/me/cormack/lighting7/sync/` covers
   canonical-JSON determinism, round-trip byte-identity, UUID-collision /

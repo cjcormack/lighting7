@@ -96,6 +96,10 @@ dependencies {
     // Pinned to the last 6.x release on Maven Central — the 7.x line bumps to JDK 17+
     // which we already meet, but keeps a smaller transitive footprint on jlink runtimes.
     implementation("org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r")
+
+    // Cross-platform OS-keychain access for storing GitHub PATs (cloud-sync phase 4).
+    // Wraps macOS Security framework, libsecret, and Windows Credential Manager via JNA.
+    implementation("com.github.javakeyring:java-keyring:1.0.4")
 }
 
 // ─── Frontend bundling ─────────────────────────────────────────────────

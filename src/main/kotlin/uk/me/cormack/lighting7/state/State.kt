@@ -42,6 +42,11 @@ import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.sync.Overrides
+import uk.me.cormack.lighting7.sync.auth.CredentialStore
+import uk.me.cormack.lighting7.sync.auth.CredentialStoreFactory
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
 
 private val logger = LoggerFactory.getLogger("State")
@@ -65,6 +70,37 @@ class State(val config: ApplicationConfig) {
     val syncWorkingTreeRoot: Path = config.optionalString("sync.workingTreeRoot")
         ?.let { Paths.get(it) }
         ?: appDataDir().resolve("sync")
+
+    /**
+     * Cloud-sync lifecycle broadcasts. The REST sync-run handler emits into this flow;
+     * each WS handler in `plugins/Sockets.kt` collects per-connection.
+     */
+    private val _cloudSyncEventsFlow = MutableSharedFlow<uk.me.cormack.lighting7.plugins.OutMessage>(
+        replay = 0,
+        extraBufferCapacity = 32,
+    )
+    val cloudSyncEventsFlow: SharedFlow<uk.me.cormack.lighting7.plugins.OutMessage> =
+        _cloudSyncEventsFlow.asSharedFlow()
+
+    fun emitCloudSyncEvent(message: uk.me.cormack.lighting7.plugins.OutMessage) {
+        _cloudSyncEventsFlow.tryEmit(message)
+    }
+
+    /**
+     * GitHub Personal Access Token store for cloud sync. Backend selected by
+     * `sync.credentialStore` (default `keychain`) — see [CredentialStoreFactory] for the
+     * fallback rules. Built lazily after the install row exists so the file fallback can
+     * derive its encryption key from the install UUID.
+     */
+    val credentialStore: CredentialStore by lazy {
+        val backend = config.optionalString("sync.credentialStore")
+        val fallbackPath = appDataDir().resolve("credentials.enc")
+        val installUuid = transaction(database) {
+            DaoInstall.all().firstOrNull()?.uuid?.toString()
+                ?: error("Install row missing — `ensureInstallRow` should have created it on startup.")
+        }
+        CredentialStoreFactory.create(backend, fallbackPath, installUuid)
+    }
 
     // Stored here so [shutdown] can close JmDNS as part of the same teardown sequence
     // that drains the rest of the show; ownership lives with Application bootstrap.

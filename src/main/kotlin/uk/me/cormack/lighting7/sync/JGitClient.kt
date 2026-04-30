@@ -2,9 +2,19 @@ package uk.me.cormack.lighting7.sync
 
 import kotlinx.serialization.Serializable
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.ResetCommand
+import org.eclipse.jgit.api.errors.TransportException
+import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevCommit
+import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
+import org.eclipse.jgit.transport.RefSpec
+import org.eclipse.jgit.transport.RemoteRefUpdate
+import org.eclipse.jgit.transport.URIish
+import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
+import org.eclipse.jgit.treewalk.TreeWalk
+import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -113,6 +123,181 @@ object JGitClient {
         }
     }
 
+    // ─── Remote operations (cloud-sync phase 4) ────────────────────────────
+
+    /**
+     * Idempotently configure a single remote on the repo. If [name] already exists with a
+     * different URL, it's updated in place; the previously stored URL is overwritten so a
+     * user who corrects a typo in the repo URL doesn't have to manually edit `.git/config`.
+     */
+    fun setRemote(repo: Repository, name: String, url: String) {
+        Git(repo).use { git ->
+            val existing = repo.config.getString("remote", name, "url")
+            if (existing == url) return
+            val cmd = if (existing == null) {
+                git.remoteAdd().setName(name).setUri(URIish(url))
+            } else {
+                git.remoteSetUrl().setRemoteName(name).setRemoteUri(URIish(url))
+            }
+            cmd.call()
+        }
+    }
+
+    /**
+     * Fetch [branch] from [remote] using [credentials]. Returns the fetched commit's id (or
+     * null if the remote branch doesn't exist yet — first push will create it). Throws
+     * [GitAuthException] on a 401/403 so callers can map to a clear UI error rather than
+     * showing a generic stack trace.
+     */
+    fun fetch(
+        repo: Repository,
+        remote: String,
+        branch: String,
+        credentials: GitCredentials,
+    ): ObjectId? {
+        Git(repo).use { git ->
+            try {
+                val result = git.fetch()
+                    .setRemote(remote)
+                    .setRefSpecs(RefSpec("+refs/heads/$branch:refs/remotes/$remote/$branch"))
+                    .setCredentialsProvider(credentials.toProvider())
+                    .call()
+                val advertised = result.advertisedRefs.firstOrNull { it.name == "refs/heads/$branch" }
+                return advertised?.objectId
+            } catch (e: TransportException) {
+                // First-push case: the remote exists but doesn't yet have our branch.
+                // JGit treats this as a transport error; we treat it as "ref absent" so the
+                // caller proceeds to push and create the branch.
+                val msg = e.message ?: ""
+                if ("does not have" in msg && "refs/heads/$branch" in msg) {
+                    return null
+                }
+                throw e.toAuthOrRethrow()
+            }
+        }
+    }
+
+    /**
+     * Push [branch] to [remote]. If [force] is true, performs a force update — the caller
+     * must have decided this is the right call (phase 4 does so on diverged history). Returns
+     * a [PushResult] describing the outcome of the single ref update we sent.
+     */
+    fun push(
+        repo: Repository,
+        remote: String,
+        branch: String,
+        credentials: GitCredentials,
+        force: Boolean = false,
+    ): PushResult {
+        Git(repo).use { git ->
+            try {
+                val refSpec = if (force) "+refs/heads/$branch:refs/heads/$branch"
+                              else "refs/heads/$branch:refs/heads/$branch"
+                val results = git.push()
+                    .setRemote(remote)
+                    .setRefSpecs(RefSpec(refSpec))
+                    .setCredentialsProvider(credentials.toProvider())
+                    .setForce(force)
+                    .call()
+                val update = results.firstOrNull()?.remoteUpdates?.firstOrNull()
+                    ?: return PushResult(status = PushStatus.UP_TO_DATE, message = null)
+                return when (update.status) {
+                    RemoteRefUpdate.Status.OK,
+                    RemoteRefUpdate.Status.UP_TO_DATE -> PushResult(PushStatus.OK, update.message)
+                    RemoteRefUpdate.Status.REJECTED_NONFASTFORWARD ->
+                        PushResult(PushStatus.REJECTED_NONFASTFORWARD, update.message)
+                    RemoteRefUpdate.Status.REJECTED_REMOTE_CHANGED ->
+                        PushResult(PushStatus.REJECTED_REMOTE_CHANGED, update.message)
+                    RemoteRefUpdate.Status.REJECTED_NODELETE,
+                    RemoteRefUpdate.Status.REJECTED_OTHER_REASON,
+                    RemoteRefUpdate.Status.NON_EXISTING,
+                    RemoteRefUpdate.Status.AWAITING_REPORT,
+                    RemoteRefUpdate.Status.NOT_ATTEMPTED ->
+                        PushResult(PushStatus.REJECTED_OTHER, update.message ?: update.status.toString())
+                    null -> PushResult(PushStatus.REJECTED_OTHER, "no status")
+                }
+            } catch (e: TransportException) {
+                throw e.toAuthOrRethrow()
+            }
+        }
+    }
+
+    /**
+     * Hard-reset the working tree to [ref]. Used to fast-forward a local branch to its
+     * upstream — JGit's `MergeCommand` won't move HEAD if the branch is checked out and the
+     * working tree differs, so a hard reset is the simpler, less-magical primitive for the
+     * "remote is ancestor of local" case.
+     */
+    fun resetHard(repo: Repository, ref: String) {
+        Git(repo).use { git ->
+            git.reset()
+                .setMode(ResetCommand.ResetType.HARD)
+                .setRef(ref)
+                .call()
+        }
+    }
+
+    /**
+     * Compare two commit-ish refs and return their relationship.
+     *
+     *  * [HistoryRelation.RemoteAbsent] if [remoteRef] doesn't resolve.
+     *  * [HistoryRelation.Equal] if both sides point at the same commit.
+     *  * [HistoryRelation.LocalAhead] if remote is a strict ancestor of local (regular push).
+     *  * [HistoryRelation.RemoteAhead] if local is a strict ancestor of remote (fast-forward).
+     *  * [HistoryRelation.Diverged] otherwise — both have commits the other doesn't.
+     *
+     * The `aheadCount` / `behindCount` counts are absolute commit counts on each side beyond
+     * the merge base, which the UI uses to show "force-pushed N commits".
+     */
+    fun classify(repo: Repository, localRef: String, remoteRef: String): HistoryRelation {
+        val localId = repo.resolve(localRef) ?: return HistoryRelation.RemoteAbsent
+        val remoteId = repo.resolve(remoteRef) ?: return HistoryRelation.RemoteAbsent
+        if (localId == remoteId) return HistoryRelation.Equal
+
+        val localAhead = countAhead(repo, localId, remoteId)
+        val remoteAhead = countAhead(repo, remoteId, localId)
+        return when {
+            localAhead > 0 && remoteAhead == 0 -> HistoryRelation.LocalAhead(localAhead)
+            localAhead == 0 && remoteAhead > 0 -> HistoryRelation.RemoteAhead(remoteAhead)
+            else -> HistoryRelation.Diverged(localAhead, remoteAhead)
+        }
+    }
+
+    /** Read [path] from [ref] as a UTF-8 string, or null if either doesn't exist. */
+    fun readBlob(repo: Repository, ref: String, path: String): String? {
+        val commitId = repo.resolve(ref) ?: return null
+        RevWalk(repo).use { walk ->
+            val commit = walk.parseCommit(commitId)
+            TreeWalk.forPath(repo, path, commit.tree)?.use { tree ->
+                val loader = repo.open(tree.getObjectId(0))
+                val out = ByteArrayOutputStream()
+                loader.copyTo(out)
+                return out.toString(Charsets.UTF_8)
+            }
+        }
+        return null
+    }
+
+    private fun countAhead(repo: Repository, head: ObjectId, base: ObjectId): Int {
+        RevWalk(repo).use { walk ->
+            walk.markStart(walk.parseCommit(head))
+            walk.markUninteresting(walk.parseCommit(base))
+            return walk.count()
+        }
+    }
+
+    private fun TransportException.toAuthOrRethrow(): RuntimeException {
+        val msg = message ?: ""
+        // JGit doesn't expose a structured error type for auth failures — sniff the message.
+        // GitHub's typical response is "not authorized" / "Authentication is required" / 401.
+        val lower = msg.lowercase()
+        val isAuth = "not authorized" in lower
+            || "authentication" in lower
+            || "401" in msg
+            || "403" in msg
+        return if (isAuth) GitAuthException(msg, this) else RuntimeException(msg, this)
+    }
+
     private fun RevCommit.toCommitInfo(): CommitInfo {
         val full = name
         return CommitInfo(
@@ -141,3 +326,48 @@ data class CommitInfo(
     val whenMs: Long,
     val message: String,
 )
+
+/**
+ * Authentication for JGit transport. GitHub Personal Access Tokens are sent as the
+ * password with the literal username `x-access-token` (this is GitHub's documented
+ * placeholder for token-based HTTPS auth).
+ */
+data class GitCredentials(val username: String, val secret: String) {
+    fun toProvider(): UsernamePasswordCredentialsProvider =
+        UsernamePasswordCredentialsProvider(username, secret)
+
+    companion object {
+        /** Build credentials for a GitHub Personal Access Token. */
+        fun forGitHubPat(pat: String): GitCredentials = GitCredentials("x-access-token", pat)
+    }
+}
+
+/**
+ * Result of a [JGitClient.push] call. [PushStatus.OK] covers both first-create and
+ * fast-forward updates; [PushStatus.UP_TO_DATE] means the remote already had everything
+ * we tried to send (a no-op push). The non-fast-forward statuses can only happen on a
+ * regular (non-force) push.
+ */
+data class PushResult(val status: PushStatus, val message: String?)
+
+enum class PushStatus { OK, UP_TO_DATE, REJECTED_NONFASTFORWARD, REJECTED_REMOTE_CHANGED, REJECTED_OTHER }
+
+/**
+ * Result of [JGitClient.classify] — the relationship between two refs from the local
+ * repo's perspective. The `count` fields are commit counts beyond the merge base, used
+ * by the UI to surface "force-pushed N commits" warnings on diverged history.
+ */
+sealed class HistoryRelation {
+    object Equal : HistoryRelation()
+    object RemoteAbsent : HistoryRelation()
+    data class LocalAhead(val ahead: Int) : HistoryRelation()
+    data class RemoteAhead(val behind: Int) : HistoryRelation()
+    data class Diverged(val ahead: Int, val behind: Int) : HistoryRelation()
+}
+
+/**
+ * Thrown by [JGitClient.fetch] / [JGitClient.push] when the remote rejected the
+ * connection on auth grounds. Callers (the REST layer) translate this to a 401 with
+ * `AUTH_FAILED` so the UI can prompt the user to re-enter the PAT.
+ */
+class GitAuthException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)

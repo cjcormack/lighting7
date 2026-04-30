@@ -525,6 +525,39 @@ data class ProjectChangedOutMessage(
     val newProjectName: String
 ) : OutMessage()
 
+// ─── Cloud sync (phase 4) ────────────────────────────────────────────
+
+/**
+ * Lifecycle broadcasts for the unified `POST /sync/run` endpoint. The frontend uses
+ * these to disable the Sync-now button while one is in flight, refresh status / log
+ * panels on completion, and surface toasts. Only emitted on transitions — there is no
+ * streaming progress (single done/fail message is enough for the data volumes we
+ * support; revisit if a project ever feels unresponsive).
+ */
+@Serializable
+@SerialName("cloudSyncStarted")
+data class CloudSyncStartedOutMessage(val projectId: Int) : OutMessage()
+
+@Serializable
+@SerialName("cloudSyncDone")
+data class CloudSyncDoneOutMessage(
+    val projectId: Int,
+    val outcome: String,
+    val headSha: String,
+    val pushed: Int,
+    val pulled: Int,
+    val replaced: Int,
+    val message: String,
+) : OutMessage()
+
+@Serializable
+@SerialName("cloudSyncFailed")
+data class CloudSyncFailedOutMessage(
+    val projectId: Int,
+    val errorCode: String,
+    val message: String,
+) : OutMessage()
+
 class SocketConnection(val session: WebSocketServerSession) {
     companion object {
         val lastId = AtomicInteger(0)
@@ -737,6 +770,11 @@ fun Application.configureSockets(state: State) {
                         newProjectName = event.newProjectName
                     ))
                 }
+                .launchIn(this)
+
+            // Cloud-sync lifecycle messages — fanned out from State.emitCloudSyncEvent.
+            val cloudSyncJob = state.cloudSyncEventsFlow
+                .onEach { message -> sendSerialized(message) }
                 .launchIn(this)
 
             // Per-connection cueEdit session. At most one open edit at a time per connection;

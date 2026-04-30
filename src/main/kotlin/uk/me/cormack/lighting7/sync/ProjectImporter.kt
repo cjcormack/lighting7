@@ -23,6 +23,7 @@ import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoShowEntry
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
+import uk.me.cormack.lighting7.routes.deleteCueChildren
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
@@ -47,7 +48,7 @@ import java.util.UUID
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
-private const val SUPPORTED_FORMAT_VERSION = 1
+internal const val SUPPORTED_FORMAT_VERSION = 1
 
 /**
  * Import-time error with the HTTP status the route layer should report. Carrying the status
@@ -72,27 +73,7 @@ class ProjectImporter(private val state: State) {
      * `isCurrent = false` on the new project.
      */
     fun import(sourceDir: Path, nameOverride: String?): Result {
-        if (!sourceDir.exists() || !sourceDir.isDirectory()) {
-            throw ImportError.invalidArchive("Folder not found: $sourceDir")
-        }
-
-        // Validate format version up-front so we don't open a transaction we can't commit.
-        val formatPath = sourceDir.resolve("formatVersion.json")
-        if (!formatPath.exists()) {
-            throw ImportError.invalidArchive("Missing formatVersion.json")
-        }
-        val format = canonicalDecode(FormatVersionJson.serializer(), Files.readString(formatPath))
-        if (format.formatVersion > SUPPORTED_FORMAT_VERSION) {
-            throw ImportError.unsupportedFormat(
-                "Repo format v${format.formatVersion} is newer than this install supports (v$SUPPORTED_FORMAT_VERSION). Upgrade lighting7."
-            )
-        }
-
-        val projectPath = sourceDir.resolve("project.json")
-        if (!projectPath.exists()) {
-            throw ImportError.invalidArchive("Missing project.json")
-        }
-        val projectJson = canonicalDecode(ProjectJson.serializer(), Files.readString(projectPath))
+        val (_, projectJson) = loadAndValidateArchive(sourceDir)
         val targetName = nameOverride ?: projectJson.name
         val targetUuid = UUID.fromString(projectJson.uuid)
 
@@ -124,21 +105,7 @@ class ProjectImporter(private val state: State) {
                 uuid = targetUuid
             }
 
-            val scriptMap = importScripts(sourceDir, project)
-            importFxDefinitions(sourceDir, project)
-            val fxPresetMap = importFxPresets(sourceDir, project)
-            val universeMap = importUniverseConfigs(sourceDir, project)
-            val patchMap = importFixturePatches(sourceDir, project, universeMap)
-            importFixtureGroups(sourceDir, project, patchMap)
-            val cueStackMap = importCueStacks(sourceDir, project)
-            val cueMap = importCues(sourceDir, project, cueStackMap)
-            importCuePropertyAssignments(sourceDir, cueMap)
-            importCuePresetApplications(sourceDir, cueMap, fxPresetMap)
-            importCueAdHocEffects(sourceDir, cueMap)
-            importCueTriggers(sourceDir, cueMap, scriptMap)
-            importShowEntries(sourceDir, project, cueStackMap)
-            importCueSlots(sourceDir, project, cueMap, cueStackMap)
-            importControlSurfaceBindings(sourceDir, project)
+            populateProject(sourceDir, project)
 
             Result(
                 projectId = project.id.value,
@@ -146,6 +113,124 @@ class ProjectImporter(private val state: State) {
                 name = targetName,
             )
         }
+    }
+
+    /**
+     * Replace an existing project's data with whatever is on disk at [sourceDir]. Used by
+     * the cloud-sync pull path: the working tree has just been fast-forwarded to a new
+     * remote SHA, and the DB needs to match.
+     *
+     *  * Validates the JSON's project UUID against the existing row — refuses to clobber a
+     *    different project by accident.
+     *  * Cascade-deletes child rows (cues, stacks, presets, etc.) and re-imports them from
+     *    JSON, preserving the existing project row's `id` so non-synced FK references
+     *    (`machine_overrides`, `sync_configs`) survive.
+     *  * Updates the project's name + description from JSON.
+     *
+     * Runs in a single transaction — partial pulls can't leave the DB inconsistent.
+     */
+    fun replaceFromWorkingTree(projectId: Int, sourceDir: Path): Result {
+        val (_, projectJson) = loadAndValidateArchive(sourceDir)
+        val incomingUuid = UUID.fromString(projectJson.uuid)
+
+        return transaction(state.database) {
+            val project = DaoProject.findById(projectId)
+                ?: throw ImportError.invalidArchive("Project $projectId not found")
+            if (project.uuid != incomingUuid) {
+                throw ImportError.conflict(
+                    "Working tree's project UUID ($incomingUuid) does not match local project ${project.id.value} (${project.uuid}). " +
+                        "Refusing to clobber a different project."
+                )
+            }
+
+            // Mirrors the project-delete cascade in `routes/projects.kt` (same FK-safe
+            // order) but leaves the DaoProject row plus non-synced child tables (machine
+            // overrides, sync configs, parked channels) alone.
+            project.activeEntryId = null
+            project.showEntries.forEach { it.delete() }
+            project.cues.forEach { cue ->
+                deleteCueChildren(cue)
+                cue.delete()
+            }
+            project.cueStacks.forEach { it.delete() }
+            project.cueSlots.forEach { it.delete() }
+            project.fxPresets.forEach { preset ->
+                preset.propertyAssignments.forEach { it.delete() }
+                preset.delete()
+            }
+            project.fixtureGroups.forEach { group ->
+                group.members.forEach { it.delete() }
+                group.delete()
+            }
+            project.fixturePatches.forEach { it.delete() }
+            project.universeConfigs.forEach { it.delete() }
+            project.fxDefinitions.forEach { it.delete() }
+            project.scripts.forEach { it.delete() }
+            project.controlSurfaceBindings.forEach { it.delete() }
+
+            project.name = projectJson.name
+            project.description = projectJson.description
+
+            populateProject(sourceDir, project)
+
+            Result(
+                projectId = project.id.value,
+                projectUuid = project.uuid.toString(),
+                name = project.name,
+            )
+        }
+    }
+
+    /**
+     * Common up-front validation for both [import] and [replaceFromWorkingTree]. Reads
+     * `formatVersion.json` and `project.json`, version-checks, and returns the parsed
+     * pair. Done before opening a DB transaction so a malformed archive never
+     * partially-mutates the DB.
+     */
+    private fun loadAndValidateArchive(sourceDir: Path): Pair<FormatVersionJson, ProjectJson> {
+        if (!sourceDir.exists() || !sourceDir.isDirectory()) {
+            throw ImportError.invalidArchive("Folder not found: $sourceDir")
+        }
+        val formatPath = sourceDir.resolve("formatVersion.json")
+        if (!formatPath.exists()) {
+            throw ImportError.invalidArchive("Missing formatVersion.json")
+        }
+        val format = canonicalDecode(FormatVersionJson.serializer(), Files.readString(formatPath))
+        if (format.formatVersion > SUPPORTED_FORMAT_VERSION) {
+            throw ImportError.unsupportedFormat(
+                "Repo format v${format.formatVersion} is newer than this install supports (v$SUPPORTED_FORMAT_VERSION). Upgrade lighting7."
+            )
+        }
+        val projectPath = sourceDir.resolve("project.json")
+        if (!projectPath.exists()) {
+            throw ImportError.invalidArchive("Missing project.json")
+        }
+        val projectJson = canonicalDecode(ProjectJson.serializer(), Files.readString(projectPath))
+        return format to projectJson
+    }
+
+    /**
+     * Read every per-table directory under [sourceDir] and create the corresponding rows
+     * under [project]. Shared by both the fresh-import path and the working-tree-replace
+     * path; the topological order matters because parent rows must exist before children
+     * dereference them through the maps returned by each step.
+     */
+    private fun populateProject(sourceDir: Path, project: DaoProject) {
+        val scriptMap = importScripts(sourceDir, project)
+        importFxDefinitions(sourceDir, project)
+        val fxPresetMap = importFxPresets(sourceDir, project)
+        val universeMap = importUniverseConfigs(sourceDir, project)
+        val patchMap = importFixturePatches(sourceDir, project, universeMap)
+        importFixtureGroups(sourceDir, project, patchMap)
+        val cueStackMap = importCueStacks(sourceDir, project)
+        val cueMap = importCues(sourceDir, project, cueStackMap)
+        importCuePropertyAssignments(sourceDir, cueMap)
+        importCuePresetApplications(sourceDir, cueMap, fxPresetMap)
+        importCueAdHocEffects(sourceDir, cueMap)
+        importCueTriggers(sourceDir, cueMap, scriptMap)
+        importShowEntries(sourceDir, project, cueStackMap)
+        importCueSlots(sourceDir, project, cueMap, cueStackMap)
+        importControlSurfaceBindings(sourceDir, project)
     }
 
     private fun importScripts(dir: Path, project: DaoProject): Map<UUID, DaoScript> {
