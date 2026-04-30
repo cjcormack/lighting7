@@ -10,4 +10,9 @@
 	<logger name="org.eclipse.jetty" level="WARN"/>
 	<logger name="io.netty" level="WARN"/>
 	<logger name="uk.me.cormack.lighting7.midi" level="debug"/>
+	<!-- JmDNS 3.5.x does not understand DNS record type 65 (HTTPS/SVCB, RFC 9460);
+	     suppress the harmless WARN it emits whenever a browser or the system
+	     mDNSResponder asks for one. -->
+	<logger name="javax.jmdns.impl.DNSIncoming" level="ERROR"/>
+	<logger name="javax.jmdns.impl.constants.DNSRecordType" level="ERROR"/>
 </configuration>
