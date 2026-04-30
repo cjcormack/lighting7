@@ -115,7 +115,7 @@ class ArtNetController(override val universe: Universe, val address: String? = n
     }
 
     override fun getValue(channelNo: Int): UByte {
-        return currentValues[channelNo] ?: 0u
+        return _parkedChannels[channelNo] ?: currentValues[channelNo] ?: 0u
     }
 
     fun registerListener(listener: ChannelChangeListener) {

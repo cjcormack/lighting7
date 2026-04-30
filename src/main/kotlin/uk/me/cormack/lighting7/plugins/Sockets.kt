@@ -925,11 +925,19 @@ fun Application.configureSockets(state: State) {
                     when (val message = converter?.deserialize<InMessage>(frame)) {
                         is PingInMessage -> {}
                         is ChannelStateInMessage -> {
-                            val currentValues = state.show.fixtures.controllers.map { controller ->
-                                controller.currentValues.map {
-                                    ChannelState(controller.universe.universe, it.key, it.value)
+                            // Overlay parked values onto currentValues — a parked channel outputs
+                            // its parked value to DMX regardless of what's in currentValues, so
+                            // clients should see the same value the fixture is actually emitting.
+                            val currentValues = state.show.fixtures.controllers.flatMap { controller ->
+                                val parked = controller.parkedChannels
+                                controller.currentValues.map { (channelNo, value) ->
+                                    ChannelState(
+                                        controller.universe.universe,
+                                        channelNo,
+                                        parked[channelNo] ?: value,
+                                    )
                                 }
-                            }.flatten()
+                            }
 
                             sendSerialized<OutMessage>(ChannelStateOutMessage(currentValues))
                         }
