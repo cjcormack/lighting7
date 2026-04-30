@@ -20,7 +20,7 @@ private const val COMPILER_PORT = 8321
 private val READINESS_TIMEOUT_MS: Long = run {
     val raw = System.getProperty("lighting7.readinessTimeoutMs")
         ?: System.getenv("LIGHTING7_READINESS_TIMEOUT_MS")
-    raw?.toLongOrNull()?.takeIf { it > 0 } ?: 60_000L
+    raw?.toLongOrNull()?.takeIf { it > 0 } ?: 600_000L
 }
 
 /** Marker used to resolve the launcher's own JAR / classpath via [Class.protectionDomain]. */
