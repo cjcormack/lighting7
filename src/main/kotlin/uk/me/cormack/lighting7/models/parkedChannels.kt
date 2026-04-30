@@ -10,6 +10,7 @@ object DaoParkedChannels : IntIdTable("parked_channels") {
     val universe = integer("universe")
     val channel = integer("channel")
     val value = integer("value")
+    val uuid = uuid("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, universe, channel)
@@ -23,4 +24,5 @@ class DaoParkedChannel(id: EntityID<Int>) : IntEntity(id) {
     var universe by DaoParkedChannels.universe
     var channel by DaoParkedChannels.channel
     var value by DaoParkedChannels.value
+    var uuid by DaoParkedChannels.uuid
 }

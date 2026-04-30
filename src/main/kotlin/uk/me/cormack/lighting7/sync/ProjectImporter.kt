@@ -18,6 +18,7 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFxDefinition
 import uk.me.cormack.lighting7.models.DaoFxPreset
 import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
+import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.DaoScript
@@ -38,6 +39,7 @@ import uk.me.cormack.lighting7.sync.dto.FixturePatchJson
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.FxDefinitionJson
 import uk.me.cormack.lighting7.sync.dto.FxPresetJson
+import uk.me.cormack.lighting7.sync.dto.ParkedChannelJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.dto.ScriptMetaJson
 import uk.me.cormack.lighting7.sync.dto.ShowEntryJson
@@ -145,7 +147,7 @@ class ProjectImporter(private val state: State) {
 
             // Mirrors the project-delete cascade in `routes/projects.kt` (same FK-safe
             // order) but leaves the DaoProject row plus non-synced child tables (machine
-            // overrides, sync configs, parked channels) alone.
+            // overrides, sync configs) alone.
             project.activeEntryId = null
             project.showEntries.forEach { it.delete() }
             project.cues.forEach { cue ->
@@ -164,6 +166,7 @@ class ProjectImporter(private val state: State) {
             }
             project.fixturePatches.forEach { it.delete() }
             project.universeConfigs.forEach { it.delete() }
+            project.parkedChannels.forEach { it.delete() }
             project.fxDefinitions.forEach { it.delete() }
             project.scripts.forEach { it.delete() }
             project.controlSurfaceBindings.forEach { it.delete() }
@@ -230,6 +233,7 @@ class ProjectImporter(private val state: State) {
         importCueTriggers(sourceDir, cueMap, scriptMap)
         importShowEntries(sourceDir, project, cueStackMap)
         importCueSlots(sourceDir, project, cueMap, cueStackMap)
+        importParkedChannels(sourceDir, project)
         importControlSurfaceBindings(sourceDir, project)
     }
 
@@ -582,6 +586,21 @@ class ProjectImporter(private val state: State) {
                 slotIndex = s.slotIndex
                 this.cue = cue
                 this.cueStack = stack
+                this.uuid = uuid
+            }
+            uuid to Unit
+        }
+    }
+
+    private fun importParkedChannels(dir: Path, project: DaoProject) {
+        readDir(dir.resolve("parkedChannels")) { json ->
+            val p = canonicalDecode(ParkedChannelJson.serializer(), json)
+            val uuid = UUID.fromString(p.uuid)
+            DaoParkedChannel.new {
+                this.project = project
+                universe = p.universe
+                channel = p.channel
+                value = p.value
                 this.uuid = uuid
             }
             uuid to Unit

@@ -33,7 +33,13 @@ The repo split is:
   but is unused — a one-shot startup migration moves any prior values
   into `machine_overrides` and nulls the column.
 * **Transient runtime state** (never synced): grand master / blackout state,
-  AI conversation history, parked DMX channels.
+  AI conversation history.
+
+Parked DMX channels are portable: operators use park to pin "house lights at
+50%" or to protect a hot-powered fixture plugged into a dimmer, both of which
+need to follow the project. They sit alongside the rest of the show graph in
+`parkedChannels/{uuid}.json` and three-way diff with the same record-level
+semantics as cues or fixture patches.
 
 ## Repo layout (Phase 1)
 
@@ -57,6 +63,7 @@ fixtureGroups/{uuid}.json      # members embedded inline
 fxPresets/{uuid}.json          # propertyAssignments embedded inline
 fxDefinitions/{uuid}.json
 cueSlots/{uuid}.json
+parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's parked output
 controlSurfaceBindings/{uuid}.json
 scripts/{uuid}.kts             # raw Kotlin script body for git-friendly diffs
 scripts/{uuid}.meta.json       # metadata sidecar (name, scriptType)

@@ -23,6 +23,7 @@ import uk.me.cormack.lighting7.sync.dto.FxDefinitionJson
 import uk.me.cormack.lighting7.sync.dto.FxPresetJson
 import uk.me.cormack.lighting7.sync.dto.FxPresetPropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
+import uk.me.cormack.lighting7.sync.dto.ParkedChannelJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.dto.ScriptMetaJson
 import uk.me.cormack.lighting7.sync.dto.ShowEntryJson
@@ -54,6 +55,7 @@ import java.util.UUID
  * /fxPresets/{uuid}.json           -- propertyAssignments embedded inline
  * /fxDefinitions/{uuid}.json
  * /cueSlots/{uuid}.json
+ * /parkedChannels/{uuid}.json
  * /controlSurfaceBindings/{uuid}.json
  * /scripts/{uuid}.kts              -- raw script body for git-friendly diffs
  * /scripts/{uuid}.meta.json
@@ -214,6 +216,18 @@ class ProjectExporter(private val state: State) {
                     slotIndex = s.slotIndex,
                     cueUuid = s.cue?.uuid?.toString(),
                     cueStackUuid = s.cueStack?.uuid?.toString(),
+                )
+            }
+
+            count += writeAll(
+                targetDir, "parkedChannels", project.parkedChannels.toList(),
+                ParkedChannelJson.serializer(), { it.uuid },
+            ) { p ->
+                ParkedChannelJson(
+                    uuid = p.uuid.toString(),
+                    universe = p.universe,
+                    channel = p.channel,
+                    value = p.value,
                 )
             }
 

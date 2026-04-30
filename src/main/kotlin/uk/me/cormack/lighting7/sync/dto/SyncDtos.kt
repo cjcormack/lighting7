@@ -229,6 +229,23 @@ data class CueSlotJson(
     val cueStackUuid: String? = null,
 )
 
+/**
+ * Parked DMX channel — a channel locked at a fixed output value that overrides every other
+ * source. Parking is portable show content: operators routinely use it to pin "house lights at
+ * 50%" or to protect a channel that drives a hard-powered fixture plugged into a dimmer, both
+ * of which travel with the project.
+ *
+ * `(universe, channel)` is the natural key on disk and in the DB unique index; `uuid` exists
+ * solely to give the sync engine a stable record identity across renames-of-value.
+ */
+@Serializable
+data class ParkedChannelJson(
+    val uuid: String,
+    val universe: Int,
+    val channel: Int,
+    val value: Int,
+)
+
 @Serializable
 data class ControlSurfaceBindingJson(
     val uuid: String,

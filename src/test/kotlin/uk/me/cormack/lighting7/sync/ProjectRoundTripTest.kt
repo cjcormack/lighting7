@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFxDefinition
 import uk.me.cormack.lighting7.models.DaoFxPreset
 import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
+import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoShowEntry
@@ -351,6 +352,17 @@ class ProjectRoundTripTest {
         // cue slot
         DaoCueSlot.new {
             this.project = project; page = 1; slotIndex = 1; cue = cue1
+        }
+
+        // parked channels — two on universe 0, one on universe 1, exercises sort + UUID round-trip
+        DaoParkedChannel.new {
+            this.project = project; universe = 0; channel = 5; value = 128
+        }
+        DaoParkedChannel.new {
+            this.project = project; universe = 0; channel = 12; value = 0
+        }
+        DaoParkedChannel.new {
+            this.project = project; universe = 1; channel = 7; value = 255
         }
 
         // Wire up activeEntryId now that show entries exist.
