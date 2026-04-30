@@ -10,10 +10,14 @@ class InMemoryCredentialStore : CredentialStore {
     private val map = mutableMapOf<String, String>()
     override val backendName: String = "in-memory test store"
 
-    override fun get(repoUrl: String): String? = map[repoUrl]
-    override fun set(repoUrl: String, pat: String) {
-        require(pat.isNotBlank())
-        map[repoUrl] = pat
+    override fun getBlob(key: String): String? = map[key]
+
+    override fun setBlob(key: String, value: String) {
+        require(value.isNotBlank())
+        map[key] = value
     }
-    override fun delete(repoUrl: String) { map.remove(repoUrl) }
+
+    override fun deleteBlob(key: String) {
+        map.remove(key)
+    }
 }

@@ -276,6 +276,13 @@ serialises most of the project graph as canonical JSON. Adding or modifying
 tables/columns has implications for sync correctness — read
 `docs/sync-engineering.md` before changing the schema.
 
+Auth has two paths: **GitHub OAuth** (primary, install-wide identity via
+web flow / device flow, auto-refreshing tokens) and **Personal Access
+Tokens** (Advanced fallback, per-repo). Both flow through `AuthResolver`
+and use the same `CredentialStore` backend (OS keychain by default, with an
+encrypted-file fallback). OAuth requires `sync.oauth.github.clientId` /
+`clientSecret` in `local.conf`; absent that, only the PAT path is offered.
+
 **Decision tree for any DB change:**
 
 1. **Is the new table/column part of a project's portable show content,
@@ -388,7 +395,7 @@ For deeper technical details, see the docs in `docs/`:
 - [WebSocket Protocol](docs/websocket-engineering.md) - Real-time client communication, message types, update flow
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, multi-element fixtures
-- [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow (Phases 1–3 of the cloud-sync plan)
+- [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow, three-way diff + conflict sessions, GitHub OAuth + PAT auth (Phases 1–5 of the cloud-sync plan)
 
 ## Follow-ups
 

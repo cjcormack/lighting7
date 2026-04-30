@@ -299,8 +299,16 @@ All endpoints live under `/api/rest/project/{projectId}/sync/...`:
 |---|---|---|
 | GET | `/config` | `sync_configs` row + `tokenPresent` |
 | PUT | `/config` | Update `repo_url` / `branch` / `enabled` |
-| PUT | `/credentials` | Store a PAT against the configured `repo_url` |
+| PUT | `/credentials` | Store a PAT against the configured `repo_url` (Advanced fallback). |
 | DELETE | `/credentials` | Clear the stored PAT |
+| GET | `/api/rest/oauth/github/identity` | Connected GitHub user (or 404-shape "not connected") |
+| DELETE | `/api/rest/oauth/github/identity` | Clear the install-wide OAuth identity |
+| GET | `/api/rest/oauth/github/start?projectId=…` | Kick off the OAuth web flow |
+| GET | `/api/rest/oauth/github/callback` | OAuth web-flow return path |
+| POST | `/api/rest/oauth/github/device/start` | Begin device flow |
+| POST | `/api/rest/oauth/github/device/poll` | Poll until user authorises |
+| GET | `/api/rest/oauth/github/repositories?query=` | List repos accessible to the App |
+| POST | `/api/rest/oauth/github/repositories` | Create a new repo under the user |
 | GET | `/status` | `{ workingTreePath, hasRepo, head, dirty }` |
 | GET | `/log?limit=50` | Recent `CommitInfo[]` |
 | POST | `/snapshot` | Take a snapshot commit (refused while session active) |
@@ -330,8 +338,10 @@ serialise:
 
 1. **Validate config**: `sync_configs.repoUrl` non-blank, `enabled = true`. Else
    400 with `REPO_URL_MISSING` / `SYNC_DISABLED`.
-2. **Resolve PAT** via the [credential store](#auth--credential-storage). Else
-   401 with `MISSING_PAT`.
+2. **Resolve credentials** via [`AuthResolver`](#github-oauth) — OAuth first,
+   PAT fallback. Else 401 with `MISSING_CREDENTIALS` (or
+   `OAUTH_REAUTH_REQUIRED` if an OAuth identity exists but its refresh token
+   has expired).
 3. **Snapshot** local DB → working tree → commit (reuses the phase 3
    `SnapshotEngine` verbatim — every sync starts by capturing whatever changes
    the user has made since the last snapshot).
@@ -412,41 +422,151 @@ as-is.
 
 ## Auth / credential storage
 
-GitHub Personal Access Tokens are credentials and don't belong in
-`local.conf` (which can be checked into the user's dotfiles repo) or in the
-synced DB. The
+Two paths:
+
+1. **GitHub OAuth (primary)** — install-wide identity established via the web
+   flow or device flow. Auto-refreshing user-to-server tokens; per-repo
+   permission grants chosen by the user when they install the GitHub App.
+2. **Personal Access Tokens (Advanced fallback)** — per-repo PATs for headless
+   rigs, GitHub Enterprise, or as an explicit override. Existing PAT-only
+   configurations from before the OAuth migration keep working unchanged.
+
+### GitHub OAuth
+
+Architecture lives in
+[`sync/auth/oauth/`](../src/main/kotlin/uk/me/cormack/lighting7/sync/auth/oauth/):
+
+| Class | Role |
+|---|---|
+| `OAuthGitHubClient` | Ktor HTTP client for `github.com/login/...` and `api.github.com/user/...`. Methods: `exchangeCode`, `refresh`, `startDeviceFlow`, `pollDeviceFlow`, `getAuthenticatedUser`, `listInstallationRepositories`, `createUserRepo`. |
+| `OAuthTokenStore` | Persists the install-wide identity as a JSON blob in [`CredentialStore`](#credential-store) under `oauth:github:default`. Refresh always overwrites the whole blob so a partial write can't leave a fresh access token paired with a stale refresh token. |
+| `OAuthTokenProvider` | Refresh-on-demand wrapper. A `Mutex` guards the read-refresh-write so concurrent git ops don't race-burn the (single-use) refresh token. Throws `OAuthReauthRequiredException` when the refresh token is itself expired. |
+| `AuthResolver` | The single throat callers use to get JGit credentials. Prefers OAuth, falls back to the per-repo PAT if OAuth is missing or its refresh token has expired. |
+
+Identity metadata mirror table:
+
+```
+oauth_identities      (machine-local; never synced)
+  id PK
+  provider VARCHAR    -- "github"
+  scope VARCHAR       -- "default"
+  github_login VARCHAR
+  github_user_id BIGINT
+  access_expires_at_ms BIGINT?
+  refresh_expires_at_ms BIGINT?
+  connected_at_ms BIGINT
+  UNIQUE(provider, scope)
+```
+
+The row carries only non-secret display metadata so the UI can render
+"Connected as @login" without round-tripping the credential store. Tokens
+themselves never go in this table — only `CredentialStore`.
+
+#### Web flow vs. device flow
+
+* **Web flow** (primary): the user clicks "Connect GitHub" in the sync UI,
+  which hits `GET /api/rest/oauth/github/start`. The backend mints a CSRF
+  cookie carrying the originating `projectId`/`returnTo`, redirects the
+  browser to `github.com/login/oauth/authorize`, and waits for the callback at
+  `/api/rest/oauth/github/callback`. The exchange happens server-side and
+  the user is bounced back to `/projects/{id}/sync` with the identity stored.
+* **Device flow** (fallback): for rigs accessed from a host that doesn't match
+  the GitHub App's registered Callback URL (e.g. iPad on the LAN browsing
+  the studio rig). The UI shows a short user code and a verification URI;
+  the backend polls until GitHub observes the user's authorisation.
+
+Both paths yield the same `StoredOAuthIdentity` blob and the same DB mirror
+row.
+
+#### Refresh
+
+Access tokens last 8 hours; refresh tokens last 6 months and are *single-use*
+(each refresh issues a new pair). The provider refreshes proactively when an
+access token has less than 60 s of remaining lifetime, and is single-flight
+under a Mutex so two concurrent git ops don't race the same refresh.
+
+The `onRefreshed` hook (wired up in `State`) writes the new expiries into the
+`oauth_identities` row so the UI's "expires in" badge stays accurate without
+polling.
+
+#### Configuration
+
+```hocon
+sync.oauth.github {
+    clientId      = ""    # blank disables OAuth — UI offers PAT only
+    clientSecret  = ""    # sensitive; treat local.conf as a secret file
+    publicBaseUrl = ""    # default "http://localhost:8413"; appended with
+                          # /api/rest/oauth/github/callback
+}
+```
+
+GitHub App registration steps (one-time, by the install operator):
+
+* Repository permissions: `Contents: Read & write`, `Metadata: Read-only`,
+  `Administration: Read & write` (the last is needed for the inline
+  "Create new private repo" affordance — drop it if you only ever pick
+  existing repos).
+* Enable "Request user authorization (OAuth) during installation".
+* Enable "Device Flow" so the device-flow fallback works.
+* Set Callback URL to `${publicBaseUrl}/api/rest/oauth/github/callback`.
+* Webhooks: off.
+
+No private key (`.pem`) is needed — that's only required for server-to-server
+operations (acting as the App without a logged-in user), which lighting7
+doesn't do.
+
+### Credential store
+
+The
 [`CredentialStore`](../src/main/kotlin/uk/me/cormack/lighting7/sync/auth/CredentialStore.kt)
-interface abstracts storage; phase 4 ships two implementations:
+interface holds both PATs (under `pat:<repoUrl>`) and the OAuth blob (under
+`oauth:github:default`). The PAT-keyed methods are convenience wrappers over
+the more general `getBlob`/`setBlob`/`deleteBlob`/`containsBlob` API.
 
 | Backend | Used when | Notes |
 |---|---|---|
-| `KeyringCredentialStore` | `sync.credentialStore = "keychain"` (default) | macOS Security framework, libsecret on Linux, Windows Credential Manager — wrapped by [java-keyring][jk] (which uses JNA under the hood). Service name `lighting7`, account = the repo URL. |
+| `KeyringCredentialStore` | `sync.credentialStore = "keychain"` (default) | macOS Security framework, libsecret on Linux, Windows Credential Manager — wrapped by [java-keyring][jk] (which uses JNA under the hood). Service name `lighting7`, account = the blob key. |
 | `FileCredentialStore` | `sync.credentialStore = "file"` *or* keychain init failed | AES-GCM-encrypted JSON at `<appDataDir>/credentials.enc`. Key derived from the install UUID + the machine hostname (single SHA-256 round). Defeats casual file-copy leaks; not a real secret store. |
 
 The factory ([`CredentialStoreFactory`](../src/main/kotlin/uk/me/cormack/lighting7/sync/auth/CredentialStoreFactory.kt))
 falls back from keychain to file silently if the native backend isn't
-available (typical on a headless Linux box). The fallback is logged at WARN
-so the choice isn't completely invisible.
+available (typical on a headless Linux box). The fallback is logged at WARN.
 
-Tokens are keyed per-`repoUrl` so two projects pointing at different
-remotes hold different PATs. Changing a project's `repoUrl` invalidates the
-old PAT lookup; the user has to re-enter the token under the new URL.
+### PAT (Advanced fallback)
 
-REST surface (additions in phase 4):
+PATs are keyed per-`repoUrl` so two projects pointing at different remotes
+can hold different credentials. Changing a project's `repoUrl` invalidates
+the old PAT lookup; the user has to re-enter the token under the new URL.
+
+REST surface:
 
 * `PUT /api/rest/project/{id}/sync/credentials` — body `{ pat }`. The repo
   URL must be set first; the PAT is keyed against it.
-* `DELETE /api/rest/project/{id}/sync/credentials` — clears the entry. No-op
-  if none exists.
-* `GET /api/rest/project/{id}/sync/config` returns `tokenPresent: Boolean` so
-  the UI can render "✓ stored" without round-tripping the secret.
+* `DELETE /api/rest/project/{id}/sync/credentials` — clears the entry.
+  No-op if none exists.
+* `GET /api/rest/project/{id}/sync/config` returns `tokenPresent: Boolean`
+  so the UI can render "✓ stored" without round-tripping the secret.
 
 The PAT itself is **never** sent to the client. Rotation = clear + re-enter.
 
-GitHub PAT scope: `repo` is required for private repos. The phase 4 backend
-relies on JGit surfacing a 401 on push/fetch if the scope is missing; a
-proactive scope-validation request is in the phase 4 plan but out of scope
-for v1 (low value vs. the round trip it adds on every set-PAT).
+GitHub PAT scope: `repo` is required for private repos. JGit surfaces a 401
+on push/fetch if the scope is missing.
+
+### JGit transport
+
+Both PAT and OAuth user-to-server tokens authenticate identically over
+HTTPS — the username is the literal placeholder `x-access-token`, the
+password is the token. `GitCredentials.forGitHubToken(...)` (formerly
+`forGitHubPat`) builds the JGit credentials provider for either source.
+
+### Error codes
+
+| Code | Mapped HTTP | Cause |
+|---|---|---|
+| `MISSING_CREDENTIALS` | 401 | No OAuth identity AND no PAT for this repo. |
+| `OAUTH_REAUTH_REQUIRED` | 401 | OAuth identity present but refresh token rejected — user must re-connect. |
+| `AUTH_FAILED` | 401 | Credentials present but GitHub rejected the push/fetch. |
+| `MISSING_PAT` | 401 | Legacy alias for `MISSING_CREDENTIALS`; retained for one release. |
 
 [jk]: https://github.com/javakeyring/java-keyring
 

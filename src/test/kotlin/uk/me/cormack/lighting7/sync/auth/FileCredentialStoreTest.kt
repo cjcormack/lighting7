@@ -106,4 +106,38 @@ class FileCredentialStoreTest {
         cs.set("https://github.com/me/repo.git", "ghp_x")
         assertEquals("ghp_x", cs.get("https://github.com/me/repo.git"))
     }
+
+    @Test
+    fun `blob api round trips arbitrary keys`() {
+        val s = store()
+        s.setBlob("oauth:github:default", "{\"accessToken\":\"abc\"}")
+        assertEquals("{\"accessToken\":\"abc\"}", s.getBlob("oauth:github:default"))
+        assertTrue(s.containsBlob("oauth:github:default"))
+    }
+
+    @Test
+    fun `pat api and blob api share the same backing store`() {
+        val s = store()
+        s.set("https://github.com/me/repo.git", "ghp_pat")
+        // PAT entries are accessible via the blob API under the well-known prefix.
+        assertEquals("ghp_pat", s.getBlob(CredentialStore.patKey("https://github.com/me/repo.git")))
+    }
+
+    @Test
+    fun `deleteBlob clears only the named key`() {
+        val s = store()
+        s.setBlob("a", "1")
+        s.setBlob("b", "2")
+        s.deleteBlob("a")
+        assertNull(s.getBlob("a"))
+        assertEquals("2", s.getBlob("b"))
+    }
+
+    @Test
+    fun `blank blob value is rejected`() {
+        try {
+            store().setBlob("k", "")
+            error("expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) { /* expected */ }
+    }
 }

@@ -572,6 +572,21 @@ data class CloudSyncConflictsPendingOutMessage(
     val conflictCount: Int,
 ) : OutMessage()
 
+/**
+ * Broadcast when the install-wide GitHub OAuth identity changes — the user connects,
+ * refreshes (login unchanged but expiry shifts), or disconnects. The sync config UI
+ * uses this to live-update the "Connected as @login" row without polling.
+ */
+@Serializable
+@SerialName("oauthIdentityChanged")
+data class OAuthIdentityChangedOutMessage(
+    val provider: String,
+    val connected: Boolean,
+    val login: String? = null,
+    val accessExpiresAtMs: Long? = null,
+    val refreshExpiresAtMs: Long? = null,
+) : OutMessage()
+
 class SocketConnection(val session: WebSocketServerSession) {
     companion object {
         val lastId = AtomicInteger(0)

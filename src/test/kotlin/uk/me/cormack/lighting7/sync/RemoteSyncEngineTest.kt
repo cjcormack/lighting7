@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
@@ -49,7 +50,7 @@ class RemoteSyncEngineTest {
 
         state = State(testAppConfig("sync.workingTreeRoot" to workingRoot.toString()))
         credentialStore = InMemoryCredentialStore()
-        engine = RemoteSyncEngine(state, credentialStore)
+        engine = RemoteSyncEngine(state, AuthResolver(credentialStore, tokenStore = null, tokenProvider = null))
     }
 
     @After
@@ -132,14 +133,14 @@ class RemoteSyncEngineTest {
     }
 
     @Test
-    fun `missing PAT yields MISSING_PAT error`() {
+    fun `missing credentials yields MISSING_CREDENTIALS error`() {
         val projectId = seedMinimalProject(state)
         configureSync(projectId, bareRepo.toUri().toString(), pat = null)
         try {
             runSync(projectId)
             fail("expected SyncException")
         } catch (e: SyncException) {
-            assertEquals(SyncErrorCode.MISSING_PAT, e.code)
+            assertEquals(SyncErrorCode.MISSING_CREDENTIALS, e.code)
         }
     }
 

@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
@@ -77,7 +78,7 @@ class RemoteSyncEngineConflictsTest {
             ),
         )
         credsA = InMemoryCredentialStore()
-        engineA = RemoteSyncEngine(stateA, credsA)
+        engineA = RemoteSyncEngine(stateA, AuthResolver(credsA, tokenStore = null, tokenProvider = null))
 
         workingRootB = Files.createTempDirectory("lighting7-conflicts-b-")
         stateB = State(
@@ -87,7 +88,7 @@ class RemoteSyncEngineConflictsTest {
             ),
         )
         credsB = InMemoryCredentialStore()
-        engineB = RemoteSyncEngine(stateB, credsB)
+        engineB = RemoteSyncEngine(stateB, AuthResolver(credsB, tokenStore = null, tokenProvider = null))
     }
 
     @After

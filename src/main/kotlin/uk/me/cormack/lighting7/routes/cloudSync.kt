@@ -53,7 +53,7 @@ import java.util.UUID
 internal fun Route.routeApiRestProjectCloudSync(state: State) {
     val workingTree = SyncWorkingTree(state)
     val snapshotEngine = SnapshotEngine(state)
-    val remoteSyncEngine = RemoteSyncEngine(state, state.credentialStore)
+    val remoteSyncEngine = RemoteSyncEngine(state, state.authResolver)
 
     get<ProjectSyncConfigResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->

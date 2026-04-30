@@ -395,17 +395,24 @@ data class CommitInfo(
 )
 
 /**
- * Authentication for JGit transport. GitHub Personal Access Tokens are sent as the
- * password with the literal username `x-access-token` (this is GitHub's documented
- * placeholder for token-based HTTPS auth).
+ * Authentication for JGit transport. GitHub Personal Access Tokens **and** OAuth
+ * user-to-server tokens are both sent as the password with the literal username
+ * `x-access-token` (GitHub's documented placeholder for token-based HTTPS auth).
  */
 data class GitCredentials(val username: String, val secret: String) {
     fun toProvider(): UsernamePasswordCredentialsProvider =
         UsernamePasswordCredentialsProvider(username, secret)
 
     companion object {
-        /** Build credentials for a GitHub Personal Access Token. */
-        fun forGitHubPat(pat: String): GitCredentials = GitCredentials("x-access-token", pat)
+        /**
+         * Build credentials for a GitHub token (PAT or OAuth user-to-server token).
+         * GitHub treats both identically over HTTPS — the username is a literal
+         * placeholder. */
+        fun forGitHubToken(token: String): GitCredentials = GitCredentials("x-access-token", token)
+
+        /** Deprecated alias kept for one release while callers migrate. */
+        @Deprecated("Use forGitHubToken — works for both PAT and OAuth tokens.", ReplaceWith("forGitHubToken(pat)"))
+        fun forGitHubPat(pat: String): GitCredentials = forGitHubToken(pat)
     }
 }
 

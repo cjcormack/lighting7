@@ -1,13 +1,11 @@
 package uk.me.cormack.lighting7.sync.auth
 
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermissions
 import java.security.MessageDigest
 import java.util.Base64
@@ -25,12 +23,12 @@ import javax.crypto.spec.SecretKeySpec
  * launches on a given machine and unique enough to defeat casual file-copy leaks.
  *
  * **This is not a real secret store.** Anyone with read access to both this file and
- * the install table can decrypt the PATs. The threat model is "stop a stolen `.config`
+ * the install table can decrypt the entries. The threat model is "stop a stolen `.config`
  * directory or backed-up disk image from yielding cleartext credentials" — not "defend
  * against an attacker with shell access to the running machine". For higher assurance,
  * point [sync.credentialStore] at "keychain".
  *
- * On-disk format: a single JSON file with `{ url -> base64(iv ‖ ciphertext) }`. Each
+ * On-disk format: a single JSON file with `{ key -> base64(iv ‖ ciphertext) }`. Each
  * entry is encrypted with its own random 12-byte IV under the same key. Posix
  * permissions are set to 0600 on write where the filesystem supports it.
  */
@@ -44,25 +42,25 @@ class FileCredentialStore(
 
     override val backendName: String = "encrypted file ($path)"
 
-    override fun get(repoUrl: String): String? {
+    override fun getBlob(key: String): String? {
         val map = readMap()
-        val cipherText = map[repoUrl] ?: return null
+        val cipherText = map[key] ?: return null
         return decrypt(cipherText)
     }
 
-    override fun contains(repoUrl: String): Boolean = repoUrl in readMap()
+    override fun containsBlob(key: String): Boolean = key in readMap()
 
-    override fun set(repoUrl: String, pat: String) {
-        require(pat.isNotBlank()) { "PAT must not be blank" }
+    override fun setBlob(key: String, value: String) {
+        require(value.isNotBlank()) { "Credential value must not be blank" }
         val map = readMap().toMutableMap()
-        map[repoUrl] = encrypt(pat)
+        map[key] = encrypt(value)
         writeMap(map)
     }
 
-    override fun delete(repoUrl: String) {
+    override fun deleteBlob(key: String) {
         val map = readMap()
-        if (repoUrl !in map) return
-        val updated = map - repoUrl
+        if (key !in map) return
+        val updated = map - key
         writeMap(updated)
     }
 
@@ -118,9 +116,6 @@ class FileCredentialStore(
         }
         Files.move(tmp, path, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
     }
-
-    @Serializable
-    private data class StoredEntry(val ciphertext: String)
 
     companion object {
         private val logger = LoggerFactory.getLogger(FileCredentialStore::class.java)

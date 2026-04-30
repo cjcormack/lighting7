@@ -18,7 +18,9 @@ import uk.me.cormack.lighting7.models.DaoSyncSessionConflicts
 import uk.me.cormack.lighting7.models.DaoSyncState
 import uk.me.cormack.lighting7.models.DaoSyncStates
 import uk.me.cormack.lighting7.state.State
-import uk.me.cormack.lighting7.sync.auth.CredentialStore
+import uk.me.cormack.lighting7.sync.auth.AuthResolver
+import uk.me.cormack.lighting7.sync.auth.MissingCredentialsException
+import uk.me.cormack.lighting7.sync.auth.oauth.OAuthReauthRequiredException
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import java.nio.file.Files
 import java.nio.file.Path
@@ -39,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class RemoteSyncEngine(
     private val state: State,
-    private val credentialStore: CredentialStore,
+    private val authResolver: AuthResolver,
 ) {
 
     private val workingTree = SyncWorkingTree(state)
@@ -47,6 +49,20 @@ class RemoteSyncEngine(
     private val importer = ProjectImporter(state)
 
     private val projectLocks = ConcurrentHashMap<Int, Mutex>()
+
+    /**
+     * Pull credentials for [repoUrl] via [authResolver], translating its typed errors
+     * into the [SyncException] codes the route layer maps to HTTP statuses.
+     */
+    private suspend fun resolveCredentials(repoUrl: String): GitCredentials {
+        return try {
+            authResolver.resolveFor(repoUrl)
+        } catch (e: MissingCredentialsException) {
+            throw SyncException(SyncErrorCode.MISSING_CREDENTIALS, e.message ?: "No GitHub credentials configured for this repository.")
+        } catch (e: OAuthReauthRequiredException) {
+            throw SyncException(SyncErrorCode.OAUTH_REAUTH_REQUIRED, e.message ?: "GitHub OAuth re-authentication required.")
+        }
+    }
 
     suspend fun runSync(
         projectId: Int,
@@ -104,9 +120,7 @@ class RemoteSyncEngine(
             url to cfg.branch
         }
 
-        val pat = credentialStore.get(repoUrl)
-            ?: throw SyncException(SyncErrorCode.MISSING_PAT, "No GitHub Personal Access Token stored for this repository — set one in the sync configuration.")
-        val credentials = GitCredentials.forGitHubPat(pat)
+        val credentials = resolveCredentials(repoUrl)
 
         snapshotEngine.snapshot(projectId, projectUuid, installUuid, installFriendlyName, message = null)
 
@@ -152,7 +166,7 @@ class RemoteSyncEngine(
         val remoteCommitId = try {
             JGitClient.fetch(repo, REMOTE_NAME, branch, credentials)
         } catch (e: GitAuthException) {
-            throw SyncException(SyncErrorCode.AUTH_FAILED, "GitHub rejected the PAT — check it has `repo` scope and isn't expired. ${e.message}", e)
+            throw SyncException(SyncErrorCode.AUTH_FAILED, "GitHub rejected the credentials — check the OAuth identity is connected (or that any PAT has `repo` scope and isn't expired). ${e.message}", e)
         }
 
         val remoteRef = remoteBranchRef(branch)
@@ -390,9 +404,7 @@ class RemoteSyncEngine(
             )
         }
 
-        val pat = credentialStore.get(view.repoUrl)
-            ?: throw SyncException(SyncErrorCode.MISSING_PAT, "No GitHub Personal Access Token stored for this repository.")
-        val credentials = GitCredentials.forGitHubPat(pat)
+        val credentials = resolveCredentials(view.repoUrl)
 
         val workingTreePath = workingTree.pathFor(projectUuid)
         val result = withContext(Dispatchers.IO) {
@@ -439,7 +451,7 @@ class RemoteSyncEngine(
         try {
             JGitClient.fetch(repo, REMOTE_NAME, view.branch, credentials)
         } catch (e: GitAuthException) {
-            throw SyncException(SyncErrorCode.AUTH_FAILED, "GitHub rejected the PAT during apply: ${e.message}", e)
+            throw SyncException(SyncErrorCode.AUTH_FAILED, "GitHub rejected the credentials during apply: ${e.message}", e)
         }
 
         val localSnapshots = RecordHasher.fromRef(repo, view.localSha)
@@ -610,7 +622,19 @@ data class AbortResult(val sessionId: Int)
  * statuses inside the route layer (see [toHttpStatus]).
  */
 enum class SyncErrorCode {
-    REPO_URL_MISSING, SYNC_DISABLED, MISSING_PAT, AUTH_FAILED,
+    REPO_URL_MISSING, SYNC_DISABLED,
+    /** No GitHub credentials of any kind (OAuth or PAT) configured for this repo. */
+    MISSING_CREDENTIALS,
+    /**
+     * Legacy alias for [MISSING_CREDENTIALS]; retained for one release so existing UIs
+     * that branch on this code keep working. New code should branch on
+     * [MISSING_CREDENTIALS] / [OAUTH_REAUTH_REQUIRED].
+     */
+    @Deprecated("Use MISSING_CREDENTIALS or OAUTH_REAUTH_REQUIRED.")
+    MISSING_PAT,
+    /** OAuth identity present but the refresh token is rejected — user must re-connect. */
+    OAUTH_REAUTH_REQUIRED,
+    AUTH_FAILED,
     FORMAT_TOO_NEW, PUSH_REJECTED, NO_REPO,
     SESSION_PENDING, SESSION_NOT_FOUND, SESSION_STALE, UNRESOLVED_CONFLICTS,
 }
@@ -618,10 +642,13 @@ enum class SyncErrorCode {
 class SyncException(val code: SyncErrorCode, message: String, cause: Throwable? = null) :
     RuntimeException(message, cause)
 
+@Suppress("DEPRECATION")
 fun SyncErrorCode.toHttpStatus(): HttpStatusCode = when (this) {
     SyncErrorCode.REPO_URL_MISSING, SyncErrorCode.SYNC_DISABLED, SyncErrorCode.NO_REPO ->
         HttpStatusCode.BadRequest
-    SyncErrorCode.MISSING_PAT, SyncErrorCode.AUTH_FAILED -> HttpStatusCode.Unauthorized
+    SyncErrorCode.MISSING_CREDENTIALS, SyncErrorCode.MISSING_PAT,
+    SyncErrorCode.OAUTH_REAUTH_REQUIRED, SyncErrorCode.AUTH_FAILED ->
+        HttpStatusCode.Unauthorized
     SyncErrorCode.FORMAT_TOO_NEW -> HttpStatusCode.UnprocessableEntity
     SyncErrorCode.UNRESOLVED_CONFLICTS -> HttpStatusCode.UnprocessableEntity
     SyncErrorCode.PUSH_REJECTED, SyncErrorCode.SESSION_PENDING, SyncErrorCode.SESSION_STALE ->

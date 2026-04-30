@@ -42,8 +42,12 @@ import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.sync.Overrides
+import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.CredentialStore
 import uk.me.cormack.lighting7.sync.auth.CredentialStoreFactory
+import uk.me.cormack.lighting7.sync.auth.oauth.OAuthGitHubClient
+import uk.me.cormack.lighting7.sync.auth.oauth.OAuthTokenProvider
+import uk.me.cormack.lighting7.sync.auth.oauth.OAuthTokenStore
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -87,7 +91,9 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
-     * GitHub Personal Access Token store for cloud sync. Backend selected by
+     * GitHub credential store for cloud sync. Holds Personal Access Tokens (per repo
+     * URL) and the install-wide OAuth identity blob (under
+     * [CredentialStore.OAUTH_GITHUB_DEFAULT_KEY]). Backend selected by
      * `sync.credentialStore` (default `keychain`) — see [CredentialStoreFactory] for the
      * fallback rules. Built lazily after the install row exists so the file fallback can
      * derive its encryption key from the install UUID.
@@ -100,6 +106,59 @@ class State(val config: ApplicationConfig) {
                 ?: error("Install row missing — `ensureInstallRow` should have created it on startup.")
         }
         CredentialStoreFactory.create(backend, fallbackPath, installUuid)
+    }
+
+    /**
+     * GitHub OAuth HTTP client. Null if `sync.oauth.github.clientId` is unset — the UI
+     * then offers PAT-only auth. Owns a Ktor CIO engine; closed in [shutdown].
+     */
+    val oauthGitHubClient: OAuthGitHubClient? by lazy {
+        val clientId = config.optionalString("sync.oauth.github.clientId") ?: return@lazy null
+        val clientSecret = config.optionalString("sync.oauth.github.clientSecret")
+        if (clientSecret.isNullOrBlank()) {
+            logger.warn("sync.oauth.github.clientId is set but clientSecret is blank — disabling OAuth path.")
+            return@lazy null
+        }
+        OAuthGitHubClient(clientId = clientId, clientSecret = clientSecret)
+    }
+
+    /** Public base URL the user's browser hits to reach this install (for OAuth callbacks). */
+    val oauthPublicBaseUrl: String
+        get() = config.optionalString("sync.oauth.github.publicBaseUrl")
+            ?.trimEnd('/')
+            ?: "http://localhost:8413"
+
+    /** OAuth identity blob persistence; null when [oauthGitHubClient] is null. */
+    val oauthTokenStore: OAuthTokenStore? by lazy {
+        oauthGitHubClient?.let { OAuthTokenStore(credentialStore) }
+    }
+
+    /**
+     * Refresh-on-demand wrapper used by [AuthResolver]. The `onRefreshed` callback
+     * mirrors the new expiry into the [DaoOAuthIdentities][uk.me.cormack.lighting7.models.DaoOAuthIdentities]
+     * row so the UI's "expires in" badge stays accurate without polling the credential
+     * store.
+     */
+    val oauthTokenProvider: OAuthTokenProvider? by lazy {
+        val client = oauthGitHubClient ?: return@lazy null
+        val store = oauthTokenStore ?: return@lazy null
+        OAuthTokenProvider(
+            tokenStore = store,
+            client = client,
+            onRefreshed = { identity ->
+                transaction(database) {
+                    DaoOAuthIdentity.findGithubDefault()?.let {
+                        it.accessExpiresAtMs = identity.accessExpiresAtMs
+                        it.refreshExpiresAtMs = identity.refreshExpiresAtMs
+                    }
+                }
+            },
+        )
+    }
+
+    /** Single resolver instance shared by the sync engine and route handlers. */
+    val authResolver: AuthResolver by lazy {
+        AuthResolver(credentialStore, oauthTokenStore, oauthTokenProvider)
     }
 
     // Stored here so [shutdown] can close JmDNS as part of the same teardown sequence
@@ -406,6 +465,8 @@ class State(val config: ApplicationConfig) {
         runCatching { mdnsRegistration?.close() }
         mdnsRegistration = null
 
+        runCatching { oauthGitHubClient?.close() }
+
         runCatching { projectManager.show.close() }
 
         runCatching { ds.close() }
@@ -501,6 +562,7 @@ class State(val config: ApplicationConfig) {
                 DaoInstalls, DaoMachineOverrides,
                 DaoSyncConfigs,
                 DaoSyncStates, DaoSyncSessions, DaoSyncSessionConflicts,
+                DaoOAuthIdentities,
             )
 
             // Drops a legacy index name; both PG and SQLite accept `DROP INDEX IF EXISTS`.

@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.models.DaoSyncState
 import uk.me.cormack.lighting7.models.DaoSyncStates
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
@@ -46,7 +47,7 @@ class SyncStateBookkeepingTest {
 
         state = State(testAppConfig("sync.workingTreeRoot" to workingRoot.toString()))
         credentialStore = InMemoryCredentialStore()
-        engine = RemoteSyncEngine(state, credentialStore)
+        engine = RemoteSyncEngine(state, AuthResolver(credentialStore, tokenStore = null, tokenProvider = null))
     }
 
     @After
