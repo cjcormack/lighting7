@@ -50,7 +50,7 @@ import java.util.UUID
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
-internal const val SUPPORTED_FORMAT_VERSION = 1
+internal const val SUPPORTED_FORMAT_VERSION = 2
 
 /**
  * Import-time error with the HTTP status the route layer should report. Carrying the status
@@ -104,6 +104,9 @@ class ProjectImporter(private val state: State) {
                 description = projectJson.description
                 isCurrent = false
                 activeEntryId = null
+                stageWidthM = projectJson.stageWidthM
+                stageDepthM = projectJson.stageDepthM
+                stageHeightM = projectJson.stageHeightM
                 uuid = targetUuid
             }
 
@@ -173,6 +176,9 @@ class ProjectImporter(private val state: State) {
 
             project.name = projectJson.name
             project.description = projectJson.description
+            project.stageWidthM = projectJson.stageWidthM
+            project.stageDepthM = projectJson.stageDepthM
+            project.stageHeightM = projectJson.stageHeightM
 
             populateProject(sourceDir, project)
 
@@ -346,6 +352,9 @@ class ProjectImporter(private val state: State) {
             sortOrder = p.sortOrder
             stageX = p.stageX
             stageY = p.stageY
+            stageZ = p.stageZ
+            baseYawDeg = p.baseYawDeg
+            basePitchDeg = p.basePitchDeg
             riggingPosition = p.riggingPosition
             beamAngleDeg = p.beamAngleDeg
             gelCode = p.gelCode

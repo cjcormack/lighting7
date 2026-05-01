@@ -86,6 +86,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             val stageError = validateStageMetadata(
                 stageX = request.stageX,
                 stageY = request.stageY,
+                stageZ = request.stageZ,
+                baseYawDeg = request.baseYawDeg,
+                basePitchDeg = request.basePitchDeg,
                 beamAngleDeg = request.beamAngleDeg,
             )
             if (stageError != null) {
@@ -145,6 +148,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.sortOrder = maxSortOrder + 1
                     this.stageX = request.stageX
                     this.stageY = request.stageY
+                    this.stageZ = request.stageZ
+                    this.baseYawDeg = request.baseYawDeg
+                    this.basePitchDeg = request.basePitchDeg
                     this.riggingPosition = normalisedRiggingPosition
                     this.beamAngleDeg = request.beamAngleDeg
                     this.gelCode = normalisedGelCode
@@ -193,6 +199,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             val stageError = validateStageMetadata(
                 stageX = body["stageX"].nullableDouble(),
                 stageY = body["stageY"].nullableDouble(),
+                stageZ = body["stageZ"].nullableDouble(),
+                baseYawDeg = body["baseYawDeg"].nullableDouble(),
+                basePitchDeg = body["basePitchDeg"].nullableDouble(),
                 beamAngleDeg = body["beamAngleDeg"].nullableInt(),
             )
             if (stageError != null) {
@@ -222,6 +231,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
 
                 if ("stageX" in body) patch.stageX = body["stageX"].nullableDouble()
                 if ("stageY" in body) patch.stageY = body["stageY"].nullableDouble()
+                if ("stageZ" in body) patch.stageZ = body["stageZ"].nullableDouble()
+                if ("baseYawDeg" in body) patch.baseYawDeg = body["baseYawDeg"].nullableDouble()
+                if ("basePitchDeg" in body) patch.basePitchDeg = body["basePitchDeg"].nullableDouble()
                 if ("beamAngleDeg" in body) patch.beamAngleDeg = body["beamAngleDeg"].nullableInt()
                 if ("riggingPosition" in body) {
                     patch.riggingPosition = normaliseRiggingPosition(body["riggingPosition"].nullableString())
@@ -333,6 +345,9 @@ data class FixturePatchDto(
     val groups: List<FixturePatchGroupRef>,
     val stageX: Double? = null,
     val stageY: Double? = null,
+    val stageZ: Double? = null,
+    val baseYawDeg: Double? = null,
+    val basePitchDeg: Double? = null,
     val riggingPosition: String? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
@@ -355,6 +370,9 @@ data class CreatePatchRequest(
     val groupName: String? = null,
     val stageX: Double? = null,
     val stageY: Double? = null,
+    val stageZ: Double? = null,
+    val baseYawDeg: Double? = null,
+    val basePitchDeg: Double? = null,
     val riggingPosition: String? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
@@ -371,6 +389,9 @@ data class CreatePatchRequest(
 private val METADATA_ONLY_PUT_KEYS = setOf(
     "stageX",
     "stageY",
+    "stageZ",
+    "baseYawDeg",
+    "basePitchDeg",
     "riggingPosition",
     "beamAngleDeg",
     "gelCode",
@@ -397,6 +418,9 @@ private fun DaoFixturePatch.toDto(): FixturePatchDto {
         groups = groupRefs,
         stageX = stageX,
         stageY = stageY,
+        stageZ = stageZ,
+        baseYawDeg = baseYawDeg,
+        basePitchDeg = basePitchDeg,
         riggingPosition = riggingPosition,
         beamAngleDeg = beamAngleDeg,
         gelCode = gelCode,
@@ -404,21 +428,40 @@ private fun DaoFixturePatch.toDto(): FixturePatchDto {
 }
 
 /**
- * Range-check the numeric stage-metadata fields. Returns the first error message,
- * or null if every field is acceptable. Trim/uppercase normalisation for the
- * string fields lives in [normaliseRiggingPosition] / [normaliseGelCode].
+ * Range-check the numeric stage-metadata fields, returning the first error message or null.
+ * Coordinates are FOH-relative metres (see `docs/fixtures-engineering.md`).
+ *
+ * Coordinate bounds are intentionally loose (±500 m) — large enough for any real venue,
+ * tight enough to catch unit mistakes (mm, pixels). String-field normalisation lives in
+ * [normaliseRiggingPosition] / [normaliseGelCode].
  */
 private fun validateStageMetadata(
     stageX: Double?,
     stageY: Double?,
+    stageZ: Double?,
+    baseYawDeg: Double?,
+    basePitchDeg: Double?,
     beamAngleDeg: Int?,
 ): String? {
-    if (stageX != null && (stageX < 0.0 || stageX > 100.0)) {
-        return "stageX must be between 0.0 and 100.0"
+    fun checkCoord(name: String, v: Double?): String? {
+        if (v == null) return null
+        if (!v.isFinite()) return "$name must be a finite number"
+        if (v < -500.0 || v > 500.0) return "$name must be between -500.0 and 500.0 metres"
+        return null
     }
-    if (stageY != null && (stageY < 0.0 || stageY > 100.0)) {
-        return "stageY must be between 0.0 and 100.0"
+    fun checkAngle(name: String, v: Double?, min: Double, max: Double): String? {
+        if (v == null) return null
+        if (!v.isFinite()) return "$name must be a finite number"
+        if (v < min || v > max) return "$name must be between $min and $max degrees"
+        return null
     }
+    checkCoord("stageX", stageX)?.let { return it }
+    checkCoord("stageY", stageY)?.let { return it }
+    checkCoord("stageZ", stageZ)?.let { return it }
+    // Yaw/pitch allow a full ±360°/±180° range so a UI can normalise either way without
+    // tripping a 400. Renderers should reduce mod 360.
+    checkAngle("baseYawDeg", baseYawDeg, -360.0, 360.0)?.let { return it }
+    checkAngle("basePitchDeg", basePitchDeg, -180.0, 180.0)?.let { return it }
     if (beamAngleDeg != null && (beamAngleDeg < 2 || beamAngleDeg > 120)) {
         return "beamAngleDeg must be between 2 and 120"
     }

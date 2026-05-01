@@ -153,10 +153,11 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.Created, createOk.status, createOk.bodyAsText())
         val patchId = createOk.body<FixturePatchDto>().id
 
-        // stageX out of range on PUT
+        // stageX out of range on PUT — coordinates are FOH-relative metres with a generous
+        // ±500 m bound, so use a value well past that to exercise rejection.
         val badStageX = client.put("/api/rest/project/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
-            setBody(buildJsonObject { put("stageX", JsonPrimitive(150.0)) })
+            setBody(buildJsonObject { put("stageX", JsonPrimitive(600.0)) })
         }
         assertEquals(HttpStatusCode.BadRequest, badStageX.status)
         assertTrue(badStageX.bodyAsText().contains("stageX"), "error should mention stageX")

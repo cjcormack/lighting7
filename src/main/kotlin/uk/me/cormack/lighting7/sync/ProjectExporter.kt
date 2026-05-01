@@ -111,7 +111,14 @@ class ProjectExporter(private val state: State) {
             writeJson(
                 targetDir.resolve("project.json"),
                 ProjectJson.serializer(),
-                ProjectJson(projectUuid.toString(), project.name, project.description),
+                ProjectJson(
+                    uuid = projectUuid.toString(),
+                    name = project.name,
+                    description = project.description,
+                    stageWidthM = project.stageWidthM,
+                    stageDepthM = project.stageDepthM,
+                    stageHeightM = project.stageHeightM,
+                ),
             )
             var count = 3
 
@@ -166,6 +173,9 @@ class ProjectExporter(private val state: State) {
                     sortOrder = p.sortOrder,
                     stageX = p.stageX,
                     stageY = p.stageY,
+                    stageZ = p.stageZ,
+                    baseYawDeg = p.baseYawDeg,
+                    basePitchDeg = p.basePitchDeg,
                     riggingPosition = p.riggingPosition,
                     beamAngleDeg = p.beamAngleDeg,
                     gelCode = p.gelCode,

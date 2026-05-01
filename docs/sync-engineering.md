@@ -136,15 +136,36 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Phase 1 writes `1` for both. Rules for future phases:
+Current writer emits `formatVersion = 2`, `minReader = 1`. Rules for future
+phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
 * New required field, removed field, or semantic change → bump
   `formatVersion`.
 * Truly breaking change → bump both `formatVersion` and `minReader`.
 
+### Version 2 — FOH stage geometry
+
+Bumped when the FOH 3D stage view landed. Additive changes only; `minReader`
+stayed at `1` because v1 readers tolerate the new optional fields via
+`ignoreUnknownKeys`. Specifically:
+
+* `FixturePatchJson` gained `stageZ` (depth, metres), `baseYawDeg`,
+  `basePitchDeg` — see `docs/fixtures-engineering.md` for the FOH-relative
+  coordinate system. The pre-existing `stageX` / `stageY` fields are
+  reinterpreted as **metres** in the same coordinate system; before v2 they
+  were a UI-internal 0–100 percentage.
+* `ProjectJson` gained `stageWidthM`, `stageDepthM`, `stageHeightM` —
+  per-venue stage bounds for the renderer.
+
+Reinterpreting `stageX` / `stageY` is the closest thing to a semantic break
+in v2; bumping `formatVersion` makes that explicit even though the wire
+shape is technically backward-compatible. There is no live data migration —
+the project repo this lighting rig was bootstrapped against had only test
+coordinates, and they are expected to be re-placed in metres.
+
 On import (manual fresh-import or post-pull replace), an export with
-`formatVersion > 1` is rejected (HTTP 422). On pull (cloud-sync phase 4), the
+`formatVersion > 2` is rejected (HTTP 422). On pull (cloud-sync phase 4), the
 remote `formatVersion.json` is read straight from the fetched git ref
 **before** the working tree is touched (see "Pre-pull formatVersion check"
 under [Remote sync (Phase 4)](#remote-sync-phase-4)) so a too-new repo can't
@@ -203,7 +224,7 @@ The install row is machine-local; it never leaves the local SQLite DB.
 The Phase 1 importer is intentionally restrictive — it's the manual-backup
 case, not multi-master sync. Import:
 
-1. Validates `formatVersion ≤ 1` (422 otherwise).
+1. Validates `formatVersion ≤ 2` (422 otherwise).
 2. Refuses (409) if a project with the imported UUID already exists. The
    operator can delete that project or skip the import; merge is Phase 5+.
 3. Refuses (409) if the imported name collides with an existing project's

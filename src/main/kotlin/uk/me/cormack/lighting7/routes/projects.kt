@@ -123,11 +123,23 @@ internal fun Route.routeApiRestProjects(state: State) {
         // POST / - Create new project
         routingPost {
             val request = call.receive<CreateProjectRequest>()
+            val stageError = validateStageDimensions(
+                request.stageWidthM,
+                request.stageDepthM,
+                request.stageHeightM,
+            )
+            if (stageError != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(stageError))
+                return@routingPost
+            }
             val project = transaction(state.database) {
                 val newProject = DaoProject.new {
                     name = request.name
                     description = request.description
                     isCurrent = false
+                    stageWidthM = request.stageWidthM
+                    stageDepthM = request.stageDepthM
+                    stageHeightM = request.stageHeightM
                 }
 
                 newProject.toDetailDto()
@@ -138,12 +150,24 @@ internal fun Route.routeApiRestProjects(state: State) {
         // PUT /{id} - Update project
         put<ProjectIdResource> { resource ->
             val request = call.receive<UpdateProjectRequest>()
+            val stageError = validateStageDimensions(
+                request.stageWidthM,
+                request.stageDepthM,
+                request.stageHeightM,
+            )
+            if (stageError != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(stageError))
+                return@put
+            }
             val project = transaction(state.database) {
                 val project = DaoProject.findById(resource.id)
                     ?: return@transaction null
 
                 request.name?.let { project.name = it }
                 request.description?.let { project.description = it }
+                request.stageWidthM?.let { project.stageWidthM = it }
+                request.stageDepthM?.let { project.stageDepthM = it }
+                request.stageHeightM?.let { project.stageHeightM = it }
 
                 project.toDetailDto()
             }
@@ -400,18 +424,27 @@ data class ProjectDetailDto(
     val fxPresetCount: Int,
     val cueCount: Int,
     val cueStackCount: Int,
+    val stageWidthM: Double? = null,
+    val stageDepthM: Double? = null,
+    val stageHeightM: Double? = null,
 )
 
 @Serializable
 data class CreateProjectRequest(
     val name: String,
     val description: String? = null,
+    val stageWidthM: Double? = null,
+    val stageDepthM: Double? = null,
+    val stageHeightM: Double? = null,
 )
 
 @Serializable
 data class UpdateProjectRequest(
     val name: String? = null,
     val description: String? = null,
+    val stageWidthM: Double? = null,
+    val stageDepthM: Double? = null,
+    val stageHeightM: Double? = null,
 )
 
 @Serializable
@@ -451,5 +484,26 @@ private fun DaoProject.toDetailDto() = ProjectDetailDto(
     fxPresetCount = fxPresets.count().toInt(),
     cueCount = cues.count().toInt(),
     cueStackCount = cueStacks.count().toInt(),
+    stageWidthM = stageWidthM,
+    stageDepthM = stageDepthM,
+    stageHeightM = stageHeightM,
 )
+
+/**
+ * Range-check the project's stage dimensions. Returns the first error message, or null
+ * if every field is acceptable. Width/depth/height are in metres; values must be finite
+ * and fit a sane physical range.
+ */
+private fun validateStageDimensions(width: Double?, depth: Double?, height: Double?): String? {
+    fun check(name: String, v: Double?, min: Double, max: Double): String? {
+        if (v == null) return null
+        if (!v.isFinite()) return "$name must be a finite number"
+        if (v < min || v > max) return "$name must be between $min and $max metres"
+        return null
+    }
+    check("stageWidthM", width, 0.1, 500.0)?.let { return it }
+    check("stageDepthM", depth, 0.1, 500.0)?.let { return it }
+    check("stageHeightM", height, 0.1, 200.0)?.let { return it }
+    return null
+}
 

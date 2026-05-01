@@ -604,3 +604,72 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `SlenderBeamBarQuadFixture.Mode14Ch` | slender-beam-bar-quad-14ch | 14 | Dimmer, Strobe, MultiElementFixture |
 | `SlenderBeamBarQuadFixture.Mode27Ch` | slender-beam-bar-quad-27ch | 27 | Dimmer, Strobe, MultiElementFixture (full) |
 | `VarytecEasymoveXl60SpotFixture.Mode11Ch` | varytec-easymove-xl-60-spot-11ch | 11 | Dimmer, Position, Strobe (+ colour/gobo wheels) |
+
+## Stage geometry & coordinate system
+
+Fixture patches carry physical-world geometry on `DaoFixturePatches` so the
+frontend can render an FOH (Front-of-House) 3D view. Per-project stage
+dimensions live on `DaoProjects` and bound the rendered scene. Both are
+synced — a project travels with the rig layout it was designed for.
+
+### Coordinate system (FOH-relative)
+
+Right-handed, **Y-up**, units = **metres**. Origin = stage centre at deck
+level. Picked to match an FOH-camera convention so the editor's screen-space
+maps cleanly onto the data axes:
+
+| Axis | + direction               | Notes                                       |
+|------|---------------------------|---------------------------------------------|
+| X    | audience-right            | "stage left" in actor terms                 |
+| Y    | up                        | height above the deck (0 = deck level)      |
+| Z    | into the stage            | away from the audience; downstage is −Z     |
+
+Negative values are valid: `stageX < 0` is audience-left, `stageY < 0` is below
+deck (orchestra pit, traps), `stageZ < 0` is in front of the downstage edge
+(thrust, runway).
+
+Patch validation accepts any finite value in ±500 m on each axis — generous
+enough for any real venue, tight enough to catch unit mistakes (mm, pixels).
+
+### Per-patch fields
+
+Defined on `DaoFixturePatches` and surfaced through `FixturePatchDto`. Every
+field is nullable; an unplaced fixture has `null` on all five.
+
+| Column          | Meaning                                                         |
+|-----------------|-----------------------------------------------------------------|
+| `stage_x`       | X position in metres (FOH-relative — see table above).          |
+| `stage_y`       | Y position in metres (height above deck).                       |
+| `stage_z`       | Z position in metres (depth into the stage).                    |
+| `base_yaw_deg`  | Body rotation around Y. 0° = pointing toward the audience (along −Z); +yaw rotates toward audience-right. Stored ±360°; renderers should reduce mod 360. |
+| `base_pitch_deg`| Body rotation around X. 0° = horizontal; +pitch aims the fixture down. |
+
+Roll (rotation around the beam axis) is intentionally not stored — add it
+when a fixture type actually needs it (asymmetric beams, gobo orientation).
+
+### Static fixtures vs. moving heads
+
+For a static fixture (PAR, wash bar, fresnel), `baseYawDeg` + `basePitchDeg`
+**is** the aim direction — the beam exits along the body's local −Z axis after
+applying yaw and pitch.
+
+For a moving head, the base orientation describes only where the **yoke is
+bolted**. The live aim is the base orientation composed with runtime
+`pan` / `tilt` (already in fixture state and broadcast over the WebSocket
+`channelState` updates). The frontend animates moving-head beams by reading
+both: base from the patch, current pan/tilt from the live channel feed.
+
+### Per-project fields (stage dimensions)
+
+`DaoProjects` carries the stage bounding box so the renderer has scene
+extents to draw the deck and walls. All three are nullable metres; if absent,
+the renderer should fall back to a default stage size.
+
+| Column           | Meaning                                                       |
+|------------------|---------------------------------------------------------------|
+| `stage_width_m`  | Total width along X (audience-left to audience-right).        |
+| `stage_depth_m`  | Total depth along Z (downstage to upstage).                   |
+| `stage_height_m` | Trim height — Y of the rigging plane (typical fixture hang).  |
+
+These are venue-shaped, not fixture-shaped: don't try to derive them from
+patch positions, and don't gate rendering on them being set.

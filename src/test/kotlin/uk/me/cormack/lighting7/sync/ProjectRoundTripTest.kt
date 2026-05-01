@@ -232,6 +232,9 @@ class ProjectRoundTripTest {
             name = "round-trip-rich"
             description = "exercises every synced table"
             isCurrent = true
+            stageWidthM = 12.0
+            stageDepthM = 8.0
+            stageHeightM = 6.0
         }
 
         // 2 universes, 4 patches, 2 groups. The address is now machine-local (Phase 2 cloud sync)
@@ -251,6 +254,16 @@ class ProjectRoundTripTest {
                 universeConfig = if (i <= 2) u0 else u1
                 fixtureTypeKey = "hex-fixture"
                 key = "hex-$i"; displayName = "Hex $i"; startChannel = i * 10; sortOrder = i
+                // Exercise the FOH-relative geometry columns so any future serializer
+                // change has to keep these round-tripping. Mix of populated & null on
+                // patch[3] so the omit-null canonical encoder is exercised too.
+                if (i <= 3) {
+                    stageX = (i - 2).toDouble()      // -1, 0, 1
+                    stageY = 4.5
+                    stageZ = -2.0 + i * 0.5
+                    baseYawDeg = if (i == 1) -90.0 else 45.0
+                    basePitchDeg = if (i == 2) 30.0 else null
+                }
             }
         }
         val groupA = DaoFixtureGroup.new { this.project = project; name = "front-wash" }

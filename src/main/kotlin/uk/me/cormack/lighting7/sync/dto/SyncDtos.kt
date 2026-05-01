@@ -22,7 +22,7 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 
 @Serializable
 data class FormatVersionJson(
-    val formatVersion: Int = 1,
+    val formatVersion: Int = 2,
     val minReader: Int = 1,
 )
 
@@ -45,6 +45,9 @@ data class ProjectJson(
     val uuid: String,
     val name: String,
     val description: String? = null,
+    val stageWidthM: Double? = null,
+    val stageDepthM: Double? = null,
+    val stageHeightM: Double? = null,
 )
 
 @Serializable
@@ -113,6 +116,9 @@ data class FixturePatchJson(
     val sortOrder: Int = 0,
     val stageX: Double? = null,
     val stageY: Double? = null,
+    val stageZ: Double? = null,
+    val baseYawDeg: Double? = null,
+    val basePitchDeg: Double? = null,
     val riggingPosition: String? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
