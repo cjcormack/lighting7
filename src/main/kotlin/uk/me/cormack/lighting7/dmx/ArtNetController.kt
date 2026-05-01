@@ -1,6 +1,5 @@
 package uk.me.cormack.lighting7.dmx
 
-import ch.bildspur.artnet.ArtNetClient
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ticker
@@ -15,10 +14,9 @@ class ArtNetController(
     val address: String? = null,
     val needsRefresh: Boolean = false,
     private val parkSource: ParkSource? = null,
+    private val transport: ArtNetTransport = DefaultArtNetTransport(),
 ): DmxController {
     internal val fadeTickMs = 10
-
-    private val artnet = ArtNetClient()
 
     private val channelChangeChannels: Map<Int, Channel<ChannelUpdatePayload>>
 
@@ -38,7 +36,7 @@ class ArtNetController(
     val totalPacketsSent: Long get() = packetCounter.total
 
     init {
-        artnet.start()
+        transport.start()
 
         channelChangeChannels = HashMap()
 
@@ -162,8 +160,6 @@ class ArtNetController(
     private fun CoroutineScope.runTransmissionChannel() {
         var isClosed = false
 
-        sendCurrentValues()
-
         val ticker = ticker(25)
         val sendEverythingTicker = if (needsRefresh) {
             ticker(1000)
@@ -174,6 +170,13 @@ class ArtNetController(
         var consecutiveErrors = 0
 
         launch(newSingleThreadContext("ArtNetThread-${universe.subnet}-${universe.universe}")) {
+            // Bootstrap on the dedicated ArtNet thread so the very first packet has the
+            // same thread affinity as every subsequent transmit. `sendCurrentValues()` is
+            // the only path to `transport.broadcast/unicastDmx`, so this is also the only
+            // ArtNet packet emitted before the ticker loop spins up — and it overlays the
+            // [parkSource] view, satisfying the park bootstrap safety property.
+            sendCurrentValues()
+
             while(coroutineContext.isActive && !isClosed) {
                 try {
                     select<Unit> {
@@ -215,7 +218,7 @@ class ArtNetController(
                 }
             }
 
-            artnet.stop()
+            transport.stop()
         }
     }
 
@@ -296,9 +299,9 @@ class ArtNetController(
         previousSentDmxData = dmxData
 
         if (address == null) {
-            artnet.broadcastDmx(universe.subnet, universe.universe, dmxData)
+            transport.broadcastDmx(universe.subnet, universe.universe, dmxData)
         } else {
-            artnet.unicastDmx(address, universe.subnet, universe.universe, dmxData)
+            transport.unicastDmx(address, universe.subnet, universe.universe, dmxData)
         }
         packetCounter.record()
 
