@@ -938,10 +938,22 @@ suppresses DB import for that UUID — no importer changes needed.
 ### Tombstone GC (deferred)
 
 Tombstone files are tiny (~25 bytes) but accumulate forever in `sync_state`
-and on disk. GC is deliberately not in Phase 7 — it's a tree-size optimisation,
-not a correctness issue. A future maintenance task can walk `git log -1
---format=%ct -- tombstones/{path}` and prune entries older than (e.g.) 90 days.
-Punted to Phase 8.
+and on disk. GC is deliberately not in Phase 7 — it's a tree-size
+optimisation, not a correctness issue.
+
+A naïve age-based sweep (e.g. "prune `tombstones/{path}` whose `git log -1
+--format=%ct` is older than 90 days") **is not safe in this multi-master
+model**. An install that's been offline longer than the cutoff would, on
+catch-up, see `live record locally / no remote file / no sync_state row`
+and treat the record as a brand-new local insert, resurrecting the
+deletion. That's the exact scenario `RemoteSyncEngineTombstonePropagationTest`
+prevents. Any GC needs a peer-aware low-water mark — for example, an
+extension to `installs.json` recording each install's last-synced
+timestamp, with GC bounded by the *oldest* peer's view of history.
+
+The design sketch (safe shape, where the maintenance loop lives, ordering
+of `git rm` vs. `sync_state` row drop) lives in
+[`docs/plans/followups.md` → `FU-SYNC-TOMBSTONE-GC`](plans/followups.md).
 
 ## Push-rejected retry (Phase 7)
 
@@ -1107,6 +1119,16 @@ same `CommitInfo[]` shape as before, with the added attribution fields described
   `<appDataDir>/credentials.enc`. The file is created with permissions
   `0600` on POSIX filesystems.
 * **DB**: SQLite on the lighting7 install path.
+* **Sync-cycle memory**: peak heap during `runSync` is roughly bounded by
+  2× the working tree's blob size — `JGitClient.walkTree` materialises
+  every blob into a `Map<String, String>` on both the local and remote
+  sides for the three-way diff. At ~5 KB per record this comfortably
+  stays under 50 MB up to ~5000 records, which is well above any expected
+  project size. Stress-test before acting on this number — the
+  benchmark harness shape is sketched in
+  [`docs/plans/followups.md` → `FU-SYNC-JGIT-STRESS-BENCH`](plans/followups.md);
+  the trigger to run it is a real project crossing ~1000 records or a
+  perceptible (>5s) `runSync` wall-clock.
 * **Tests**: `src/test/kotlin/uk/me/cormack/lighting7/sync/` covers
   canonical-JSON determinism, round-trip byte-identity, UUID-collision /
   name-collision refusal, FK-resolution failure rollback, machine-local

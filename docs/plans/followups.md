@@ -149,6 +149,146 @@ not as the source PNG.
 
 ---
 
+## Cloud sync
+
+### `FU-SYNC-TOMBSTONE-GC` — Tombstone garbage collection
+
+**Status**: Trigger (deferred maintenance)
+**Origin**: Cloud-sync Phases 7–8, deferred 2026-05-01
+
+`tombstones/{tableName}/{uuid}.json` files (~25 bytes each) plus their
+matching `sync_state` rows accumulate forever. GC isn't a correctness
+issue, just tree-size optimisation — but the *safety analysis* is the
+load-bearing part, not the home of the loop.
+
+**Why pure age-based GC is unsafe.** A naive 90-day cutoff would resurrect
+records on installs that were offline longer than the cutoff: an install
+catching up after, say, 6 months would see `live record locally, no remote
+file, no sync_state row` and treat it as a brand-new local record (push
+it). That's the exact resurrection scenario the tombstone was preventing
+— see
+[`RemoteSyncEngineTombstonePropagationTest`](../../src/test/kotlin/uk/me/cormack/lighting7/sync/RemoteSyncEngineTombstonePropagationTest.kt).
+
+**Safe shape.** Extend `installs.json` so each install records the commit
+SHA and timestamp it last synced to. GC only tombstones whose path's last
+touch (`git log -1 --format=%ct -- tombstones/{table}/{uuid}.json`) is
+older than the *oldest* install's last-synced timestamp — i.e. older than
+the slowest peer's view of history. That's a `formatVersion` bump (new
+required field on the install registry) plus a migration for repos
+already in flight. A simpler escape hatch: drop installs from
+`installs.json` once they haven't pushed in N months, GC tombstones
+older than every remaining install's last-synced, and document that
+re-introducing a long-dormant install requires a clean clone.
+
+**Where it lives.** A separate `SyncMaintenance` coroutine in
+[`sync/`](../../src/main/kotlin/uk/me/cormack/lighting7/sync/), started
+from `Application.module()` parallel to
+[`AutoSyncScheduler`](../../src/main/kotlin/uk/me/cormack/lighting7/sync/AutoSyncScheduler.kt),
+ticking once per day. Iterates every `sync_configs.enabled = true`
+project (not just auto-sync — manual-sync projects also accumulate
+tombstones). A manual `POST /api/rest/project/{id}/sync/maintenance/gc-tombstones`
+endpoint surfaces the same operation for operator-driven cleanup and
+tests. Tying GC to `AutoSyncScheduler` would skip projects that only
+ever sync on demand.
+
+**Per-project GC steps.** `git log` the `tombstones/` paths, identify
+files older than the low-water mark, then in order: (1) snapshot a
+commit that `git rm`s the tombstone, (2) drop the matching
+[`sync_state`](../../src/main/kotlin/uk/me/cormack/lighting7/models/syncState.kt)
+row. Reverse order would leave a snapshot with no `sync_state` row,
+re-arming carry-forward (`SnapshotEngine.snapshot` only writes
+tombstones for records that *do* have a `sync_state` row), so a peer
+that hadn't yet caught up would resurrect the deletion.
+
+**Trigger to revisit** (any one):
+- `find tombstones -type f | wc -l` exceeds ~1000 on a real project's
+  working tree.
+- Operator reports working-tree size pain or `git gc` failing to
+  reclaim meaningful space.
+- A delete-heavy migration is being planned (e.g. tearing out an old
+  fixture set en masse) where the post-migration tombstone count is
+  predictable and the operator wants a clean tree before pushing.
+
+Below those, the engineering cost (peer low-water in `installs.json`,
+migration, ordering invariants) is out of proportion to the disk
+savings.
+
+### `FU-SYNC-JGIT-STRESS-BENCH` — JGit memory stress benchmark
+
+**Status**: Trigger (signal-driven)
+**Origin**: Cloud-sync plan §"Risks and open items", revisited 2026-05-01
+
+The cloud-sync design doc flagged "JGit memory on large projects with
+thousands of cues" as a Phase-5 stress-test item. Phases 5–8 landed
+without a concrete stress fixture. The dominant memory cost during
+`runSync` is
+[`JGitClient.walkTree`](../../src/main/kotlin/uk/me/cormack/lighting7/sync/JGitClient.kt)
+materialising every blob into a `Map<String, String>` — bounded by ~2×
+the working tree's blob size resident at peak (local + remote snapshots
+plus the merged tree).
+
+For lighting7's actual deployment scale (personal rig: tens of cues per
+project; small touring rig: low hundreds), this is invisible. The risk
+only matters at the speculative "thousands of cues" tier the design doc
+called out.
+
+**Suggested harness shape.**
+- Programmatic seed in a new test under
+  [`src/test/kotlin/uk/me/cormack/lighting7/sync/`](../../src/test/kotlin/uk/me/cormack/lighting7/sync/):
+  N cues × M stacks × K propertyAssignments per cue at realistic content
+  sizes (~5 KB per cue JSON). Sane large N: 1000 / 5000 / 10000.
+- Run a full `RemoteSyncEngine.runSync` cycle against a local bare-repo
+  remote (no network — same pattern as
+  [`JGitRemoteTest`](../../src/test/kotlin/uk/me/cormack/lighting7/sync/JGitRemoteTest.kt)).
+- Measure peak heap via
+  `Runtime.getRuntime().totalMemory() - freeMemory()` snapshots at the
+  obvious phase boundaries (post-fetch, post-diff, post-apply,
+  post-push), or attach a JFR recording for an allocation profile.
+- Output: a one-shot `[stress]` log line per project size with peak
+  heap, runSync wall-clock, and total allocations. Gate on
+  `-Dsync.stress=true` (mirrors the `dmx.benchmark` / `fx.benchmark`
+  precedent forwarded by [`build.gradle.kts`](../../build.gradle.kts)).
+
+**Likely fixes if a threshold is hit.** Stream blobs through `walkTree`
+instead of materialising every body (yield per-record snapshots to the
+diff). Shallow clones (`--depth=1`) for the working tree if
+push-history walking isn't needed. Both are real engineering, hence not
+pre-empted.
+
+**Trigger to revisit** (any one):
+- A real project hits ~1000 synced records (sum across
+  `cues + cuePropertyAssignments + cuePresetApplications + ...`).
+- Operator reports `runSync` taking >5s on a real project.
+- Sync OOMs in the field.
+
+Until one of those fires, the speculative threshold sits in
+[`docs/sync-engineering.md`](../sync-engineering.md) §"Operational
+notes" so future-you knows where to look.
+
+### `FU-SYNC-STREAMING-PROGRESS` — Streaming sync progress (fetch %, conflict count)
+
+**Status**: Trigger (operator feedback)
+**Origin**: Cloud-sync plan §"Risks and open items", revisited 2026-05-01
+
+Today `runSync` emits exactly one terminal WS message per cycle:
+`cloudSyncDone` / `cloudSyncFailed` / `cloudSyncConflictsPending`. The
+design doc deliberately punted intermediate progress (a hypothetical
+`cloudSyncProgress` carrying fetch %, conflicts-discovered count, etc.)
+on the basis that data volumes don't justify the ceremony.
+
+For typical projects the entire `cloudSyncStarted → cloudSyncDone`
+interval is sub-second. UX feels fine; no signal yet that operators
+need more.
+
+**Trigger to revisit**: operator reports the sync UX feels
+unresponsive, **or** a real project's `cloudSyncStarted →
+cloudSyncDone` interval consistently exceeds 5s. Either indicates the
+user is staring at a non-progressing spinner and would benefit from
+intermediate state. The wire-protocol shape will follow whatever the
+actual unmet case demands — no design sketch needed pre-emptively.
+
+---
+
 ## Code quality
 
 ---
