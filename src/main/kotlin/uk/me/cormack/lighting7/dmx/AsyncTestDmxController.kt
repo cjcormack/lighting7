@@ -95,6 +95,12 @@ class AsyncTestDmxController(
     override fun getValue(channelNo: Int): UByte =
         _parkedChannels[channelNo] ?: currentValues[channelNo] ?: 0u
 
+    override fun restoreState(values: Map<Int, UByte>) {
+        for ((channelNo, value) in values) {
+            if (channelNo in 1..512) currentValues[channelNo] = value
+        }
+    }
+
     override fun parkChannel(channelNo: Int, value: UByte) { _parkedChannels[channelNo] = value }
     override fun unparkChannel(channelNo: Int) { _parkedChannels.remove(channelNo) }
     override fun unparkAll() { _parkedChannels.clear() }

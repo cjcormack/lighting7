@@ -30,7 +30,7 @@ data class ParkedChannel(
 class ParkManager(
     private val database: Database,
     private val projectId: Int,
-) {
+) : ParkSource {
     // In-memory park state: universe -> (channel -> value)
     private val parkedChannels = ConcurrentHashMap<Int, ConcurrentHashMap<Int, UByte>>()
 
@@ -131,14 +131,14 @@ class ParkManager(
     /**
      * Check if a channel is parked.
      */
-    fun isParked(universe: Int, channel: Int): Boolean {
+    override fun isParked(universe: Int, channel: Int): Boolean {
         return parkedChannels[universe]?.containsKey(channel) == true
     }
 
     /**
      * Get the parked value for a channel, or null if not parked.
      */
-    fun getParkedValue(universe: Int, channel: Int): UByte? {
+    override fun getParkedValue(universe: Int, channel: Int): UByte? {
         return parkedChannels[universe]?.get(channel)
     }
 

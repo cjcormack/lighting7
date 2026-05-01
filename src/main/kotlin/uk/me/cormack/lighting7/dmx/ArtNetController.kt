@@ -10,7 +10,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 
 @OptIn(DelicateCoroutinesApi::class, ObsoleteCoroutinesApi::class, ExperimentalCoroutinesApi::class)
-class ArtNetController(override val universe: Universe, val address: String? = null, val needsRefresh: Boolean = false): DmxController {
+class ArtNetController(
+    override val universe: Universe,
+    val address: String? = null,
+    val needsRefresh: Boolean = false,
+    private val parkSource: ParkSource? = null,
+): DmxController {
     internal val fadeTickMs = 10
 
     private val artnet = ArtNetClient()
@@ -115,7 +120,19 @@ class ArtNetController(override val universe: Universe, val address: String? = n
     }
 
     override fun getValue(channelNo: Int): UByte {
-        return _parkedChannels[channelNo] ?: currentValues[channelNo] ?: 0u
+        return parkSource?.getParkedValue(universe.universe, channelNo)
+            ?: _parkedChannels[channelNo]
+            ?: currentValues[channelNo]
+            ?: 0u
+    }
+
+    override fun restoreState(values: Map<Int, UByte>) {
+        for ((channelNo, value) in values) {
+            if (channelNo in 1..512) currentValues[channelNo] = value
+        }
+        // No transmission trigger: this is called on a freshly-constructed controller
+        // before its transmission loop starts. The loop's first sendCurrentValues() picks
+        // up the restored buffer, and the 25ms periodic tick covers any later writes.
     }
 
     fun registerListener(listener: ChannelChangeListener) {
@@ -278,9 +295,11 @@ class ArtNetController(override val universe: Universe, val address: String? = n
 
         currentValues.forEach { (channelNo, channelValue) ->
             // Apply park override: parked channels always output their parked value.
+            // ParkSource (ParkManager) is consulted first so a fresh controller picks up
+            // park state without needing an explicit applyToControllers() reapply.
             // Modifiers iterate on the CopyOnWriteArrayList directly — its iterators snapshot
             // internally without allocating a fresh list per frame.
-            val parked = _parkedChannels[channelNo]
+            val parked = parkSource?.getParkedValue(universe.universe, channelNo) ?: _parkedChannels[channelNo]
             val outputValue = if (parked != null) {
                 parked
             } else {

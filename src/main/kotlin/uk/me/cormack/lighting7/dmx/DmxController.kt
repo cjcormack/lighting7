@@ -1,5 +1,17 @@
 package uk.me.cormack.lighting7.dmx
 
+/**
+ * Authoritative source of parked-channel state. Controllers consult a
+ * [ParkSource] at transmit time so park overrides survive controller
+ * reconstruction (fixture reloads, patch edits) without depending on any
+ * explicit re-apply step. The per-controller `_parkedChannels` cache remains
+ * as a fallback for tests / call sites that have no central park manager.
+ */
+interface ParkSource {
+    fun getParkedValue(universe: Int, channel: Int): UByte?
+    fun isParked(universe: Int, channel: Int): Boolean
+}
+
 sealed interface DmxController {
     val universe: Universe
 
@@ -30,6 +42,14 @@ sealed interface DmxController {
     fun setValue(channelNo: Int, channelChange: ChannelChange)
     fun setValue(channelNo: Int, channelValue: UByte, fadeMs: Long = 0)
     fun getValue(channelNo: Int): UByte
+
+    /**
+     * Bulk-replace channel state with a snapshot, bypassing fades and write logs.
+     * Used by fixture-reload paths to carry channel values across a controller swap
+     * (so patching one fixture doesn't zero every other channel on the universe).
+     * Channels absent from the snapshot are left at their current value.
+     */
+    fun restoreState(values: Map<Int, UByte>)
 
     /**
      * Park a channel at a fixed value. The parked value will override

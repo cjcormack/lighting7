@@ -5,6 +5,7 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.dmx.ArtNetController
 import uk.me.cormack.lighting7.dmx.MockDmxController
+import uk.me.cormack.lighting7.dmx.ParkSource
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
@@ -22,8 +23,18 @@ object DbFixtureLoader {
     /**
      * Load all fixture configuration from the database for the given project.
      * Clears existing fixtures and rebuilds from DB state.
+     *
+     * The optional [parkSource] is wired into freshly-constructed controllers so
+     * parked channels survive the rebuild without callers having to remember to
+     * call [uk.me.cormack.lighting7.dmx.ParkManager.applyToControllers] afterwards.
+     * Pass `null` from tests that don't exercise the park subsystem.
      */
-    fun loadFixtures(projectId: Int, fixtures: Fixtures, database: Database) {
+    fun loadFixtures(
+        projectId: Int,
+        fixtures: Fixtures,
+        database: Database,
+        parkSource: ParkSource? = null,
+    ) {
         val (universeConfigs, patches, groups) = transaction(database) {
             val project = DaoProject.findById(projectId)
                 ?: throw IllegalArgumentException("Project $projectId not found")
@@ -68,6 +79,16 @@ object DbFixtureLoader {
         // Build universe lookup: configId → Universe
         val universeByConfigId = mutableMapOf<Int, Universe>()
 
+        // Snapshot existing controllers' channel state so unrelated channels survive
+        // a fixture-and-controller rebuild. Without this, patching or editing one
+        // fixture would zero every channel on the rig — a fresh ArtNetController
+        // initialises all 512 entries of currentValues to 0u. Channels owned by a
+        // since-removed fixture stay at their last value here, which matches what
+        // the rig is actually outputting; the next write (fixture, FX, manual) will
+        // overwrite them.
+        val priorValuesByUniverse: Map<Universe, Map<Int, UByte>> =
+            fixtures.controllers.associate { it.universe to it.currentValues.toMap() }
+
         fixtures.register(removeUnused = true) {
             // 1. Create controllers
             for (config in universeConfigs) {
@@ -75,11 +96,13 @@ object DbFixtureLoader {
                 universeByConfigId[config.id] = universe
 
                 val controller = when (config.controllerType.uppercase()) {
-                    "ARTNET" -> ArtNetController(universe, config.address)
-                    "MOCK" -> MockDmxController(universe)
-                    else -> ArtNetController(universe, config.address) // default to ArtNet
+                    "ARTNET" -> ArtNetController(universe, config.address, parkSource = parkSource)
+                    "MOCK" -> MockDmxController(universe, parkSource = parkSource)
+                    else -> ArtNetController(universe, config.address, parkSource = parkSource) // default to ArtNet
                 }
                 addController(controller)
+
+                priorValuesByUniverse[universe]?.let { controller.restoreState(it) }
             }
 
             // 2. Create fixtures

@@ -64,10 +64,11 @@ class Show(
 
     fun start() {
         try {
-            DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database)
-
-            // Load and apply parked channels after fixtures/controllers are registered
+            // Park state must be loaded before fixture controllers are constructed so
+            // they pick it up via the [ParkSource] hook on their first transmit. The
+            // legacy applyToControllers() call is kept as a belt-and-braces fallback.
             parkManager.loadFromDatabase()
+            DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database, parkSource = parkManager)
             parkManager.applyToControllers(fixtures.controllers)
         } catch (e: Exception) {
             e.printStackTrace()

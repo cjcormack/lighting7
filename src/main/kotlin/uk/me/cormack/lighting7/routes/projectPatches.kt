@@ -166,7 +166,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             }
 
             if (state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
             }
             state.show.fixtures.patchListChanged()
 
@@ -264,7 +264,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
 
             val touchedRebuildKey = body.keys.any { it !in METADATA_ONLY_PUT_KEYS }
             if (touchedRebuildKey && state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
             } else if (state.isCurrentProject(project)) {
                 // Metadata-only edits skip the rebuild, so refresh the cache directly.
                 state.show.fixtures.setPatchMetadata(
@@ -299,7 +299,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             }
 
             if (state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
             }
             state.show.fixtures.patchListChanged()
 

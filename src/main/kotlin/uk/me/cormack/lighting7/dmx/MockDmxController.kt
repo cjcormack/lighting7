@@ -5,7 +5,8 @@ package uk.me.cormack.lighting7.dmx
  * Stores channel values in memory without sending to any hardware.
  */
 class MockDmxController(
-    override val universe: Universe = Universe(0, 0)
+    override val universe: Universe = Universe(0, 0),
+    private val parkSource: ParkSource? = null,
 ) : DmxController {
     private val values = mutableMapOf<Int, UByte>()
     private val _parkedChannels = mutableMapOf<Int, UByte>()
@@ -54,7 +55,16 @@ class MockDmxController(
     }
 
     override fun getValue(channelNo: Int): UByte {
-        return _parkedChannels[channelNo] ?: values[channelNo] ?: 0u
+        return parkSource?.getParkedValue(universe.universe, channelNo)
+            ?: _parkedChannels[channelNo]
+            ?: values[channelNo]
+            ?: 0u
+    }
+
+    override fun restoreState(values: Map<Int, UByte>) {
+        for ((channelNo, value) in values) {
+            this.values[channelNo] = value
+        }
     }
 
     override fun parkChannel(channelNo: Int, value: UByte) {
@@ -83,9 +93,11 @@ class MockDmxController(
 
     /**
      * Get the effective output value for a channel, applying modifiers. For test assertions.
-     * Park takes absolute precedence; then modifiers run over the raw value in registration order.
+     * Park takes absolute precedence (ParkSource first, then per-controller cache); then
+     * modifiers run over the raw value in registration order.
      */
     fun getEffectiveValue(channelNo: Int): UByte {
+        parkSource?.getParkedValue(universe.universe, channelNo)?.let { return it }
         _parkedChannels[channelNo]?.let { return it }
         var v = values[channelNo] ?: 0u
         for (mod in _transmitModifiers) v = mod.modify(universe, channelNo, v)
