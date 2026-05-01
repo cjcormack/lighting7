@@ -160,6 +160,7 @@ class RemoteSyncEngine(
         repoUrl: String,
         branch: String,
         credentials: GitCredentials,
+        attemptsRemaining: Int = MAX_PUSH_RETRIES,
     ): SyncRunResult {
         JGitClient.setRemote(repo, REMOTE_NAME, repoUrl)
 
@@ -183,7 +184,7 @@ class RemoteSyncEngine(
         }
 
         val relation = JGitClient.classify(repo, "HEAD", remoteRef)
-        logger.info("Sync classify for repo={}: {}", repoUrl, relation)
+        logger.info("Sync classify for repo={}: {} (attempts remaining {})", repoUrl, relation, attemptsRemaining)
 
         return when (relation) {
             HistoryRelation.Equal -> {
@@ -194,17 +195,22 @@ class RemoteSyncEngine(
             HistoryRelation.RemoteAbsent -> {
                 val head = JGitClient.head(repo)?.sha
                     ?: error("Cannot push from an unborn repo (snapshot should have created at least one commit).")
-                val pushed = JGitClient.push(repo, REMOTE_NAME, branch, credentials, force = false)
-                ensurePushOk(pushed)
-                bootstrapSyncStateAtHead(projectId, repo, head)
-                SyncRunResult(SyncOutcome.PUSHED, pushed = 1, pulled = 0, replaced = 0, headSha = head, message = "Initial push to remote.", sessionId = null, conflictCount = 0)
+                pushAheadOrRedispatch(
+                    repo, projectId, installUuid, installFriendlyName,
+                    repoUrl, branch, credentials,
+                    headSha = head, ahead = 1, message = "Initial push to remote.",
+                    attemptsRemaining = attemptsRemaining,
+                )
             }
             is HistoryRelation.LocalAhead -> {
                 val head = JGitClient.head(repo)?.sha ?: error("LocalAhead with null HEAD")
-                val pushed = JGitClient.push(repo, REMOTE_NAME, branch, credentials, force = false)
-                ensurePushOk(pushed)
-                bootstrapSyncStateAtHead(projectId, repo, head)
-                SyncRunResult(SyncOutcome.PUSHED, pushed = relation.ahead, pulled = 0, replaced = 0, headSha = head, message = "Pushed ${relation.ahead} commit(s).", sessionId = null, conflictCount = 0)
+                pushAheadOrRedispatch(
+                    repo, projectId, installUuid, installFriendlyName,
+                    repoUrl, branch, credentials,
+                    headSha = head, ahead = relation.ahead,
+                    message = "Pushed ${relation.ahead} commit(s).",
+                    attemptsRemaining = attemptsRemaining,
+                )
             }
             is HistoryRelation.RemoteAhead -> {
                 JGitClient.resetHard(repo, remoteRef)
@@ -214,9 +220,59 @@ class RemoteSyncEngine(
                 SyncRunResult(SyncOutcome.FAST_FORWARDED, pushed = 0, pulled = relation.behind, replaced = 0, headSha = head, message = "Pulled ${relation.behind} commit(s) from remote.", sessionId = null, conflictCount = 0)
             }
             is HistoryRelation.Diverged -> {
-                handleDiverged(repo, projectId, installUuid, installFriendlyName, branch, credentials, relation)
+                handleDiverged(
+                    repo, projectId, installUuid, installFriendlyName, branch, credentials, relation,
+                    attemptsRemaining = attemptsRemaining,
+                )
             }
         }
+    }
+
+    /**
+     * The `LocalAhead` / `RemoteAbsent` push path. On rejection, re-fetch and recurse into
+     * [configureAndExchange] so the new history relation can be handled the same way as
+     * the first attempt — the only difference is the decremented retry budget. This lets a
+     * "we lost the push race; peer's commit means we're now Diverged" scenario fall
+     * through to the full Diverged-with-retry handling, which the user-facing tests
+     * exercise via concurrent runs.
+     */
+    private fun pushAheadOrRedispatch(
+        repo: Repository,
+        projectId: Int,
+        installUuid: UUID,
+        installFriendlyName: String,
+        repoUrl: String,
+        branch: String,
+        credentials: GitCredentials,
+        headSha: String,
+        ahead: Int,
+        message: String,
+        attemptsRemaining: Int,
+    ): SyncRunResult {
+        val pushed = JGitClient.push(repo, REMOTE_NAME, branch, credentials, force = false)
+        if (!pushIsRejected(pushed)) {
+            ensurePushOk(pushed)
+            bootstrapSyncStateAtHead(projectId, repo, headSha)
+            return SyncRunResult(
+                SyncOutcome.PUSHED, pushed = ahead, pulled = 0, replaced = 0,
+                headSha = headSha, message = message, sessionId = null, conflictCount = 0,
+            )
+        }
+        if (attemptsRemaining <= 0) {
+            throw SyncException(
+                SyncErrorCode.PUSH_REJECTED,
+                "Remote rejected the push after $MAX_PUSH_RETRIES attempts: ${pushed.message ?: pushed.status}.",
+            )
+        }
+        logger.info(
+            "LocalAhead push rejected ({}); re-classifying with attempts remaining {}",
+            pushed.message ?: pushed.status, attemptsRemaining - 1,
+        )
+        return configureAndExchange(
+            repo, projectId, installUuid, installFriendlyName,
+            repoUrl, branch, credentials,
+            attemptsRemaining = attemptsRemaining - 1,
+        )
     }
 
     private fun handleDiverged(
@@ -227,6 +283,7 @@ class RemoteSyncEngine(
         branch: String,
         credentials: GitCredentials,
         relation: HistoryRelation.Diverged,
+        attemptsRemaining: Int,
     ): SyncRunResult {
         val remoteRef = remoteBranchRef(branch)
         val localSha = JGitClient.head(repo)?.sha ?: error("Diverged with null HEAD")
@@ -235,15 +292,12 @@ class RemoteSyncEngine(
 
         val localSnapshots = RecordHasher.fromRef(repo, localSha)
         val remoteSnapshots = RecordHasher.fromRef(repo, remoteSha)
-        val syncStateHashes = transaction(state.database) {
-            DaoSyncState.find { DaoSyncStates.project eq projectId }
-                .associate { RecordKey(it.tableName, it.recordUuid) to it.lastSyncedHash }
-        }
+        val syncStateMeta = readSyncStateMeta(projectId)
 
         val outcomes = ThreeWayDiff.compute(
-            localSnapshots.mapValues { it.value.hash },
-            remoteSnapshots.mapValues { it.value.hash },
-            syncStateHashes,
+            localSnapshots.mapValues { it.value.toMeta() },
+            remoteSnapshots.mapValues { it.value.toMeta() },
+            syncStateMeta,
         )
 
         val conflictKeys = outcomes
@@ -251,37 +305,11 @@ class RemoteSyncEngine(
             .map { it.key }
 
         if (conflictKeys.isNotEmpty()) {
-            val baseSnapshots = baseSha?.let { RecordHasher.fromRef(repo, it) } ?: emptyMap()
-            val sessionId = transaction(state.database) {
-                val project = DaoProject.findById(projectId)
-                    ?: error("Project $projectId vanished mid-sync")
-                val rows = conflictKeys.map { key ->
-                    val kind = (outcomes[key] as DiffOutcome.Conflict).kind.name
-                    ConflictRow(
-                        tableName = key.tableName,
-                        recordUuid = key.uuid,
-                        conflictKind = kind,
-                        localJson = localSnapshots[key]?.canonicalJsonForDisplay(),
-                        remoteJson = remoteSnapshots[key]?.canonicalJsonForDisplay(),
-                        baseJson = baseSnapshots[key]?.canonicalJsonForDisplay(),
-                    )
-                }
-                ConflictSession.open(project, localSha, remoteSha, baseSha, rows).id.value
-            }
-            state.emitCloudSyncEvent(
-                uk.me.cormack.lighting7.plugins.CloudSyncConflictsPendingOutMessage(
-                    projectId = projectId,
-                    sessionId = sessionId,
-                    conflictCount = conflictKeys.size,
-                ),
-            )
-            return SyncRunResult(
-                outcome = SyncOutcome.CONFLICTS_PENDING,
-                pushed = 0, pulled = 0, replaced = 0,
-                headSha = localSha,
-                message = "Found ${conflictKeys.size} conflict(s); resolve them in the UI to continue.",
-                sessionId = sessionId,
-                conflictCount = conflictKeys.size,
+            return openConflictSessionFor(
+                repo, projectId,
+                outcomes, conflictKeys,
+                localSnapshots, remoteSnapshots, baseSha,
+                localSha, remoteSha,
             )
         }
 
@@ -292,13 +320,33 @@ class RemoteSyncEngine(
             localSnapshots, remoteSnapshots, outcomes,
             relation.ahead, relation.behind,
             isFromConflictSession = false,
+            attemptsRemaining = attemptsRemaining,
         )
     }
+
+    /**
+     * Read every project `sync_state` row into the `(hash, isDeleted)` map shape the
+     * three-way diff consumes. One trip to the DB per diff invocation.
+     */
+    private fun readSyncStateMeta(projectId: Int): Map<RecordKey, SnapshotMeta> =
+        transaction(state.database) {
+            DaoSyncState.find { DaoSyncStates.project eq projectId }
+                .associate {
+                    RecordKey(it.tableName, it.recordUuid) to
+                        SnapshotMeta(it.lastSyncedHash, it.lastSyncedIsDeleted)
+                }
+        }
 
     /**
      * Build the merged working-tree state, commit it as a two-parent merge, and push.
      * Used both for the no-conflict Diverged path and the apply-session path. The caller
      * supplies pre-computed snapshots so we don't walk the trees twice.
+     *
+     * On `PUSH_REJECTED` (a peer pushed between our fetch and our push), retry up to
+     * [attemptsRemaining] times: re-fetch, re-classify, and either re-merge against the
+     * new remote tip or surface new conflicts. Note that `replaceFromWorkingTree` rewrites
+     * the project's row set on every retry; for the small project sizes this engine
+     * targets that's acceptable, but a future optimiser could budget here if it ever bites.
      */
     private fun autoMerge(
         repo: Repository,
@@ -311,36 +359,39 @@ class RemoteSyncEngine(
         remoteSha: String,
         remoteRef: String,
         localSnapshots: Map<RecordKey, RecordSnapshot>,
-        @Suppress("UNUSED_PARAMETER") remoteSnapshots: Map<RecordKey, RecordSnapshot>,
+        remoteSnapshots: Map<RecordKey, RecordSnapshot>,
         outcomes: Map<RecordKey, DiffOutcome>,
         ahead: Int,
         behind: Int,
         isFromConflictSession: Boolean,
+        attemptsRemaining: Int,
     ): SyncRunResult {
         JGitClient.resetHard(repo, remoteRef)
         val workingTreePath = repo.workTree.toPath()
 
         // Overlay local-wins and manually-edited records onto the remote-tip working
-        // tree. For MANUAL we look up the file paths from the local snapshot — the user
-        // can only manually edit a record that already existed locally.
+        // tree. For each winning record, delete any path that exists only on the remote
+        // side (so a tombstone overlay removes the live record file, and vice-versa) and
+        // write the local snapshot's files. For MANUAL we look up the file paths from the
+        // local snapshot — the user can only manually edit a record that already existed
+        // locally.
         for ((key, outcome) in outcomes) {
             when (outcome) {
                 is DiffOutcome.TakeLocal -> {
-                    val snapshot = localSnapshots[key] ?: continue
-                    for ((relPath, content) in snapshot.files) {
-                        writeWorkingTreeFile(workingTreePath, relPath, content)
-                    }
+                    val localSnap = localSnapshots[key] ?: continue
+                    overlayLocalOntoRemote(workingTreePath, localSnap, remoteSnapshots[key])
                 }
                 is DiffOutcome.TakeManual -> {
-                    val snapshot = localSnapshots[key]
+                    val localSnap = localSnapshots[key]
                         ?: error("MANUAL resolution for $key but no local snapshot to anchor it")
-                    val paths = snapshot.files.keys
+                    val paths = localSnap.files.keys
                     if (paths.size != 1) {
                         error(
                             "MANUAL resolution for $key spans ${paths.size} files; " +
-                                "Phase 6 only supports single-file records",
+                                "MANUAL only supports single-file records",
                         )
                     }
+                    removeRemoteOnlyPaths(workingTreePath, localSnap, remoteSnapshots[key])
                     writeWorkingTreeFile(workingTreePath, paths.single(), outcome.content)
                 }
                 else -> Unit
@@ -374,6 +425,15 @@ class RemoteSyncEngine(
         )
 
         val pushed = JGitClient.push(repo, REMOTE_NAME, branch, credentials, force = false)
+        if (pushIsRejected(pushed)) {
+            return retryAfterPushReject(
+                repo, projectId, installUuid, installFriendlyName,
+                branch, credentials,
+                isFromConflictSession = isFromConflictSession,
+                rejectionMessage = pushed.message ?: pushed.status.toString(),
+                attemptsRemaining = attemptsRemaining,
+            )
+        }
         ensurePushOk(pushed)
 
         bootstrapSyncStateAtHead(projectId, repo, merged.sha)
@@ -385,6 +445,229 @@ class RemoteSyncEngine(
             message = "Merged ${ahead + behind} commit(s) and pushed.",
             sessionId = null, conflictCount = 0,
         )
+    }
+
+    private fun pushIsRejected(result: PushResult): Boolean = when (result.status) {
+        PushStatus.REJECTED_NONFASTFORWARD,
+        PushStatus.REJECTED_REMOTE_CHANGED,
+        PushStatus.REJECTED_OTHER -> true
+        else -> false
+    }
+
+    /**
+     * Push was rejected (a peer raced us between fetch and push). HEAD is at our merge
+     * commit; the DB is at the merged state. Re-fetch and either re-merge against the
+     * new remote tip (if no new conflicts emerge) or surface the new conflicts.
+     */
+    private fun retryAfterPushReject(
+        repo: Repository,
+        projectId: Int,
+        installUuid: UUID,
+        installFriendlyName: String,
+        branch: String,
+        credentials: GitCredentials,
+        isFromConflictSession: Boolean,
+        rejectionMessage: String,
+        attemptsRemaining: Int,
+    ): SyncRunResult {
+        if (attemptsRemaining <= 0) {
+            throw SyncException(
+                SyncErrorCode.PUSH_REJECTED,
+                "Remote rejected the push after $MAX_PUSH_RETRIES attempts: $rejectionMessage. " +
+                    "Try again — the remote keeps moving under us.",
+            )
+        }
+
+        logger.info(
+            "Push rejected ({}); re-fetching and retrying (attempts remaining: {})",
+            rejectionMessage, attemptsRemaining,
+        )
+        try {
+            JGitClient.fetch(repo, REMOTE_NAME, branch, credentials)
+        } catch (e: GitAuthException) {
+            throw SyncException(SyncErrorCode.AUTH_FAILED, "GitHub rejected the credentials during retry: ${e.message}", e)
+        }
+
+        // After our last autoMerge ran, HEAD is at our merge commit. That commit captures
+        // both the user's original work and the previous remote state — so for the retry's
+        // diff input we walk our merge commit as the "local" side.
+        val newLocalSha = JGitClient.head(repo)?.sha ?: error("Null HEAD on retry")
+        val remoteRef = remoteBranchRef(branch)
+        val newRelation = JGitClient.classify(repo, "HEAD", remoteRef)
+
+        return when (newRelation) {
+            // The peer's push made our merge a fast-forward target — done.
+            HistoryRelation.Equal -> {
+                bootstrapSyncStateAtHead(projectId, repo, newLocalSha)
+                SyncRunResult(
+                    outcome = SyncOutcome.MERGED, pushed = 0, pulled = 0, replaced = 0,
+                    headSha = newLocalSha,
+                    message = "Merge already on remote after retry.",
+                    sessionId = null, conflictCount = 0,
+                )
+            }
+            HistoryRelation.RemoteAbsent -> {
+                error("Remote vanished between push attempts; this should not happen.")
+            }
+            // Our merge is now ahead — just push it.
+            is HistoryRelation.LocalAhead -> {
+                val pushed = JGitClient.push(repo, REMOTE_NAME, branch, credentials, force = false)
+                if (pushIsRejected(pushed)) {
+                    return retryAfterPushReject(
+                        repo, projectId, installUuid, installFriendlyName,
+                        branch, credentials, isFromConflictSession,
+                        pushed.message ?: pushed.status.toString(), attemptsRemaining - 1,
+                    )
+                }
+                ensurePushOk(pushed)
+                bootstrapSyncStateAtHead(projectId, repo, newLocalSha)
+                SyncRunResult(
+                    outcome = SyncOutcome.MERGED, pushed = newRelation.ahead, pulled = 0, replaced = 0,
+                    headSha = newLocalSha,
+                    message = "Pushed merge after retry.",
+                    sessionId = null, conflictCount = 0,
+                )
+            }
+            // Remote moved ahead of us in a strict-superset way (peer fast-forwarded our
+            // merge commit and then added more) — fast-forward our HEAD and re-import.
+            is HistoryRelation.RemoteAhead -> {
+                JGitClient.resetHard(repo, remoteRef)
+                importer.replaceFromWorkingTree(projectId, repo.workTree.toPath())
+                val head = JGitClient.head(repo)?.sha ?: error("Null HEAD after fast-forward retry")
+                bootstrapSyncStateAtHead(projectId, repo, head)
+                SyncRunResult(
+                    outcome = SyncOutcome.FAST_FORWARDED,
+                    pushed = 0, pulled = newRelation.behind, replaced = 0,
+                    headSha = head,
+                    message = "Fast-forwarded to peer's superset after retry.",
+                    sessionId = null, conflictCount = 0,
+                )
+            }
+            // The common case: a peer's commit lands during our push window. Re-do the
+            // diff against the new remote tip, merging in any record we hadn't already
+            // resolved. New conflicts get surfaced (or, in the apply-from-session path,
+            // throw SESSION_STALE so the user re-syncs and re-resolves cleanly).
+            is HistoryRelation.Diverged -> {
+                val remoteSha = repo.resolve(remoteRef)?.name
+                    ?: error("Diverged with null remote ref on retry")
+                val baseSha = JGitClient.mergeBase(repo, newLocalSha, remoteSha)
+                val localSnapshots = RecordHasher.fromRef(repo, newLocalSha)
+                val remoteSnapshots = RecordHasher.fromRef(repo, remoteSha)
+                val syncStateMeta = readSyncStateMeta(projectId)
+                val outcomes = ThreeWayDiff.compute(
+                    localSnapshots.mapValues { it.value.toMeta() },
+                    remoteSnapshots.mapValues { it.value.toMeta() },
+                    syncStateMeta,
+                )
+                val newConflictKeys = outcomes
+                    .filter { it.value is DiffOutcome.Conflict }
+                    .map { it.key }
+
+                if (newConflictKeys.isNotEmpty()) {
+                    if (isFromConflictSession) {
+                        throw SyncException(
+                            SyncErrorCode.SESSION_STALE,
+                            "A peer pushed conflicting changes during apply (${newConflictKeys.size} new " +
+                                "conflict(s)). Abort the session and re-run sync.",
+                        )
+                    }
+                    return openConflictSessionFor(
+                        repo, projectId,
+                        outcomes, newConflictKeys,
+                        localSnapshots, remoteSnapshots, baseSha,
+                        newLocalSha, remoteSha,
+                    )
+                }
+
+                autoMerge(
+                    repo, projectId, installUuid, installFriendlyName,
+                    branch, credentials,
+                    newLocalSha, remoteSha, remoteRef,
+                    localSnapshots, remoteSnapshots, outcomes,
+                    newRelation.ahead, newRelation.behind,
+                    isFromConflictSession = isFromConflictSession,
+                    attemptsRemaining = attemptsRemaining - 1,
+                )
+            }
+        }
+    }
+
+    /**
+     * Hoist the conflict-session opening from [handleDiverged] so the push-retry path can
+     * surface newly-discovered conflicts the same way the first-time-diverged path does.
+     */
+    private fun openConflictSessionFor(
+        repo: Repository,
+        projectId: Int,
+        outcomes: Map<RecordKey, DiffOutcome>,
+        conflictKeys: List<RecordKey>,
+        localSnapshots: Map<RecordKey, RecordSnapshot>,
+        remoteSnapshots: Map<RecordKey, RecordSnapshot>,
+        baseSha: String?,
+        localSha: String,
+        remoteSha: String,
+    ): SyncRunResult {
+        val baseSnapshots = baseSha?.let { RecordHasher.fromRef(repo, it) } ?: emptyMap()
+        val sessionId = transaction(state.database) {
+            val project = DaoProject.findById(projectId)
+                ?: error("Project $projectId vanished mid-sync")
+            val rows = conflictKeys.map { key ->
+                val kind = (outcomes[key] as DiffOutcome.Conflict).kind.name
+                ConflictRow(
+                    tableName = key.tableName,
+                    recordUuid = key.uuid,
+                    conflictKind = kind,
+                    localJson = localSnapshots[key]?.canonicalJsonForDisplay(),
+                    remoteJson = remoteSnapshots[key]?.canonicalJsonForDisplay(),
+                    baseJson = baseSnapshots[key]?.canonicalJsonForDisplay(),
+                )
+            }
+            ConflictSession.open(project, localSha, remoteSha, baseSha, rows).id.value
+        }
+        state.emitCloudSyncEvent(
+            uk.me.cormack.lighting7.plugins.CloudSyncConflictsPendingOutMessage(
+                projectId = projectId,
+                sessionId = sessionId,
+                conflictCount = conflictKeys.size,
+            ),
+        )
+        return SyncRunResult(
+            outcome = SyncOutcome.CONFLICTS_PENDING,
+            pushed = 0, pulled = 0, replaced = 0,
+            headSha = localSha,
+            message = "Found ${conflictKeys.size} conflict(s); resolve them in the UI to continue.",
+            sessionId = sessionId,
+            conflictCount = conflictKeys.size,
+        )
+    }
+
+    /**
+     * Overlay [localSnap]'s files onto the working tree, after deleting any path that
+     * exists on the remote side but not in the local snapshot. This is what flips a
+     * record-file ↔ tombstone-file pairing during merge — the kind of file changes
+     * between sides, so just writing local without removing remote-only paths would
+     * leave a stale file behind.
+     */
+    private fun overlayLocalOntoRemote(
+        workingTreePath: Path,
+        localSnap: RecordSnapshot,
+        remoteSnap: RecordSnapshot?,
+    ) {
+        removeRemoteOnlyPaths(workingTreePath, localSnap, remoteSnap)
+        for ((relPath, content) in localSnap.files) {
+            writeWorkingTreeFile(workingTreePath, relPath, content)
+        }
+    }
+
+    private fun removeRemoteOnlyPaths(
+        workingTreePath: Path,
+        localSnap: RecordSnapshot,
+        remoteSnap: RecordSnapshot?,
+    ) {
+        val remotePaths = remoteSnap?.files?.keys ?: return
+        for (path in remotePaths - localSnap.files.keys) {
+            Files.deleteIfExists(workingTreePath.resolve(path))
+        }
     }
 
     private suspend fun doApply(
@@ -481,14 +764,11 @@ class RemoteSyncEngine(
 
         val localSnapshots = RecordHasher.fromRef(repo, view.localSha)
         val remoteSnapshots = RecordHasher.fromRef(repo, view.remoteSha)
-        val syncStateHashes = transaction(state.database) {
-            DaoSyncState.find { DaoSyncStates.project eq projectId }
-                .associate { RecordKey(it.tableName, it.recordUuid) to it.lastSyncedHash }
-        }
+        val syncStateMeta = readSyncStateMeta(projectId)
         val baseOutcomes = ThreeWayDiff.compute(
-            localSnapshots.mapValues { it.value.hash },
-            remoteSnapshots.mapValues { it.value.hash },
-            syncStateHashes,
+            localSnapshots.mapValues { it.value.toMeta() },
+            remoteSnapshots.mapValues { it.value.toMeta() },
+            syncStateMeta,
         )
         val mergedOutcomes = baseOutcomes.toMutableMap()
         for ((key, choice) in view.resolutions) {
@@ -510,6 +790,7 @@ class RemoteSyncEngine(
             localSnapshots, remoteSnapshots, mergedOutcomes,
             ahead = 0, behind = 0,
             isFromConflictSession = true,
+            attemptsRemaining = MAX_PUSH_RETRIES,
         )
     }
 
@@ -559,6 +840,7 @@ class RemoteSyncEngine(
                     this.recordUuid = key.uuid
                     this.lastSyncedSha = sha
                     this.lastSyncedHash = snap.hash
+                    this.lastSyncedIsDeleted = snap.isDeleted
                 }
             }
         }
@@ -619,17 +901,24 @@ class RemoteSyncEngine(
 
     companion object {
         const val REMOTE_NAME = "origin"
+        /** Cap on automatic retries when push is rejected by the remote. */
+        const val MAX_PUSH_RETRIES = 3
         private val logger = LoggerFactory.getLogger(RemoteSyncEngine::class.java)
     }
 }
 
 /**
- * Concatenated canonical-JSON view of a record snapshot, suitable for storing as a
- * single TEXT column on `sync_session_conflict`. Files are joined in sorted-path order
- * with a literal `\n` between them; matches the order [RecordHasher] uses for hashing.
+ * Canonical-JSON view of a record snapshot for the conflict-resolution UI, suitable for
+ * storing as a single TEXT column on `sync_session_conflict`. Returns `null` for
+ * tombstones — the UI then renders a "(deleted)" placeholder instead of the marker file
+ * body, matching the frontend `localJson: string | null` typing for the deletion conflict
+ * kinds. Live-record files are joined in sorted-path order with a literal `\n`, matching
+ * the order [RecordHasher] uses for hashing.
  */
-private fun RecordSnapshot.canonicalJsonForDisplay(): String =
-    files.entries.sortedBy { it.key }.joinToString("\n") { it.value }
+private fun RecordSnapshot.canonicalJsonForDisplay(): String? {
+    if (isDeleted) return null
+    return files.entries.sortedBy { it.key }.joinToString("\n") { it.value }
+}
 
 /** Outcome of a successful sync run. The UI uses this to pick which toast/badge to show. */
 enum class SyncOutcome { NO_OP, PUSHED, FAST_FORWARDED, MERGED, CONFLICTS_PENDING }

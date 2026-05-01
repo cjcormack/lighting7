@@ -374,4 +374,205 @@ class RemoteSyncEngineConflictsTest {
         val projectIdB = seedBFromRemote()
         return Triple(projectIdA, projectIdB, sharedUuid)
     }
+
+    // ─── Phase 7 tombstone scenarios ──────────────────────────────
+
+    @Test
+    fun `tombstone propagates A to B (no conflict)`() {
+        val (projectIdA, projectIdB, sharedUuid) = setUpSharedStackOnBothSides()
+
+        // A deletes the shared stack and pushes the tombstone.
+        transaction(stateA.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.forEach { it.delete() }
+        }
+        val pushA = runSync(stateA, engineA, projectIdA)
+        assertEquals(SyncOutcome.PUSHED, pushA.outcome)
+
+        // B has no local edits to the shared stack, so the tombstone fast-forwards.
+        val resultB = runSync(stateB, engineB, projectIdB)
+        assertTrue(
+            resultB.outcome == SyncOutcome.FAST_FORWARDED || resultB.outcome == SyncOutcome.MERGED,
+            "Expected B to absorb A's tombstone cleanly; got ${resultB.outcome}",
+        )
+
+        val stillThere = transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.toList()
+        }
+        assertTrue(stillThere.isEmpty(), "Tombstone must remove B's local row")
+    }
+
+    @Test
+    fun `same-record EDIT_DELETE conflict, resolve LOCAL keeps the record`() {
+        // A deletes; B edits — surface as EDIT_DELETE on B. (`local edited, remote deleted`)
+        val (_, projectIdB, sharedUuid) = setUpSharedStackOnBothSides()
+        transaction(stateA.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.forEach { it.delete() }
+        }
+        runSync(stateA, engineA, transaction(stateA.database) { DaoProject.all().first().id.value })
+        transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.first().name = "edited-by-B"
+        }
+
+        val result = runSync(stateB, engineB, projectIdB)
+        assertEquals(SyncOutcome.CONFLICTS_PENDING, result.outcome)
+        transaction(stateB.database) {
+            val session = ConflictSession.findActive(projectIdB)!!
+            val c = ConflictSession.listConflicts(session).single()
+            assertEquals(ConflictKind.EDIT_DELETE.name, c.conflictKind)
+            ConflictSession.resolve(
+                session,
+                listOf(ResolutionEntry("cueStacks", sharedUuid, ConflictResolution.LOCAL.name)),
+            )
+        }
+        applySync(stateB, engineB, projectIdB)
+
+        val nameOnB = transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.firstOrNull()?.name
+        }
+        assertEquals("edited-by-B", nameOnB, "LOCAL on EDIT_DELETE must keep the record alive on B")
+
+        // A pulls and gets the record back (resurrected by B's resolution).
+        val resultA = runSync(stateA, engineA, transaction(stateA.database) { DaoProject.all().first().id.value })
+        assertEquals(SyncOutcome.FAST_FORWARDED, resultA.outcome)
+        val nameOnA = transaction(stateA.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.firstOrNull()?.name
+        }
+        assertEquals("edited-by-B", nameOnA)
+    }
+
+    @Test
+    fun `same-record EDIT_DELETE conflict, resolve REMOTE accepts the deletion`() {
+        val (_, projectIdB, sharedUuid) = setUpSharedStackOnBothSides()
+        transaction(stateA.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.forEach { it.delete() }
+        }
+        runSync(stateA, engineA, transaction(stateA.database) { DaoProject.all().first().id.value })
+        transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.first().name = "edited-by-B"
+        }
+        runSync(stateB, engineB, projectIdB)
+
+        transaction(stateB.database) {
+            val session = ConflictSession.findActive(projectIdB)!!
+            ConflictSession.resolve(
+                session,
+                listOf(ResolutionEntry("cueStacks", sharedUuid, ConflictResolution.REMOTE.name)),
+            )
+        }
+        applySync(stateB, engineB, projectIdB)
+
+        val rowOnB = transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.toList()
+        }
+        assertTrue(rowOnB.isEmpty(), "REMOTE on EDIT_DELETE must accept A's deletion")
+    }
+
+    @Test
+    fun `same-record DELETE_EDIT conflict, resolve LOCAL keeps the deletion`() {
+        // B deletes; A edits — surface as DELETE_EDIT on B. (`local deleted, remote edited`)
+        val (_, projectIdB, sharedUuid) = setUpSharedStackOnBothSides()
+        transaction(stateA.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.first().name = "edited-by-A"
+        }
+        runSync(stateA, engineA, transaction(stateA.database) { DaoProject.all().first().id.value })
+        transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.forEach { it.delete() }
+        }
+
+        val result = runSync(stateB, engineB, projectIdB)
+        assertEquals(SyncOutcome.CONFLICTS_PENDING, result.outcome)
+        transaction(stateB.database) {
+            val session = ConflictSession.findActive(projectIdB)!!
+            val c = ConflictSession.listConflicts(session).single()
+            assertEquals(ConflictKind.DELETE_EDIT.name, c.conflictKind)
+            ConflictSession.resolve(
+                session,
+                listOf(ResolutionEntry("cueStacks", sharedUuid, ConflictResolution.LOCAL.name)),
+            )
+        }
+        applySync(stateB, engineB, projectIdB)
+
+        val rowOnB = transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.toList()
+        }
+        assertTrue(rowOnB.isEmpty(), "LOCAL on DELETE_EDIT must keep the deletion")
+    }
+
+    @Test
+    fun `same-record DELETE_EDIT conflict, resolve REMOTE restores the edit`() {
+        val (_, projectIdB, sharedUuid) = setUpSharedStackOnBothSides()
+        transaction(stateA.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.first().name = "edited-by-A"
+        }
+        runSync(stateA, engineA, transaction(stateA.database) { DaoProject.all().first().id.value })
+        transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.forEach { it.delete() }
+        }
+        runSync(stateB, engineB, projectIdB)
+
+        transaction(stateB.database) {
+            val session = ConflictSession.findActive(projectIdB)!!
+            ConflictSession.resolve(
+                session,
+                listOf(ResolutionEntry("cueStacks", sharedUuid, ConflictResolution.REMOTE.name)),
+            )
+        }
+        applySync(stateB, engineB, projectIdB)
+
+        val nameOnB = transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.firstOrNull()?.name
+        }
+        assertEquals("edited-by-A", nameOnB, "REMOTE on DELETE_EDIT must restore A's edit")
+    }
+
+    @Test
+    fun `concurrent identical deletes auto-merge with no conflict`() {
+        val (projectIdA, projectIdB, sharedUuid) = setUpSharedStackOnBothSides()
+
+        // Both sides delete the same stack between syncs.
+        transaction(stateA.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.forEach { it.delete() }
+        }
+        runSync(stateA, engineA, projectIdA)
+        transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.forEach { it.delete() }
+        }
+        val resultB = runSync(stateB, engineB, projectIdB)
+        // Both arrived at the same tombstone — no conflict, auto-merge.
+        assertTrue(
+            resultB.outcome == SyncOutcome.MERGED || resultB.outcome == SyncOutcome.FAST_FORWARDED,
+            "Concurrent identical deletes must not conflict; got ${resultB.outcome}",
+        )
+        val rowOnB = transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedUuid }.toList()
+        }
+        assertTrue(rowOnB.isEmpty())
+    }
+
+    @Test
+    fun `delete with no intervening sync still produces a tombstone on next snapshot`() {
+        // Sequence: create + sync, delete, snapshot/sync. The deletion happens entirely on
+        // one install — the test asserts that the snapshot pipeline picks up the deletion
+        // from `sync_state` even though the wipe-then-export step nuked the record path.
+        val projectIdA = seedMinimalProject(stateA)
+        configureSync(stateA, projectIdA, credsA)
+        val stackUuid = transaction(stateA.database) {
+            val project = DaoProject.findById(projectIdA)!!
+            DaoCueStack.new { this.project = project; this.name = "ephemeral"; this.palette = emptyList() }.uuid
+        }
+        runSync(stateA, engineA, projectIdA)
+
+        transaction(stateA.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq stackUuid }.forEach { it.delete() }
+        }
+        val push = runSync(stateA, engineA, projectIdA)
+        assertEquals(SyncOutcome.PUSHED, push.outcome)
+
+        // Verify the working tree has a tombstone file for the deleted UUID.
+        val tombstonePath = workingRootA
+            .resolve(transaction(stateA.database) { DaoProject.findById(projectIdA)!!.uuid }.toString())
+            .resolve("repo")
+            .resolve("tombstones").resolve("cueStacks").resolve("$stackUuid.json")
+        assertTrue(Files.exists(tombstonePath), "Snapshot must write a tombstone file at $tombstonePath")
+    }
 }

@@ -156,7 +156,11 @@ class SyncStateBookkeepingTest {
     }
 
     @Test
-    fun `deleting a record removes its sync_state row on next sync`() {
+    fun `deleting a record converts its sync_state row to a tombstone on next sync`() {
+        // Phase 7: deletion no longer drops the sync_state row — it flips
+        // `lastSyncedIsDeleted = true` so the deletion propagates as a tombstone to peers
+        // that haven't seen it yet. Without this, install B (which still has the record)
+        // would resurrect it on its next push.
         val projectId = seedMinimalProject(state)
         configureSync(projectId)
         val stackUuid = transaction(state.database) {
@@ -164,16 +168,27 @@ class SyncStateBookkeepingTest {
             DaoCueStack.new { this.project = project; this.name = "deleteMe"; this.palette = emptyList() }.uuid
         }
         runSync(projectId)
-        assertTrue(fetchSyncStates(projectId).any { it.first.uuid == stackUuid })
+        val initial = transaction(state.database) {
+            DaoSyncState.find { DaoSyncStates.project eq projectId }
+                .first { it.recordUuid == stackUuid }
+        }.let { it.lastSyncedIsDeleted to it.lastSyncedHash }
+        assertEquals(false, initial.first, "Record should land as live before deletion")
 
         transaction(state.database) {
             DaoCueStack.find { uk.me.cormack.lighting7.models.DaoCueStacks.uuid eq stackUuid }.forEach { it.delete() }
         }
         val pushed = runSync(projectId)
         assertEquals(SyncOutcome.PUSHED, pushed.outcome)
-        assertTrue(
-            fetchSyncStates(projectId).none { it.first.uuid == stackUuid },
-            "Deleted record must drop out of sync_state",
+
+        val afterRow = transaction(state.database) {
+            DaoSyncState.find { DaoSyncStates.project eq projectId }
+                .firstOrNull { it.recordUuid == stackUuid }
+        }
+        assertTrue(afterRow != null, "Tombstone row must persist (not GC'd) so it propagates to peers")
+        assertEquals(true, afterRow!!.lastSyncedIsDeleted, "sync_state must mark the record as deleted")
+        kotlin.test.assertNotEquals(
+            initial.second, afterRow.lastSyncedHash,
+            "Tombstone hash must differ from the live-record hash",
         )
     }
 }

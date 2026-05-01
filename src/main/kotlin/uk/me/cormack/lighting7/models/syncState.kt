@@ -12,6 +12,10 @@ import org.jetbrains.exposed.dao.id.IntIdTable
  * [uk.me.cormack.lighting7.sync.ThreeWayDiff] able to tell "I changed this since last
  * sync" from "I happen to look like remote".
  *
+ * `lastSyncedIsDeleted` distinguishes "the last-synced state was a tombstone" from "the
+ * last-synced state was a live record" — required for the tombstone-aware diff so a row
+ * that's tombstoned on both sides reads as `NoOp` rather than ambiguous-deletion.
+ *
  * Machine-local — never serialised to the cloud repo.
  */
 object DaoSyncStates : IntIdTable("sync_state") {
@@ -22,6 +26,7 @@ object DaoSyncStates : IntIdTable("sync_state") {
     val recordUuid = uuid("record_uuid")
     val lastSyncedSha = varchar("last_synced_sha", 64)
     val lastSyncedHash = varchar("last_synced_hash", 64)
+    val lastSyncedIsDeleted = bool("last_synced_is_deleted").default(false)
 
     init {
         uniqueIndex(project, targetTable, recordUuid)
@@ -36,4 +41,5 @@ class DaoSyncState(id: EntityID<Int>) : IntEntity(id) {
     var recordUuid by DaoSyncStates.recordUuid
     var lastSyncedSha by DaoSyncStates.lastSyncedSha
     var lastSyncedHash by DaoSyncStates.lastSyncedHash
+    var lastSyncedIsDeleted by DaoSyncStates.lastSyncedIsDeleted
 }

@@ -24,10 +24,12 @@ import uk.me.cormack.lighting7.plugins.CloudSyncFailedOutMessage
 import uk.me.cormack.lighting7.plugins.CloudSyncStartedOutMessage
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.CommitInfo
+import uk.me.cormack.lighting7.sync.ConflictKind
 import uk.me.cormack.lighting7.sync.ConflictResolution
 import uk.me.cormack.lighting7.sync.ConflictSession
 import uk.me.cormack.lighting7.sync.JGitClient
 import uk.me.cormack.lighting7.sync.RecordHasher
+import uk.me.cormack.lighting7.sync.RecordKey
 import uk.me.cormack.lighting7.sync.RemoteSyncEngine
 import uk.me.cormack.lighting7.sync.ResolutionEntry
 import uk.me.cormack.lighting7.sync.SessionState
@@ -240,7 +242,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                         remoteJson = c.remoteJson,
                         baseJson = c.baseJson,
                         manualValueJson = c.manualValueJson,
-                        manualEditAllowed = isManualEditAllowed(c.tableName),
+                        manualEditAllowed = isManualEditAllowed(c.tableName, c.conflictKind),
                     )
                 }
                 ConflictsResponse(
@@ -260,9 +262,8 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
 
     post<ProjectSyncResolveResource> { resource ->
         val request = call.receive<ResolveRequest>()
-        // Validate body before opening a transaction. Bad-choice and bad-UUID are
-        // body-shape errors, not session-state errors, so they don't go through
-        // SyncException's status mapping.
+        // Body-shape pass: bad-choice and bad-UUID are body errors and skip SyncException's
+        // status mapping. The conflict-kind gate for MANUAL needs the DB and runs below.
         val parsed = mutableListOf<ResolutionEntry>()
         for (entry in request.resolutions) {
             val choice = entry.resolution
@@ -277,29 +278,20 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                 )
                 return@post
             }
-            if (choice == ConflictResolution.MANUAL.name) {
-                if (entry.manualValueJson == null) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ErrorResponse("MANUAL resolution requires manualValueJson."),
-                    )
-                    return@post
-                }
-                if (!isManualEditAllowed(entry.tableName)) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ErrorResponse(
-                            "MANUAL editing is not yet supported for ${entry.tableName} records " +
-                                "(multi-file layout). Choose LOCAL or REMOTE instead.",
-                        ),
-                    )
-                    return@post
-                }
+            if (choice == ConflictResolution.MANUAL.name && entry.manualValueJson == null) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse("MANUAL resolution requires manualValueJson."),
+                )
+                return@post
             }
             val uuid = runCatching { UUID.fromString(entry.recordUuid) }.getOrNull() ?: continue
             parsed.add(ResolutionEntry(entry.tableName, uuid, choice, entry.manualValueJson))
         }
         withProject(state, resource.parent.projectId) { project ->
+            // Track the first MANUAL gate violation so we can respond with a precise body
+            // error after the transaction unwinds.
+            var manualGateError: String? = null
             try {
                 transaction(state.database) {
                     val session = ConflictSession.findActive(project.id.value)
@@ -307,7 +299,27 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                     if (session.state != SessionState.CONFLICTS_PENDING.name) {
                         throw SyncException(SyncErrorCode.SESSION_NOT_FOUND, "Session is not in CONFLICTS_PENDING state.")
                     }
+
+                    // Look up each MANUAL entry's conflict row to verify the kind allows
+                    // MANUAL (multi-file gate + DELETE_EDIT gate). DELETE_EDIT means the
+                    // local side is a tombstone — there's no record to "edit."
+                    val sessionConflicts = ConflictSession.listConflicts(session)
+                        .associateBy { RecordKey(it.tableName, it.recordUuid) }
+                    for (entry in parsed) {
+                        if (entry.resolution != ConflictResolution.MANUAL.name) continue
+                        val key = RecordKey(entry.tableName, entry.recordUuid)
+                        val conflict = sessionConflicts[key] ?: continue
+                        if (!isManualEditAllowed(entry.tableName, conflict.conflictKind)) {
+                            manualGateError = manualGateMessage(entry.tableName, conflict.conflictKind)
+                            return@transaction
+                        }
+                    }
+
                     ConflictSession.resolve(session, parsed)
+                }
+                if (manualGateError != null) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(manualGateError!!))
+                    return@withProject
                 }
                 call.respond(HttpStatusCode.NoContent)
             } catch (e: SyncException) {
@@ -496,13 +508,30 @@ data class ResolveEntry(
 )
 
 /**
- * Multi-file records (currently scripts) can't round-trip through the single-textarea
- * MANUAL editor, so MANUAL is rejected for them and the UI must hide the option.
- * Defers to [RecordHasher.isMultiFileTable] so the multi-file table list lives in one
- * place.
+ * Whether MANUAL editing is meaningful for this `(tableName, conflictKind)` pair.
+ *
+ *  * Multi-file records (currently scripts) can't round-trip through the single-textarea
+ *    MANUAL editor — defers to [RecordHasher.isMultiFileTable].
+ *  * `DELETE_EDIT` means the local side is a tombstone, so there's no record to
+ *    hand-edit. Pick LOCAL (keep deleted) or REMOTE (accept the remote edit) instead.
+ *    `EDIT_DELETE` (local edited, remote deleted) is fine — local-side is a live record.
  */
-private fun isManualEditAllowed(tableName: String): Boolean =
-    !RecordHasher.isMultiFileTable(tableName)
+private fun isManualEditAllowed(tableName: String, conflictKind: String): Boolean {
+    if (RecordHasher.isMultiFileTable(tableName)) return false
+    if (conflictKind == ConflictKind.DELETE_EDIT.name) return false
+    return true
+}
+
+private fun manualGateMessage(tableName: String, conflictKind: String): String = when {
+    RecordHasher.isMultiFileTable(tableName) ->
+        "MANUAL editing is not yet supported for $tableName records (multi-file layout). " +
+            "Choose LOCAL or REMOTE instead."
+    conflictKind == ConflictKind.DELETE_EDIT.name ->
+        "MANUAL editing isn't available on a DELETE_EDIT conflict — the local side is a " +
+            "deletion, so there's nothing to hand-edit. Choose LOCAL (keep deleted) or " +
+            "REMOTE (accept the remote edit)."
+    else -> "MANUAL is not allowed for this conflict."
+}
 
 /**
  * Lazily create the per-project `sync_configs` row on first read. Mirrors the

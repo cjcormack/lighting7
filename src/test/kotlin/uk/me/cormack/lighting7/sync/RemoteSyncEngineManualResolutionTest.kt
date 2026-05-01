@@ -249,6 +249,61 @@ class RemoteSyncEngineManualResolutionTest {
     }
 
     @Test
+    fun `MANUAL resolution on EDIT_DELETE keeps the record alive with custom content`() {
+        // Phase 7: A deletes the shared stack; B edits it. EDIT_DELETE on B (local edited,
+        // remote deleted). MANUAL is allowed for EDIT_DELETE — the user can hand-edit the
+        // record they want to keep.
+        val (projectIdA, projectIdB, sharedStackUuid) = setUpSharedStackOnBothSides()
+        transaction(stateA.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedStackUuid }.forEach { it.delete() }
+        }
+        runSync(stateA, engineA, projectIdA)
+        transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedStackUuid }.first().name = "edited-by-B"
+        }
+        val result = runSync(stateB, engineB, projectIdB)
+        assertEquals(SyncOutcome.CONFLICTS_PENDING, result.outcome)
+
+        // Verify the conflict was classified as EDIT_DELETE (local edited, remote tombstone).
+        transaction(stateB.database) {
+            val session = ConflictSession.findActive(projectIdB)!!
+            val c = ConflictSession.listConflicts(session).single()
+            assertEquals(ConflictKind.EDIT_DELETE.name, c.conflictKind)
+        }
+
+        val manualPayload = canonicalEncode(
+            CueStackJson.serializer(),
+            CueStackJson(
+                uuid = sharedStackUuid.toString(),
+                name = "manually-rescued",
+            ),
+        )
+        transaction(stateB.database) {
+            val session = ConflictSession.findActive(projectIdB)!!
+            ConflictSession.resolve(
+                session,
+                listOf(
+                    ResolutionEntry(
+                        tableName = "cueStacks",
+                        recordUuid = sharedStackUuid,
+                        resolution = ConflictResolution.MANUAL.name,
+                        manualValueJson = manualPayload,
+                    ),
+                ),
+            )
+        }
+        applySync(stateB, engineB, projectIdB)
+
+        val nameOnB = transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.uuid eq sharedStackUuid }.firstOrNull()?.name
+        }
+        assertEquals(
+            "manually-rescued", nameOnB,
+            "MANUAL on EDIT_DELETE must restore the record with the user's content (not the deletion)",
+        )
+    }
+
+    @Test
     fun `apply rejects MANUAL with no content even after allResolved passes`() {
         // allResolved only checks `resolution != null`. If a row is somehow MANUAL with
         // no manualValueJson — e.g. a hand-crafted DB write — apply must refuse rather

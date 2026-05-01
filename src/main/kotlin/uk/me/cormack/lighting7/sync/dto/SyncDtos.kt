@@ -26,6 +26,15 @@ data class FormatVersionJson(
     val minReader: Int = 1,
 )
 
+/**
+ * Marker written to `tombstones/{tableName}/{uuid}.json` when a previously-synced record
+ * has been deleted locally. Body is intentionally minimal and timestamp-free so the
+ * file's hash stays stable across re-snapshots — forensics come from `git log` on the
+ * path, not from the file contents.
+ */
+@Serializable
+data class TombstoneJson(val tombstone: Boolean = true)
+
 @Serializable
 data class InstallsJson(
     val installs: Map<String, String> = emptyMap(),

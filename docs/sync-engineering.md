@@ -6,13 +6,15 @@ this doc captures the contracts and operational details that current code
 relies on so that future contributors don't reinvent them.
 
 The subsystem ships in eight phases (see the design doc). **Today, Phases 1
-through 6 are in-tree** — UUID columns, canonical JSON, manual export/import,
+through 7 are in-tree** — UUID columns, canonical JSON, manual export/import,
 the install-identity / `machine_override` tables, a per-project local git
 working tree, remote push/pull with PAT credentials, the multi-master
-three-way diff with a flat conflict-resolution flow, plus Phase 6's polished
-conflict UX: **MANUAL** resolution (per-record JSON edit) and crash recovery
-for sessions caught mid-apply. Sections marked *Forward-looking* describe the
-contract Phase 7+ work is expected to land against, not anything that runs yet.
+three-way diff with a flat conflict-resolution flow, Phase 6's polished
+conflict UX (MANUAL resolution + crash recovery for sessions caught mid-apply),
+and Phase 7's correctness-corner work: tombstones for deletion propagation,
+`EDIT_DELETE` / `DELETE_EDIT` conflict kinds, and an in-engine push-rejected
+retry. Sections marked *Forward-looking* describe the contract Phase 8 work is
+expected to land against, not anything that runs yet.
 
 ## Architecture overview
 
@@ -642,17 +644,29 @@ between local, remote, and the last-known shared base.
 
 ### Outcome matrix
 
-| Local present? | Remote present? | sync_state | Hash relations | Outcome |
+Phase 7 added a per-snapshot `isDeleted` bit (the snapshot is either a live
+record or a tombstone). The matrix now branches on that bit so a deletion can
+be distinguished from "we never had this." Each side's input is `(hash,
+isDeleted)`; same-hash + same-isDeleted is `local == remote` for the matrix's
+`NoOp` row.
+
+| Local | Remote | sync_state | Hash relations | Outcome |
 |---|---|---|---|---|
-| yes | yes | any | `local == remote` | `NoOp` |
-| yes | yes | yes | `local == base, remote ≠ base` | `TakeRemote` |
-| yes | yes | yes | `remote == base, local ≠ base` | `TakeLocal` |
-| yes | yes | none | `local == remote` | `NoOp` |
-| yes | yes | none | `local ≠ remote` | `Conflict (EDIT_EDIT)` |
-| yes | yes | yes | `local ≠ base, remote ≠ base, local ≠ remote` | `Conflict (EDIT_EDIT)` |
-| yes | no | any | — | `TakeLocal` (Phase 5: tombstone-blind) |
-| no | yes | any | — | `TakeRemote` (Phase 5: tombstone-blind) |
-| no | no | yes | — | `NoOp` (orphan; bootstrap GCs it) |
+| any | any | any | `local == remote` (kind+hash both equal) | `NoOp` (covers concurrent identical edits AND concurrent identical deletes) |
+| live | live | yes | `local == base, remote ≠ base` | `TakeRemote` |
+| live | live | yes | `remote == base, local ≠ base` | `TakeLocal` |
+| live | live | none | `local ≠ remote` | `Conflict (EDIT_EDIT)` (Phase 4 → 5 upgrade) |
+| live | live | yes | both moved, different values | `Conflict (EDIT_EDIT)` |
+| **tombstone** | **live** | yes, both moved | — | `Conflict (DELETE_EDIT)` |
+| **live** | **tombstone** | yes, both moved | — | `Conflict (EDIT_DELETE)` |
+| **tombstone** | **live** | yes, remote unchanged from base | — | `TakeLocal` (push the tombstone, deletion wins) |
+| **live** | **tombstone** | yes, local unchanged from base | — | `TakeRemote` (accept the deletion) |
+| live | absent | yes (live base) | — | `TakeLocal` with `WARN` (history rewrite or pre-Phase-7 peer dropped a record without a tombstone) |
+| live | absent | none | — | `TakeLocal` (new local record, no tombstone awareness needed) |
+| absent | live | any | — | `TakeRemote` (new remote record) |
+| tombstone | absent | any | — | `NoOp` (deletion already not on the remote side) |
+| absent | tombstone | any | — | `NoOp` (we never had it, nothing to delete) |
+| absent | absent | yes | — | `NoOp` (orphan; bootstrap GCs it) |
 
 The "no shared base" rows cover the **first sync after upgrading from
 Phase 4**: until `bootstrapSyncStateAtHead` populates `sync_state` for the
@@ -746,14 +760,12 @@ the user's resolutions override each conflicting record's outcome. The
 resulting commit's message is `Resolve …` instead of `Merge …` so it's
 distinguishable in `git log`.
 
-### Known gap until Phase 7
+### Tombstones and deletion propagation (Phase 7)
 
-Without tombstones, "local has X but remote doesn't" is treated as
-`TakeLocal` even when the truth is "remote deleted X since last sync".
-Concretely: a record deleted on machine A may be **resurrected** on the next
-sync from machine B that still has it. The conflict UI surfaces a banner
-explaining this, and Phase 7 fixes it by introducing tombstone files and
-the `EDIT_DELETE` / `DELETE_EDIT` conflict kinds.
+Phase 7 closed the resurrection gap with three pieces: snapshot-time
+tombstone derivation, `(hash, isDeleted)` plumbing through the diff, and a
+push-rejected retry that absorbs peer races. See [Tombstones](#tombstones-phase-7)
+below for the full contract.
 
 ## MANUAL resolution (Phase 6)
 
@@ -811,6 +823,164 @@ phase that opens a session row at the start of `runSync` (so a crash mid-fetch
 is observable), but Phase 6 doesn't write `FETCHING` rows — `runSync` is
 mutex-locked and a crash mid-fetch leaves no row at all. Reserving the value
 now means Phase 7+ can adopt it without a schema migration.
+
+## Tombstones (Phase 7)
+
+Phase 7 introduces deletion markers in the repo so the diff can distinguish
+"local has X, remote deleted X" from "local has X, remote never had X." The
+former propagates the deletion; the latter pushes the new record. Without
+this, a record deleted on install A could be resurrected on the next sync
+from install B that still had it.
+
+### File format
+
+Path: `tombstones/{tableName}/{uuid}.json`. Body:
+
+```json
+{
+  "tombstone": true
+}
+```
+
+Hash-stable: the body never carries a timestamp or attribution, so re-running
+a snapshot doesn't churn the file. Forensics (when, by whom) come from `git
+log` on the tombstone path. The DTO is
+[`TombstoneJson`](../src/main/kotlin/uk/me/cormack/lighting7/sync/dto/SyncDtos.kt).
+
+### Snapshot-time derivation (and carry-forward)
+
+`SnapshotEngine.snapshot` writes tombstones for every `sync_state` row not
+matched by a live record in the freshly-exported tree. The set is the union of:
+
+1. **Locally deleted between snapshots** — `sync_state` row had a live record
+   last time but the live DB no longer has that UUID.
+2. **Carry-forward** — `sync_state` row already has `lastSyncedIsDeleted = true`
+   (the install previously pulled a tombstone). The wipe-then-export step
+   nuked the on-disk tombstone before re-export; the carry-forward step writes
+   it back. **Without this, the install would silently drop tombstones on its
+   next push and a peer who never saw the deletion would resurrect the record.**
+   The three-install propagation regression test in
+   `RemoteSyncEngineTombstonePropagationTest` enforces this rule.
+
+The deletion set is derived purely by walking
+[`RecordHasher.scanRecordKeys(workingTreePath)`](../src/main/kotlin/uk/me/cormack/lighting7/sync/RecordHasher.kt)
+and computing `sync_state \ on-disk` — no per-DAO delete hooks. The cost is
+one DB read per snapshot.
+
+### `sync_state.lastSyncedIsDeleted`
+
+Phase 7 adds one column on `sync_state`:
+
+```kotlin
+val lastSyncedIsDeleted = bool("last_synced_is_deleted").default(false)
+```
+
+`bootstrapSyncStateAtHead` writes the bit from each snapshot's `isDeleted`
+field, so a tombstone-at-HEAD seeds a `sync_state` row with `isDeleted = true`.
+The diff reads this back so a record that's tombstoned on both sides reads as
+`NoOp` rather than ambiguous-deletion.
+
+### Defensive invariants
+
+* If a snapshot ever sees both a live record AND a tombstone for the same
+  `(tableName, uuid)`, the live record wins and `RecordHasher` logs a `WARN`.
+  The wipe-and-export pipeline can't normally produce this state.
+* If remote is absent and `sync_state` says the base was a live record (i.e.
+  remote dropped a record without a tombstone — history rewrite, manual `rm`,
+  pre-Phase-7 peer), the diff falls back to `TakeLocal` with a `WARN`. Same
+  semantics as Phase 5/6, so the user-visible behaviour doesn't regress.
+
+### Pre-Phase-7 deletion forensics
+
+Deletions that happened before this upgrade can't retroactively get
+tombstones — they were silently dropped from `sync_state`. The first
+post-upgrade sync that finds a record on local but absent remotely with no
+matching `sync_state` row treats it as a brand-new local record (push it).
+Operators who care about pre-upgrade deletions need to apply them on every
+install manually before re-syncing.
+
+### Conflict kinds
+
+Phase 7 produces two new conflict kinds in addition to `EDIT_EDIT`:
+
+* **`DELETE_EDIT`** — local deleted, remote edited. The user picks LOCAL
+  (keep the deletion) or REMOTE (restore the remote edit). MANUAL is
+  disabled — there's no live local-side content to hand-edit; the route
+  layer rejects MANUAL with HTTP 400.
+* **`EDIT_DELETE`** — local edited, remote deleted. The user picks LOCAL
+  (keep the edit), REMOTE (accept the deletion), or MANUAL (rescue the
+  record with hand-edited content). MANUAL on `EDIT_DELETE` is fully
+  supported.
+
+The route layer's MANUAL gate is in
+[`isManualEditAllowed(tableName, conflictKind)`](../src/main/kotlin/uk/me/cormack/lighting7/routes/cloudSync.kt) —
+multi-file records (scripts) and `DELETE_EDIT` conflicts both return false.
+
+### Auto-merge with path removal
+
+When the merge winner's set of files differs from the loser's (a
+record-↔-tombstone flip), the engine deletes paths that exist only on the
+remote side before writing the local snapshot's files. Without that step the
+remote-side stale file would linger in the merged tree.
+
+```kotlin
+val remotePaths = remoteSnapshots[key]?.files?.keys ?: emptySet()
+val localPaths = localSnap.files.keys
+for (path in remotePaths - localPaths) Files.deleteIfExists(workingTree.resolve(path))
+for ((p, c) in localSnap.files) writeWorkingTreeFile(workingTree, p, c)
+```
+
+`replaceFromWorkingTree` only walks the named record subdirs (`cues/`,
+`cueStacks/`, …) and ignores `tombstones/`, so a tombstone on disk naturally
+suppresses DB import for that UUID — no importer changes needed.
+
+### Tombstone GC (deferred)
+
+Tombstone files are tiny (~25 bytes) but accumulate forever in `sync_state`
+and on disk. GC is deliberately not in Phase 7 — it's a tree-size optimisation,
+not a correctness issue. A future maintenance task can walk `git log -1
+--format=%ct -- tombstones/{path}` and prune entries older than (e.g.) 90 days.
+Punted to Phase 8.
+
+## Push-rejected retry (Phase 7)
+
+When push is rejected by the remote (a peer pushed in the window between our
+fetch and our push), the engine retries up to
+[`RemoteSyncEngine.MAX_PUSH_RETRIES`](../src/main/kotlin/uk/me/cormack/lighting7/sync/RemoteSyncEngine.kt)
+= 3 times before surfacing `PUSH_REJECTED` to the caller.
+
+The retry wrapper is around the IO sub-step (the contents of `withContext(Dispatchers.IO)`),
+not the whole orchestrator — so DB-side post-success bookkeeping
+(`lastSyncedSha` update, `cloudSyncDone` event, session→DONE) runs exactly
+once after the IO step succeeds. Two distinct retry paths:
+
+* **`LocalAhead` / `RemoteAbsent`** — `pushAheadOrRedispatch`. On rejection,
+  re-fetch and recurse into `configureAndExchange` with
+  `attemptsRemaining - 1`. The new history relation may turn out to be
+  `Diverged` (peer's commit means we now need to merge), in which case the
+  recursive call dispatches to `handleDiverged` for full merge handling.
+* **`Diverged` auto-merge** — `retryAfterPushReject`. Re-fetch, re-classify,
+  rebuild the diff against the new remote tip. If zero new conflicts, redo
+  `autoMerge` (resetHard new-remote, overlay local-wins, replaceFromWorkingTree,
+  commitWithParents with the original `localSha` as parent #2, push). If new
+  conflicts emerge: open a fresh conflict session (or, on the
+  apply-from-session retry path, throw `SESSION_STALE` — the user must abort
+  and re-run because their stored resolutions may now be wrong against the
+  newer remote).
+
+The DB churn is real: `replaceFromWorkingTree` rewrites the project's row set
+on every retry. For the small project sizes this engine targets that's
+acceptable, but a future optimiser could budget here if it ever bites.
+
+### Coverage limitation
+
+Fully-deterministic push-retry coverage requires inserting a peer-push
+between our fetch and our push, which has no test seam in the current
+synchronous IO block. `RemoteSyncEnginePushRetryTest` exercises the retry
+path opportunistically via concurrent `runSync` calls from two engines
+against a shared bare repo, asserting eventual consistency rather than
+verifying the retry counter directly. A `JGitClient` interface refactor
+would unlock fully-deterministic coverage and is tracked as a follow-up.
 
 ## Operational notes
 

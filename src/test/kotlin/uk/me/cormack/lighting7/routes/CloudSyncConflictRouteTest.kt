@@ -176,6 +176,150 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         }
     }
 
+    /**
+     * Phase 7: a `DELETE_EDIT` conflict has a tombstone on the local side, so MANUAL
+     * editing makes no sense. The route layer must reject it with 400 even though
+     * single-file `cueStacks` records normally allow MANUAL.
+     */
+    @Test
+    fun `POST resolve MANUAL on DELETE_EDIT is 400`() = testApplication {
+        mountTestApp(state)
+        // Seed a session with a DELETE_EDIT conflict directly.
+        val stackUuid = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project; this.name = "shared"; this.palette = emptyList()
+            }
+            val rows = listOf(
+                uk.me.cormack.lighting7.sync.ConflictRow(
+                    tableName = "cueStacks",
+                    recordUuid = stack.uuid,
+                    conflictKind = "DELETE_EDIT",
+                    localJson = null,
+                    remoteJson = """{"name":"remote-edited","uuid":"${stack.uuid}"}""",
+                    baseJson = """{"name":"shared","uuid":"${stack.uuid}"}""",
+                ),
+            )
+            ConflictSession.open(
+                project = project,
+                localSha = "0".repeat(40),
+                remoteSha = "1".repeat(40),
+                baseSha = "2".repeat(40),
+                conflicts = rows,
+            )
+            stack.uuid
+        }
+        val client = jsonClient()
+        val resp = client.post("/api/rest/project/$projectId/sync/resolve") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ResolveRequest(
+                    listOf(
+                        ResolveEntry(
+                            tableName = "cueStacks",
+                            recordUuid = stackUuid.toString(),
+                            resolution = "MANUAL",
+                            manualValueJson = """{"name":"trying-to-edit","uuid":"$stackUuid"}""",
+                        ),
+                    ),
+                ),
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+    }
+
+    /**
+     * Phase 7: MANUAL on `EDIT_DELETE` is allowed (local has a live record to hand-edit;
+     * remote is a tombstone). The route accepts the resolution and persists the manual
+     * payload.
+     */
+    @Test
+    fun `POST resolve MANUAL on EDIT_DELETE is accepted`() = testApplication {
+        mountTestApp(state)
+        val stackUuid = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project; this.name = "shared"; this.palette = emptyList()
+            }
+            val rows = listOf(
+                uk.me.cormack.lighting7.sync.ConflictRow(
+                    tableName = "cueStacks",
+                    recordUuid = stack.uuid,
+                    conflictKind = "EDIT_DELETE",
+                    localJson = """{"name":"local-edited","uuid":"${stack.uuid}"}""",
+                    remoteJson = null,
+                    baseJson = """{"name":"shared","uuid":"${stack.uuid}"}""",
+                ),
+            )
+            ConflictSession.open(
+                project = project,
+                localSha = "0".repeat(40),
+                remoteSha = "1".repeat(40),
+                baseSha = "2".repeat(40),
+                conflicts = rows,
+            )
+            stack.uuid
+        }
+        val client = jsonClient()
+        val resp = client.post("/api/rest/project/$projectId/sync/resolve") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ResolveRequest(
+                    listOf(
+                        ResolveEntry(
+                            tableName = "cueStacks",
+                            recordUuid = stackUuid.toString(),
+                            resolution = "MANUAL",
+                            manualValueJson = """{"name":"manually-rescued","uuid":"$stackUuid"}""",
+                        ),
+                    ),
+                ),
+            )
+        }
+        assertEquals(HttpStatusCode.NoContent, resp.status)
+
+        // The conflict's `manualEditAllowed` must be true for EDIT_DELETE.
+        val getResp = client.get("/api/rest/project/$projectId/sync/conflicts")
+        val body = getResp.body<uk.me.cormack.lighting7.routes.ConflictsResponse>()
+        val c = body.conflicts.first()
+        assertEquals("EDIT_DELETE", c.conflictKind)
+        assertEquals(true, c.manualEditAllowed)
+        assertEquals("MANUAL", c.resolution)
+    }
+
+    @Test
+    fun `GET conflicts marks DELETE_EDIT as manualEditAllowed=false`() = testApplication {
+        mountTestApp(state)
+        transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project; this.name = "shared"; this.palette = emptyList()
+            }
+            ConflictSession.open(
+                project = project,
+                localSha = "0".repeat(40),
+                remoteSha = "1".repeat(40),
+                baseSha = "2".repeat(40),
+                conflicts = listOf(
+                    uk.me.cormack.lighting7.sync.ConflictRow(
+                        tableName = "cueStacks",
+                        recordUuid = stack.uuid,
+                        conflictKind = "DELETE_EDIT",
+                        localJson = null,
+                        remoteJson = """{"name":"remote-edited","uuid":"${stack.uuid}"}""",
+                        baseJson = """{"name":"shared","uuid":"${stack.uuid}"}""",
+                    ),
+                ),
+            )
+        }
+        val client = jsonClient()
+        val resp = client.get("/api/rest/project/$projectId/sync/conflicts")
+        val body = resp.body<uk.me.cormack.lighting7.routes.ConflictsResponse>()
+        val c = body.conflicts.single()
+        assertEquals("DELETE_EDIT", c.conflictKind)
+        assertEquals(false, c.manualEditAllowed, "DELETE_EDIT must not allow MANUAL editing")
+    }
+
     @Test
     fun `POST snapshot is rejected while a session is open`() = testApplication {
         mountTestApp(state)

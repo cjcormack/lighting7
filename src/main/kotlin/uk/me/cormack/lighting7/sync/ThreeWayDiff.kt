@@ -1,7 +1,9 @@
 package uk.me.cormack.lighting7.sync
 
+import org.slf4j.LoggerFactory
+
 /**
- * Pure three-way diff over per-record snapshots and last-synced hashes.
+ * Pure three-way diff over per-record snapshots and last-synced metadata.
  *
  * For every key in `local ∪ remote ∪ syncState`, classify into one of:
  *  * [DiffOutcome.NoOp] — both sides agree (or no record on either side).
@@ -10,64 +12,92 @@ package uk.me.cormack.lighting7.sync
  *  * [DiffOutcome.Conflict] — both sides changed and disagree; user must resolve.
  *
  * The function is deliberately pure / no-side-effects. It's the testable core of the
- * Phase 5 engine and the logic that the integration tests poke through
- * `RemoteSyncEngine`.
+ * sync engine and the logic that the integration tests poke through [RemoteSyncEngine].
  *
- * **Phase 5 limitations** (documented in `docs/sync-engineering.md`):
- *  * No tombstone awareness. A record present on one side and absent on the other is
- *    treated as "the side that has it wins" — we can't tell "deleted by user" from
- *    "never existed here". Phase 7 will add this distinction.
- *  * Only [ConflictKind.EDIT_EDIT] is produced — [ConflictKind.EDIT_DELETE] /
- *    [ConflictKind.DELETE_EDIT] also wait for tombstones in Phase 7.
+ * Each side carries an `isDeleted` bit alongside the content hash so deletions propagate
+ * explicitly instead of looking like "absent." The sync_state row likewise carries
+ * `lastSyncedIsDeleted` so a tombstone on both sides is `NoOp` rather than ambiguous.
  */
 object ThreeWayDiff {
 
+    private val logger = LoggerFactory.getLogger(ThreeWayDiff::class.java)
+
     /**
-     * @param local       SHA-256 hash by key for the local side.
-     * @param remote      SHA-256 hash by key for the remote side.
-     * @param lastSynced  SHA-256 hash by key from `sync_state` (the last-known shared base).
+     * @param local       per-record `(hash, isDeleted)` for the local side.
+     * @param remote      per-record `(hash, isDeleted)` for the remote side.
+     * @param lastSynced  per-record `(hash, isDeleted)` from `sync_state` (the last-known shared base).
      * @return one [DiffOutcome] per key in the union of all three inputs.
      */
     fun compute(
-        local: Map<RecordKey, String>,
-        remote: Map<RecordKey, String>,
-        lastSynced: Map<RecordKey, String>,
+        local: Map<RecordKey, SnapshotMeta>,
+        remote: Map<RecordKey, SnapshotMeta>,
+        lastSynced: Map<RecordKey, SnapshotMeta>,
     ): Map<RecordKey, DiffOutcome> {
         val keys = local.keys union remote.keys union lastSynced.keys
         val out = mutableMapOf<RecordKey, DiffOutcome>()
         for (key in keys) {
-            val l = local[key]
-            val r = remote[key]
-            val base = lastSynced[key]
-            out[key] = classify(l, r, base)
+            out[key] = classify(key, local[key], remote[key], lastSynced[key])
         }
         return out
     }
 
-    private fun classify(local: String?, remote: String?, base: String?): DiffOutcome = when {
-        // Neither side has it — left over `sync_state` row. Engine GCs it.
+    private fun classify(
+        key: RecordKey,
+        local: SnapshotMeta?,
+        remote: SnapshotMeta?,
+        base: SnapshotMeta?,
+    ): DiffOutcome = when {
+        // Neither side has any trace — left over `sync_state` row. Engine GCs it.
         local == null && remote == null -> DiffOutcome.NoOp
 
-        // Only one side has it. Phase 5 doesn't model tombstones, so the side that
-        // has the record wins. Documented gap: this resurrects records the other
-        // side deleted since the last sync.
-        local != null && remote == null -> DiffOutcome.TakeLocal
-        local == null && remote != null -> DiffOutcome.TakeRemote
+        // One side absent on disk entirely. With snapshot-time tombstone derivation a
+        // deletion always lands as a tombstone, so "absent on local" is either "we never
+        // had it" or "remote dropped it without a tombstone" (history rewrite, manual
+        // `rm`, peer that doesn't write tombstones). Resurrect with a logged warning when
+        // sync_state says the base was a live record.
+        local != null && remote == null -> {
+            if (base != null && !base.isDeleted) {
+                logger.warn(
+                    "Record {} present locally but absent from remote with no tombstone; " +
+                        "treating as TakeLocal (history rewrite or pre-Phase-7 peer).",
+                    key,
+                )
+            }
+            if (local.isDeleted) DiffOutcome.NoOp else DiffOutcome.TakeLocal
+        }
+        local == null && remote != null -> {
+            if (remote.isDeleted) DiffOutcome.NoOp else DiffOutcome.TakeRemote
+        }
 
-        // Both sides have it.
-        local == remote -> DiffOutcome.NoOp
+        // Both sides have something (live record or tombstone).
+        // Same hash + same kind → no-op. Covers concurrent identical edits AND concurrent
+        // identical deletions (both tombstones share the same canonical body hash).
+        local!!.hash == remote!!.hash && local.isDeleted == remote.isDeleted -> DiffOutcome.NoOp
 
-        // No shared base means we never recorded a sync_state row — neither side can
-        // claim "I'm unchanged since the last sync". Surface as a conflict so the user
-        // makes the call. This is also the only outcome on the very first Phase 5 sync
-        // following a Phase 4 upgrade where local & remote happen to differ.
-        base == null -> DiffOutcome.Conflict(ConflictKind.EDIT_EDIT)
+        // No shared base (first sync after Phase-4 → Phase-5 upgrade, or both sides
+        // independently created the same UUID). Surface as a conflict so the user picks.
+        base == null -> DiffOutcome.Conflict(conflictKindFor(local, remote))
 
-        local == base -> DiffOutcome.TakeRemote
-        remote == base -> DiffOutcome.TakeLocal
+        else -> {
+            val localChanged = local.hash != base.hash || local.isDeleted != base.isDeleted
+            val remoteChanged = remote.hash != base.hash || remote.isDeleted != base.isDeleted
+            when {
+                !localChanged && !remoteChanged -> DiffOutcome.NoOp
+                !localChanged -> DiffOutcome.TakeRemote
+                !remoteChanged -> DiffOutcome.TakeLocal
+                else -> DiffOutcome.Conflict(conflictKindFor(local, remote))
+            }
+        }
+    }
 
-        // Both sides moved away from base, and to different values.
-        else -> DiffOutcome.Conflict(ConflictKind.EDIT_EDIT)
+    /**
+     * Pick the right [ConflictKind] when both sides moved away from base to different
+     * values — purely a function of whether each side is currently a tombstone.
+     */
+    private fun conflictKindFor(local: SnapshotMeta, remote: SnapshotMeta): ConflictKind = when {
+        local.isDeleted && !remote.isDeleted -> ConflictKind.DELETE_EDIT
+        !local.isDeleted && remote.isDeleted -> ConflictKind.EDIT_DELETE
+        else -> ConflictKind.EDIT_EDIT
     }
 }
 
@@ -79,8 +109,8 @@ sealed class DiffOutcome {
     data class Conflict(val kind: ConflictKind) : DiffOutcome()
 
     /**
-     * Phase 6 MANUAL resolution: write [content] to the record's file path verbatim instead
-     * of choosing local or remote. Never produced by [ThreeWayDiff.compute] — it's only
+     * MANUAL resolution: write [content] to the record's file path verbatim instead of
+     * choosing local or remote. Never produced by [ThreeWayDiff.compute] — it's only
      * synthesised in [uk.me.cormack.lighting7.sync.RemoteSyncEngine.applyMergeFromSession]
      * from the user's stored manual edit.
      */
@@ -88,7 +118,10 @@ sealed class DiffOutcome {
 }
 
 /**
- * The kind of conflict the diff detected. Phase 5 only produces `EDIT_EDIT`; the others
- * are reserved for Phase 7 when tombstones land.
+ * The kind of conflict the diff detected.
+ *
+ *  * `EDIT_EDIT` — both sides edited the record to different live values.
+ *  * `DELETE_EDIT` — local deleted, remote edited.
+ *  * `EDIT_DELETE` — local edited, remote deleted.
  */
 enum class ConflictKind { EDIT_EDIT, EDIT_DELETE, DELETE_EDIT }

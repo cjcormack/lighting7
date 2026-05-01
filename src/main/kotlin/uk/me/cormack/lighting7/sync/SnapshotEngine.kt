@@ -3,6 +3,9 @@ package uk.me.cormack.lighting7.sync
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.sql.transactions.transaction
+import uk.me.cormack.lighting7.models.DaoSyncState
+import uk.me.cormack.lighting7.models.DaoSyncStates
 import uk.me.cormack.lighting7.state.State
 import java.time.Instant
 import java.time.format.DateTimeFormatter
@@ -13,14 +16,23 @@ import java.util.UUID
  * tree as a single git commit.
  *
  * Pipeline (on `Dispatchers.IO`): ensure the repo exists, wipe non-metadata files,
- * re-export the canonical JSON via [ProjectExporter], stage everything, and commit
- * if anything changed.
+ * re-export the canonical JSON via [ProjectExporter], **derive and write tombstones**
+ * for any record present in `sync_state` but missing from the freshly-exported tree,
+ * stage everything, and commit if anything changed.
+ *
+ * Tombstone derivation covers two cases:
+ *  * **Local deletion since last sync** — `sync_state` row with `lastSyncedIsDeleted=false`
+ *    but the live DB no longer has that UUID.
+ *  * **Carry-forward** — `sync_state` row with `lastSyncedIsDeleted=true` (a previously-pulled
+ *    tombstone). The wipe step nuked the on-disk tombstone before re-export; without
+ *    rewriting it, this install would silently drop the deletion on its next push and
+ *    a peer who never saw the deletion would resurrect the record.
  *
  * The wipe-then-re-export strategy is what makes deletions show up: without it,
  * stale `cues/{uuid}.json` files would linger after a row is removed and `git
  * status` would report no change.
  */
-class SnapshotEngine(state: State) {
+class SnapshotEngine(private val state: State) {
 
     private val workingTree = SyncWorkingTree(state)
     private val exporter = ProjectExporter(state)
@@ -51,7 +63,17 @@ class SnapshotEngine(state: State) {
         return withContext(Dispatchers.IO) {
             workingTree.ensureInitialised(path).use { repo ->
                 workingTree.cleanTrackedFiles(path)
-                exporter.export(projectId, path)
+                val exportResult = exporter.export(projectId, path)
+
+                // Derive tombstones: anything in `sync_state` not matched by a live
+                // record we just wrote gets a tombstone marker. Covers both freshly-deleted
+                // DB rows and carry-forward of tombstones pulled from previous syncs.
+                val syncStateKeys = transaction(state.database) {
+                    DaoSyncState.find { DaoSyncStates.project eq projectId }
+                        .map { RecordKey(it.tableName, it.recordUuid) }
+                        .toSet()
+                }
+                exporter.writeTombstones(path, syncStateKeys - exportResult.liveKeys)
 
                 if (!JGitClient.stageAll(repo)) {
                     return@withContext SnapshotResponse(

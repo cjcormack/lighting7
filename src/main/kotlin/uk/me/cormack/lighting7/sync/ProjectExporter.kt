@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.sync.dto.ParkedChannelJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.dto.ScriptMetaJson
 import uk.me.cormack.lighting7.sync.dto.ShowEntryJson
+import uk.me.cormack.lighting7.sync.dto.TombstoneJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import java.nio.file.Files
 import java.nio.file.Path
@@ -59,13 +60,23 @@ import java.util.UUID
  * /controlSurfaceBindings/{uuid}.json
  * /scripts/{uuid}.kts              -- raw script body for git-friendly diffs
  * /scripts/{uuid}.meta.json
+ * /tombstones/{tableName}/{uuid}.json -- deletion markers; written by [SnapshotEngine]
+ *                                       via [writeTombstones], not by [export], because
+ *                                       the exporter doesn't know which records were
+ *                                       just deleted.
  * ```
  */
 class ProjectExporter(private val state: State) {
 
-    data class Result(val path: Path, val fileCount: Int)
+    /**
+     * `liveKeys` is every record the exporter wrote as a live record (i.e. not a
+     * tombstone — the snapshot engine writes those separately). Returning them lets
+     * callers diff against `sync_state` without re-walking the export folder.
+     */
+    data class Result(val path: Path, val fileCount: Int, val liveKeys: Set<RecordKey>)
 
     fun export(projectId: Int, targetDir: Path): Result {
+        val liveKeys = mutableSetOf<RecordKey>()
         val fileCount = transaction(state.database) {
             val project = DaoProject.findById(projectId)
                 ?: throw IllegalArgumentException("Project not found: $projectId")
@@ -91,7 +102,7 @@ class ProjectExporter(private val state: State) {
             )
             var count = 3
 
-            count += writeAll(targetDir, "showEntries", project.showEntries.toList(), ShowEntryJson.serializer(), { it.uuid }) { e ->
+            count += writeAll(targetDir, "showEntries", project.showEntries.toList(), ShowEntryJson.serializer(), { it.uuid }, liveKeys) { e ->
                 ShowEntryJson(
                     uuid = e.uuid.toString(),
                     cueStackUuid = e.cueStack?.uuid?.toString(),
@@ -101,11 +112,11 @@ class ProjectExporter(private val state: State) {
                 )
             }
 
-            count += writeAll(targetDir, "cueStacks", project.cueStacks.toList(), CueStackJson.serializer(), { it.uuid }) { s ->
+            count += writeAll(targetDir, "cueStacks", project.cueStacks.toList(), CueStackJson.serializer(), { it.uuid }, liveKeys) { s ->
                 CueStackJson(s.uuid.toString(), s.name, s.palette, s.loop)
             }
 
-            count += writeAll(targetDir, "cues", project.cues.toList(), CueJson.serializer(), { it.uuid }) { c ->
+            count += writeAll(targetDir, "cues", project.cues.toList(), CueJson.serializer(), { it.uuid }, liveKeys) { c ->
                 CueJson(
                     uuid = c.uuid.toString(),
                     cueStackUuid = c.cueStack?.uuid?.toString(),
@@ -124,14 +135,14 @@ class ProjectExporter(private val state: State) {
                 )
             }
 
-            count += writeCueChildren(targetDir, project)
+            count += writeCueChildren(targetDir, project, liveKeys)
 
-            count += writeAll(targetDir, "universeConfigs", project.universeConfigs.toList(), UniverseConfigJson.serializer(), { it.uuid }) { u ->
+            count += writeAll(targetDir, "universeConfigs", project.universeConfigs.toList(), UniverseConfigJson.serializer(), { it.uuid }, liveKeys) { u ->
                 // `address` deliberately omitted — machine-local per cloud-sync design.
                 UniverseConfigJson(u.uuid.toString(), u.subnet, u.universe, u.controllerType)
             }
 
-            count += writeAll(targetDir, "fixturePatches", project.fixturePatches.toList(), FixturePatchJson.serializer(), { it.uuid }) { p ->
+            count += writeAll(targetDir, "fixturePatches", project.fixturePatches.toList(), FixturePatchJson.serializer(), { it.uuid }, liveKeys) { p ->
                 FixturePatchJson(
                     uuid = p.uuid.toString(),
                     universeConfigUuid = p.universeConfig.uuid.toString(),
@@ -148,7 +159,7 @@ class ProjectExporter(private val state: State) {
                 )
             }
 
-            count += writeAll(targetDir, "fixtureGroups", project.fixtureGroups.toList(), FixtureGroupJson.serializer(), { it.uuid }) { g ->
+            count += writeAll(targetDir, "fixtureGroups", project.fixtureGroups.toList(), FixtureGroupJson.serializer(), { it.uuid }, liveKeys) { g ->
                 val members = g.members
                     .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                     .map { m ->
@@ -163,7 +174,7 @@ class ProjectExporter(private val state: State) {
                 FixtureGroupJson(g.uuid.toString(), g.name, members)
             }
 
-            count += writeAll(targetDir, "fxPresets", project.fxPresets.toList(), FxPresetJson.serializer(), { it.uuid }) { p ->
+            count += writeAll(targetDir, "fxPresets", project.fxPresets.toList(), FxPresetJson.serializer(), { it.uuid }, liveKeys) { p ->
                 val assignments = p.propertyAssignments
                     .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                     .map { a ->
@@ -187,7 +198,7 @@ class ProjectExporter(private val state: State) {
                 )
             }
 
-            count += writeAll(targetDir, "fxDefinitions", project.fxDefinitions.toList(), FxDefinitionJson.serializer(), { it.uuid }) { d ->
+            count += writeAll(targetDir, "fxDefinitions", project.fxDefinitions.toList(), FxDefinitionJson.serializer(), { it.uuid }, liveKeys) { d ->
                 // Encode ParameterInfo through the canonical JSON instance so nested defaults/nulls
                 // follow the same omission rules as the parent document.
                 val parametersJson = canonicalJson.encodeToJsonElement(
@@ -209,7 +220,7 @@ class ProjectExporter(private val state: State) {
                 )
             }
 
-            count += writeAll(targetDir, "cueSlots", project.cueSlots.toList(), CueSlotJson.serializer(), { it.uuid }) { s ->
+            count += writeAll(targetDir, "cueSlots", project.cueSlots.toList(), CueSlotJson.serializer(), { it.uuid }, liveKeys) { s ->
                 CueSlotJson(
                     uuid = s.uuid.toString(),
                     page = s.page,
@@ -221,7 +232,7 @@ class ProjectExporter(private val state: State) {
 
             count += writeAll(
                 targetDir, "parkedChannels", project.parkedChannels.toList(),
-                ParkedChannelJson.serializer(), { it.uuid },
+                ParkedChannelJson.serializer(), { it.uuid }, liveKeys,
             ) { p ->
                 ParkedChannelJson(
                     uuid = p.uuid.toString(),
@@ -233,7 +244,7 @@ class ProjectExporter(private val state: State) {
 
             count += writeAll(
                 targetDir, "controlSurfaceBindings", project.controlSurfaceBindings.toList(),
-                ControlSurfaceBindingJson.serializer(), { it.uuid },
+                ControlSurfaceBindingJson.serializer(), { it.uuid }, liveKeys,
             ) { b ->
                 ControlSurfaceBindingJson(
                     uuid = b.uuid.toString(),
@@ -247,15 +258,17 @@ class ProjectExporter(private val state: State) {
                 )
             }
 
-            count += writeScripts(targetDir, project)
+            count += writeScripts(targetDir, project, liveKeys)
             count
         }
-        return Result(targetDir, fileCount)
+        return Result(targetDir, fileCount, liveKeys)
     }
 
     /**
      * Writes one canonical-JSON file per entity under `[targetDir]/[subdir]/{uuid}.json`. The
      * subdirectory is created lazily — projects with no rows in [entities] produce no folder.
+     * Each written record's [RecordKey] is added to [liveKeys] so the snapshot pipeline can
+     * derive deletions without re-walking the export folder.
      */
     private fun <E, J> writeAll(
         targetDir: Path,
@@ -263,18 +276,21 @@ class ProjectExporter(private val state: State) {
         entities: List<E>,
         serializer: KSerializer<J>,
         uuidOf: (E) -> UUID,
+        liveKeys: MutableSet<RecordKey>,
         mapper: (E) -> J,
     ): Int {
         if (entities.isEmpty()) return 0
         val sub = targetDir.resolve(subdir)
         Files.createDirectories(sub)
         entities.forEach { e ->
-            writeJson(sub.resolve("${uuidOf(e)}.json"), serializer, mapper(e))
+            val uuid = uuidOf(e)
+            writeJson(sub.resolve("$uuid.json"), serializer, mapper(e))
+            liveKeys.add(RecordKey(subdir, uuid))
         }
         return entities.size
     }
 
-    private fun writeCueChildren(dir: Path, project: DaoProject): Int {
+    private fun writeCueChildren(dir: Path, project: DaoProject, liveKeys: MutableSet<RecordKey>): Int {
         val cues = project.cues.toList()
         if (cues.isEmpty()) return 0
 
@@ -304,6 +320,7 @@ class ProjectExporter(private val state: State) {
                         moveInDark = a.moveInDark,
                     ),
                 )
+                liveKeys.add(RecordKey("cuePropertyAssignments", a.uuid))
                 count++
             }
 
@@ -323,6 +340,7 @@ class ProjectExporter(private val state: State) {
                         sortOrder = a.sortOrder,
                     ),
                 )
+                liveKeys.add(RecordKey("cuePresetApplications", a.uuid))
                 count++
             }
 
@@ -353,6 +371,7 @@ class ProjectExporter(private val state: State) {
                         sortOrder = e.sortOrder,
                     ),
                 )
+                liveKeys.add(RecordKey("cueAdHocEffects", e.uuid))
                 count++
             }
 
@@ -372,13 +391,14 @@ class ProjectExporter(private val state: State) {
                         sortOrder = t.sortOrder,
                     ),
                 )
+                liveKeys.add(RecordKey("cueTriggers", t.uuid))
                 count++
             }
         }
         return count
     }
 
-    private fun writeScripts(dir: Path, project: DaoProject): Int {
+    private fun writeScripts(dir: Path, project: DaoProject, liveKeys: MutableSet<RecordKey>): Int {
         val scripts = project.scripts.toList()
         if (scripts.isEmpty()) return 0
         val sub = dir.resolve("scripts")
@@ -391,11 +411,34 @@ class ProjectExporter(private val state: State) {
                 ScriptMetaJson.serializer(),
                 ScriptMetaJson(s.uuid.toString(), s.name, s.scriptType),
             )
+            liveKeys.add(RecordKey("scripts", s.uuid))
         }
         return scripts.size * 2
     }
 
     private fun <T> writeJson(path: Path, serializer: KSerializer<T>, value: T) {
         Files.writeString(path, canonicalEncode(serializer, value))
+    }
+
+    /**
+     * Write a tombstone marker for each [keys] entry under
+     * `[targetDir]/tombstones/{tableName}/{uuid}.json`. The body is intentionally minimal
+     * and timestamp-free so the file's hash stays stable across re-snapshots — see
+     * [TombstoneJson].
+     */
+    fun writeTombstones(targetDir: Path, keys: Collection<RecordKey>): Int {
+        if (keys.isEmpty()) return 0
+        val body = canonicalEncode(TombstoneJson.serializer(), TombstoneJson())
+        val byTable = keys.groupBy { it.tableName }
+        var count = 0
+        for ((tableName, recordKeys) in byTable) {
+            val sub = targetDir.resolve(RecordHasher.TOMBSTONES_DIR).resolve(tableName)
+            Files.createDirectories(sub)
+            for (key in recordKeys) {
+                Files.writeString(sub.resolve("${key.uuid}.json"), body)
+                count++
+            }
+        }
+        return count
     }
 }
