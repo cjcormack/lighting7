@@ -25,9 +25,9 @@ object DbFixtureLoader {
      * Clears existing fixtures and rebuilds from DB state.
      *
      * The optional [parkSource] is wired into freshly-constructed controllers so
-     * parked channels survive the rebuild without callers having to remember to
-     * call [uk.me.cormack.lighting7.dmx.ParkManager.applyToControllers] afterwards.
-     * Pass `null` from tests that don't exercise the park subsystem.
+     * parked channels survive the rebuild — controllers consult the source at
+     * transmit time rather than holding their own park cache. Pass `null` from
+     * tests that don't exercise the park subsystem.
      */
     fun loadFixtures(
         projectId: Int,

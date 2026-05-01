@@ -925,16 +925,16 @@ fun Application.configureSockets(state: State) {
                     when (val message = converter?.deserialize<InMessage>(frame)) {
                         is PingInMessage -> {}
                         is ChannelStateInMessage -> {
-                            // Overlay parked values onto currentValues — a parked channel outputs
-                            // its parked value to DMX regardless of what's in currentValues, so
-                            // clients should see the same value the fixture is actually emitting.
+                            // Overlay parked values onto currentValues so clients see what the
+                            // fixture is actually emitting, not the underlying buffered value.
+                            val parkManager = state.show.parkManager
                             val currentValues = state.show.fixtures.controllers.flatMap { controller ->
-                                val parked = controller.parkedChannels
+                                val universe = controller.universe.universe
                                 controller.currentValues.map { (channelNo, value) ->
                                     ChannelState(
-                                        controller.universe.universe,
+                                        universe,
                                         channelNo,
-                                        parked[channelNo] ?: value,
+                                        parkManager.getParkedValue(universe, channelNo) ?: value,
                                     )
                                 }
                             }
@@ -947,23 +947,22 @@ fun Application.configureSockets(state: State) {
                             state.show.directWriteStore.put(message.universe, message.id, message.level)
                         }
 
-                        // Park-related message handlers
+                        // Park mutations write through ParkManager; the requestTransmit() poke
+                        // pushes the new value to the rig before the next 25 ms transmit tick.
                         is ParkStateInMessage -> {
                             sendSerialized<OutMessage>(buildParkStateMessage(state))
                         }
                         is ParkChannelInMessage -> {
                             state.show.parkManager.park(message.universe, message.channel, message.value)
-                            val controller = state.show.fixtures.controller(Universe(0, message.universe))
-                            controller.parkChannel(message.channel, message.value)
+                            state.show.fixtures.controller(Universe(0, message.universe)).requestTransmit()
                         }
                         is UnparkChannelInMessage -> {
                             state.show.parkManager.unpark(message.universe, message.channel)
-                            val controller = state.show.fixtures.controller(Universe(0, message.universe))
-                            controller.unparkChannel(message.channel)
+                            state.show.fixtures.controller(Universe(0, message.universe)).requestTransmit()
                         }
                         is UnparkAllInMessage -> {
                             state.show.parkManager.unparkAll()
-                            state.show.fixtures.controllers.forEach { it.unparkAll() }
+                            state.show.fixtures.controllers.forEach { it.requestTransmit() }
                         }
 
                         is UniversesStateInMessage -> {

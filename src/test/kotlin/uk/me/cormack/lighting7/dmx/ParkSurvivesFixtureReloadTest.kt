@@ -8,13 +8,9 @@ import kotlin.test.assertEquals
 
 /**
  * Patch-time channel-state preservation. A fixture-and-controller rebuild
- * (`DbFixtureLoader.loadFixtures`) must:
- *
- *   1. Keep parked channels parked, even when the caller forgets to invoke
- *      `parkManager.applyToControllers()` afterwards (phase 1 — `ParkSource`
- *      hook on the new controller).
- *   2. Preserve every other channel's current value across the rebuild
- *      (phase 2 — snapshot/restore in [DbFixtureLoader]).
+ * (`DbFixtureLoader.loadFixtures`) must keep both parked and non-parked channel
+ * values intact: parked via the [ParkSource] hook on the fresh controller,
+ * non-parked via the snapshot/restore in `DbFixtureLoader`.
  *
  * Regression context: patching or editing a fixture via `POST /patches` /
  * `PUT /patches/{id}` was zeroing every channel on the rig. For non-parked
@@ -38,10 +34,7 @@ class ParkSurvivesFixtureReloadTest : RouteIntegrationTest() {
         assertEquals(100u.toUByte(), state.show.fixtures.controller(universe).getValue(5))
         assertEquals(200u.toUByte(), state.show.fixtures.controller(universe).getValue(6))
 
-        // Same rebuild path as `POST /patches`: a full controller swap. We do NOT call
-        // `parkManager.applyToControllers()` afterwards — this proves the new controller
-        // picks up parked values via the `ParkSource` hook alone, and non-parked values
-        // via the snapshot/restore in [DbFixtureLoader].
+        // Same rebuild path as `POST /patches`: a full controller swap.
         DbFixtureLoader.loadFixtures(
             projectId = projectId,
             fixtures = state.show.fixtures,

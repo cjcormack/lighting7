@@ -56,7 +56,6 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
             // Reload controllers so the new address takes effect at runtime
             if (state.isCurrentProject(project)) {
                 DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
-                state.show.parkManager.applyToControllers(state.show.fixtures.controllers)
             }
             state.show.fixtures.patchListChanged()
 
@@ -94,7 +93,6 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
             // Reload controllers to remove the deleted universe
             if (state.isCurrentProject(project)) {
                 DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
-                state.show.parkManager.applyToControllers(state.show.fixtures.controllers)
             }
             state.show.fixtures.patchListChanged()
 

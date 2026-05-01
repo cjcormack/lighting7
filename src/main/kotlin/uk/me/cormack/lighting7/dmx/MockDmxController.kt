@@ -9,7 +9,6 @@ class MockDmxController(
     private val parkSource: ParkSource? = null,
 ) : DmxController {
     private val values = mutableMapOf<Int, UByte>()
-    private val _parkedChannels = mutableMapOf<Int, UByte>()
     private val _transmitModifiers = mutableListOf<TransmitModifier>()
 
     /** Modifiers registered on this controller. Mock lets tests inspect them without forcing transmit. */
@@ -34,9 +33,6 @@ class MockDmxController(
     override val currentValues: Map<Int, UByte>
         get() = values.toMap()
 
-    override val parkedChannels: Map<Int, UByte>
-        get() = _parkedChannels.toMap()
-
     override fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>) {
         valuesToSet.forEach { (channel, change) ->
             values[channel] = change.newValue
@@ -56,7 +52,6 @@ class MockDmxController(
 
     override fun getValue(channelNo: Int): UByte {
         return parkSource?.getParkedValue(universe.universe, channelNo)
-            ?: _parkedChannels[channelNo]
             ?: values[channelNo]
             ?: 0u
     }
@@ -65,18 +60,6 @@ class MockDmxController(
         for ((channelNo, value) in values) {
             this.values[channelNo] = value
         }
-    }
-
-    override fun parkChannel(channelNo: Int, value: UByte) {
-        _parkedChannels[channelNo] = value
-    }
-
-    override fun unparkChannel(channelNo: Int) {
-        _parkedChannels.remove(channelNo)
-    }
-
-    override fun unparkAll() {
-        _parkedChannels.clear()
     }
 
     override fun addTransmitModifier(modifier: TransmitModifier) {
@@ -93,12 +76,11 @@ class MockDmxController(
 
     /**
      * Get the effective output value for a channel, applying modifiers. For test assertions.
-     * Park takes absolute precedence (ParkSource first, then per-controller cache); then
-     * modifiers run over the raw value in registration order.
+     * Park takes absolute precedence via the [ParkSource]; then modifiers run over the raw
+     * value in registration order.
      */
     fun getEffectiveValue(channelNo: Int): UByte {
         parkSource?.getParkedValue(universe.universe, channelNo)?.let { return it }
-        _parkedChannels[channelNo]?.let { return it }
         var v = values[channelNo] ?: 0u
         for (mod in _transmitModifiers) v = mod.modify(universe, channelNo, v)
         return v
@@ -109,7 +91,6 @@ class MockDmxController(
      */
     fun reset() {
         values.clear()
-        _parkedChannels.clear()
         _transmitModifiers.clear()
         _writeLog.clear()
         transmitRequests = 0

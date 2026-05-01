@@ -26,9 +26,6 @@ class ArtNetController(
 
     override val currentValues = ConcurrentHashMap<Int, UByte>(512)
 
-    private val _parkedChannels = ConcurrentHashMap<Int, UByte>()
-    override val parkedChannels: Map<Int, UByte> get() = _parkedChannels
-
     private val transmitModifiers = java.util.concurrent.CopyOnWriteArrayList<TransmitModifier>()
 
     private var previousSentDmxData = ByteArray(512)
@@ -121,7 +118,6 @@ class ArtNetController(
 
     override fun getValue(channelNo: Int): UByte {
         return parkSource?.getParkedValue(universe.universe, channelNo)
-            ?: _parkedChannels[channelNo]
             ?: currentValues[channelNo]
             ?: 0u
     }
@@ -143,22 +139,6 @@ class ArtNetController(
 
     fun unregisterListener(listener: ChannelChangeListener) {
         listeners.remove(listener)
-    }
-
-    override fun parkChannel(channelNo: Int, value: UByte) {
-        if (channelNo < 1 || channelNo > 512) return
-        _parkedChannels[channelNo] = value
-        runBlocking { transmissionNeeded.send(Unit) }
-    }
-
-    override fun unparkChannel(channelNo: Int) {
-        _parkedChannels.remove(channelNo)
-        runBlocking { transmissionNeeded.send(Unit) }
-    }
-
-    override fun unparkAll() {
-        _parkedChannels.clear()
-        runBlocking { transmissionNeeded.send(Unit) }
     }
 
     override fun addTransmitModifier(modifier: TransmitModifier) {
@@ -293,13 +273,12 @@ class ArtNetController(
         val changes = HashMap<Int, UByte>()
         val dmxData = ByteArray(512)
 
+        // Grab the universe park snapshot once per frame: at 40 Hz x 512 channels x N
+        // controllers, dropping the per-channel outer-map lookup is meaningful.
+        val parkedView = parkSource?.universeView(universe.universe)
+
         currentValues.forEach { (channelNo, channelValue) ->
-            // Apply park override: parked channels always output their parked value.
-            // ParkSource (ParkManager) is consulted first so a fresh controller picks up
-            // park state without needing an explicit applyToControllers() reapply.
-            // Modifiers iterate on the CopyOnWriteArrayList directly — its iterators snapshot
-            // internally without allocating a fresh list per frame.
-            val parked = parkSource?.getParkedValue(universe.universe, channelNo) ?: _parkedChannels[channelNo]
+            val parked = parkedView?.get(channelNo)
             val outputValue = if (parked != null) {
                 parked
             } else {

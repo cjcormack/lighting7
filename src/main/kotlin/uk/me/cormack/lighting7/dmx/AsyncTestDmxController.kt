@@ -30,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class AsyncTestDmxController(
     override val universe: Universe = Universe(0, 0),
+    private val parkSource: ParkSource? = null,
 ) : DmxController {
 
     private class ChannelUpdatePayload(
@@ -38,7 +39,6 @@ class AsyncTestDmxController(
     )
 
     override val currentValues = ConcurrentHashMap<Int, UByte>(512)
-    private val _parkedChannels = ConcurrentHashMap<Int, UByte>()
 
     private val supervisor = SupervisorJob()
     private val scope = CoroutineScope(supervisor + Dispatchers.Default)
@@ -60,8 +60,6 @@ class AsyncTestDmxController(
             }
         }
     }
-
-    override val parkedChannels: Map<Int, UByte> get() = _parkedChannels
 
     override fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>) {
         runBlocking { setValuesSuspend(valuesToSet) }
@@ -93,17 +91,15 @@ class AsyncTestDmxController(
     }
 
     override fun getValue(channelNo: Int): UByte =
-        _parkedChannels[channelNo] ?: currentValues[channelNo] ?: 0u
+        parkSource?.getParkedValue(universe.universe, channelNo)
+            ?: currentValues[channelNo]
+            ?: 0u
 
     override fun restoreState(values: Map<Int, UByte>) {
         for ((channelNo, value) in values) {
             if (channelNo in 1..512) currentValues[channelNo] = value
         }
     }
-
-    override fun parkChannel(channelNo: Int, value: UByte) { _parkedChannels[channelNo] = value }
-    override fun unparkChannel(channelNo: Int) { _parkedChannels.remove(channelNo) }
-    override fun unparkAll() { _parkedChannels.clear() }
 
     override fun addTransmitModifier(modifier: TransmitModifier) {}
     override fun removeTransmitModifier(modifier: TransmitModifier) {}

@@ -1,7 +1,9 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.MockDmxController
+import uk.me.cormack.lighting7.dmx.ParkSource
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
@@ -41,10 +43,27 @@ class FxEnginePipelineTest {
         val engine: FxEngine,
         val directWriteStore: DirectWriteStore,
         val masterClock: MasterClock,
+        val parkSource: MutableParkSource,
     )
 
+    /**
+     * Minimal mutable [ParkSource] for tests that exercise the park override path without
+     * spinning up the full [uk.me.cormack.lighting7.dmx.ParkManager] (DB + project).
+     */
+    private class MutableParkSource : ParkSource {
+        private val parked = mutableMapOf<Long, UByte>()
+        fun park(universe: Int, channel: Int, value: UByte) {
+            parked[packChannelKey(universe, channel)] = value
+        }
+        override fun getParkedValue(universe: Int, channel: Int): UByte? =
+            parked[packChannelKey(universe, channel)]
+        override fun isParked(universe: Int, channel: Int): Boolean =
+            parked.containsKey(packChannelKey(universe, channel))
+    }
+
     private fun newRig(firstChannel: Int = 1): Rig {
-        val controller = MockDmxController(universe)
+        val parkSource = MutableParkSource()
+        val controller = MockDmxController(universe, parkSource = parkSource)
         val fixtures = Fixtures()
         fixtures.register {
             addController(controller)
@@ -58,7 +77,7 @@ class FxEnginePipelineTest {
             directWriteStore = directWriteStore,
             layerResolver = LayerResolver(Layer3Resolver(), directWriteStore),
         )
-        return Rig(controller, fixtures, engine, directWriteStore, masterClock)
+        return Rig(controller, fixtures, engine, directWriteStore, masterClock, parkSource)
     }
 
     /**
@@ -127,7 +146,7 @@ class FxEnginePipelineTest {
     fun `Worked Example 1 — parked channel defeats effect output at transmit time`() {
         val rig = newRig(firstChannel = 1)
         // Park channel 1 at 128 before any effect runs.
-        rig.controller.parkChannel(1, 128u)
+        rig.parkSource.park(universe.universe, 1, 128u)
 
         // SineWave on dimmer, OVERRIDE blend. The engine has no ParkManager wired in, so the
         // effect still writes to the controller's raw `values` map; parking wins at transmit
@@ -341,7 +360,7 @@ class FxEnginePipelineTest {
     @Test
     fun `park plus effect — park wins at transmit, effect still drives raw write`() {
         val rig = newRig(firstChannel = 1)
-        rig.controller.parkChannel(1, 200u)
+        rig.parkSource.park(universe.universe, 1, 200u)
 
         val effect = makeStaticDimmer(value = 80u, blendMode = BlendMode.OVERRIDE)
         rig.engine.addEffect(effect)

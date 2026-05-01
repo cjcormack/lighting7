@@ -54,19 +54,6 @@ class ParkManager(
     }
 
     /**
-     * Apply parked overrides to all registered controllers.
-     * Call after controllers are registered (after fixtures.register {}).
-     */
-    fun applyToControllers(controllers: List<DmxController>) {
-        for (controller in controllers) {
-            val universeParked = parkedChannels[controller.universe.universe] ?: continue
-            for ((channel, value) in universeParked) {
-                controller.parkChannel(channel, value)
-            }
-        }
-    }
-
-    /**
      * Park a channel at the given value.
      */
     suspend fun park(universe: Int, channel: Int, value: UByte) {
@@ -141,6 +128,8 @@ class ParkManager(
     override fun getParkedValue(universe: Int, channel: Int): UByte? {
         return parkedChannels[universe]?.get(channel)
     }
+
+    override fun universeView(universe: Int): Map<Int, UByte>? = parkedChannels[universe]
 
     /**
      * Get all parked channels as a flat list.

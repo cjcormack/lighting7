@@ -4,24 +4,23 @@ package uk.me.cormack.lighting7.dmx
  * Authoritative source of parked-channel state. Controllers consult a
  * [ParkSource] at transmit time so park overrides survive controller
  * reconstruction (fixture reloads, patch edits) without depending on any
- * explicit re-apply step. The per-controller `_parkedChannels` cache remains
- * as a fallback for tests / call sites that have no central park manager.
+ * explicit re-apply step.
  */
 interface ParkSource {
     fun getParkedValue(universe: Int, channel: Int): UByte?
     fun isParked(universe: Int, channel: Int): Boolean
+
+    /**
+     * Snapshot of parked channels for [universe], or `null` if none. Lets the 25 ms transmit
+     * loop pay one hashmap lookup per frame instead of one per channel.
+     */
+    fun universeView(universe: Int): Map<Int, UByte>? = null
 }
 
 sealed interface DmxController {
     val universe: Universe
 
     val currentValues: Map<Int, UByte>
-
-    /**
-     * Channels parked at a fixed output value. Parked values override
-     * all other sources in the final DMX output.
-     */
-    val parkedChannels: Map<Int, UByte>
 
     fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>)
 
@@ -50,22 +49,6 @@ sealed interface DmxController {
      * Channels absent from the snapshot are left at their current value.
      */
     fun restoreState(values: Map<Int, UByte>)
-
-    /**
-     * Park a channel at a fixed value. The parked value will override
-     * normal output in the DMX transmission.
-     */
-    fun parkChannel(channelNo: Int, value: UByte)
-
-    /**
-     * Remove a channel's parked value, returning it to normal output.
-     */
-    fun unparkChannel(channelNo: Int)
-
-    /**
-     * Remove all parked channels.
-     */
-    fun unparkAll()
 
     /**
      * Register a [TransmitModifier] that will transform channel values at transmit time.
