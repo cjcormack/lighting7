@@ -33,6 +33,14 @@ apply. `./gradlew test` is the equivalent pre-commit check. A recent green
 run earlier in the same session is sufficient; you do not need to re-run it
 just before `git commit` if nothing has changed since.
 
+### Git workflow
+
+Solo personal repo — commit and push directly to `main`. Do **not** open pull
+requests, do **not** create feature branches. The standard "still don't commit
+or push without me asking" rule from the global CLAUDE.md still applies; this
+section only changes *how* a confirmed commit/push happens (straight to `main`,
+no PR).
+
 ## Project Structure
 
 ```
