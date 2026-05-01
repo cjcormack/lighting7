@@ -1,5 +1,14 @@
 package uk.me.cormack.lighting7.state
 
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.net.Inet4Address
@@ -12,18 +21,84 @@ private val logger = LoggerFactory.getLogger("MdnsService")
 
 /**
  * Advertises the lighting7 backend on the LAN so iPad / desktop clients reach it at
- * `lighting7-<hostname>.local:<port>` without entering an IP address. Wraps the
- * per-interface [JmDNS] instances so [State.shutdown] can close them cleanly.
+ * `lighting7-<hostname>.local:<port>` without entering an IP address.
+ *
+ * One [JmDNS] instance per usable LAN IPv4 address; a background coroutine polls
+ * [NetworkInterface.getNetworkInterfaces] and reconciles so that interfaces appearing
+ * (Wi-Fi enabled mid-show, USB-Ethernet plugged in) or disappearing get picked up at
+ * runtime instead of being frozen at the addresses present at startup.
+ *
+ * Why not [javax.jmdns.JmmDNS]: it routes through the default
+ * [javax.jmdns.NetworkTopologyDiscovery], which re-includes the pseudo-interfaces
+ * ([VIRTUAL_INTERFACE_PREFIXES]) we deliberately exclude. Replacing the discovery
+ * delegate is a process-wide side effect, so we keep our own filter and poll instead.
  */
-class MdnsService private constructor(private val instances: List<JmDNS>) : Closeable {
+class MdnsService private constructor(
+    private val port: Int,
+    private val name: String,
+    private val refreshIntervalMs: Long,
+) : Closeable {
+    private val instances = mutableMapOf<InetAddress, JmDNS>()
+    private val scope = CoroutineScope(SupervisorJob() + CoroutineName("MdnsService") + Dispatchers.IO)
+    private var pollJob: Job? = null
+
+    private fun start() {
+        reconcile()
+        if (instances.isEmpty()) {
+            logger.warn(
+                "mDNS: no usable LAN IPv4 interface found at startup; will retry every {} ms",
+                refreshIntervalMs,
+            )
+        }
+        pollJob = scope.launch {
+            while (isActive) {
+                delay(refreshIntervalMs)
+                runCatching { reconcile() }
+                    .onFailure { logger.warn("mDNS interface reconcile failed: {}", it.message) }
+            }
+        }
+    }
+
+    @Synchronized
+    private fun reconcile() {
+        val desired = pickLanAddresses().toSet()
+        val current = instances.keys
+
+        for (addr in current - desired) {
+            val jmdns = instances.remove(addr) ?: continue
+            runCatching { jmdns.close() }
+            logger.info("mDNS unregistered {}.local on {} (interface no longer usable)", name, addr.hostAddress)
+        }
+
+        for (addr in desired - current) {
+            runCatching {
+                val jmdns = JmDNS.create(addr, name)
+                val info = ServiceInfo.create(SERVICE_TYPE, name, port, 0, 0, mapOf("path" to "/"))
+                jmdns.registerService(info)
+                instances[addr] = jmdns
+                logger.info(
+                    "mDNS registered: {}.{} on port {} — browse to http://{}.local:{}/ (bound to {})",
+                    name, SERVICE_TYPE, port, name, port, addr.hostAddress,
+                )
+            }.onFailure {
+                logger.warn("mDNS: failed to register on {}: {}", addr.hostAddress, it.message)
+            }
+        }
+    }
+
+    @Synchronized
     override fun close() {
-        // JmDNS.close() unregisters all registered services internally.
-        instances.forEach { runCatching { it.close() } }
+        pollJob?.cancel()
+        pollJob = null
+        scope.cancel()
+        instances.values.forEach { runCatching { it.close() } }
+        instances.clear()
     }
 
     companion object {
-        /** Service type for unencrypted HTTP — every Bonjour client knows this string. */
         private const val SERVICE_TYPE = "_http._tcp.local."
+
+        private const val DEFAULT_REFRESH_INTERVAL_MS = 15_000L
 
         /**
          * macOS exposes a fleet of pseudo-interfaces (Apple wireless link, IPv6 tunnels,
@@ -36,29 +111,11 @@ class MdnsService private constructor(private val instances: List<JmDNS>) : Clos
             "bridge", "vmenet", "vmnet", "vboxnet", "utun",
         )
 
-        fun register(port: Int, name: String): MdnsService {
-            val addresses = pickLanAddresses()
-            if (addresses.isEmpty()) {
-                logger.warn("mDNS: no usable LAN IPv4 interface found; falling back to InetAddress.getLocalHost()")
-            }
-            val targets = addresses.ifEmpty { listOf(InetAddress.getLocalHost()) }
-
-            // Pass `name` as JmDNS's hostname so it publishes an A record for
-            // `<name>.local` (e.g. `lighting7-selwyn.local`). Without this, JmDNS uses
-            // the system short hostname (e.g. `selwyn`) and competes with the macOS
-            // mDNSResponder that already owns `selwyn.local`.
-            val instances = targets.map { addr ->
-                val jmdns = JmDNS.create(addr, name)
-                val info = ServiceInfo.create(SERVICE_TYPE, name, port, 0, 0, mapOf("path" to "/"))
-                jmdns.registerService(info)
-                logger.info(
-                    "mDNS registered: {}.{} on port {} — browse to http://{}.local:{}/ (bound to {})",
-                    name, SERVICE_TYPE, port, name, port, addr.hostAddress,
-                )
-                jmdns
-            }
-            return MdnsService(instances)
-        }
+        fun register(
+            port: Int,
+            name: String,
+            refreshIntervalMs: Long = DEFAULT_REFRESH_INTERVAL_MS,
+        ): MdnsService = MdnsService(port, name, refreshIntervalMs).also { it.start() }
 
         /**
          * `lighting7-<sanitized-hostname>`. DNS-SD only allows `[a-z0-9-]`, so we lowercase
