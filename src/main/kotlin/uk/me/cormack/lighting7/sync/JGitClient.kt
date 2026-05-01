@@ -143,14 +143,27 @@ object JGitClient {
         return repo.parseCommit(objectId).toCommitInfo()
     }
 
-    /** Walks recent commits from HEAD, mapping to the public DTO. */
-    fun log(repo: Repository, limit: Int = 50): List<CommitInfo> {
+    /**
+     * Walks recent commits from HEAD (or *strictly older than* [before] when supplied),
+     * mapping to the public DTO. [before] is an exclusive cursor: when set, the walk
+     * walks **all parents** of the cursor commit, so a merge between the previous page
+     * and this one doesn't lose its second-parent ancestors. Paging by passing the
+     * smallest SHA from the previous page yields the next page without overlap.
+     */
+    fun log(repo: Repository, limit: Int = 50, before: String? = null): List<CommitInfo> {
         if (head(repo) == null) return emptyList()
         Git(repo).use { git ->
-            return git.log()
-                .setMaxCount(limit)
-                .call()
-                .map { it.toCommitInfo() }
+            val log = git.log().setMaxCount(limit)
+            if (before != null) {
+                val cursor = repo.resolve(before) ?: return emptyList()
+                val parents = RevWalk(repo).use { walk ->
+                    val commit = walk.parseCommit(cursor)
+                    if (commit.parentCount == 0) return emptyList()
+                    (0 until commit.parentCount).map { commit.getParent(it).id }
+                }
+                parents.forEach { log.add(it) }
+            }
+            return log.call().map { it.toCommitInfo() }
         }
     }
 
@@ -383,6 +396,10 @@ object JGitClient {
  * Serialisable view of a git commit returned by REST endpoints. `whenMs` is the
  * author timestamp in epoch millis (UTC). `shortSha` is the conventional 7-char
  * abbreviation for UI display.
+ *
+ * [installShortUuid] / [installFriendlyName] carry the parsed attribution from the
+ * commit message's `[install:{shortUuid}]` marker — populated by route handlers via
+ * [withAttribution]; null on commits not produced by the snapshot/merge engines.
  */
 @Serializable
 data class CommitInfo(
@@ -392,7 +409,26 @@ data class CommitInfo(
     val authorEmail: String,
     val whenMs: Long,
     val message: String,
+    val installShortUuid: String? = null,
+    val installFriendlyName: String? = null,
 )
+
+private val INSTALL_MARKER_REGEX = Regex("""\[install:([0-9a-f]{8})]""")
+
+/**
+ * Parse the `[install:{shortUuid}]` marker out of [CommitInfo.message] and pair it with
+ * a friendly name from [installs] (falling back to null when the install hasn't
+ * registered itself in `installs.json`). Stable for non-engine commits — they keep
+ * `installShortUuid = null`.
+ */
+fun CommitInfo.withAttribution(installs: Map<String, String>): CommitInfo {
+    val match = INSTALL_MARKER_REGEX.find(message) ?: return this
+    val short = match.groupValues[1]
+    val friendly = installs.entries
+        .firstOrNull { it.key.startsWith(short) }
+        ?.value
+    return copy(installShortUuid = short, installFriendlyName = friendly)
+}
 
 /**
  * Authentication for JGit transport. GitHub Personal Access Tokens **and** OAuth

@@ -339,7 +339,7 @@ Each phase ships standalone value and is independently testable.
 | 5 ✅ | `sync_state` + three-way diff + flat conflict list (LOCAL/REMOTE only) | True multi-master support, minimal UX. |
 | 6 | Conflict-resolution UX (three-pane diff, MANUAL edit, resume-after-crash) | Polished conflict resolution. |
 | 7 | Tombstones, EDIT_DELETE / DELETE_EDIT conflicts, push-rejected retry | Correctness corners. |
-| 8 | Auto-sync, log feed polish, attribution rendering, history browser | Quality of life. |
+| 8 ✅ | Auto-sync, log feed polish, attribution rendering, history browser | Quality of life. |
 
 Phase 1 alone is genuinely useful (manual backups). Phases 1–4 cover the
 common solo-but-multi-machine case; phases 5–7 are needed only when two

@@ -573,6 +573,18 @@ data class CloudSyncConflictsPendingOutMessage(
 ) : OutMessage()
 
 /**
+ * Broadcast on every persisted [uk.me.cormack.lighting7.sync.SyncLogger] write. The
+ * frontend's activity feed appends the entry — re-fetching `/sync/log/entries` is
+ * unnecessary while the WS is connected.
+ */
+@Serializable
+@SerialName("cloudSyncLogAppended")
+data class CloudSyncLogAppendedOutMessage(
+    val projectId: Int,
+    val entry: uk.me.cormack.lighting7.sync.SyncLogEntryDto,
+) : OutMessage()
+
+/**
  * Broadcast when the install-wide GitHub OAuth identity changes — the user connects,
  * refreshes (login unchanged but expiry shifts), or disconnects. The sync config UI
  * uses this to live-update the "Connected as @login" row without polling.

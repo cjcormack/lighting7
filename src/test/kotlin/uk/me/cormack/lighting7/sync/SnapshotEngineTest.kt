@@ -181,6 +181,48 @@ class SnapshotEngineTest {
         )
     }
 
+    @Test
+    fun `installs json unions a peer registry across snapshots`() {
+        val projectId = seedMinimalProject(state)
+        runBlocking { takeSnapshot(projectId, null) }
+
+        val path = workingTree.pathFor(transaction(state.database) {
+            DaoProject.findById(projectId)!!.uuid
+        })
+
+        // Inject a peer entry into installs.json the way a fetch+merge from another rig
+        // would. The installs.json file is checked-in, so we need to mimic the same shape
+        // (live registry + valid canonical JSON) and commit it.
+        val peerUuid = "ffffeeee-dddd-cccc-bbbb-aaaa99998888"
+        val peerName = "Touring Laptop"
+        val installsFile = path.resolve("installs.json")
+        val merged = uk.me.cormack.lighting7.sync.dto.InstallsJson(
+            installs = canonicalDecode(
+                uk.me.cormack.lighting7.sync.dto.InstallsJson.serializer(),
+                Files.readString(installsFile),
+            ).installs + (peerUuid to peerName),
+        )
+        Files.writeString(installsFile, canonicalEncode(uk.me.cormack.lighting7.sync.dto.InstallsJson.serializer(), merged))
+
+        // Snapshot again — the wipe step should preserve the peer entry through the
+        // exporter's union path, so the next installs.json still carries it. The
+        // peer-injected installs.json by itself constitutes a tree-level diff so the
+        // snapshot will commit even without DB changes.
+        runBlocking { takeSnapshot(projectId, "after peer write") }
+
+        val finalRegistry = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.InstallsJson.serializer(),
+            Files.readString(installsFile),
+        ).installs
+        assertTrue(finalRegistry.containsKey(peerUuid), "peer install entry must survive wipe-then-export")
+        assertEquals(peerName, finalRegistry[peerUuid])
+        // Local install also still present.
+        val localInstall = transaction(state.database) {
+            DaoInstall.all().first().uuid.toString()
+        }
+        assertTrue(finalRegistry.containsKey(localInstall), "local install must remain in registry")
+    }
+
     /**
      * Resolve project + install identity in a transaction and call the engine —
      * the same shape the REST handler uses, so tests exercise the realistic path.

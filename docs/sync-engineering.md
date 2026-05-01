@@ -6,15 +6,16 @@ this doc captures the contracts and operational details that current code
 relies on so that future contributors don't reinvent them.
 
 The subsystem ships in eight phases (see the design doc). **Today, Phases 1
-through 7 are in-tree** — UUID columns, canonical JSON, manual export/import,
+through 8 are in-tree** — UUID columns, canonical JSON, manual export/import,
 the install-identity / `machine_override` tables, a per-project local git
 working tree, remote push/pull with PAT credentials, the multi-master
 three-way diff with a flat conflict-resolution flow, Phase 6's polished
 conflict UX (MANUAL resolution + crash recovery for sessions caught mid-apply),
-and Phase 7's correctness-corner work: tombstones for deletion propagation,
+Phase 7's correctness-corner work (tombstones for deletion propagation,
 `EDIT_DELETE` / `DELETE_EDIT` conflict kinds, and an in-engine push-rejected
-retry. Sections marked *Forward-looking* describe the contract Phase 8 work is
-expected to land against, not anything that runs yet.
+retry), and Phase 8's quality-of-life additions: a periodic auto-sync
+scheduler, a persisted activity log, parsed commit attribution, and history
+pagination.
 
 ## Architecture overview
 
@@ -981,6 +982,108 @@ path opportunistically via concurrent `runSync` calls from two engines
 against a shared bare repo, asserting eventual consistency rather than
 verifying the retry counter directly. A `JGitClient` interface refactor
 would unlock fully-deterministic coverage and is tracked as a follow-up.
+
+## Auto-sync (Phase 8)
+
+Periodic syncs are driven by [`AutoSyncScheduler`](../src/main/kotlin/uk/me/cormack/lighting7/sync/AutoSyncScheduler.kt).
+Lifecycle:
+
+* Started from `Application.module()` once `State` is fully constructed; stopped from
+  [`State.shutdown`](../src/main/kotlin/uk/me/cormack/lighting7/state/State.kt) so the
+  pollers don't outlive the DB.
+* Owns one coroutine per project where `sync_configs.autoSyncEnabled = true`. The loop
+  delays `autoSyncIntervalMs` (clamped to [`MIN_INTERVAL_MS`](../src/main/kotlin/uk/me/cormack/lighting7/sync/AutoSyncScheduler.kt)
+  = 60s) before its first tick — a freshly-enabled auto-sync doesn't fire mid-form-submit.
+* `PUT /sync/config` calls `scheduler.reschedule(projectId)` after committing. That cancels
+  any existing loop and (re-)launches one if the new config still has auto-sync enabled,
+  so toggling the flag or changing the interval takes effect immediately without a
+  restart.
+* Each tick re-reads the config, refuses to run when `enabled = false` or
+  `autoSyncEnabled = false`, and **skips when a conflict session is pending** —
+  auto-syncing under an active conflict would either bounce a 409 off the engine or
+  silently re-enter the diff against stale resolutions. The skip is logged as
+  `AUTO_SYNC_SKIPPED` so the operator sees why nothing happened.
+* `SyncException` from `engine.runSync` is caught and logged (the engine has already
+  written `RUN_FAILED`); unexpected `Throwable`s log a fresh `RUN_FAILED` and keep the
+  loop alive. A single tick failure must never kill the project's auto-sync.
+
+The scheduler shares the engine's per-project mutex with manual `Sync now` clicks, so a
+human-driven sync and an auto-sync tick can never run concurrently against the same
+project.
+
+## Activity log (Phase 8)
+
+`sync_log_entry` (machine-local) carries the operator-visible activity feed: one row per
+noteworthy event, written by [`SyncLogger`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SyncLogger.kt).
+Capped per project at [`MAX_ENTRIES_PER_PROJECT`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SyncLogger.kt)
+= 500; older rows are pruned on every write so the table never accumulates without
+bound.
+
+```
+sync_log_entry
+  id PK
+  project_id FK -> projects (indexed)
+  ts_ms LONG (indexed)
+  level VARCHAR             -- INFO | WARN | ERROR
+  event VARCHAR             -- stable code, see SyncLogEvent
+  message TEXT
+```
+
+Stable event codes (see [`SyncLogEvent`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SyncLogger.kt)):
+
+| Event | Emitted by | Notes |
+|---|---|---|
+| `RUN_STARTED` | `RemoteSyncEngine.runSync` (start) | One per manual or auto-sync run. |
+| `RUN_DONE` | `RemoteSyncEngine.runSync` (success) | Outcome + summary in the message. |
+| `RUN_FAILED` | `RemoteSyncEngine.runSync` (catch) | `{code}: {message}` shape. |
+| `CONFLICTS_PENDING` | `RemoteSyncEngine.runSync` | Conflict count + session id. |
+| `APPLY_DONE` | `RemoteSyncEngine.applySession` (success) | Post-resolve commit pushed. |
+| `APPLY_FAILED` | `RemoteSyncEngine.applySession` (catch) | Same shape as `RUN_FAILED`. |
+| `SESSION_ABORTED` | `RemoteSyncEngine.abortSession` | Working tree reset. |
+| `SNAPSHOT_TAKEN` | `SnapshotEngine.snapshot` | Carries short SHA + summary. |
+| `SNAPSHOT_NOOP` | `SnapshotEngine.snapshot` | Nothing to commit. |
+| `AUTO_SYNC_TICK` | `AutoSyncScheduler` | Pre-runSync trace marker. |
+| `AUTO_SYNC_SKIPPED` | `AutoSyncScheduler` | Conflict session pending. |
+
+Each write fans out a `cloudSyncLogAppended` WebSocket message
+(see [`Sockets.kt`](../src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt))
+so the frontend's activity feed updates live. Consumers don't need to re-fetch
+`/sync/activity` while the WS is connected — but a fresh page-load reads from the
+endpoint, so the persisted ring is the source of truth.
+
+`GET /api/rest/project/{id}/sync/activity?limit=…&beforeId=…` paginates newest-first.
+`beforeId` is the smallest id from the previous page; `limit` is clamped to
+[`MAX_LIST_LIMIT`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SyncLogger.kt) = 500.
+
+## Attribution rendering (Phase 8)
+
+Every snapshot / merge / resolve commit has a stable `[install:{shortUuid}]` marker in
+its message (see "Snapshot commit format" above). The `installs.json` registry tracks
+the friendly names that have ever pushed to the repo:
+
+* On every snapshot, [`SnapshotEngine`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SnapshotEngine.kt)
+  reads the current `installs.json` from the working tree **before** the wipe step,
+  passes the entries to [`ProjectExporter.export`](../src/main/kotlin/uk/me/cormack/lighting7/sync/ProjectExporter.kt)
+  as `knownInstalls`, and the exporter writes back the union of `knownInstalls` and
+  the local install row. Local install always wins on key clash so a renamed install
+  propagates its new `friendlyName`.
+* `git log` walks back through prior commits and the history is the long-term record;
+  `installs.json` at HEAD is the union the diff-and-merge layer cares about.
+
+`GET /sync/log` enriches each [`CommitInfo`](../src/main/kotlin/uk/me/cormack/lighting7/sync/JGitClient.kt)
+with `installShortUuid` and `installFriendlyName` parsed via
+[`CommitInfo.withAttribution`](../src/main/kotlin/uk/me/cormack/lighting7/sync/JGitClient.kt).
+Commits without the marker (e.g. ones authored outside the engine) keep both fields
+null. Unknown `shortUuid`s — peers who never showed up in `installs.json` at HEAD —
+keep `installFriendlyName = null` so the UI can fall back to "(unknown @ short)".
+
+## History pagination (Phase 8)
+
+`GET /sync/log?limit=…&before={fullSha}` walks history backwards from `HEAD` (default)
+or from `{fullSha}`'s **first parent** when the cursor is supplied. The first-parent
+hop is what makes `before = lastSha-of-prev-page` advance the page without overlapping
+the boundary commit. Limit is clamped to `MAX_LOG_LIMIT` = 500. The response is the
+same `CommitInfo[]` shape as before, with the added attribution fields described above.
 
 ## Operational notes
 

@@ -41,8 +41,11 @@ import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.sync.AutoSyncScheduler
 import uk.me.cormack.lighting7.sync.ConflictSession
 import uk.me.cormack.lighting7.sync.Overrides
+import uk.me.cormack.lighting7.sync.RemoteSyncEngine
+import uk.me.cormack.lighting7.sync.SyncLogger
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.CredentialStore
 import uk.me.cormack.lighting7.sync.auth.CredentialStoreFactory
@@ -190,6 +193,31 @@ class State(val config: ApplicationConfig) {
     /** Single resolver instance shared by the sync engine and route handlers. */
     val authResolver: AuthResolver by lazy {
         AuthResolver(credentialStore, oauthTokenStore, oauthTokenProvider)
+    }
+
+    /**
+     * Activity-log writer. Single instance shared across engines, route handlers, and
+     * the scheduler so all writes pass through one place (and so test coverage
+     * targeting one of those callers also exercises the prune + WS-broadcast paths).
+     */
+    val syncLogger: SyncLogger by lazy { SyncLogger(this) }
+
+    /**
+     * Cloud-sync engine. Shared by route handlers and [autoSyncScheduler] so a single
+     * per-project mutex serialises manual `Sync now` clicks against periodic auto-sync
+     * ticks.
+     */
+    val remoteSyncEngine: RemoteSyncEngine by lazy {
+        RemoteSyncEngine(this, authResolver)
+    }
+
+    /**
+     * Periodic driver for [remoteSyncEngine]. Started in [Application.module] after the
+     * show is up; stopped in [shutdown]. The engine's own per-project mutex prevents a
+     * scheduler tick racing a manual sync.
+     */
+    val autoSyncScheduler: AutoSyncScheduler by lazy {
+        AutoSyncScheduler(this, remoteSyncEngine)
     }
 
     // Stored here so [shutdown] can close JmDNS as part of the same teardown sequence
@@ -484,6 +512,7 @@ class State(val config: ApplicationConfig) {
         val ds = dataSource ?: return
         dataSource = null
 
+        runCatching { autoSyncScheduler.stop() }
         runCatching { projectChangedJob?.cancel() }
         projectChangedJob = null
 
@@ -593,6 +622,7 @@ class State(val config: ApplicationConfig) {
                 DaoInstalls, DaoMachineOverrides,
                 DaoSyncConfigs,
                 DaoSyncStates, DaoSyncSessions, DaoSyncSessionConflicts,
+                DaoSyncLogEntries,
                 DaoOAuthIdentities,
             )
 

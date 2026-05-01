@@ -75,7 +75,18 @@ class ProjectExporter(private val state: State) {
      */
     data class Result(val path: Path, val fileCount: Int, val liveKeys: Set<RecordKey>)
 
-    fun export(projectId: Int, targetDir: Path): Result {
+    /**
+     * Export to [targetDir]. [knownInstalls] is the registry of peer installs already in
+     * the cloud repo (read by [SnapshotEngine] from `installs.json` before the wipe step);
+     * the local install is unioned in so the file accumulates every install that has ever
+     * pushed. Manual export passes an empty map — the result is just the local install,
+     * matching pre-Phase-8 behaviour.
+     */
+    fun export(
+        projectId: Int,
+        targetDir: Path,
+        knownInstalls: Map<String, String> = emptyMap(),
+    ): Result {
         val liveKeys = mutableSetOf<RecordKey>()
         val fileCount = transaction(state.database) {
             val project = DaoProject.findById(projectId)
@@ -85,11 +96,13 @@ class ProjectExporter(private val state: State) {
             Files.createDirectories(targetDir)
 
             writeJson(targetDir.resolve("formatVersion.json"), FormatVersionJson.serializer(), FormatVersionJson())
-            // installs.json is the registry of installs that have written to this repo. Today we
-            // record only the local install; once cloud sync lands, git history merges entries
-            // from peers.
-            val installs = DaoInstall.all()
+            // installs.json is the registry of installs that have written to this repo —
+            // union the peer set already on disk with the local install so the file
+            // accumulates rather than overwrites. Local install always wins on key clash
+            // (a renamed install should propagate its new friendlyName).
+            val localInstalls = DaoInstall.all()
                 .associate { it.uuid.toString() to it.friendlyName }
+            val installs = knownInstalls + localInstalls
             writeJson(
                 targetDir.resolve("installs.json"),
                 InstallsJson.serializer(),

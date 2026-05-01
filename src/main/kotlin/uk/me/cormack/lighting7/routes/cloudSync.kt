@@ -30,7 +30,6 @@ import uk.me.cormack.lighting7.sync.ConflictSession
 import uk.me.cormack.lighting7.sync.JGitClient
 import uk.me.cormack.lighting7.sync.RecordHasher
 import uk.me.cormack.lighting7.sync.RecordKey
-import uk.me.cormack.lighting7.sync.RemoteSyncEngine
 import uk.me.cormack.lighting7.sync.ResolutionEntry
 import uk.me.cormack.lighting7.sync.SessionState
 import uk.me.cormack.lighting7.sync.SnapshotEngine
@@ -39,8 +38,13 @@ import uk.me.cormack.lighting7.sync.SyncErrorCode
 import uk.me.cormack.lighting7.sync.SyncException
 import uk.me.cormack.lighting7.sync.SyncOutcome
 import uk.me.cormack.lighting7.sync.SyncRunResult
+import uk.me.cormack.lighting7.sync.AutoSyncScheduler
+import uk.me.cormack.lighting7.sync.SyncLogger
 import uk.me.cormack.lighting7.sync.SyncWorkingTree
+import uk.me.cormack.lighting7.sync.canonicalDecode
+import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.toHttpStatus
+import uk.me.cormack.lighting7.sync.withAttribution
 import java.util.UUID
 
 /**
@@ -56,7 +60,8 @@ import java.util.UUID
 internal fun Route.routeApiRestProjectCloudSync(state: State) {
     val workingTree = SyncWorkingTree(state)
     val snapshotEngine = SnapshotEngine(state)
-    val remoteSyncEngine = RemoteSyncEngine(state, state.authResolver)
+    val remoteSyncEngine = state.remoteSyncEngine
+    val syncLogger = state.syncLogger
 
     get<ProjectSyncConfigResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
@@ -74,14 +79,31 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse("branch must not be blank"))
             return@put
         }
+        if (request.autoSyncIntervalMs != null &&
+            request.autoSyncIntervalMs < AutoSyncScheduler.MIN_INTERVAL_MS
+        ) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ErrorResponse(
+                    "autoSyncIntervalMs must be at least " +
+                        "${AutoSyncScheduler.MIN_INTERVAL_MS}ms.",
+                ),
+            )
+            return@put
+        }
         withProject(state, resource.parent.projectId) { project ->
             val (config, repoUrl) = transaction(state.database) {
                 val cfg = ensureSyncConfig(project)
                 request.repoUrl?.let { cfg.repoUrl = it.ifBlank { null } }
                 request.branch?.let { cfg.branch = it }
                 request.enabled?.let { cfg.enabled = it }
+                request.autoSyncEnabled?.let { cfg.autoSyncEnabled = it }
+                if (request.autoSyncIntervalMs != null) {
+                    cfg.autoSyncIntervalMs = request.autoSyncIntervalMs
+                }
                 cfg.toBareDto() to cfg.repoUrl
             }
+            state.autoSyncScheduler.reschedule(project.id.value)
             call.respond(config.copy(tokenPresent = resolveTokenPresent(state, repoUrl)))
         }
     }
@@ -146,11 +168,30 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
         val limit = (resource.limit ?: DEFAULT_LOG_LIMIT).coerceIn(1, MAX_LOG_LIMIT)
         withProject(state, resource.parent.projectId) { project ->
             val path = workingTree.pathFor(project.uuid)
-            val commits = withContext(Dispatchers.IO) {
-                JGitClient.open(path)?.use { repo -> JGitClient.log(repo, limit) }
-                    ?: emptyList()
+            val commits: List<CommitInfo> = withContext(Dispatchers.IO) {
+                JGitClient.open(path)?.use { repo ->
+                    val installs = JGitClient.readBlob(repo, "HEAD", "installs.json")
+                        ?.let {
+                            runCatching {
+                                canonicalDecode(InstallsJson.serializer(), it)
+                            }.getOrNull()
+                        }
+                    JGitClient.log(repo, limit, before = resource.before)
+                        .map { it.withAttribution(installs?.installs.orEmpty()) }
+                } ?: emptyList()
             }
             call.respond(commits)
+        }
+    }
+
+    get<ProjectSyncActivityResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val limit = (resource.limit ?: SyncLogger.DEFAULT_LIST_LIMIT)
+                .coerceIn(1, SyncLogger.MAX_LIST_LIMIT)
+            val entries = withContext(Dispatchers.IO) {
+                syncLogger.list(project.id.value, limit, resource.beforeId)
+            }
+            call.respond(entries)
         }
     }
 
@@ -397,7 +438,20 @@ data class ProjectSyncStatusResource(val parent: ProjectSyncResource)
 data class ProjectSyncSnapshotResource(val parent: ProjectSyncResource)
 
 @Resource("/log")
-data class ProjectSyncLogResource(val parent: ProjectSyncResource, val limit: Int? = null)
+data class ProjectSyncLogResource(
+    val parent: ProjectSyncResource,
+    val limit: Int? = null,
+    /** Pagination cursor: full SHA of the commit to walk backwards from (exclusive). */
+    val before: String? = null,
+)
+
+@Resource("/activity")
+data class ProjectSyncActivityResource(
+    val parent: ProjectSyncResource,
+    val limit: Int? = null,
+    /** Pagination cursor: id of the oldest entry from the previous page. */
+    val beforeId: Int? = null,
+)
 
 @Resource("/credentials")
 data class ProjectSyncCredentialsResource(val parent: ProjectSyncResource)
@@ -446,6 +500,9 @@ data class UpdateSyncConfigRequest(
     val repoUrl: String? = null,
     val branch: String? = null,
     val enabled: Boolean? = null,
+    val autoSyncEnabled: Boolean? = null,
+    /** Minimum [AutoSyncScheduler.MIN_INTERVAL_MS]. */
+    val autoSyncIntervalMs: Long? = null,
 )
 
 @Serializable

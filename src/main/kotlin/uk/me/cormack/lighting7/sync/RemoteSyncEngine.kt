@@ -47,6 +47,7 @@ class RemoteSyncEngine(
     private val workingTree = SyncWorkingTree(state)
     private val snapshotEngine = SnapshotEngine(state)
     private val importer = ProjectImporter(state)
+    private val syncLogger get() = state.syncLogger
 
     private val projectLocks = ConcurrentHashMap<Int, Mutex>()
 
@@ -69,11 +70,8 @@ class RemoteSyncEngine(
         projectUuid: UUID,
         installUuid: UUID,
         installFriendlyName: String,
-    ): SyncRunResult {
-        val mutex = projectLocks.computeIfAbsent(projectId) { Mutex() }
-        return mutex.withLock {
-            doRun(projectId, projectUuid, installUuid, installFriendlyName)
-        }
+    ): SyncRunResult = withProjectLock(projectId, SyncLogEvent.RUN_FAILED) {
+        doRun(projectId, projectUuid, installUuid, installFriendlyName)
     }
 
     suspend fun applySession(
@@ -81,17 +79,48 @@ class RemoteSyncEngine(
         projectUuid: UUID,
         installUuid: UUID,
         installFriendlyName: String,
-    ): SyncRunResult {
-        val mutex = projectLocks.computeIfAbsent(projectId) { Mutex() }
-        return mutex.withLock {
-            doApply(projectId, projectUuid, installUuid, installFriendlyName)
-        }
+    ): SyncRunResult = withProjectLock(projectId, SyncLogEvent.APPLY_FAILED) {
+        val result = doApply(projectId, projectUuid, installUuid, installFriendlyName)
+        syncLogger.info(
+            projectId, SyncLogEvent.APPLY_DONE,
+            "${result.outcome.name}: ${result.message}",
+        )
+        result
     }
 
-    suspend fun abortSession(projectId: Int, projectUuid: UUID): AbortResult {
+    suspend fun abortSession(projectId: Int, projectUuid: UUID): AbortResult =
+        withProjectLock(projectId, failEvent = null) {
+            val result = doAbort(projectId, projectUuid)
+            syncLogger.info(
+                projectId, SyncLogEvent.SESSION_ABORTED,
+                "Conflict session #${result.sessionId} aborted; working tree reset.",
+            )
+            result
+        }
+
+    /**
+     * Acquire the per-project mutex and run [block]. If [block] throws [SyncException]
+     * and [failEvent] is non-null, log it as an error before rethrowing — keeps the
+     * `{code}: {message}` formatting in one place.
+     */
+    private suspend fun <T> withProjectLock(
+        projectId: Int,
+        failEvent: String?,
+        block: suspend () -> T,
+    ): T {
         val mutex = projectLocks.computeIfAbsent(projectId) { Mutex() }
         return mutex.withLock {
-            doAbort(projectId, projectUuid)
+            try {
+                block()
+            } catch (e: SyncException) {
+                if (failEvent != null) {
+                    syncLogger.error(
+                        projectId, failEvent,
+                        "${e.code.name}: ${e.message ?: e.code.name}",
+                    )
+                }
+                throw e
+            }
         }
     }
 
@@ -101,6 +130,7 @@ class RemoteSyncEngine(
         installUuid: UUID,
         installFriendlyName: String,
     ): SyncRunResult {
+        syncLogger.info(projectId, SyncLogEvent.RUN_STARTED, "Starting sync run")
         val (repoUrl, branch) = transaction(state.database) {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.firstOrNull()
                 ?: throw SyncException(SyncErrorCode.REPO_URL_MISSING, "Sync config has not been initialised for this project.")
@@ -147,6 +177,18 @@ class RemoteSyncEngine(
 
         if (outcome.outcome == SyncOutcome.FAST_FORWARDED || outcome.outcome == SyncOutcome.MERGED) {
             reloadShowIfActive(projectId)
+        }
+
+        if (outcome.outcome == SyncOutcome.CONFLICTS_PENDING) {
+            syncLogger.warn(
+                projectId, SyncLogEvent.CONFLICTS_PENDING,
+                "${outcome.conflictCount} conflict(s) need resolution (session #${outcome.sessionId}).",
+            )
+        } else {
+            syncLogger.info(
+                projectId, SyncLogEvent.RUN_DONE,
+                "${outcome.outcome.name}: ${outcome.message}",
+            )
         }
 
         return outcome

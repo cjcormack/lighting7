@@ -31,6 +31,8 @@ fun Application.module() {
 
     registerMdns(state)
 
+    state.autoSyncScheduler.start()
+
     moduleWithState(state)
 }
 

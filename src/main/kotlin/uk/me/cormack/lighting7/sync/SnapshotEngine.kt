@@ -7,6 +7,8 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.DaoSyncState
 import uk.me.cormack.lighting7.models.DaoSyncStates
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.dto.InstallsJson
+import java.nio.file.Files
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -36,6 +38,7 @@ class SnapshotEngine(private val state: State) {
 
     private val workingTree = SyncWorkingTree(state)
     private val exporter = ProjectExporter(state)
+    private val syncLogger get() = state.syncLogger
 
     /**
      * Capture the project's current state as a git commit. Returns a
@@ -60,10 +63,14 @@ class SnapshotEngine(private val state: State) {
         val authorEmail = "$shortInstall@$INSTALL_EMAIL_DOMAIN"
         val commitMessage = "$installFriendlyName: $summary [install:$shortInstall]"
 
-        return withContext(Dispatchers.IO) {
+        val response = withContext(Dispatchers.IO) {
             workingTree.ensureInitialised(path).use { repo ->
+                // Preserve the peer install registry across the wipe-then-export step so
+                // installs.json accumulates contributors rather than overwriting them on
+                // every push.
+                val knownInstalls = readKnownInstalls(path)
                 workingTree.cleanTrackedFiles(path)
-                val exportResult = exporter.export(projectId, path)
+                val exportResult = exporter.export(projectId, path, knownInstalls)
 
                 // Derive tombstones: anything in `sync_state` not matched by a live
                 // record we just wrote gets a tombstone marker. Covers both freshly-deleted
@@ -90,7 +97,22 @@ class SnapshotEngine(private val state: State) {
                 )
             }
         }
+        if (response.noChanges) {
+            syncLogger.info(projectId, SyncLogEvent.SNAPSHOT_NOOP, "Snapshot taken — no changes.")
+        } else {
+            val commit = response.commit
+            syncLogger.info(
+                projectId, SyncLogEvent.SNAPSHOT_TAKEN,
+                "Snapshot ${commit?.shortSha ?: "?"} — $summary",
+            )
+        }
+        return response
     }
+
+    private fun readKnownInstalls(path: java.nio.file.Path): Map<String, String> =
+        runCatching {
+            canonicalDecode(InstallsJson.serializer(), Files.readString(path.resolve("installs.json"))).installs
+        }.getOrDefault(emptyMap())
 
     companion object {
         /** Domain for synthesised commit-author emails ({shortUuid}@{domain}). */
