@@ -25,8 +25,10 @@ import uk.me.cormack.lighting7.sync.dto.FxPresetPropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.ParkedChannelJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
+import uk.me.cormack.lighting7.sync.dto.RiggingJson
 import uk.me.cormack.lighting7.sync.dto.ScriptMetaJson
 import uk.me.cormack.lighting7.sync.dto.ShowEntryJson
+import uk.me.cormack.lighting7.sync.dto.StageRegionJson
 import uk.me.cormack.lighting7.sync.dto.TombstoneJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import java.nio.file.Files
@@ -52,6 +54,8 @@ import java.util.UUID
  * /cueTriggers/{uuid}.json
  * /fixturePatches/{uuid}.json
  * /universeConfigs/{uuid}.json     -- omits machine-local `address` field
+ * /riggings/{uuid}.json
+ * /stageRegions/{uuid}.json
  * /fixtureGroups/{uuid}.json       -- members embedded inline
  * /fxPresets/{uuid}.json           -- propertyAssignments embedded inline
  * /fxDefinitions/{uuid}.json
@@ -162,6 +166,36 @@ class ProjectExporter(private val state: State) {
                 UniverseConfigJson(u.uuid.toString(), u.subnet, u.universe, u.controllerType)
             }
 
+            count += writeAll(targetDir, "riggings", project.riggings.toList(), RiggingJson.serializer(), { it.uuid }, liveKeys) { r ->
+                RiggingJson(
+                    uuid = r.uuid.toString(),
+                    name = r.name,
+                    kind = r.kind,
+                    positionX = r.positionX,
+                    positionY = r.positionY,
+                    positionZ = r.positionZ,
+                    yawDeg = r.yawDeg,
+                    pitchDeg = r.pitchDeg,
+                    rollDeg = r.rollDeg,
+                    sortOrder = r.sortOrder,
+                )
+            }
+
+            count += writeAll(targetDir, "stageRegions", project.stageRegions.toList(), StageRegionJson.serializer(), { it.uuid }, liveKeys) { s ->
+                StageRegionJson(
+                    uuid = s.uuid.toString(),
+                    name = s.name,
+                    centerX = s.centerX,
+                    centerY = s.centerY,
+                    centerZ = s.centerZ,
+                    widthM = s.widthM,
+                    depthM = s.depthM,
+                    heightM = s.heightM,
+                    yawDeg = s.yawDeg,
+                    sortOrder = s.sortOrder,
+                )
+            }
+
             count += writeAll(targetDir, "fixturePatches", project.fixturePatches.toList(), FixturePatchJson.serializer(), { it.uuid }, liveKeys) { p ->
                 FixturePatchJson(
                     uuid = p.uuid.toString(),
@@ -176,7 +210,7 @@ class ProjectExporter(private val state: State) {
                     stageZ = p.stageZ,
                     baseYawDeg = p.baseYawDeg,
                     basePitchDeg = p.basePitchDeg,
-                    riggingPosition = p.riggingPosition,
+                    riggingUuid = p.rigging?.uuid?.toString(),
                     beamAngleDeg = p.beamAngleDeg,
                     gelCode = p.gelCode,
                 )

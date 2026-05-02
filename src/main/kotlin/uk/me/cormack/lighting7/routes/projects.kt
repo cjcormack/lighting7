@@ -207,6 +207,8 @@ internal fun Route.routeApiRestProjects(state: State) {
                     group.delete()
                 }
                 project.fixturePatches.forEach { it.delete() }
+                project.riggings.forEach { it.delete() }
+                project.stageRegions.forEach { it.delete() }
                 project.universeConfigs.forEach { it.delete() }
                 project.parkedChannels.forEach { it.delete() }
                 project.aiConversations.forEach { it.delete() }
@@ -255,6 +257,8 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectCueStacks(state)
         routeApiRestProjectCueSlots(state)
         routeApiRestProjectPatches(state)
+        routeApiRestProjectRiggings(state)
+        routeApiRestProjectStageRegions(state)
         routeApiRestProjectUniverseConfigs(state)
         routeApiRestProjectPatchGroups(state)
         routeApiRestProjectShow(state)

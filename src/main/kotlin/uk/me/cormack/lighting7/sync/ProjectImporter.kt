@@ -21,8 +21,10 @@ import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
+import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoShowEntry
+import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.routes.deleteCueChildren
 import uk.me.cormack.lighting7.state.State
@@ -41,8 +43,10 @@ import uk.me.cormack.lighting7.sync.dto.FxDefinitionJson
 import uk.me.cormack.lighting7.sync.dto.FxPresetJson
 import uk.me.cormack.lighting7.sync.dto.ParkedChannelJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
+import uk.me.cormack.lighting7.sync.dto.RiggingJson
 import uk.me.cormack.lighting7.sync.dto.ScriptMetaJson
 import uk.me.cormack.lighting7.sync.dto.ShowEntryJson
+import uk.me.cormack.lighting7.sync.dto.StageRegionJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import java.nio.file.Files
 import java.nio.file.Path
@@ -50,7 +54,8 @@ import java.util.UUID
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
-internal const val SUPPORTED_FORMAT_VERSION = 2
+internal const val SUPPORTED_FORMAT_VERSION = 3
+internal const val MIN_SUPPORTED_FORMAT_VERSION = 3
 
 /**
  * Import-time error with the HTTP status the route layer should report. Carrying the status
@@ -168,6 +173,8 @@ class ProjectImporter(private val state: State) {
                 group.delete()
             }
             project.fixturePatches.forEach { it.delete() }
+            project.riggings.forEach { it.delete() }
+            project.stageRegions.forEach { it.delete() }
             project.universeConfigs.forEach { it.delete() }
             project.parkedChannels.forEach { it.delete() }
             project.fxDefinitions.forEach { it.delete() }
@@ -210,6 +217,11 @@ class ProjectImporter(private val state: State) {
                 "Repo format v${format.formatVersion} is newer than this install supports (v$SUPPORTED_FORMAT_VERSION). Upgrade lighting7."
             )
         }
+        if (format.formatVersion < MIN_SUPPORTED_FORMAT_VERSION) {
+            throw ImportError.unsupportedFormat(
+                "Repo format v${format.formatVersion} is older than this install supports (v$MIN_SUPPORTED_FORMAT_VERSION). Re-export from a newer install."
+            )
+        }
         val projectPath = sourceDir.resolve("project.json")
         if (!projectPath.exists()) {
             throw ImportError.invalidArchive("Missing project.json")
@@ -229,7 +241,9 @@ class ProjectImporter(private val state: State) {
         importFxDefinitions(sourceDir, project)
         val fxPresetMap = importFxPresets(sourceDir, project)
         val universeMap = importUniverseConfigs(sourceDir, project)
-        val patchMap = importFixturePatches(sourceDir, project, universeMap)
+        val riggingMap = importRiggings(sourceDir, project)
+        importStageRegions(sourceDir, project)
+        val patchMap = importFixturePatches(sourceDir, project, universeMap, riggingMap)
         importFixtureGroups(sourceDir, project, patchMap)
         val cueStackMap = importCueStacks(sourceDir, project)
         val cueMap = importCues(sourceDir, project, cueStackMap)
@@ -332,19 +346,67 @@ class ProjectImporter(private val state: State) {
             uuid to dao
         }
 
+    private fun importRiggings(dir: Path, project: DaoProject): Map<UUID, DaoRigging> =
+        readDir(dir.resolve("riggings")) { json ->
+            val r = canonicalDecode(RiggingJson.serializer(), json)
+            val uuid = UUID.fromString(r.uuid)
+            val dao = DaoRigging.new {
+                this.project = project
+                name = r.name
+                kind = r.kind
+                positionX = r.positionX
+                positionY = r.positionY
+                positionZ = r.positionZ
+                yawDeg = r.yawDeg
+                pitchDeg = r.pitchDeg
+                rollDeg = r.rollDeg
+                sortOrder = r.sortOrder
+                this.uuid = uuid
+            }
+            uuid to dao
+        }
+
+    private fun importStageRegions(dir: Path, project: DaoProject) {
+        readDir(dir.resolve("stageRegions")) { json ->
+            val s = canonicalDecode(StageRegionJson.serializer(), json)
+            val uuid = UUID.fromString(s.uuid)
+            DaoStageRegion.new {
+                this.project = project
+                name = s.name
+                centerX = s.centerX
+                centerY = s.centerY
+                centerZ = s.centerZ
+                widthM = s.widthM
+                depthM = s.depthM
+                heightM = s.heightM
+                yawDeg = s.yawDeg
+                sortOrder = s.sortOrder
+                this.uuid = uuid
+            }
+            uuid to Unit
+        }
+    }
+
     private fun importFixturePatches(
         dir: Path,
         project: DaoProject,
         universeMap: Map<UUID, DaoUniverseConfig>,
+        riggingMap: Map<UUID, DaoRigging>,
     ): Map<UUID, DaoFixturePatch> = readDir(dir.resolve("fixturePatches")) { json ->
         val p = canonicalDecode(FixturePatchJson.serializer(), json)
         val uuid = UUID.fromString(p.uuid)
         val universeUuid = UUID.fromString(p.universeConfigUuid)
         val universe = universeMap[universeUuid]
             ?: throw ImportError.invalidArchive("Fixture patch ${p.uuid} references unknown universe $universeUuid")
+        val rigging = p.riggingUuid?.let {
+            val riggingUuid = UUID.fromString(it)
+            riggingMap[riggingUuid]
+                ?: throw ImportError.invalidArchive("Fixture patch ${p.uuid} references unknown rigging $riggingUuid")
+        }
         val dao = DaoFixturePatch.new {
             this.project = project
             universeConfig = universe
+            this.rigging = rigging
             fixtureTypeKey = p.fixtureTypeKey
             key = p.key
             displayName = p.displayName
@@ -355,7 +417,6 @@ class ProjectImporter(private val state: State) {
             stageZ = p.stageZ
             baseYawDeg = p.baseYawDeg
             basePitchDeg = p.basePitchDeg
-            riggingPosition = p.riggingPosition
             beamAngleDeg = p.beamAngleDeg
             gelCode = p.gelCode
             this.uuid = uuid

@@ -7,12 +7,17 @@ import org.jetbrains.exposed.dao.id.IntIdTable
 
 /**
  * Stage geometry ([stageX]/[stageY]/[stageZ], [baseYawDeg], [basePitchDeg]) is FOH-relative,
- * right-handed, Y-up, metres — see `docs/fixtures-engineering.md`. For moving heads, `base*`
- * is the yoke orientation, not the live aim.
+ * right-handed, **Z-up**, metres — see `docs/fixtures-engineering.md`. For moving heads,
+ * `base*` is the yoke orientation, not the live aim.
+ *
+ * When [rigging] is non-null, [stageX]/[stageY]/[stageZ] are interpreted as offsets in
+ * the rigging's local frame (rigging origin = (0,0,0)). When [rigging] is null, they are
+ * absolute world coordinates from the FOH origin (stage centre on the deck).
  */
 object DaoFixturePatches : IntIdTable("fixture_patches") {
     val project = reference("project_id", DaoProjects)
     val universeConfig = reference("universe_config_id", DaoUniverseConfigs)
+    val rigging = optReference("rigging_id", DaoRiggings)
     val fixtureTypeKey = varchar("fixture_type_key", 100)
     val key = varchar("key", 100)
     val displayName = varchar("display_name", 255)
@@ -23,7 +28,6 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
     val stageZ = double("stage_z").nullable()
     val baseYawDeg = double("base_yaw_deg").nullable()
     val basePitchDeg = double("base_pitch_deg").nullable()
-    val riggingPosition = varchar("rigging_position", 50).nullable()
     val beamAngleDeg = integer("beam_angle_deg").nullable()
     val gelCode = varchar("gel_code", 20).nullable()
     val uuid = uuid("uuid").autoGenerate()
@@ -38,6 +42,7 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
 
     var project by DaoProject referencedOn DaoFixturePatches.project
     var universeConfig by DaoUniverseConfig referencedOn DaoFixturePatches.universeConfig
+    var rigging by DaoRigging optionalReferencedOn DaoFixturePatches.rigging
     var fixtureTypeKey by DaoFixturePatches.fixtureTypeKey
     var key by DaoFixturePatches.key
     var displayName by DaoFixturePatches.displayName
@@ -48,7 +53,6 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var stageZ by DaoFixturePatches.stageZ
     var baseYawDeg by DaoFixturePatches.baseYawDeg
     var basePitchDeg by DaoFixturePatches.basePitchDeg
-    var riggingPosition by DaoFixturePatches.riggingPosition
     var beamAngleDeg by DaoFixturePatches.beamAngleDeg
     var gelCode by DaoFixturePatches.gelCode
     var uuid by DaoFixturePatches.uuid

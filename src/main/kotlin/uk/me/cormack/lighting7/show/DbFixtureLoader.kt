@@ -57,7 +57,6 @@ object DbFixtureLoader {
                         universeConfigId = it.universeConfig.id.value,
                         stageX = it.stageX,
                         stageY = it.stageY,
-                        riggingPosition = it.riggingPosition,
                         beamAngleDeg = it.beamAngleDeg,
                         gelCode = it.gelCode,
                     )
@@ -157,7 +156,6 @@ object DbFixtureLoader {
         val universeConfigId: Int,
         val stageX: Double?,
         val stageY: Double?,
-        val riggingPosition: String?,
         val beamAngleDeg: Int?,
         val gelCode: String?,
     )

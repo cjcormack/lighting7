@@ -614,7 +614,8 @@ class State(val config: ApplicationConfig) {
                 DaoCueStacks, DaoCues,
                 DaoCuePresetApplications, DaoCueAdHocEffects, DaoCuePropertyAssignments, DaoCueTriggers,
                 DaoAiConversations, DaoCueSlots,
-                DaoUniverseConfigs, DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
+                DaoUniverseConfigs, DaoRiggings, DaoStageRegions,
+                DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
                 DaoParkedChannels, DaoFxDefinitions,
                 DaoShowEntries,
                 DaoControlSurfaceBindings,
@@ -653,6 +654,7 @@ class State(val config: ApplicationConfig) {
                 migrateDropScenesAndChases()
                 migrateDropRunLoop()
                 migrateDropTrackChangedScript()
+                migrateRiggingsV3()
 
                 val summary = LegacyStaticEffectMigration.run(this)
                 if (summary.converted > 0 || summary.skipped > 0) {
@@ -998,6 +1000,70 @@ private fun Transaction.migrateDropTrackChangedScript() {
     exec("ALTER TABLE projects DROP COLUMN IF EXISTS track_changed_script_id")
 
     logger.info("Track changed script migration complete")
+}
+
+/**
+ * One-time migration for formatVersion 3 (riggings + Z-up coordinate system).
+ *
+ * Promotes the legacy `rigging_position` string on fixture_patches into first-class
+ * Rigging rows, swaps stage_y ↔ stage_z so existing v2 data lives in the new Z-up
+ * frame, then drops the rigging_position column.
+ *
+ * Safe to run repeatedly — gated on `rigging_position` column existence. Once the
+ * column is gone, the migration is a no-op.
+ */
+private fun Transaction.migrateRiggingsV3() {
+    var hasColumn = false
+    exec(
+        """SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'fixture_patches' AND column_name = 'rigging_position'"""
+    ) { rs ->
+        hasColumn = rs.next()
+    }
+    if (!hasColumn) return
+
+    logger.info("Migrating to v3: promoting rigging_position strings → Riggings, swapping stage_y ↔ stage_z...")
+
+    val distinctPairs = mutableListOf<Pair<Int, String>>()
+    exec(
+        """SELECT DISTINCT project_id, rigging_position
+           FROM fixture_patches
+           WHERE rigging_position IS NOT NULL"""
+    ) { rs ->
+        while (rs.next()) {
+            distinctPairs.add(rs.getInt("project_id") to rs.getString("rigging_position"))
+        }
+    }
+
+    var linked = 0
+    for ((projectId, name) in distinctPairs) {
+        val project = DaoProject.findById(projectId)
+            ?: error("Project $projectId referenced by fixture_patches.rigging_position no longer exists")
+        val rigging = DaoRigging.new {
+            this.project = project
+            this.name = name
+            this.sortOrder = 0
+        }
+        val safeName = name.replace("'", "''")
+        exec(
+            """UPDATE fixture_patches
+               SET rigging_id = ${rigging.id.value}
+               WHERE project_id = $projectId AND rigging_position = '$safeName'"""
+        )
+        linked++
+    }
+
+    // Swap stage_y ↔ stage_z on every patch row. PostgreSQL evaluates the right-hand
+    // side of every SET clause against the pre-update row, so this swaps atomically
+    // without a temp column.
+    exec("UPDATE fixture_patches SET stage_y = stage_z, stage_z = stage_y")
+
+    exec("ALTER TABLE fixture_patches DROP COLUMN rigging_position")
+
+    logger.info(
+        "v3 rigging migration complete: created {} rigging(s), swapped Y↔Z, dropped rigging_position",
+        linked,
+    )
 }
 
 /**

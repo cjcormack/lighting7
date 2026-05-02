@@ -17,6 +17,10 @@ import org.junit.Test
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
@@ -25,14 +29,14 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * Round-trip the five "Patch with Stage" fields (`stageX`, `stageY`,
- * `riggingPosition`, `beamAngleDeg`, `gelCode`) through
+ * Round-trip the "Patch with Stage" fields (`stageX`, `stageY`, `stageZ`,
+ * `riggingUuid`, `beamAngleDeg`, `gelCode`) through
  *   POST /patches  →  GET /patches/{id}  →  PUT /patches/{id} (set)
  *   →  GET /patches/{id}  →  PUT /patches/{id} (clear via null)
  *   →  GET /patches/{id}.
  *
  * Also exercises the validation paths (out-of-range stageX, beamAngleDeg), the
- * normalisation of `riggingPosition` (uppercase) and `gelCode` (trim), and the
+ * `worldPositionX/Y/Z` composition with a rigging pose, and the
  * "metadata-only PUT skips the fixture-loader rebuild" optimisation.
  */
 class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
@@ -41,6 +45,9 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
     fun `stage metadata round-trips through POST, GET, PUT (set then clear)`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
+
+        val rigging = createRigging(client, name = "FOH-1")
+        val rigging2 = createRigging(client, name = "MID")
 
         val createResp = client.post("/api/rest/project/$projectId/patches") {
             contentType(ContentType.Application.Json)
@@ -53,7 +60,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
                     startChannel = 1,
                     stageX = 25.0,
                     stageY = 75.5,
-                    riggingPosition = "lx1",
+                    riggingUuid = rigging.uuid,
                     beamAngleDeg = 36,
                     gelCode = "  L201  ",
                 )
@@ -63,7 +70,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         val created = createResp.body<FixturePatchDto>()
         assertEquals(25.0, created.stageX)
         assertEquals(75.5, created.stageY)
-        assertEquals("LX1", created.riggingPosition, "riggingPosition normalises to uppercase + trim")
+        assertEquals(rigging.uuid, created.riggingUuid)
         assertEquals(36, created.beamAngleDeg)
         assertEquals("L201", created.gelCode, "gelCode trims surrounding whitespace")
 
@@ -74,7 +81,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         val fetched = getResp.body<FixturePatchDto>()
         assertEquals(25.0, fetched.stageX)
         assertEquals(75.5, fetched.stageY)
-        assertEquals("LX1", fetched.riggingPosition)
+        assertEquals(rigging.uuid, fetched.riggingUuid)
         assertEquals(36, fetched.beamAngleDeg)
         assertEquals("L201", fetched.gelCode)
 
@@ -82,17 +89,17 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
             .body<List<FixturePatchDto>>()
         val listedDim = listed.firstOrNull { it.id == patchId }
         assertNotNull(listedDim, "list should include the created patch")
-        assertEquals("LX1", listedDim.riggingPosition)
+        assertEquals(rigging.uuid, listedDim.riggingUuid)
         assertEquals("L201", listedDim.gelCode)
 
         // PUT replaces stage metadata. Keys not present must be left unchanged —
-        // we change only stageX, riggingPosition, gelCode and verify stageY +
+        // we change only stageX, riggingUuid, gelCode and verify stageY +
         // beamAngleDeg survive untouched.
         val putSet = client.put("/api/rest/project/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("stageX", JsonPrimitive(10.0))
-                put("riggingPosition", JsonPrimitive("foh"))
+                put("riggingUuid", JsonPrimitive(rigging2.uuid))
                 put("gelCode", JsonPrimitive("R26"))
             })
         }
@@ -100,7 +107,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         val updated = putSet.body<FixturePatchDto>()
         assertEquals(10.0, updated.stageX)
         assertEquals(75.5, updated.stageY, "stageY must survive an unrelated PUT")
-        assertEquals("FOH", updated.riggingPosition)
+        assertEquals(rigging2.uuid, updated.riggingUuid)
         assertEquals(36, updated.beamAngleDeg, "beamAngleDeg must survive an unrelated PUT")
         assertEquals("R26", updated.gelCode)
 
@@ -110,7 +117,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
             setBody(buildJsonObject {
                 put("stageX", JsonNull)
                 put("stageY", JsonNull)
-                put("riggingPosition", JsonNull)
+                put("riggingUuid", JsonNull)
                 put("beamAngleDeg", JsonNull)
                 put("gelCode", JsonNull)
             })
@@ -119,7 +126,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         val cleared = putClear.body<FixturePatchDto>()
         assertNull(cleared.stageX)
         assertNull(cleared.stageY)
-        assertNull(cleared.riggingPosition)
+        assertNull(cleared.riggingUuid)
         assertNull(cleared.beamAngleDeg)
         assertNull(cleared.gelCode)
 
@@ -128,9 +135,73 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
             .body<FixturePatchDto>()
         assertNull(finalGet.stageX)
         assertNull(finalGet.stageY)
-        assertNull(finalGet.riggingPosition)
+        assertNull(finalGet.riggingUuid)
         assertNull(finalGet.beamAngleDeg)
         assertNull(finalGet.gelCode)
+    }
+
+    @Test
+    fun `worldPosition composes rigging pose with patch offset`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        // Rigging at (2, 4, 5) yawed 30° about Z.
+        val rigging = client.post("/api/rest/project/$projectId/riggings") {
+            contentType(ContentType.Application.Json)
+            setBody(CreateRiggingRequest(
+                name = "Yaw Truss",
+                positionX = 2.0,
+                positionY = 4.0,
+                positionZ = 5.0,
+                yawDeg = 30.0,
+            ))
+        }.body<RiggingDto>()
+
+        // Patch with offset (1, 0, 0) along the rigging's local X axis.
+        val patch = client.post("/api/rest/project/$projectId/patches") {
+            contentType(ContentType.Application.Json)
+            setBody(CreatePatchRequest(
+                universe = 0,
+                fixtureTypeKey = "generic-dimmer",
+                key = "yaw-fix",
+                name = "Yaw Fixture",
+                startChannel = 30,
+                stageX = 1.0,
+                stageY = 0.0,
+                stageZ = 0.0,
+                riggingUuid = rigging.uuid,
+            ))
+        }.body<FixturePatchDto>()
+
+        val yaw = 30.0 * PI / 180.0
+        val expectedX = 2.0 + cos(yaw)
+        val expectedY = 4.0 + sin(yaw)
+        val expectedZ = 5.0
+        assertNotNull(patch.worldPositionX)
+        assertNotNull(patch.worldPositionY)
+        assertNotNull(patch.worldPositionZ)
+        assertTrue(abs(patch.worldPositionX!! - expectedX) < 1e-9, "worldX=${patch.worldPositionX} expected=$expectedX")
+        assertTrue(abs(patch.worldPositionY!! - expectedY) < 1e-9, "worldY=${patch.worldPositionY} expected=$expectedY")
+        assertTrue(abs(patch.worldPositionZ!! - expectedZ) < 1e-9, "worldZ=${patch.worldPositionZ} expected=$expectedZ")
+
+        // With no rigging, world position is the offset itself.
+        val standalone = client.post("/api/rest/project/$projectId/patches") {
+            contentType(ContentType.Application.Json)
+            setBody(CreatePatchRequest(
+                universe = 0,
+                fixtureTypeKey = "generic-dimmer",
+                key = "free-fix",
+                name = "Free Fixture",
+                startChannel = 60,
+                stageX = -3.0,
+                stageY = 1.5,
+                stageZ = 4.0,
+            ))
+        }.body<FixturePatchDto>()
+
+        assertEquals(-3.0, standalone.worldPositionX)
+        assertEquals(1.5, standalone.worldPositionY)
+        assertEquals(4.0, standalone.worldPositionZ)
     }
 
     @Test
@@ -291,6 +362,8 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
+        val rigging = createRigging(client, name = "Rebuild Truss")
+
         val createResp = client.post("/api/rest/project/$projectId/patches") {
             contentType(ContentType.Application.Json)
             setBody(
@@ -313,7 +386,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
             setBody(buildJsonObject {
                 put("stageX", JsonPrimitive(40.0))
                 put("stageY", JsonPrimitive(60.0))
-                put("riggingPosition", JsonPrimitive("LX2"))
+                put("riggingUuid", JsonPrimitive(rigging.uuid))
             })
         }
         assertEquals(HttpStatusCode.OK, metaPut.status, metaPut.bodyAsText())
@@ -339,5 +412,17 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
             afterDisplayPut,
             "PUT touching displayName (a loader-consumed field) must trigger a rebuild",
         )
+    }
+
+    private suspend fun createRigging(
+        client: io.ktor.client.HttpClient,
+        name: String,
+    ): RiggingDto {
+        val resp = client.post("/api/rest/project/$projectId/riggings") {
+            contentType(ContentType.Application.Json)
+            setBody(CreateRiggingRequest(name = name))
+        }
+        assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
+        return resp.body()
     }
 }

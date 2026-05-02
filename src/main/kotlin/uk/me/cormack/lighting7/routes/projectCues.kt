@@ -1699,13 +1699,6 @@ internal fun createFixtureTargetForCue(
     }
 }
 
-/** Extract a nullable String from a JsonElement (null / JsonNull → null). */
-private fun kotlinx.serialization.json.JsonElement?.nullableString(): String? =
-    if (this == null || this is JsonNull) null else jsonPrimitive.content
-
-/** Extract a nullable Long from a JsonElement (null / JsonNull → null). */
-private fun kotlinx.serialization.json.JsonElement?.nullableLong(): Long? =
-    if (this == null || this is JsonNull) null else jsonPrimitive.long
 
 /**
  * Infer effect category from property name for from-state capture.

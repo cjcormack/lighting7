@@ -60,8 +60,10 @@ cuePropertyAssignments/{uuid}.json   # carries cueUuid
 cuePresetApplications/{uuid}.json    # carries cueUuid + presetUuid
 cueAdHocEffects/{uuid}.json    # carries cueUuid
 cueTriggers/{uuid}.json        # carries cueUuid + scriptUuid
-fixturePatches/{uuid}.json     # carries universeConfigUuid
+fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUuid
 universeConfigs/{uuid}.json    # `address` deliberately omitted (machine-local)
+riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v3+)
+stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
 fixtureGroups/{uuid}.json      # members embedded inline
 fxPresets/{uuid}.json          # propertyAssignments embedded inline
 fxDefinitions/{uuid}.json
@@ -136,7 +138,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 2`, `minReader = 1`. Rules for future
+Current writer emits `formatVersion = 3`, `minReader = 1`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -164,14 +166,44 @@ shape is technically backward-compatible. There is no live data migration —
 the project repo this lighting rig was bootstrapped against had only test
 coordinates, and they are expected to be re-placed in metres.
 
+### Version 3 — Riggings, stage regions, Z-up
+
+Bumped when riggings became a first-class entity, stage regions arrived, and
+the coordinate system flipped from Y-up to Z-up. Both `SUPPORTED_FORMAT_VERSION`
+and `MIN_SUPPORTED_FORMAT_VERSION` are 3 — older repos are **rejected on
+import** (HTTP 422 with a "re-export from a newer install" message). No
+graceful v2-to-v3 migration code: this project hasn't shipped beyond the dev
+box, so backwards-reader plumbing would be dead weight. (Once the project
+runs on a real lighting console, the next breaking bump should add a
+v3-to-v4 reader instead of repeating this shortcut.)
+
+Wire-format changes:
+
+* `FixturePatchJson` lost `riggingPosition` (the legacy free-text string)
+  and gained `riggingUuid` (FK to a Rigging by UUID).
+* `FixturePatchJson.stageY` / `stageZ` swap meaning — `stageY` is now depth
+  (was height), `stageZ` is now height (was depth). Same field names,
+  different axes.
+* New `RiggingJson` table — pose (position + yaw/pitch/roll), name, optional
+  `kind` advisory label.
+* New `StageRegionJson` table — rectangular platforms describing the
+  playable surface beyond the project bounding box.
+
+Local DB migration: `State.migrateRiggingsV3` runs on PG installs that still
+have a `rigging_position` column. It reads each distinct legacy string, mints
+a Rigging row per `(projectId, riggingPosition)` pair (name = the legacy
+string, geometry null), updates `fixture_patches.rigging_id` to point at the
+new row, swaps `stage_y` ↔ `stage_z` on every patch (Y-up → Z-up), and drops
+the `rigging_position` column. Idempotent — gated on the column's existence.
+
 On import (manual fresh-import or post-pull replace), an export with
-`formatVersion > 2` is rejected (HTTP 422). On pull (cloud-sync phase 4), the
-remote `formatVersion.json` is read straight from the fetched git ref
-**before** the working tree is touched (see "Pre-pull formatVersion check"
-under [Remote sync (Phase 4)](#remote-sync-phase-4)) so a too-new repo can't
-corrupt the local working tree. When Phase 5+ migrations land, they live at
-`sync/migrations/V{n}_to_V{n+1}.kt` and run before the importer's
-three-way diff.
+`formatVersion > 3` is rejected (HTTP 422); same for `formatVersion < 3`. On
+pull (cloud-sync phase 4), the remote `formatVersion.json` is read straight
+from the fetched git ref **before** the working tree is touched (see
+"Pre-pull formatVersion check" under [Remote sync (Phase 4)](#remote-sync-phase-4))
+so a too-new repo can't corrupt the local working tree. When Phase 5+
+migrations land, they live at `sync/migrations/V{n}_to_V{n+1}.kt` and run
+before the importer's three-way diff.
 
 ## Machine-local data
 
@@ -224,7 +256,7 @@ The install row is machine-local; it never leaves the local SQLite DB.
 The Phase 1 importer is intentionally restrictive — it's the manual-backup
 case, not multi-master sync. Import:
 
-1. Validates `formatVersion ≤ 2` (422 otherwise).
+1. Validates `formatVersion == 3` (422 otherwise — too old or too new).
 2. Refuses (409) if a project with the imported UUID already exists. The
    operator can delete that project or skip the import; merge is Phase 5+.
 3. Refuses (409) if the imported name collides with an existing project's

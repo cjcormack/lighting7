@@ -614,22 +614,26 @@ synced — a project travels with the rig layout it was designed for.
 
 ### Coordinate system (FOH-relative)
 
-Right-handed, **Y-up**, units = **metres**. Origin = stage centre at deck
-level. Picked to match an FOH-camera convention so the editor's screen-space
-maps cleanly onto the data axes:
+Right-handed, **Z-up**, units = **metres**. Origin = stage centre at deck
+level. Z-up matches the convention used by most theatrical lighting CAD tools
+(Capture, Wysiwyg) and by stage-design intuition ("the stage is the floor;
+height goes up from it"):
 
-| Axis | + direction               | Notes                                       |
-|------|---------------------------|---------------------------------------------|
-| X    | audience-right            | "stage left" in actor terms                 |
-| Y    | up                        | height above the deck (0 = deck level)      |
-| Z    | into the stage            | away from the audience; downstage is −Z     |
+| Axis | + direction                  | Notes                                       |
+|------|------------------------------|---------------------------------------------|
+| X    | audience-right               | "stage left" in actor terms                 |
+| Y    | upstage                      | away from the audience (0 = downstage edge) |
+| Z    | up                           | height above the deck (0 = deck level)      |
 
-Negative values are valid: `stageX < 0` is audience-left, `stageY < 0` is below
-deck (orchestra pit, traps), `stageZ < 0` is in front of the downstage edge
-(thrust, runway).
+Negative values are valid: `stageX < 0` is audience-left, `stageY < 0` is
+in front of the downstage edge (thrust, runway), `stageZ < 0` is below deck
+(orchestra pit, traps).
 
 Patch validation accepts any finite value in ±500 m on each axis — generous
 enough for any real venue, tight enough to catch unit mistakes (mm, pixels).
+
+`baseYawDeg` rotates about Z (up). `basePitchDeg` rotates about X. Numerically
+unchanged from v2 — only the axis labels swapped.
 
 ### Per-patch fields
 
@@ -639,18 +643,40 @@ field is nullable; an unplaced fixture has `null` on all five.
 | Column          | Meaning                                                         |
 |-----------------|-----------------------------------------------------------------|
 | `stage_x`       | X position in metres (FOH-relative — see table above).          |
-| `stage_y`       | Y position in metres (height above deck).                       |
-| `stage_z`       | Z position in metres (depth into the stage).                    |
-| `base_yaw_deg`  | Body rotation around Y. 0° = pointing toward the audience (along −Z); +yaw rotates toward audience-right. Stored ±360°; renderers should reduce mod 360. |
+| `stage_y`       | Y position in metres (depth into the stage).                    |
+| `stage_z`       | Z position in metres (height above deck).                       |
+| `base_yaw_deg`  | Body rotation around Z. 0° = pointing toward the audience (along −Y); +yaw rotates toward audience-right. Stored ±360°; renderers should reduce mod 360. |
 | `base_pitch_deg`| Body rotation around X. 0° = horizontal; +pitch aims the fixture down. |
 
-Roll (rotation around the beam axis) is intentionally not stored — add it
-when a fixture type actually needs it (asymmetric beams, gobo orientation).
+Roll (rotation around the beam axis) is intentionally not stored on patches —
+add it when a fixture type actually needs it (asymmetric beams, gobo
+orientation). Riggings carry roll, so a rolled truss propagates orientation
+to its fixtures via the rigging frame.
+
+#### Rigging-relative offsets
+
+When `rigging_id` is set, `stage_x` / `stage_y` / `stage_z` are interpreted as
+**offsets in the rigging's local frame** rather than absolute world
+coordinates. World position is computed by composing the rigging's pose
+(position + yaw/pitch/roll) with the patch offset:
+
+```
+world = rigging.position + R(yaw, pitch, roll) · (stage_x, stage_y, stage_z)
+```
+
+The REST DTO surfaces both — `stageX/Y/Z` are the raw offsets (rigging-frame
+or world, depending on `riggingUuid`); `worldPositionX/Y/Z` is the resolved
+world position, precomputed for renderers.
+
+`base_yaw_deg` / `base_pitch_deg` continue to mean the fixture body's
+orientation; when a rigging is set, they're typically authored relative to
+the rigging frame (e.g. a fixture clamped square on a rotated truss has
+`baseYawDeg = 0` and inherits the truss's yaw from the rigging).
 
 ### Static fixtures vs. moving heads
 
 For a static fixture (PAR, wash bar, fresnel), `baseYawDeg` + `basePitchDeg`
-**is** the aim direction — the beam exits along the body's local −Z axis after
+**is** the aim direction — the beam exits along the body's local −Y axis after
 applying yaw and pitch.
 
 For a moving head, the base orientation describes only where the **yoke is
@@ -668,8 +694,58 @@ the renderer should fall back to a default stage size.
 | Column           | Meaning                                                       |
 |------------------|---------------------------------------------------------------|
 | `stage_width_m`  | Total width along X (audience-left to audience-right).        |
-| `stage_depth_m`  | Total depth along Z (downstage to upstage).                   |
-| `stage_height_m` | Trim height — Y of the rigging plane (typical fixture hang).  |
+| `stage_depth_m`  | Total depth along Y (downstage to upstage).                   |
+| `stage_height_m` | Trim height along Z (typical fixture hang above the deck).    |
 
 These are venue-shaped, not fixture-shaped: don't try to derive them from
 patch positions, and don't gate rendering on them being set.
+
+The bounding box is a **coarse** description of the venue. For irregular
+floor plans (thrusts, raised platforms, multi-level stages), see the
+`stage_regions` table below.
+
+### Riggings (`DaoRiggings`)
+
+A first-class entity for trusses, bars, booms, pipes, and floor stands. Each
+rigging carries a 3D pose and groups the fixtures hung off it. Fixture
+patches reference a rigging via the optional `rigging_id` FK; when set, the
+patch's `stage_x` / `stage_y` / `stage_z` are interpreted in the rigging's
+local frame.
+
+| Column        | Meaning                                                                     |
+|---------------|-----------------------------------------------------------------------------|
+| `name`        | Operator-facing label, unique per project (e.g. `"FOH"`, `"LX1"`, `"Boom-SL"`). |
+| `kind`        | Optional advisory label (`TRUSS`, `BAR`, `BOOM`, `PIPE`, `FLOOR_STAND`, `OTHER`). Renderers may use this to pick a default mesh; not enforced. |
+| `position_x/y/z` | Origin in world coordinates (metres). Nullable; null = treat as 0.       |
+| `yaw_deg`     | Rotation about Z (up). Stored ±360°.                                        |
+| `pitch_deg`   | Rotation about X (audience-right). Stored ±180°.                            |
+| `roll_deg`    | Rotation about Y (upstage). Stored ±180°.                                   |
+| `sort_order`  | Display order in operator UI.                                               |
+
+Composition order is yaw → pitch → roll (intrinsic Tait-Bryan). For a typical
+flown truss with only `yawDeg` set, this collapses to a single 2D rotation
+in the X/Y plane. CRUD: `GET`/`POST`/`PUT`/`DELETE` under
+`/api/rest/project/{projectId}/riggings`. Deleting a rigging detaches any
+patches that reference it (`rigging_id` is set to NULL; the fixtures are not
+deleted).
+
+### Stage regions (`DaoStageRegions`)
+
+Rectangular platforms describing the actual playable surface. Multiple
+regions handle thrusts, raised platforms, pits, and multi-level stages.
+
+| Column        | Meaning                                                                     |
+|---------------|-----------------------------------------------------------------------------|
+| `name`        | Operator-facing label, unique per project.                                  |
+| `center_x/y`  | Centre of the rectangle in the deck plane (metres).                         |
+| `center_z`    | Z (height) of the platform's top surface. 0 = deck level; >0 raised.        |
+| `width_m`     | Extent along X (after rotation).                                            |
+| `depth_m`     | Extent along Y (after rotation).                                            |
+| `height_m`    | Vertical extent — total platform thickness, including the bit below `center_z`. |
+| `yaw_deg`     | Rotation about Z relative to the rectangle's centre.                        |
+| `sort_order`  | Display / draw order.                                                       |
+
+Regions are additive — the union of all regions is the playable surface. A
+plain rectangular stage is a single region whose `width_m`/`depth_m` match
+the project's bounding box. CRUD endpoints mirror riggings under
+`/api/rest/project/{projectId}/stageRegions`.

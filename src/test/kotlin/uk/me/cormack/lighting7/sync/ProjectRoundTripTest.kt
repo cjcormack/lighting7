@@ -22,8 +22,10 @@ import uk.me.cormack.lighting7.models.DaoFxPreset
 import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoShowEntry
+import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.FxPresetEffectDto
 import uk.me.cormack.lighting7.models.TriggerType
@@ -248,15 +250,54 @@ class ProjectRoundTripTest {
             subnet = 0; universe = 1; controllerType = "MOCK"
         }
         Overrides.setUniverseAddress(project.id.value, u0.uuid, "10.0.0.1")
+
+        // 2 riggings — one fully populated (covers all pose fields), one mostly null
+        // (covers the omit-null canonical encoder for riggings too).
+        val rigFront = DaoRigging.new {
+            this.project = project
+            name = "FOH Truss"
+            kind = "TRUSS"
+            positionX = 0.0
+            positionY = -2.0
+            positionZ = 6.0
+            yawDeg = 0.0
+            pitchDeg = 0.0
+            rollDeg = 0.0
+            sortOrder = 0
+        }
+        val rigBoom = DaoRigging.new {
+            this.project = project
+            name = "Boom-SL"
+            sortOrder = 1
+        }
+
+        // 2 stage regions — main stage + a thrust extension downstage.
+        DaoStageRegion.new {
+            this.project = project
+            name = "main"
+            centerX = 0.0; centerY = 0.0; centerZ = 0.0
+            widthM = 12.0; depthM = 8.0; heightM = 0.0
+            yawDeg = 0.0
+            sortOrder = 0
+        }
+        DaoStageRegion.new {
+            this.project = project
+            name = "thrust"
+            centerY = -5.0
+            widthM = 4.0; depthM = 2.0
+            sortOrder = 1
+        }
+
         val patches = (1..4).map { i ->
             DaoFixturePatch.new {
                 this.project = project
                 universeConfig = if (i <= 2) u0 else u1
                 fixtureTypeKey = "hex-fixture"
                 key = "hex-$i"; displayName = "Hex $i"; startChannel = i * 10; sortOrder = i
-                // Exercise the FOH-relative geometry columns so any future serializer
-                // change has to keep these round-tripping. Mix of populated & null on
-                // patch[3] so the omit-null canonical encoder is exercised too.
+                // Patches 1 & 2 hang from the FOH truss (offsets in its local frame);
+                // patch 3 is a free-standing fixture; patch 4 has no geometry at all.
+                if (i in 1..2) rigging = rigFront
+                if (i == 3) rigging = rigBoom
                 if (i <= 3) {
                     stageX = (i - 2).toDouble()      // -1, 0, 1
                     stageY = 4.5

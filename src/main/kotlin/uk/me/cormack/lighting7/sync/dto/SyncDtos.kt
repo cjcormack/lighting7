@@ -22,7 +22,7 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 
 @Serializable
 data class FormatVersionJson(
-    val formatVersion: Int = 2,
+    val formatVersion: Int = 3,
     val minReader: Int = 1,
 )
 
@@ -119,9 +119,49 @@ data class FixturePatchJson(
     val stageZ: Double? = null,
     val baseYawDeg: Double? = null,
     val basePitchDeg: Double? = null,
-    val riggingPosition: String? = null,
+    val riggingUuid: String? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
+)
+
+/**
+ * A first-class rigging — truss, bar, boom, pipe, or floor stand. Carries a 3D pose
+ * (position + yaw/pitch/roll) so fixture patches with [FixturePatchJson.riggingUuid]
+ * set can express their stage_x/y/z as offsets in the rigging's local frame. See
+ * `docs/fixtures-engineering.md` for the v3 Z-up FOH-relative coordinate system.
+ */
+@Serializable
+data class RiggingJson(
+    val uuid: String,
+    val name: String,
+    val kind: String? = null,
+    val positionX: Double? = null,
+    val positionY: Double? = null,
+    val positionZ: Double? = null,
+    val yawDeg: Double? = null,
+    val pitchDeg: Double? = null,
+    val rollDeg: Double? = null,
+    val sortOrder: Int = 0,
+)
+
+/**
+ * A rectangular platform forming part of the playable stage surface. Multiple regions
+ * describe thrusts, raised platforms, pits, and multi-level stages. Project-level
+ * [ProjectJson.stageWidthM] / depth / height stays as a coarse fallback bounding box.
+ * [centerZ] = 0 means deck level; > 0 raises the top surface above the deck.
+ */
+@Serializable
+data class StageRegionJson(
+    val uuid: String,
+    val name: String,
+    val centerX: Double? = null,
+    val centerY: Double? = null,
+    val centerZ: Double? = null,
+    val widthM: Double? = null,
+    val depthM: Double? = null,
+    val heightM: Double? = null,
+    val yawDeg: Double? = null,
+    val sortOrder: Int = 0,
 )
 
 @Serializable

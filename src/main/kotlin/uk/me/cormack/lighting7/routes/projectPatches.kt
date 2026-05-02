@@ -11,12 +11,7 @@ import io.ktor.server.resources.delete
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.double
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
@@ -26,6 +21,9 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
+import java.util.UUID
+import kotlin.math.cos
+import kotlin.math.sin
 
 internal fun Route.routeApiRestProjectPatches(state: State) {
     // GET /{projectId}/patches - List all patches for a project
@@ -95,10 +93,14 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(stageError))
                 return@withProject
             }
-            val normalisedRiggingPosition = normaliseRiggingPosition(request.riggingPosition)
             val normalisedGelCode = normaliseGelCode(request.gelCode)
 
             val result = transaction(state.database) {
+                val rigging = request.riggingUuid?.let { resolveRiggingForProject(project, it) }
+                if (request.riggingUuid != null && rigging == null) {
+                    return@transaction Pair<FixturePatchDto?, String?>(null, "Rigging ${request.riggingUuid} not found")
+                }
+
                 // Find or create universe config
                 val universeConfig = DaoUniverseConfig.find {
                     (DaoUniverseConfigs.project eq project.id) and
@@ -141,6 +143,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 val patch = DaoFixturePatch.new {
                     this.project = project
                     this.universeConfig = universeConfig
+                    this.rigging = rigging
                     this.fixtureTypeKey = request.fixtureTypeKey
                     this.key = request.key
                     this.displayName = request.name
@@ -151,7 +154,6 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.stageZ = request.stageZ
                     this.baseYawDeg = request.baseYawDeg
                     this.basePitchDeg = request.basePitchDeg
-                    this.riggingPosition = normalisedRiggingPosition
                     this.beamAngleDeg = request.beamAngleDeg
                     this.gelCode = normalisedGelCode
                 }
@@ -235,8 +237,15 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 if ("baseYawDeg" in body) patch.baseYawDeg = body["baseYawDeg"].nullableDouble()
                 if ("basePitchDeg" in body) patch.basePitchDeg = body["basePitchDeg"].nullableDouble()
                 if ("beamAngleDeg" in body) patch.beamAngleDeg = body["beamAngleDeg"].nullableInt()
-                if ("riggingPosition" in body) {
-                    patch.riggingPosition = normaliseRiggingPosition(body["riggingPosition"].nullableString())
+                if ("riggingUuid" in body) {
+                    val uuidStr = body["riggingUuid"].nullableString()
+                    if (uuidStr == null) {
+                        patch.rigging = null
+                    } else {
+                        val rigging = resolveRiggingForProject(project, uuidStr)
+                            ?: return@transaction Pair<FixturePatchDto?, String?>(null, "Rigging $uuidStr not found")
+                        patch.rigging = rigging
+                    }
                 }
                 if ("gelCode" in body) {
                     patch.gelCode = normaliseGelCode(body["gelCode"].nullableString())
@@ -348,7 +357,10 @@ data class FixturePatchDto(
     val stageZ: Double? = null,
     val baseYawDeg: Double? = null,
     val basePitchDeg: Double? = null,
-    val riggingPosition: String? = null,
+    val riggingUuid: String? = null,
+    val worldPositionX: Double? = null,
+    val worldPositionY: Double? = null,
+    val worldPositionZ: Double? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
 )
@@ -373,7 +385,7 @@ data class CreatePatchRequest(
     val stageZ: Double? = null,
     val baseYawDeg: Double? = null,
     val basePitchDeg: Double? = null,
-    val riggingPosition: String? = null,
+    val riggingUuid: String? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
 )
@@ -392,7 +404,7 @@ private val METADATA_ONLY_PUT_KEYS = setOf(
     "stageZ",
     "baseYawDeg",
     "basePitchDeg",
-    "riggingPosition",
+    "riggingUuid",
     "beamAngleDeg",
     "gelCode",
 )
@@ -402,6 +414,7 @@ private fun DaoFixturePatch.toDto(): FixturePatchDto {
     val typeInfo = FixtureTypeRegistry.typeInfoForKey(fixtureTypeKey)
     val groupRefs = DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq this@toDto.id }
         .map { FixturePatchGroupRef(id = it.group.id.value, name = it.group.name) }
+    val world = resolveWorldPosition(this)
     return FixturePatchDto(
         id = id.value,
         key = key,
@@ -421,10 +434,71 @@ private fun DaoFixturePatch.toDto(): FixturePatchDto {
         stageZ = stageZ,
         baseYawDeg = baseYawDeg,
         basePitchDeg = basePitchDeg,
-        riggingPosition = riggingPosition,
+        riggingUuid = rigging?.uuid?.toString(),
+        worldPositionX = world?.first,
+        worldPositionY = world?.second,
+        worldPositionZ = world?.third,
         beamAngleDeg = beamAngleDeg,
         gelCode = gelCode,
     )
+}
+
+/**
+ * Compose the patch's stage_x/y/z (offsets in the rigging's local frame) with the
+ * rigging's pose to produce world coordinates. When no rigging is set, the offsets
+ * are already world coordinates. Returns null if neither rigging nor any of the
+ * stage_x/y/z fields are populated.
+ *
+ * Z-up convention: yaw rotates about Z, pitch about X, roll about Y. Intrinsic
+ * order is yaw → pitch → roll, which expands to the matrix product
+ * `R_z(yaw) · R_x(pitch) · R_y(roll) · v` (axes Z-X-Y, applied right-to-left).
+ * Typical truss rigs use yaw only; the all-null fast path below skips the
+ * trig entirely, since most fixtures have an unset pose.
+ */
+private fun resolveWorldPosition(patch: DaoFixturePatch): Triple<Double, Double, Double>? {
+    val rig = patch.rigging
+    val ox = patch.stageX
+    val oy = patch.stageY
+    val oz = patch.stageZ
+    if (rig == null) {
+        return if (ox == null && oy == null && oz == null) null
+        else Triple(ox ?: 0.0, oy ?: 0.0, oz ?: 0.0)
+    }
+    val rx = rig.positionX ?: 0.0
+    val ry = rig.positionY ?: 0.0
+    val rz = rig.positionZ ?: 0.0
+    val lx = ox ?: 0.0
+    val ly = oy ?: 0.0
+    val lz = oz ?: 0.0
+
+    // Common case: rigging is just a translated origin (no orientation). Skip trig.
+    if (rig.yawDeg == null && rig.pitchDeg == null && rig.rollDeg == null) {
+        return Triple(rx + lx, ry + ly, rz + lz)
+    }
+
+    val yaw = Math.toRadians(rig.yawDeg ?: 0.0)
+    val pitch = Math.toRadians(rig.pitchDeg ?: 0.0)
+    val roll = Math.toRadians(rig.rollDeg ?: 0.0)
+    val (rollX, rollY, rollZ) = run {
+        val cr = cos(roll); val sr = sin(roll)
+        Triple(cr * lx + sr * lz, ly, -sr * lx + cr * lz)
+    }
+    val (pitchX, pitchY, pitchZ) = run {
+        val cp = cos(pitch); val sp = sin(pitch)
+        Triple(rollX, cp * rollY - sp * rollZ, sp * rollY + cp * rollZ)
+    }
+    val (yawX, yawY, yawZ) = run {
+        val cy = cos(yaw); val sy = sin(yaw)
+        Triple(cy * pitchX - sy * pitchY, sy * pitchX + cy * pitchY, pitchZ)
+    }
+    return Triple(rx + yawX, ry + yawY, rz + yawZ)
+}
+
+private fun resolveRiggingForProject(project: DaoProject, uuidStr: String): DaoRigging? {
+    val parsedUuid = runCatching { UUID.fromString(uuidStr) }.getOrNull() ?: return null
+    val rigging = DaoRigging.find { DaoRiggings.uuid eq parsedUuid }.firstOrNull() ?: return null
+    if (rigging.project.id != project.id) return null
+    return rigging
 }
 
 /**
@@ -443,21 +517,9 @@ private fun validateStageMetadata(
     basePitchDeg: Double?,
     beamAngleDeg: Int?,
 ): String? {
-    fun checkCoord(name: String, v: Double?): String? {
-        if (v == null) return null
-        if (!v.isFinite()) return "$name must be a finite number"
-        if (v < -500.0 || v > 500.0) return "$name must be between -500.0 and 500.0 metres"
-        return null
-    }
-    fun checkAngle(name: String, v: Double?, min: Double, max: Double): String? {
-        if (v == null) return null
-        if (!v.isFinite()) return "$name must be a finite number"
-        if (v < min || v > max) return "$name must be between $min and $max degrees"
-        return null
-    }
-    checkCoord("stageX", stageX)?.let { return it }
-    checkCoord("stageY", stageY)?.let { return it }
-    checkCoord("stageZ", stageZ)?.let { return it }
+    checkStageCoord("stageX", stageX)?.let { return it }
+    checkStageCoord("stageY", stageY)?.let { return it }
+    checkStageCoord("stageZ", stageZ)?.let { return it }
     // Yaw/pitch allow a full ±360°/±180° range so a UI can normalise either way without
     // tripping a 400. Renderers should reduce mod 360.
     checkAngle("baseYawDeg", baseYawDeg, -360.0, 360.0)?.let { return it }
@@ -468,29 +530,11 @@ private fun validateStageMetadata(
     return null
 }
 
-private fun normaliseRiggingPosition(raw: String?): String? {
-    val trimmed = raw?.trim() ?: return null
-    if (trimmed.isEmpty()) return null
-    return trimmed.uppercase().take(50)
-}
-
 private fun normaliseGelCode(raw: String?): String? {
     val trimmed = raw?.trim() ?: return null
     if (trimmed.isEmpty()) return null
     return trimmed.take(20)
 }
-
-// Tri-state JSON-element extractors for partial updates: a missing key and an
-// explicit JSON null both yield Kotlin null; callers that need to tell those
-// apart can guard with `"key" in body` first.
-private fun JsonElement?.nullableString(): String? =
-    if (this == null || this is JsonNull) null else jsonPrimitive.content
-
-private fun JsonElement?.nullableInt(): Int? =
-    if (this == null || this is JsonNull) null else jsonPrimitive.int
-
-private fun JsonElement?.nullableDouble(): Double? =
-    if (this == null || this is JsonNull) null else jsonPrimitive.double
 
 /**
  * Find or create a fixture group by name within a project.

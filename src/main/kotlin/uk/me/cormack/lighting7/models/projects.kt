@@ -44,6 +44,8 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     val cueStacks by DaoCueStack referrersOn DaoCueStacks.project
     val cueSlots by DaoCueSlot referrersOn DaoCueSlots.project
     val universeConfigs by DaoUniverseConfig referrersOn DaoUniverseConfigs.project
+    val riggings by DaoRigging referrersOn DaoRiggings.project
+    val stageRegions by DaoStageRegion referrersOn DaoStageRegions.project
     val fixturePatches by DaoFixturePatch referrersOn DaoFixturePatches.project
     val fixtureGroups by DaoFixtureGroup referrersOn DaoFixtureGroups.project
     val parkedChannels by DaoParkedChannel referrersOn DaoParkedChannels.project
