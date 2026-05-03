@@ -585,6 +585,19 @@ data class CloudSyncLogAppendedOutMessage(
 ) : OutMessage()
 
 /**
+ * Emitted after a successful `POST /api/rest/cloud-sync/import` clones a remote repo
+ * into a brand-new local project. Other tabs / connected clients use this to refresh
+ * their project list and sync-config map without round-tripping the REST endpoints.
+ */
+@Serializable
+@SerialName("cloudSyncProjectImported")
+data class CloudSyncProjectImportedOutMessage(
+    val projectId: Int,
+    val projectUuid: String,
+    val name: String,
+) : OutMessage()
+
+/**
  * Broadcast when the install-wide GitHub OAuth identity changes — the user connects,
  * refreshes (login unchanged but expiry shifts), or disconnects. The sync config UI
  * uses this to live-update the "Connected as @login" row without polling.

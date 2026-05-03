@@ -33,6 +33,15 @@ interface CredentialStore {
     fun contains(repoUrl: String): Boolean = containsBlob(patKey(repoUrl))
 
     /**
+     * Bulk presence check — returns the subset of [repoUrls] that have a PAT stored.
+     * Default loops through [contains] one at a time; backends that can answer the
+     * whole question with one I/O round-trip (e.g. [FileCredentialStore], which would
+     * otherwise re-read its file once per key) should override.
+     */
+    fun containsAll(repoUrls: Collection<String>): Set<String> =
+        repoUrls.filterTo(mutableSetOf()) { contains(it) }
+
+    /**
      * Persist [pat] under [repoUrl]. Overwrites any existing value. Blank PATs are
      * rejected — use [delete] to clear.
      */

@@ -244,7 +244,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                         message = e.message ?: e.code.name,
                     ),
                 )
-                call.respond(e.code.toHttpStatus(), SyncErrorResponse(e.message ?: e.code.name, e.code.name))
+                respondSyncError(e)
                 return@withProject
             }
             // A CONFLICTS_PENDING run emits its own bespoke message from the engine;
@@ -364,7 +364,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                 }
                 call.respond(HttpStatusCode.NoContent)
             } catch (e: SyncException) {
-                call.respond(e.code.toHttpStatus(), SyncErrorResponse(e.message ?: e.code.name, e.code.name))
+                respondSyncError(e)
             }
         }
     }
@@ -391,7 +391,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                         message = e.message ?: e.code.name,
                     ),
                 )
-                call.respond(e.code.toHttpStatus(), SyncErrorResponse(e.message ?: e.code.name, e.code.name))
+                respondSyncError(e)
                 return@withProject
             }
             state.emitCloudSyncEvent(
@@ -414,7 +414,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
             val result = try {
                 remoteSyncEngine.abortSession(project.id.value, project.uuid)
             } catch (e: SyncException) {
-                call.respond(e.code.toHttpStatus(), SyncErrorResponse(e.message ?: e.code.name, e.code.name))
+                respondSyncError(e)
                 return@withProject
             }
             call.respond(result)
@@ -494,6 +494,14 @@ data class SetCredentialsRequest(val pat: String)
 /** Error response carrying a stable [code] so the frontend can branch on cause. */
 @Serializable
 data class SyncErrorResponse(val error: String, val code: String)
+
+/**
+ * Send a [SyncException] as a stable-coded JSON error response. Centralises the four
+ * call sites in this file plus the import handler in `cloudSyncTopLevel.kt`.
+ */
+internal suspend fun io.ktor.server.routing.RoutingContext.respondSyncError(e: SyncException) {
+    call.respond(e.code.toHttpStatus(), SyncErrorResponse(e.message ?: e.code.name, e.code.name))
+}
 
 @Serializable
 data class UpdateSyncConfigRequest(
@@ -618,7 +626,7 @@ private suspend fun resolveTokenPresent(state: State, repoUrl: String?): Boolean
  * post-process the DTO with the real `tokenPresent` value because the credential lookup
  * is blocking I/O that we don't want to do inside a DB transaction.
  */
-private fun DaoSyncConfig.toBareDto() = SyncConfigDto(
+internal fun DaoSyncConfig.toBareDto() = SyncConfigDto(
     branch = branch,
     repoUrl = repoUrl,
     enabled = enabled,

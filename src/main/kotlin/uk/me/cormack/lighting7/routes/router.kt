@@ -26,6 +26,7 @@ fun Application.configureRouting(state: State) {
             routeApiRestControlSurfaceTypes(state)
             routeApiRestPerf(state)
             routeApiRestInstall(state)
+            routeApiRestCloudSync(state)
             routeApiOAuthGitHub(state)
         }
 

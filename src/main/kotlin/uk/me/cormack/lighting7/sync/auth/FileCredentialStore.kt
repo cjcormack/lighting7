@@ -50,6 +50,12 @@ class FileCredentialStore(
 
     override fun containsBlob(key: String): Boolean = key in readMap()
 
+    override fun containsAll(repoUrls: Collection<String>): Set<String> {
+        if (repoUrls.isEmpty()) return emptySet()
+        val map = readMap()
+        return repoUrls.filterTo(mutableSetOf()) { CredentialStore.patKey(it) in map }
+    }
+
     override fun setBlob(key: String, value: String) {
         require(value.isNotBlank()) { "Credential value must not be blank" }
         val map = readMap().toMutableMap()

@@ -170,6 +170,37 @@ object JGitClient {
     // ─── Remote operations (cloud-sync phase 4) ────────────────────────────
 
     /**
+     * Clone [repoUrl] (single-branch [branch]) into [path] using [credentials]. Used by the
+     * import-from-remote path to materialise an existing peer's repo into a fresh local
+     * working tree before [ProjectImporter] reads it. The returned [Repository] is a
+     * closeable native resource — wrap in `.use { ... }`.
+     *
+     * Translates JGit's auth-failure transport exceptions to [GitAuthException] in the
+     * same shape as [fetch]/[push] so the route layer can map them to a 401 with a stable
+     * `AUTH_FAILED` code.
+     */
+    fun clone(
+        repoUrl: String,
+        path: Path,
+        branch: String,
+        credentials: GitCredentials,
+    ): Repository {
+        Files.createDirectories(path)
+        try {
+            return Git.cloneRepository()
+                .setURI(repoUrl)
+                .setDirectory(path.toFile())
+                .setBranch(branch)
+                .setBranchesToClone(listOf("refs/heads/$branch"))
+                .setCredentialsProvider(credentials.toProvider())
+                .call()
+                .repository
+        } catch (e: TransportException) {
+            throw e.toAuthOrRethrow()
+        }
+    }
+
+    /**
      * Idempotently configure a single remote on the repo. If [name] already exists with a
      * different URL, it's updated in place; the previously stored URL is overwritten so a
      * user who corrects a typo in the repo URL doesn't have to manually edit `.git/config`.
