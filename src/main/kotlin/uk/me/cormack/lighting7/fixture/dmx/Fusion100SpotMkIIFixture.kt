@@ -180,10 +180,12 @@ sealed class Fusion100SpotMkIIFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode5Ch =
             Mode5Ch(this, transaction)
 
-        @FixtureProperty("Pan adjustment 0-540°", category = PropertyCategory.PAN)
+        @FixtureProperty("Pan adjustment 0-540°", category = PropertyCategory.PAN,
+            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Tilt adjustment 0-210°", category = PropertyCategory.TILT)
+        @FixtureProperty("Tilt adjustment 0-210°", category = PropertyCategory.TILT,
+            axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 210.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
         @FixtureProperty("LED macro", category = PropertyCategory.SETTING)
@@ -229,10 +231,12 @@ sealed class Fusion100SpotMkIIFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode8Ch =
             Mode8Ch(this, transaction)
 
-        @FixtureProperty("Pan adjustment 0-540°", category = PropertyCategory.PAN)
+        @FixtureProperty("Pan adjustment 0-540°", category = PropertyCategory.PAN,
+            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Tilt adjustment 0-210°", category = PropertyCategory.TILT)
+        @FixtureProperty("Tilt adjustment 0-210°", category = PropertyCategory.TILT,
+            axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 210.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
@@ -294,13 +298,15 @@ sealed class Fusion100SpotMkIIFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode15Ch =
             Mode15Ch(this, transaction)
 
-        @FixtureProperty("Pan adjustment 0-540°", category = PropertyCategory.PAN)
+        @FixtureProperty("Pan adjustment 0-540°", category = PropertyCategory.PAN,
+            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Pan fine adjustment", category = PropertyCategory.PAN_FINE)
         val panFine = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Tilt adjustment 0-210°", category = PropertyCategory.TILT)
+        @FixtureProperty("Tilt adjustment 0-210°", category = PropertyCategory.TILT,
+            axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 210.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
         @FixtureProperty("Tilt fine adjustment", category = PropertyCategory.TILT_FINE)

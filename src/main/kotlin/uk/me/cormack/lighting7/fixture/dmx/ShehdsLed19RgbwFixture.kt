@@ -153,13 +153,15 @@ sealed class ShehdsLed19RgbwFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode24Ch =
             Mode24Ch(this, transaction)
 
-        @FixtureProperty("Pan (coarse, 0–540°)", category = PropertyCategory.PAN)
+        @FixtureProperty("Pan (coarse, 0–540°)", category = PropertyCategory.PAN,
+            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Tilt (coarse, 0–270°)", category = PropertyCategory.TILT)
+        @FixtureProperty("Tilt (coarse, 0–270°)", category = PropertyCategory.TILT,
+            axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 270.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
         @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
@@ -257,13 +259,15 @@ sealed class ShehdsLed19RgbwFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode16Ch =
             Mode16Ch(this, transaction)
 
-        @FixtureProperty("Pan (coarse, 0–540°)", category = PropertyCategory.PAN)
+        @FixtureProperty("Pan (coarse, 0–540°)", category = PropertyCategory.PAN,
+            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Tilt (coarse, 0–270°)", category = PropertyCategory.TILT)
+        @FixtureProperty("Tilt (coarse, 0–270°)", category = PropertyCategory.TILT,
+            axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 270.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
         @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)

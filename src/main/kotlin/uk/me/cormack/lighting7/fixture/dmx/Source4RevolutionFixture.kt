@@ -127,13 +127,15 @@ sealed class Source4RevolutionFixture(
         @FixtureProperty(category = PropertyCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Pan (coarse)", category = PropertyCategory.PAN)
+        @FixtureProperty("Pan (coarse)", category = PropertyCategory.PAN,
+            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
         @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Tilt (coarse)", category = PropertyCategory.TILT)
+        @FixtureProperty("Tilt (coarse)", category = PropertyCategory.TILT,
+            axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 270.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 3)
 
         @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)

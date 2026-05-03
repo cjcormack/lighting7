@@ -42,6 +42,19 @@ enum class PropertyCategory(val defaultComposition: CompositionRule) {
 }
 
 /**
+ * Movement axis for pan/tilt sliders. The 3D stage view uses this together with
+ * [FixtureProperty.degMin]/[FixtureProperty.degMax]/[FixtureProperty.inverted] to
+ * convert raw DMX values into degrees and rotate the moving-head model.
+ */
+enum class PanTiltAxis {
+    NONE,
+    PAN,
+    TILT;
+
+    fun serialized(): String? = if (this == NONE) null else name
+}
+
+/**
  * Roles for promoting a property to the compact fixture card display.
  * Up to two properties can be promoted: one primary (top row) and one secondary (bottom row).
  */
@@ -74,6 +87,15 @@ enum class CompactDisplayRole {
  *                         (used for white, amber, UV channels that extend RGB)
  * @param compactDisplay If set to PRIMARY or SECONDARY, this property will be promoted
  *                        to the compact fixture card display
+ * @param axis Movement axis for moving-head sliders. Defaults to [PanTiltAxis.NONE].
+ *             Used together with [degMin]/[degMax]/[inverted] by the 3D stage view to
+ *             rotate the head model from live DMX.
+ * @param degMin Slider min in degrees (mapped to the slider's DMX min). Defaults to
+ *               [Double.NaN] meaning "unset" — Kotlin annotations can't carry null Double
+ *               defaults, so NaN is the sentinel and is converted to null at reflect time.
+ * @param degMax Slider max in degrees (mapped to the slider's DMX max). Defaults [Double.NaN].
+ * @param inverted Reverse the direction of the slider→degrees mapping. Used for fixtures
+ *                  whose tilt is mechanically inverted from the DMX-up = stage-up convention.
  */
 @Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
@@ -82,7 +104,11 @@ annotation class FixtureProperty(
     val category: PropertyCategory = PropertyCategory.OTHER,
     val composition: CompositionRule = CompositionRule.UNSET,
     val bundleWithColour: Boolean = false,
-    val compactDisplay: CompactDisplayRole = CompactDisplayRole.NONE
+    val compactDisplay: CompactDisplayRole = CompactDisplayRole.NONE,
+    val axis: PanTiltAxis = PanTiltAxis.NONE,
+    val degMin: Double = Double.NaN,
+    val degMax: Double = Double.NaN,
+    val inverted: Boolean = false,
 )
 
 /** Resolved composition rule: annotation override takes precedence, else the category default. */

@@ -24,25 +24,47 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
         val composition: CompositionRule,
         val bundleWithColour: Boolean,
         val compactDisplay: CompactDisplayRole = CompactDisplayRole.NONE,
-    )
+        val axis: PanTiltAxis = PanTiltAxis.NONE,
+        val degMin: Double? = null,
+        val degMax: Double? = null,
+        val inverted: Boolean = false,
+    ) {
+        companion object {
+            /**
+             * Build a [Property] from a [@FixtureProperty] annotation. Used by
+             * both the fixture-level reflection scan ([Fixture.fixtureProperties])
+             * and the per-element reflection scans in [DmxFixture]. NaN sentinels
+             * for the optional Double-valued annotation fields are converted to
+             * null here in one place.
+             */
+            fun fromAnnotation(
+                classProperty: KProperty1<out Fixture, *>,
+                ann: FixtureProperty,
+            ): Property = Property(
+                classProperty,
+                classProperty.name,
+                ann.description,
+                ann.category,
+                ann.resolveComposition(),
+                ann.bundleWithColour,
+                ann.compactDisplay,
+                ann.axis,
+                ann.degMin.takeUnless { it.isNaN() },
+                ann.degMax.takeUnless { it.isNaN() },
+                ann.inverted,
+            )
+        }
+    }
 
     private val fixtureTypeAnnotation: FixtureType = this::class.annotations.filterIsInstance<FixtureType>().first()
     val typeKey: String = fixtureTypeAnnotation.typeKey
     val manufacturer: String = fixtureTypeAnnotation.manufacturer
     val model: String = fixtureTypeAnnotation.model
-    val fixtureProperties: List<Property> = this::class.memberProperties.map { classProperty ->
+    val fixtureProperties: List<Property> = this::class.memberProperties.flatMap { classProperty ->
         classProperty.annotations.filterIsInstance<FixtureProperty>().map { fixtureProperty ->
-            Property(
-                classProperty,
-                classProperty.name,
-                fixtureProperty.description,
-                fixtureProperty.category,
-                fixtureProperty.resolveComposition(),
-                fixtureProperty.bundleWithColour,
-                fixtureProperty.compactDisplay
-            )
+            Property.fromAnnotation(classProperty, fixtureProperty)
         }
-    }.flatten()
+    }
 
     /** Look up a declared property by its reflection name; null if no such annotated property. */
     fun fixtureProperty(name: String): Property? =

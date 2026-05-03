@@ -238,7 +238,11 @@ data class SliderPropertyDescriptor(
     val channel: ChannelRef,
     val min: Int = 0,
     val max: Int = 255,
-    override val compactDisplay: String? = null
+    override val compactDisplay: String? = null,
+    val axis: String? = null,
+    val degMin: Double? = null,
+    val degMax: Double? = null,
+    val inverted: Boolean? = null,
 ) : PropertyDescriptor
 
 @Serializable

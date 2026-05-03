@@ -47,16 +47,10 @@ abstract class DmxFixture(
                 val elementPrefix = "Head ${element.elementIndex + 1}"
 
                 val elementProperties = element::class.memberProperties.flatMap { classProperty ->
+                    @Suppress("UNCHECKED_CAST")
+                    val fixtureProp = classProperty as kotlin.reflect.KProperty1<out Fixture, *>
                     classProperty.annotations.filterIsInstance<FixtureProperty>().map { fixtureProperty ->
-                        Fixture.Property(
-                            classProperty as kotlin.reflect.KProperty1<out Fixture, *>,
-                            classProperty.name,
-                            fixtureProperty.description,
-                            fixtureProperty.category,
-                            fixtureProperty.resolveComposition(),
-                            fixtureProperty.bundleWithColour,
-                            fixtureProperty.compactDisplay
-                        )
+                        Fixture.Property.fromAnnotation(fixtureProp, fixtureProperty)
                     }
                 }
 
@@ -126,17 +120,7 @@ abstract class DmxFixture(
                             else -> {} // Ignore other bundleWithColour sliders
                         }
                     } else {
-                        descriptors.add(
-                            SliderPropertyDescriptor(
-                                name = prop.name,
-                                displayName = displayName,
-                                category = prop.category.name.lowercase(),
-                                channel = ChannelRef(universe.universe, value.channelNo),
-                                min = value.min.toInt(),
-                                max = value.max.toInt(),
-                                compactDisplay = prop.compactDisplay.serialized()
-                            )
-                        )
+                        descriptors.add(buildSliderDescriptor(prop, value, displayName))
                     }
                 }
                 is DmxFixtureSetting<*> -> {
@@ -290,15 +274,10 @@ abstract class DmxFixture(
 
         // Get all properties from the element class with @FixtureProperty annotation
         val elementProperties = element::class.memberProperties.flatMap { classProperty ->
+            @Suppress("UNCHECKED_CAST")
+            val fixtureProp = classProperty as kotlin.reflect.KProperty1<out Fixture, *>
             classProperty.annotations.filterIsInstance<FixtureProperty>().map { fixtureProperty ->
-                Fixture.Property(
-                    classProperty as kotlin.reflect.KProperty1<out Fixture, *>,
-                    classProperty.name,
-                    fixtureProperty.description,
-                    fixtureProperty.category,
-                    fixtureProperty.resolveComposition(),
-                    fixtureProperty.bundleWithColour
-                )
+                Fixture.Property.fromAnnotation(fixtureProp, fixtureProperty)
             }
         }
 
@@ -324,17 +303,7 @@ abstract class DmxFixture(
                 is DmxSlider -> {
                     // Skip bundled colour channels in element properties
                     if (!prop.bundleWithColour) {
-                        descriptors.add(
-                            SliderPropertyDescriptor(
-                                name = prop.name,
-                                displayName = displayName,
-                                category = prop.category.name.lowercase(),
-                                channel = ChannelRef(universe.universe, value.channelNo),
-                                min = value.min.toInt(),
-                                max = value.max.toInt(),
-                                compactDisplay = prop.compactDisplay.serialized()
-                            )
-                        )
+                        descriptors.add(buildSliderDescriptor(prop, value, displayName))
                     }
                 }
                 is DmxFixtureSetting<*> -> {
@@ -381,6 +350,24 @@ abstract class DmxFixture(
 
         return descriptors
     }
+
+    private fun buildSliderDescriptor(
+        prop: Fixture.Property,
+        slider: DmxSlider,
+        displayName: String,
+    ): SliderPropertyDescriptor = SliderPropertyDescriptor(
+        name = prop.name,
+        displayName = displayName,
+        category = prop.category.name.lowercase(),
+        channel = ChannelRef(universe.universe, slider.channelNo),
+        min = slider.min.toInt(),
+        max = slider.max.toInt(),
+        compactDisplay = prop.compactDisplay.serialized(),
+        axis = prop.axis.serialized(),
+        degMin = prop.degMin,
+        degMax = prop.degMax,
+        inverted = prop.inverted.takeIf { it },
+    )
 
     private fun String.formatPropertyName(): String {
         return this.replace(Regex("([a-z])([A-Z])"), "$1 $2")

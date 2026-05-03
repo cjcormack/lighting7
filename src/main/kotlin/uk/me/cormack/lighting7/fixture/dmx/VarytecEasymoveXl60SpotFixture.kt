@@ -129,10 +129,12 @@ sealed class VarytecEasymoveXl60SpotFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode11Ch =
             Mode11Ch(this, transaction)
 
-        @FixtureProperty("Pan (coarse, 0–630°)", category = PropertyCategory.PAN)
+        @FixtureProperty("Pan (coarse, 0–630°)", category = PropertyCategory.PAN,
+            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 630.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Tilt (coarse, 0–270°)", category = PropertyCategory.TILT)
+        @FixtureProperty("Tilt (coarse, 0–270°)", category = PropertyCategory.TILT,
+            axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 270.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
         @FixtureProperty("Colour wheel", category = PropertyCategory.COLOUR)
