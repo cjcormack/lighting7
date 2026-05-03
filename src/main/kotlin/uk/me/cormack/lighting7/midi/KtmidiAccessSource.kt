@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.midi
 
+import dev.atsushieno.ktmidi.JvmMidiAccess
 import dev.atsushieno.ktmidi.LibreMidiAccess
 import dev.atsushieno.ktmidi.MidiAccess
 import dev.atsushieno.ktmidi.MidiInput
@@ -7,14 +8,8 @@ import dev.atsushieno.ktmidi.MidiOutput
 import dev.atsushieno.ktmidi.MidiTransportProtocol
 import dev.atsushieno.ktmidi.OnMidiReceivedEventListener
 
-/**
- * Production [MidiAccessSource] backed by ktmidi's [LibreMidiAccess] (native libremidi
- * through the Panama FFM bindings). Wraps the ktmidi-specific types into our transport
- * abstraction so the rest of the control-surface stack stays library-agnostic and unit
- * testable without loading the native binary.
- */
-class LibreMidiAccessSource(
-    private val access: MidiAccess = LibreMidiAccess.create(MidiTransportProtocol.MIDI1),
+class KtmidiAccessSource(
+    private val access: MidiAccess,
 ) : MidiAccessSource {
 
     override val name: String get() = access.name
@@ -66,3 +61,25 @@ class LibreMidiAccessSource(
         }
     }
 }
+
+// Windows has no usable libremidi-panama binary (no arm64 .dll; the x64 .dll trips an LLP64
+// ABI bug). Fall back to javax.sound.midi there, filtering out the four pure-software
+// pseudo-devices the JVM and Windows always enumerate — Microsoft MIDI Mapper is a
+// system-wide router that's always held open (auto-open fails with "already in use"); the
+// others are software synths / sequencers that would burn a MidiThread-* per device for no
+// purpose since they're never control surfaces.
+fun createPlatformKtmidiAccessSource(): MidiAccessSource {
+    val os = System.getProperty("os.name")?.lowercase().orEmpty()
+    return if (os.contains("windows")) {
+        FilteredMidiAccessSource(KtmidiAccessSource(JvmMidiAccess()), denied = WINDOWS_PSEUDO_DEVICES)
+    } else {
+        KtmidiAccessSource(LibreMidiAccess.create(MidiTransportProtocol.MIDI1))
+    }
+}
+
+private val WINDOWS_PSEUDO_DEVICES = setOf(
+    "Microsoft MIDI Mapper",
+    "Microsoft GS Wavetable Synth",
+    "Real Time Sequencer",
+    "Gervill",
+)

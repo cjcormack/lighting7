@@ -35,7 +35,7 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │  Physical control                                                        │
   │    │                                                                     │
   │    ▼                                                                     │
-  │  LibreMidiAccessSource (listener)  ──▶  MidiMessageParser                │
+  │  KtmidiAccessSource (listener)  ─────▶  MidiMessageParser                │
   │    │                                      │                              │
   │    ▼                                      ▼                              │
   │  KtMidiController.input (SharedFlow<MidiInputEvent>)                    │
@@ -90,7 +90,7 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │    ├─ 60 Hz transmit loop on dedicated thread                            │
   │    └─ delta suppression via lastSentBytes                                │
   │    ▼                                                                     │
-  │  LibreMidiAccessSource.KtMidiSendTarget.send → native libremidi          │
+  │  KtmidiAccessSource.KtMidiSendTarget.send → native libremidi             │
   └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -104,7 +104,7 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 |---|---|
 | `MidiController.kt` | Transport interface (relaxed from `sealed` — see Phase 4 change log in plan). Exposes `input: SharedFlow<MidiInputEvent>`, `sendFeedback(MidiFeedbackMessage)`, `close()`. Test-seam interfaces: `MidiSendTarget`, `MidiInputSource`, `MidiAccessSource`. |
 | `KtMidiController.kt` | ktmidi-backed implementation. Dedicated `newSingleThreadContext("MidiThread-${displayKey}")`; per-`MidiControlKey` conflated channels; 60 Hz transmission loop with delta suppression. |
-| `LibreMidiAccessSource.kt` | Wraps ktmidi's `LibreMidiAccess` (native libremidi via Panama FFM) into the `MidiAccessSource` abstraction. |
+| `KtmidiAccessSource.kt` | Wraps a ktmidi `MidiAccess` into the `MidiAccessSource` abstraction. `createPlatformKtmidiAccess()` picks `LibreMidiAccess` (native libremidi via Panama FFM) on macOS / Linux and falls back to `JvmMidiAccess` (`javax.sound.midi`) on Windows, where libremidi-panama lacks an arm64 binary and its x64 binary trips an LLP64 ABI bug. |
 | `MidiInputEvent.kt` | Sealed ADT: `NoteOn` / `NoteOff` / `ControlChange` / `PitchBend` / `SysEx`. |
 | `MidiFeedbackMessage.kt` | Outbound ADT with `controlKey` for conflation and `encode(): ByteArray`. |
 | `MidiDevicePort.kt` | Port enumeration record. |
@@ -162,7 +162,7 @@ Concurrency shape deliberately mirrors [ArtNetController](dmx-engineering.md):
 
 ### Input path
 
-`LibreMidiAccessSource` installs a raw-bytes listener. `MidiMessageParser` handles channel-voice decoding, running status, multi-packet SysEx accumulation, and swallows system real-time / system common interleaves. Parsed events go to a `MutableSharedFlow<MidiInputEvent>(replay = 0, extraBufferCapacity = 256, onBufferOverflow = DROP_OLDEST)` — there is no backpressure at the transport layer. If a consumer can't keep up, oldest events are dropped. For a 60 Hz fader at full tilt that's ~60 CC/sec, well within the buffer.
+`KtmidiAccessSource` installs a raw-bytes listener. `MidiMessageParser` handles channel-voice decoding, running status, multi-packet SysEx accumulation, and swallows system real-time / system common interleaves. Parsed events go to a `MutableSharedFlow<MidiInputEvent>(replay = 0, extraBufferCapacity = 256, onBufferOverflow = DROP_OLDEST)` — there is no backpressure at the transport layer. If a consumer can't keep up, oldest events are dropped. For a 60 Hz fader at full tilt that's ~60 CC/sec, well within the buffer.
 
 ### Hot-plug
 

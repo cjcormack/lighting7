@@ -24,7 +24,7 @@ import kotlin.test.Test
  * borrow + Exposed transaction + Layer 3 republish each time) and by `FU-MANUAL-SUSPEND-PATH`.
  *
  * Opens a libremidi virtual output port with the same shape as
- * `src/main/kotlin/uk/me/cormack/lighting7/midi/LibreMidiAccessSource.kt`, so the running
+ * `src/main/kotlin/uk/me/cormack/lighting7/midi/KtmidiAccessSource.kt`, so the running
  * backend's `MidiDeviceRegistry` enumeration polls pick it up and auto-open it as a normal
  * input device. Once paired with a control surface in the backend's UI, every CC emitted
  * here drives the bound property. The harness is pure client — backend-side cost lives in

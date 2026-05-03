@@ -53,7 +53,7 @@ class MidiDeviceRegistry(
     private var lastEnumSummary: String? = null
 
     // Serialises rescan and tick — a rescan that swaps `access` mid-tick would invalidate
-    // port IDs already captured for an in-flight doOpen, since each LibreMidiAccessSource
+    // port IDs already captured for an in-flight doOpen, since each KtmidiAccessSource
     // stamps its own instance-ID into them.
     private val accessMutex = Mutex()
 
@@ -158,7 +158,7 @@ class MidiDeviceRegistry(
                 val infos = uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider.getMidiDeviceInfo()
                 "loaded=$loaded devices=${infos.joinToString { it.name }}"
             }.getOrElse { "error: ${it.message}" }
-            val summary = "libremidi ports=${ports.size} handles=[${newHandles.joinToString { it.displayKey }}] | " +
+            val summary = "${snapshotAccess.name} ports=${ports.size} handles=[${newHandles.joinToString { it.displayKey }}] | " +
                 "javax.sound.midi=[${jvmNames.joinToString()}] | coremidi4j=$coreMidi4j"
             if (summary != lastEnumSummary) {
                 lastEnumSummary = summary

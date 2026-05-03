@@ -67,7 +67,7 @@ class PerfRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `GET midi-latency returns zeroed histograms and no ports for fresh state`() = testApplication {
+    fun `GET midi-latency returns zeroed histograms for fresh state`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
@@ -78,7 +78,13 @@ class PerfRouteTest : RouteIntegrationTest() {
         assertEquals(30, body.windowSeconds)
         assertEquals(MidiLatencyStage.entries.size, body.histograms.buckets.size)
         assertTrue(body.histograms.buckets.values.all { it.count == 0L })
-        assertTrue(body.ports.isEmpty(), "no MIDI controllers open in test setup")
+        // Don't assert ports.isEmpty() — on Windows, JvmMidiAccess enumerates the OS's built-in
+        // synth + sequencer, which are real ports the registry auto-opens. Just check that no
+        // traffic has been recorded against any of them yet.
+        assertTrue(
+            body.ports.all { it.inboundCcTotal == 0L && it.outboundCcTotal == 0L },
+            "fresh state should record zero CC traffic on every port",
+        )
     }
 
     @Test

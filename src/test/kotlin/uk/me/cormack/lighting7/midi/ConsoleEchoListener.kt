@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.collect
  * Behringer X-Touch Compact in Standard mode) plugged in.
  *
  * Behaviour:
- * - Creates a [MidiDeviceRegistry] on [LibreMidiAccessSource], starts polling.
+ * - Creates a [MidiDeviceRegistry] on the platform default access source, starts polling.
  * - Logs every `Connected` / `Disconnected` event.
  * - For each new controller, subscribes to its [MidiController.input] and prints every event.
  * - Echoes every inbound `NoteOn` / `ControlChange` back as the matching feedback message,
@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.collect
  * Exit with Ctrl-C.
  */
 fun main(): Unit = runBlocking {
-    val registry = MidiDeviceRegistry(LibreMidiAccessSource())
+    val registry = MidiDeviceRegistry(createPlatformKtmidiAccessSource())
     val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     registry.start(scope)
 
