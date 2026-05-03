@@ -547,6 +547,8 @@ class State(val config: ApplicationConfig) {
         override fun cueStackListChanged() = refreshActiveProjectBindingHealth()
         override fun cueSlotListChanged() {}
         override fun patchListChanged() = refreshActiveProjectBindingHealth()
+        override fun riggingListChanged() {}
+        override fun stageRegionListChanged() {}
         override fun showEntriesChanged() {}
         override fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?) {}
     }

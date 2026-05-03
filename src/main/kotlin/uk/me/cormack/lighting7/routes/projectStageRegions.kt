@@ -99,6 +99,7 @@ internal fun Route.routeApiRestProjectStageRegions(state: State) {
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(error))
                 return@withProject
             }
+            state.show.fixtures.stageRegionListChanged()
             call.respond(HttpStatusCode.Created, dto!!)
         }
     }
@@ -157,6 +158,7 @@ internal fun Route.routeApiRestProjectStageRegions(state: State) {
                 call.respond(code, ErrorResponse(error))
                 return@withProject
             }
+            state.show.fixtures.stageRegionListChanged()
             call.respond(dto!!)
         }
     }
@@ -173,6 +175,7 @@ internal fun Route.routeApiRestProjectStageRegions(state: State) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Stage region not found"))
                 return@withProject
             }
+            state.show.fixtures.stageRegionListChanged()
             call.respond(HttpStatusCode.NoContent)
         }
     }

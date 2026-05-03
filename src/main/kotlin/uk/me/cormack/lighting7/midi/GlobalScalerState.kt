@@ -70,6 +70,8 @@ class GlobalScalerState(
         override fun cueStackListChanged() {}
         override fun cueSlotListChanged() {}
         override fun patchListChanged() {}
+        override fun riggingListChanged() {}
+        override fun stageRegionListChanged() {}
         override fun showEntriesChanged() {}
         override fun showChanged(
             projectId: Int,

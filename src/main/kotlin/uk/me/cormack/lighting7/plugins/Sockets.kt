@@ -108,6 +108,14 @@ data object CueSlotListChangedOutMessage: OutMessage()
 data object PatchListChangedOutMessage: OutMessage()
 
 @Serializable
+@SerialName("riggingListChanged")
+data object RiggingListChangedOutMessage: OutMessage()
+
+@Serializable
+@SerialName("stageRegionListChanged")
+data object StageRegionListChangedOutMessage: OutMessage()
+
+@Serializable
 @SerialName("showEntriesChanged")
 data object ShowEntriesChangedOutMessage: OutMessage()
 
@@ -692,6 +700,18 @@ fun Application.configureSockets(state: State) {
                 override fun patchListChanged() {
                     launch {
                         sendSerialized<OutMessage>(PatchListChangedOutMessage)
+                    }
+                }
+
+                override fun riggingListChanged() {
+                    launch {
+                        sendSerialized<OutMessage>(RiggingListChangedOutMessage)
+                    }
+                }
+
+                override fun stageRegionListChanged() {
+                    launch {
+                        sendSerialized<OutMessage>(StageRegionListChangedOutMessage)
                     }
                 }
 

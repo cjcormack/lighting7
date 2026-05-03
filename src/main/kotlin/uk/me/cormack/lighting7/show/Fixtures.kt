@@ -20,6 +20,8 @@ interface FixturesChangeListener {
     fun cueStackListChanged()
     fun cueSlotListChanged()
     fun patchListChanged()
+    fun riggingListChanged()
+    fun stageRegionListChanged()
     fun showEntriesChanged()
     fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?)
 }
@@ -274,6 +276,18 @@ class Fixtures {
     fun patchListChanged() {
         changeListeners.forEach {
             it.patchListChanged()
+        }
+    }
+
+    fun riggingListChanged() {
+        changeListeners.forEach {
+            it.riggingListChanged()
+        }
+    }
+
+    fun stageRegionListChanged() {
+        changeListeners.forEach {
+            it.stageRegionListChanged()
         }
     }
 

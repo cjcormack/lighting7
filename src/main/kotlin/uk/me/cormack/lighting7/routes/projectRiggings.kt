@@ -100,6 +100,7 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(error))
                 return@withProject
             }
+            state.show.fixtures.riggingListChanged()
             call.respond(HttpStatusCode.Created, dto!!)
         }
     }
@@ -159,25 +160,38 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
                 call.respond(code, ErrorResponse(error))
                 return@withProject
             }
+            state.show.fixtures.riggingListChanged()
+            // Only re-fanout patches when pose actually changed — rig-mounted patches'
+            // worldPosition* derive from rigging pose, but a name/kind/sortOrder edit
+            // doesn't recompose anything. Avoids per-drag refetch storms in Session 6.
+            val poseChanged = RIGGING_POSE_KEYS.any { it in body }
+            if (poseChanged) {
+                state.show.fixtures.patchListChanged()
+            }
             call.respond(dto!!)
         }
     }
 
     delete<ProjectRiggingResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
-            val deleted = transaction(state.database) {
-                val rigging = DaoRigging.findById(resource.riggingId) ?: return@transaction false
-                if (rigging.project.id != project.id) return@transaction false
+            val deleteResult = transaction(state.database) {
+                val rigging = DaoRigging.findById(resource.riggingId) ?: return@transaction null
+                if (rigging.project.id != project.id) return@transaction null
                 // Detach any patches before deleting (FK is ON DELETE SET NULL conceptually,
                 // but Exposed's optReference doesn't enforce that — clear explicitly).
-                DaoFixturePatch.find { DaoFixturePatches.rigging eq rigging.id }
-                    .forEach { it.rigging = null }
+                val detached = DaoFixturePatch.find { DaoFixturePatches.rigging eq rigging.id }
+                    .onEach { it.rigging = null }
+                    .count()
                 rigging.delete()
-                true
+                detached
             }
-            if (!deleted) {
+            if (deleteResult == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Rigging not found"))
                 return@withProject
+            }
+            state.show.fixtures.riggingListChanged()
+            if (deleteResult > 0) {
+                state.show.fixtures.patchListChanged()
             }
             call.respond(HttpStatusCode.NoContent)
         }
@@ -215,6 +229,13 @@ data class CreateRiggingRequest(
     val yawDeg: Double? = null,
     val pitchDeg: Double? = null,
     val rollDeg: Double? = null,
+)
+
+// Rigging fields whose change recomposes worldPosition* on rig-mounted patches.
+// PUT bodies that don't touch any of these keys can skip the patch re-broadcast.
+private val RIGGING_POSE_KEYS = setOf(
+    "positionX", "positionY", "positionZ",
+    "yawDeg", "pitchDeg", "rollDeg",
 )
 
 private fun DaoRigging.toDto() = RiggingDto(
