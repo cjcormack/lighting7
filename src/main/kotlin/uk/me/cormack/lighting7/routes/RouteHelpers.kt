@@ -45,3 +45,15 @@ internal fun checkAngle(name: String, v: Double?, min: Double, max: Double): Str
     if (v < min || v > max) return "$name must be between $min and $max degrees"
     return null
 }
+
+/**
+ * Range-check a metric (metres) field — region extents, stage dimensions, rigging length.
+ * Same NaN-guard rationale as [checkStageCoord]. Use [checkStageCoord] for FOH-relative
+ * coordinates that can be negative; this helper is for sizes/lengths bounded above zero.
+ */
+internal fun checkMetres(name: String, v: Double?, min: Double, max: Double): String? {
+    if (v == null) return null
+    if (!v.isFinite()) return "$name must be a finite number"
+    if (v < min || v > max) return "$name must be between $min and $max metres"
+    return null
+}

@@ -141,6 +141,7 @@ data class RiggingJson(
     val yawDeg: Double? = null,
     val pitchDeg: Double? = null,
     val rollDeg: Double? = null,
+    val lengthM: Double? = null,
     val sortOrder: Int = 0,
 )
 

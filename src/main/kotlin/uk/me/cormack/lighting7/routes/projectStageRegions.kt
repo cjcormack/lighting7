@@ -237,18 +237,12 @@ internal fun validateStageRegion(
     heightM: Double?,
     yawDeg: Double?,
 ): String? {
-    fun checkExtent(name: String, v: Double?): String? {
-        if (v == null) return null
-        if (!v.isFinite()) return "$name must be a finite number"
-        if (v < 0.0 || v > 500.0) return "$name must be between 0 and 500 metres"
-        return null
-    }
     checkStageCoord("centerX", centerX)?.let { return it }
     checkStageCoord("centerY", centerY)?.let { return it }
     checkStageCoord("centerZ", centerZ)?.let { return it }
-    checkExtent("widthM", widthM)?.let { return it }
-    checkExtent("depthM", depthM)?.let { return it }
-    checkExtent("heightM", heightM)?.let { return it }
+    checkMetres("widthM", widthM, 0.0, 500.0)?.let { return it }
+    checkMetres("depthM", depthM, 0.0, 500.0)?.let { return it }
+    checkMetres("heightM", heightM, 0.0, 500.0)?.let { return it }
     checkAngle("yawDeg", yawDeg, -360.0, 360.0)?.let { return it }
     return null
 }

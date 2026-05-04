@@ -499,15 +499,9 @@ private fun DaoProject.toDetailDto() = ProjectDetailDto(
  * and fit a sane physical range.
  */
 private fun validateStageDimensions(width: Double?, depth: Double?, height: Double?): String? {
-    fun check(name: String, v: Double?, min: Double, max: Double): String? {
-        if (v == null) return null
-        if (!v.isFinite()) return "$name must be a finite number"
-        if (v < min || v > max) return "$name must be between $min and $max metres"
-        return null
-    }
-    check("stageWidthM", width, 0.1, 500.0)?.let { return it }
-    check("stageDepthM", depth, 0.1, 500.0)?.let { return it }
-    check("stageHeightM", height, 0.1, 200.0)?.let { return it }
+    checkMetres("stageWidthM", width, 0.1, 500.0)?.let { return it }
+    checkMetres("stageDepthM", depth, 0.1, 500.0)?.let { return it }
+    checkMetres("stageHeightM", height, 0.1, 200.0)?.let { return it }
     return null
 }
 

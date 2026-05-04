@@ -26,6 +26,7 @@ object DaoRiggings : IntIdTable("riggings") {
     val yawDeg = double("yaw_deg").nullable()
     val pitchDeg = double("pitch_deg").nullable()
     val rollDeg = double("roll_deg").nullable()
+    val lengthM = double("length_m").nullable()
     val sortOrder = integer("sort_order").default(0)
     val uuid = uuid("uuid").autoGenerate()
 
@@ -46,6 +47,7 @@ class DaoRigging(id: EntityID<Int>) : IntEntity(id) {
     var yawDeg by DaoRiggings.yawDeg
     var pitchDeg by DaoRiggings.pitchDeg
     var rollDeg by DaoRiggings.rollDeg
+    var lengthM by DaoRiggings.lengthM
     var sortOrder by DaoRiggings.sortOrder
     var uuid by DaoRiggings.uuid
 

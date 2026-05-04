@@ -61,6 +61,7 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
                 yawDeg = request.yawDeg,
                 pitchDeg = request.pitchDeg,
                 rollDeg = request.rollDeg,
+                lengthM = request.lengthM,
             )
             if (poseError != null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(poseError))
@@ -91,6 +92,7 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
                     this.yawDeg = request.yawDeg
                     this.pitchDeg = request.pitchDeg
                     this.rollDeg = request.rollDeg
+                    this.lengthM = request.lengthM
                     this.sortOrder = maxSortOrder + 1
                 }
                 Pair<RiggingDto?, String?>(rigging.toDto(), null)
@@ -115,6 +117,7 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
                 yawDeg = body["yawDeg"].nullableDouble(),
                 pitchDeg = body["pitchDeg"].nullableDouble(),
                 rollDeg = body["rollDeg"].nullableDouble(),
+                lengthM = body["lengthM"].nullableDouble(),
             )
             if (poseError != null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(poseError))
@@ -150,6 +153,7 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
                 if ("yawDeg" in body) rigging.yawDeg = body["yawDeg"].nullableDouble()
                 if ("pitchDeg" in body) rigging.pitchDeg = body["pitchDeg"].nullableDouble()
                 if ("rollDeg" in body) rigging.rollDeg = body["rollDeg"].nullableDouble()
+                if ("lengthM" in body) rigging.lengthM = body["lengthM"].nullableDouble()
                 body["sortOrder"].nullableInt()?.let { rigging.sortOrder = it }
 
                 Pair<RiggingDto?, String?>(rigging.toDto(), null)
@@ -216,6 +220,7 @@ data class RiggingDto(
     val yawDeg: Double? = null,
     val pitchDeg: Double? = null,
     val rollDeg: Double? = null,
+    val lengthM: Double? = null,
     val sortOrder: Int,
 )
 
@@ -229,6 +234,7 @@ data class CreateRiggingRequest(
     val yawDeg: Double? = null,
     val pitchDeg: Double? = null,
     val rollDeg: Double? = null,
+    val lengthM: Double? = null,
 )
 
 // Rigging fields whose change recomposes worldPosition* on rig-mounted patches.
@@ -249,6 +255,7 @@ private fun DaoRigging.toDto() = RiggingDto(
     yawDeg = yawDeg,
     pitchDeg = pitchDeg,
     rollDeg = rollDeg,
+    lengthM = lengthM,
     sortOrder = sortOrder,
 )
 
@@ -263,6 +270,7 @@ internal fun validateRiggingPose(
     yawDeg: Double?,
     pitchDeg: Double?,
     rollDeg: Double?,
+    lengthM: Double?,
 ): String? {
     checkStageCoord("positionX", positionX)?.let { return it }
     checkStageCoord("positionY", positionY)?.let { return it }
@@ -270,5 +278,12 @@ internal fun validateRiggingPose(
     checkAngle("yawDeg", yawDeg, -360.0, 360.0)?.let { return it }
     checkAngle("pitchDeg", pitchDeg, -180.0, 180.0)?.let { return it }
     checkAngle("rollDeg", rollDeg, -180.0, 180.0)?.let { return it }
+    // Length must be strictly positive — a 0 m bar is nonsense, and the box geometry
+    // needs a non-zero width to render. checkMetres tolerates the floor being inclusive
+    // so we hand it a strictly-positive lower bound.
+    checkMetres("lengthM", lengthM, MIN_RIGGING_LENGTH_M, MAX_RIGGING_LENGTH_M)?.let { return it }
     return null
 }
+
+private const val MIN_RIGGING_LENGTH_M = 0.01
+private const val MAX_RIGGING_LENGTH_M = 100.0

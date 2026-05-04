@@ -177,6 +177,7 @@ class ProjectExporter(private val state: State) {
                     yawDeg = r.yawDeg,
                     pitchDeg = r.pitchDeg,
                     rollDeg = r.rollDeg,
+                    lengthM = r.lengthM,
                     sortOrder = r.sortOrder,
                 )
             }
