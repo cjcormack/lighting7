@@ -68,12 +68,15 @@ enum class CueEditMode {
 // ── Inbound messages ────────────────────────────────────────────────────────
 
 @Serializable
+sealed class CueEditInMessage : InMessage()
+
+@Serializable
 @SerialName("cueEdit.beginEdit")
-data class CueEditBeginEditInMessage(val cueId: Int, val mode: String) : InMessage()
+data class CueEditBeginEditInMessage(val cueId: Int, val mode: String) : CueEditInMessage()
 
 @Serializable
 @SerialName("cueEdit.endEdit")
-data class CueEditEndEditInMessage(val cueId: Int) : InMessage()
+data class CueEditEndEditInMessage(val cueId: Int) : CueEditInMessage()
 
 @Serializable
 @SerialName("cueEdit.setChannel")
@@ -82,7 +85,7 @@ data class CueEditSetChannelInMessage(
     val universe: Int,
     val channel: Int,
     val level: UByte,
-) : InMessage()
+) : CueEditInMessage()
 
 @Serializable
 @SerialName("cueEdit.setProperty")
@@ -92,19 +95,19 @@ data class CueEditSetPropertyInMessage(
     val targetKey: String,
     val propertyName: String,
     val value: String,
-) : InMessage()
+) : CueEditInMessage()
 
 @Serializable
 @SerialName("cueEdit.discardChanges")
-data class CueEditDiscardChangesInMessage(val cueId: Int) : InMessage()
+data class CueEditDiscardChangesInMessage(val cueId: Int) : CueEditInMessage()
 
 @Serializable
 @SerialName("cueEdit.setMode")
-data class CueEditSetModeInMessage(val cueId: Int, val mode: String) : InMessage()
+data class CueEditSetModeInMessage(val cueId: Int, val mode: String) : CueEditInMessage()
 
 @Serializable
 @SerialName("cueEdit.setPalette")
-data class CueEditSetPaletteInMessage(val cueId: Int, val palette: List<String>) : InMessage()
+data class CueEditSetPaletteInMessage(val cueId: Int, val palette: List<String>) : CueEditInMessage()
 
 @Serializable
 @SerialName("cueEdit.addPresetApplication")
@@ -115,14 +118,14 @@ data class CueEditAddPresetApplicationInMessage(
     val delayMs: Long? = null,
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
-) : InMessage()
+) : CueEditInMessage()
 
 @Serializable
 @SerialName("cueEdit.addAdHocEffect")
 data class CueEditAddAdHocEffectInMessage(
     val cueId: Int,
     val effect: CueAdHocEffectDto,
-) : InMessage()
+) : CueEditInMessage()
 
 @Serializable
 @SerialName("cueEdit.clearAssignment")
@@ -131,20 +134,23 @@ data class CueEditClearAssignmentInMessage(
     val targetType: String,
     val targetKey: String,
     val propertyName: String,
-) : InMessage()
+) : CueEditInMessage()
 
 // ── Outbound messages ───────────────────────────────────────────────────────
+
+@Serializable
+sealed class CueEditOutMessage : OutMessage()
 
 @Serializable
 @SerialName("cueEdit.sessionStarted")
 data class CueEditSessionStartedOutMessage(
     val cueId: Int,
     val mode: String,
-) : OutMessage()
+) : CueEditOutMessage()
 
 @Serializable
 @SerialName("cueEdit.sessionEnded")
-data class CueEditSessionEndedOutMessage(val cueId: Int) : OutMessage()
+data class CueEditSessionEndedOutMessage(val cueId: Int) : CueEditOutMessage()
 
 @Serializable
 @SerialName("cueEdit.assignmentChanged")
@@ -154,11 +160,11 @@ data class CueEditAssignmentChangedOutMessage(
     val targetKey: String,
     val propertyName: String,
     val value: String,
-) : OutMessage()
+) : CueEditOutMessage()
 
 @Serializable
 @SerialName("cueEdit.changesDiscarded")
-data class CueEditChangesDiscardedOutMessage(val cueId: Int) : OutMessage()
+data class CueEditChangesDiscardedOutMessage(val cueId: Int) : CueEditOutMessage()
 
 @Serializable
 @SerialName("cueEdit.assignmentCleared")
@@ -167,21 +173,21 @@ data class CueEditAssignmentClearedOutMessage(
     val targetType: String,
     val targetKey: String,
     val propertyName: String,
-) : OutMessage()
+) : CueEditOutMessage()
 
 @Serializable
 @SerialName("cueEdit.paletteChanged")
 data class CueEditPaletteChangedOutMessage(
     val cueId: Int,
     val palette: List<String>,
-) : OutMessage()
+) : CueEditOutMessage()
 
 @Serializable
 @SerialName("cueEdit.presetApplicationAdded")
 data class CueEditPresetApplicationAddedOutMessage(
     val cueId: Int,
     val presetId: Int,
-) : OutMessage()
+) : CueEditOutMessage()
 
 @Serializable
 @SerialName("cueEdit.adHocEffectAdded")
@@ -189,14 +195,63 @@ data class CueEditAdHocEffectAddedOutMessage(
     val cueId: Int,
     val effectType: String,
     val targetKey: String,
-) : OutMessage()
+) : CueEditOutMessage()
 
 @Serializable
 @SerialName("cueEdit.error")
 data class CueEditErrorOutMessage(
     val cueId: Int?,
     val message: String,
-) : OutMessage()
+) : CueEditOutMessage()
+
+// ── Domain dispatcher ───────────────────────────────────────────────────────
+
+suspend fun handleCueEdit(scope: SocketScope, message: CueEditInMessage) {
+    val state = scope.state
+    val ref = scope.cueEditSessionRef
+    val reply: OutMessage = when (message) {
+        is CueEditBeginEditInMessage -> CueEditSessionHandler.beginEdit(state, ref, message.cueId, message.mode)
+        is CueEditEndEditInMessage -> CueEditSessionHandler.endEdit(state, ref, message.cueId)
+        is CueEditSetChannelInMessage -> CueEditSessionHandler.setChannel(
+            state, ref, message.cueId, message.universe, message.channel, message.level,
+        )
+        is CueEditSetPropertyInMessage -> {
+            val target = TargetRef.ofOrNull(message.targetType, message.targetKey)
+            if (target == null) {
+                CueEditErrorOutMessage(message.cueId, "Unknown targetType '${message.targetType}'")
+            } else {
+                CueEditSessionHandler.setProperty(
+                    state, ref, message.cueId, target, message.propertyName, message.value,
+                )
+            }
+        }
+        is CueEditDiscardChangesInMessage ->
+            CueEditSessionHandler.discardChanges(state, ref, message.cueId)
+        is CueEditSetModeInMessage ->
+            CueEditSessionHandler.setMode(state, ref, message.cueId, message.mode)
+        is CueEditClearAssignmentInMessage -> {
+            val target = TargetRef.ofOrNull(message.targetType, message.targetKey)
+            if (target == null) {
+                CueEditErrorOutMessage(message.cueId, "Unknown targetType '${message.targetType}'")
+            } else {
+                CueEditSessionHandler.clearAssignment(
+                    state, ref, message.cueId, target, message.propertyName,
+                )
+            }
+        }
+        is CueEditSetPaletteInMessage ->
+            CueEditSessionHandler.setPalette(state, ref, message.cueId, message.palette)
+        is CueEditAddPresetApplicationInMessage ->
+            CueEditSessionHandler.addPresetApplication(
+                state, ref, message.cueId,
+                message.presetId, message.targets,
+                message.delayMs, message.intervalMs, message.randomWindowMs,
+            )
+        is CueEditAddAdHocEffectInMessage ->
+            CueEditSessionHandler.addAdHocEffect(state, ref, message.cueId, message.effect)
+    }
+    scope.send(reply)
+}
 
 // ── Handler ─────────────────────────────────────────────────────────────────
 
