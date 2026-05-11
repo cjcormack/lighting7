@@ -214,6 +214,7 @@ class ProjectExporter(private val state: State) {
                     riggingUuid = p.rigging?.uuid?.toString(),
                     beamAngleDeg = p.beamAngleDeg,
                     gelCode = p.gelCode,
+                    kindOverride = p.kindOverride,
                 )
             }
 

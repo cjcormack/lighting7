@@ -122,6 +122,7 @@ data class FixturePatchJson(
     val riggingUuid: String? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
+    val kindOverride: String? = null,
 )
 
 /**

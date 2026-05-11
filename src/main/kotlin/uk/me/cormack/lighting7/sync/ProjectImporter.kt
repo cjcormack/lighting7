@@ -420,6 +420,7 @@ class ProjectImporter(private val state: State) {
             basePitchDeg = p.basePitchDeg
             beamAngleDeg = p.beamAngleDeg
             gelCode = p.gelCode
+            kindOverride = p.kindOverride
             this.uuid = uuid
         }
         uuid to dao

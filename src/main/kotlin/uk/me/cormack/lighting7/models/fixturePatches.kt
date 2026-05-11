@@ -30,6 +30,7 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
     val basePitchDeg = double("base_pitch_deg").nullable()
     val beamAngleDeg = integer("beam_angle_deg").nullable()
     val gelCode = varchar("gel_code", 20).nullable()
+    val kindOverride = varchar("kind_override", 32).nullable()
     val uuid = uuid("uuid").autoGenerate()
 
     init {
@@ -55,5 +56,6 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var basePitchDeg by DaoFixturePatches.basePitchDeg
     var beamAngleDeg by DaoFixturePatches.beamAngleDeg
     var gelCode by DaoFixturePatches.gelCode
+    var kindOverride by DaoFixturePatches.kindOverride
     var uuid by DaoFixturePatches.uuid
 }

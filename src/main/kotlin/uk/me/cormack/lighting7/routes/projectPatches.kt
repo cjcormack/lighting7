@@ -16,6 +16,7 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
+import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.DbFixtureLoader
@@ -94,6 +95,12 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 return@withProject
             }
             val normalisedGelCode = normaliseGelCode(request.gelCode)
+            val normalisedKindOverride = try {
+                normaliseKindOverride(request.kindOverride)
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Invalid kindOverride"))
+                return@withProject
+            }
 
             val result = transaction(state.database) {
                 val rigging = request.riggingUuid?.let { resolveRiggingForProject(project, it) }
@@ -156,6 +163,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.basePitchDeg = request.basePitchDeg
                     this.beamAngleDeg = request.beamAngleDeg
                     this.gelCode = normalisedGelCode
+                    this.kindOverride = normalisedKindOverride
                 }
 
                 // Assign to group if specified
@@ -211,6 +219,15 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 return@withProject
             }
 
+            val normalisedKindOverride: String? = if ("kindOverride" in body) {
+                try {
+                    normaliseKindOverride(body["kindOverride"].nullableString())
+                } catch (e: IllegalArgumentException) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Invalid kindOverride"))
+                    return@withProject
+                }
+            } else null
+
             val result = transaction(state.database) {
                 val patch = DaoFixturePatch.findById(resource.patchId)
                     ?: return@transaction Pair<FixturePatchDto?, String?>(null, "Patch not found")
@@ -249,6 +266,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
                 if ("gelCode" in body) {
                     patch.gelCode = normaliseGelCode(body["gelCode"].nullableString())
+                }
+                if ("kindOverride" in body) {
+                    patch.kindOverride = normalisedKindOverride
                 }
 
                 body["removeFromGroupId"].nullableInt()?.let { groupId ->
@@ -363,6 +383,7 @@ data class FixturePatchDto(
     val worldPositionZ: Double? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
+    val kindOverride: String? = null,
 )
 
 @Serializable
@@ -388,6 +409,7 @@ data class CreatePatchRequest(
     val riggingUuid: String? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
+    val kindOverride: String? = null,
 )
 
 /**
@@ -407,6 +429,7 @@ private val METADATA_ONLY_PUT_KEYS = setOf(
     "riggingUuid",
     "beamAngleDeg",
     "gelCode",
+    "kindOverride",
 )
 
 // Helpers
@@ -440,6 +463,7 @@ private fun DaoFixturePatch.toDto(): FixturePatchDto {
         worldPositionZ = world?.third,
         beamAngleDeg = beamAngleDeg,
         gelCode = gelCode,
+        kindOverride = kindOverride,
     )
 }
 
@@ -534,6 +558,22 @@ private fun normaliseGelCode(raw: String?): String? {
     val trimmed = raw?.trim() ?: return null
     if (trimmed.isEmpty()) return null
     return trimmed.take(20)
+}
+
+/**
+ * Validate a `kindOverride` request value: must be either `null`/empty (clear) or
+ * the name of a [FixtureKind]. Throws [IllegalArgumentException] for anything else
+ * so the caller can map to a 400 response.
+ */
+private fun normaliseKindOverride(raw: String?): String? {
+    val trimmed = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return try {
+        FixtureKind.valueOf(trimmed).name
+    } catch (_: IllegalArgumentException) {
+        throw IllegalArgumentException(
+            "kindOverride must be one of ${FixtureKind.entries.joinToString(", ") { it.name }}"
+        )
+    }
 }
 
 /**
