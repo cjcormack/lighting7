@@ -154,6 +154,7 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                     acceptsBeamAngle = info.acceptsBeamAngle,
                     acceptsGel = info.acceptsGel,
                     gelCompactDisplay = info.gelCompactDisplay.serialized(),
+                    kind = info.kind.name,
                 )
             })
         }
@@ -324,4 +325,5 @@ data class FixtureTypeDetails(
     val acceptsBeamAngle: Boolean = false,
     val acceptsGel: Boolean = false,
     val gelCompactDisplay: String? = null,
+    val kind: String = "GENERIC",
 )

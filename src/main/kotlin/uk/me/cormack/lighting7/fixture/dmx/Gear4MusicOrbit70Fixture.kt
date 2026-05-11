@@ -71,7 +71,7 @@ sealed class Gear4MusicOrbit70Fixture(
      * - Ch 12: Static LED colour select (raw slider — manual gives no value bands).
      * - Ch 13: Built-in programs / reset.
      */
-    @FixtureType("gear4music-orbit-70-13ch", manufacturer = "Gear4music", model = "Orbit-70")
+    @FixtureType("gear4music-orbit-70-13ch", manufacturer = "Gear4music", model = "Orbit-70", kind = FixtureKind.MOVING_HEAD)
     class Mode13Ch(
         universe: Universe,
         key: String,

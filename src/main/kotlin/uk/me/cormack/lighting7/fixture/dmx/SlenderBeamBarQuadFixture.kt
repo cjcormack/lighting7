@@ -241,7 +241,7 @@ sealed class SlenderBeamBarQuadFixture(
      * DMX Layout (1 channel):
      * - Ch 1: Show mode preset
      */
-    @FixtureType("slender-beam-bar-quad-1ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad")
+    @FixtureType("slender-beam-bar-quad-1ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad", kind = FixtureKind.MOVING_HEAD)
     class Mode1Ch(
         universe: Universe,
         key: String,
@@ -276,7 +276,7 @@ sealed class SlenderBeamBarQuadFixture(
      * - Ch 5: Colour chase preset
      * - Ch 6: Colour chase speed
      */
-    @FixtureType("slender-beam-bar-quad-6ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad")
+    @FixtureType("slender-beam-bar-quad-6ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad", kind = FixtureKind.MOVING_HEAD)
     class Mode6Ch(
         universe: Universe,
         key: String,
@@ -325,7 +325,7 @@ sealed class SlenderBeamBarQuadFixture(
      *   - +1: Tilt
      *   - +2: Colour preset
      */
-    @FixtureType("slender-beam-bar-quad-12ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad")
+    @FixtureType("slender-beam-bar-quad-12ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad", kind = FixtureKind.MOVING_HEAD)
     class Mode12Ch(
         universe: Universe,
         key: String,
@@ -374,7 +374,7 @@ sealed class SlenderBeamBarQuadFixture(
      *   - +1: Tilt
      *   - +2: Colour preset
      */
-    @FixtureType("slender-beam-bar-quad-14ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad")
+    @FixtureType("slender-beam-bar-quad-14ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad", kind = FixtureKind.MOVING_HEAD)
     class Mode14Ch(
         universe: Universe,
         key: String,
@@ -438,7 +438,7 @@ sealed class SlenderBeamBarQuadFixture(
      *   - +5: Colour preset
      * - Ch 27: Special function (reset, etc.)
      */
-    @FixtureType("slender-beam-bar-quad-27ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad")
+    @FixtureType("slender-beam-bar-quad-27ch", manufacturer = "Equinox", model = "Slender Beam Bar Quad", kind = FixtureKind.MOVING_HEAD)
     class Mode27Ch(
         universe: Universe,
         key: String,

@@ -23,7 +23,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithStrobe
  * just want "cells working normally" should set `macro.setting = Macro.DIMMER_1`
  * after fixture creation — the channel default at startup is 000 (blackout).
  */
-@FixtureType("kam-liteobar-252-11ch", manufacturer = "Kam", model = "Liteobar 252")
+@FixtureType("kam-liteobar-252-11ch", manufacturer = "Kam", model = "Liteobar 252", kind = FixtureKind.STRIP)
 class KamLiteobar252Fixture(
     universe: Universe,
     key: String,

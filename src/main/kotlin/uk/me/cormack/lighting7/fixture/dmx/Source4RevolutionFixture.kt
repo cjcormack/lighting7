@@ -104,6 +104,7 @@ sealed class Source4RevolutionFixture(
         "etc-source4-revolution-base-frame",
         manufacturer = "ETC",
         model = "Source 4 Revolution",
+        kind = FixtureKind.PROFILE,
     )
     class BaseFrame31Ch(
         universe: Universe,

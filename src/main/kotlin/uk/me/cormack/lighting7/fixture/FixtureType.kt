@@ -9,4 +9,5 @@ annotation class FixtureType(
     val acceptsBeamAngle: Boolean = false,
     val acceptsGel: Boolean = false,
     val gelCompactDisplay: CompactDisplayRole = CompactDisplayRole.NONE,
+    val kind: FixtureKind = FixtureKind.GENERIC,
 )

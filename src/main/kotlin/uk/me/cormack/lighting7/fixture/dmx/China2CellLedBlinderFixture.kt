@@ -23,7 +23,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithStrobe
  * is `2CellLEDBlind`. The `@FixtureType` annotation uses ChamSys's
  * spelling for consistency with the patch.
  */
-@FixtureType("china-2-cell-led-blinder-8ch", manufacturer = "China", model = "2-Cell LED Blinder")
+@FixtureType("china-2-cell-led-blinder-8ch", manufacturer = "China", model = "2-Cell LED Blinder", kind = FixtureKind.BLINDER)
 class China2CellLedBlinderFixture(
     universe: Universe,
     key: String,

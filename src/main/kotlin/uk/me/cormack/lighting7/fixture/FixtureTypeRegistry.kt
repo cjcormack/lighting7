@@ -65,6 +65,7 @@ object FixtureTypeRegistry {
         val acceptsBeamAngle: Boolean,
         val acceptsGel: Boolean,
         val gelCompactDisplay: CompactDisplayRole,
+        val kind: FixtureKind,
     )
 
     /**
@@ -262,6 +263,7 @@ object FixtureTypeRegistry {
                 acceptsBeamAngle = annotation.acceptsBeamAngle,
                 acceptsGel = annotation.acceptsGel,
                 gelCompactDisplay = annotation.gelCompactDisplay,
+                kind = annotation.kind,
             )
         )
     }

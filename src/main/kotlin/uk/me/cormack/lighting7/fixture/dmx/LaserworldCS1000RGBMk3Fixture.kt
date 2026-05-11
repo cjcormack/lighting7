@@ -4,6 +4,7 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.CompactDisplayRole
+import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.PropertyCategory
@@ -26,7 +27,7 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
  * - Ch 12: Colour change
  * - Ch 13: Colour speed
  */
-@FixtureType("laserworld-cs1000rgb-mk3", manufacturer = "Laserworld", model = "CS-1000RGB MK3")
+@FixtureType("laserworld-cs1000rgb-mk3", manufacturer = "Laserworld", model = "CS-1000RGB MK3", kind = FixtureKind.LASER)
 class LaserworldCS1000RGBMk3Fixture(
     universe: Universe,
     key: String,

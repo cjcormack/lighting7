@@ -238,6 +238,7 @@ sealed class RobeColorSpot575Fixture(
         "robe-color-spot-575-mode-2",
         manufacturer = "Robe",
         model = "ColorSpot 575 AT",
+        kind = FixtureKind.MOVING_HEAD,
     )
     class Mode2Ch(
         universe: Universe,

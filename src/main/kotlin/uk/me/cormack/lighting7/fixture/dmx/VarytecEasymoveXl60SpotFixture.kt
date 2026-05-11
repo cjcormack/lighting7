@@ -109,7 +109,7 @@ sealed class VarytecEasymoveXl60SpotFixture(
      * - Ch 10: Tilt (fine).
      * - Ch 11: Reset.
      */
-    @FixtureType("varytec-easymove-xl-60-spot-11ch", manufacturer = "Varytec", model = "Easymove XL 60 Spot")
+    @FixtureType("varytec-easymove-xl-60-spot-11ch", manufacturer = "Varytec", model = "Easymove XL 60 Spot", kind = FixtureKind.MOVING_HEAD)
     class Mode11Ch(
         universe: Universe,
         key: String,

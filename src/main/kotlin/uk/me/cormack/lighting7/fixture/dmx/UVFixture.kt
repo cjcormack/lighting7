@@ -10,6 +10,9 @@ import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithUv
 
+// UV fixtures ship in many form factors (PAR cans, bars, panels) and the
+// `uv` type key is intentionally generic. Leave GENERIC rather than pick a
+// shape that will be wrong half the time.
 @FixtureType("uv")
 class UVFixture (
     universe: Universe,

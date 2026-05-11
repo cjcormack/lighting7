@@ -51,7 +51,7 @@ sealed class AdjFogFuryJettFixture(
      * - Ch 6: Strobe (off / strobe / pulse / random strobe).
      * - Ch 7: Master dimmer.
      */
-    @FixtureType("adj-fog-fury-jett-7ch", manufacturer = "ADJ", model = "Fog Fury Jett")
+    @FixtureType("adj-fog-fury-jett-7ch", manufacturer = "ADJ", model = "Fog Fury Jett", kind = FixtureKind.EFFECT)
     class Mode7Ch(
         universe: Universe,
         key: String,

@@ -156,7 +156,7 @@ sealed class MartinMac250Fixture(
      * - Ch 12: Pan/tilt speed.
      * - Ch 13: Effect speed.
      */
-    @FixtureType("martin-mac-250-mode-4", manufacturer = "Martin", model = "MAC 250")
+    @FixtureType("martin-mac-250-mode-4", manufacturer = "Martin", model = "MAC 250", kind = FixtureKind.MOVING_HEAD)
     class Mode4Ch(
         universe: Universe,
         key: String,

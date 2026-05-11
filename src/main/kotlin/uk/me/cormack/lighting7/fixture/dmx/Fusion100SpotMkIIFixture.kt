@@ -160,7 +160,7 @@ sealed class Fusion100SpotMkIIFixture(
      * - Ch 4: Pan/Tilt Macros / Sound active
      * - Ch 5: Motor mode / Reset
      */
-    @FixtureType("fusion-100-spot-mkii-5ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII")
+    @FixtureType("fusion-100-spot-mkii-5ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD)
     class Mode5Ch(
         universe: Universe,
         key: String,
@@ -211,7 +211,7 @@ sealed class Fusion100SpotMkIIFixture(
      * - Ch 7: Focus
      * - Ch 8: Prism (open/3-facet)
      */
-    @FixtureType("fusion-100-spot-mkii-8ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII")
+    @FixtureType("fusion-100-spot-mkii-8ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD)
     class Mode8Ch(
         universe: Universe,
         key: String,
@@ -278,7 +278,7 @@ sealed class Fusion100SpotMkIIFixture(
      * - Ch 14: Pan/Tilt Macros / Sound active
      * - Ch 15: Motor mode / Reset
      */
-    @FixtureType("fusion-100-spot-mkii-15ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII")
+    @FixtureType("fusion-100-spot-mkii-15ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD)
     class Mode15Ch(
         universe: Universe,
         key: String,

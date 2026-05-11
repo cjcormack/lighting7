@@ -4,11 +4,12 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.CompactDisplayRole
+import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 
-@FixtureType("starcluster")
+@FixtureType("starcluster", kind = FixtureKind.EFFECT)
 class StarClusterFixture(
     universe: Universe,
     key: String,

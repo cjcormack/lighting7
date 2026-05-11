@@ -10,7 +10,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
 
-@FixtureType("hex", manufacturer = "Chauvet", model = "Freedom Par Hex")
+@FixtureType("hex", manufacturer = "Chauvet", model = "Freedom Par Hex", kind = FixtureKind.PAR)
 class HexFixture(
     universe: Universe,
     key: String,

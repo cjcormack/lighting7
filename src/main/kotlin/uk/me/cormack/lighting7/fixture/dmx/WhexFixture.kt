@@ -12,7 +12,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
 import kotlin.math.roundToInt
 
-@FixtureType("whex")
+@FixtureType("whex", kind = FixtureKind.PAR)
 class WhexFixture(
     universe: Universe,
     key: String,

@@ -21,7 +21,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithDimmer
  *
  * No strobe channel and no pan/tilt — typical static LED bar.
  */
-@FixtureType("gear4music-sol-party-12b-8ch", manufacturer = "Gear4music", model = "SOL Party 12B")
+@FixtureType("gear4music-sol-party-12b-8ch", manufacturer = "Gear4music", model = "SOL Party 12B", kind = FixtureKind.STRIP)
 class Gear4MusicSolParty12BFixture(
     universe: Universe,
     key: String,
