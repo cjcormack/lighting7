@@ -23,8 +23,6 @@ import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
-import kotlin.math.cos
-import kotlin.math.sin
 
 internal fun Route.routeApiRestProjectPatches(state: State) {
     // GET /{projectId}/patches - List all patches for a project
@@ -378,9 +376,6 @@ data class FixturePatchDto(
     val baseYawDeg: Double? = null,
     val basePitchDeg: Double? = null,
     val riggingUuid: String? = null,
-    val worldPositionX: Double? = null,
-    val worldPositionY: Double? = null,
-    val worldPositionZ: Double? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
     val kindOverride: String? = null,
@@ -437,7 +432,6 @@ private fun DaoFixturePatch.toDto(): FixturePatchDto {
     val typeInfo = FixtureTypeRegistry.typeInfoForKey(fixtureTypeKey)
     val groupRefs = DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq this@toDto.id }
         .map { FixturePatchGroupRef(id = it.group.id.value, name = it.group.name) }
-    val world = resolveWorldPosition(this)
     return FixturePatchDto(
         id = id.value,
         key = key,
@@ -458,64 +452,10 @@ private fun DaoFixturePatch.toDto(): FixturePatchDto {
         baseYawDeg = baseYawDeg,
         basePitchDeg = basePitchDeg,
         riggingUuid = rigging?.uuid?.toString(),
-        worldPositionX = world?.first,
-        worldPositionY = world?.second,
-        worldPositionZ = world?.third,
         beamAngleDeg = beamAngleDeg,
         gelCode = gelCode,
         kindOverride = kindOverride,
     )
-}
-
-/**
- * Compose the patch's stage_x/y/z (offsets in the rigging's local frame) with the
- * rigging's pose to produce world coordinates. When no rigging is set, the offsets
- * are already world coordinates. Returns null if neither rigging nor any of the
- * stage_x/y/z fields are populated.
- *
- * Z-up convention: yaw rotates about Z, pitch about X, roll about Y. Intrinsic
- * order is yaw → pitch → roll, which expands to the matrix product
- * `R_z(yaw) · R_x(pitch) · R_y(roll) · v` (axes Z-X-Y, applied right-to-left).
- * Typical truss rigs use yaw only; the all-null fast path below skips the
- * trig entirely, since most fixtures have an unset pose.
- */
-private fun resolveWorldPosition(patch: DaoFixturePatch): Triple<Double, Double, Double>? {
-    val rig = patch.rigging
-    val ox = patch.stageX
-    val oy = patch.stageY
-    val oz = patch.stageZ
-    if (rig == null) {
-        return if (ox == null && oy == null && oz == null) null
-        else Triple(ox ?: 0.0, oy ?: 0.0, oz ?: 0.0)
-    }
-    val rx = rig.positionX ?: 0.0
-    val ry = rig.positionY ?: 0.0
-    val rz = rig.positionZ ?: 0.0
-    val lx = ox ?: 0.0
-    val ly = oy ?: 0.0
-    val lz = oz ?: 0.0
-
-    // Common case: rigging is just a translated origin (no orientation). Skip trig.
-    if (rig.yawDeg == null && rig.pitchDeg == null && rig.rollDeg == null) {
-        return Triple(rx + lx, ry + ly, rz + lz)
-    }
-
-    val yaw = Math.toRadians(rig.yawDeg ?: 0.0)
-    val pitch = Math.toRadians(rig.pitchDeg ?: 0.0)
-    val roll = Math.toRadians(rig.rollDeg ?: 0.0)
-    val (rollX, rollY, rollZ) = run {
-        val cr = cos(roll); val sr = sin(roll)
-        Triple(cr * lx + sr * lz, ly, -sr * lx + cr * lz)
-    }
-    val (pitchX, pitchY, pitchZ) = run {
-        val cp = cos(pitch); val sp = sin(pitch)
-        Triple(rollX, cp * rollY - sp * rollZ, sp * rollY + cp * rollZ)
-    }
-    val (yawX, yawY, yawZ) = run {
-        val cy = cos(yaw); val sy = sin(yaw)
-        Triple(cy * pitchX - sy * pitchY, sy * pitchX + cy * pitchY, pitchZ)
-    }
-    return Triple(rx + yawX, ry + yawY, rz + yawZ)
 }
 
 private fun resolveRiggingForProject(project: DaoProject, uuidStr: String): DaoRigging? {

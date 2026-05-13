@@ -17,10 +17,6 @@ import org.junit.Test
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
-import kotlin.math.PI
-import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
@@ -35,9 +31,8 @@ import kotlin.test.assertTrue
  *   →  GET /patches/{id}  →  PUT /patches/{id} (clear via null)
  *   →  GET /patches/{id}.
  *
- * Also exercises the validation paths (out-of-range stageX, beamAngleDeg), the
- * `worldPositionX/Y/Z` composition with a rigging pose, and the
- * "metadata-only PUT skips the fixture-loader rebuild" optimisation.
+ * Also exercises the validation paths (out-of-range stageX, beamAngleDeg) and
+ * the "metadata-only PUT skips the fixture-loader rebuild" optimisation.
  */
 class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
 
@@ -138,70 +133,6 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         assertNull(finalGet.riggingUuid)
         assertNull(finalGet.beamAngleDeg)
         assertNull(finalGet.gelCode)
-    }
-
-    @Test
-    fun `worldPosition composes rigging pose with patch offset`() = testApplication {
-        mountTestApp(state)
-        val client = jsonClient()
-
-        // Rigging at (2, 4, 5) yawed 30° about Z.
-        val rigging = client.post("/api/rest/project/$projectId/riggings") {
-            contentType(ContentType.Application.Json)
-            setBody(CreateRiggingRequest(
-                name = "Yaw Truss",
-                positionX = 2.0,
-                positionY = 4.0,
-                positionZ = 5.0,
-                yawDeg = 30.0,
-            ))
-        }.body<RiggingDto>()
-
-        // Patch with offset (1, 0, 0) along the rigging's local X axis.
-        val patch = client.post("/api/rest/project/$projectId/patches") {
-            contentType(ContentType.Application.Json)
-            setBody(CreatePatchRequest(
-                universe = 0,
-                fixtureTypeKey = "generic-dimmer",
-                key = "yaw-fix",
-                name = "Yaw Fixture",
-                startChannel = 30,
-                stageX = 1.0,
-                stageY = 0.0,
-                stageZ = 0.0,
-                riggingUuid = rigging.uuid,
-            ))
-        }.body<FixturePatchDto>()
-
-        val yaw = 30.0 * PI / 180.0
-        val expectedX = 2.0 + cos(yaw)
-        val expectedY = 4.0 + sin(yaw)
-        val expectedZ = 5.0
-        assertNotNull(patch.worldPositionX)
-        assertNotNull(patch.worldPositionY)
-        assertNotNull(patch.worldPositionZ)
-        assertTrue(abs(patch.worldPositionX!! - expectedX) < 1e-9, "worldX=${patch.worldPositionX} expected=$expectedX")
-        assertTrue(abs(patch.worldPositionY!! - expectedY) < 1e-9, "worldY=${patch.worldPositionY} expected=$expectedY")
-        assertTrue(abs(patch.worldPositionZ!! - expectedZ) < 1e-9, "worldZ=${patch.worldPositionZ} expected=$expectedZ")
-
-        // With no rigging, world position is the offset itself.
-        val standalone = client.post("/api/rest/project/$projectId/patches") {
-            contentType(ContentType.Application.Json)
-            setBody(CreatePatchRequest(
-                universe = 0,
-                fixtureTypeKey = "generic-dimmer",
-                key = "free-fix",
-                name = "Free Fixture",
-                startChannel = 60,
-                stageX = -3.0,
-                stageY = 1.5,
-                stageZ = 4.0,
-            ))
-        }.body<FixturePatchDto>()
-
-        assertEquals(-3.0, standalone.worldPositionX)
-        assertEquals(1.5, standalone.worldPositionY)
-        assertEquals(4.0, standalone.worldPositionZ)
     }
 
     @Test
