@@ -66,6 +66,14 @@ object FixtureTypeRegistry {
         val acceptsGel: Boolean,
         val gelCompactDisplay: CompactDisplayRole,
         val kind: FixtureKind,
+        /** Physical bounding size in metres; `lengthM` is the long axis. Always
+         *  concrete — sentinels are resolved in [discoverTypes]. */
+        val lengthM: Double,
+        val widthM: Double,
+        val heightM: Double,
+        /** Resolved beam geometry — never [BeamShape.INHERIT]/[BeamEdge.INHERIT]. */
+        val beamShape: BeamShape,
+        val beamEdge: BeamEdge,
     )
 
     /**
@@ -250,6 +258,14 @@ object FixtureTypeRegistry {
         // Channel count: prefer mode info (multi-mode fixtures), fall back to instance
         val channelCount = modeInfo?.channelCount ?: instance?.channelCount
 
+        // Resolve dimension/beam sentinels against the kind defaults here, so
+        // INHERIT / -1.0 can never enter FixtureTypeInfo or the wire.
+        val kd = annotation.kind.beamDefaults()
+        val beamShape =
+            if (annotation.beamShape != BeamShape.INHERIT) annotation.beamShape else kd.beamShape
+        val beamEdge =
+            if (annotation.beamEdge != BeamEdge.INHERIT) annotation.beamEdge else kd.beamEdge
+
         return listOf(
             FixtureTypeInfo(
                 typeKey = annotation.typeKey,
@@ -260,10 +276,17 @@ object FixtureTypeRegistry {
                 capabilities = capabilities,
                 properties = properties,
                 elementGroupProperties = elementGroupProperties,
-                acceptsBeamAngle = annotation.acceptsBeamAngle,
+                // A fixture accepts a beam angle if explicitly flagged OR its
+                // (resolved) shape draws a beam.
+                acceptsBeamAngle = annotation.acceptsBeamAngle || beamShape != BeamShape.NONE,
                 acceptsGel = annotation.acceptsGel,
                 gelCompactDisplay = annotation.gelCompactDisplay,
                 kind = annotation.kind,
+                lengthM = if (annotation.lengthM >= 0.0) annotation.lengthM else kd.lengthM,
+                widthM = if (annotation.widthM >= 0.0) annotation.widthM else kd.widthM,
+                heightM = if (annotation.heightM >= 0.0) annotation.heightM else kd.heightM,
+                beamShape = beamShape,
+                beamEdge = beamEdge,
             )
         )
     }

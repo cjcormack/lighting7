@@ -244,7 +244,7 @@ sealed class LedLightbar12PixelFixture(
      * - Ch 3: Speed
      * - Ch 4: Linear Strobe
      */
-    @FixtureType("led-lightbar-12-pixel-4ch-program", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP)
+    @FixtureType("led-lightbar-12-pixel-4ch-program", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP, lengthM = 1.0)
     class Mode4ChProgram(
         universe: Universe,
         key: String,
@@ -287,7 +287,7 @@ sealed class LedLightbar12PixelFixture(
      * - Ch 3: Blue
      * - Ch 4: White
      */
-    @FixtureType("led-lightbar-12-pixel-4ch-rgbw", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP)
+    @FixtureType("led-lightbar-12-pixel-4ch-rgbw", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP, lengthM = 1.0)
     class Mode4ChRgbw(
         universe: Universe,
         key: String,
@@ -332,7 +332,7 @@ sealed class LedLightbar12PixelFixture(
      * - Ch 5: Blue
      * - Ch 6: White
      */
-    @FixtureType("led-lightbar-12-pixel-6ch", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP)
+    @FixtureType("led-lightbar-12-pixel-6ch", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP, lengthM = 1.0)
     class Mode6Ch(
         universe: Universe,
         key: String,
@@ -381,7 +381,7 @@ sealed class LedLightbar12PixelFixture(
      * - Ch 3-6: Section 1 RGBW
      * - Ch 7-10: Section 2 RGBW
      */
-    @FixtureType("led-lightbar-12-pixel-10ch", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP)
+    @FixtureType("led-lightbar-12-pixel-10ch", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP, lengthM = 1.0)
     class Mode10Ch(
         universe: Universe,
         key: String,
@@ -447,7 +447,7 @@ sealed class LedLightbar12PixelFixture(
      * - Ch 11: Blue
      * - Ch 12: White
      */
-    @FixtureType("led-lightbar-12-pixel-12ch", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP)
+    @FixtureType("led-lightbar-12-pixel-12ch", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP, lengthM = 1.0)
     class Mode12Ch(
         universe: Universe,
         key: String,
@@ -516,7 +516,7 @@ sealed class LedLightbar12PixelFixture(
      * - Ch 11-14: Section 3 RGBW
      * - Ch 15-18: Section 4 RGBW
      */
-    @FixtureType("led-lightbar-12-pixel-18ch", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP)
+    @FixtureType("led-lightbar-12-pixel-18ch", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP, lengthM = 1.0)
     class Mode18Ch(
         universe: Universe,
         key: String,
@@ -582,7 +582,7 @@ sealed class LedLightbar12PixelFixture(
      * - Ch 41-44: Pixel 11 RGBW
      * - Ch 45-48: Pixel 12 RGBW
      */
-    @FixtureType("led-lightbar-12-pixel-48ch", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP)
+    @FixtureType("led-lightbar-12-pixel-48ch", manufacturer = "Showtec", model = "LED Lightbar 12 Pixel", kind = FixtureKind.STRIP, lengthM = 1.0)
     class Mode48Ch(
         universe: Universe,
         key: String,

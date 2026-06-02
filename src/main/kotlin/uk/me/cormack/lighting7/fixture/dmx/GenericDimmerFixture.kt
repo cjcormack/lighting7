@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.BeamShape
 import uk.me.cormack.lighting7.fixture.CompactDisplayRole
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
@@ -23,6 +24,9 @@ import uk.me.cormack.lighting7.fixture.trait.WithDimmer
     acceptsBeamAngle = true,
     acceptsGel = true,
     gelCompactDisplay = CompactDisplayRole.SECONDARY,
+    // GENERIC kind defaults to NONE; this conventional fixture does throw a
+    // beam, so opt in explicitly to keep the shape-gate and acceptsBeamAngle aligned.
+    beamShape = BeamShape.ROUND,
 )
 class GenericDimmerFixture(
     universe: Universe,

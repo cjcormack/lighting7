@@ -155,6 +155,11 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                     acceptsGel = info.acceptsGel,
                     gelCompactDisplay = info.gelCompactDisplay.serialized(),
                     kind = info.kind.name,
+                    lengthM = info.lengthM,
+                    widthM = info.widthM,
+                    heightM = info.heightM,
+                    beamShape = info.beamShape.name,
+                    beamEdge = info.beamEdge.name,
                 )
             })
         }
@@ -326,4 +331,11 @@ data class FixtureTypeDetails(
     val acceptsGel: Boolean = false,
     val gelCompactDisplay: String? = null,
     val kind: String = "GENERIC",
+    // Physical bounding size in metres (lengthM = long axis) + beam geometry.
+    // Defaults keep older clients/payloads valid.
+    val lengthM: Double? = null,
+    val widthM: Double? = null,
+    val heightM: Double? = null,
+    val beamShape: String = "NONE",
+    val beamEdge: String = "SOFT",
 )
