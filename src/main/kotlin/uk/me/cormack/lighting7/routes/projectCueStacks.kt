@@ -113,13 +113,14 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         ) { project ->
             val keepCues = call.request.queryParameters["keepCues"]?.toBoolean() ?: true
 
-            val found = transaction(state.database) {
-                val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction false
-                if (stack.project.id != project.id) return@transaction false
+            val result = transaction(state.database) {
+                val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction null
+                if (stack.project.id != project.id) return@transaction null
 
                 // Deactivate if running
                 state.show.cueStackManager.deactivateStack(resource.stackId, state)
 
+                var removedAnchors = 0
                 if (keepCues) {
                     // Detach cues from stack (make standalone)
                     stack.cues.forEach { cue ->
@@ -130,17 +131,19 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     // Delete cues and their children
                     stack.cues.forEach { cue ->
                         deleteCueChildren(cue)
+                        removedAnchors += deletePromptBookAnchorsForCue(cue)
                         cue.delete()
                     }
                 }
 
                 stack.delete()
-                true
+                removedAnchors
             }
 
-            if (found) {
+            if (result != null) {
                 state.show.fixtures.cueStackListChanged()
                 state.show.fixtures.cueListChanged()
+                if (result > 0) state.show.fixtures.promptBookListChanged()
                 call.respond(HttpStatusCode.OK)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))

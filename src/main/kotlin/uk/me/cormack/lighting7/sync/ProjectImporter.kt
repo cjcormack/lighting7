@@ -21,6 +21,14 @@ import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
+import org.jetbrains.exposed.sql.SqlExpressionBuilder
+import org.jetbrains.exposed.sql.deleteWhere
+import uk.me.cormack.lighting7.models.DaoPromptBook
+import uk.me.cormack.lighting7.models.DaoPromptBookAnchor
+import uk.me.cormack.lighting7.models.DaoPromptBookAnchors
+import uk.me.cormack.lighting7.models.DaoPromptBookAnnotation
+import uk.me.cormack.lighting7.models.DaoPromptBookAnnotations
+import uk.me.cormack.lighting7.models.checkPromptBookRegion
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoShowEntry
@@ -36,6 +44,9 @@ import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.sync.dto.CueTriggerJson
+import uk.me.cormack.lighting7.sync.dto.PromptBookAnchorJson
+import uk.me.cormack.lighting7.sync.dto.PromptBookAnnotationJson
+import uk.me.cormack.lighting7.sync.dto.PromptBookJson
 import uk.me.cormack.lighting7.sync.dto.FixtureGroupJson
 import uk.me.cormack.lighting7.sync.dto.FixturePatchJson
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
@@ -158,6 +169,11 @@ class ProjectImporter(private val state: State) {
             // overrides, sync configs) alone.
             project.activeEntryId = null
             project.showEntries.forEach { it.delete() }
+            project.promptBooks.forEach { book ->
+                DaoPromptBookAnchors.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnchors.promptBook eq book.id } }
+                DaoPromptBookAnnotations.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnnotations.promptBook eq book.id } }
+                book.delete()
+            }
             project.cues.forEach { cue ->
                 deleteCueChildren(cue)
                 cue.delete()
@@ -252,6 +268,9 @@ class ProjectImporter(private val state: State) {
         importCueAdHocEffects(sourceDir, cueMap)
         importCueTriggers(sourceDir, cueMap, scriptMap)
         importShowEntries(sourceDir, project, cueStackMap)
+        val promptBookMap = importPromptBooks(sourceDir, project)
+        importPromptBookAnchors(sourceDir, promptBookMap, cueMap)
+        importPromptBookAnnotations(sourceDir, promptBookMap)
         importCueSlots(sourceDir, project, cueMap, cueStackMap)
         importParkedChannels(sourceDir, project)
         importControlSurfaceBindings(sourceDir, project)
@@ -695,6 +714,71 @@ class ProjectImporter(private val state: State) {
                 this.uuid = uuid
             }
             uuid to Unit
+        }
+    }
+
+    private fun importPromptBooks(dir: Path, project: DaoProject): Map<UUID, DaoPromptBook> =
+        readDir(dir.resolve("promptBooks")) { json ->
+            val b = canonicalDecode(PromptBookJson.serializer(), json)
+            val uuid = UUID.fromString(b.uuid)
+            val dao = DaoPromptBook.new {
+                name = b.name
+                this.project = project
+                scriptHash = b.scriptHash
+                scriptFileName = b.scriptFileName
+                pageCount = b.pageCount
+                this.uuid = uuid
+            }
+            uuid to dao
+        }
+
+    private fun importPromptBookAnchors(
+        dir: Path,
+        promptBookMap: Map<UUID, DaoPromptBook>,
+        cueMap: Map<UUID, DaoCue>,
+    ) {
+        readDir(dir.resolve("promptBookAnchors")) { json ->
+            val a = canonicalDecode(PromptBookAnchorJson.serializer(), json)
+            val bookUuid = UUID.fromString(a.promptBookUuid)
+            val book = promptBookMap[bookUuid]
+                ?: throw ImportError.invalidArchive("Prompt book anchor ${a.uuid} references unknown prompt book $bookUuid")
+            val cueUuid = UUID.fromString(a.cueUuid)
+            val cue = cueMap[cueUuid]
+                ?: throw ImportError.invalidArchive("Prompt book anchor ${a.uuid} references unknown cue $cueUuid")
+            checkPromptBookRegion(a.region, book.pageCount)?.let {
+                throw ImportError.invalidArchive("Prompt book anchor ${a.uuid} has an invalid region: $it")
+            }
+            val uuid = UUID.fromString(a.uuid)
+            val dao = DaoPromptBookAnchor.new {
+                promptBook = book
+                this.cue = cue
+                region = a.region
+                label = a.label
+                this.uuid = uuid
+            }
+            uuid to dao
+        }
+    }
+
+    private fun importPromptBookAnnotations(dir: Path, promptBookMap: Map<UUID, DaoPromptBook>) {
+        readDir(dir.resolve("promptBookAnnotations")) { json ->
+            val n = canonicalDecode(PromptBookAnnotationJson.serializer(), json)
+            val bookUuid = UUID.fromString(n.promptBookUuid)
+            val book = promptBookMap[bookUuid]
+                ?: throw ImportError.invalidArchive("Prompt book annotation ${n.uuid} references unknown prompt book $bookUuid")
+            checkPromptBookRegion(n.region, book.pageCount)?.let {
+                throw ImportError.invalidArchive("Prompt book annotation ${n.uuid} has an invalid region: $it")
+            }
+            val uuid = UUID.fromString(n.uuid)
+            val dao = DaoPromptBookAnnotation.new {
+                promptBook = book
+                kind = n.kind
+                region = n.region
+                text = n.text
+                color = n.color
+                this.uuid = uuid
+            }
+            uuid to dao
         }
     }
 

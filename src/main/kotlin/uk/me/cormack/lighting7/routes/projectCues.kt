@@ -237,16 +237,18 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             resource.parent.projectId,
             { p -> "Cannot delete cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
-            val found = transaction(state.database) {
-                val cue = DaoCue.findById(resource.cueId) ?: return@transaction false
-                if (cue.project.id != project.id) return@transaction false
+            val result = transaction(state.database) {
+                val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
+                if (cue.project.id != project.id) return@transaction null
                 deleteCueChildren(cue)
+                val removedAnchors = deletePromptBookAnchorsForCue(cue)
                 cue.delete()
-                true
+                removedAnchors
             }
 
-            if (found) {
+            if (result != null) {
                 state.show.fixtures.cueListChanged()
+                if (result > 0) state.show.fixtures.promptBookListChanged()
                 call.respond(HttpStatusCode.OK)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))

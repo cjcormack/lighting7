@@ -79,6 +79,7 @@ class GlobalScalerState(
             activatedStackId: Int?,
             activatedStackName: String?,
         ) {}
+        override fun promptBookListChanged() {}
     }
 
     /**

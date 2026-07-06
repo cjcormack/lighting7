@@ -192,9 +192,12 @@ object RecordHasher {
 
     /** Hex-encoded SHA-256 of the UTF-8 bytes of [content]. Mirrors the precedent in
      *  [uk.me.cormack.lighting7.show.Show.cacheKey]. */
+    fun sha256Hex(content: String): String = sha256Hex(content.toByteArray(Charsets.UTF_8))
+
+    /** Hex-encoded SHA-256 of [bytes] (e.g. prompt-book script PDFs). */
     @OptIn(ExperimentalStdlibApi::class)
-    fun sha256Hex(content: String): String =
-        MessageDigest.getInstance("SHA-256").digest(content.toByteArray(Charsets.UTF_8)).toHexString()
+    fun sha256Hex(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).toHexString()
 
     /**
      * Classify a repo-relative path into one of the record-grouping categories. Single

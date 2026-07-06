@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.FxPresetEffectDto
+import uk.me.cormack.lighting7.models.PromptBookRectDto
 import uk.me.cormack.lighting7.models.TriggerType
 import uk.me.cormack.lighting7.scripts.ScriptType
 
@@ -313,4 +314,38 @@ data class ControlSurfaceBindingJson(
     val targetPayload: String,
     val takeoverPolicy: String? = null,
     val sortOrder: Int = 0,
+)
+
+/**
+ * Prompt-book: binds an imported PDF script (identified by content hash) to the
+ * project's show. The PDF bytes themselves are deliberately NOT synced — the repo
+ * is JSON-only; on an install where the bytes are missing, the client offers a
+ * re-import that re-attaches by hash.
+ */
+@Serializable
+data class PromptBookJson(
+    val uuid: String,
+    val name: String,
+    val scriptHash: String,
+    val scriptFileName: String? = null,
+    val pageCount: Int,
+)
+
+@Serializable
+data class PromptBookAnchorJson(
+    val uuid: String,
+    val promptBookUuid: String,
+    val cueUuid: String,
+    val region: List<PromptBookRectDto>,
+    val label: String? = null,
+)
+
+@Serializable
+data class PromptBookAnnotationJson(
+    val uuid: String,
+    val promptBookUuid: String,
+    val kind: String,
+    val region: List<PromptBookRectDto>,
+    val text: String? = null,
+    val color: String? = null,
 )

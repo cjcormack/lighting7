@@ -57,6 +57,10 @@ data class ShowChangedOutMessage(
 @SerialName("fixturesChanged")
 data object FixturesChangedOutMessage : BroadcastOutMessage()
 
+@Serializable
+@SerialName("promptBookListChanged")
+data object PromptBookListChangedOutMessage : BroadcastOutMessage()
+
 // ─── Listener wiring ────────────────────────────────────────────────────
 
 /**
@@ -107,6 +111,8 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         ) {
             fire(ShowChangedOutMessage(projectId, activeEntryId, activatedStackId, activatedStackName))
         }
+
+        override fun promptBookListChanged() = fire(PromptBookListChangedOutMessage)
     }
 
     var currentFixtures = state.show.fixtures

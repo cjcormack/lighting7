@@ -12,6 +12,8 @@ import io.ktor.server.routing.*
 import io.ktor.server.routing.post as routingPost
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
@@ -181,6 +183,7 @@ internal fun Route.routeApiRestProjects(state: State) {
 
         // DELETE /{id} - Delete project
         delete<ProjectIdResource> { resource ->
+            var deletedProjectUuid: String? = null
             val result = transaction(state.database) {
                 val project = DaoProject.findById(resource.id)
                     ?: return@transaction DeleteResult.NOT_FOUND
@@ -188,11 +191,19 @@ internal fun Route.routeApiRestProjects(state: State) {
                 if (project.isCurrent) {
                     return@transaction DeleteResult.IS_CURRENT
                 }
+                deletedProjectUuid = project.uuid.toString()
 
                 // Clear active_entry_id first to satisfy the deferrable FK
                 // before deleting show entries.
                 project.activeEntryId = null
                 project.showEntries.forEach { it.delete() }
+
+                // Prompt books before cues — anchors reference cue rows.
+                project.promptBooks.forEach { book ->
+                    DaoPromptBookAnchors.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnchors.promptBook eq book.id } }
+                    DaoPromptBookAnnotations.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnnotations.promptBook eq book.id } }
+                    book.delete()
+                }
 
                 // Delete associated records in FK-safe order
                 project.cues.forEach { cue ->
@@ -223,7 +234,13 @@ internal fun Route.routeApiRestProjects(state: State) {
             }
 
             when (result) {
-                DeleteResult.SUCCESS -> call.respond(HttpStatusCode.NoContent)
+                DeleteResult.SUCCESS -> {
+                    // Content-addressed PDF store for this project is now unreachable.
+                    deletedProjectUuid?.let { uuid ->
+                        runCatching { state.promptScriptStoreRoot.resolve(uuid).toFile().deleteRecursively() }
+                    }
+                    call.respond(HttpStatusCode.NoContent)
+                }
                 DeleteResult.NOT_FOUND -> call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
                 DeleteResult.IS_CURRENT -> call.respond(
                     HttpStatusCode.Conflict,
@@ -262,6 +279,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectUniverseConfigs(state)
         routeApiRestProjectPatchGroups(state)
         routeApiRestProjectShow(state)
+        routeApiRestProjectPromptBooks(state)
         routeApiRestProjectSurfaceBindings(state)
         routeApiRestProjectExport(state)
         routeApiRestProjectMachineOverrides(state)

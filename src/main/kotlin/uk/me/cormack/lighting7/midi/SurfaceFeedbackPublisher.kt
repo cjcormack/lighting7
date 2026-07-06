@@ -181,6 +181,7 @@ class SurfaceFeedbackPublisher(
         override fun stageRegionListChanged() {}
         override fun showEntriesChanged() {}
         override fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?) {}
+        override fun promptBookListChanged() {}
     }
 
     private val jobs = mutableListOf<Job>()

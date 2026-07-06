@@ -24,6 +24,7 @@ interface FixturesChangeListener {
     fun stageRegionListChanged()
     fun showEntriesChanged()
     fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?)
+    fun promptBookListChanged()
 }
 
 class Fixtures {
@@ -300,6 +301,12 @@ class Fixtures {
     fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?) {
         changeListeners.forEach {
             it.showChanged(projectId, activeEntryId, activatedStackId, activatedStackName)
+        }
+    }
+
+    fun promptBookListChanged() {
+        changeListeners.forEach {
+            it.promptBookListChanged()
         }
     }
 

@@ -25,6 +25,9 @@ import uk.me.cormack.lighting7.sync.dto.FxPresetPropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.ParkedChannelJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
+import uk.me.cormack.lighting7.sync.dto.PromptBookAnchorJson
+import uk.me.cormack.lighting7.sync.dto.PromptBookAnnotationJson
+import uk.me.cormack.lighting7.sync.dto.PromptBookJson
 import uk.me.cormack.lighting7.sync.dto.RiggingJson
 import uk.me.cormack.lighting7.sync.dto.ScriptMetaJson
 import uk.me.cormack.lighting7.sync.dto.ShowEntryJson
@@ -160,6 +163,36 @@ class ProjectExporter(private val state: State) {
             }
 
             count += writeCueChildren(targetDir, project, liveKeys)
+
+            val promptBooks = project.promptBooks.toList()
+            count += writeAll(targetDir, "promptBooks", promptBooks, PromptBookJson.serializer(), { it.uuid }, liveKeys) { b ->
+                PromptBookJson(
+                    uuid = b.uuid.toString(),
+                    name = b.name,
+                    scriptHash = b.scriptHash,
+                    scriptFileName = b.scriptFileName,
+                    pageCount = b.pageCount,
+                )
+            }
+            count += writeAll(targetDir, "promptBookAnchors", promptBooks.flatMap { it.anchors.toList() }, PromptBookAnchorJson.serializer(), { it.uuid }, liveKeys) { a ->
+                PromptBookAnchorJson(
+                    uuid = a.uuid.toString(),
+                    promptBookUuid = a.promptBook.uuid.toString(),
+                    cueUuid = a.cue.uuid.toString(),
+                    region = a.region,
+                    label = a.label,
+                )
+            }
+            count += writeAll(targetDir, "promptBookAnnotations", promptBooks.flatMap { it.annotations.toList() }, PromptBookAnnotationJson.serializer(), { it.uuid }, liveKeys) { n ->
+                PromptBookAnnotationJson(
+                    uuid = n.uuid.toString(),
+                    promptBookUuid = n.promptBook.uuid.toString(),
+                    kind = n.kind,
+                    region = n.region,
+                    text = n.text,
+                    color = n.color,
+                )
+            }
 
             count += writeAll(targetDir, "universeConfigs", project.universeConfigs.toList(), UniverseConfigJson.serializer(), { it.uuid }, liveKeys) { u ->
                 // `address` deliberately omitted — machine-local per cloud-sync design.

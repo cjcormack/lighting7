@@ -5,7 +5,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import org.jetbrains.exposed.dao.with
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.CompositionRule
@@ -450,13 +452,26 @@ internal fun createCueChildren(
     }
 }
 
-/** Delete all child entities (preset applications, ad-hoc effects, property assignments, and triggers) for a cue. */
+/**
+ * Delete all child entities (preset applications, ad-hoc effects, property assignments, and
+ * triggers) for a cue. Also used by the cue PUT route to *replace* children on update —
+ * anything that must survive a cue edit (e.g. prompt-book anchors) must NOT be deleted here.
+ */
 internal fun deleteCueChildren(cue: DaoCue) {
     cue.presetApplications.forEach { it.delete() }
     cue.adHocEffects.forEach { it.delete() }
     cue.propertyAssignments.forEach { it.delete() }
     cue.triggers.forEach { it.delete() }
 }
+
+/**
+ * Delete every prompt-book anchor bound to [cue]. Kept separate from [deleteCueChildren]
+ * because anchors must survive cue edits and die only with the cue itself. Explicit rather
+ * than DB-cascade because SQLite doesn't enforce cascades without a per-connection pragma.
+ * Returns the number removed so callers know whether to fire promptBookListChanged.
+ */
+internal fun deletePromptBookAnchorsForCue(cue: DaoCue): Int =
+    DaoPromptBookAnchors.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnchors.cue eq cue.id } }
 
 // ─── Apply logic ────────────────────────────────────────────────────────
 

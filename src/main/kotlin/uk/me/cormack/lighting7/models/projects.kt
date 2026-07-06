@@ -52,4 +52,5 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     val aiConversations by DaoAiConversation referrersOn DaoAiConversations.project
     val fxDefinitions by DaoFxDefinition referrersOn DaoFxDefinitions.project
     val controlSurfaceBindings by DaoControlSurfaceBinding referrersOn DaoControlSurfaceBindings.project
+    val promptBooks by DaoPromptBook referrersOn DaoPromptBooks.project
 }

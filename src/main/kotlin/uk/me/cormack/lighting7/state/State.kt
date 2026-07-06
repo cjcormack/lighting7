@@ -83,6 +83,16 @@ class State(val config: ApplicationConfig) {
         ?: appDataDir().resolve("sync")
 
     /**
+     * Root directory for prompt-book script PDFs, stored content-addressed as
+     * `{projectUuid}/{sha256}.pdf`. Defaults to `<appDataDir>/prompt-scripts` and is
+     * overridable via `promptBooks.scriptStoreRoot` in `local.conf` (handy for tests).
+     * The store is deliberately outside the DB and outside git sync (JSON-only).
+     */
+    val promptScriptStoreRoot: Path = config.optionalString("promptBooks.scriptStoreRoot")
+        ?.let { Paths.get(it) }
+        ?: appDataDir().resolve("prompt-scripts")
+
+    /**
      * Cloud-sync lifecycle broadcasts. The REST sync-run handler emits into this flow;
      * each WS handler in `plugins/Sockets.kt` collects per-connection.
      */
@@ -548,6 +558,7 @@ class State(val config: ApplicationConfig) {
         override fun stageRegionListChanged() {}
         override fun showEntriesChanged() {}
         override fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?) {}
+        override fun promptBookListChanged() {}
     }
 
     private fun attachBindingHealthListener() {
@@ -617,6 +628,7 @@ class State(val config: ApplicationConfig) {
                 DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
                 DaoParkedChannels, DaoFxDefinitions,
                 DaoShowEntries,
+                DaoPromptBooks, DaoPromptBookAnchors, DaoPromptBookAnnotations,
                 DaoControlSurfaceBindings,
                 DaoProjectScalerStates,
                 DaoInstalls, DaoMachineOverrides,

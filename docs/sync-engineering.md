@@ -72,7 +72,21 @@ parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's pa
 controlSurfaceBindings/{uuid}.json
 scripts/{uuid}.kts             # raw Kotlin script body for git-friendly diffs
 scripts/{uuid}.meta.json       # metadata sidecar (name, scriptType)
+promptBooks/{uuid}.json        # script reference by content hash (PDF bytes NOT synced)
+promptBookAnchors/{uuid}.json  # carries promptBookUuid + cueUuid; normalized region rects
+promptBookAnnotations/{uuid}.json  # carries promptBookUuid; note/strikethrough/freetext
 ```
+
+### Prompt books
+
+Prompt-book records sync as JSON like everything else, but the script PDF the
+book is bound to is deliberately **not** synced — the repo stays JSON-only.
+`promptBooks/{uuid}.json` carries the PDF's SHA-256 (`scriptHash`), which is
+the script's identity (never the filename). On an install where the bytes are
+missing from the content-addressed store (`<appDataDir>/prompt-scripts/`),
+the frontend offers a re-import that re-attaches by hash. Anchor and
+annotation regions are validated on import against the book's `pageCount`
+(same invariant as the REST routes — see `checkPromptBookRegion`).
 
 A future phase may re-nest cue children under their parent stack folder
 (`cueStacks/{stackUuid}/cues/{cueUuid}/...`) so `git diff` scopes to the

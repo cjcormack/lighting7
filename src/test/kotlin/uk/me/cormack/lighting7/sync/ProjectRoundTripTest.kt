@@ -22,6 +22,10 @@ import uk.me.cormack.lighting7.models.DaoFxPreset
 import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoPromptBook
+import uk.me.cormack.lighting7.models.DaoPromptBookAnchor
+import uk.me.cormack.lighting7.models.DaoPromptBookAnnotation
+import uk.me.cormack.lighting7.models.PromptBookRectDto
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoShowEntry
@@ -406,6 +410,29 @@ class ProjectRoundTripTest {
         // cue slot
         DaoCueSlot.new {
             this.project = project; page = 1; slotIndex = 1; cue = cue1
+        }
+
+        // prompt book with an anchor (FK-by-UUID to a cue) and two annotation kinds
+        val promptBook = DaoPromptBook.new {
+            this.project = project
+            name = "act-one"
+            scriptHash = "a".repeat(64)
+            scriptFileName = "act-one.pdf"
+            pageCount = 12
+        }
+        DaoPromptBookAnchor.new {
+            this.promptBook = promptBook; cue = cue1
+            region = listOf(PromptBookRectDto(page = 0, x = 0.1, y = 0.2, w = 0.8, h = 0.05))
+            label = "LX 1"
+        }
+        DaoPromptBookAnnotation.new {
+            this.promptBook = promptBook; kind = "STRIKETHROUGH"
+            region = listOf(PromptBookRectDto(page = 1, x = 0.1, y = 0.5, w = 0.8, h = 0.1))
+        }
+        DaoPromptBookAnnotation.new {
+            this.promptBook = promptBook; kind = "NOTE"
+            region = listOf(PromptBookRectDto(page = 2, x = 0.05, y = 0.9, w = 0.4, h = 0.03))
+            text = "slow build, watch conductor"; color = "#ffb000"
         }
 
         // parked channels — two on universe 0, one on universe 1, exercises sort + UUID round-trip
