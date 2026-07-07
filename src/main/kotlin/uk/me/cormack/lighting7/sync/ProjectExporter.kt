@@ -191,6 +191,7 @@ class ProjectExporter(private val state: State) {
                     region = n.region,
                     text = n.text,
                     color = n.color,
+                    tone = n.tone,
                 )
             }
 

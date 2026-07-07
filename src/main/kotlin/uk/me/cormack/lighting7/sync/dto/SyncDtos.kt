@@ -348,4 +348,5 @@ data class PromptBookAnnotationJson(
     val region: List<PromptBookRectDto>,
     val text: String? = null,
     val color: String? = null,
+    val tone: String? = null,
 )

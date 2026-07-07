@@ -776,6 +776,7 @@ class ProjectImporter(private val state: State) {
                 region = n.region
                 text = n.text
                 color = n.color
+                tone = n.tone
                 this.uuid = uuid
             }
             uuid to dao

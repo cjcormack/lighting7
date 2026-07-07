@@ -13,6 +13,13 @@ import org.jetbrains.exposed.sql.json.json
 
 enum class PromptBookAnnotationKind { NOTE, STRIKETHROUGH, FREETEXT }
 
+/**
+ * Severity/intent of a NOTE annotation — drives the callout colour in the
+ * reader (note=blue, warn=amber, safety=red). Only meaningful for NOTE; other
+ * kinds leave it null. Nullable in storage so pre-existing notes read as NOTE.
+ */
+enum class PromptBookNoteTone { NOTE, WARN, SAFETY }
+
 // ─── DTOs (used for API serialization and json columns) ─────────────────
 
 /**
@@ -143,6 +150,9 @@ object DaoPromptBookAnnotations : IntIdTable("prompt_book_annotations") {
 
     /** Optional colour override; otherwise derives from kind. */
     val color = varchar("color", 16).nullable()
+
+    /** NOTE severity (NOTE/WARN/SAFETY) driving the callout colour; null → NOTE. */
+    val tone = varchar("tone", 16).nullable()
     val uuid = uuid("uuid").autoGenerate()
 }
 
@@ -154,5 +164,6 @@ class DaoPromptBookAnnotation(id: EntityID<Int>) : IntEntity(id) {
     var region by DaoPromptBookAnnotations.region
     var text by DaoPromptBookAnnotations.text
     var color by DaoPromptBookAnnotations.color
+    var tone by DaoPromptBookAnnotations.tone
     var uuid by DaoPromptBookAnnotations.uuid
 }

@@ -297,6 +297,7 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
                         region = input.region
                         text = input.text
                         color = input.color
+                        tone = input.tone
                     }.toDto()
                 )
             }
@@ -333,6 +334,7 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
                 annotation.region = input.region
                 annotation.text = input.text
                 annotation.color = input.color
+                annotation.tone = input.tone
                 RouteResult.Ok(annotation.toDto())
             }
 
@@ -445,6 +447,9 @@ private fun validateAnnotationInput(input: AnnotationRequest, pageCount: Int): S
     if (PromptBookAnnotationKind.entries.none { it.name == input.kind }) {
         return "kind must be one of ${PromptBookAnnotationKind.entries.joinToString { it.name }}"
     }
+    if (input.tone != null && PromptBookNoteTone.entries.none { it.name == input.tone }) {
+        return "tone must be one of ${PromptBookNoteTone.entries.joinToString { it.name }}"
+    }
     return checkPromptBookRegion(input.region, pageCount)
 }
 
@@ -500,6 +505,7 @@ private fun DaoPromptBookAnnotation.toDto() = PromptBookAnnotationDto(
     region = region,
     text = text,
     color = color,
+    tone = tone,
 )
 
 // ─── Resources ──────────────────────────────────────────────────────────
@@ -573,6 +579,7 @@ data class PromptBookAnnotationDto(
     val region: List<PromptBookRectDto>,
     val text: String? = null,
     val color: String? = null,
+    val tone: String? = null,
 )
 
 @Serializable
@@ -587,6 +594,7 @@ data class AnnotationRequest(
     val region: List<PromptBookRectDto>,
     val text: String? = null,
     val color: String? = null,
+    val tone: String? = null,
 )
 
 @Serializable
