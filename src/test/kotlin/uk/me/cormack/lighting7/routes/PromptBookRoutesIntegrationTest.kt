@@ -276,4 +276,63 @@ class PromptBookRoutesIntegrationTest {
         }
         assertEquals(HttpStatusCode.BadRequest, resp.status)
     }
+
+    @Test
+    fun `cue-locations reduces each anchor to its earliest rect`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val bookId = client.post("/api/rest/project/$projectId/prompt-books") {
+            contentType(ContentType.Application.Json)
+            setBody(newBook())
+        }.body<PromptBookDetails>().id
+
+        val stackId = client.post("/api/rest/project/$projectId/cue-stacks") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCueStack(name = "stack-a"))
+        }.body<CueStackDetails>().id
+        val cue1 = client.post("/api/rest/project/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "cue-1", cueStackId = stackId))
+        }.body<CueDetails>().id
+        val cue2 = client.post("/api/rest/project/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "cue-2", cueStackId = stackId))
+        }.body<CueDetails>().id
+
+        // cue1: single rect near the top of page 0
+        client.put("/api/rest/project/$projectId/prompt-books/$bookId/anchors/$cue1") {
+            contentType(ContentType.Application.Json)
+            setBody(UpsertAnchorRequest(region = listOf(rect(page = 0, y = 0.1))))
+        }
+        // cue2: a multi-rect region (spans pages + lines). The earliest rect —
+        // lowest page, then topmost y — must win, regardless of list order.
+        client.put("/api/rest/project/$projectId/prompt-books/$bookId/anchors/$cue2") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                UpsertAnchorRequest(
+                    region = listOf(rect(page = 2, y = 0.5), rect(page = 1, y = 0.8), rect(page = 1, y = 0.3)),
+                ),
+            )
+        }
+
+        val locations = client.get("/api/rest/project/$projectId/cue-locations")
+            .body<List<CueLocationDto>>()
+        val byCue = locations.associateBy { it.cueId }
+        assertEquals(2, locations.size)
+        assertEquals(0, byCue.getValue(cue1).page)
+        assertEquals(0.1, byCue.getValue(cue1).y)
+        assertEquals(1, byCue.getValue(cue2).page, "earliest rect is on the lowest page")
+        assertEquals(0.3, byCue.getValue(cue2).y, "and the topmost y on that page")
+    }
+
+    @Test
+    fun `cue-locations is empty when the project has no book`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val locations = client.get("/api/rest/project/$projectId/cue-locations")
+            .body<List<CueLocationDto>>()
+        assertTrue(locations.isEmpty())
+    }
 }

@@ -84,6 +84,30 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
         }
     }
 
+    // GET /{projectId}/cue-locations - Per-cue reading positions from the project's
+    // prompt book, each reduced to {cueId, page, y}. Project-scoped and book-agnostic
+    // so it survives the planned move to a single prompt book per show: today it resolves
+    // the first book by name; then it will simply resolve the one-and-only book — the
+    // contract is unchanged. Empty when the project has no book. The human phrasing
+    // ("top of p. 9") is derived on the frontend from these coordinates.
+    get<ProjectCueLocationsResource> { resource ->
+        withProject(state, resource.projectId) { project ->
+            val locations = transaction(state.database) {
+                val book = DaoPromptBook
+                    .find { DaoPromptBooks.project eq project.id }
+                    .orderBy(DaoPromptBooks.name to SortOrder.ASC)
+                    .firstOrNull()
+                    ?: return@transaction emptyList<CueLocationDto>()
+                book.anchors.mapNotNull { anchor ->
+                    val earliest = anchor.region.minWithOrNull(compareBy({ it.page }, { it.y }))
+                        ?: return@mapNotNull null
+                    CueLocationDto(cueId = anchor.cueId, page = earliest.page, y = earliest.y)
+                }
+            }
+            call.respond(locations)
+        }
+    }
+
     // POST /{projectId}/prompt-books - Create prompt book
     post<ProjectPromptBooksResource> { resource ->
         withCurrentProject(
@@ -513,6 +537,9 @@ private fun DaoPromptBookAnnotation.toDto() = PromptBookAnnotationDto(
 @Resource("/{projectId}/prompt-books")
 data class ProjectPromptBooksResource(val projectId: String)
 
+@Resource("/{projectId}/cue-locations")
+data class ProjectCueLocationsResource(val projectId: String)
+
 @Resource("/{bookId}")
 data class ProjectPromptBookResource(val parent: ProjectPromptBooksResource, val bookId: Int)
 
@@ -570,6 +597,18 @@ data class PromptBookAnchorDto(
     val cueId: Int,
     val region: List<PromptBookRectDto>,
     val label: String? = null,
+)
+
+/**
+ * A cue's reading position in the project's prompt book, reduced from its anchor
+ * region to the earliest rect (topmost on the lowest page). Consumed by the Run view;
+ * the frontend formats these coordinates into "top of p. 9"-style labels.
+ */
+@Serializable
+data class CueLocationDto(
+    val cueId: Int,
+    val page: Int,
+    val y: Double,
 )
 
 @Serializable
