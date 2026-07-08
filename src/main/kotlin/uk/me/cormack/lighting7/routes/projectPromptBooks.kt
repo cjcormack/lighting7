@@ -113,6 +113,7 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
                     existing.scriptHash = input.scriptHash
                     existing.scriptFileName = input.scriptFileName
                     existing.pageCount = input.pageCount
+                    existing.coverPages = input.coverPages
                     existing.toDetails(isCurrentProject = true) to false
                 } else {
                     DaoPromptBook.new {
@@ -120,6 +121,7 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
                         scriptHash = input.scriptHash
                         scriptFileName = input.scriptFileName
                         pageCount = input.pageCount
+                        coverPages = input.coverPages
                     }.toDetails(isCurrentProject = true) to true
                 }
             }
@@ -384,6 +386,9 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
 private fun validatePromptBookInput(input: NewPromptBook): String? {
     if (!SCRIPT_HASH_REGEX.matches(input.scriptHash)) return "scriptHash must be 64 lowercase hex characters (SHA-256)"
     if (input.pageCount < 1) return "pageCount must be at least 1"
+    if (input.coverPages < 0 || input.coverPages >= input.pageCount) {
+        return "coverPages must be between 0 and pageCount - 1"
+    }
     return null
 }
 
@@ -401,6 +406,7 @@ private fun DaoPromptBook.toDetails(isCurrentProject: Boolean) = PromptBookDetai
     scriptHash = scriptHash,
     scriptFileName = scriptFileName,
     pageCount = pageCount,
+    coverPages = coverPages,
     anchors = anchors.map { it.toDto() },
     annotations = annotations.map { it.toDto() },
     canEdit = isCurrentProject,
@@ -451,6 +457,8 @@ data class NewPromptBook(
     val scriptHash: String,
     val pageCount: Int,
     val scriptFileName: String? = null,
+    /** Leading front-matter (cover/title) pages before the script's printed page 1. */
+    val coverPages: Int = 0,
 )
 
 @Serializable
@@ -458,6 +466,8 @@ data class PromptBookDetails(
     val scriptHash: String,
     val scriptFileName: String?,
     val pageCount: Int,
+    /** Leading front-matter (cover/title) pages before the script's printed page 1. */
+    val coverPages: Int,
     val anchors: List<PromptBookAnchorDto>,
     val annotations: List<PromptBookAnnotationDto>,
     val canEdit: Boolean,

@@ -418,6 +418,7 @@ class ProjectRoundTripTest {
             scriptHash = "a".repeat(64)
             scriptFileName = "act-one.pdf"
             pageCount = 12
+            coverPages = 3
         }
         DaoPromptBookAnchor.new {
             this.promptBook = promptBook; cue = cue1

@@ -77,6 +77,13 @@ object DaoPromptBooks : IntIdTable("prompt_books") {
     /** Original filename, display only — never used for identity. */
     val scriptFileName = varchar("script_file_name", 255).nullable()
     val pageCount = integer("page_count")
+
+    /**
+     * Count of leading front-matter PDF pages (cover/title) that precede the
+     * script's printed page 1. Cue page labels are offset by this so the number
+     * shown matches the script's own numbering. Default 0 — no cover page.
+     */
+    val coverPages = integer("cover_pages").default(0)
     val uuid = uuid("uuid").autoGenerate()
 
     init {
@@ -92,6 +99,7 @@ class DaoPromptBook(id: EntityID<Int>) : IntEntity(id) {
     var scriptHash by DaoPromptBooks.scriptHash
     var scriptFileName by DaoPromptBooks.scriptFileName
     var pageCount by DaoPromptBooks.pageCount
+    var coverPages by DaoPromptBooks.coverPages
     var uuid by DaoPromptBooks.uuid
     val anchors by DaoPromptBookAnchor referrersOn DaoPromptBookAnchors.promptBook
     val annotations by DaoPromptBookAnnotation referrersOn DaoPromptBookAnnotations.promptBook

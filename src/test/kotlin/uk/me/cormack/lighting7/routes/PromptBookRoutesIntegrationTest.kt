@@ -81,22 +81,26 @@ class PromptBookRoutesIntegrationTest {
         assertEquals(hashA, created.scriptHash)
         assertTrue(created.canEdit)
         assertTrue(created.anchors.isEmpty())
+        assertEquals(0, created.coverPages, "coverPages defaults to 0 when omitted")
 
         // GET returns the one book
         val fetched = client.get(bookUrl()).body<PromptBookDetails>()
         assertEquals(hashA, fetched.scriptHash)
 
         // A second PUT replaces the script in place — 200 (not 201), proving the
-        // one-book-per-project invariant (no second row is created).
+        // one-book-per-project invariant (no second row is created). Also sets a
+        // cover-page count, which must persist through the round-trip.
         val newHash = "b".repeat(64)
         val putResp = client.put(bookUrl()) {
             contentType(ContentType.Application.Json)
-            setBody(NewPromptBook(scriptHash = newHash, pageCount = 11))
+            setBody(NewPromptBook(scriptHash = newHash, pageCount = 11, coverPages = 2))
         }
         assertEquals(HttpStatusCode.OK, putResp.status, putResp.bodyAsText())
         val updated = putResp.body<PromptBookDetails>()
         assertEquals(newHash, updated.scriptHash)
         assertEquals(11, updated.pageCount)
+        assertEquals(2, updated.coverPages)
+        assertEquals(2, client.get(bookUrl()).body<PromptBookDetails>().coverPages, "coverPages must survive GET")
 
         val deleteResp = client.delete(bookUrl())
         assertEquals(HttpStatusCode.NoContent, deleteResp.status)
@@ -119,6 +123,13 @@ class PromptBookRoutesIntegrationTest {
             setBody(NewPromptBook(scriptHash = hashA, pageCount = 0))
         }
         assertEquals(HttpStatusCode.BadRequest, badPages.status)
+
+        // coverPages must leave at least one numbered page (0 <= coverPages < pageCount).
+        val badCover = client.put(bookUrl()) {
+            contentType(ContentType.Application.Json)
+            setBody(NewPromptBook(scriptHash = hashA, pageCount = 5, coverPages = 5))
+        }
+        assertEquals(HttpStatusCode.BadRequest, badCover.status)
     }
 
     @Test

@@ -738,6 +738,7 @@ class ProjectImporter(private val state: State) {
             scriptHash = b.scriptHash
             scriptFileName = b.scriptFileName
             pageCount = b.pageCount
+            coverPages = b.coverPages
             this.uuid = UUID.fromString(b.uuid)
         }
     }

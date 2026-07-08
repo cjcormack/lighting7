@@ -173,6 +173,7 @@ class ProjectExporter(private val state: State) {
                     scriptHash = b.scriptHash,
                     scriptFileName = b.scriptFileName,
                     pageCount = b.pageCount,
+                    coverPages = b.coverPages,
                 )
             }
             count += writeAll(targetDir, "promptBookAnchors", promptBooks.flatMap { it.anchors.toList() }, PromptBookAnchorJson.serializer(), { it.uuid }, liveKeys) { a ->

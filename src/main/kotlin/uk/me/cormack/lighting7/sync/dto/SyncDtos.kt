@@ -328,6 +328,8 @@ data class PromptBookJson(
     val scriptHash: String,
     val scriptFileName: String? = null,
     val pageCount: Int,
+    /** Leading front-matter (cover/title) pages before the script's printed page 1. */
+    val coverPages: Int = 0,
 )
 
 @Serializable

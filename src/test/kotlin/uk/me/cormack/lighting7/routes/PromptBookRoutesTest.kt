@@ -29,6 +29,7 @@ class PromptBookRoutesTest {
             scriptHash = "ab".repeat(32),
             scriptFileName = "act-one.pdf",
             pageCount = 42,
+            coverPages = 2,
             anchors = listOf(
                 PromptBookAnchorDto(cueId = 3, region = listOf(rect), label = "LX 12"),
                 PromptBookAnchorDto(cueId = 4, region = listOf(rect, rect.copy(page = 1, y = 0.0))),
@@ -42,6 +43,7 @@ class PromptBookRoutesTest {
         val deserialized = json.decodeFromString<PromptBookDetails>(json.encodeToString(details))
         assertEquals(details, deserialized)
         assertEquals(2, deserialized.anchors.size)
+        assertEquals(2, deserialized.coverPages, "coverPages must round-trip")
         assertNull(deserialized.anchors[1].label, "label omitted must stay null")
     }
 
