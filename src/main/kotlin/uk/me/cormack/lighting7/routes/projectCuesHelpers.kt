@@ -468,7 +468,7 @@ internal fun deleteCueChildren(cue: DaoCue) {
  * Delete every prompt-book anchor bound to [cue]. Kept separate from [deleteCueChildren]
  * because anchors must survive cue edits and die only with the cue itself. Explicit rather
  * than DB-cascade because SQLite doesn't enforce cascades without a per-connection pragma.
- * Returns the number removed so callers know whether to fire promptBookListChanged.
+ * Returns the number removed so callers know whether to fire promptBookChanged.
  */
 internal fun deletePromptBookAnchorsForCue(cue: DaoCue): Int =
     DaoPromptBookAnchors.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnchors.cue eq cue.id } }

@@ -415,7 +415,6 @@ class ProjectRoundTripTest {
         // prompt book with an anchor (FK-by-UUID to a cue) and two annotation kinds
         val promptBook = DaoPromptBook.new {
             this.project = project
-            name = "act-one"
             scriptHash = "a".repeat(64)
             scriptFileName = "act-one.pdf"
             pageCount = 12

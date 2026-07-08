@@ -31,8 +31,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Pure-HTTP prompt-book lifecycle: book CRUD, anchor upsert-by-cue, annotations,
- * and the content-addressed script PDF store (redirected to a temp dir).
+ * Pure-HTTP prompt-book lifecycle: the project's single book (create/replace/delete),
+ * anchor upsert-by-cue, annotations, and the content-addressed script PDF store
+ * (redirected to a temp dir).
  */
 class PromptBookRoutesIntegrationTest {
 
@@ -60,53 +61,46 @@ class PromptBookRoutesIntegrationTest {
     private fun rect(page: Int = 0, y: Double = 0.2) =
         PromptBookRectDto(page = page, x = 0.06, y = y, w = 0.88, h = 0.04)
 
-    private fun newBook(name: String = "Act One") =
-        NewPromptBook(name = name, scriptHash = hashA, pageCount = 10, scriptFileName = "act-one.pdf")
+    private fun newBook() =
+        NewPromptBook(scriptHash = hashA, pageCount = 10, scriptFileName = "act-one.pdf")
+
+    private fun bookUrl() = "/api/rest/project/$projectId/prompt-book"
 
     @Test
-    fun `book CRUD lifecycle`() = testApplication {
+    fun `book create-replace-delete lifecycle`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
-        val createResp = client.post("/api/rest/project/$projectId/prompt-books") {
+        // Create
+        val createResp = client.put(bookUrl()) {
             contentType(ContentType.Application.Json)
             setBody(newBook())
         }
         assertEquals(HttpStatusCode.Created, createResp.status, createResp.bodyAsText())
         val created = createResp.body<PromptBookDetails>()
-        assertEquals("Act One", created.name)
         assertEquals(hashA, created.scriptHash)
         assertTrue(created.canEdit)
+        assertTrue(created.anchors.isEmpty())
 
-        // Duplicate name → 409
-        val dupResp = client.post("/api/rest/project/$projectId/prompt-books") {
-            contentType(ContentType.Application.Json)
-            setBody(newBook())
-        }
-        assertEquals(HttpStatusCode.Conflict, dupResp.status)
+        // GET returns the one book
+        val fetched = client.get(bookUrl()).body<PromptBookDetails>()
+        assertEquals(hashA, fetched.scriptHash)
 
-        val list = client.get("/api/rest/project/$projectId/prompt-books").body<List<PromptBookSummary>>()
-        assertEquals(1, list.size)
-        assertEquals(0, list[0].anchorCount)
-
-        // Rename + swap script (re-anchor flow)
+        // A second PUT replaces the script in place — 200 (not 201), proving the
+        // one-book-per-project invariant (no second row is created).
         val newHash = "b".repeat(64)
-        val putResp = client.put("/api/rest/project/$projectId/prompt-books/${created.id}") {
+        val putResp = client.put(bookUrl()) {
             contentType(ContentType.Application.Json)
-            setBody(NewPromptBook(name = "Act One v2", scriptHash = newHash, pageCount = 11))
+            setBody(NewPromptBook(scriptHash = newHash, pageCount = 11))
         }
         assertEquals(HttpStatusCode.OK, putResp.status, putResp.bodyAsText())
         val updated = putResp.body<PromptBookDetails>()
-        assertEquals("Act One v2", updated.name)
         assertEquals(newHash, updated.scriptHash)
         assertEquals(11, updated.pageCount)
 
-        val deleteResp = client.delete("/api/rest/project/$projectId/prompt-books/${created.id}")
+        val deleteResp = client.delete(bookUrl())
         assertEquals(HttpStatusCode.NoContent, deleteResp.status)
-        assertEquals(
-            HttpStatusCode.NotFound,
-            client.get("/api/rest/project/$projectId/prompt-books/${created.id}").status,
-        )
+        assertEquals(HttpStatusCode.NotFound, client.get(bookUrl()).status)
     }
 
     @Test
@@ -114,15 +108,15 @@ class PromptBookRoutesIntegrationTest {
         mountTestApp(state)
         val client = jsonClient()
 
-        val badHash = client.post("/api/rest/project/$projectId/prompt-books") {
+        val badHash = client.put(bookUrl()) {
             contentType(ContentType.Application.Json)
-            setBody(NewPromptBook(name = "x", scriptHash = "not-a-hash", pageCount = 5))
+            setBody(NewPromptBook(scriptHash = "not-a-hash", pageCount = 5))
         }
         assertEquals(HttpStatusCode.BadRequest, badHash.status)
 
-        val badPages = client.post("/api/rest/project/$projectId/prompt-books") {
+        val badPages = client.put(bookUrl()) {
             contentType(ContentType.Application.Json)
-            setBody(NewPromptBook(name = "x", scriptHash = hashA, pageCount = 0))
+            setBody(NewPromptBook(scriptHash = hashA, pageCount = 0))
         }
         assertEquals(HttpStatusCode.BadRequest, badPages.status)
     }
@@ -132,10 +126,10 @@ class PromptBookRoutesIntegrationTest {
         mountTestApp(state)
         val client = jsonClient()
 
-        val bookId = client.post("/api/rest/project/$projectId/prompt-books") {
+        client.put(bookUrl()) {
             contentType(ContentType.Application.Json)
             setBody(newBook())
-        }.body<PromptBookDetails>().id
+        }
 
         val stackId = client.post("/api/rest/project/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
@@ -146,8 +140,10 @@ class PromptBookRoutesIntegrationTest {
             setBody(NewCue(name = "cue-1", cueStackId = stackId))
         }.body<CueDetails>().id
 
+        val anchorUrl = "${bookUrl()}/anchors/$cueId"
+
         // Create
-        val createResp = client.put("/api/rest/project/$projectId/prompt-books/$bookId/anchors/$cueId") {
+        val createResp = client.put(anchorUrl) {
             contentType(ContentType.Application.Json)
             setBody(UpsertAnchorRequest(region = listOf(rect()), label = "LX 1"))
         }
@@ -155,25 +151,25 @@ class PromptBookRoutesIntegrationTest {
         assertEquals("LX 1", createResp.body<PromptBookAnchorDto>().label)
 
         // Upsert same cue — still one anchor, region moved
-        val moveResp = client.put("/api/rest/project/$projectId/prompt-books/$bookId/anchors/$cueId") {
+        val moveResp = client.put(anchorUrl) {
             contentType(ContentType.Application.Json)
             setBody(UpsertAnchorRequest(region = listOf(rect(y = 0.6))))
         }
         assertEquals(HttpStatusCode.OK, moveResp.status)
-        val book = client.get("/api/rest/project/$projectId/prompt-books/$bookId").body<PromptBookDetails>()
+        val book = client.get(bookUrl()).body<PromptBookDetails>()
         assertEquals(1, book.anchors.size, "upsert must not create a second anchor for the same cue")
         assertEquals(0.6, book.anchors[0].region[0].y)
         assertNull(book.anchors[0].label, "upsert without label must clear the cached label")
 
         // Invalid region → 400
-        val badResp = client.put("/api/rest/project/$projectId/prompt-books/$bookId/anchors/$cueId") {
+        val badResp = client.put(anchorUrl) {
             contentType(ContentType.Application.Json)
             setBody(UpsertAnchorRequest(region = emptyList()))
         }
         assertEquals(HttpStatusCode.BadRequest, badResp.status)
 
         // Unknown cue → 404
-        val unknownCue = client.put("/api/rest/project/$projectId/prompt-books/$bookId/anchors/999999") {
+        val unknownCue = client.put("${bookUrl()}/anchors/999999") {
             contentType(ContentType.Application.Json)
             setBody(UpsertAnchorRequest(region = listOf(rect())))
         }
@@ -181,8 +177,29 @@ class PromptBookRoutesIntegrationTest {
 
         // Deleting the cue removes its anchor with it
         client.delete("/api/rest/project/$projectId/cues/$cueId")
-        val afterCueDelete = client.get("/api/rest/project/$projectId/prompt-books/$bookId").body<PromptBookDetails>()
+        val afterCueDelete = client.get(bookUrl()).body<PromptBookDetails>()
         assertEquals(0, afterCueDelete.anchors.size, "cue deletion must take its anchor with it")
+    }
+
+    @Test
+    fun `anchor upsert without a book is 404`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val stackId = client.post("/api/rest/project/$projectId/cue-stacks") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCueStack(name = "stack-a"))
+        }.body<CueStackDetails>().id
+        val cueId = client.post("/api/rest/project/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "cue-1", cueStackId = stackId))
+        }.body<CueDetails>().id
+
+        val resp = client.put("${bookUrl()}/anchors/$cueId") {
+            contentType(ContentType.Application.Json)
+            setBody(UpsertAnchorRequest(region = listOf(rect())))
+        }
+        assertEquals(HttpStatusCode.NotFound, resp.status)
     }
 
     @Test
@@ -190,34 +207,34 @@ class PromptBookRoutesIntegrationTest {
         mountTestApp(state)
         val client = jsonClient()
 
-        val bookId = client.post("/api/rest/project/$projectId/prompt-books") {
+        client.put(bookUrl()) {
             contentType(ContentType.Application.Json)
             setBody(newBook())
-        }.body<PromptBookDetails>().id
+        }
 
-        val createResp = client.post("/api/rest/project/$projectId/prompt-books/$bookId/annotations") {
+        val createResp = client.post("${bookUrl()}/annotations") {
             contentType(ContentType.Application.Json)
             setBody(AnnotationRequest(kind = "STRIKETHROUGH", region = listOf(rect(page = 1))))
         }
         assertEquals(HttpStatusCode.Created, createResp.status, createResp.bodyAsText())
         val annotation = createResp.body<PromptBookAnnotationDto>()
 
-        val badKind = client.post("/api/rest/project/$projectId/prompt-books/$bookId/annotations") {
+        val badKind = client.post("${bookUrl()}/annotations") {
             contentType(ContentType.Application.Json)
             setBody(AnnotationRequest(kind = "HIGHLIGHTER", region = listOf(rect())))
         }
         assertEquals(HttpStatusCode.BadRequest, badKind.status)
 
-        val updateResp = client.put("/api/rest/project/$projectId/prompt-books/$bookId/annotations/${annotation.id}") {
+        val updateResp = client.put("${bookUrl()}/annotations/${annotation.id}") {
             contentType(ContentType.Application.Json)
             setBody(AnnotationRequest(kind = "NOTE", region = listOf(rect(page = 1)), text = "watch conductor"))
         }
         assertEquals(HttpStatusCode.OK, updateResp.status)
         assertEquals("watch conductor", updateResp.body<PromptBookAnnotationDto>().text)
 
-        val deleteResp = client.delete("/api/rest/project/$projectId/prompt-books/$bookId/annotations/${annotation.id}")
+        val deleteResp = client.delete("${bookUrl()}/annotations/${annotation.id}")
         assertEquals(HttpStatusCode.NoContent, deleteResp.status)
-        val book = client.get("/api/rest/project/$projectId/prompt-books/$bookId").body<PromptBookDetails>()
+        val book = client.get(bookUrl()).body<PromptBookDetails>()
         assertEquals(0, book.annotations.size)
     }
 
@@ -230,7 +247,7 @@ class PromptBookRoutesIntegrationTest {
         val expectedHash = MessageDigest.getInstance("SHA-256").digest(pdfBytes)
             .joinToString("") { "%02x".format(it) }
 
-        val uploadResp = client.post("/api/rest/project/$projectId/prompt-books/scripts") {
+        val uploadResp = client.post("${bookUrl()}/scripts") {
             contentType(ContentType.Application.OctetStream)
             setBody(pdfBytes)
         }
@@ -240,13 +257,13 @@ class PromptBookRoutesIntegrationTest {
         assertEquals(pdfBytes.size.toLong(), upload.sizeBytes)
 
         // Re-upload of identical bytes is idempotent
-        val reupload = client.post("/api/rest/project/$projectId/prompt-books/scripts") {
+        val reupload = client.post("${bookUrl()}/scripts") {
             contentType(ContentType.Application.OctetStream)
             setBody(pdfBytes)
         }
         assertEquals(expectedHash, reupload.body<ScriptUploadResponse>().scriptHash)
 
-        val downloadResp = client.get("/api/rest/project/$projectId/prompt-books/scripts/$expectedHash")
+        val downloadResp = client.get("${bookUrl()}/scripts/$expectedHash")
         assertEquals(HttpStatusCode.OK, downloadResp.status)
         assertContentEquals(pdfBytes, downloadResp.readRawBytes())
         assertTrue(
@@ -257,11 +274,11 @@ class PromptBookRoutesIntegrationTest {
         // Unknown hash → 404; malformed hash → 400
         assertEquals(
             HttpStatusCode.NotFound,
-            client.get("/api/rest/project/$projectId/prompt-books/scripts/${"c".repeat(64)}").status,
+            client.get("${bookUrl()}/scripts/${"c".repeat(64)}").status,
         )
         assertEquals(
             HttpStatusCode.BadRequest,
-            client.get("/api/rest/project/$projectId/prompt-books/scripts/nope").status,
+            client.get("${bookUrl()}/scripts/nope").status,
         )
     }
 
@@ -270,7 +287,7 @@ class PromptBookRoutesIntegrationTest {
         mountTestApp(state)
         val client = jsonClient()
 
-        val resp = client.post("/api/rest/project/$projectId/prompt-books/scripts") {
+        val resp = client.post("${bookUrl()}/scripts") {
             contentType(ContentType.Application.OctetStream)
             setBody("just some text".toByteArray())
         }
@@ -282,10 +299,10 @@ class PromptBookRoutesIntegrationTest {
         mountTestApp(state)
         val client = jsonClient()
 
-        val bookId = client.post("/api/rest/project/$projectId/prompt-books") {
+        client.put(bookUrl()) {
             contentType(ContentType.Application.Json)
             setBody(newBook())
-        }.body<PromptBookDetails>().id
+        }
 
         val stackId = client.post("/api/rest/project/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
@@ -301,13 +318,13 @@ class PromptBookRoutesIntegrationTest {
         }.body<CueDetails>().id
 
         // cue1: single rect near the top of page 0
-        client.put("/api/rest/project/$projectId/prompt-books/$bookId/anchors/$cue1") {
+        client.put("${bookUrl()}/anchors/$cue1") {
             contentType(ContentType.Application.Json)
             setBody(UpsertAnchorRequest(region = listOf(rect(page = 0, y = 0.1))))
         }
         // cue2: a multi-rect region (spans pages + lines). The earliest rect —
         // lowest page, then topmost y — must win, regardless of list order.
-        client.put("/api/rest/project/$projectId/prompt-books/$bookId/anchors/$cue2") {
+        client.put("${bookUrl()}/anchors/$cue2") {
             contentType(ContentType.Application.Json)
             setBody(
                 UpsertAnchorRequest(

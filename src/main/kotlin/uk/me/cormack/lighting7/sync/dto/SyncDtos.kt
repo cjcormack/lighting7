@@ -325,7 +325,6 @@ data class ControlSurfaceBindingJson(
 @Serializable
 data class PromptBookJson(
     val uuid: String,
-    val name: String,
     val scriptHash: String,
     val scriptFileName: String? = null,
     val pageCount: Int,
@@ -334,7 +333,6 @@ data class PromptBookJson(
 @Serializable
 data class PromptBookAnchorJson(
     val uuid: String,
-    val promptBookUuid: String,
     val cueUuid: String,
     val region: List<PromptBookRectDto>,
     val label: String? = null,
@@ -343,7 +341,6 @@ data class PromptBookAnchorJson(
 @Serializable
 data class PromptBookAnnotationJson(
     val uuid: String,
-    val promptBookUuid: String,
     val kind: String,
     val region: List<PromptBookRectDto>,
     val text: String? = null,

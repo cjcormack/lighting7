@@ -164,11 +164,12 @@ class ProjectExporter(private val state: State) {
 
             count += writeCueChildren(targetDir, project, liveKeys)
 
-            val promptBooks = project.promptBooks.toList()
+            // A project has at most one prompt book; keep it as a 0-or-1 list so the
+            // anchor/annotation flatMap below is unchanged.
+            val promptBooks = listOfNotNull(project.promptBook)
             count += writeAll(targetDir, "promptBooks", promptBooks, PromptBookJson.serializer(), { it.uuid }, liveKeys) { b ->
                 PromptBookJson(
                     uuid = b.uuid.toString(),
-                    name = b.name,
                     scriptHash = b.scriptHash,
                     scriptFileName = b.scriptFileName,
                     pageCount = b.pageCount,
@@ -177,7 +178,6 @@ class ProjectExporter(private val state: State) {
             count += writeAll(targetDir, "promptBookAnchors", promptBooks.flatMap { it.anchors.toList() }, PromptBookAnchorJson.serializer(), { it.uuid }, liveKeys) { a ->
                 PromptBookAnchorJson(
                     uuid = a.uuid.toString(),
-                    promptBookUuid = a.promptBook.uuid.toString(),
                     cueUuid = a.cue.uuid.toString(),
                     region = a.region,
                     label = a.label,
@@ -186,7 +186,6 @@ class ProjectExporter(private val state: State) {
             count += writeAll(targetDir, "promptBookAnnotations", promptBooks.flatMap { it.annotations.toList() }, PromptBookAnnotationJson.serializer(), { it.uuid }, liveKeys) { n ->
                 PromptBookAnnotationJson(
                     uuid = n.uuid.toString(),
-                    promptBookUuid = n.promptBook.uuid.toString(),
                     kind = n.kind,
                     region = n.region,
                     text = n.text,

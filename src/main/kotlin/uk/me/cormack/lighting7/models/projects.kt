@@ -52,5 +52,7 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     val aiConversations by DaoAiConversation referrersOn DaoAiConversations.project
     val fxDefinitions by DaoFxDefinition referrersOn DaoFxDefinitions.project
     val controlSurfaceBindings by DaoControlSurfaceBinding referrersOn DaoControlSurfaceBindings.project
-    val promptBooks by DaoPromptBook referrersOn DaoPromptBooks.project
+    /** The project's single prompt book, or null if none has been imported yet. */
+    val promptBook: DaoPromptBook?
+        get() = DaoPromptBook.find { DaoPromptBooks.project eq id }.firstOrNull()
 }

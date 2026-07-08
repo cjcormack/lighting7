@@ -69,7 +69,6 @@ fun checkPromptBookRegion(region: List<PromptBookRectDto>, pageCount: Int): Stri
 // payload stays in the cue stack — anchors store only the binding.
 
 object DaoPromptBooks : IntIdTable("prompt_books") {
-    val name = varchar("name", 255)
     val project = reference("project_id", DaoProjects)
 
     /** SHA-256 hex of the PDF bytes — the script's identity. */
@@ -81,14 +80,14 @@ object DaoPromptBooks : IntIdTable("prompt_books") {
     val uuid = uuid("uuid").autoGenerate()
 
     init {
-        uniqueIndex(project, name)
+        // One prompt book per project: a project's show has a single script.
+        uniqueIndex(project)
     }
 }
 
 class DaoPromptBook(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoPromptBook>(DaoPromptBooks)
 
-    var name by DaoPromptBooks.name
     var project by DaoProject referencedOn DaoPromptBooks.project
     var scriptHash by DaoPromptBooks.scriptHash
     var scriptFileName by DaoPromptBooks.scriptFileName

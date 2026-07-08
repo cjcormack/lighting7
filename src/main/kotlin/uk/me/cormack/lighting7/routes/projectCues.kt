@@ -248,7 +248,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
             if (result != null) {
                 state.show.fixtures.cueListChanged()
-                if (result > 0) state.show.fixtures.promptBookListChanged()
+                if (result > 0) state.show.fixtures.promptBookChanged()
                 call.respond(HttpStatusCode.OK)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))

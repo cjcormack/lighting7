@@ -26,8 +26,6 @@ class PromptBookRoutesTest {
     @Test
     fun `PromptBookDetails round-trips with anchors and annotations`() {
         val details = PromptBookDetails(
-            id = 7,
-            name = "Act One",
             scriptHash = "ab".repeat(32),
             scriptFileName = "act-one.pdf",
             pageCount = 42,

@@ -198,8 +198,11 @@ internal fun Route.routeApiRestProjects(state: State) {
                 project.activeEntryId = null
                 project.showEntries.forEach { it.delete() }
 
-                // Prompt books before cues — anchors reference cue rows.
-                project.promptBooks.forEach { book ->
+                // Prompt book(s) before cues — anchors reference cue rows. Iterate every
+                // row for the project (not just project.promptBook) so a pre-collapse
+                // project with leftover extra books is fully cleaned before its cues go,
+                // avoiding orphaned anchors pointing at deleted cue rows.
+                DaoPromptBook.find { DaoPromptBooks.project eq project.id }.forEach { book ->
                     DaoPromptBookAnchors.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnchors.promptBook eq book.id } }
                     DaoPromptBookAnnotations.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnnotations.promptBook eq book.id } }
                     book.delete()

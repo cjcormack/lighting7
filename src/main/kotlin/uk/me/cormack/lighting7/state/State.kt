@@ -558,7 +558,7 @@ class State(val config: ApplicationConfig) {
         override fun stageRegionListChanged() {}
         override fun showEntriesChanged() {}
         override fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?) {}
-        override fun promptBookListChanged() {}
+        override fun promptBookChanged() {}
     }
 
     private fun attachBindingHealthListener() {
@@ -640,6 +640,11 @@ class State(val config: ApplicationConfig) {
 
             // Drops a legacy index name; both PG and SQLite accept `DROP INDEX IF EXISTS`.
             exec("DROP INDEX IF EXISTS fx_presets_project_id_name")
+
+            // Prompt books collapsed to one-per-project: drop the legacy per-name unique
+            // index (was uniqueIndex(project, name)). The new uniqueIndex(project) is
+            // created by createMissingTablesAndColumns above.
+            exec("DROP INDEX IF EXISTS prompt_books_project_id_name")
 
             // Partial unique index: cue_number must be unique per stack for STANDARD cues.
             // SQLite supports partial indexes with the same syntax.
