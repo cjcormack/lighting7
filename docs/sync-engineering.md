@@ -1,7 +1,7 @@
 # Cloud Sync — Engineering
 
 This is the engineering reference for the cloud-sync subsystem. The big-picture
-design and rationale live in [`docs/plans/cloud-sync.md`](plans/cloud-sync.md);
+design and rationale live in [`docs/plans/completed/cloud-sync.md`](plans/completed/cloud-sync.md);
 this doc captures the contracts and operational details that current code
 relies on so that future contributors don't reinvent them.
 

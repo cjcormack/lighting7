@@ -77,7 +77,7 @@ where the child has no independent identity.
 > Note: prompt books (record JSON + anchors/annotations) and their PDF binaries
 > were added after this design doc was first written. The living layout and the
 > binary-blob contract are in
-> [`docs/sync-engineering.md`](../sync-engineering.md) (see "Version 4").
+> [`docs/sync-engineering.md`](../../sync-engineering.md) (see "Version 4").
 
 **FK rewrite.** Every synced DAO gains a `uuid: UUID` column (indexed,
 unique, non-null). Auto-increment `id` becomes a local-only handle; JSON
@@ -338,18 +338,44 @@ Each phase ships standalone value and is independently testable.
 
 | # | Phase | Demoable outcome |
 |---|---|---|
-| 1 | UUID columns + canonical JSON serialiser + local export/import | "Export project to folder" / "Import from folder" buttons. Manual backups work. |
-| 2 | Install identity (`install` table) + `machine_override` table + UI | Friendly install name editable; ArtNet IP override per universe. |
-| 3 | Local git wiring (JGit, working tree, `sync_config`) | "Commit snapshot" button; user can browse commit history locally. |
-| 4 | Remote push/pull (no conflicts) + PAT storage + `formatVersion` | Solo-multi-machine use case works end-to-end. |
+| 1 ✅ | UUID columns + canonical JSON serialiser + local export/import | "Export project to folder" / "Import from folder" buttons. Manual backups work. |
+| 2 ✅ | Install identity (`install` table) + `machine_override` table + UI | Friendly install name editable; ArtNet IP override per universe. |
+| 3 ✅ | Local git wiring (JGit, working tree, `sync_config`) | "Commit snapshot" button; user can browse commit history locally. |
+| 4 ✅ | Remote push/pull (no conflicts) + PAT storage + `formatVersion` | Solo-multi-machine use case works end-to-end. |
 | 5 ✅ | `sync_state` + three-way diff + flat conflict list (LOCAL/REMOTE only) | True multi-master support, minimal UX. |
-| 6 | Conflict-resolution UX (three-pane diff, MANUAL edit, resume-after-crash) | Polished conflict resolution. |
-| 7 | Tombstones, EDIT_DELETE / DELETE_EDIT conflicts, push-rejected retry | Correctness corners. |
+| 6 ✅ | Conflict-resolution UX (three-pane diff, MANUAL edit, resume-after-crash) | Polished conflict resolution. |
+| 7 ✅ | Tombstones, EDIT_DELETE / DELETE_EDIT conflicts, push-rejected retry | Correctness corners. |
 | 8 ✅ | Auto-sync, log feed polish, attribution rendering, history browser | Quality of life. |
 
 Phase 1 alone is genuinely useful (manual backups). Phases 1–4 cover the
 common solo-but-multi-machine case; phases 5–7 are needed only when two
 people may edit at once.
+
+> **Status (as shipped, 2026-07-23 — plan retired to `completed/`).** All
+> eight phases landed (commits `fdd850d` … `b01e993`), plus post-plan work
+> beyond the original scope: GitHub OAuth alongside PAT auth, `formatVersion`
+> 2–4, prompt-book PDF binary blobs, import-from-remote, and a
+> single-instance / overridable-data-dir startup path.
+>
+> Two design commitments in this plan were **consciously deferred rather than
+> built**, and are tracked as dormant follow-ups in
+> [`docs/plans/followups.md`](../followups.md):
+>
+> * **§Ordering — `ordinal: Double`** was *not* implemented. The synced DTOs
+>   still carry `sortOrder: Int`. Exports sort by `(sortOrder, uuid)` for
+>   deterministic output, but two installs inserting at the same position
+>   collide on the integer and the merged order is decided only by the UUID
+>   tiebreak (`FU-SYNC-ORDINAL-DOUBLE`).
+> * **§Format versioning — the `sync/migrations/V{n}_to_V{n+1}.kt` framework**
+>   was *not* built. A repo whose `formatVersion` differs from the reader's is
+>   hard-rejected (HTTP 422) rather than migrated
+>   (`FU-SYNC-FORMAT-MIGRATIONS`).
+>
+> The remaining follow-ups — `FU-SYNC-TOMBSTONE-GC`, `-JGIT-STRESS-BENCH`,
+> `-STREAMING-PROGRESS`, `-MERGE-ATOMICITY` (auto-merge path only; the
+> fast-forward path is fixed), `-FETCHING-STATE`, `-FIELD-LEVEL-MERGE` — were
+> either punted in this plan's own "Risks / Out of scope" sections or are
+> Trigger-gated correctness/scale corners. None are Ready.
 
 Each phase that lands a user-visible change or a new architectural concept
 must update documentation in the same PR — see "Documentation updates"
