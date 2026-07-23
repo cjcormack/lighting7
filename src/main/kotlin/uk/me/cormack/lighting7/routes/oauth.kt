@@ -15,7 +15,13 @@ import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -35,8 +41,11 @@ import uk.me.cormack.lighting7.sync.auth.oauth.OAuthReauthRequiredException
 import uk.me.cormack.lighting7.sync.auth.oauth.OAuthTokenProvider
 import uk.me.cormack.lighting7.sync.auth.oauth.TokenResponse
 import uk.me.cormack.lighting7.sync.auth.oauth.newStoredIdentity
+import uk.me.cormack.lighting7.sync.canonicalDecode
+import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import java.security.SecureRandom
 import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * GitHub OAuth routes — both the user-facing web flow (start + callback) and the
@@ -207,11 +216,31 @@ internal fun Route.routeApiOAuthGitHub(state: State) {
                     client.listInstallationRepositories(accessToken, page = page, perPage = perPage)
                 }
                 val query = resource.query?.lowercase()?.takeIf { it.isNotBlank() }
-                val filtered = repos
+                val matching = repos
                     .filter { (it.permissions?.push ?: false) || (it.permissions?.admin ?: false) }
                     .filter { query == null || it.fullName.lowercase().contains(query) || it.name.lowercase().contains(query) }
-                    .map(::toDto)
-                call.respond(filtered)
+
+                val result = if (resource.lightingOnly) {
+                    // Peek at each candidate's project.json (bounded concurrency) and keep only
+                    // repos that actually carry one, enriching the DTO with its name/description.
+                    withContext(Dispatchers.IO) {
+                        coroutineScope {
+                            val gate = Semaphore(PROBE_CONCURRENCY)
+                            matching
+                                .map { repo ->
+                                    async {
+                                        val project = gate.withPermit { probeProjectJson(client, accessToken, repo) }
+                                        project?.let { toDto(repo, it) }
+                                    }
+                                }
+                                .awaitAll()
+                                .filterNotNull()
+                        }
+                    }
+                } else {
+                    matching.map { toDto(it) }
+                }
+                call.respond(result)
             } catch (e: OAuthRateLimitedException) {
                 call.respond(HttpStatusCode.TooManyRequests, ErrorResponse(e.message ?: "rate limited"))
             } catch (e: OAuthException) {
@@ -350,7 +379,7 @@ private fun persistIdentity(state: State, token: TokenResponse, user: GithubUser
     )
 }
 
-private fun toDto(repo: GithubRepository) = RepoDto(
+private fun toDto(repo: GithubRepository, project: ProjectJson? = null) = RepoDto(
     fullName = repo.fullName,
     name = repo.name,
     owner = repo.owner.login,
@@ -360,7 +389,75 @@ private fun toDto(repo: GithubRepository) = RepoDto(
     cloneUrl = repo.cloneUrl,
     description = repo.description,
     pushPermission = repo.permissions?.push ?: false,
+    lightingProject = project != null,
+    projectName = project?.name,
+    projectDescription = project?.description,
+    projectUuid = project?.uuid,
 )
+
+// ─── Lighting-project detection ─────────────────────────────────────────
+
+/** Max concurrent Contents-API probes while enriching a repo listing. */
+private const val PROBE_CONCURRENCY = 8
+
+/** How long a probe result (hit or miss) stays fresh before we re-hit GitHub. */
+private const val PROBE_CACHE_TTL_MS = 60_000L
+
+/** Prune expired entries once the cache grows past this, so it can't leak unbounded. */
+private const val PROBE_CACHE_MAX = 512
+
+private data class ProbeCacheEntry(val atMs: Long, val projectJson: ProjectJson?)
+
+/** Keyed by "$fullName@$defaultBranch"; caches both hits and definitive misses. */
+private val projectProbeCache = ConcurrentHashMap<String, ProbeCacheEntry>()
+
+/**
+ * Parse a repo's `project.json` text into [ProjectJson], or `null` when it's absent, blank,
+ * or not valid — i.e. a repo we don't treat as a lighting project. Kept as a pure function
+ * so the classify-or-reject decision is unit-testable without touching GitHub.
+ */
+internal fun parseProjectJsonOrNull(text: String?): ProjectJson? {
+    if (text.isNullOrBlank()) return null
+    return try {
+        canonicalDecode(ProjectJson.serializer(), text)
+    } catch (e: Exception) {
+        logger.debug("project.json parse failed: {}", e.message)
+        null
+    }
+}
+
+/**
+ * Peek at a repo's root `project.json` (on its default branch) via the Contents API to
+ * decide whether it's a lighting project and read its name/description — without cloning.
+ * Definitive results are cached briefly so re-opening the picker / debounced searches don't
+ * re-hit GitHub. A *transient* failure (rate limit, network) degrades to `null` for this
+ * listing but is NOT cached — caching it would hide a real project for the whole TTL.
+ */
+private suspend fun probeProjectJson(
+    client: OAuthGitHubClient,
+    accessToken: String,
+    repo: GithubRepository,
+): ProjectJson? {
+    val key = "${repo.fullName}@${repo.defaultBranch}"
+    val now = System.currentTimeMillis()
+    projectProbeCache[key]?.let { if (now - it.atMs < PROBE_CACHE_TTL_MS) return it.projectJson }
+    // fetchRepoTextFile returns null for a definitive 404 (no project.json) and throws for
+    // transient failures. Only cache definitive outcomes; let cancellation propagate.
+    val text = try {
+        client.fetchRepoTextFile(accessToken, repo.owner.login, repo.name, "project.json", repo.defaultBranch)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        logger.debug("project.json probe failed for {}: {}", repo.fullName, e.message)
+        return null
+    }
+    val parsed = parseProjectJsonOrNull(text)
+    if (projectProbeCache.size >= PROBE_CACHE_MAX) {
+        projectProbeCache.entries.removeIf { now - it.value.atMs >= PROBE_CACHE_TTL_MS }
+    }
+    projectProbeCache[key] = ProbeCacheEntry(now, parsed)
+    return parsed
+}
 
 // ─── Resources & DTOs ───────────────────────────────────────────────────
 
@@ -380,7 +477,13 @@ class OAuthGithubDevicePollResource
 class OAuthGithubIdentityResource
 
 @Resource("/oauth/github/repositories")
-data class OAuthGithubRepositoriesResource(val query: String? = null, val page: Int? = null, val perPage: Int? = null)
+data class OAuthGithubRepositoriesResource(
+    val query: String? = null,
+    val page: Int? = null,
+    val perPage: Int? = null,
+    /** When true, probe each repo's `project.json` and return only lighting projects. */
+    val lightingOnly: Boolean = false,
+)
 
 @Serializable
 data class IdentityResponse(
@@ -428,4 +531,10 @@ data class RepoDto(
     val cloneUrl: String,
     val description: String?,
     val pushPermission: Boolean,
+    /** True when a parseable `project.json` was found at the repo root (a lighting project). */
+    val lightingProject: Boolean = false,
+    /** Name/description/uuid read from `project.json`; null when not a lighting project. */
+    val projectName: String? = null,
+    val projectDescription: String? = null,
+    val projectUuid: String? = null,
 )

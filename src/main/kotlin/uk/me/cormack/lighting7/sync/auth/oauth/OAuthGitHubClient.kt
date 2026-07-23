@@ -25,6 +25,7 @@ import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.net.URLEncoder
+import java.util.Base64
 
 /**
  * Narrow interface the [OAuthTokenProvider] depends on. Allows tests to substitute a
@@ -215,6 +216,33 @@ class OAuthGitHubClient(
             throw classifyError(response.status, response.bodyAsText(), "POST /user/repos")
         }
         return response.body()
+    }
+
+    /**
+     * Fetch a single small text file from a repo via the GitHub Contents API, or `null`
+     * when the file doesn't exist on [ref] (HTTP 404). Lets callers peek at metadata files
+     * (e.g. `project.json`) without cloning. Only suitable for small files — the Contents
+     * API inlines content as base64 up to ~1 MB, which the files we probe never approach.
+     */
+    suspend fun fetchRepoTextFile(
+        accessToken: String,
+        owner: String,
+        repo: String,
+        path: String,
+        ref: String,
+    ): String? {
+        val response = client.get("$API_BASE/repos/$owner/$repo/contents/$path") {
+            githubApiHeaders(accessToken)
+            parameter("ref", ref)
+        }
+        if (response.status == HttpStatusCode.NotFound) return null
+        if (!response.status.isSuccess()) {
+            throw classifyError(response.status, response.bodyAsText(), "GET /repos/$owner/$repo/contents/$path")
+        }
+        val body = response.body<ContentsResponse>()
+        val content = body.content ?: return null
+        // GitHub returns base64 with embedded newlines; the MIME decoder tolerates them.
+        return String(Base64.getMimeDecoder().decode(content), Charsets.UTF_8)
     }
 
     /** Build the full `https://github.com/login/oauth/authorize?...` URL. */
@@ -414,6 +442,13 @@ internal data class CreateRepoRequest(
     val private: Boolean,
     val description: String? = null,
     @SerialName("auto_init") val autoInit: Boolean = false,
+)
+
+/** GitHub Contents API response for a single file — content is base64 (`encoding: "base64"`). */
+@Serializable
+data class ContentsResponse(
+    val content: String? = null,
+    val encoding: String? = null,
 )
 
 // ─── Errors ─────────────────────────────────────────────────────────────
