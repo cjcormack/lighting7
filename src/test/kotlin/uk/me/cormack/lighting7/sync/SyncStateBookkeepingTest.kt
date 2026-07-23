@@ -63,12 +63,10 @@ class SyncStateBookkeepingTest {
             DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.firstOrNull()
                 ?.also {
                     it.repoUrl = bareRepo.toUri().toString()
-                    it.enabled = true
                 }
                 ?: DaoSyncConfig.new {
                     this.project = project
                     this.repoUrl = bareRepo.toUri().toString()
-                    this.enabled = true
                 }
         }
         credentialStore.set(bareRepo.toUri().toString(), "test-pat")

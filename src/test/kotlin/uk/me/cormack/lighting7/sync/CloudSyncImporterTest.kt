@@ -123,15 +123,16 @@ class CloudSyncImporterTest {
 
         assertEquals("Imported", result.name)
 
-        // Project + sync_config rows landed.
-        val (cfgRepoUrl, cfgBranch, cfgEnabled, cfgLastSha) = transaction(state.database) {
+        // Project + sync_config rows landed. A remote project is synced by definition
+        // (repo attached) with auto-sync on by default.
+        val (cfgRepoUrl, cfgBranch, cfgAutoSync, cfgLastSha) = transaction(state.database) {
             val project = DaoProject.findById(result.projectId)!!
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.first()
-            listOf(cfg.repoUrl, cfg.branch, cfg.enabled, cfg.lastSyncedSha)
+            listOf(cfg.repoUrl, cfg.branch, cfg.autoSyncEnabled, cfg.lastSyncedSha)
         }
         assertEquals(bareUrl(), cfgRepoUrl)
         assertEquals("main", cfgBranch)
-        assertEquals(true, cfgEnabled)
+        assertEquals(true, cfgAutoSync)
         assertNotNull(cfgLastSha)
         assertTrue((cfgLastSha as String).length == 40)
 

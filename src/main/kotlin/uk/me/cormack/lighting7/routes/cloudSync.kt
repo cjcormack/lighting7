@@ -19,6 +19,8 @@ import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
+import uk.me.cormack.lighting7.models.DaoSyncLinkedRepo
+import uk.me.cormack.lighting7.models.DaoSyncLinkedRepos
 import uk.me.cormack.lighting7.plugins.CloudSyncDoneOutMessage
 import uk.me.cormack.lighting7.plugins.CloudSyncFailedOutMessage
 import uk.me.cormack.lighting7.plugins.CloudSyncStartedOutMessage
@@ -92,16 +94,39 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
             return@put
         }
         withProject(state, resource.parent.projectId) { project ->
-            val (config, repoUrl) = transaction(state.database) {
-                val cfg = ensureSyncConfig(project)
-                request.repoUrl?.let { cfg.repoUrl = it.ifBlank { null } }
-                request.branch?.let { cfg.branch = it }
-                request.enabled?.let { cfg.enabled = it }
-                request.autoSyncEnabled?.let { cfg.autoSyncEnabled = it }
-                if (request.autoSyncIntervalMs != null) {
-                    cfg.autoSyncIntervalMs = request.autoSyncIntervalMs
+            val (config, repoUrl) = try {
+                transaction(state.database) {
+                    val cfg = ensureSyncConfig(project)
+                    val incoming = request.repoUrl?.ifBlank { null }
+                    val current = cfg.repoUrl?.ifBlank { null }
+                    when {
+                        // Blank/absent repoUrl is a no-op here — clearing a repo goes
+                        // through `/sync/disconnect` so the URL is remembered.
+                        incoming == null -> Unit
+                        // Attach: the only transition this endpoint performs. Auto-sync
+                        // defaults on for a freshly-attached repo.
+                        current == null -> {
+                            cfg.repoUrl = incoming
+                            cfg.autoSyncEnabled = true
+                        }
+                        current == incoming -> Unit
+                        // Repo is immutable once attached — force disconnect + reconnect.
+                        else -> throw SyncException(
+                            SyncErrorCode.REPO_URL_IMMUTABLE,
+                            "This project is already linked to a repository. Disconnect first, " +
+                                "then reconnect to change it.",
+                        )
+                    }
+                    request.branch?.let { cfg.branch = it }
+                    request.autoSyncEnabled?.let { cfg.autoSyncEnabled = it }
+                    if (request.autoSyncIntervalMs != null) {
+                        cfg.autoSyncIntervalMs = request.autoSyncIntervalMs
+                    }
+                    cfg.toBareDto() to cfg.repoUrl
                 }
-                cfg.toBareDto() to cfg.repoUrl
+            } catch (e: SyncException) {
+                respondSyncError(e)
+                return@withProject
             }
             state.autoSyncScheduler.reschedule(project.id.value)
             call.respond(config.copy(tokenPresent = resolveTokenPresent(state, repoUrl)))
@@ -420,6 +445,102 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
             call.respond(result)
         }
     }
+
+    // ─── Disconnect / reconnect ────────────────────────────────────────
+
+    /**
+     * Detach the current repository from a project. Remembers the repo URL in
+     * `sync_linked_repos` so it can be reconnected later, stops auto-sync, and clears
+     * `repoUrl` — but deliberately *preserves* the branch, last-synced watermark, the
+     * on-disk working tree, sync-state rows, and the stored credential, so a subsequent
+     * `/sync/reconnect` is cheap and doesn't re-clone or re-diff.
+     */
+    post<ProjectSyncDisconnectResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val (config, repoUrl) = transaction(state.database) {
+                val cfg = ensureSyncConfig(project)
+                val current = cfg.repoUrl?.takeIf { it.isNotBlank() }
+                if (current != null) {
+                    val now = System.currentTimeMillis()
+                    val existing = DaoSyncLinkedRepo
+                        .find { DaoSyncLinkedRepos.project eq project.id }
+                        .firstOrNull { it.repoUrl == current }
+                    if (existing != null) {
+                        existing.lastLinkedAtMs = now
+                    } else {
+                        DaoSyncLinkedRepo.new {
+                            this.project = project
+                            this.repoUrl = current
+                            this.firstLinkedAtMs = now
+                            this.lastLinkedAtMs = now
+                        }
+                    }
+                }
+                cfg.repoUrl = null
+                cfg.autoSyncEnabled = false
+                cfg.toBareDto() to cfg.repoUrl
+            }
+            // Cancels the auto-sync loop for this project (no repo → nothing to sync).
+            state.autoSyncScheduler.reschedule(project.id.value)
+            call.respond(config.copy(tokenPresent = resolveTokenPresent(state, repoUrl)))
+        }
+    }
+
+    /**
+     * Re-attach a previously-linked repository. The URL must already be in this project's
+     * `sync_linked_repos` set — reconnecting to a remembered repo is the only sanctioned
+     * way to attach an existing, non-empty repo, because it already holds this project's
+     * uuid + history so the next sync classifies cleanly. Auto-sync defaults back on.
+     */
+    post<ProjectSyncReconnectResource> { resource ->
+        val request = call.receive<ReconnectRequest>()
+        val target = request.repoUrl.trim()
+        if (target.isBlank()) {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("repoUrl must not be blank"))
+            return@post
+        }
+        withProject(state, resource.parent.projectId) { project ->
+            var notRemembered = false
+            val result = try {
+                transaction(state.database) {
+                    val cfg = ensureSyncConfig(project)
+                    if (!cfg.repoUrl.isNullOrBlank()) {
+                        throw SyncException(
+                            SyncErrorCode.REPO_URL_IMMUTABLE,
+                            "This project is already linked to a repository — disconnect before reconnecting.",
+                        )
+                    }
+                    val remembered = DaoSyncLinkedRepo
+                        .find { DaoSyncLinkedRepos.project eq project.id }
+                        .firstOrNull { it.repoUrl == target }
+                    if (remembered == null) {
+                        notRemembered = true
+                        return@transaction null
+                    }
+                    cfg.repoUrl = target
+                    cfg.autoSyncEnabled = true
+                    remembered.lastLinkedAtMs = System.currentTimeMillis()
+                    cfg.toBareDto() to cfg.repoUrl
+                }
+            } catch (e: SyncException) {
+                respondSyncError(e)
+                return@withProject
+            }
+            if (notRemembered) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse(
+                        "That repository hasn't been linked to this project before — only " +
+                            "previously-linked repos can be reconnected.",
+                    ),
+                )
+                return@withProject
+            }
+            val (config, repoUrl) = result!!
+            state.autoSyncScheduler.reschedule(project.id.value)
+            call.respond(config.copy(tokenPresent = resolveTokenPresent(state, repoUrl)))
+        }
+    }
 }
 
 private const val DEFAULT_LOG_LIMIT = 50
@@ -471,11 +592,18 @@ data class ProjectSyncApplyResource(val parent: ProjectSyncResource)
 @Resource("/abort")
 data class ProjectSyncAbortResource(val parent: ProjectSyncResource)
 
+@Resource("/disconnect")
+data class ProjectSyncDisconnectResource(val parent: ProjectSyncResource)
+
+@Resource("/reconnect")
+data class ProjectSyncReconnectResource(val parent: ProjectSyncResource)
+
 @Serializable
 data class SyncConfigDto(
     val branch: String,
     val repoUrl: String?,
-    val enabled: Boolean,
+    /** A project is synced iff a repository is attached (`repoUrl != null`). */
+    val synced: Boolean,
     val autoSyncEnabled: Boolean,
     val autoSyncIntervalMs: Long?,
     val lastSyncedSha: String?,
@@ -486,10 +614,25 @@ data class SyncConfigDto(
      * show "✓ token stored" without round-tripping the secret.
      */
     val tokenPresent: Boolean,
+    /**
+     * Repositories this project has previously been linked to (most-recently-linked
+     * first). The UI offers these for one-click reconnect after a disconnect — the only
+     * sanctioned way to re-attach an existing, non-empty repo.
+     */
+    val linkedRepos: List<LinkedRepoDto> = emptyList(),
+)
+
+@Serializable
+data class LinkedRepoDto(
+    val repoUrl: String,
+    val lastLinkedAtMs: Long,
 )
 
 @Serializable
 data class SetCredentialsRequest(val pat: String)
+
+@Serializable
+data class ReconnectRequest(val repoUrl: String)
 
 /** Error response carrying a stable [code] so the frontend can branch on cause. */
 @Serializable
@@ -505,9 +648,13 @@ internal suspend fun io.ktor.server.routing.RoutingContext.respondSyncError(e: S
 
 @Serializable
 data class UpdateSyncConfigRequest(
+    /**
+     * Attach a repository to a project with no repo yet. Ignored once a repo is attached
+     * — the repo is immutable except via `/sync/disconnect` then `/sync/reconnect`.
+     * A blank/null value is a no-op (disconnect has its own endpoint).
+     */
     val repoUrl: String? = null,
     val branch: String? = null,
-    val enabled: Boolean? = null,
     val autoSyncEnabled: Boolean? = null,
     /** Minimum [AutoSyncScheduler.MIN_INTERVAL_MS]. */
     val autoSyncIntervalMs: Long? = null,
@@ -622,17 +769,34 @@ private suspend fun resolveTokenPresent(state: State, repoUrl: String?): Boolean
 }
 
 /**
+ * Load a project's remembered-repo set, most-recently-linked first. Must run inside a
+ * transaction.
+ */
+internal fun loadLinkedRepos(project: DaoProject): List<LinkedRepoDto> =
+    DaoSyncLinkedRepo
+        .find { DaoSyncLinkedRepos.project eq project.id }
+        .sortedByDescending { it.lastLinkedAtMs }
+        .map { LinkedRepoDto(repoUrl = it.repoUrl, lastLinkedAtMs = it.lastLinkedAtMs) }
+
+/**
  * Build a [SyncConfigDto] from the DAO without consulting the credential store. Callers
  * post-process the DTO with the real `tokenPresent` value because the credential lookup
  * is blocking I/O that we don't want to do inside a DB transaction.
+ *
+ * Must run inside a transaction. Single-project callers can rely on the default, which
+ * loads the remembered-repo set; the batch endpoint pre-loads all projects' sets in one
+ * query and passes [linkedRepos] to avoid an N+1.
  */
-internal fun DaoSyncConfig.toBareDto() = SyncConfigDto(
+internal fun DaoSyncConfig.toBareDto(
+    linkedRepos: List<LinkedRepoDto> = loadLinkedRepos(project),
+) = SyncConfigDto(
     branch = branch,
     repoUrl = repoUrl,
-    enabled = enabled,
+    synced = synced,
     autoSyncEnabled = autoSyncEnabled,
     autoSyncIntervalMs = autoSyncIntervalMs,
     lastSyncedSha = lastSyncedSha,
     lastSyncedAtMs = lastSyncedAtMs,
     tokenPresent = false,
+    linkedRepos = linkedRepos,
 )

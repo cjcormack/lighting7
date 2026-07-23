@@ -11,9 +11,12 @@ import io.ktor.server.routing.Route
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoSyncConfig
+import uk.me.cormack.lighting7.models.DaoSyncLinkedRepos
 import uk.me.cormack.lighting7.plugins.CloudSyncProjectImportedOutMessage
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.CloudSyncImporter
@@ -39,8 +42,22 @@ internal fun Route.routeApiRestCloudSync(state: State) {
      */
     get<CloudSyncConfigsResource> {
         val rows = transaction(state.database) {
+            // Pre-load every project's remembered-repo set in a single query, grouped by
+            // project (most-recently-linked first), so per-config `toBareDto` doesn't fire
+            // an N+1 across the batch.
+            val linkedByProject = DaoSyncLinkedRepos
+                .selectAll()
+                .orderBy(DaoSyncLinkedRepos.lastLinkedAtMs, SortOrder.DESC)
+                .groupBy({ it[DaoSyncLinkedRepos.project].value }) {
+                    LinkedRepoDto(it[DaoSyncLinkedRepos.repoUrl], it[DaoSyncLinkedRepos.lastLinkedAtMs])
+                }
             DaoSyncConfig.all().map { cfg ->
-                BatchEntry(projectId = cfg.project.id.value, dto = cfg.toBareDto(), repoUrl = cfg.repoUrl)
+                val projectId = cfg.project.id.value
+                BatchEntry(
+                    projectId = projectId,
+                    dto = cfg.toBareDto(linkedByProject[projectId] ?: emptyList()),
+                    repoUrl = cfg.repoUrl,
+                )
             }
         }
         // The file-backed credential store would re-read + decode its JSON file once per

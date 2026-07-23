@@ -229,6 +229,21 @@ internal fun Route.routeApiRestProjects(state: State) {
                 project.fxDefinitions.forEach { it.delete() }
                 project.scripts.forEach { it.delete() }
                 project.controlSurfaceBindings.forEach { it.delete() }
+
+                // Cloud-sync rows. These FKs have no ON DELETE cascade, so PostgreSQL
+                // would reject `project.delete()` for any project that ever had a
+                // sync_configs row (GET /sync/config auto-creates one). Delete children
+                // before parents: session conflicts → sessions, then the project-keyed
+                // tables. The on-disk working tree is removed after the commit below.
+                DaoSyncSession.find { DaoSyncSessions.project eq project.id }.forEach { session ->
+                    session.conflicts.forEach { it.delete() }
+                    session.delete()
+                }
+                DaoSyncState.find { DaoSyncStates.project eq project.id }.forEach { it.delete() }
+                DaoSyncLogEntry.find { DaoSyncLogEntries.project eq project.id }.forEach { it.delete() }
+                DaoSyncLinkedRepo.find { DaoSyncLinkedRepos.project eq project.id }.forEach { it.delete() }
+                DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.forEach { it.delete() }
+
                 state.controlSurfaceBindingService.invalidate(project.id.value)
                 clearPresetPreview(state, resource.id.toString())
                 project.delete()
@@ -241,6 +256,9 @@ internal fun Route.routeApiRestProjects(state: State) {
                     // Content-addressed PDF store for this project is now unreachable.
                     deletedProjectUuid?.let { uuid ->
                         runCatching { state.promptScriptStoreRoot.resolve(uuid).toFile().deleteRecursively() }
+                        // Cloud-sync working tree (`<root>/{uuid}/repo`) — remove the whole
+                        // per-project dir so a delete doesn't leave an orphaned git repo behind.
+                        runCatching { state.syncWorkingTreeRoot.resolve(uuid).toFile().deleteRecursively() }
                     }
                     call.respond(HttpStatusCode.NoContent)
                 }

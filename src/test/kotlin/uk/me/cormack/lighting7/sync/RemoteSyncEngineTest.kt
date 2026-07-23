@@ -67,7 +67,6 @@ class RemoteSyncEngineTest {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.firstOrNull()
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = repoUrl
-            cfg.enabled = true
         }
         if (pat != null) credentialStore.set(repoUrl, pat)
     }
@@ -148,12 +147,12 @@ class RemoteSyncEngineTest {
     @Test
     fun `missing repo URL yields REPO_URL_MISSING error`() {
         val projectId = seedMinimalProject(state)
-        // Configure WITHOUT setting repoUrl — `enabled` flips on, repoUrl stays null.
+        // A sync_config row with no repoUrl means the project isn't synced — a run
+        // against it must report REPO_URL_MISSING rather than attempting a push.
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             DaoSyncConfig.new {
                 this.project = project
-                this.enabled = true
             }
         }
         try {
@@ -164,25 +163,9 @@ class RemoteSyncEngineTest {
         }
     }
 
-    @Test
-    fun `disabled sync is rejected`() {
-        val projectId = seedMinimalProject(state)
-        transaction(state.database) {
-            val project = DaoProject.findById(projectId)!!
-            DaoSyncConfig.new {
-                this.project = project
-                this.repoUrl = bareRepo.toUri().toString()
-                this.enabled = false
-            }
-        }
-        credentialStore.set(bareRepo.toUri().toString(), "pat")
-        try {
-            runSync(projectId)
-            fail("expected SyncException")
-        } catch (e: SyncException) {
-            assertEquals(SyncErrorCode.SYNC_DISABLED, e.code)
-        }
-    }
+    // Note: there is no longer a "disabled sync" state — cloud sync is on iff a
+    // repository is attached. The former `disabled sync is rejected` test (which set
+    // repoUrl + enabled=false and expected SYNC_DISABLED) is obsolete and was removed.
 
     @Test
     fun `format too new on remote aborts sync without modifying DB`() {

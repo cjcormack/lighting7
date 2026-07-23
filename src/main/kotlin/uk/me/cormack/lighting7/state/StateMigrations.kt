@@ -34,6 +34,7 @@ internal fun Transaction.runStateMigrations(database: Database) {
         migrateDropRunLoop()
         migrateDropTrackChangedScript()
         migrateRiggingsV3()
+        migrateDropSyncEnabled()
 
         val summary = LegacyStaticEffectMigration.run(this)
         if (summary.converted > 0 || summary.skipped > 0) {
@@ -418,6 +419,35 @@ private fun Transaction.migrateRiggingsV3() {
         "v3 rigging migration complete: created {} rigging(s), swapped Y↔Z, dropped rigging_position",
         linked,
     )
+}
+
+/**
+ * One-time migration: drop the now-defunct `sync_configs.enabled` column.
+ *
+ * Cloud sync collapsed from three controls (repoUrl / enabled / autoSync) to one:
+ * "synced iff `repoUrl` is set". The `enabled` flag no longer has a meaning distinct
+ * from `repoUrl != null`, so it's removed. Rows that had `repoUrl` set but `enabled =
+ * false` become synced under the new model — acceptable given the collapse, and rare
+ * (these are machine-local rows).
+ *
+ * Safe to run repeatedly — gated on the column's existence, then `DROP COLUMN IF EXISTS`.
+ */
+private fun Transaction.migrateDropSyncEnabled() {
+    var hasColumn = false
+    exec(
+        """SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'sync_configs' AND column_name = 'enabled'"""
+    ) { rs ->
+        hasColumn = rs.next()
+    }
+
+    if (!hasColumn) return
+
+    logger.info("Migrating sync_configs: dropping the defunct 'enabled' column (synced == repoUrl set)...")
+
+    exec("ALTER TABLE sync_configs DROP COLUMN IF EXISTS enabled")
+
+    logger.info("sync_configs.enabled migration complete")
 }
 
 /**

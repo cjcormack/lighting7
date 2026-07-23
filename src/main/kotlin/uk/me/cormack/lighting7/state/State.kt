@@ -670,7 +670,7 @@ class State(val config: ApplicationConfig) {
                 DaoControlSurfaceBindings,
                 DaoProjectScalerStates,
                 DaoInstalls, DaoMachineOverrides,
-                DaoSyncConfigs,
+                DaoSyncConfigs, DaoSyncLinkedRepos,
                 DaoSyncStates, DaoSyncSessions, DaoSyncSessionConflicts,
                 DaoSyncLogEntries,
                 DaoOAuthIdentities,

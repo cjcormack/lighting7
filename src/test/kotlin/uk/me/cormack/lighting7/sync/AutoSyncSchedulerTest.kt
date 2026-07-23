@@ -68,7 +68,6 @@ class AutoSyncSchedulerTest {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.firstOrNull()
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = bareRepo.toUri().toString()
-            cfg.enabled = true
             cfg.autoSyncEnabled = autoSyncEnabled
             cfg.autoSyncIntervalMs = intervalMs
         }

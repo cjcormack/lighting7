@@ -22,6 +22,7 @@ import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.MissingCredentialsException
 import uk.me.cormack.lighting7.sync.auth.oauth.OAuthReauthRequiredException
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
+import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -134,11 +135,9 @@ class RemoteSyncEngine(
         val (repoUrl, branch) = transaction(state.database) {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.firstOrNull()
                 ?: throw SyncException(SyncErrorCode.REPO_URL_MISSING, "Sync config has not been initialised for this project.")
-            if (!cfg.enabled) {
-                throw SyncException(SyncErrorCode.SYNC_DISABLED, "Cloud sync is disabled for this project — enable it in the sync configuration first.")
-            }
+            // "Synced iff a repo is attached" — a missing repoUrl is the single gate.
             val url = cfg.repoUrl?.takeIf { it.isNotBlank() }
-                ?: throw SyncException(SyncErrorCode.REPO_URL_MISSING, "Repository URL is not set.")
+                ?: throw SyncException(SyncErrorCode.REPO_URL_MISSING, "No repository is attached to this project — attach one to enable cloud sync.")
 
             ConflictSession.findActive(projectId)?.let { existing ->
                 throw SyncException(
@@ -220,6 +219,25 @@ class RemoteSyncEngine(
                     throw SyncException(
                         SyncErrorCode.FORMAT_TOO_NEW,
                         "Repo format v${remoteFormat.formatVersion} is newer than this install supports (v$SUPPORTED_FORMAT_VERSION). Upgrade lighting7 before syncing.",
+                    )
+                }
+            }
+            // Guard against attaching a foreign, non-empty repo: if the remote already
+            // carries a project.json for a *different* project uuid, the three-way diff
+            // would treat unrelated history as Diverged and clobber it. Only an empty
+            // remote (create-new-repo) or a same-uuid remote (reconnect) is permitted.
+            JGitClient.readBlob(repo, remoteRef, "project.json")?.let { json ->
+                val remoteUuid = runCatching {
+                    canonicalDecode(ProjectJson.serializer(), json).uuid
+                }.getOrNull()
+                val localUuid = transaction(state.database) {
+                    DaoProject.findById(projectId)?.uuid?.toString()
+                }
+                if (remoteUuid != null && localUuid != null && remoteUuid != localUuid) {
+                    throw SyncException(
+                        SyncErrorCode.PROJECT_MISMATCH,
+                        "The remote repository belongs to a different project ($remoteUuid). " +
+                            "Attach an empty repository, or add it as a new remote project instead.",
                     )
                 }
             }
@@ -1064,6 +1082,10 @@ enum class SyncErrorCode {
     AUTH_FAILED,
     FORMAT_TOO_NEW, PUSH_REJECTED, NO_REPO,
     SESSION_PENDING, SESSION_NOT_FOUND, SESSION_STALE, UNRESOLVED_CONFLICTS,
+    /** Attempted to change a project's repo to a different URL — repos are immutable; disconnect then reconnect. */
+    REPO_URL_IMMUTABLE,
+    /** The remote repo belongs to a different project (uuid mismatch) — attach an empty repo or import it as a new project. */
+    PROJECT_MISMATCH,
 }
 
 class SyncException(val code: SyncErrorCode, message: String, cause: Throwable? = null) :
@@ -1078,7 +1100,8 @@ fun SyncErrorCode.toHttpStatus(): HttpStatusCode = when (this) {
         HttpStatusCode.Unauthorized
     SyncErrorCode.FORMAT_TOO_NEW -> HttpStatusCode.UnprocessableEntity
     SyncErrorCode.UNRESOLVED_CONFLICTS -> HttpStatusCode.UnprocessableEntity
-    SyncErrorCode.PUSH_REJECTED, SyncErrorCode.SESSION_PENDING, SyncErrorCode.SESSION_STALE ->
+    SyncErrorCode.PUSH_REJECTED, SyncErrorCode.SESSION_PENDING, SyncErrorCode.SESSION_STALE,
+    SyncErrorCode.REPO_URL_IMMUTABLE, SyncErrorCode.PROJECT_MISMATCH ->
         HttpStatusCode.Conflict
     SyncErrorCode.SESSION_NOT_FOUND -> HttpStatusCode.NotFound
 }

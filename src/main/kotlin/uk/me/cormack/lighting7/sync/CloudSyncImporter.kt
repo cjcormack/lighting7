@@ -104,7 +104,10 @@ class CloudSyncImporter(
                         this.project = project
                         this.repoUrl = repoUrl
                         this.branch = resolvedBranch
-                        this.enabled = true
+                        // A remote project is synced by definition (repo attached) with
+                        // auto-sync on by default — we intend to keep it in sync, not
+                        // treat the clone as a one-time import.
+                        this.autoSyncEnabled = true
                         this.lastSyncedSha = headSha
                         this.lastSyncedAtMs = System.currentTimeMillis()
                     }

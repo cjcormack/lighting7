@@ -92,7 +92,6 @@ class RemoteSyncEnginePushRetryTest {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.firstOrNull()
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = repoUrl
-            cfg.enabled = true
         }
         creds.set(repoUrl, "test-pat")
     }
