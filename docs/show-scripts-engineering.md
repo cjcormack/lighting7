@@ -220,7 +220,7 @@ frontWash.rgbColour.value = Color.GREEN
 
 ```kotlin
 val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<LightingScript>()
-val compiledResult = BasicJvmScriptingHost().compiler(
+val compiledResult = BasicJvmScriptingHost(state.scriptingHostConfiguration).compiler(
     expandedScript.toScriptSource(),
     compilationConfiguration
 )
@@ -231,6 +231,34 @@ Configuration includes:
 - Dependencies: entire classpath
 - Base class: varies by `ScriptType`
 - Default imports
+
+Every scripting host in the app (`Show.scriptingHost` and the FX-calc
+`FxScriptCompiler`) is constructed with the **shared** `state.scriptingHostConfiguration`
+(built by `buildScriptingHostConfiguration` in `state/ScriptCache.kt`), so they share the
+persistent compilation cache below.
+
+### Persistent compilation cache (on disk)
+
+Runtime script compilation — 28 built-in FX effects, cue-trigger scripts, user effects — is
+the dominant start-up cost. `buildScriptingHostConfiguration` installs a
+`CompiledScriptJarsCache` under `<appDataDir>/script-cache` (override with `scriptCache.path`;
+disable with `scriptCache.enabled=false`). The first compile of each distinct script writes a
+`<hash>.jar`; every later boot — and every project switch within a run — loads the compiled
+bytecode instead of recompiling from source.
+
+The jar file name is a SHA-256 of the script source, the template base class, and a **build
+fingerprint** of the classpath, computed once at startup. Because all templates compile with
+`dependenciesFromCurrentContext(wholeClasspath = true)`, a compiled script links against the
+app's own classes, so the fingerprint must change on any rebuild. For **file** classpath entries
+(jars — the packaged case) it folds in each entry's mtime + size; for **directory** entries (the
+`build/classes/kotlin/main` dir under `gradle run`, where rebuilds actually happen) it folds in
+the *newest* last-modified time among all contained files — a nested `.class` rebuild bumps that
+even though the directory entry's own mtime does not. This prevents stale bytecode from linking
+against a class that has since changed shape (which would blow up with `NoSuchMethodError`).
+
+This on-disk cache is distinct from the two in-memory caches (`Show.scripts`,
+`FxScriptCompiler.cache`), which avoid re-evaluation within a single process; the disk cache
+adds cross-process, cross-`Show` persistence at the compile layer.
 
 ### Evaluation (GENERAL scripts)
 
@@ -296,9 +324,31 @@ object DaoScripts : IntIdTable("scripts") {
 
 ## Startup Sequence
 
-1. `Show.start()` called
-2. `DbFixtureLoader.loadFixtures()` registers controllers and fixtures from DB patches
-3. Load and apply parked channels
-4. Start the FX engine
-5. Load user-created FX definitions from database
-6. Pre-compile cue trigger scripts to avoid cold-start latency
+### Server-first boot
+
+`Application.module()` mounts the web server, routes, sockets, and static UI **first**, then
+runs show init on a background coroutine (`show.backgroundInit=true`, the default). This lets
+the loading UI and `GET /api/rest/status` serve immediately while the slow work proceeds. Set
+`show.backgroundInit=false` for the legacy order, where the server refuses all connections
+until the rig is fully live.
+
+During the warm-up window:
+- Show-dependent `/api/rest/*` routes return **503** with the current boot status (the
+  readiness gate in `configureRouting`); `/api/rest/status` is exempt.
+- The `/api` WebSocket streams `bootProgressState` messages and holds show-dependent
+  subscription setup until the show exists.
+- `State.bootProgress` (a `BootStatus` `StateFlow`) advances through phases
+  `SHOW_INIT → FX_COMPILE → FIXTURES → CUE_PREWARM → READY` (or `FAILED`), with a `percent`
+  for the loading bar. FX-compile progress is reported per-effect by `FxFileLoader`.
+
+### Show init steps
+
+1. `Show` constructor compiles the built-in FX effects (parallel unless
+   `fx.parallelCompile=false`), served from the disk cache after the first boot
+2. `Show.start()` called
+3. `DbFixtureLoader.loadFixtures()` registers controllers and fixtures from DB patches
+4. Load and apply parked channels
+5. Start the FX engine
+6. Load user-created FX definitions from database
+7. Pre-compile cue trigger scripts to avoid cold-start latency (always runs; cheap after the
+   first boot via the on-disk compiled-script cache)

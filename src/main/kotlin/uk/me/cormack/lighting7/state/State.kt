@@ -64,6 +64,20 @@ class State(val config: ApplicationConfig) {
     val database = initDatabase()
     val projectManager = ProjectManager(database) { this }
 
+    /**
+     * Kotlin scripting host configuration shared by every scripting host in the app. Installs
+     * the on-disk compiled-script cache (see [buildScriptingHostConfiguration]) so scripts are
+     * only compiled from source on the first boot after a rebuild.
+     */
+    val scriptingHostConfiguration = buildScriptingHostConfiguration(config)
+
+    /**
+     * Boot progress for the show init sequence. Driven forward by the background init coroutine
+     * in `Application.module()`; read by `GET /api/rest/status` and the `bootProgressState` WS
+     * message so clients can render a loading bar during the warm-up window.
+     */
+    val bootProgress = BootProgress()
+
     init {
         // Must run after initDatabase so the sync_session table exists.
         ConflictSession.recoverFromCrash(this)
@@ -250,6 +264,20 @@ class State(val config: ApplicationConfig) {
      * The show is only available after initializeShow() is called.
      */
     val show: Show get() = projectManager.show
+
+    /**
+     * The show if it has been initialised, otherwise null. For callers that run during the
+     * server-first warm-up window and must tolerate "not ready yet" instead of throwing.
+     */
+    val showOrNull: Show? get() = projectManager.showOrNull
+
+    /**
+     * True once the show has finished [Show.start] — fixtures loaded, FX engine running — so
+     * show-dependent routes/sockets will serve correct data. This is the condition the readiness
+     * gate keys on (not merely "Show object constructed", which is true partway through init while
+     * fixtures are still empty). Independent of [BootProgress], which drives the loading-bar UI.
+     */
+    val isShowReady: Boolean get() = projectManager.showOrNull?.isStarted == true
 
     /** Manages cue trigger lifecycle (lazy init after show is available) */
     val cueTriggerManager: CueTriggerManager by lazy {

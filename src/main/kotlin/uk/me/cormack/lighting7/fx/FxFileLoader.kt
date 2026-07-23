@@ -1,5 +1,12 @@
 package uk.me.cormack.lighting7.fx
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicInteger
+
 /**
  * Loads built-in FX definition scripts from `.fx.kts` resource files.
  *
@@ -11,20 +18,39 @@ package uk.me.cormack.lighting7.fx
 class FxFileLoader(
     private val compiler: FxScriptCompiler,
 ) {
+    /** A built-in effect file parsed but not yet compiled. */
+    private data class ParsedFx(
+        val relativePath: String,
+        val metadata: FxFileMetadata,
+        val scriptBody: String,
+        val effectMode: EffectMode,
+        val outputType: FxOutputType,
+        val parameters: List<ParameterInfo>,
+    )
+
     /**
      * Load all .fx.kts files from the `fx/` resource directory and register them.
      *
+     * Compilation dominates cold-boot time, so it runs in three stages: parse every file
+     * (cheap), compile the bodies — [parallel] fans them across [Dispatchers.Default] — then
+     * register the successful ones serially ([FxRegistry] is not built for concurrent writes).
+     *
      * @param registry The FxRegistry to register effects into
+     * @param parallel Compile bodies concurrently (default true). Set false to force sequential.
+     * @param progress Optional callback invoked as each body finishes compiling, with
+     *   `(done, total)` — used to drive the boot progress bar. May fire from worker threads.
      * @return Number of effects successfully loaded
      */
-    fun loadBuiltInEffects(registry: FxRegistry): Int {
-        val fxDir = this::class.java.classLoader.getResource("fx")
+    fun loadBuiltInEffects(
+        registry: FxRegistry,
+        parallel: Boolean = true,
+        progress: ((done: Int, total: Int) -> Unit)? = null,
+    ): Int {
+        this::class.java.classLoader.getResource("fx")
             ?: run {
                 System.err.println("FxFileLoader: fx/ resource directory not found")
                 return 0
             }
-
-        var count = 0
 
         // Read the index file which lists all .fx.kts files
         val indexResource = this::class.java.classLoader.getResource("fx/index.txt")
@@ -37,65 +63,109 @@ class FxFileLoader(
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
 
-        for (relativePath in files) {
+        // Stage 1: parse (cheap, sequential).
+        val parsed = files.mapNotNull { relativePath ->
             try {
                 val resource = this::class.java.classLoader.getResource("fx/$relativePath")
                 if (resource == null) {
                     System.err.println("FxFileLoader: Could not find resource fx/$relativePath")
-                    continue
+                    return@mapNotNull null
                 }
+                val (metadata, scriptBody) = parseFxFile(resource.readText())
+                ParsedFx(
+                    relativePath = relativePath,
+                    metadata = metadata,
+                    scriptBody = scriptBody,
+                    effectMode = EffectMode.valueOf(metadata.effectMode),
+                    outputType = FxOutputType.valueOf(metadata.outputType),
+                    parameters = metadata.parameters.map { p ->
+                        ParameterInfo(p.name, p.type, p.default, p.description)
+                    },
+                )
+            } catch (e: Exception) {
+                System.err.println("FxFileLoader: Error loading fx/$relativePath: ${e.message}")
+                e.printStackTrace()
+                null
+            }
+        }
 
-                val content = resource.readText()
-                val (metadata, scriptBody) = parseFxFile(content)
+        val total = parsed.size
+        val completed = AtomicInteger(0)
 
-                val effectMode = EffectMode.valueOf(metadata.effectMode)
-                val outputType = FxOutputType.valueOf(metadata.outputType)
-                val parameters = metadata.parameters.map { p ->
-                    ParameterInfo(p.name, p.type, p.default, p.description)
+        // Stage 2: compile. Each compile is isolated in try/catch so one file's failure — e.g. a
+        // corrupt/unreadable cached .jar (partial write after a kill, disk full) that makes the
+        // scripting host throw — loses only that effect, not the whole built-in library. (Without
+        // this, in parallel mode `awaitAll` would rethrow and cancel the siblings.) Parallel mode
+        // shares one BasicJvmScriptingHost across workers; the FxScriptCompiler cache is a
+        // ConcurrentHashMap and this path is exercised by FxRegistryTest, but if a JDK/host combo
+        // ever proves unsafe under concurrency, `fx.parallelCompile=false` forces sequential.
+        fun compileOne(p: ParsedFx): CompiledFxScript? {
+            val compiled = try {
+                compiler.compile(p.scriptBody, p.effectMode)
+            } catch (e: Exception) {
+                System.err.println("FxFileLoader: Error compiling fx/${p.relativePath}: ${e.message}")
+                null
+            }
+            progress?.invoke(completed.incrementAndGet(), total)
+            return compiled
+        }
+
+        val compiledResults: List<Pair<ParsedFx, CompiledFxScript?>> = if (parallel && parsed.size > 1) {
+            runBlocking {
+                coroutineScope {
+                    parsed.map { p -> async(Dispatchers.Default) { p to compileOne(p) } }.awaitAll()
                 }
+            }
+        } else {
+            parsed.map { p -> p to compileOne(p) }
+        }
 
-                val compiled = compiler.compile(scriptBody, effectMode)
-                if (!compiled.isSuccess) {
-                    System.err.println("FxFileLoader: Failed to compile fx/$relativePath:")
-                    compiled.diagnostics.forEach { d ->
-                        System.err.println("  ${d.severity}: ${d.message} ${d.location ?: ""}")
-                    }
-                    continue
+        // Stage 3: register (serial). Also per-file try/catch so a bad factory/registration for
+        // one effect doesn't abort the rest.
+        var count = 0
+        for ((p, compiled) in compiledResults) {
+            if (compiled == null || !compiled.isSuccess) {
+                System.err.println("FxFileLoader: Failed to compile fx/${p.relativePath}:")
+                compiled?.diagnostics?.forEach { d ->
+                    System.err.println("  ${d.severity}: ${d.message} ${d.location ?: ""}")
                 }
+                continue
+            }
 
+            try {
                 val factory = ScriptEffectAdapter.createFactory(
                     compiled = compiled,
-                    schema = parameters,
-                    effectName = metadata.name,
-                    outputType = outputType,
-                    defaultStepTiming = metadata.defaultStepTiming,
+                    schema = p.parameters,
+                    effectName = p.metadata.name,
+                    outputType = p.outputType,
+                    defaultStepTiming = p.metadata.defaultStepTiming,
                 )
 
                 val timingSource = try {
-                    TimingSource.valueOf(metadata.timingSource)
+                    TimingSource.valueOf(p.metadata.timingSource)
                 } catch (_: Exception) {
                     TimingSource.BEAT
                 }
 
                 registry.register(EffectRegistration(
-                    id = metadata.id,
-                    aliases = metadata.aliases?.toSet() ?: emptySet(),
-                    name = metadata.name,
-                    category = metadata.category,
-                    outputType = outputType,
-                    effectMode = effectMode,
-                    parameters = parameters,
-                    compatibleProperties = metadata.compatibleProperties,
+                    id = p.metadata.id,
+                    aliases = p.metadata.aliases?.toSet() ?: emptySet(),
+                    name = p.metadata.name,
+                    category = p.metadata.category,
+                    outputType = p.outputType,
+                    effectMode = p.effectMode,
+                    parameters = p.parameters,
+                    compatibleProperties = p.metadata.compatibleProperties,
                     source = EffectSource.BUILT_IN,
-                    script = scriptBody,
-                    defaultStepTiming = metadata.defaultStepTiming,
+                    script = p.scriptBody,
+                    defaultStepTiming = p.metadata.defaultStepTiming,
                     timingSource = timingSource,
                     factory = factory,
                 ))
 
                 count++
             } catch (e: Exception) {
-                System.err.println("FxFileLoader: Error loading fx/$relativePath: ${e.message}")
+                System.err.println("FxFileLoader: Error registering fx/${p.relativePath}: ${e.message}")
                 e.printStackTrace()
             }
         }

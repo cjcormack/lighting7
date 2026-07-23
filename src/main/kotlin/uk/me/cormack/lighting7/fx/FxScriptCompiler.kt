@@ -4,7 +4,9 @@ import uk.me.cormack.lighting7.scripts.*
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.script.experimental.api.*
+import kotlin.script.experimental.host.ScriptingHostConfiguration
 import kotlin.script.experimental.host.toScriptSource
+import kotlin.script.experimental.jvm.defaultJvmScriptingHostConfiguration
 import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromTemplate
 
@@ -32,9 +34,11 @@ import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromT
  * After compilation + one-time evaluation, the lambda is extracted and cached.
  * Per-tick calls are direct JVM invocations — fully JIT-optimizable.
  */
-class FxScriptCompiler {
+class FxScriptCompiler(
+    hostConfiguration: ScriptingHostConfiguration = defaultJvmScriptingHostConfiguration,
+) {
     private val cache = ConcurrentHashMap<String, CompiledFxScript>()
-    private val scriptingHost = BasicJvmScriptingHost()
+    private val scriptingHost = BasicJvmScriptingHost(hostConfiguration)
 
     /**
      * Compile a script body and extract its lambda for the given effect mode.

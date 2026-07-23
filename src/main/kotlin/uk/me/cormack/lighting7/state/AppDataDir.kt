@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.state
 
 import io.ktor.server.config.ApplicationConfig
+import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -8,6 +9,26 @@ import java.nio.file.Paths
 /** Read an optional config string, treating absent or blank values as `null`. */
 fun ApplicationConfig.optionalString(key: String): String? =
     propertyOrNull(key)?.getString()?.takeIf { it.isNotBlank() }
+
+private val configLogger = LoggerFactory.getLogger("Config")
+
+/**
+ * Read an optional boolean flag, accepting the common HOCON/English spellings
+ * (`true/false`, `yes/no`, `on/off`, `1/0`, case-insensitive). Absent or blank → [default].
+ * An unrecognised non-blank value logs a warning and falls back to [default] rather than being
+ * silently ignored (which is what `String.toBooleanStrictOrNull()` would do for e.g. `off`).
+ */
+fun ApplicationConfig.optionalBoolean(key: String, default: Boolean): Boolean {
+    val raw = optionalString(key) ?: return default
+    return when (raw.trim().lowercase()) {
+        "true", "yes", "on", "1" -> true
+        "false", "no", "off", "0" -> false
+        else -> {
+            configLogger.warn("Unrecognised boolean for {}: '{}' — using default {}", key, raw, default)
+            default
+        }
+    }
+}
 
 /**
  * Returns the per-user application data directory for lighting7, creating it if missing.

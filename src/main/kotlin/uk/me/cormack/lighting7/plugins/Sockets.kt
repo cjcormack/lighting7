@@ -5,7 +5,10 @@ import io.ktor.serialization.kotlinx.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.serialization.json.Json
+import uk.me.cormack.lighting7.state.BootPhase
 import uk.me.cormack.lighting7.state.State
 import java.util.Collections
 import java.util.LinkedHashSet
@@ -46,9 +49,27 @@ fun Application.configureSockets(state: State) {
         val connections = Collections.synchronizedSet<SocketConnection?>(LinkedHashSet())
 
         webSocket("/api") {
+            val scope = SocketScope(this, state)
+
+            // Server-first warm-up: the subscription setup below touches `state.show` and its
+            // fixtures/FX engine, which aren't usable until `show.start()` completes. Stream boot
+            // progress and hold setup until the show is ready (gating on `isShowReady`, mirroring
+            // the REST gate — so we wait for start(), not just the Show constructor). Done *before*
+            // registering into `connections` so a client that disconnects mid-warm-up leaves
+            // nothing to clean up. Terminate on FAILED too, so a boot failure doesn't hang the
+            // socket; if boot failed we send the terminal frame and close without wiring show
+            // subscriptions (they would throw / serve an unusable show).
+            scope.send(BootProgressStateOutMessage(state.bootProgress.current))
+            if (!state.isShowReady) {
+                state.bootProgress.flow
+                    .takeWhile { !state.isShowReady && it.phase != BootPhase.FAILED }
+                    .collect { scope.send(BootProgressStateOutMessage(it)) }
+                scope.send(BootProgressStateOutMessage(state.bootProgress.current))
+                if (!state.isShowReady) return@webSocket
+            }
+
             val thisConnection = SocketConnection(this)
             connections += thisConnection
-            val scope = SocketScope(this, state)
 
             val unregisterBroadcastListener = setupBroadcastSubscriptions(scope)
             setupParkSubscriptions(scope)

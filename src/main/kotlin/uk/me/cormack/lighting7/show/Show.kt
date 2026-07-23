@@ -12,6 +12,8 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.registerUserEffect
 import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.state.optionalBoolean
+import uk.me.cormack.lighting7.state.optionalString
 import java.security.MessageDigest
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.script.experimental.api.*
@@ -26,11 +28,22 @@ class Show(
     val project: DaoProject,
 ) {
     val fixtures = Fixtures()
-    val fxScriptCompiler = FxScriptCompiler()
+    val fxScriptCompiler = FxScriptCompiler(state.scriptingHostConfiguration)
     val fxRegistry = FxRegistry().apply {
-        // Load built-in effects from .fx.kts resource files
+        // Load built-in effects from .fx.kts resource files. Compilation is the single biggest
+        // cold-boot cost, so it (a) reports progress to the boot bar and (b) compiles in
+        // parallel unless disabled via `fx.parallelCompile=false`.
         val fileLoader = FxFileLoader(fxScriptCompiler)
-        fileLoader.loadBuiltInEffects(this)
+        val parallel = state.config.optionalBoolean("fx.parallelCompile", default = true)
+        fileLoader.loadBuiltInEffects(this, parallel = parallel) { done, total ->
+            // Only drive the boot bar on the *initial* boot. This constructor also runs on a
+            // runtime project switch (ProjectManager.switchProject), where the previous show is
+            // already started (isStarted == true) — reporting there would rewind the global boot
+            // status from READY back to "compiling", freezing the loading bar on a live app.
+            if (state.showOrNull?.isStarted != true) {
+                state.bootProgress.updateFxCompile(done, total)
+            }
+        }
     }
     val directWriteStore = DirectWriteStore()
     val layer3Resolver = Layer3Resolver()
@@ -57,10 +70,20 @@ class Show(
     val globalScalerState = GlobalScalerState(fixtures, state.scalerHolderFor(project.id.value))
     private val scripts: MutableMap<String, Script> = mutableMapOf()
     private val scriptsLock = ReentrantLock()
-    private val scriptingHost = BasicJvmScriptingHost()
+    private val scriptingHost = BasicJvmScriptingHost(state.scriptingHostConfiguration)
 
     private val runnerPool = newFixedThreadPoolContext(1, "lighting-running-pool")
     private val compilerPool = newFixedThreadPoolContext(1, "lighting-compiler-pool")
+
+    /**
+     * True once [start] has completed — i.e. fixtures are loaded and the FX engine is running, so
+     * show-dependent routes/sockets will serve correct data. Drives [State.isShowReady] / the
+     * readiness gate. `@Volatile` because it is written on the background boot dispatcher and read
+     * from Netty request threads with no other happens-before edge.
+     */
+    @Volatile
+    var isStarted: Boolean = false
+        private set
 
     fun start() {
         try {
@@ -82,8 +105,15 @@ class Show(
         // Load user-created FX definitions from the database into the registry
         loadUserFxDefinitions()
 
-        // Pre-compile scripts used by cue triggers to avoid cold-start latency
+        // Pre-compile scripts used by cue triggers so the first live activation of a cue doesn't
+        // pay the Kotlin-compiler cold start. This runs off the server-accept path (server-first
+        // boot) and, after the first boot, loads from the on-disk compiled-script cache, so it is
+        // cheap enough to always run — there is no longer a toggle for it.
         prewarmCueScripts()
+
+        // Mark the show usable last: fixtures are loaded and the FX engine is running. Readers of
+        // [isStarted] (the readiness gate) now see a fully-initialised show.
+        isStarted = true
     }
 
     fun close() {

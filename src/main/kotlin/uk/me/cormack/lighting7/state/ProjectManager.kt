@@ -22,9 +22,16 @@ class ProjectManager(
     val currentProject: DaoProject
         get() = checkNotNull(_currentProject) { "No current project set" }
 
+    // `@Volatile`: written by the background boot coroutine (Dispatchers.IO) but read from Netty
+    // request threads (readiness gate, WS warm-up) with no other happens-before edge, so a plain
+    // field could let a reader keep observing a stale null after the show is available.
+    @Volatile
     private var _show: Show? = null
     val show: Show
         get() = checkNotNull(_show) { "Show not initialized" }
+
+    /** The show if [initialize] has run, otherwise null (no throw). */
+    val showOrNull: Show? get() = _show
 
     private val _projectChangedFlow = MutableSharedFlow<ProjectChangedEvent>(replay = 1)
     val projectChangedFlow: SharedFlow<ProjectChangedEvent> = _projectChangedFlow.asSharedFlow()
