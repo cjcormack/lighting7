@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
@@ -333,5 +334,65 @@ class RemoteSyncEngineTest {
             p.cueStacks.map { it.name }.toSet()
         }
         assertTrue("From-other" in stackNames, "fast-forward should have populated DB; got $stackNames")
+    }
+
+    @Test
+    fun `failed fast-forward import does not advance local HEAD (import-first ordering)`() {
+        // Regression guard for the fast-forward ordering fix. The engine imports the remote
+        // tree into the DB BEFORE advancing git HEAD. If the import fails, HEAD must stay put
+        // — the old reset-then-import order left HEAD at the remote tip, so the next snapshot
+        // would re-export the stale DB over the pulled tree and silently revert the peer.
+        val projectId = seedMinimalProject(state)
+        configureSync(projectId, bareRepo.toUri().toString())
+        val first = runSync(projectId)
+        assertEquals(SyncOutcome.PUSHED, first.outcome)
+        val shaA = first.headSha
+        val projectUuid = transaction(state.database) { DaoProject.findById(projectId)!!.uuid }
+
+        // Push a strict child of SHA-A (so we classify RemoteAhead) whose project.json carries
+        // a DIFFERENT project UUID. ProjectImporter refuses to clobber a mismatched project, so
+        // replaceFromWorkingTree throws mid-fast-forward — a deterministic import failure.
+        val scratch = Files.createTempDirectory("lighting7-badremote-")
+        try {
+            JGitClient.init(scratch).use { repo ->
+                JGitClient.setRemote(repo, "origin", bareRepo.toUri().toString())
+                JGitClient.fetch(repo, "origin", "main", GitCredentials("", ""))
+                val originSha = repo.resolve("refs/remotes/origin/main")!!.name
+                Git(repo).branchCreate().setName("main").setStartPoint(originSha).setForce(true).call()
+                JGitClient.resetHard(repo, originSha)
+
+                val projectJsonPath = scratch.resolve("project.json")
+                val parsed = canonicalDecode(ProjectJson.serializer(), Files.readString(projectJsonPath))
+                val mutated = parsed.copy(uuid = java.util.UUID.randomUUID().toString())
+                Files.writeString(projectJsonPath, canonicalEncode(ProjectJson.serializer(), mutated))
+
+                JGitClient.stageAll(repo)
+                JGitClient.commit(repo, "BadRemote", "bad@example.com", "mismatched-project-uuid")
+                assertEquals(PushStatus.OK, JGitClient.push(repo, "origin", "main", GitCredentials("", "")).status)
+            }
+        } finally {
+            runCatching { scratch.toFile().deleteRecursively() }
+        }
+
+        // The pull must fail (import rejects the mismatched UUID).
+        try {
+            runSync(projectId)
+            fail("expected the fast-forward import to fail")
+        } catch (_: Exception) {
+            // Expected — either ImportError or a wrapping SyncException; the point is it didn't succeed.
+        }
+
+        // Git HEAD must still be at SHA-A — the import failed before HEAD advanced.
+        val wtHead = JGitClient.open(SyncWorkingTree(state).pathFor(projectUuid))!!
+            .use { JGitClient.head(it)!!.sha }
+        assertEquals(shaA, wtHead, "a failed fast-forward must not advance local HEAD")
+
+        // DB and last-synced bookkeeping are untouched (the import transaction rolled back).
+        val (dbUuid, syncedSha) = transaction(state.database) {
+            val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.first()
+            DaoProject.findById(projectId)!!.uuid to cfg.lastSyncedSha
+        }
+        assertEquals(projectUuid, dbUuid, "the local project must be untouched by a failed pull")
+        assertEquals(shaA, syncedSha, "lastSyncedSha must not advance on a failed fast-forward")
     }
 }

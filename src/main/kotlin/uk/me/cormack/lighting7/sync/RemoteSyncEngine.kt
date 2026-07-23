@@ -255,8 +255,7 @@ class RemoteSyncEngine(
                 )
             }
             is HistoryRelation.RemoteAhead -> {
-                JGitClient.resetHard(repo, remoteRef)
-                importer.replaceFromWorkingTree(projectId, repo.workTree.toPath())
+                fastForwardTo(repo, projectId, remoteRef)
                 val head = JGitClient.head(repo)?.sha ?: error("RemoteAhead fast-forward produced no HEAD")
                 bootstrapSyncStateAtHead(projectId, repo, head)
                 SyncRunResult(SyncOutcome.FAST_FORWARDED, pushed = 0, pulled = relation.behind, replaced = 0, headSha = head, message = "Pulled ${relation.behind} commit(s) from remote.", sessionId = null, conflictCount = 0)
@@ -573,8 +572,7 @@ class RemoteSyncEngine(
             // Remote moved ahead of us in a strict-superset way (peer fast-forwarded our
             // merge commit and then added more) — fast-forward our HEAD and re-import.
             is HistoryRelation.RemoteAhead -> {
-                JGitClient.resetHard(repo, remoteRef)
-                importer.replaceFromWorkingTree(projectId, repo.workTree.toPath())
+                fastForwardTo(repo, projectId, remoteRef)
                 val head = JGitClient.head(repo)?.sha ?: error("Null HEAD after fast-forward retry")
                 bootstrapSyncStateAtHead(projectId, repo, head)
                 SyncRunResult(
@@ -886,6 +884,40 @@ class RemoteSyncEngine(
                 }
             }
         }
+    }
+
+    /**
+     * Fast-forward the local DB and git HEAD to the tip of [remoteRef].
+     *
+     * The DB import runs **first** — against a scratch materialisation of the remote tree
+     * read straight from the git object store — and git HEAD / the working tree only
+     * advance once that transaction has committed. This ordering is load-bearing.
+     *
+     * The naive shape (`resetHard(remoteRef)` then `replaceFromWorkingTree`) moves git HEAD
+     * before the DB catches up. There is no `sync_session` for a plain fast-forward, so if
+     * the import then threw (bad pulled record, FK/constraint failure) or the process died
+     * in the window, [ConflictSession.recoverFromCrash] couldn't see it: git would sit
+     * ahead of the DB, and the next [SnapshotEngine] run would re-export the *stale* DB over
+     * the pulled tree and push it — silently reverting the peer's change across the mesh.
+     *
+     * Importing first inverts the failure mode: a mid-operation failure leaves the DB ahead
+     * of git instead. The next sync then sees local (a fresh snapshot of the merged DB) and
+     * remote carrying identical record content, which the three-way diff classifies as all
+     * `NoOp` — a content-identical no-op merge with no data loss.
+     */
+    private fun fastForwardTo(repo: Repository, projectId: Int, remoteRef: String) {
+        val remoteSha = repo.resolve(remoteRef)?.name
+            ?: error("Cannot fast-forward: $remoteRef does not resolve")
+        val scratch = Files.createTempDirectory("lighting7-ff-")
+        try {
+            for ((relPath, content) in JGitClient.walkTree(repo, remoteSha)) {
+                writeWorkingTreeFile(scratch, relPath, content)
+            }
+            importer.replaceFromWorkingTree(projectId, scratch)
+        } finally {
+            scratch.toFile().deleteRecursively()
+        }
+        JGitClient.resetHard(repo, remoteRef)
     }
 
     /** Write [content] to `relPath` under [workingTreePath], creating parent dirs. */
