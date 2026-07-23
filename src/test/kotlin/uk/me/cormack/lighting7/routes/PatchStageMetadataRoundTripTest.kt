@@ -212,12 +212,21 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
             "generic-dimmer should render its gel as the compact-card secondary display",
         )
 
-        // A non-conventional fixture (e.g. the LED Hex) must default to false on both flags.
+        // A PAR-kind fixture (the Chauvet Freedom Par Hex) accepts a beam angle by virtue of
+        // its kind's beam shape (PAR -> BeamShape.ROUND), even without opting in explicitly —
+        // but it exposes no gel.
         val hex = types.firstOrNull { it.typeKey == "hex" }
         assertNotNull(hex, "hex fixture type expected in registry")
-        assertEquals(false, hex.acceptsBeamAngle)
+        assertTrue(hex.acceptsBeamAngle, "a PAR fixture accepts a beam angle via its kind's beam shape")
         assertEquals(false, hex.acceptsGel)
-        assertNull(hex.gelCompactDisplay, "non-gel fixtures must not opt into gel compact display")
+
+        // A fixture that opts into neither beam nor gel (a hazer draws no beam and takes no
+        // gel) must report false on both flags and expose no gel compact display.
+        val hazer = types.firstOrNull { it.typeKey == "hazer" }
+        assertNotNull(hazer, "hazer fixture type expected in registry")
+        assertEquals(false, hazer.acceptsBeamAngle)
+        assertEquals(false, hazer.acceptsGel)
+        assertNull(hazer.gelCompactDisplay, "non-gel fixtures must not opt into gel compact display")
     }
 
     /**
