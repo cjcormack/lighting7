@@ -34,6 +34,11 @@ fun main() {
     val logsDir = dataDir.resolve("logs").also { Files.createDirectories(it) }
     redirectLauncherIo(logsDir.resolve("launcher.log"))
 
+    // Refuse a second launch for the same data dir before spawning any children, so a
+    // double-launch is one clean log line rather than a second compiler-server fighting for
+    // port 8321. The backend enforces its own lock too (covers direct `java -jar` / dev runs).
+    LauncherLock.acquireOrExit(dataDir)
+
     val backendJar = resolveJar("lighting7.jar")
     val compilerJar = resolveJar("kotlin-compiler-server.jar")
     val javaBin = resolveJavaExecutable()
@@ -76,6 +81,10 @@ fun main() {
         java = javaBin,
         jar = backendJar,
         workingDir = dataDir,
+        // Pin the backend to the launcher's resolved data dir. The child would inherit
+        // LIGHTING7_DATA_DIR through the environment, but a `-Dlighting7.dataDir` override
+        // on the launcher would not propagate — forwarding the resolved value covers both.
+        env = mapOf("LIGHTING7_DATA_DIR" to dataDir.toAbsolutePath().toString()),
         logFile = logsDir.resolve("lighting7.log"),
     )
 

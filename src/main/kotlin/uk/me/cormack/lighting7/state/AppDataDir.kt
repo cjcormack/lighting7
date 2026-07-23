@@ -2,6 +2,8 @@ package uk.me.cormack.lighting7.state
 
 import io.ktor.server.config.ApplicationConfig
 import org.slf4j.LoggerFactory
+import java.io.File
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -31,15 +33,69 @@ fun ApplicationConfig.optionalBoolean(key: String, default: Boolean): Boolean {
 }
 
 /**
- * Returns the per-user application data directory for lighting7, creating it if missing.
+ * Returns the application data directory for lighting7, creating it if missing.
  *
- * - Windows: `%APPDATA%\lighting7\`
- * - macOS:   `~/Library/Application Support/lighting7/`
- * - Linux:   `~/.config/lighting7/`
+ * Resolution order:
+ *  1. The `lighting7.dataDir` JVM system property (`-Dlighting7.dataDir=…`).
+ *  2. The `LIGHTING7_DATA_DIR` environment variable.
+ *  3. The per-user OS default:
+ *     - Windows: `%APPDATA%\lighting7\`
+ *     - macOS:   `~/Library/Application Support/lighting7/`
+ *     - Linux:   `~/.config/lighting7/`
  *
- * Holds the SQLite database, logs, and a writable copy of `local.conf` once packaged.
+ * An explicit override (1 or 2) is used verbatim as the data directory — the `lighting7`
+ * leaf is NOT appended, since the caller is naming the directory itself. A leading `~` is
+ * expanded to the user's home directory. It is deliberately not a `local.conf` key: the data
+ * dir must be resolvable before any config is read (the single-instance lock is taken in
+ * `main` before Ktor parses config, and both the launcher and `main` look for `local.conf`
+ * here).
+ *
+ * The result is deterministic for the process lifetime, so it is resolved and created once
+ * and cached. Holds the SQLite database, logs, the single-instance lock, and a writable copy
+ * of `local.conf` once packaged.
  */
-fun appDataDir(): Path {
+fun appDataDir(): Path = cachedAppDataDir
+
+private val cachedAppDataDir: Path by lazy {
+    val dir = resolveAppDataDir(rawDataDirOverride())
+    try {
+        Files.createDirectories(dir)
+    } catch (e: FileAlreadyExistsException) {
+        throw IllegalStateException(
+            "lighting7 data directory $dir exists but is not a directory — " +
+                "point LIGHTING7_DATA_DIR / -Dlighting7.dataDir at a directory path.",
+            e,
+        )
+    }
+    dir
+}
+
+/** Raw override string from the system property (preferred) or env var; null if neither is set non-blank. */
+private fun rawDataDirOverride(): String? =
+    System.getProperty("lighting7.dataDir")?.takeIf { it.isNotBlank() }
+        ?: System.getenv("LIGHTING7_DATA_DIR")?.takeIf { it.isNotBlank() }
+
+/**
+ * Pure resolution of the data-dir path from an optional [override] string — no filesystem
+ * side effects, so it is unit-testable. Expands a leading `~` and normalises an override to an
+ * absolute path; falls back to the per-OS default when [override] is null or blank.
+ */
+internal fun resolveAppDataDir(override: String?): Path {
+    val raw = override?.takeIf { it.isNotBlank() } ?: return defaultAppDataDir()
+    return expandUserHome(raw).toAbsolutePath().normalize()
+}
+
+/** Expand a leading `~` / `~/` (or `~\` on Windows) to the user's home directory. */
+private fun expandUserHome(path: String): Path {
+    val home = System.getProperty("user.home")
+    return when {
+        path == "~" -> Paths.get(home)
+        path.startsWith("~/") || path.startsWith("~" + File.separator) -> Paths.get(home, path.substring(2))
+        else -> Paths.get(path)
+    }
+}
+
+private fun defaultAppDataDir(): Path {
     val os = System.getProperty("os.name").lowercase()
     val home = System.getProperty("user.home")
     val base = when {
@@ -50,7 +106,5 @@ fun appDataDir(): Path {
         os.contains("mac") -> Paths.get(home, "Library", "Application Support")
         else -> Paths.get(home, ".config")
     }
-    val dir = base.resolve("lighting7")
-    Files.createDirectories(dir)
-    return dir
+    return base.resolve("lighting7")
 }

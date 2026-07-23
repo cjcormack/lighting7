@@ -28,6 +28,7 @@ class ChildProcess(val name: String, val process: Process) {
             jar: Path,
             args: List<String> = emptyList(),
             workingDir: Path? = null,
+            env: Map<String, String> = emptyMap(),
             logFile: Path,
         ): ChildProcess {
             Files.createDirectories(logFile.parent)
@@ -43,6 +44,7 @@ class ChildProcess(val name: String, val process: Process) {
                 // terminal during dev, our Java children don't read stdin anyway.
                 .redirectInput(ProcessBuilder.Redirect.INHERIT)
             if (workingDir != null) pb.directory(workingDir.toFile())
+            if (env.isNotEmpty()) pb.environment().putAll(env)
             return ChildProcess(name, pb.start())
         }
     }

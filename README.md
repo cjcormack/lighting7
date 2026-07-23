@@ -28,6 +28,27 @@ SQLite is used for persistence — there is no database server to install. The D
 | Windows | `%APPDATA%\lighting7\`                     |
 | Linux   | `~/.config/lighting7/`                     |
 
+Override the whole data dir (DB, logs, caches, sync trees) by setting
+`LIGHTING7_DATA_DIR=/path` or passing `-Dlighting7.dataDir=/path` — handy for a
+portable install or a second instance on the same machine. The path is used verbatim
+(no `lighting7` leaf appended; a leading `~` is expanded). It's an env var / system
+property rather than a `local.conf` key because the data dir has to be resolved *before*
+any config is read — the single-instance lock is taken before Ktor loads config.
+
+`local.conf` is loaded from the process working directory if one exists there, otherwise
+from the data dir. The packaged launcher runs the backend with its working directory set
+to the data dir; in dev, the project-root `local.conf` (the CWD) wins.
+
+To relocate only the SQLite file, set `database.path` in `local.conf`. Note the
+single-instance lock guards the *data dir*, not the DB file — if you move the DB outside
+its data dir, keep that path unique per instance, or two instances will still corrupt it.
+
+Only one instance may use a given data directory at a time: at startup the backend takes
+an OS lock on `<dataDir>/lighting7.lock` and exits with a clear message if another
+instance already holds it (SQLite is single-writer); the packaged launcher guards likewise
+on `<dataDir>/launcher.lock` before spawning children. To run two instances, give each its
+own `LIGHTING7_DATA_DIR`.
+
 ## Quick Start (development)
 
 ```bash

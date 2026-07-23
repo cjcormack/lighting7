@@ -2,23 +2,55 @@ package uk.me.cormack.lighting7
 
 import io.ktor.server.application.*
 import io.ktor.server.netty.*
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.plugins.configureHTTP
 import uk.me.cormack.lighting7.plugins.configureSockets
 import uk.me.cormack.lighting7.routes.configureRouting
 import uk.me.cormack.lighting7.state.BootPhase
+import uk.me.cormack.lighting7.state.InstanceLock
 import uk.me.cormack.lighting7.state.MdnsService
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.state.appDataDir
 import uk.me.cormack.lighting7.state.optionalBoolean
 import uk.me.cormack.lighting7.state.optionalString
 
 fun main(argv: Array<String>) {
+    // Resolve the data dir up front — before Ktor/config — since both the single-instance
+    // lock and the local.conf fallback below need it. A misconfigured override (e.g. pointing
+    // at a file) surfaces here as a clean message rather than a raw stack trace.
+    val dataDir = try {
+        appDataDir()
+    } catch (e: Exception) {
+        System.err.println("lighting7: ${e.message}")
+        exitProcess(1)
+    }
+
+    // Refuse to start if another instance is already using this data directory — a second
+    // writer would corrupt the SQLite DB and race the sync working trees. Done before Ktor
+    // (and the DB) come up so we fail fast with a clear message. Relocate the data dir with
+    // LIGHTING7_DATA_DIR / -Dlighting7.dataDir to run a second instance intentionally.
+    InstanceLock.acquireOrExit(dataDir)
+
     val args = mutableListOf("-config=application.conf")
     args += argv.filter { it != "-config=application.conf" }
 
     if (args.none { it.startsWith("-config=") && it != "-config=application.conf" }) {
-        args += "-config=local.conf"
+        // Ktor resolves `-config` paths against the process working directory. The packaged
+        // launcher runs us with CWD = data dir, but a direct `java -jar` / `./gradlew run`
+        // does not — so prefer a local.conf in the CWD (keeps dev working) and otherwise fall
+        // back to one in the data dir, so a relocated data dir's local.conf loads standalone.
+        val cwdConf = Path.of("local.conf")
+        val dataDirConf = dataDir.resolve("local.conf")
+        val configPath = when {
+            Files.exists(cwdConf) -> "local.conf"
+            Files.exists(dataDirConf) -> dataDirConf.toString()
+            else -> "local.conf"
+        }
+        args += "-config=$configPath"
     }
 
     EngineMain.main(args.toTypedArray())
