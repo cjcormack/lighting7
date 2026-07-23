@@ -287,6 +287,196 @@ user is staring at a non-progressing spinner and would benefit from
 intermediate state. The wire-protocol shape will follow whatever the
 actual unmet case demands — no design sketch needed pre-emptively.
 
+### `FU-SYNC-MERGE-ATOMICITY` — Reset-before-import window in the auto-merge path
+
+**Status**: Trigger (correctness corner)
+**Origin**: Surfaced 2026-07-23 while fixing the sibling fast-forward bug.
+
+The fast-forward pull path used to `resetHard(origin/{branch})` (moving git
+HEAD) *before* `ProjectImporter.replaceFromWorkingTree` caught the DB up. With
+no `sync_session` for a plain FF, a crash or import exception in that window
+left git ahead of the DB, and the next `SnapshotEngine` run re-exported the
+stale DB over the pulled tree and pushed it — silently reverting the peer's
+change. That path is **fixed**: `RemoteSyncEngine.fastForwardTo` now imports
+the remote tree into the DB first (from a scratch materialisation read via
+`JGitClient.walkTree`) and only advances HEAD once the import commits, so a
+failure leaves DB-ahead-of-git, which the next sync reconciles to a
+content-identical no-op merge.
+
+The **auto-merge path shares the same hazard and is not yet fixed.**
+[`RemoteSyncEngine.autoMerge`](../../src/main/kotlin/uk/me/cormack/lighting7/sync/RemoteSyncEngine.kt)
+does `resetHard(remoteRef)` → overlay local-wins files →
+`replaceFromWorkingTree` → `commitWithParents` → push. A crash or exception
+between the `resetHard` and the DB import commit leaves HEAD at the remote tip
+with a pre-merge DB; the next snapshot commits the stale DB as a child of the
+remote tip (`LocalAhead`) and pushes it, reverting the merge. The
+`Diverged`-with-zero-conflicts case has no session at all; the
+apply-from-session case is only partially covered (a crashed `APPLYING`
+session is demoted to `FAILED` by `ConflictSession.recoverFromCrash`, but the
+DB/git inconsistency itself still relies on the operator aborting).
+
+The FF fix's import-first reorder is the model for the safe shape, but
+auto-merge is harder: it must also produce the two-parent merge commit
+(tree = merged, parents = `[remoteTip, localSha]`), so the reorder has to build
+the merged tree in scratch, import it, *then* reset + re-stage + commit. Left
+as a follow-up rather than bundled with the FF fix because the merge-commit
+plumbing wants its own test pass.
+
+**Trigger to revisit** (any one):
+- A field report of a merged/pulled change reappearing or reverting after a
+  crash or a failed `runSync`.
+- Any work that adds a test seam for injecting a failure mid-`autoMerge` (see
+  `FU-SYNC-PUSHRETRY-TEST-SEAM`) — fold the fix in while the seam is fresh.
+
+### `FU-SYNC-ORDINAL-DOUBLE` — Double-precision ordinals for concurrent inserts
+
+**Status**: Trigger (multi-master ordering)
+**Origin**: Cloud-sync plan §"Ordering" / §"Risks and open items"; unshipped
+through Phase 8, re-logged 2026-07-23.
+
+The design (and `docs/sync-engineering.md` §"Ordinal contract") specifies that
+Phase 5 replaces `sortOrder: Int` with `ordinal: Double` on the ten ordered
+tables, so two installs inserting into the same position pick a midpoint
+instead of colliding, tiebroken by UUID. **Not implemented** — the DTOs in
+`sync/dto/SyncDtos.kt` still carry `sortOrder: Int` (exports already sort by
+`(sortOrder, uuid)` for deterministic output, which is the pre-work the doc
+notes, but the type change itself never landed).
+
+Consequence today: two installs each inserting a cue "between 5 and 6" isn't a
+conflict (distinct UUIDs) but both land on the same integer `sortOrder`, so the
+merged ordering is decided only by the UUID tiebreak — non-deterministic from
+the operator's point of view, and integer renumbers can cascade. Acceptable for
+solo-multi-machine use; bites once two people routinely reorder the same stack.
+
+**Shape when it lands**: `ordinal: Double` column + one-shot migration
+(renumber existing rows to `1.0, 2.0, …`), DTO field swap, `formatVersion` bump
+(→ 4) with a v3→v4 reader (see `FU-SYNC-FORMAT-MIGRATIONS`), and midpoint-pick
+insert logic in the routes that create ordered rows.
+
+**Trigger to revisit**: two installs editing the same project report cues/
+stacks landing in a surprising order after a merge, **or** any `formatVersion`
+bump is already being planned (do it in the same bump to avoid a second
+migration).
+
+### `FU-SYNC-FORMAT-MIGRATIONS` — Repo-format migration framework
+
+**Status**: Blocked (needs a real breaking bump) / Trigger
+**Origin**: Cloud-sync plan §"Format versioning"; re-logged 2026-07-23.
+
+Both the design and `docs/sync-engineering.md` reference migrations living at
+`sync/migrations/V{n}_to_V{n+1}.kt`, run on pull before the three-way diff. The
+directory **does not exist** — there is no migration framework. Today an
+imported/pulled repo whose `formatVersion` differs from `3` is hard-rejected
+(HTTP 422 in `ProjectImporter.loadAndValidateArchive`, both too-old and
+too-new). The v2→v3 jump was handled by rejecting old repos outright on the
+rationale that the project hadn't shipped beyond the dev box.
+
+That shortcut stops being acceptable once >1 install exists in the field and a
+breaking bump ships: without a reader for the previous version, every peer must
+upgrade in lockstep or lose access to the repo.
+
+**Shape when it lands**: a `SyncMigrations` registry keyed by source version, a
+`migrate(sourceDir, fromVersion)` step invoked from both import entry points
+before validation/diff, and per-version transformers. The `formatVersion.json`
+`minReader` field already exists to gate truly-breaking changes.
+
+**Trigger to revisit**: the next `formatVersion` bump is planned (e.g.
+`FU-SYNC-ORDINAL-DOUBLE`, or re-nesting cue children under their stack folder),
+**or** a second install needs to read a repo written by a newer install.
+
+### `FU-SYNC-FETCHING-STATE` — Observe crash-mid-fetch via a `FETCHING` session
+
+**Status**: Trigger (crash observability)
+**Origin**: Cloud-sync Phase 6 deferral; `SessionState.FETCHING` reserved but
+unused. Re-logged 2026-07-23.
+
+`SessionState.FETCHING` is defined on the enum and documented as reserved, but
+no code ever writes it. `runSync` opens no session until conflicts are found,
+so a crash during the fetch/classify/snapshot phase leaves no row — the mutex
+just releases and the next run starts clean. That's *safe* (the FF and
+auto-merge reorder work covers the DB/git consistency corners), but it means a
+crash mid-fetch is invisible: no audit-log breadcrumb, no "a previous sync was
+interrupted" surfacing in the UI.
+
+**Shape when it lands**: open a `FETCHING` session at the top of `runSync`,
+transition it through the existing states, and extend
+`ConflictSession.recoverFromCrash` to reap stale `FETCHING` rows on startup
+(log + drop, since nothing was applied). Low value until crash-mid-sync is
+something operators actually hit and want explained.
+
+**Trigger to revisit**: operator reports a sync that "just stopped" with no log
+trail, **or** the activity-log feed is being extended and a
+`SYNC_INTERRUPTED` breadcrumb would be cheap to add alongside.
+
+### `FU-SYNC-FIELD-LEVEL-MERGE` — Field-level conflict granularity
+
+**Status**: Trigger (operator friction)
+**Origin**: Cloud-sync three-way-diff design; re-logged 2026-07-23.
+
+Conflicts are detected and resolved at **whole-record** granularity: the diff
+hashes each record's entire canonical JSON. Two installs editing *different
+fields* of the same cue (one changes the name, the other the fade time) is a
+`EDIT_EDIT` conflict the operator must resolve by picking a whole side or
+hand-merging via MANUAL — even though a field-level merge would be
+unambiguous.
+
+Fine at current scale (edits rarely overlap on one record); becomes friction if
+two people routinely co-edit the same records. A field-level three-way merge
+(diff the JSON objects key-by-key, auto-merge disjoint field edits, only
+surface same-field disagreements) would cut the conflict rate but adds real
+complexity to `ThreeWayDiff` / the resolution model and the conflict UI.
+
+**Trigger to revisit**: operators report frequent conflicts on records where
+the two sides "obviously" touched different fields.
+
+### `FU-SYNC-MANUAL-MULTIFILE` — MANUAL resolution for scripts + richer editors
+
+**Status**: Trigger (conflict-UX gap)
+**Origin**: Cloud-sync Phase 6/7; documented single-file restriction. Re-logged
+2026-07-23.
+
+MANUAL conflict resolution only works on records that serialise to a single
+file. The route layer's `isManualEditAllowed` returns false for multi-file
+records — currently just `scripts` (`scripts/{uuid}.kts` +
+`scripts/{uuid}.meta.json`) — and for `DELETE_EDIT` conflicts. So a script
+edited on both sides can only be resolved whole-side (LOCAL/REMOTE); the user
+can't hand-merge the body. The conflict DTO already carries `manualEditAllowed`
+so the UI hides the option cleanly, but the capability gap remains.
+
+**Shape when it lands**: a multi-file-aware MANUAL editor (body textarea + meta
+fields, or two panes) and a resolve/apply path that accepts a per-file payload
+map instead of a single `manualValueJson`. Worth pairing with any broader
+"richer per-table conflict editors" work (structured pickers instead of raw
+JSON textareas).
+
+**Trigger to revisit**: an operator hits a same-script conflict and wants to
+keep parts of both sides, **or** conflict-resolution UX is being reworked
+anyway.
+
+### `FU-SYNC-PUSHRETRY-TEST-SEAM` — Deterministic push-retry / merge-failure coverage
+
+**Status**: Trigger (test hardening)
+**Origin**: `docs/sync-engineering.md` §"Push-rejected retry → Coverage
+limitation"; re-logged 2026-07-23.
+
+Fully-deterministic coverage of the push-rejected retry path (and, now, the
+mid-`autoMerge` failure window from `FU-SYNC-MERGE-ATOMICITY`) needs a seam to
+inject a peer push / a failure between our fetch and our push. The current
+synchronous IO block in `RemoteSyncEngine` has no such seam, so
+`RemoteSyncEnginePushRetryTest` exercises the path opportunistically via
+concurrent `runSync` calls against a shared bare repo and asserts *eventual
+consistency* rather than verifying the retry counter or a specific interleaving.
+
+**Shape when it lands**: extract a `JGitClient` interface (the wrapper is
+already a single object — this is mechanical) so tests can substitute a fake
+that fails/steps the remote deterministically at a chosen point. Unlocks
+counter-level assertions on the retry budget and a real test for the
+reset-before-import windows.
+
+**Trigger to revisit**: `FU-SYNC-MERGE-ATOMICITY` is picked up (the seam is a
+prerequisite for testing that fix), **or** a push-retry regression is suspected
+and the non-deterministic test can't pin it down.
+
 ---
 
 ## Code quality
