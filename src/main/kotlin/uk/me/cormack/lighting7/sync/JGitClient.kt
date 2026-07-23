@@ -358,16 +358,23 @@ object JGitClient {
      * Returns an empty map if [ref] is unborn / can't be resolved. Used by
      * [uk.me.cormack.lighting7.sync.RecordHasher] to snapshot a whole commit's tree
      * without checking it out into the working tree.
+     *
+     * The `promptScripts/` subtree is skipped: those are binary, content-addressed PDF
+     * blobs (not records) and decoding them as UTF-8 here would be lossy — plus at up to
+     * 100 MB each, materialising them into this String map on every diff would be a real
+     * memory cost. They travel as raw bytes via [PromptScriptRepoSync] instead.
      */
     fun walkTree(repo: Repository, ref: String): Map<String, String> {
         val commitId = repo.resolve(ref) ?: return emptyMap()
         val out = mutableMapOf<String, String>()
+        val skipPrefix = "${RecordHasher.PROMPT_SCRIPTS_DIR}/"
         RevWalk(repo).use { walk ->
             val commit = walk.parseCommit(commitId)
             TreeWalk(repo).use { tree ->
                 tree.addTree(commit.tree)
                 tree.isRecursive = true
                 while (tree.next()) {
+                    if (tree.pathString.startsWith(skipPrefix)) continue
                     val loader = repo.open(tree.getObjectId(0))
                     val bytes = ByteArrayOutputStream().also { loader.copyTo(it) }
                     out[tree.pathString] = bytes.toString(Charsets.UTF_8)

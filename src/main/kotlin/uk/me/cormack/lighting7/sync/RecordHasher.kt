@@ -74,6 +74,14 @@ object RecordHasher {
     /** Repo-relative subdirectory holding tombstones for deleted records. */
     const val TOMBSTONES_DIR = "tombstones"
 
+    /**
+     * Repo-relative subdirectory holding prompt-book script PDFs (`{sha256}.pdf`).
+     * These are binary, content-addressed blobs — not records — so they're excluded
+     * from the record scan and from [JGitClient.walkTree]'s UTF-8 read. See
+     * [PromptScriptRepoSync].
+     */
+    const val PROMPT_SCRIPTS_DIR = "promptScripts"
+
     fun fromRef(repo: Repository, ref: String): Map<RecordKey, RecordSnapshot> =
         groupBlobs(JGitClient.walkTree(repo, ref))
 
@@ -154,7 +162,7 @@ object RecordHasher {
                 // Skip subtrees that can never contain live records: `.git/` (huge, full of
                 // pack files / loose objects) and `tombstones/` (deletions, not records).
                 val rel = workingTreePath.relativize(dir).toString().replace(File.separatorChar, '/')
-                return if (rel == ".git" || rel == TOMBSTONES_DIR) {
+                return if (rel == ".git" || rel == TOMBSTONES_DIR || rel == PROMPT_SCRIPTS_DIR) {
                     FileVisitResult.SKIP_SUBTREE
                 } else {
                     FileVisitResult.CONTINUE

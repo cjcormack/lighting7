@@ -70,8 +70,14 @@ where the child has no independent identity.
 /controlSurfaceBindings/{uuid}.json
 /scripts/{uuid}.kts                  raw Kotlin script body, git-friendly
 /scripts/{uuid}.meta.json            metadata sidecar (name, scriptType)
+/promptScripts/{sha256}.pdf          prompt-book script PDF, binary blob (v4+)
 /tombstones/{tableName}/{uuid}.json  deletion markers
 ```
+
+> Note: prompt books (record JSON + anchors/annotations) and their PDF binaries
+> were added after this design doc was first written. The living layout and the
+> binary-blob contract are in
+> [`docs/sync-engineering.md`](../sync-engineering.md) (see "Version 4").
 
 **FK rewrite.** Every synced DAO gains a `uuid: UUID` column (indexed,
 unique, non-null). Auto-increment `id` becomes a local-only handle; JSON

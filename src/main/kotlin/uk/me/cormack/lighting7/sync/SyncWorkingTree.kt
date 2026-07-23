@@ -5,6 +5,7 @@ import uk.me.cormack.lighting7.state.State
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.util.UUID
 
 /**
@@ -16,7 +17,9 @@ import java.util.UUID
  *
  *  * `.gitignore` — excludes OS junk (`.DS_Store`, `Thumbs.db`).
  *  * `.gitattributes` — `* text=auto eol=lf` so commits are byte-stable across
- *    macOS / Linux / Windows installs of the same project.
+ *    macOS / Linux / Windows installs of the same project, plus a rule marking
+ *    the `promptScripts` tree binary so prompt-book PDF blobs aren't
+ *    EOL-normalised. (That binary rule is back-filled onto pre-existing repos.)
  *
  * The snapshot pipeline calls [cleanTrackedFiles] before re-running
  * [ProjectExporter], which lets `git status` correctly surface deletions for
@@ -62,6 +65,12 @@ class SyncWorkingTree(private val state: State) {
         if (rel.isEmpty()) return true
         if (rel == ".git" || rel.startsWith(".git${File.separator}")) return true
         if (rel == ".gitignore" || rel == ".gitattributes") return true
+        // Prompt-book PDFs are content-addressed binary blobs, not DB-derived records, so
+        // the wipe must not delete them — an install lacking the bytes locally would
+        // otherwise drop the repo copy and revert the deletion onto its peers. The
+        // exporter reconciles this dir against the referenced hash (add/orphan-remove).
+        val prefix = RecordHasher.PROMPT_SCRIPTS_DIR
+        if (rel == prefix || rel.startsWith("$prefix${File.separator}")) return true
         return false
     }
 
@@ -69,7 +78,23 @@ class SyncWorkingTree(private val state: State) {
         val gitignore = path.resolve(".gitignore")
         if (!Files.exists(gitignore)) Files.writeString(gitignore, GITIGNORE_CONTENT)
         val gitattributes = path.resolve(".gitattributes")
-        if (!Files.exists(gitattributes)) Files.writeString(gitattributes, GITATTRIBUTES_CONTENT)
+        if (!Files.exists(gitattributes)) {
+            Files.writeString(gitattributes, GITATTRIBUTES_CONTENT)
+        } else {
+            // Existing repos (created before binary-PDF support) carry only
+            // `* text=auto eol=lf`. Ensure the binary rule is present so committed PDFs
+            // are never EOL-normalised or textually diffed. Idempotent — appended once,
+            // on the first snapshot after upgrade.
+            val current = Files.readString(gitattributes)
+            if (!current.contains(PROMPT_SCRIPTS_ATTRIBUTE)) {
+                val sep = if (current.isEmpty() || current.endsWith("\n")) "" else "\n"
+                Files.writeString(
+                    gitattributes,
+                    "$sep$PROMPT_SCRIPTS_ATTRIBUTE\n",
+                    StandardOpenOption.APPEND,
+                )
+            }
+        }
     }
 
     companion object {
@@ -80,11 +105,20 @@ class SyncWorkingTree(private val state: State) {
             desktop.ini
         """.trimIndent() + "\n"
 
+        /**
+         * Marks the prompt-book PDF directory as binary so git skips EOL normalisation
+         * and textual diffing on those blobs. Kept as a standalone constant so
+         * [writeMetadataFiles] can detect and back-fill it on already-initialised repos.
+         */
+        const val PROMPT_SCRIPTS_ATTRIBUTE = "promptScripts/** binary"
+
         // `text=auto eol=lf` normalises line endings on commit, so a Windows
         // install committing into the same repo as a macOS install doesn't
-        // produce a diff for every file on first push.
+        // produce a diff for every file on first push. `promptScripts/** binary`
+        // exempts the content-addressed PDF blobs from that normalisation.
         private val GITATTRIBUTES_CONTENT = """
             * text=auto eol=lf
+            $PROMPT_SCRIPTS_ATTRIBUTE
         """.trimIndent() + "\n"
     }
 }

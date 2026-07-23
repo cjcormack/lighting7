@@ -72,21 +72,29 @@ parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's pa
 controlSurfaceBindings/{uuid}.json
 scripts/{uuid}.kts             # raw Kotlin script body for git-friendly diffs
 scripts/{uuid}.meta.json       # metadata sidecar (name, scriptType)
-promptBooks/{uuid}.json        # script reference by content hash (PDF bytes NOT synced)
+promptBooks/{uuid}.json        # script reference by content hash (scriptHash)
 promptBookAnchors/{uuid}.json  # carries promptBookUuid + cueUuid; normalized region rects
 promptBookAnnotations/{uuid}.json  # carries promptBookUuid; note/strikethrough/freetext
+promptScripts/{sha256}.pdf     # the script PDF itself — binary blob, content-addressed (v4+)
 ```
 
 ### Prompt books
 
-Prompt-book records sync as JSON like everything else, but the script PDF the
-book is bound to is deliberately **not** synced — the repo stays JSON-only.
-`promptBooks/{uuid}.json` carries the PDF's SHA-256 (`scriptHash`), which is
-the script's identity (never the filename). On an install where the bytes are
-missing from the content-addressed store (`<appDataDir>/prompt-scripts/`),
-the frontend offers a re-import that re-attaches by hash. Anchor and
-annotation regions are validated on import against the book's `pageCount`
-(same invariant as the REST routes — see `checkPromptBookRegion`).
+Prompt-book records sync as JSON like everything else. **As of format v4 the
+script PDF travels too**, as a binary blob at `promptScripts/{sha256}.pdf`
+(see [Version 4](#version-4--prompt-book-pdf-binaries)). `promptBooks/{uuid}.json`
+carries the PDF's SHA-256 (`scriptHash`), which is the script's identity (never
+the filename); the blob's filename *is* that hash. Anchor and annotation regions
+are validated on import against the book's `pageCount` (same invariant as the
+REST routes — see `checkPromptBookRegion`).
+
+The bytes live in a per-install content-addressed store
+(`<appDataDir>/prompt-scripts/{projectUuid}/{hash}.pdf`, `State.promptScriptPath`)
+and are copied to/from the repo as **raw bytes only** — never through the
+text/`walkTree` machinery. See [Version 4](#version-4--prompt-book-pdf-binaries)
+for the full contract. The legacy "PDF missing on this install" re-import card
+(re-attach by hash) survives as a fallback for books whose bytes reached no peer
+(e.g. created before v4).
 
 A future phase may re-nest cue children under their parent stack folder
 (`cueStacks/{stackUuid}/cues/{cueUuid}/...`) so `git diff` scopes to the
@@ -210,14 +218,69 @@ string, geometry null), updates `fixture_patches.rigging_id` to point at the
 new row, swaps `stage_y` ↔ `stage_z` on every patch (Y-up → Z-up), and drops
 the `rigging_position` column. Idempotent — gated on the column's existence.
 
-On import (manual fresh-import or post-pull replace), an export with
-`formatVersion > 3` is rejected (HTTP 422); same for `formatVersion < 3`. On
-pull (cloud-sync phase 4), the remote `formatVersion.json` is read straight
-from the fetched git ref **before** the working tree is touched (see
-"Pre-pull formatVersion check" under [Remote sync (Phase 4)](#remote-sync-phase-4))
-so a too-new repo can't corrupt the local working tree. When Phase 5+
-migrations land, they live at `sync/migrations/V{n}_to_V{n+1}.kt` and run
-before the importer's three-way diff.
+On import (manual fresh-import or post-pull replace), an export whose
+`formatVersion` is greater than `SUPPORTED_FORMAT_VERSION` is rejected (HTTP 422);
+same if it is less than `MIN_SUPPORTED_FORMAT_VERSION`. On pull, the remote
+`formatVersion.json` is read straight from the fetched git ref **before** the
+working tree is touched (see "Pre-pull formatVersion check" under
+[Remote sync (Phase 4)](#remote-sync-phase-4)) so a too-new repo can't corrupt
+the local working tree. When Phase 5+ migrations land, they live at
+`sync/migrations/V{n}_to_V{n+1}.kt` and run before the importer's three-way diff.
+
+### Version 4 — Prompt-book PDF binaries
+
+Bumped when the script PDF a prompt book is bound to began travelling in the
+repo. `SUPPORTED_FORMAT_VERSION = 4`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 3**
+so a v4 install still reads pre-v4 (JSON-only) repos. The writer always emits
+`formatVersion = 4`.
+
+The bump is deliberately a hard gate rather than a graceful additive change: a
+pre-v4 install lacks the wipe-preserve/reconcile logic below, so on its next
+snapshot it would delete `promptScripts/` and **revert the PDF onto every peer**.
+Emitting v4 makes such an install refuse the repo as too-new (the same
+`formatVersion > SUPPORTED` check used everywhere else), which is the protection.
+For that to work the value must actually be on disk: `FormatVersionJson`
+force-encodes both fields with `@EncodeDefault(ALWAYS)`, because the canonical
+encoder's `encodeDefaults = false` would otherwise omit them (serialising the
+whole object to `{}`) and every reader would fall back to its own compiled-in
+default — silently defeating the gate. This also fixes that latent gap for good.
+
+Wire-format / repo-layout change: a new top-level `promptScripts/{sha256}.pdf`
+directory holding the raw PDF bytes. There is **no JSON DTO** — the file is the
+content, keyed by its own SHA-256 (which is also the book record's `scriptHash`).
+
+**Binaries never touch the text machinery.** PDFs are content-addressed and
+immutable, so they are *not records*: they're excluded from `RecordHasher`, the
+three-way diff, and `JGitClient.walkTree` (which UTF-8-decodes blobs and would be
+lossy — and, at up to 100 MB each, expensive). They move only as raw bytes via
+[`PromptScriptRepoSync`](../src/main/kotlin/uk/me/cormack/lighting7/sync/PromptScriptRepoSync.kt):
+
+* **store → tree** (`reconcileTree`) — on every export/snapshot, and on the
+  auto-merge path after the DB is merged. Copies the referenced hash's PDF from
+  the local store into `promptScripts/`, deletes orphaned hashes (a `scriptHash`
+  change or a deleted book), and — critically — **never deletes a referenced
+  hash's file even if the store lacks the bytes**, so a store-less install can't
+  drop the repo copy. The merge call is what puts the *winning* side's PDF into
+  the merge commit, since the record overlay only writes JSON.
+* **tree → store** (`hydrateStore`) — on every pull (from the real git checkout,
+  post-`resetHard`) and on manual import (from the export folder). Copies
+  `promptScripts/*.pdf` into the local store so the book renders without a manual
+  re-import.
+
+Supporting pieces:
+
+* `promptScripts/` is exempt from the snapshot **wipe**
+  (`SyncWorkingTree.isPreserved`) — see the no-data-loss rule above. Unchanged
+  PDFs keep their mtime, so `stageAll` treats them as no-change and they aren't
+  re-committed.
+* `.gitattributes` gains `promptScripts/** binary` so git skips EOL
+  normalisation and textual diffing. The rule is **back-filled** onto
+  already-initialised repos (`writeMetadataFiles` appends it if missing).
+* `walkTree` prunes the `promptScripts/` subtree, so the diff input and the
+  fast-forward scratch reconstruction never see (and never corrupt) the bytes.
+
+There is no live migration: a pre-v4 repo simply has no `promptScripts/` dir;
+the first v4 push adds it and stamps `formatVersion = 4`.
 
 ## Machine-local data
 

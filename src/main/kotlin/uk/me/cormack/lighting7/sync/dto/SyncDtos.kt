@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.sync.dto
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import uk.me.cormack.lighting7.fx.EffectMode
@@ -21,9 +23,19 @@ import uk.me.cormack.lighting7.scripts.ScriptType
  * silently change the synced JSON shape).
  */
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
-    val formatVersion: Int = 3,
+    // v4: prompt-book script PDFs travel in the repo as `promptScripts/{hash}.pdf`.
+    //
+    // @EncodeDefault(ALWAYS) forces these to be written despite the canonical encoder's
+    // `encodeDefaults = false`. Without it the whole object serialises to `{}` and every
+    // reader falls back to its OWN compiled-in default — so the version gate can never see
+    // the writer's version and never rejects a too-new repo. Forcing the value is what
+    // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val formatVersion: Int = 4,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 1,
 )
 
@@ -318,9 +330,10 @@ data class ControlSurfaceBindingJson(
 
 /**
  * Prompt-book: binds an imported PDF script (identified by content hash) to the
- * project's show. The PDF bytes themselves are deliberately NOT synced — the repo
- * is JSON-only; on an install where the bytes are missing, the client offers a
- * re-import that re-attaches by hash.
+ * project's show. As of format v4 the PDF bytes travel too, as a binary blob at
+ * `promptScripts/{scriptHash}.pdf` moved by `PromptScriptRepoSync` (never through
+ * this JSON path). On an install still missing the bytes — e.g. a book created
+ * before v4 whose PDF reached no peer — the client offers a re-import by hash.
  */
 @Serializable
 data class PromptBookJson(

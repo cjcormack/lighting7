@@ -441,6 +441,12 @@ class RemoteSyncEngine(
 
         importer.replaceFromWorkingTree(projectId, workingTreePath)
 
+        // Ensure the merged tree carries the PDF matching the merged scriptHash (the
+        // overlay above only writes record JSON, not the binary), and hydrate the local
+        // store so the UI can render whichever side won. Done before stageAll so a
+        // PDF add/remove is part of the merge commit.
+        reconcileAndHydratePromptScripts(projectId, workingTreePath, reconcile = true)
+
         if (!JGitClient.stageAll(repo)) {
             // No tree-level diff vs remote — equivalent to a fast-forward.
             val head = JGitClient.head(repo)?.sha ?: error("Auto-merge no-op: null HEAD")
@@ -918,6 +924,11 @@ class RemoteSyncEngine(
             scratch.toFile().deleteRecursively()
         }
         JGitClient.resetHard(repo, remoteRef)
+        // HEAD (and the working tree) now hold the real remote bytes, including any
+        // `promptScripts/{hash}.pdf`. Copy them into the local store so the book renders
+        // without a manual re-import. No reconcile: a fast-forward adopts the remote tree
+        // wholesale, so it already matches the pulled scriptHash exactly.
+        reconcileAndHydratePromptScripts(projectId, repo.workTree.toPath(), reconcile = false)
     }
 
     /** Write [content] to `relPath` under [workingTreePath], creating parent dirs. */
@@ -925,6 +936,24 @@ class RemoteSyncEngine(
         val target = workingTreePath.resolve(relPath)
         Files.createDirectories(target.parent)
         Files.writeString(target, content)
+    }
+
+    /**
+     * After a pull materialises a new tree, keep prompt-book PDFs in sync with the local
+     * store. When [reconcile] is true (the merge path) the tree is first reconciled to the
+     * merged `scriptHash` — copying the winning PDF in from the store and dropping orphans
+     * — so the merge commit is self-consistent (the record-overlay only writes JSON, never
+     * the binary). Then every PDF in the tree's `promptScripts` directory is copied into
+     * the store (byte-accurate) so the book renders without a manual re-import. Reads the referenced
+     * hash from the DB, which reflects the just-applied merge/fast-forward.
+     */
+    private fun reconcileAndHydratePromptScripts(projectId: Int, treeDir: Path, reconcile: Boolean) {
+        val ref = transaction(state.database) {
+            DaoProject.findById(projectId)
+                ?.let { it.uuid to listOfNotNull(it.promptBook?.scriptHash).toSet() }
+        } ?: return
+        if (reconcile) PromptScriptRepoSync.reconcileTree(state, ref.first, ref.second, treeDir)
+        PromptScriptRepoSync.hydrateStore(state, ref.first, treeDir)
     }
 
     private fun remoteBranchRef(branch: String): String = "refs/remotes/$REMOTE_NAME/$branch"

@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.sync
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoCue
@@ -66,7 +67,11 @@ import java.util.UUID
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
-internal const val SUPPORTED_FORMAT_VERSION = 3
+// v4 added `promptScripts/{hash}.pdf` binary blobs to the repo. MIN stays 3 so a v4
+// install still reads pre-v4 (JSON-only) repos; the writer emits 4 (see FormatVersionJson),
+// which makes a pre-v4 install refuse a v4 repo (it lacks the wipe-preserve logic and would
+// delete the PDFs, reverting them onto peers).
+internal const val SUPPORTED_FORMAT_VERSION = 4
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 3
 
 /**
@@ -83,6 +88,8 @@ class ImportError(val status: HttpStatusCode, message: String) : RuntimeExceptio
 
 class ProjectImporter(private val state: State) {
 
+    private val logger = LoggerFactory.getLogger(ProjectImporter::class.java)
+
     data class Result(val projectId: Int, val projectUuid: String, val name: String)
 
     /**
@@ -96,7 +103,7 @@ class ProjectImporter(private val state: State) {
         val targetName = nameOverride ?: projectJson.name
         val targetUuid = UUID.fromString(projectJson.uuid)
 
-        return transaction(state.database) {
+        val result = transaction(state.database) {
             // UUID-collision check first — a same-UUID project means we'd be merging, which
             // Phase 1 deliberately doesn't support.
             val uuidCollision = DaoProject.find { DaoProjects.uuid eq targetUuid }.firstOrNull()
@@ -135,6 +142,17 @@ class ProjectImporter(private val state: State) {
                 name = targetName,
             )
         }
+
+        // Copy any script PDF(s) shipped in the export folder into the local content
+        // store (byte-accurate) so the prompt book renders without a manual re-import.
+        // Done AFTER the transaction and best-effort: the store is only a UI cache with a
+        // missing-PDF re-import fallback, and the copy can be up to 100MB — neither a copy
+        // failure nor its duration should roll back or stall the committed import. The
+        // sync-pull path hydrates in the engine instead, from the real git checkout.
+        runCatching { PromptScriptRepoSync.hydrateStore(state, targetUuid, sourceDir) }
+            .onFailure { logger.warn("Prompt-book PDF hydrate failed for imported project {}: {}", targetUuid, it.message) }
+
+        return result
     }
 
     /**

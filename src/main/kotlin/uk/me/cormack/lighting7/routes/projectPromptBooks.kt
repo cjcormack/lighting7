@@ -36,7 +36,7 @@ private val SCRIPT_HASH_REGEX = Regex("^[0-9a-f]{64}$")
 private const val MAX_SCRIPT_BYTES = 100 * 1024 * 1024
 
 internal fun promptScriptPath(state: State, projectUuid: String, hash: String): Path =
-    state.promptScriptStoreRoot.resolve(projectUuid).resolve("$hash.pdf")
+    state.promptScriptPath(projectUuid, hash)
 
 /**
  * Outcome of a transaction block that can fail with a client error. Lets handlers

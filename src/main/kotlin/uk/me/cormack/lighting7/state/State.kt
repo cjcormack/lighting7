@@ -107,6 +107,16 @@ class State(val config: ApplicationConfig) {
         ?: appDataDir().resolve("prompt-scripts")
 
     /**
+     * Content-addressed on-disk location of a prompt-book script PDF:
+     * `{promptScriptStoreRoot}/{projectUuid}/{hash}.pdf`. Shared by the prompt-book
+     * routes (upload/serve) and the cloud-sync layer, which copies the byte-accurate
+     * file between this store and the git working tree. The bytes never round-trip
+     * through the text-oriented sync machinery — see `PromptScriptRepoSync`.
+     */
+    fun promptScriptPath(projectUuid: String, hash: String): Path =
+        promptScriptStoreRoot.resolve(projectUuid).resolve("$hash.pdf")
+
+    /**
      * Cloud-sync lifecycle broadcasts. The REST sync-run handler emits into this flow;
      * each WS handler in `plugins/Sockets.kt` collects per-connection.
      */

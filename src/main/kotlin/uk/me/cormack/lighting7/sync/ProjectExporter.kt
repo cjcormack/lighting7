@@ -95,10 +95,13 @@ class ProjectExporter(private val state: State) {
         knownInstalls: Map<String, String> = emptyMap(),
     ): Result {
         val liveKeys = mutableSetOf<RecordKey>()
+        var reconcileProjectUuid: UUID? = null
+        var referencedScriptHashes: Set<String> = emptySet()
         val fileCount = transaction(state.database) {
             val project = DaoProject.findById(projectId)
                 ?: throw IllegalArgumentException("Project not found: $projectId")
             val projectUuid = project.uuid
+            reconcileProjectUuid = projectUuid
 
             Files.createDirectories(targetDir)
 
@@ -194,6 +197,10 @@ class ProjectExporter(private val state: State) {
                     tone = n.tone,
                 )
             }
+
+            // Capture the referenced script-PDF hashes; the actual (up-to-100MB) copy
+            // happens AFTER the transaction commits so it never holds the DB write lock.
+            referencedScriptHashes = promptBooks.map { it.scriptHash }.toSet()
 
             count += writeAll(targetDir, "universeConfigs", project.universeConfigs.toList(), UniverseConfigJson.serializer(), { it.uuid }, liveKeys) { u ->
                 // `address` deliberately omitted — machine-local per cloud-sync design.
@@ -353,6 +360,12 @@ class ProjectExporter(private val state: State) {
 
             count += writeScripts(targetDir, project, liveKeys)
             count
+        }
+        // Copy the referenced script PDF(s) into `promptScripts/{hash}.pdf` (raw bytes)
+        // and remove orphaned ones — outside the transaction so the copy never blocks the
+        // DB writer. PDFs are not records; they ride the repo as content-addressed blobs.
+        reconcileProjectUuid?.let {
+            PromptScriptRepoSync.reconcileTree(state, it, referencedScriptHashes, targetDir)
         }
         return Result(targetDir, fileCount, liveKeys)
     }
