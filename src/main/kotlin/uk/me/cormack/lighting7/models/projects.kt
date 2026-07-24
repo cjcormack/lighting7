@@ -14,9 +14,11 @@ object DaoProjects: IntIdTable("projects") {
     val name = varchar("name", 50).uniqueIndex()
     val description = varchar("description", 255).nullable()
     val isCurrent = bool("is_current").default(false)
-    // Plain integer to avoid circular FK with DaoShowEntries.
-    // The deferrable FK constraint is added via manual SQL in State.kt.
-    val activeEntryId = integer("active_entry_id").nullable()
+    // The project's currently-active cue stack (the show playhead), or null when the show is not
+    // running. Plain integer, no enforced FK — a deleted stack is reconciled by nulling this in the
+    // stack-delete path. (The legacy `active_entry_id` column referenced the dropped show_entries
+    // table; StateMigrations.migrateCollapseShowIntoStacks copies its value here.)
+    val activeStackId = integer("active_stack_id").nullable()
     // Per-project stage bounds (metres) for the FOH 3D view; synced with the project
     // because shows are designed for a specific venue. See docs/fixtures-engineering.md.
     val stageWidthM = double("stage_width_m").nullable()
@@ -31,14 +33,13 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     var name by DaoProjects.name
     var description by DaoProjects.description
     var isCurrent by DaoProjects.isCurrent
-    var activeEntryId by DaoProjects.activeEntryId
+    var activeStackId by DaoProjects.activeStackId
     var stageWidthM by DaoProjects.stageWidthM
     var stageDepthM by DaoProjects.stageDepthM
     var stageHeightM by DaoProjects.stageHeightM
     var uuid by DaoProjects.uuid
 
     val scripts by DaoScript referrersOn DaoScripts.project
-    val showEntries by DaoShowEntry referrersOn DaoShowEntries.project
     val fxPresets by DaoFxPreset referrersOn DaoFxPresets.project
     val cues by DaoCue referrersOn DaoCues.project
     val cueStacks by DaoCueStack referrersOn DaoCueStacks.project

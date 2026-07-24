@@ -2,8 +2,11 @@ package uk.me.cormack.lighting7.state
 
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.Transaction
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.models.DaoCueStack
+import uk.me.cormack.lighting7.models.DaoCueStacks
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoRigging
@@ -11,6 +14,7 @@ import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
 import uk.me.cormack.lighting7.models.LegacyStaticEffectMigration
 import uk.me.cormack.lighting7.sync.Overrides
+import java.util.UUID
 
 private val logger = LoggerFactory.getLogger("StateMigrations")
 
@@ -47,6 +51,7 @@ internal fun Transaction.runStateMigrations(database: Database) {
 
     ensureInstallRow()
     migrateUniverseAddressesToOverrides()
+    migrateCollapseShowIntoStacks(database)
 }
 
 /**
@@ -512,4 +517,178 @@ private fun Transaction.migrateProjectActiveEntryFk() {
             FOREIGN KEY (active_entry_id) REFERENCES show_entries(id)
             DEFERRABLE INITIALLY DEFERRED
     """.trimIndent())
+}
+
+/**
+ * Collapses the old two-layer show model (`show_entries` + nullable `cues.cue_stack_id`) into the
+ * new first-class model where a project directly owns an *ordered* list of cue stacks (the show)
+ * and every cue belongs to a stack.
+ *
+ * Unlike the PostgreSQL-only migrations above, this runs for **all dialects** (it is the actual data
+ * fix for the real SQLite deployment) and touches the now-deleted `show_entries` table only through
+ * raw SQL. Idempotent: once there are no null `cue_stack_id` rows and `show_entries` is gone, every
+ * step is a no-op.
+ *
+ * Steps:
+ *  1. Move any standalone cues (`cue_stack_id IS NULL`) into a per-project "Unsorted" stack.
+ *  2. Apply the `show_entries` order onto `cue_stacks.sort_order`; turn MARKER entries into
+ *     `SEPARATOR` stacks (preserving their uuid); then densify `sort_order` per project, appending
+ *     unreferenced stacks (incl. "Unsorted") after the ordered ones, by name.
+ *  3. Resolve `projects.active_entry_id` → `projects.active_stack_id` (markers resolve to null).
+ *  4. Drop the `show_entries` table (the inert `active_entry_id` column is left in place on SQLite).
+ */
+internal fun Transaction.migrateCollapseShowIntoStacks(database: Database) {
+    // ── Step 1: rescue standalone cues ──────────────────────────────────────
+    val standaloneByProject = linkedMapOf<Int, MutableList<Int>>()
+    exec("SELECT id, project_id FROM cues WHERE cue_stack_id IS NULL") { rs ->
+        while (rs.next()) {
+            standaloneByProject.getOrPut(rs.getInt("project_id")) { mutableListOf() }.add(rs.getInt("id"))
+        }
+    }
+    if (standaloneByProject.isNotEmpty()) {
+        var rescued = 0
+        for ((projectId, cueIds) in standaloneByProject) {
+            val project = DaoProject.findById(projectId) ?: continue
+            val unsorted = DaoCueStack.find {
+                (DaoCueStacks.project eq project.id) and
+                    (DaoCueStacks.name eq "Unsorted") and
+                    (DaoCueStacks.type eq "STACK")
+            }.firstOrNull() ?: DaoCueStack.new {
+                this.project = project
+                name = "Unsorted"
+                palette = emptyList()
+                loop = false
+                type = "STACK"
+                sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            }
+            var nextSort = (unsorted.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            for (cueId in cueIds) {
+                exec("UPDATE cues SET cue_stack_id = ${unsorted.id.value}, sort_order = ${nextSort++} WHERE id = $cueId")
+                rescued++
+            }
+        }
+        logger.info("Collapse-show: rescued {} standalone cue(s) into per-project 'Unsorted' stack(s)", rescued)
+    }
+
+    // ── Steps 2-4: fold show_entries into the ordered stack collection ──────
+    if (!tableExists(database, "show_entries")) return
+
+    data class Entry(
+        val id: Int, val projectId: Int, val cueStackId: Int?,
+        val entryType: String, val sortOrder: Int, val label: String?, val uuid: String?,
+    )
+
+    val entries = mutableListOf<Entry>()
+    exec(
+        """SELECT id, project_id, cue_stack_id, entry_type, sort_order, label, uuid
+           FROM show_entries ORDER BY project_id, sort_order"""
+    ) { rs ->
+        while (rs.next()) {
+            entries.add(Entry(
+                id = rs.getInt("id"),
+                projectId = rs.getInt("project_id"),
+                cueStackId = rs.getInt("cue_stack_id").let { if (rs.wasNull()) null else it },
+                entryType = rs.getString("entry_type"),
+                sortOrder = rs.getInt("sort_order"),
+                label = rs.getString("label"),
+                uuid = rs.getString("uuid"),
+            ))
+        }
+    }
+
+    // entryId → resulting stack id, for STACK entries only (used to resolve the active playhead).
+    val stackEntryToStackId = mutableMapOf<Int, Int>()
+    // Every stack id that came from an entry (STACK targets + created SEPARATORs) — these sort first.
+    val referencedStackIds = mutableSetOf<Int>()
+
+    for (entry in entries) {
+        when (entry.entryType) {
+            "STACK" -> {
+                val sid = entry.cueStackId ?: continue
+                val labelSql = entry.label?.let { "'${it.replace("'", "''")}'" } ?: "NULL"
+                exec("UPDATE cue_stacks SET sort_order = ${entry.sortOrder}, type = 'STACK', label = $labelSql WHERE id = $sid")
+                stackEntryToStackId[entry.id] = sid
+                referencedStackIds.add(sid)
+            }
+            "MARKER" -> {
+                val project = DaoProject.findById(entry.projectId) ?: continue
+                val separator = DaoCueStack.new {
+                    this.project = project
+                    name = entry.label ?: "Separator"
+                    label = entry.label
+                    palette = emptyList()
+                    loop = false
+                    type = "SEPARATOR"
+                    sortOrder = entry.sortOrder
+                    entry.uuid?.let { u -> runCatching { uuid = UUID.fromString(u) } }
+                }
+                referencedStackIds.add(separator.id.value)
+            }
+        }
+    }
+
+    // Densify sort_order per project: referenced rows first (by entry order), then unreferenced
+    // stacks (including any "Unsorted") appended by name.
+    for (projectId in DaoProject.all().map { it.id.value }) {
+        val stacks = DaoCueStack.find { DaoCueStacks.project eq projectId }
+            .toList()
+            .sortedWith(
+                compareBy(
+                    { if (it.id.value in referencedStackIds) 0 else 1 },
+                    { it.sortOrder },
+                    { it.name },
+                )
+            )
+        stacks.forEachIndexed { index, stack -> if (stack.sortOrder != index) stack.sortOrder = index }
+    }
+
+    // ── Step 3: active_entry_id → active_stack_id ───────────────────────────
+    if (columnExists(database, "projects", "active_entry_id")) {
+        val activeEntryByProject = mutableMapOf<Int, Int>()
+        exec("SELECT id, active_entry_id FROM projects WHERE active_entry_id IS NOT NULL") { rs ->
+            while (rs.next()) activeEntryByProject[rs.getInt("id")] = rs.getInt("active_entry_id")
+        }
+        for ((projectId, entryId) in activeEntryByProject) {
+            val stackId = stackEntryToStackId[entryId]  // markers → null (not runnable)
+            exec("UPDATE projects SET active_stack_id = ${stackId ?: "NULL"} WHERE id = $projectId")
+        }
+    }
+
+    // ── Step 4: drop show_entries ───────────────────────────────────────────
+    if (database.dialect is PostgreSQLDialect) {
+        exec("ALTER TABLE projects DROP CONSTRAINT IF EXISTS fk_project_active_entry")
+        exec("DROP TABLE IF EXISTS show_entries CASCADE")
+    } else {
+        exec("DROP TABLE IF EXISTS show_entries")
+    }
+    logger.info("Collapse-show: migrated {} show entry/entries into ordered stacks; dropped show_entries", entries.size)
+}
+
+/** Dialect-agnostic table-existence check (SQLite `sqlite_master`, PostgreSQL `information_schema`). */
+private fun Transaction.tableExists(database: Database, table: String): Boolean {
+    var exists = false
+    val sql = if (database.dialect is PostgreSQLDialect) {
+        "SELECT 1 FROM information_schema.tables WHERE table_name = '$table'"
+    } else {
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '$table'"
+    }
+    exec(sql) { rs -> exists = rs.next() }
+    return exists
+}
+
+/** Dialect-agnostic column-existence check. */
+private fun Transaction.columnExists(database: Database, table: String, column: String): Boolean {
+    var exists = false
+    if (database.dialect is PostgreSQLDialect) {
+        exec(
+            "SELECT 1 FROM information_schema.columns WHERE table_name = '$table' AND column_name = '$column'"
+        ) { rs -> exists = rs.next() }
+    } else {
+        exec("PRAGMA table_info($table)") { rs ->
+            while (rs.next()) {
+                if (rs.getString("name") == column) { exists = true; break }
+            }
+        }
+    }
+    return exists
 }

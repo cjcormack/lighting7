@@ -59,8 +59,18 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid cueType: '${newCue.cueType}'. Valid values: ${CueType.entries.joinToString()}"))
                 return@withCurrentProject
             }
-            val cueDetails = transaction(state.database) {
-                val stack = newCue.cueStackId?.let { DaoCueStack.findById(it) }
+            // Every cue belongs to a stack — standalone cues no longer exist.
+            val cueStackId = newCue.cueStackId
+            if (cueStackId == null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("cueStackId is required — every cue must belong to a cue stack"))
+                return@withCurrentProject
+            }
+            val result = transaction(state.database) {
+                val stack = DaoCueStack.findById(cueStackId)
+                    ?: return@transaction null to "Cue stack not found"
+                if (stack.project.id != project.id) return@transaction null to "Cue stack does not belong to project"
+                if (stack.type == CueStackType.SEPARATOR.name) return@transaction null to "Cannot add cues to a separator"
+
                 val cue = DaoCue.new {
                     name = newCue.name
                     this.project = project
@@ -74,10 +84,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     notes = newCue.notes
                     cueType = validatedCueType
                     stomp = newCue.stomp
-                    if (stack != null) {
-                        cueStack = stack
-                        sortOrder = newCue.sortOrder ?: stack.cues.count().toInt()
-                    }
+                    cueStack = stack
+                    sortOrder = newCue.sortOrder ?: stack.cues.count().toInt()
                 }
                 createCueChildren(
                     cue,
@@ -86,10 +94,15 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     newCue.propertyAssignments,
                     newCue.triggers,
                 )
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures) to null
+            }
+            val (cueDetails, error) = result
+            if (error != null || cueDetails == null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(error ?: "Failed to create cue"))
+                return@withCurrentProject
             }
             state.show.fixtures.cueListChanged()
-            if (newCue.cueStackId != null) state.show.fixtures.cueStackListChanged()
+            state.show.fixtures.cueStackListChanged()
             call.respond(HttpStatusCode.Created, cueDetails)
         }
     }
@@ -222,7 +235,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
             if (cueDetails != null) {
                 state.show.fixtures.cueListChanged()
-                if (cueDetails.cueStackId != null) state.show.fixtures.cueStackListChanged()
+                state.show.fixtures.cueStackListChanged()
                 call.respond(cueDetails)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
@@ -286,6 +299,9 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 return@transaction null to "A cue with name '$cueName' already exists in target project"
             }
 
+            // Every cue must live in a stack. A cross-project copy lands in the target project's
+            // "Unsorted" stack (created on demand); the operator can move it afterwards.
+            val targetStack = getOrCreateUnsortedStack(targetProject)
             val newCue = DaoCue.new {
                 name = cueName
                 project = targetProject
@@ -296,6 +312,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 fadeDurationMs = sourceCue.fadeDurationMs
                 fadeCurve = sourceCue.fadeCurve
                 stomp = sourceCue.stomp
+                cueStack = targetStack
+                sortOrder = targetStack.cues.count().toInt()
             }
 
             // Copy child entities
@@ -369,6 +387,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         val (response, error) = result
         if (response != null) {
             state.show.fixtures.cueListChanged()
+            state.show.fixtures.cueStackListChanged()
             call.respond(HttpStatusCode.Created, response)
         } else {
             val statusCode = when (error) {
@@ -387,67 +406,27 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             resource.parent.projectId,
             { p -> "Cannot apply cues from project '${p.name}' - only the current project's cues can be applied" },
         ) { project ->
-            val replaceAll = call.request.queryParameters["replaceAll"]?.toBoolean() ?: false
-
-            // Read cue data and check stack membership
-            val cueInfo = transaction(state.database) {
+            // Read the cue's stack membership. Every cue belongs to a stack, so applying a cue is
+            // just activating that cue within its stack (activates the stack if needed).
+            val cueStackId = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
-                val cueData = buildCueApplyData(cue)
-                Pair(cueData, cueData.cueStackId)
+                cue.cueStack.id.value
             }
 
-            if (cueInfo == null) {
+            if (cueStackId == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
                 return@withCurrentProject
             }
 
-            val (cueData, cueStackId) = cueInfo
-
             try {
-                if (cueStackId != null) {
-                    // Cue belongs to a stack — delegate to CueStackManager
-                    // This activates the stack (if not already active) and switches to this cue
-                    val stackResult = state.show.cueStackManager.activateCueInStack(
-                        state, cueStackId, resource.cueId
-                    )
-                    call.respond(ApplyCueResponse(
-                        effectCount = stackResult.effectCount,
-                        cueName = stackResult.cueName,
-                    ))
-                } else {
-                    // Deactivate old triggers/timed effects for this cue before re-applying
-                    state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
-
-                    val result = applyCue(state, cueData, replaceAll = replaceAll)
-
-                    // Activate timed effects (delayed/recurring presets and ad-hoc effects)
-                    val timedPresets = cueData.presetApplications.filter { it.delayMs != null || it.intervalMs != null }
-                    val timedAdHoc = cueData.adHocEffects.filter { it.delayMs != null || it.intervalMs != null }
-                    if (timedPresets.isNotEmpty() || timedAdHoc.isNotEmpty()) {
-                        state.cueTriggerManager.activateTimedEffectsForCue(
-                            cueId = resource.cueId,
-                            cueStackId = null,
-                            priority = cueDerivedPriority(cueData),
-                            timedPresets = timedPresets,
-                            timedAdHocEffects = timedAdHoc,
-                            scope = kotlinx.coroutines.GlobalScope,
-                            cuePalette = cueData.palette.toPaletteColours(),
-                        )
-                    }
-
-                    // Activate script triggers after effects are applied
-                    if (cueData.triggers.isNotEmpty()) {
-                        state.cueTriggerManager.activateTriggersForCue(
-                            cueId = resource.cueId,
-                            cueStackId = null,
-                            triggers = cueData.triggers,
-                            scope = kotlinx.coroutines.GlobalScope,
-                        )
-                    }
-
-                    call.respond(result)
-                }
+                val stackResult = state.show.cueStackManager.activateCueInStack(
+                    state, cueStackId, resource.cueId
+                )
+                call.respond(ApplyCueResponse(
+                    effectCount = stackResult.effectCount,
+                    cueName = stackResult.cueName,
+                ))
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to apply cue"))
             }
@@ -657,4 +636,23 @@ data class StopCueResponse(
     val removedCount: Int,
     val cueId: Int,
 )
+
+/**
+ * Returns the project's "Unsorted" cue stack, creating it (appended to the end of the show order)
+ * if it doesn't exist yet. Used as the landing stack for cross-project cue copies, since every cue
+ * must belong to a stack. Must be called inside a transaction.
+ */
+private fun getOrCreateUnsortedStack(project: DaoProject): DaoCueStack =
+    DaoCueStack.find {
+        (DaoCueStacks.project eq project.id) and
+            (DaoCueStacks.name eq "Unsorted") and
+            (DaoCueStacks.type eq CueStackType.STACK.name)
+    }.firstOrNull() ?: DaoCueStack.new {
+        name = "Unsorted"
+        this.project = project
+        palette = emptyList()
+        loop = false
+        type = CueStackType.STACK.name
+        sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1
+    }
 

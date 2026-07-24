@@ -201,6 +201,10 @@ data class CueStackJson(
     val name: String,
     val palette: List<String> = emptyList(),
     val loop: Boolean = false,
+    val sortOrder: Int = 0,
+    /** "STACK" (default) or "SEPARATOR". */
+    val type: String = "STACK",
+    val label: String? = null,
 )
 
 @Serializable

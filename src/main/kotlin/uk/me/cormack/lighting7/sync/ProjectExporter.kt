@@ -30,7 +30,6 @@ import uk.me.cormack.lighting7.sync.dto.PromptBookAnnotationJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookJson
 import uk.me.cormack.lighting7.sync.dto.RiggingJson
 import uk.me.cormack.lighting7.sync.dto.ScriptMetaJson
-import uk.me.cormack.lighting7.sync.dto.ShowEntryJson
 import uk.me.cormack.lighting7.sync.dto.StageRegionJson
 import uk.me.cormack.lighting7.sync.dto.TombstoneJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
@@ -48,8 +47,7 @@ import java.util.UUID
  * /formatVersion.json
  * /project.json
  * /installs.json                  -- empty in Phase 1; Phase 2 populates
- * /showEntries/{uuid}.json
- * /cueStacks/{uuid}.json
+ * /cueStacks/{uuid}.json           -- includes SEPARATOR rows and show order (sortOrder)
  * /cues/{uuid}.json
  * /cuePropertyAssignments/{uuid}.json
  * /cuePresetApplications/{uuid}.json
@@ -132,24 +130,22 @@ class ProjectExporter(private val state: State) {
             )
             var count = 3
 
-            count += writeAll(targetDir, "showEntries", project.showEntries.toList(), ShowEntryJson.serializer(), { it.uuid }, liveKeys) { e ->
-                ShowEntryJson(
-                    uuid = e.uuid.toString(),
-                    cueStackUuid = e.cueStack?.uuid?.toString(),
-                    entryType = e.entryType,
-                    sortOrder = e.sortOrder,
-                    label = e.label,
-                )
-            }
-
             count += writeAll(targetDir, "cueStacks", project.cueStacks.toList(), CueStackJson.serializer(), { it.uuid }, liveKeys) { s ->
-                CueStackJson(s.uuid.toString(), s.name, s.palette, s.loop)
+                CueStackJson(
+                    uuid = s.uuid.toString(),
+                    name = s.name,
+                    palette = s.palette,
+                    loop = s.loop,
+                    sortOrder = s.sortOrder,
+                    type = s.type,
+                    label = s.label,
+                )
             }
 
             count += writeAll(targetDir, "cues", project.cues.toList(), CueJson.serializer(), { it.uuid }, liveKeys) { c ->
                 CueJson(
                     uuid = c.uuid.toString(),
-                    cueStackUuid = c.cueStack?.uuid?.toString(),
+                    cueStackUuid = c.cueStack.uuid.toString(),
                     name = c.name,
                     palette = c.palette,
                     updateGlobalPalette = c.updateGlobalPalette,

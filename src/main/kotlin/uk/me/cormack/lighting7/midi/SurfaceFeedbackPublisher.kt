@@ -179,8 +179,7 @@ class SurfaceFeedbackPublisher(
         override fun patchListChanged() {}
         override fun riggingListChanged() {}
         override fun stageRegionListChanged() {}
-        override fun showEntriesChanged() {}
-        override fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?) {}
+        override fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {}
         override fun promptBookChanged() {}
     }
 

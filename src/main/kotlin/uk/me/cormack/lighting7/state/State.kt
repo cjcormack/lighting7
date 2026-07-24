@@ -594,8 +594,7 @@ class State(val config: ApplicationConfig) {
         override fun patchListChanged() = refreshActiveProjectBindingHealth()
         override fun riggingListChanged() {}
         override fun stageRegionListChanged() {}
-        override fun showEntriesChanged() {}
-        override fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?) {}
+        override fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {}
         override fun promptBookChanged() {}
     }
 
@@ -665,7 +664,6 @@ class State(val config: ApplicationConfig) {
                 DaoUniverseConfigs, DaoRiggings, DaoStageRegions,
                 DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
                 DaoParkedChannels, DaoFxDefinitions,
-                DaoShowEntries,
                 DaoPromptBooks, DaoPromptBookAnchors, DaoPromptBookAnnotations,
                 DaoControlSurfaceBindings,
                 DaoProjectScalerStates,
@@ -683,6 +681,16 @@ class State(val config: ApplicationConfig) {
             // index (was uniqueIndex(project, name)). The new uniqueIndex(project) is
             // created by createMissingTablesAndColumns above.
             exec("DROP INDEX IF EXISTS prompt_books_project_id_name")
+
+            // Cue stacks gained a SEPARATOR type; separators may share a name (e.g. two "Interval"
+            // dividers), so the old full (project, name) unique index is replaced with a partial one
+            // scoped to real STACK rows. Drop the legacy index name created by the previous model.
+            exec("DROP INDEX IF EXISTS cue_stacks_project_id_name")
+            exec("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_cue_stack_name_per_project
+                    ON cue_stacks (project_id, name)
+                    WHERE type = 'STACK'
+            """.trimIndent())
 
             // Partial unique index: cue_number must be unique per stack for STANDARD cues.
             // SQLite supports partial indexes with the same syntax.

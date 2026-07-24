@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueSlot
+import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueTrigger
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
@@ -28,7 +29,6 @@ import uk.me.cormack.lighting7.models.DaoPromptBookAnnotation
 import uk.me.cormack.lighting7.models.PromptBookRectDto
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
-import uk.me.cormack.lighting7.models.DaoShowEntry
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.FxPresetEffectDto
@@ -365,9 +365,11 @@ class ProjectRoundTripTest {
         // 2 cue stacks, 3 cues, with property assignments + ad-hoc + preset apps + triggers
         val stack1 = DaoCueStack.new {
             this.project = project; name = "show-1"; palette = emptyList(); loop = false
+            type = CueStackType.STACK.name; sortOrder = 0
         }
         val stack2 = DaoCueStack.new {
             this.project = project; name = "show-2"; palette = emptyList(); loop = true
+            type = CueStackType.STACK.name; sortOrder = 2
         }
         val cue1 = DaoCue.new {
             this.project = project; name = "open"; cueStack = stack1; sortOrder = 0
@@ -399,12 +401,11 @@ class ProjectRoundTripTest {
             palette = emptyList()
         }
 
-        // show entries (1 stack reference + 1 marker)
-        val entry1 = DaoShowEntry.new {
-            this.project = project; cueStack = stack1; entryType = "STACK"; sortOrder = 0
-        }
-        DaoShowEntry.new {
-            this.project = project; entryType = "MARKER"; sortOrder = 1; label = "intermission"
+        // separator between the two stacks (replaces the old show MARKER entry); the stacks'
+        // sortOrder values above define show order.
+        DaoCueStack.new {
+            this.project = project; name = "intermission"; label = "intermission"
+            palette = emptyList(); loop = false; type = CueStackType.SEPARATOR.name; sortOrder = 1
         }
 
         // cue slot
@@ -446,8 +447,8 @@ class ProjectRoundTripTest {
             this.project = project; universe = 1; channel = 7; value = 255
         }
 
-        // Wire up activeEntryId now that show entries exist.
-        project.activeEntryId = entry1.id.value
+        // Wire up the show playhead to the first stack.
+        project.activeStackId = stack1.id.value
         project.id.value
     }
 }

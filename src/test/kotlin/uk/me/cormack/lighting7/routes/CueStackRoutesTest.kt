@@ -23,6 +23,7 @@ class CueStackRoutesTest {
             name = "Act 1",
             palette = listOf("#ff0000", "#00ff00", "#0000ff"),
             loop = true,
+            sortOrder = 2,
         )
         val serialized = json.encodeToString(input)
         val deserialized = json.decodeFromString<NewCueStack>(serialized)
@@ -30,10 +31,23 @@ class CueStackRoutesTest {
     }
 
     @Test
+    fun `NewCueStack separator round-trips`() {
+        val input = NewCueStack(name = "Interval", type = "SEPARATOR", label = "Interval")
+        val serialized = json.encodeToString(input)
+        val deserialized = json.decodeFromString<NewCueStack>(serialized)
+        assertEquals(input, deserialized)
+        assertEquals("SEPARATOR", deserialized.type)
+        assertEquals("Interval", deserialized.label)
+    }
+
+    @Test
     fun `NewCueStack defaults correctly`() {
         val input = NewCueStack(name = "Minimal Stack")
         assertEquals(emptyList(), input.palette)
         assertEquals(false, input.loop)
+        assertNull(input.type)
+        assertNull(input.label)
+        assertNull(input.sortOrder)
     }
 
     @Test
@@ -70,6 +84,9 @@ class CueStackRoutesTest {
             name = "Act 1",
             palette = listOf("#ff0000", "#0000ff"),
             loop = true,
+            sortOrder = 0,
+            type = "STACK",
+            label = null,
             cues = listOf(
                 CueStackCueEntry(id = 10, name = "Scene 1", sortOrder = 0, paletteSize = 2, presetCount = 1, adHocEffectCount = 0),
                 CueStackCueEntry(id = 11, name = "Scene 2", sortOrder = 1, paletteSize = 0, presetCount = 0, adHocEffectCount = 3, fadeDurationMs = 1500, fadeCurve = "CUBIC_IN_OUT"),
@@ -90,6 +107,9 @@ class CueStackRoutesTest {
             name = "Empty Stack",
             palette = emptyList(),
             loop = false,
+            sortOrder = 1,
+            type = "STACK",
+            label = null,
             cues = emptyList(),
             activeCueId = null,
             canEdit = true,
@@ -108,6 +128,9 @@ class CueStackRoutesTest {
             name = "Read Only",
             palette = emptyList(),
             loop = false,
+            sortOrder = 0,
+            type = "STACK",
+            label = null,
             cues = emptyList(),
             activeCueId = null,
             canEdit = false,
@@ -143,11 +166,33 @@ class CueStackRoutesTest {
     }
 
     @Test
-    fun `RemoveCueFromStackRequest serialization round-trips`() {
-        val request = RemoveCueFromStackRequest(cueId = 42)
+    fun `CueStackDetails SEPARATOR row round-trips`() {
+        val details = CueStackDetails(
+            id = 9,
+            name = "Interval",
+            palette = emptyList(),
+            loop = false,
+            sortOrder = 3,
+            type = "SEPARATOR",
+            label = "Interval",
+            cues = emptyList(),
+            activeCueId = null,
+            canEdit = true,
+            canDelete = true,
+        )
+        val serialized = json.encodeToString(details)
+        val deserialized = json.decodeFromString<CueStackDetails>(serialized)
+        assertEquals(details, deserialized)
+        assertEquals("SEPARATOR", deserialized.type)
+        assertEquals("Interval", deserialized.label)
+    }
+
+    @Test
+    fun `ReorderStacksRequest serialization round-trips`() {
+        val request = ReorderStacksRequest(stackIds = listOf(3, 1, 5, 2))
         val serialized = json.encodeToString(request)
-        val deserialized = json.decodeFromString<RemoveCueFromStackRequest>(serialized)
-        assertEquals(request, deserialized)
+        val deserialized = json.decodeFromString<ReorderStacksRequest>(serialized)
+        assertEquals(listOf(3, 1, 5, 2), deserialized.stackIds)
     }
 
     @Test
@@ -249,6 +294,9 @@ class CueStackRoutesTest {
             name = "Sequential Show",
             palette = listOf("#ff0000"),
             loop = false,
+            sortOrder = 0,
+            type = "STACK",
+            label = null,
             cues = cues,
             activeCueId = 102,
             canEdit = true,

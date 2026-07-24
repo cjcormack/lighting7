@@ -243,9 +243,8 @@ class SocketMessageWireFormatTest {
     fun `broadcast domain — ShowChangedOutMessage round-trips with discriminator`() {
         val out = ShowChangedOutMessage(
             projectId = 3,
-            activeEntryId = 9,
-            activatedStackId = 2,
-            activatedStackName = "Act 1",
+            activeStackId = 2,
+            activeStackName = "Act 1",
         )
         val encoded = json.encodeToString<OutMessage>(out)
         assertTrue(encoded.contains(""""type":"showChanged""""))

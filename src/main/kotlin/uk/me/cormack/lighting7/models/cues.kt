@@ -98,7 +98,7 @@ object DaoCues : IntIdTable("cues") {
     val project = reference("project_id", DaoProjects)
     val palette = json<List<String>>("palette", Json)
     val updateGlobalPalette = bool("update_global_palette").default(false)
-    val cueStack = reference("cue_stack_id", DaoCueStacks).nullable()
+    val cueStack = reference("cue_stack_id", DaoCueStacks)
     val sortOrder = integer("sort_order").default(0)
     val autoAdvance = bool("auto_advance").default(false)
     val autoAdvanceDelayMs = long("auto_advance_delay_ms").nullable()
@@ -128,7 +128,7 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var project by DaoProject referencedOn DaoCues.project
     var palette by DaoCues.palette
     var updateGlobalPalette by DaoCues.updateGlobalPalette
-    var cueStack by DaoCueStack optionalReferencedOn DaoCues.cueStack
+    var cueStack by DaoCueStack referencedOn DaoCues.cueStack
     var sortOrder by DaoCues.sortOrder
     var autoAdvance by DaoCues.autoAdvance
     var autoAdvanceDelayMs by DaoCues.autoAdvanceDelayMs

@@ -73,4 +73,16 @@ class CueCrudRoundTripTest : RouteIntegrationTest() {
             "deleted cue should not appear in list",
         )
     }
+
+    @Test
+    fun `creating a cue without a stack is rejected`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val resp = client.post("/api/rest/project/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "loose", cueStackId = null))
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
+    }
 }

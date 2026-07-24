@@ -193,10 +193,8 @@ internal fun Route.routeApiRestProjects(state: State) {
                 }
                 deletedProjectUuid = project.uuid.toString()
 
-                // Clear active_entry_id first to satisfy the deferrable FK
-                // before deleting show entries.
-                project.activeEntryId = null
-                project.showEntries.forEach { it.delete() }
+                // Clear the show playhead before tearing down the stacks it may point at.
+                project.activeStackId = null
 
                 // Prompt book(s) before cues — anchors reference cue rows. Iterate every
                 // row for the project (not just project.promptBook) so a pre-collapse
@@ -351,7 +349,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                     presetIdMapping[sourcePreset.id.value] = newPreset.id.value
                 }
 
-                // Clone all cue stacks
+                // Clone all cue stacks (including SEPARATOR rows), preserving show order
                 val cueStackIdMapping = mutableMapOf<Int, Int>()
                 sourceProject.cueStacks.forEach { sourceStack ->
                     val newStack = DaoCueStack.new {
@@ -359,14 +357,19 @@ internal fun Route.routeApiRestProjects(state: State) {
                         project = newProject
                         palette = sourceStack.palette
                         loop = sourceStack.loop
+                        sortOrder = sourceStack.sortOrder
+                        type = sourceStack.type
+                        label = sourceStack.label
                     }
                     cueStackIdMapping[sourceStack.id.value] = newStack.id.value
                 }
 
-                // Clone all cues, remapping preset IDs and cue stack IDs
+                // Clone all cues, remapping preset IDs and cue stack IDs. Every cue belongs to a
+                // stack, and every stack was cloned above, so the mapping always resolves.
                 var cuesCloned = 0
                 sourceProject.cues.forEach { sourceCue ->
-                    val newStackId = sourceCue.cueStack?.id?.value?.let { cueStackIdMapping[it] }
+                    val newStackId = cueStackIdMapping[sourceCue.cueStack.id.value]
+                        ?: error("Cloned cue references an uncloned stack ${sourceCue.cueStack.id.value}")
                     val newCue = DaoCue.new {
                         name = sourceCue.name
                         project = newProject
@@ -376,10 +379,8 @@ internal fun Route.routeApiRestProjects(state: State) {
                         autoAdvanceDelayMs = sourceCue.autoAdvanceDelayMs
                         fadeDurationMs = sourceCue.fadeDurationMs
                         fadeCurve = sourceCue.fadeCurve
-                        if (newStackId != null) {
-                            cueStack = DaoCueStack.findById(newStackId)
-                            sortOrder = sourceCue.sortOrder
-                        }
+                        cueStack = DaoCueStack.findById(newStackId)!!
+                        sortOrder = sourceCue.sortOrder
                     }
                     // Clone preset applications with remapped preset IDs
                     for (app in sourceCue.presetApplications) {

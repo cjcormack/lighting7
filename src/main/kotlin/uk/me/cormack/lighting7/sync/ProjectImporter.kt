@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueSlot
+import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueTrigger
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
@@ -33,7 +34,6 @@ import uk.me.cormack.lighting7.models.DaoPromptBookAnnotations
 import uk.me.cormack.lighting7.models.checkPromptBookRegion
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
-import uk.me.cormack.lighting7.models.DaoShowEntry
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.routes.deleteCueChildren
@@ -121,13 +121,13 @@ class ProjectImporter(private val state: State) {
             }
 
             // isCurrent forced false: importing must never silently switch which project the
-            // operator is operating on. activeEntryId stays null — Phase 1 doesn't preserve
-            // operator UI state.
+            // operator is operating on. activeStackId stays null — importing doesn't preserve
+            // operator UI state (which stack is live).
             val project = DaoProject.new {
                 name = targetName
                 description = projectJson.description
                 isCurrent = false
-                activeEntryId = null
+                activeStackId = null
                 stageWidthM = projectJson.stageWidthM
                 stageDepthM = projectJson.stageDepthM
                 stageHeightM = projectJson.stageHeightM
@@ -186,8 +186,7 @@ class ProjectImporter(private val state: State) {
             // Mirrors the project-delete cascade in `routes/projects.kt` (same FK-safe
             // order) but leaves the DaoProject row plus non-synced child tables (machine
             // overrides, sync configs) alone.
-            project.activeEntryId = null
-            project.showEntries.forEach { it.delete() }
+            project.activeStackId = null
             // Iterate every book row for the project (not just project.promptBook) so a
             // pre-collapse project with leftover extra books is fully cleaned before its
             // cues go, avoiding orphaned anchors pointing at deleted cue rows.
@@ -289,7 +288,7 @@ class ProjectImporter(private val state: State) {
         importCuePresetApplications(sourceDir, cueMap, fxPresetMap)
         importCueAdHocEffects(sourceDir, cueMap)
         importCueTriggers(sourceDir, cueMap, scriptMap)
-        importShowEntries(sourceDir, project, cueStackMap)
+        importLegacyShowOrder(sourceDir, project, cueStackMap)
         val promptBook = importPromptBook(sourceDir, project)
         importPromptBookAnchors(sourceDir, promptBook, cueMap)
         importPromptBookAnnotations(sourceDir, promptBook)
@@ -504,6 +503,9 @@ class ProjectImporter(private val state: State) {
                 this.project = project
                 palette = s.palette
                 loop = s.loop
+                sortOrder = s.sortOrder
+                type = s.type
+                label = s.label
                 this.uuid = uuid
             }
             uuid to dao
@@ -513,14 +515,33 @@ class ProjectImporter(private val state: State) {
         dir: Path,
         project: DaoProject,
         cueStackMap: Map<UUID, DaoCueStack>,
-    ): Map<UUID, DaoCue> = readDir(dir.resolve("cues")) { json ->
+    ): Map<UUID, DaoCue> {
+        // Every cue belongs to a stack now. Legacy archives may carry standalone cues (null
+        // cueStackUuid); those land in a project "Unsorted" stack, created once on demand.
+        var unsortedStack: DaoCueStack? = null
+        fun unsorted(): DaoCueStack = unsortedStack ?: run {
+            val stack = project.cueStacks.firstOrNull {
+                it.name == "Unsorted" && it.type == CueStackType.STACK.name
+            } ?: DaoCueStack.new {
+                name = "Unsorted"
+                this.project = project
+                palette = emptyList()
+                loop = false
+                type = CueStackType.STACK.name
+                sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            }
+            unsortedStack = stack
+            stack
+        }
+
+        return readDir(dir.resolve("cues")) { json ->
         val c = canonicalDecode(CueJson.serializer(), json)
         val uuid = UUID.fromString(c.uuid)
         val stack = c.cueStackUuid?.let {
             val stackUuid = UUID.fromString(it)
             cueStackMap[stackUuid]
                 ?: throw ImportError.invalidArchive("Cue ${c.uuid} references unknown cue stack $stackUuid")
-        }
+        } ?: unsorted()
         val dao = DaoCue.new {
             name = c.name
             this.project = project
@@ -539,6 +560,7 @@ class ProjectImporter(private val state: State) {
             this.uuid = uuid
         }
         uuid to dao
+        }
     }
 
     private fun importCuePropertyAssignments(dir: Path, cueMap: Map<UUID, DaoCue>) {
@@ -651,27 +673,37 @@ class ProjectImporter(private val state: State) {
         }
     }
 
-    private fun importShowEntries(
+    /**
+     * Legacy back-compat: older archives stored show order and separators in a `showEntries/`
+     * directory. The collapsed model folds those into the cue-stacks collection, so we apply each
+     * STACK entry's order onto its referenced stack's `sortOrder`, and materialise each MARKER
+     * entry as a SEPARATOR stack. New archives have no `showEntries/` dir, so this is a no-op.
+     */
+    private fun importLegacyShowOrder(
         dir: Path,
         project: DaoProject,
         cueStackMap: Map<UUID, DaoCueStack>,
-    ): Map<UUID, DaoShowEntry> = readDir(dir.resolve("showEntries")) { json ->
-        val e = canonicalDecode(ShowEntryJson.serializer(), json)
-        val uuid = UUID.fromString(e.uuid)
-        val stack = e.cueStackUuid?.let {
-            val stackUuid = UUID.fromString(it)
-            cueStackMap[stackUuid]
-                ?: throw ImportError.invalidArchive("Show entry ${e.uuid} references unknown cue stack $stackUuid")
+    ) {
+        readDir(dir.resolve("showEntries")) { json ->
+            val e = canonicalDecode(ShowEntryJson.serializer(), json)
+            val uuid = UUID.fromString(e.uuid)
+            if (e.entryType == "MARKER") {
+                DaoCueStack.new {
+                    this.project = project
+                    name = e.label ?: "Separator"
+                    label = e.label
+                    palette = emptyList()
+                    loop = false
+                    type = CueStackType.SEPARATOR.name
+                    sortOrder = e.sortOrder
+                    this.uuid = uuid
+                }
+            } else {
+                val stack = e.cueStackUuid?.let { cueStackMap[UUID.fromString(it)] }
+                stack?.sortOrder = e.sortOrder
+            }
+            uuid to Unit
         }
-        val dao = DaoShowEntry.new {
-            this.project = project
-            cueStack = stack
-            entryType = e.entryType
-            sortOrder = e.sortOrder
-            label = e.label
-            this.uuid = uuid
-        }
-        uuid to dao
     }
 
     private fun importCueSlots(

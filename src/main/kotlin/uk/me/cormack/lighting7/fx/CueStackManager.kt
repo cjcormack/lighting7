@@ -76,9 +76,12 @@ class CueStackManager(
         val (stackData, cueData) = transaction(state.database) {
             val stack = DaoCueStack.findById(stackId)
                 ?: throw IllegalArgumentException("Cue stack not found: $stackId")
+            if (stack.type == CueStackType.SEPARATOR.name) {
+                throw IllegalArgumentException("Cannot activate a separator")
+            }
             val cue = DaoCue.findById(cueId)
                 ?: throw IllegalArgumentException("Cue not found: $cueId")
-            if (cue.cueStack?.id?.value != stackId) {
+            if (cue.cueStack.id.value != stackId) {
                 throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
             }
             if (rejectMarkers && cue.cueType == CueType.MARKER.name) {
@@ -123,7 +126,7 @@ class CueStackManager(
                 fadeDurationMs = cue.fadeDurationMs,
                 fadeCurve = cue.fadeCurve,
                 stomp = cue.stomp,
-                cueStackId = cue.cueStack?.id?.value,
+                cueStackId = cue.cueStack.id.value,
                 sortOrder = cue.sortOrder,
             )
 
@@ -582,8 +585,7 @@ class CueStackManager(
         val stackId = transaction(state.database) {
             val cue = DaoCue.findById(cueId)
                 ?: throw IllegalArgumentException("Cue not found: $cueId")
-            cue.cueStack?.id?.value
-                ?: throw IllegalArgumentException("Cue $cueId is not attached to a stack")
+            cue.cueStack.id.value
         }
         return activateCueInStack(state, stackId, cueId, scope)
     }

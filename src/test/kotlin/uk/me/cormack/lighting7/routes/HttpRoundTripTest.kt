@@ -115,9 +115,17 @@ class HttpRoundTripTest : RouteIntegrationTest() {
     }
 
     private suspend fun createEmptyCue(client: HttpClient, name: String): Int {
+        // Every cue belongs to a stack now; give each test cue its own stack.
+        val stackResp = client.post("/api/rest/project/$projectId/cue-stacks") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCueStack(name = "$name stack"))
+        }
+        assertEquals(HttpStatusCode.Created, stackResp.status, "create stack for '$name' body: ${stackResp.bodyAsText()}")
+        val stackId = stackResp.body<CueStackDetails>().id
+
         val resp = client.post("/api/rest/project/$projectId/cues") {
             contentType(ContentType.Application.Json)
-            setBody(NewCue(name = name))
+            setBody(NewCue(name = name, cueStackId = stackId))
         }
         assertEquals(HttpStatusCode.Created, resp.status, "create cue '$name' body: ${resp.bodyAsText()}")
         return resp.body<CueDetails>().id

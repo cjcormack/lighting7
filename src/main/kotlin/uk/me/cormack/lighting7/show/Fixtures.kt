@@ -22,8 +22,7 @@ interface FixturesChangeListener {
     fun patchListChanged()
     fun riggingListChanged()
     fun stageRegionListChanged()
-    fun showEntriesChanged()
-    fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?)
+    fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?)
     fun promptBookChanged()
 }
 
@@ -292,15 +291,9 @@ class Fixtures {
         }
     }
 
-    fun showEntriesChanged() {
+    fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {
         changeListeners.forEach {
-            it.showEntriesChanged()
-        }
-    }
-
-    fun showChanged(projectId: Int, activeEntryId: Int?, activatedStackId: Int?, activatedStackName: String?) {
-        changeListeners.forEach {
-            it.showChanged(projectId, activeEntryId, activatedStackId, activatedStackName)
+            it.showChanged(projectId, activeStackId, activeStackName)
         }
     }
 

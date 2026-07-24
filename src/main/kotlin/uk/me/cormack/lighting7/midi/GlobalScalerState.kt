@@ -72,12 +72,10 @@ class GlobalScalerState(
         override fun patchListChanged() {}
         override fun riggingListChanged() {}
         override fun stageRegionListChanged() {}
-        override fun showEntriesChanged() {}
         override fun showChanged(
             projectId: Int,
-            activeEntryId: Int?,
-            activatedStackId: Int?,
-            activatedStackName: String?,
+            activeStackId: Int?,
+            activeStackName: String?,
         ) {}
         override fun promptBookChanged() {}
     }

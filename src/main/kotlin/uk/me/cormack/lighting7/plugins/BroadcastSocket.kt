@@ -41,16 +41,11 @@ data object RiggingListChangedOutMessage : BroadcastOutMessage()
 data object StageRegionListChangedOutMessage : BroadcastOutMessage()
 
 @Serializable
-@SerialName("showEntriesChanged")
-data object ShowEntriesChangedOutMessage : BroadcastOutMessage()
-
-@Serializable
 @SerialName("showChanged")
 data class ShowChangedOutMessage(
     val projectId: Int,
-    val activeEntryId: Int?,
-    val activatedStackId: Int?,
-    val activatedStackName: String?,
+    val activeStackId: Int?,
+    val activeStackName: String?,
 ) : BroadcastOutMessage()
 
 @Serializable
@@ -101,15 +96,13 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         override fun patchListChanged() = fire(PatchListChangedOutMessage)
         override fun riggingListChanged() = fire(RiggingListChangedOutMessage)
         override fun stageRegionListChanged() = fire(StageRegionListChangedOutMessage)
-        override fun showEntriesChanged() = fire(ShowEntriesChangedOutMessage)
 
         override fun showChanged(
             projectId: Int,
-            activeEntryId: Int?,
-            activatedStackId: Int?,
-            activatedStackName: String?,
+            activeStackId: Int?,
+            activeStackName: String?,
         ) {
-            fire(ShowChangedOutMessage(projectId, activeEntryId, activatedStackId, activatedStackName))
+            fire(ShowChangedOutMessage(projectId, activeStackId, activeStackName))
         }
 
         override fun promptBookChanged() = fire(PromptBookChangedOutMessage)

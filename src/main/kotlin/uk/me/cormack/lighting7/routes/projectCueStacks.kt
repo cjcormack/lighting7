@@ -18,21 +18,21 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 
 internal fun Route.routeApiRestProjectCueStacks(state: State) {
-    // GET /{projectId}/cue-stacks - List all stacks with ordered cues + active cue info
+    // GET /{projectId}/cue-stacks - List stacks + separators in show order, with cues + active cue info
     get<ProjectCueStacksResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val isCurrentProject = state.isCurrentProject(project)
             val manager = state.show.cueStackManager
             val stacks = transaction(state.database) {
                 DaoCueStack.find { DaoCueStacks.project eq project.id }
-                    .orderBy(DaoCueStacks.name to SortOrder.ASC)
+                    .orderBy(DaoCueStacks.sortOrder to SortOrder.ASC, DaoCueStacks.name to SortOrder.ASC)
                     .map { it.toCueStackDetails(isCurrentProject, manager) }
             }
             call.respond(stacks)
         }
     }
 
-    // POST /{projectId}/cue-stacks - Create stack
+    // POST /{projectId}/cue-stacks - Create a stack or a separator (type=SEPARATOR), appended to order
     post<ProjectCueStacksResource> { resource ->
         withCurrentProject(
             state,
@@ -42,16 +42,43 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val input = call.receive<NewCueStack>()
             val manager = state.show.cueStackManager
             val details = transaction(state.database) {
+                val stackType = input.type ?: CueStackType.STACK.name
+                val resolvedName = if (stackType == CueStackType.SEPARATOR.name) {
+                    (input.label ?: input.name).ifBlank { "Separator" }
+                } else {
+                    input.name
+                }
+                val nextSort = input.sortOrder ?: ((project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1)
                 val stack = DaoCueStack.new {
-                    name = input.name
+                    name = resolvedName
                     this.project = project
                     palette = input.palette
                     loop = input.loop
+                    type = stackType
+                    label = input.label
+                    sortOrder = nextSort
                 }
                 stack.toCueStackDetails(isCurrentProject = true, manager)
             }
             state.show.fixtures.cueStackListChanged()
             call.respond(HttpStatusCode.Created, details)
+        }
+    }
+
+    // POST /{projectId}/cue-stacks/reorder - Reorder the project's stacks + separators (show order)
+    post<ProjectStacksReorderResource> { resource ->
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<ReorderStacksRequest>()
+            transaction(state.database) {
+                for ((index, stackId) in request.stackIds.withIndex()) {
+                    val stack = DaoCueStack.findById(stackId) ?: continue
+                    if (stack.project.id == project.id) {
+                        stack.sortOrder = index
+                    }
+                }
+            }
+            state.show.fixtures.cueStackListChanged()
+            call.respond(HttpStatusCode.OK)
         }
     }
 
@@ -87,9 +114,17 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction null
                 if (stack.project.id != project.id) return@transaction null
 
-                stack.name = input.name
-                stack.palette = input.palette
-                stack.loop = input.loop
+                if (stack.type == CueStackType.SEPARATOR.name) {
+                    // A separator only carries a display label; keep `name` in sync so the NOT NULL
+                    // column stays populated and list ordering by name is stable.
+                    val newLabel = (input.label ?: input.name)
+                    stack.label = newLabel
+                    if (newLabel.isNotBlank()) stack.name = newLabel
+                } else {
+                    stack.name = input.name
+                    stack.palette = input.palette
+                    stack.loop = input.loop
+                }
 
                 stack.toCueStackDetails(isCurrentProject = true, manager)
             }
@@ -103,37 +138,29 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         }
     }
 
-    // DELETE /{projectId}/cue-stacks/{stackId} - Delete stack
-    // Query param: keepCues=true (default) or false
+    // DELETE /{projectId}/cue-stacks/{stackId} - Delete stack (cascades its cues) or separator
     delete<ProjectCueStackResource> { resource ->
         withCurrentProject(
             state,
             resource.parent.projectId,
             { p -> "Cannot delete cue stacks in project '${p.name}' - only the current project can be modified" },
         ) { project ->
-            val keepCues = call.request.queryParameters["keepCues"]?.toBoolean() ?: true
-
             val result = transaction(state.database) {
                 val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction null
                 if (stack.project.id != project.id) return@transaction null
 
-                // Deactivate if running
+                // Deactivate if running, and clear the project playhead if it pointed here.
                 state.show.cueStackManager.deactivateStack(resource.stackId, state)
+                if (project.activeStackId == resource.stackId) {
+                    project.activeStackId = null
+                }
 
+                // Every cue belongs to a stack, so deleting a stack cascades its cues + children.
                 var removedAnchors = 0
-                if (keepCues) {
-                    // Detach cues from stack (make standalone)
-                    stack.cues.forEach { cue ->
-                        cue.cueStack = null
-                        cue.sortOrder = 0
-                    }
-                } else {
-                    // Delete cues and their children
-                    stack.cues.forEach { cue ->
-                        deleteCueChildren(cue)
-                        removedAnchors += deletePromptBookAnchorsForCue(cue)
-                        cue.delete()
-                    }
+                stack.cues.forEach { cue ->
+                    deleteCueChildren(cue)
+                    removedAnchors += deletePromptBookAnchorsForCue(cue)
+                    cue.delete()
                 }
 
                 stack.delete()
@@ -158,7 +185,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             transaction(state.database) {
                 for ((index, cueId) in request.cueIds.withIndex()) {
                     val cue = DaoCue.findById(cueId) ?: continue
-                    if (cue.cueStack?.id?.value == resource.parent.stackId) {
+                    if (cue.cueStack.id.value == resource.parent.stackId) {
                         cue.sortOrder = index
                     }
                 }
@@ -175,6 +202,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val manager = state.show.cueStackManager
             val result = transaction(state.database) {
                 val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction "Stack not found" to null
+                if (stack.type == CueStackType.SEPARATOR.name) return@transaction "Cannot add cues to a separator" to null
                 val cue = DaoCue.findById(request.cueId) ?: return@transaction "Cue not found" to null
                 if (cue.project.id != project.id) return@transaction "Cue does not belong to project" to null
 
@@ -234,29 +262,6 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 state.show.fixtures.cueStackListChanged()
                 state.show.fixtures.cueListChanged()
                 call.respond(details!!)
-            }
-        }
-    }
-
-    // POST /{projectId}/cue-stacks/{stackId}/remove-cue - Remove cue from stack (becomes standalone)
-    post<CueStackRemoveCueResource> { resource ->
-        withCurrentProject(state, resource.parent.parent.projectId) { _ ->
-            val request = call.receive<RemoveCueFromStackRequest>()
-            val result = transaction(state.database) {
-                val cue = DaoCue.findById(request.cueId) ?: return@transaction "Cue not found"
-                if (cue.cueStack?.id?.value != resource.parent.stackId) return@transaction "Cue is not in this stack"
-
-                cue.cueStack = null
-                cue.sortOrder = 0
-                null
-            }
-
-            if (result != null) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(result))
-            } else {
-                state.show.fixtures.cueStackListChanged()
-                state.show.fixtures.cueListChanged()
-                call.respond(HttpStatusCode.OK)
             }
         }
     }
@@ -413,6 +418,11 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
 @Resource("/{projectId}/cue-stacks")
 data class ProjectCueStacksResource(val projectId: String)
 
+// Project-level stack reorder. The literal `/reorder` segment is preferred by Ktor over the
+// sibling `/{stackId}` (which only matches an Int), so there is no routing collision.
+@Resource("/reorder")
+data class ProjectStacksReorderResource(val parent: ProjectCueStacksResource)
+
 @Resource("/{stackId}")
 data class ProjectCueStackResource(val parent: ProjectCueStacksResource, val stackId: Int)
 
@@ -421,9 +431,6 @@ data class CueStackReorderResource(val parent: ProjectCueStackResource)
 
 @Resource("/add-cue")
 data class CueStackAddCueResource(val parent: ProjectCueStackResource)
-
-@Resource("/remove-cue")
-data class CueStackRemoveCueResource(val parent: ProjectCueStackResource)
 
 @Resource("/activate")
 data class CueStackActivateResource(val parent: ProjectCueStackResource)
@@ -444,9 +451,15 @@ data class CueStackSortByNumberResource(val parent: ProjectCueStackResource)
 
 @Serializable
 data class NewCueStack(
-    val name: String,
+    val name: String = "",
     val palette: List<String> = emptyList(),
     val loop: Boolean = false,
+    /** "STACK" (default) or "SEPARATOR". */
+    val type: String? = null,
+    /** Display text for a separator; ignored for a real stack. */
+    val label: String? = null,
+    /** Explicit position; when null the row is appended to the end of the project's order. */
+    val sortOrder: Int? = null,
 )
 
 @Serializable
@@ -455,6 +468,9 @@ data class CueStackDetails(
     val name: String,
     val palette: List<String>,
     val loop: Boolean,
+    val sortOrder: Int,
+    val type: String,
+    val label: String?,
     val cues: List<CueStackCueEntry>,
     val activeCueId: Int?,
     val canEdit: Boolean,
@@ -484,15 +500,15 @@ data class ReorderCuesRequest(
 )
 
 @Serializable
+data class ReorderStacksRequest(
+    val stackIds: List<Int>,
+)
+
+@Serializable
 data class AddCueToStackRequest(
     val cueId: Int,
     val sortOrder: Int? = null,
     val insertByNumber: Boolean = false,
-)
-
-@Serializable
-data class RemoveCueFromStackRequest(
-    val cueId: Int,
 )
 
 @Serializable
@@ -620,6 +636,9 @@ private fun DaoCueStack.toCueStackDetails(
         name = name,
         palette = palette,
         loop = loop,
+        sortOrder = sortOrder,
+        type = type,
+        label = label,
         cues = orderedCues,
         activeCueId = manager.getActiveCueId(id.value),
         canEdit = isCurrentProject,
