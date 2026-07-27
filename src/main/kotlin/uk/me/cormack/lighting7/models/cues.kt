@@ -116,9 +116,11 @@ object DaoCues : IntIdTable("cues") {
     val stomp = bool("stomp").default(false)
     val uuid = uuid("uuid").autoGenerate()
 
-    init {
-        uniqueIndex(project, name)
-    }
+    // Cue names are deliberately *not* unique. The old uniqueIndex(project, name) predates cue
+    // stacks; with a project owning many stacks, two stacks may legitimately both hold a
+    // "Blackout". Cues are identified by id (and by uuid across sync). The legacy index is
+    // dropped in State.initDatabase. Cue *numbers* remain unique per stack via
+    // uq_cue_number_per_stack.
 }
 
 class DaoCue(id: EntityID<Int>) : IntEntity(id) {

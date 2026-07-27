@@ -7,6 +7,7 @@ import java.nio.file.Path
 import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import uk.me.cormack.lighting7.plugins.configureErrorHandling
 import uk.me.cormack.lighting7.plugins.configureHTTP
 import uk.me.cormack.lighting7.plugins.configureSockets
 import uk.me.cormack.lighting7.routes.configureRouting
@@ -130,6 +131,9 @@ private fun Application.registerMdns(state: State) {
  * [State.initializeShow] bootstrap. Prod continues through [module].
  */
 fun Application.moduleWithState(state: State) {
+    // Installed first so it wraps everything below: an exception escaping any route handler
+    // becomes a JSON ErrorResponse with a meaningful status, not Netty's bodyless 500.
+    configureErrorHandling()
     configureHTTP()
     configureSockets(state)
     configureRouting(state)

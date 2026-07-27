@@ -290,14 +290,9 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val targetProject = DaoProject.findById(request.targetProjectId)
                 ?: return@transaction null to "Target project not found"
 
+            // Cue names are not unique, so a name collision in the target project is fine —
+            // the copy simply lands alongside the existing cue.
             val cueName = request.newName ?: sourceCue.name
-
-            val existingCue = DaoCue.find {
-                (DaoCues.project eq targetProject.id) and (DaoCues.name eq cueName)
-            }.firstOrNull()
-            if (existingCue != null) {
-                return@transaction null to "A cue with name '$cueName' already exists in target project"
-            }
 
             // Every cue must live in a stack. A cross-project copy lands in the target project's
             // "Unsorted" stack (created on demand); the operator can move it afterwards.
@@ -639,10 +634,10 @@ data class StopCueResponse(
 
 /**
  * Returns the project's "Unsorted" cue stack, creating it (appended to the end of the show order)
- * if it doesn't exist yet. Used as the landing stack for cross-project cue copies, since every cue
- * must belong to a stack. Must be called inside a transaction.
+ * if it doesn't exist yet. Used as the landing stack for cross-project cue copies and AI-created
+ * cues, since every cue must belong to a stack. Must be called inside a transaction.
  */
-private fun getOrCreateUnsortedStack(project: DaoProject): DaoCueStack =
+internal fun getOrCreateUnsortedStack(project: DaoProject): DaoCueStack =
     DaoCueStack.find {
         (DaoCueStacks.project eq project.id) and
             (DaoCueStacks.name eq "Unsorted") and

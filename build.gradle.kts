@@ -49,6 +49,7 @@ dependencies {
     implementation("io.github.smiley4:ktor-openapi:5.4.0")
     implementation("io.github.smiley4:ktor-swagger-ui:5.4.0")
     implementation("io.ktor:ktor-server-content-negotiation")
+    implementation("io.ktor:ktor-server-status-pages")
     implementation("io.ktor:ktor-serialization-kotlinx-json")
     implementation("org.jetbrains.exposed:exposed-core:$exposed_version")
     implementation("org.jetbrains.exposed:exposed-dao:$exposed_version")

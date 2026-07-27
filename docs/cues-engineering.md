@@ -35,8 +35,7 @@ cues
 ├── name (varchar 255)
 ├── project_id (FK → projects)
 ├── palette (JSON: List<String>)
-├── update_global_palette (boolean, default false)
-└── unique(project_id, name)
+└── update_global_palette (boolean, default false)
 
 cue_preset_applications
 ├── id (auto-increment PK)
@@ -79,6 +78,11 @@ cue_triggers (script hooks only)
 ├── script_id (FK → scripts — required)
 └── sort_order (int, default 0)
 ```
+
+Cue names are free-form and **not** unique. The old `unique(project_id, name)` index predated
+cue stacks; with a project owning many stacks, two stacks may legitimately both hold a
+"Blackout". Cues are identified by `id` locally and by `uuid` across cloud sync. Cue *numbers*
+remain unique per stack via the partial index `uq_cue_number_per_stack`.
 
 ### Key Design Decisions
 

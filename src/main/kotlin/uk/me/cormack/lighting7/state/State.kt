@@ -684,6 +684,11 @@ class State(val config: ApplicationConfig) {
                     WHERE type = 'STACK'
             """.trimIndent())
 
+            // Cue names are no longer unique. The (project, name) index predates cue stacks;
+            // with a project owning many stacks, two stacks may legitimately both hold a
+            // "Blackout". Cue numbers stay unique per stack (uq_cue_number_per_stack below).
+            exec("DROP INDEX IF EXISTS cues_project_id_name")
+
             // Partial unique index: cue_number must be unique per stack for STANDARD cues.
             // SQLite supports partial indexes with the same syntax.
             exec("""

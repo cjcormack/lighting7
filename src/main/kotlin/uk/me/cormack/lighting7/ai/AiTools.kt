@@ -429,16 +429,23 @@ class AiTools(private val state: State) {
 
         val project = state.projectManager.currentProject
         val cue = transaction(state.database) {
+            // Every cue must belong to a stack; land AI-created cues in "Unsorted" (created on
+            // demand) so the operator can move them afterwards. Without this the NOT NULL FK on
+            // cue_stack_id fails and the tool call blows up.
+            val stack = getOrCreateUnsortedStack(project)
             val newCue = DaoCue.new {
                 this.name = name
                 this.project = project
                 this.palette = palette
                 this.updateGlobalPalette = updateGlobalPalette
+                this.cueStack = stack
+                this.sortOrder = stack.cues.count().toInt()
             }
             createCueChildren(newCue, presetApplications, adHocEffects)
             newCue
         }
         state.show.fixtures.cueListChanged()
+        state.show.fixtures.cueStackListChanged()
 
         val cueId = cue.id.value
         return ToolExecutionResult(
