@@ -311,6 +311,18 @@ encrypted-file fallback). OAuth requires `sync.oauth.github.clientId` /
 4. **Transient runtime state** → leave out of `ProjectExporter` /
    `ProjectImporter` entirely and document why.
 
+**Enforcement:** the decision above is not optional bookkeeping — every table
+in `models/Schema.kt`'s `ALL_TABLES` must have a recorded disposition in
+`SyncCoverageTest.dispositions`, and every table declared portable must
+actually produce export output when `testsupport/RichProjectFixture.kt` is
+exported. Add a table without answering the question and `./gradlew test`
+fails. See `docs/sync-engineering.md` §"How to add a new table".
+
+**Project cloning is derived, not separate.** `POST /project/{id}/clone` runs
+export → fresh UUIDs → import (`sync/ProjectCloner.kt`), so wiring a table
+through the exporter and importer is all that's needed for it to be cloned.
+Never add a table-by-table clone path; that's what rotted last time.
+
 **Specific rules:**
 
 * New tables default to **not synced** until explicitly wired into
@@ -323,6 +335,9 @@ encrypted-file fallback). OAuth requires `sync.oauth.github.clientId` /
 * Updates to `docs/sync-engineering.md` are required when adding a
   synced table, changing the JSON layout, or changing the conflict
   semantics.
+* Extend `testsupport/RichProjectFixture.kt` when adding a portable table or
+  field, and set a **non-default** value. Canonical JSON omits defaults, so a
+  field left at its default is invisible to the round-trip and clone tests.
 
 ## Common Development Tasks
 

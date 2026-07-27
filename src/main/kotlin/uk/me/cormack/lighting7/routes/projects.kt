@@ -10,6 +10,9 @@ import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.routing.post as routingPost
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder
@@ -17,6 +20,8 @@ import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.ImportError
+import uk.me.cormack.lighting7.sync.ProjectCloner
 
 /**
  * Resolves a project ID string to a DaoProject.
@@ -213,7 +218,13 @@ internal fun Route.routeApiRestProjects(state: State) {
                 }
                 project.cueStacks.forEach { it.delete() }
                 project.cueSlots.forEach { it.delete() }
-                project.fxPresets.forEach { it.delete() }
+                // Preset property assignments before their presets: the FK has no ON DELETE
+                // cascade, so PostgreSQL rejects the preset delete while assignments remain.
+                // Mirrors ProjectImporter.replaceFromWorkingTree, which already does this.
+                project.fxPresets.forEach { preset ->
+                    preset.propertyAssignments.forEach { it.delete() }
+                    preset.delete()
+                }
                 project.fixtureGroups.forEach { group ->
                     group.members.forEach { it.delete() }
                     group.delete()
@@ -241,6 +252,11 @@ internal fun Route.routeApiRestProjects(state: State) {
                 DaoSyncLogEntry.find { DaoSyncLogEntries.project eq project.id }.forEach { it.delete() }
                 DaoSyncLinkedRepo.find { DaoSyncLinkedRepos.project eq project.id }.forEach { it.delete() }
                 DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.forEach { it.delete() }
+
+                // Machine-local field overrides (controller IPs). Same story as the sync rows:
+                // no ON DELETE cascade, so any project the operator gave a controller IP — and
+                // every clone, which inherits them — would otherwise be undeletable.
+                DaoMachineOverride.find { DaoMachineOverrides.project eq project.id }.forEach { it.delete() }
 
                 state.controlSurfaceBindingService.invalidate(project.id.value)
                 clearPresetPreview(state, resource.id.toString())
@@ -304,137 +320,46 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectMachineOverrides(state)
         routeApiRestProjectCloudSync(state)
 
-        // POST /{id}/clone - Clone a project with all scripts
+        // POST /{id}/clone - Clone a project, whole graph. Runs through the cloud-sync
+        // export/import format with freshly-minted UUIDs (see ProjectCloner) rather than a
+        // bespoke table walker, so newly-synced tables are cloned without a code change here.
         post<CloneProjectResource> { resource ->
             val request = call.receive<CloneProjectRequest>()
 
-            val result = transaction(state.database) {
-                val sourceProject = DaoProject.findById(resource.id)
-                    ?: return@transaction null to "Source project not found"
-
-                // Check if name is already taken
-                val existingProject = DaoProject.find { DaoProjects.name eq request.name }.firstOrNull()
-                if (existingProject != null) {
-                    return@transaction null to "A project with name '${request.name}' already exists"
+            val result = try {
+                // Export + import do file IO inside Exposed transactions; off-loading keeps
+                // the Ktor worker free, matching the manual export route.
+                withContext(Dispatchers.IO) {
+                    ProjectCloner(state).clone(resource.id, request.name, request.description)
                 }
+            } catch (e: ImportError) {
+                call.respond(e.status, ErrorResponse(e.message ?: "Clone failed"))
+                return@post
+            } catch (e: CancellationException) {
+                // The clone commits inside a blocking transaction, so cancellation surfaces
+                // only after the work has landed. Rethrow rather than reporting a 500 on a
+                // dead call: the caller would be told a clone failed that in fact exists, and
+                // its retry would collide on the name.
+                throw e
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Clone failed: ${e.message}"))
+                return@post
+            }
 
-                // Create new project
-                val newProject = DaoProject.new {
-                    name = request.name
-                    description = request.description ?: sourceProject.description
-                    isCurrent = false
-                }
-
-                // Clone all scripts, maintaining ID mapping
-                val scriptIdMapping = mutableMapOf<Int, Int>() // old ID -> new ID
-                sourceProject.scripts.forEach { sourceScript ->
-                    val newScript = DaoScript.new {
-                        name = sourceScript.name
-                        script = sourceScript.script
-                        project = newProject
-                    }
-                    scriptIdMapping[sourceScript.id.value] = newScript.id.value
-                }
-
-                // Clone all FX presets, maintaining ID mapping
-                val presetIdMapping = mutableMapOf<Int, Int>() // old ID -> new ID
-                sourceProject.fxPresets.forEach { sourcePreset ->
-                    val newPreset = DaoFxPreset.new {
-                        name = sourcePreset.name
-                        description = sourcePreset.description
-                        fixtureType = sourcePreset.fixtureType
-                        project = newProject
-                        effects = sourcePreset.effects
-                    }
-                    presetIdMapping[sourcePreset.id.value] = newPreset.id.value
-                }
-
-                // Clone all cue stacks (including SEPARATOR rows), preserving show order
-                val cueStackIdMapping = mutableMapOf<Int, Int>()
-                sourceProject.cueStacks.forEach { sourceStack ->
-                    val newStack = DaoCueStack.new {
-                        name = sourceStack.name
-                        project = newProject
-                        palette = sourceStack.palette
-                        loop = sourceStack.loop
-                        sortOrder = sourceStack.sortOrder
-                        type = sourceStack.type
-                        label = sourceStack.label
-                    }
-                    cueStackIdMapping[sourceStack.id.value] = newStack.id.value
-                }
-
-                // Clone all cues, remapping preset IDs and cue stack IDs. Every cue belongs to a
-                // stack, and every stack was cloned above, so the mapping always resolves.
-                var cuesCloned = 0
-                sourceProject.cues.forEach { sourceCue ->
-                    val newStackId = cueStackIdMapping[sourceCue.cueStack.id.value]
-                        ?: error("Cloned cue references an uncloned stack ${sourceCue.cueStack.id.value}")
-                    val newCue = DaoCue.new {
-                        name = sourceCue.name
-                        project = newProject
-                        palette = sourceCue.palette
-                        updateGlobalPalette = sourceCue.updateGlobalPalette
-                        autoAdvance = sourceCue.autoAdvance
-                        autoAdvanceDelayMs = sourceCue.autoAdvanceDelayMs
-                        fadeDurationMs = sourceCue.fadeDurationMs
-                        fadeCurve = sourceCue.fadeCurve
-                        cueStack = DaoCueStack.findById(newStackId)!!
-                        sortOrder = sourceCue.sortOrder
-                    }
-                    // Clone preset applications with remapped preset IDs
-                    for (app in sourceCue.presetApplications) {
-                        val newPresetId = presetIdMapping[app.preset.id.value] ?: continue
-                        val newPreset = DaoFxPreset.findById(newPresetId) ?: continue
-                        DaoCuePresetApplication.new {
-                            cue = newCue
-                            preset = newPreset
-                            targets = app.targets
-                        }
-                    }
-                    // Clone ad-hoc effects
-                    for (effect in sourceCue.adHocEffects) {
-                        DaoCueAdHocEffect.new {
-                            cue = newCue
-                            targetType = effect.targetType
-                            targetKey = effect.targetKey
-                            effectType = effect.effectType
-                            category = effect.category
-                            propertyName = effect.propertyName
-                            beatDivision = effect.beatDivision
-                            blendMode = effect.blendMode
-                            distribution = effect.distribution
-                            phaseOffset = effect.phaseOffset
-                            elementMode = effect.elementMode
-                            elementFilter = effect.elementFilter
-                            stepTiming = effect.stepTiming
-                            parameters = effect.parameters
-                        }
-                    }
-                    cuesCloned++
-                }
-
+            val response = transaction(state.database) {
+                val newProject = DaoProject.findById(result.projectId)
+                    ?: error("Cloned project ${result.projectId} vanished")
                 CloneProjectResponse(
                     project = newProject.toDetailDto(),
-                    scriptsCloned = scriptIdMapping.size,
-                    presetsCloned = presetIdMapping.size,
-                    cuesCloned = cuesCloned,
-                    cueStacksCloned = cueStackIdMapping.size,
-                    message = "Project cloned successfully"
-                ) to null
+                    scriptsCloned = newProject.scripts.count().toInt(),
+                    presetsCloned = newProject.fxPresets.count().toInt(),
+                    cuesCloned = newProject.cues.count().toInt(),
+                    cueStacksCloned = newProject.cueStacks.count().toInt(),
+                    recordsCloned = result.recordsCloned,
+                    message = "Project cloned successfully",
+                )
             }
-
-            val (response, error) = result
-            if (response != null) {
-                call.respond(HttpStatusCode.Created, response)
-            } else {
-                val statusCode = if (error == "Source project not found") {
-                    HttpStatusCode.NotFound
-                } else {
-                    HttpStatusCode.Conflict
-                }
-                call.respond(statusCode, ErrorResponse(error ?: "Unknown error"))
-            }
+            call.respond(HttpStatusCode.Created, response)
         }
     }
 }
@@ -504,6 +429,8 @@ data class CloneProjectResponse(
     val presetsCloned: Int,
     val cuesCloned: Int,
     val cueStacksCloned: Int = 0,
+    /** Total records copied across every synced table — patches, groups, universes, cue children, … */
+    val recordsCloned: Int = 0,
     val message: String
 )
 

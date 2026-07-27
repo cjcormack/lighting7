@@ -479,6 +479,60 @@ and the non-deterministic test can't pin it down.
 
 ---
 
+### `FU-SYNC-BINDING-PAYLOAD-UUIDS` — Control-surface binding targets address rows by integer id
+
+**Status**: Trigger (correctness, latent)
+**Origin**: Code review of the project-clone rewrite, 2026-07-27
+
+`control_surface_bindings.targetPayload` serialises
+`uk.me.cormack.lighting7.midi.BindingTarget` verbatim, and the cue-facing
+variants carry **integer row ids** — `FireCue(cueId: Int)`,
+`CueStackGo/Back/Pause(stackId: Int)`. The exporter writes the payload as an
+opaque string
+([`ProjectExporter`](../../src/main/kotlin/uk/me/cormack/lighting7/sync/ProjectExporter.kt)),
+so those ids cross project and install boundaries unchanged. Nothing can
+translate them: `ExportUuidRemapper` only substitutes UUID-shaped strings, and
+by design it knows no field schemas.
+
+Consequences, in increasing severity:
+
+* **Clone** (`sync/ProjectCloner.kt`): a cloned project's cue/stack bindings
+  point at the *source* project's rows. `State.buildBindingHealthContext`
+  resolves them against the clone's own ids, so each one evaluates to
+  `MissingCue` / `MissingStack` and `SurfaceInputRouter` drops the press. The
+  clone's MIDI surface is dead until rebound. Visible in the assignment-health
+  UI, so it's loud rather than silent — but still wrong.
+* **Import on another install**: same failure, except the stale id may
+  coincidentally *exist* and name an unrelated cue, so a button fires the wrong
+  look instead of nothing.
+* **Pre-init window**: `buildBindingHealthContext` returns null before the show
+  is initialised, and health then defaults to `Ok`. A press in that window
+  dispatches `CueStackManager.fireCue`, which does `DaoCue.findById(id)` with
+  **no project check**
+  ([`fx/CueStackManager.kt`](../../src/main/kotlin/uk/me/cormack/lighting7/fx/CueStackManager.kt)) —
+  firing another project's cue while this one is current.
+
+**Shape when it lands.** Two independent pieces:
+
+1. Make `BindingTarget`'s cue/stack variants carry UUIDs (or have
+   `ControlSurfaceBindingJson` translate id ↔ uuid on the export/import
+   boundary, leaving the runtime type alone). Either way it's a
+   `formatVersion` bump plus a migration for existing payloads, and it fixes
+   clone and cross-install import together.
+2. Independently, project-scope the lookups in `CueStackManager.fireCue` and
+   its stack equivalents so a stale id can never reach another project's row.
+   Worth doing on its own merits regardless of (1).
+
+**Trigger to revisit** (any one):
+- An operator reports dead or wrong-cue MIDI bindings after cloning or
+  importing a project.
+- Any work touching `BindingTarget`, `ControlSurfaceBindingJson`, or the
+  binding-health context — fold the fix in rather than adding another
+  id-addressed payload variant.
+- A `formatVersion` bump lands for another reason (piggyback the migration).
+
+---
+
 ## Code quality
 
 ---

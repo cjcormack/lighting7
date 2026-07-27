@@ -83,6 +83,7 @@ class ImportError(val status: HttpStatusCode, message: String) : RuntimeExceptio
         fun conflict(message: String) = ImportError(HttpStatusCode.Conflict, message)
         fun unsupportedFormat(message: String) = ImportError(HttpStatusCode.UnprocessableEntity, message)
         fun invalidArchive(message: String) = ImportError(HttpStatusCode.BadRequest, message)
+        fun notFound(message: String) = ImportError(HttpStatusCode.NotFound, message)
     }
 }
 
@@ -97,8 +98,11 @@ class ProjectImporter(private val state: State) {
      * (Conflict) if a project with the same UUID already exists, or if the imported name
      * collides with an existing project (use [nameOverride] to disambiguate). Forces
      * `isCurrent = false` on the new project.
+     *
+     * [descriptionOverride] replaces the archive's description when non-null; null keeps the
+     * archive's. Used by [ProjectCloner] so a clone can be re-described at creation time.
      */
-    fun import(sourceDir: Path, nameOverride: String?): Result {
+    fun import(sourceDir: Path, nameOverride: String?, descriptionOverride: String? = null): Result {
         val (_, projectJson) = loadAndValidateArchive(sourceDir)
         val targetName = nameOverride ?: projectJson.name
         val targetUuid = UUID.fromString(projectJson.uuid)
@@ -125,7 +129,7 @@ class ProjectImporter(private val state: State) {
             // operator UI state (which stack is live).
             val project = DaoProject.new {
                 name = targetName
-                description = projectJson.description
+                description = descriptionOverride ?: projectJson.description
                 isCurrent = false
                 activeStackId = null
                 stageWidthM = projectJson.stageWidthM

@@ -349,6 +349,104 @@ case, not multi-master sync. Import:
    `transaction(state.database) { … }` — any FK or validation failure
    rolls back atomically.
 
+## Project cloning
+
+`POST /project/{id}/clone` is implemented **on top of this export format**, in
+`sync/ProjectCloner.kt`: export the source to a temp dir → mint fresh UUIDs →
+import under the new name. There is deliberately no table-by-table clone
+walker. The previous hand-written one covered 5 of 21 project-owned tables, so
+clones silently lost their patch list, fixture groups, universes, Layer 3
+assignments, cue triggers, cue slots, FX definitions, riggings, stage regions,
+parked channels, surface bindings and prompt book. Routing clone through
+export/import means a table is cloned the moment it's wired into the exporter
+and importer — no third place to remember.
+
+`ExportUuidRemapper` does the identity minting, schema-agnostically in both
+directions. **Which identities exist** is read out of the documents: the value
+of any field named `uuid`, at any nesting depth. That deliberately does *not*
+use `RecordHasher.scanRecordKeys` — that enumerates records by filename, and a
+record embedded in a parent document (a fixture group's `members`, an FX
+preset's `propertyAssignments`) is not one, so those identities went unremapped
+until this was fixed. Every reference field is named `{table}Uuid` rather than
+`uuid`, so a reference never mints an identity of its own. **How they're
+replaced** is a blind UUID-for-UUID substitution across the JSON, which
+preserves the graph without knowing a single field name; a table added later,
+as a folder or as an embedded array, is handled with no change to the remapper.
+
+Because the substitution isn't field-aware, a UUID inside a free-text column
+(`cues.notes`, an FX definition's `script`, a binding's `targetPayload`) is
+rewritten too. For a reference that's correct; for prose it's a cosmetic edit
+to a string naming a record that no longer exists in this project. Field-level
+exclusions would buy that back at the cost of the per-table knowledge the class
+exists to avoid.
+
+Left untouched: `installs.json` (install identities, not records — exempt from
+both collection and substitution), the `scripts/{uuid}.kts` bodies and any
+other non-JSON sidecar (only `.json` documents are parsed and rewritten;
+filenames are still renamed), and the `promptScripts` PDFs (binary,
+content-addressed).
+
+A clone is a **distinct sync identity**: new project UUID, new record UUIDs, no
+`sync_configs` / `sync_state` / linked repo / session history. It is not
+`isCurrent` and doesn't inherit `activeStackId`.
+
+**Known limitation.** A clone carries everything the export carries, but one
+exported payload isn't project-portable: `control_surface_bindings.targetPayload`
+addresses cues and stacks by *integer row id*, which nothing can translate. A
+clone's cue/stack MIDI bindings therefore resolve to `MissingCue` /
+`MissingStack` and must be rebound. This affects cross-install import equally —
+it's a property of the export format, not of cloning — and the fix is a
+`formatVersion` change tracked as `FU-SYNC-BINDING-PAYLOAD-UUIDS` in
+[`docs/plans/followups.md`](plans/followups.md).
+
+One deliberate exception to "the export is the whole story": clones **do**
+inherit `machine_overrides`, notably the per-universe controller IPs. Those are
+excluded from the export because they're per-rig, but a clone lands on the same
+machine as its source, so carrying them means a cloned project can output DMX
+without re-entering every address. The copy translates each `recordUuid`
+through the clone's UUID mapping, and is best-effort after the import commits —
+mirroring the PDF hydrate, since a missing IP is fixable in the universe editor
+and not worth discarding a clone over.
+
+## Guarding coverage
+
+Three tests form a closed loop over "everything is carried everywhere". Each
+pins a different pair, and they share one fixture — `testsupport/
+RichProjectFixture.kt`, which seeds a project with rows in every portable table
+and non-default values in the interesting nullable columns:
+
+| Test | Pins | Catches |
+| --- | --- | --- |
+| `ProjectRoundTripTest` | importer → exporter | importer drops a field the exporter writes |
+| `ProjectCloneTest` | clone → exporter | clone drops a table, field, or mis-wires an FK |
+| `SyncCoverageTest` | exporter → schema | a new table has no recorded disposition, or is declared portable but produces no export output |
+
+`SyncCoverageTest` exists because the round-trip test has a blind spot worth
+naming: it compares two *exports*, so a field missing from both the exporter
+and the importer is missing symmetrically and passes. It closes that from the
+other end, asserting against `models/Schema.kt`'s `ALL_TABLES` — the same list
+`State` builds the schema from. Adding a table there without recording a
+disposition (portable / machine-local / excluded) fails the build.
+
+Its granularity is the table, not the column: a portable table whose fields are
+partly missing from the exporter still satisfies it. Field-level fidelity is
+the fixture's job, which is why the fixture sets non-default values — a column
+left at its default is omitted from canonical JSON, so a copier that drops it
+looks correct.
+
+`ProjectCloneTest` compares source and clone by inverting the clone's UUID
+mapping and demanding byte-identical exports. That's stronger than normalising
+UUIDs away: it pins every FK to the *corresponding* record, so a clone that
+wired two group members to the same patch would still fail.
+
+Its companion test — that source and clone share no identities — scans both
+exports for UUIDs with a plain regex rather than asking `ExportUuidRemapper`
+what it considers an identity. That independence is the whole point: the first
+version of that assertion compared the remapper's own returned mapping, whose
+keys and values are disjoint by construction, so it passed while embedded-child
+UUIDs were being copied verbatim. A guard computed from the thing it guards
+proves nothing.
+
 ## Working tree (Phase 3)
 
 Each project gets its own per-UUID JGit working tree at
@@ -1272,8 +1370,10 @@ same `CommitInfo[]` shape as before, with the added attribution fields described
 1. Add the column to the relevant DAO file.
 2. Decide portable vs. machine-local using the CLAUDE.md decision tree.
 3. **Portable**: add the field to the matching DTO in `sync/dto/SyncDtos.kt`,
-   pass it through `ProjectExporter` and `ProjectImporter`, and extend the
-   round-trip test to assert it survives.
+   pass it through `ProjectExporter` and `ProjectImporter`, and give it a
+   non-default value in `testsupport/RichProjectFixture.kt` so the round-trip
+   and clone tests actually exercise it. Project cloning needs no change — see
+   "Project cloning".
 4. **Machine-local**: don't put it in the sync DTO at all. Read and write it
    through the `Overrides` helper (`sync/Overrides.kt`); add a typed
    convenience accessor there if more than one call site needs it. The
@@ -1281,3 +1381,26 @@ same `CommitInfo[]` shape as before, with the added attribution fields described
 5. If the change isn't covered by `explicitNulls = false` /
    `encodeDefaults = false` (i.e. it's a required field with no default),
    that's a `formatVersion` bump — see "Format versioning".
+
+## How to add a new table
+
+1. Add the `IntIdTable` / DAO pair in `models/`, with a `uuid` column if it's
+   portable.
+2. Add it to `ALL_TABLES` in `models/Schema.kt`. `SyncCoverageTest` now fails
+   until step 3 is done — that's the forcing function.
+3. Record its disposition in `SyncCoverageTest.dispositions`: `Portable` (with
+   its export folder, and the parent's field name if the rows are embedded),
+   `MachineLocal`, or `Excluded`. The last two need a stated reason.
+4. **Portable only**: add a DTO to `sync/dto/SyncDtos.kt`, write it in
+   `ProjectExporter`, read it in `ProjectImporter`, seed rows in
+   `testsupport/RichProjectFixture.kt`, and add the project-delete cascade in
+   `routes/projects.kt` plus `ProjectImporter.replaceFromWorkingTree`. Cloning
+   is automatic. Renaming or removing a JSON field later is a `formatVersion`
+   change; removing a required one is a `minReader` bump.
+5. **Machine-local**: prefer a `machine_overrides` row via `sync/Overrides.kt`
+   for per-record fields. Give it its own local-only table only when the data
+   is wholly machine-local rather than a per-record override (e.g.
+   `sync_configs`). Either way it stays out of `ProjectExporter` /
+   `ProjectImporter`. Decide explicitly whether `ProjectCloner` should carry it
+   — it copies `machine_overrides` because a clone is same-machine, but that is
+   a judgement per table, not a rule.

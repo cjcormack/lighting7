@@ -655,27 +655,19 @@ class State(val config: ApplicationConfig) {
             // DaoProjects now includes all columns (FK columns as plain integers)
             // Note: createMissingTablesAndColumns is deprecated in favor of migration tools,
             // but is acceptable for this development/personal project setup
+            // Table list lives in models/Schema.kt so the sync-coverage guard can assert
+            // against the same set the schema is built from.
             @Suppress("DEPRECATION")
-            SchemaUtils.createMissingTablesAndColumns(
-                DaoProjects, DaoScripts, DaoFxPresets, DaoFxPresetPropertyAssignments,
-                DaoCueStacks, DaoCues,
-                DaoCuePresetApplications, DaoCueAdHocEffects, DaoCuePropertyAssignments, DaoCueTriggers,
-                DaoAiConversations, DaoCueSlots,
-                DaoUniverseConfigs, DaoRiggings, DaoStageRegions,
-                DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
-                DaoParkedChannels, DaoFxDefinitions,
-                DaoPromptBooks, DaoPromptBookAnchors, DaoPromptBookAnnotations,
-                DaoControlSurfaceBindings,
-                DaoProjectScalerStates,
-                DaoInstalls, DaoMachineOverrides,
-                DaoSyncConfigs, DaoSyncLinkedRepos,
-                DaoSyncStates, DaoSyncSessions, DaoSyncSessionConflicts,
-                DaoSyncLogEntries,
-                DaoOAuthIdentities,
-            )
+            SchemaUtils.createMissingTablesAndColumns(*ALL_TABLES.toTypedArray())
 
             // Drops a legacy index name; both PG and SQLite accept `DROP INDEX IF EXISTS`.
             exec("DROP INDEX IF EXISTS fx_presets_project_id_name")
+
+            // FX definition effectIds are unique per project, not globally — a global unique
+            // index made cloning or importing any project with a script-defined effect fail.
+            // The replacement uniqueIndex(project, effectId) is created by
+            // createMissingTablesAndColumns above.
+            exec("DROP INDEX IF EXISTS fx_definitions_effect_id")
 
             // Prompt books collapsed to one-per-project: drop the legacy per-name unique
             // index (was uniqueIndex(project, name)). The new uniqueIndex(project) is
