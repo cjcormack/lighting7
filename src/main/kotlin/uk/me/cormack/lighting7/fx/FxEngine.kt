@@ -407,6 +407,54 @@ class FxEngine(
         cueAssignments.keys.toSet()
     }
 
+    /**
+     * Rewrite the composition priority of live rows owned by the cues in [priorities]
+     * (`cueId → new priority`).
+     *
+     * Cue priority is derived from stack position and stamped at apply time
+     * (`cueDerivedPriority`), so reordering a stack that has cues on stage would otherwise leave
+     * those cues composing in their *old* relative order until each was re-applied. Callers that
+     * change `sort_order` hand the fresh map here to keep the engine consistent with the stack.
+     *
+     * Touches both layers a cue can own — Layer 2 [FxInstance.priority] and the Layer 3
+     * assignment rows — and leaves [cueFadeWeights] alone so a repriority mid-crossfade doesn't
+     * disturb the fade. Entries whose priority already matches are skipped, which makes the
+     * common single-live-cue reorder a no-op. Returns the number of rows changed.
+     */
+    fun repriorityCues(priorities: Map<Int, Int>): Int {
+        if (priorities.isEmpty()) return 0
+        var changed = 0
+
+        // Layer 2 — mutate in place, then re-sort the snapshots the tick loop reads.
+        val staleEffects = activeEffects.values.filter { effect ->
+            val target = priorities[effect.cueId ?: return@filter false] ?: return@filter false
+            effect.priority != target
+        }
+        if (staleEffects.isNotEmpty()) {
+            for (effect in staleEffects) effect.priority = priorities.getValue(effect.cueId!!)
+            changed += staleEffects.size
+            rebuildSortedSnapshots()
+            emitStateUpdate()
+        }
+
+        // Layer 3 — Assignment.priority is a val, so the rows are rebuilt by copy.
+        synchronized(cueAssignmentsLock) {
+            var layer3Changed = false
+            for ((cueId, target) in priorities) {
+                val rows = cueAssignments[cueId] ?: continue
+                if (rows.all { it.priority == target }) continue
+                cueAssignments[cueId] = rows.map {
+                    if (it.priority == target) it else it.copy(priority = target)
+                }
+                changed += rows.count { it.priority != target }
+                layer3Changed = true
+            }
+            if (layer3Changed) republishLayer3Assignments()
+        }
+
+        return changed
+    }
+
     // --- Layer 4 property writes ---
     //
     // Sticky direct writes at property-value granularity. Callers (preset toggle, future REST

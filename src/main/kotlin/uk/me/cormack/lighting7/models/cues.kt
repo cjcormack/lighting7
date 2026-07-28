@@ -105,6 +105,13 @@ object DaoCues : IntIdTable("cues") {
     val fadeDurationMs = long("fade_duration_ms").nullable()
     val fadeCurve = varchar("fade_curve", 50).default("LINEAR")
     val cueNumber = varchar("cue_number", 20).nullable()
+    /**
+     * True when [cueNumber] was derived from the cue's position rather than typed by the
+     * operator. Auto numbers are rewritten whenever the stack's membership or order changes
+     * (see `renumberAutoCues`); explicit ones are never touched. Clearing an explicit number
+     * hands the cue back to the auto scheme.
+     */
+    val cueNumberAuto = bool("cue_number_auto").default(false)
     val notes = text("notes").nullable()
     val cueType = varchar("cue_type", 20).default("STANDARD")
     /**
@@ -137,6 +144,7 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var fadeDurationMs by DaoCues.fadeDurationMs
     var fadeCurve by DaoCues.fadeCurve
     var cueNumber by DaoCues.cueNumber
+    var cueNumberAuto by DaoCues.cueNumberAuto
     var notes by DaoCues.notes
     var cueType by DaoCues.cueType
     var stomp by DaoCues.stomp

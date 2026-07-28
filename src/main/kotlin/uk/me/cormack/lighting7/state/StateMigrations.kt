@@ -3,16 +3,22 @@ package uk.me.cormack.lighting7.state
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.or
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStacks
+import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
 import uk.me.cormack.lighting7.models.LegacyStaticEffectMigration
+import uk.me.cormack.lighting7.routes.renumberAutoCues
 import uk.me.cormack.lighting7.sync.Overrides
 import java.util.UUID
 
@@ -53,6 +59,60 @@ internal fun Transaction.runStateMigrations(database: Database) {
     migrateUniverseAddressesToOverrides()
     migrateCollapseShowIntoStacks(database)
 }
+
+/**
+ * Give every STANDARD cue that has never had a number one derived from its position.
+ *
+ * [renumberAutoCues] otherwise only runs off a mutation (create / delete / reorder / an edited cue
+ * number), so cues that predate auto-numbering stay blank until something happens to touch their
+ * stack — a stack you never edit would show "—" forever. This walks every stack once at startup.
+ *
+ * Idempotent and cheap to repeat: once a stack's auto numbers agree with its positions
+ * [renumberAutoCues] returns without writing, and stacks with no blanks are skipped outright.
+ * Explicit numbers are never touched.
+ *
+ * **Runs one transaction per stack, deliberately outside the schema-creation transaction.** A stack
+ * that fails is logged and skipped — cosmetic numbering must not take startup down with it — and
+ * that promise only holds with a transaction boundary here: PostgreSQL aborts the *whole*
+ * transaction on a failed statement, so sharing one with `createMissingTablesAndColumns` would mean
+ * the next stack's query failed too and the schema work rolled back with it.
+ */
+internal fun backfillAutoCueNumbers(database: Database) {
+    var stacksTouched = 0
+    var cuesNumbered = 0L
+    val stackIds = transaction(database) { DaoCueStack.all().map { it.id.value } }
+    for (stackId in stackIds) {
+        val delta = runCatching {
+            transaction(database) {
+                val stack = DaoCueStack.findById(stackId) ?: return@transaction 0L
+                val before = blankStandardCueCount(stack)
+                if (before == 0L) return@transaction 0L
+                renumberAutoCues(stack)
+                before - blankStandardCueCount(stack)
+            }
+        }.getOrElse { error ->
+            logger.warn("Could not backfill cue numbers for stack {}: {}", stackId, error.message)
+            0L
+        }
+        if (delta > 0L) {
+            stacksTouched++
+            cuesNumbered += delta
+        }
+    }
+    if (cuesNumbered > 0) {
+        logger.info(
+            "Backfilled {} auto cue number(s) across {} stack(s)", cuesNumbered, stacksTouched,
+        )
+    }
+}
+
+/** STANDARD cues in [stack] with no cue number — `""` counts as blank, same as null. */
+private fun blankStandardCueCount(stack: DaoCueStack): Long =
+    DaoCues.selectAll().where {
+        (DaoCues.cueStack eq stack.id) and
+            (DaoCues.cueType eq CueType.STANDARD.name) and
+            (DaoCues.cueNumber.isNull() or (DaoCues.cueNumber eq ""))
+    }.count()
 
 /**
  * Bootstraps the singleton install identity. On first launch creates one row with `friendlyName`

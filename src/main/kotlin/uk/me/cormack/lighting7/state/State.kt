@@ -700,6 +700,10 @@ class State(val config: ApplicationConfig) {
             runStateMigrations(database)
         }
 
+        // Deliberately after the schema transaction, with a transaction per stack: a stack this
+        // can't number must not roll the schema work back with it. See the function's docs.
+        backfillAutoCueNumbers(database)
+
         return database
     }
 

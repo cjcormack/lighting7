@@ -182,15 +182,23 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
     post<CueStackReorderResource> { resource ->
         withCurrentProject(state, resource.parent.parent.projectId) { _ ->
             val request = call.receive<ReorderCuesRequest>()
-            transaction(state.database) {
+            val priorities = transaction(state.database) {
+                val stack = DaoCueStack.findById(resource.parent.stackId)
+                    ?: return@transaction emptyMap<Int, Int>()
                 for ((index, cueId) in request.cueIds.withIndex()) {
                     val cue = DaoCue.findById(cueId) ?: continue
                     if (cue.cueStack.id.value == resource.parent.stackId) {
                         cue.sortOrder = index
                     }
                 }
+                // Auto numbers are derived from position, so they move with the order.
+                renumberAutoCues(stack)
+                stackCuePriorities(stack)
             }
+            // Cue priority is derived from stack position; keep anything already on stage in step.
+            state.show.fxEngine.repriorityCues(priorities)
             state.show.fixtures.cueStackListChanged()
+            state.show.fixtures.cueListChanged()
             call.respond(HttpStatusCode.OK)
         }
     }
@@ -201,46 +209,45 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val request = call.receive<AddCueToStackRequest>()
             val manager = state.show.cueStackManager
             val result = transaction(state.database) {
-                val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction "Stack not found" to null
-                if (stack.type == CueStackType.SEPARATOR.name) return@transaction "Cannot add cues to a separator" to null
-                val cue = DaoCue.findById(request.cueId) ?: return@transaction "Cue not found" to null
-                if (cue.project.id != project.id) return@transaction "Cue does not belong to project" to null
+                val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction Triple("Stack not found", null, null)
+                if (stack.type == CueStackType.SEPARATOR.name) return@transaction Triple("Cannot add cues to a separator", null, null)
+                val cue = DaoCue.findById(request.cueId) ?: return@transaction Triple("Cue not found", null, null)
+                if (cue.project.id != project.id) return@transaction Triple("Cue does not belong to project", null, null)
+
+                // Every cue already in the stack, MARKERs included — the shift below has to move
+                // separators too, or they drift away from the cues they label.
+                val existingCues = DaoCue.find { DaoCues.cueStack eq stack.id }
+                    .orderBy(DaoCues.sortOrder to SortOrder.ASC)
+                    .filter { it.id.value != cue.id.value }
+                    .toList()
 
                 if (request.insertByNumber) {
-                    val cueNum = cue.cueNumber
-                    if (cueNum == null || cueNum.isEmpty() || !cueNum[0].isDigit()) {
-                        return@transaction "insertByNumber requires a cue_number starting with a digit" to null
+                    val parsed = cue.cueNumber?.let { parseCueNumber(it) }
+                        ?: return@transaction Triple(
+                            "insertByNumber requires a cue number with a numeric component",
+                            null,
+                            null,
+                        )
+
+                    // Position the cue within its own prefix group; other groups sort
+                    // independently, so their numbers say nothing about where this one belongs.
+                    val group = existingCues.mapNotNull { other ->
+                        val otherParsed = other.cueNumber?.let { parseCueNumber(it) }
+                        if (otherParsed != null && otherParsed.prefix.equals(parsed.prefix, ignoreCase = true)) {
+                            other to otherParsed
+                        } else {
+                            null
+                        }
                     }
 
-                    // Get existing STANDARD cues in this stack, ordered by sort_order
-                    val existingCues = DaoCue.find {
-                        (DaoCues.cueStack eq stack.id) and (DaoCues.cueType eq CueType.STANDARD.name)
-                    }.orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                        .filter { it.id.value != cue.id.value }
-                        .toList()
-
-                    // Find participating cues (digit-first cue_number)
-                    val participating = existingCues.filter { c ->
-                        val num = c.cueNumber
-                        num != null && num.isNotEmpty() && num[0].isDigit()
+                    val insertAfter = group.lastOrNull { (_, other) -> compareWithinGroup(other, parsed) < 0 }
+                    val insertSortOrder = when {
+                        insertAfter != null -> insertAfter.first.sortOrder + 1
+                        group.isNotEmpty() -> group.first().first.sortOrder
+                        // Nothing in this group yet — append.
+                        else -> (existingCues.maxOfOrNull { it.sortOrder } ?: -1) + 1
                     }
 
-                    // Find insertion point: after last participating cue that sorts before new cue
-                    val insertAfter = participating.lastOrNull { c ->
-                        naturalCompare(c.cueNumber!!, cueNum) < 0
-                    }
-
-                    val insertSortOrder = if (insertAfter != null) {
-                        insertAfter.sortOrder + 1
-                    } else if (participating.isNotEmpty()) {
-                        // Insert before all participating cues
-                        participating.first().sortOrder
-                    } else {
-                        // No participating cues — append at end
-                        (existingCues.maxOfOrNull { it.sortOrder } ?: -1) + 1
-                    }
-
-                    // Shift subsequent cues
                     existingCues.filter { it.sortOrder >= insertSortOrder }
                         .forEach { it.sortOrder = it.sortOrder + 1 }
 
@@ -248,17 +255,24 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     cue.sortOrder = insertSortOrder
                 } else {
                     cue.cueStack = stack
-                    cue.sortOrder = request.sortOrder ?: stack.cues.count().toInt()
+                    // max+1, not count: sort orders are allowed to have gaps, so counting would
+                    // hand out a value an existing cue already holds.
+                    cue.sortOrder = request.sortOrder ?: ((existingCues.maxOfOrNull { it.sortOrder } ?: -1) + 1)
                 }
 
-                val details = stack.toCueStackDetails(isCurrentProject = true, manager)
-                null to details
+                renumberAutoCues(stack)
+                Triple(
+                    null,
+                    stack.toCueStackDetails(isCurrentProject = true, manager),
+                    stackCuePriorities(stack),
+                )
             }
 
-            val (error, details) = result
+            val (error, details, priorities) = result
             if (error != null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
             } else {
+                state.show.fxEngine.repriorityCues(priorities ?: emptyMap())
                 state.show.fixtures.cueStackListChanged()
                 state.show.fixtures.cueListChanged()
                 call.respond(details!!)
@@ -335,7 +349,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         }
     }
 
-    // POST /{projectId}/cue-stacks/{stackId}/sort-by-cue-number - Reorder by natural sort
+    // POST /{projectId}/cue-stacks/{stackId}/sort-by-cue-number - Group-aware natural sort
     post<CueStackSortByNumberResource> { resource ->
         withCurrentProject(state, resource.parent.parent.projectId) { project ->
             val manager = state.show.cueStackManager
@@ -343,71 +357,45 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction null
                 if (stack.project.id != project.id) return@transaction null
 
-                // Get all cues in the stack ordered by sort_order
-                val allCues = DaoCue.find { DaoCues.cueStack eq stack.id }
+                val standardCues = DaoCue.find { DaoCues.cueStack eq stack.id }
                     .orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                    .toList()
+                    .filter { it.cueType == CueType.STANDARD.name }
 
-                // Partition STANDARD cues only — MARKERs are not considered
-                val standardCues = allCues.filter { it.cueType == CueType.STANDARD.name }
+                // Each prefix group is sorted within the slots it already occupies, so groups
+                // keep their relative placement. MARKERs and numbers with nothing to order by
+                // ("A", blanks) never move — that's the replacement for the old rule that a cue
+                // number had to *start* with a digit to participate, which excluded every
+                // prefixed number like "S1-3".
+                val slots = standardCues.map { it.sortOrder }
+                groupAwareCueOrder(standardCues) { it.cueNumber }
+                    .forEachIndexed { index, cue -> cue.sortOrder = slots[index] }
 
-                // Three-group partition of STANDARD cues
-                val participating = standardCues.filter { c ->
-                    val num = c.cueNumber
-                    !num.isNullOrEmpty() && num[0].isDigit()
+                // Counted before renumbering: that call is what fills blanks in, so reading these
+                // afterwards would report zero unnumbered cues no matter what came in.
+                val unparseable = standardCues.count {
+                    val number = it.cueNumber
+                    !number.isNullOrEmpty() && parseCueNumber(number) == null
                 }
-                val pinned = standardCues.filter { c ->
-                    val num = c.cueNumber
-                    !num.isNullOrEmpty() && !num[0].isDigit()
-                }
-                val unnumbered = standardCues.filter { it.cueNumber.isNullOrEmpty() }
+                val unnumbered = standardCues.count { it.cueNumber.isNullOrEmpty() }
 
-                if (participating.isEmpty()) {
-                    return@transaction SortByNumberResult(
-                        error = "No participating cues to sort (need cue numbers starting with a digit)",
-                        response = null,
-                    )
-                }
+                renumberAutoCues(stack)
 
-                // Sort participating by natural sort
-                val sortedParticipating = participating.sortedWith(
-                    compareBy(CueNumberComparator) { it.cueNumber!! }
-                )
-
-                // Collect the sort_order positions that participating cues currently occupy
-                val participatingPositions = participating.map { it.sortOrder }.sorted()
-
-                // Assign sorted participating cues to those positions
-                sortedParticipating.forEachIndexed { index, cue ->
-                    cue.sortOrder = participatingPositions[index]
-                }
-
-                // Append unnumbered after all others (find the max sort_order)
-                val maxSortOrder = allCues.maxOfOrNull { it.sortOrder } ?: 0
-                unnumbered.forEachIndexed { index, cue ->
-                    cue.sortOrder = maxSortOrder + 1 + index
-                }
-
-                // Build response with updated stack details
                 val details = stack.toCueStackDetails(isCurrentProject = true, manager)
-
-                SortByNumberResult(
-                    error = null,
-                    response = SortByNumberResponse(
-                        updatedCues = details.cues,
-                        pinnedCount = pinned.size,
-                        nullNumberCount = unnumbered.size,
-                    ),
-                )
+                SortByNumberResponse(
+                    updatedCues = details.cues,
+                    pinnedCount = unparseable,
+                    nullNumberCount = unnumbered,
+                ) to stackCuePriorities(stack)
             }
 
             if (result == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
-            } else if (result.error != null) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.error))
             } else {
+                val (response, priorities) = result
+                state.show.fxEngine.repriorityCues(priorities)
                 state.show.fixtures.cueStackListChanged()
-                call.respond(result.response!!)
+                state.show.fixtures.cueListChanged()
+                call.respond(response)
             }
         }
     }
@@ -490,6 +478,8 @@ data class CueStackCueEntry(
     val fadeDurationMs: Long? = null,
     val fadeCurve: String = "LINEAR",
     val cueNumber: String? = null,
+    /** True when [cueNumber] was derived from position rather than typed by the operator. */
+    val cueNumberAuto: Boolean = false,
     val notes: String? = null,
     val cueType: String = "STANDARD",
 )
@@ -550,63 +540,11 @@ data class SortByNumberResponse(
     val nullNumberCount: Int,
 )
 
-private data class SortByNumberResult(
-    val error: String?,
-    val response: SortByNumberResponse?,
-)
-
-// ─── Natural sort ─────────────────────────────────────────────────────
-
-/**
- * Splits a cue number into alternating numeric/non-numeric segments for natural sort.
- * E.g. "14A" → [14, "A"], "1.5" → [1, ".", 5]
- */
-internal fun naturalSortKey(cueNumber: String): List<Comparable<*>> {
-    val segments = mutableListOf<Comparable<*>>()
-    var i = 0
-    while (i < cueNumber.length) {
-        if (cueNumber[i].isDigit()) {
-            val start = i
-            while (i < cueNumber.length && cueNumber[i].isDigit()) i++
-            segments.add(cueNumber.substring(start, i).toLong())
-        } else {
-            val start = i
-            while (i < cueNumber.length && !cueNumber[i].isDigit()) i++
-            segments.add(cueNumber.substring(start, i))
-        }
-    }
-    return segments
-}
-
-/**
- * Compares two cue numbers using natural sort order.
- * Numeric segments are compared numerically, non-numeric segments lexicographically.
- * Result: 1 < 1.5 < 2 < 14 < 14A < 14B < 15 < 100
- */
-internal fun naturalCompare(a: String, b: String): Int {
-    val aKey = naturalSortKey(a)
-    val bKey = naturalSortKey(b)
-    val len = minOf(aKey.size, bKey.size)
-    for (idx in 0 until len) {
-        val aVal = aKey[idx]
-        val bVal = bKey[idx]
-        val cmp = when {
-            aVal is Long && bVal is Long -> aVal.compareTo(bVal)
-            aVal is String && bVal is String -> aVal.compareTo(bVal)
-            aVal is Long -> -1 // numbers before strings
-            else -> 1
-        }
-        if (cmp != 0) return cmp
-    }
-    return aKey.size.compareTo(bKey.size)
-}
-
-/**
- * Comparator for cue numbers using natural sort order.
- */
-internal object CueNumberComparator : Comparator<String> {
-    override fun compare(a: String, b: String): Int = naturalCompare(a, b)
-}
+// The old flat `naturalSortKey` / `naturalCompare` / `CueNumberComparator` trio lived here.
+// They compared cue numbers as one undifferentiated token stream, which is what forced the
+// "must start with a digit" participation rule — a prefixed number like "S1-3" would otherwise
+// sort against "T2-1" as if the prefixes were meaningful ordering data. `cueNumbering.kt` now
+// models prefix / decimal run / suffix separately and compares only within a group.
 
 // ─── Entity helpers ────────────────────────────────────────────────────
 
@@ -627,6 +565,7 @@ private fun DaoCueStack.toCueStackDetails(
             fadeDurationMs = cue.fadeDurationMs,
             fadeCurve = cue.fadeCurve,
             cueNumber = cue.cueNumber,
+            cueNumberAuto = cue.cueNumberAuto,
             notes = cue.notes,
             cueType = cue.cueType,
         )

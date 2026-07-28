@@ -199,6 +199,14 @@ priority composes later, so under non-OVERRIDE blend modes a later-positioned cu
 earlier cues on the same property. See
 [lighting-composition-model.md](lighting-composition-model.md) §"Layer 2".
 
+Because priority is derived from `sortOrder`, **reordering a stack changes precedence**. Priority
+is stamped at apply time, so the reorder / `add-cue` / `sort-by-cue-number` handlers call
+`FxEngine.repriorityCues(cueId → priority)` after writing sort orders. That restamps both layers a
+cue can own — `FxInstance.priority` and the Layer 3 `Assignment.priority` rows — so cues already on
+stage compose in the new order without needing to be re-applied. Crossfade weights are left
+untouched, and cues whose derived priority didn't change are skipped, which makes the ordinary
+single-live-cue reorder a no-op.
+
 ### Stomp
 
 `DaoCues.stomp: Boolean` (default false) — when a stomping cue applies, the engine calls

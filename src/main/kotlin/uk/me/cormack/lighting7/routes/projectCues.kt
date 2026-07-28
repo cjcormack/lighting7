@@ -85,7 +85,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     cueType = validatedCueType
                     stomp = newCue.stomp
                     cueStack = stack
-                    sortOrder = newCue.sortOrder ?: stack.cues.count().toInt()
+                    // max+1, not count: sort orders may have gaps, so counting can hand out a
+                    // value an existing cue already holds.
+                    sortOrder = newCue.sortOrder
+                        ?: ((stack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1)
                 }
                 createCueChildren(
                     cue,
@@ -94,6 +97,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     newCue.propertyAssignments,
                     newCue.triggers,
                 )
+                // A cue created without a number gets one derived from where it landed.
+                renumberAutoCues(stack)
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures) to null
             }
             val (cueDetails, error) = result
@@ -144,9 +149,21 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 cue.autoAdvanceDelayMs = updatedData.autoAdvanceDelayMs
                 cue.fadeDurationMs = updatedData.fadeDurationMs
                 cue.fadeCurve = updatedData.fadeCurve
-                cue.cueNumber = updatedData.cueNumber
                 cue.notes = updatedData.notes
                 cue.stomp = updatedData.stomp
+
+                // A number that differs from what's stored is an operator edit, so it becomes
+                // explicit; clearing it hands the cue back to the auto scheme. An *unchanged*
+                // value leaves the auto flag alone, so a full-object save that merely round-trips
+                // the current number (the palette editor's PUT) can't silently freeze an auto
+                // number as explicit.
+                val incomingNumber = updatedData.cueNumber?.takeIf { it.isNotEmpty() }
+                val numberChanged = incomingNumber != cue.cueNumber
+                if (numberChanged) {
+                    releaseAutoNumber(cue.cueStack, incomingNumber, cue.id.value)
+                    cue.cueNumber = incomingNumber
+                    cue.cueNumberAuto = false
+                }
 
                 // Replace children: delete existing, create new
                 deleteCueChildren(cue)
@@ -158,6 +175,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     updatedData.triggers,
                 )
 
+                if (numberChanged) renumberAutoCues(cue.cueStack)
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
@@ -186,7 +204,17 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
                 // Scalar fields
                 if ("name" in body) cue.name = body["name"]!!.jsonPrimitive.content
-                if ("cueNumber" in body) cue.cueNumber = body["cueNumber"].nullableString()
+                // A typed number is explicit and wins any auto number a sibling was given;
+                // clearing the field hands this cue back to the auto scheme, which fills it in
+                // again from position. `""` is normalised to null so the unique index and the
+                // "is it numbered?" checks agree on what blank means.
+                val numberChanged = "cueNumber" in body
+                if (numberChanged) {
+                    val next = body["cueNumber"].nullableString()?.takeIf { it.isNotEmpty() }
+                    releaseAutoNumber(cue.cueStack, next, cue.id.value)
+                    cue.cueNumber = next
+                    cue.cueNumberAuto = false
+                }
                 if ("fadeDurationMs" in body) cue.fadeDurationMs = body["fadeDurationMs"].nullableLong()
                 if ("fadeCurve" in body) cue.fadeCurve = body["fadeCurve"]!!.jsonPrimitive.content
                 if ("notes" in body) cue.notes = body["notes"].nullableString()
@@ -230,6 +258,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     )
                 }
 
+                if (numberChanged) renumberAutoCues(cue.cueStack)
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
@@ -253,14 +282,18 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val result = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
+                val stack = cue.cueStack
                 deleteCueChildren(cue)
                 val removedAnchors = deletePromptBookAnchorsForCue(cue)
                 cue.delete()
+                // The cues that followed have shifted up the derived sequence.
+                renumberAutoCues(stack)
                 removedAnchors
             }
 
             if (result != null) {
                 state.show.fixtures.cueListChanged()
+                state.show.fixtures.cueStackListChanged()
                 if (result > 0) state.show.fixtures.promptBookChanged()
                 call.respond(HttpStatusCode.OK)
             } else {
@@ -308,7 +341,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 fadeCurve = sourceCue.fadeCurve
                 stomp = sourceCue.stomp
                 cueStack = targetStack
-                sortOrder = targetStack.cues.count().toInt()
+                sortOrder = (targetStack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1
             }
 
             // Copy child entities
@@ -369,6 +402,9 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     sortOrder = trigger.sortOrder
                 }
             }
+
+            // The copy carries no cue number, so it picks one up from where it landed.
+            renumberAutoCues(targetStack)
 
             CopyCueResponse(
                 cueId = newCue.id.value,
@@ -582,6 +618,11 @@ data class CueDetails(
     val autoAdvanceDelayMs: Long? = null,
     val fadeDurationMs: Long? = null,
     val fadeCurve: String = "LINEAR",
+    val cueNumber: String? = null,
+    /** True when [cueNumber] was derived from position rather than typed by the operator. */
+    val cueNumberAuto: Boolean = false,
+    val notes: String? = null,
+    val cueType: String = "STANDARD",
     val stomp: Boolean = false,
     val canEdit: Boolean,
     val canDelete: Boolean,

@@ -280,6 +280,7 @@ data class CueJson(
     val fadeDurationMs: Long? = null,
     val fadeCurve: String = "LINEAR",
     val cueNumber: String? = null,
+    val cueNumberAuto: Boolean = false,
     val notes: String? = null,
     val cueType: String = "STANDARD",
     val stomp: Boolean = false,

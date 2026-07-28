@@ -368,6 +368,10 @@ internal fun DaoCue.toCueDetails(
         autoAdvanceDelayMs = this.autoAdvanceDelayMs,
         fadeDurationMs = this.fadeDurationMs,
         fadeCurve = this.fadeCurve,
+        cueNumber = this.cueNumber,
+        cueNumberAuto = this.cueNumberAuto,
+        notes = this.notes,
+        cueType = this.cueType,
         stomp = this.stomp,
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
@@ -648,7 +652,23 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
  * below; the magnitude gaps leave room for per-effect fine-tuning without renumbering.
  */
 internal fun cueDerivedPriority(cueData: CueApplyData): Int =
-    (cueData.cueStackId ?: 0) * 1_000_000 + cueData.sortOrder * 1_000 + 1
+    cueDerivedPriority(cueData.cueStackId, cueData.sortOrder)
+
+/**
+ * Position-only form, for recomputing the priority of *already applied* rows after a stack is
+ * reordered — see [uk.me.cormack.lighting7.fx.FxEngine.repriorityCues].
+ */
+internal fun cueDerivedPriority(cueStackId: Int?, sortOrder: Int): Int =
+    (cueStackId ?: 0) * 1_000_000 + sortOrder * 1_000 + 1
+
+/**
+ * `cueId → cueDerivedPriority` for every cue in [stack] at its current sort order. Hand the
+ * result to [uk.me.cormack.lighting7.fx.FxEngine.repriorityCues] after changing the order, so
+ * cues already on stage compose in the new order without needing to be re-applied.
+ */
+internal fun stackCuePriorities(stack: DaoCueStack): Map<Int, Int> =
+    DaoCue.find { DaoCues.cueStack eq stack.id }
+        .associate { it.id.value to cueDerivedPriority(stack.id.value, it.sortOrder) }
 
 /**
  * Build the stomp overlap set from a cue's property assignments. Group targets are expanded

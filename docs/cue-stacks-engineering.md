@@ -42,6 +42,7 @@ cues (modified)
 ├── fade_duration_ms (long, nullable)
 ├── fade_curve (varchar 50, default "LINEAR")
 ├── cue_number (varchar 20, nullable — free-form display label)
+├── cue_number_auto (boolean, default false — cue_number was derived from position)
 ├── notes (text, nullable — script reference annotation)
 └── cue_type (varchar 20, default "STANDARD" — STANDARD or MARKER)
 
@@ -53,13 +54,59 @@ Partial unique index: (cue_stack_id, cue_number) WHERE cue_number IS NOT NULL AN
 - **STANDARD** — Normal cue that can be activated. Participates in advance/go-to.
 - **MARKER** — Inert section divider. Invisible to `advance` and `go-to` (returns HTTP 400). Not moved by `sort-by-cue-number`.
 
-### Cue Number Classification
+### Cue Number Model
+
+See [`cueNumbering.kt`](../src/main/kotlin/uk/me/cormack/lighting7/routes/cueNumbering.kt); the
+frontend mirrors it in `src/lib/cueNumber.ts` (lighting-react).
+
+A number is parsed as **prefix + decimal run + letter suffix** — `S1-3.1` → `("S1-", [3,1], "")`,
+`Pre-show 2` → `("Pre-show ", [2], "")`, `14A` → `("", [14], "A")`. The prefix is the **group key**,
+and numbers are only ever compared against others in the same group. So
+`["Pre-show 1", "Pre-show 2", "T2-1", "S-1", "S-2"]` is in order despite the groups not being
+alphabetical, while `[…, "S-2", "S-1"]` is not.
 
 | Class | Rule | Examples | Behaviour |
 |-------|------|----------|-----------|
-| **Participating** | First char is a digit (0–9) | "1", "1.5", "14A" | Sorted by natural sort |
-| **Pinned** | First char is non-digit | "intro", "verse" | Never moved by sort actions |
-| **Unnumbered** | `cue_number` is null | — | Appended at end in current order |
+| **Numbered** | parses to a decimal run | "1", "1.5", "14A", "S1-3.1" | Sorted within its prefix group |
+| **Unparseable** | no decimal run at all | "intro", "A" | Singleton group — never moved |
+| **Unnumbered** | `cue_number` is null | — | Given an auto number (below) |
+
+This replaced an earlier "first character must be a digit" participation rule, which pinned every
+prefixed number — a stack numbered `S1-1`, `S1-2`, … had *nothing* eligible to sort.
+
+### Auto Numbering
+
+A cue with no explicit number is given one derived from its position, flagged with
+`cue_number_auto`. `renumberAutoCues(stack)` recomputes them and is called from every handler that
+changes a stack's membership or order: cue create / delete / copy, `reorder`, `add-cue`,
+`sort-by-cue-number`, and any PATCH/PUT that changes a cue number.
+
+Each maximal run of auto cues is labelled from the nearest preceding explicit number:
+
+- **Increment** its trailing decimal — `S1-3` → `S1-4`, `S1-5`.
+- **Decimal-insert** beneath it instead — `S1-3.1`, `S1-3.2` — when incrementing would land on a
+  number used elsewhere in the stack or run past the next explicit cue in the same group.
+
+A run with nothing explicit before it borrows the following cue's prefix and counts *up to* it: two
+cues before `S1-3` are `S1-1` and `S1-2`, and a lone cue before `S1-1` is `S1-0` — zero itself is
+free, so there is no need to decimal-insert. Only when there isn't room for the whole run below the
+boundary (two cues before `S1-1`, say) does it fall back to `S1-0.1`, `S1-0.2`. With nothing either
+side the run is starting the series, so a fresh stack numbers `1`, `2`, `3`.
+
+Typing an explicit number releases that value from any auto sibling holding it (`releaseAutoNumber`)
+so the edit can't be rejected by `uq_cue_number_per_stack`; clearing the field hands the cue back to
+the auto scheme. `renumberAutoCues` writes in two passes with a flush between, since two auto
+numbers swapping places would otherwise be a transient duplicate.
+
+Labels that won't fit `varchar(20)` are skipped — the cue stays blank rather than carrying a
+truncated number.
+
+**Backfill.** Because `renumberAutoCues` only runs off a mutation, cues that predate the feature
+would stay blank until something touched their stack. `backfillAutoCueNumbers()` in
+[StateMigrations.kt](../src/main/kotlin/uk/me/cormack/lighting7/state/StateMigrations.kt) walks every
+stack once at startup. It sits *outside* the PostgreSQL dialect gate so it runs on SQLite installs
+too, is idempotent (stacks with no blanks are skipped; a settled stack writes nothing), and logs and
+skips any stack that fails rather than taking startup down.
 
 ### Key Design Decisions
 
@@ -182,23 +229,32 @@ All endpoints under `/api/rest/project/{projectId}/cue-stacks`.
 | POST | `/{stackId}/deactivate` | Deactivate stack |
 | POST | `/{stackId}/advance` | Advance STANDARD cues only: body `{ direction: "FORWARD"\|"BACKWARD" }` |
 | POST | `/{stackId}/go-to` | Go to specific cue: body `{ cueId }` — HTTP 400 if MARKER |
-| POST | `/{stackId}/sort-by-cue-number` | Reorder by natural sort of cue_number |
+| POST | `/{stackId}/sort-by-cue-number` | Group-aware sort of cue_number |
 
 ### `add-cue` with `insertByNumber`
 
-When `insertByNumber: true`, the cue is inserted at its natural sort position among participating cues (digit-first `cue_number`). Returns 400 if the cue has no digit-starting `cue_number`.
+When `insertByNumber: true`, the cue is inserted at its sorted position **within its own prefix
+group** — other groups say nothing about where it belongs. Returns 400 if the cue's number has no
+decimal run to position it by. Cues at or after the insertion point shift down, MARKERs included.
 
 ### `sort-by-cue-number`
 
-Partitions STANDARD cues into three groups (participating, pinned, unnumbered), natural-sorts participating cues, re-slots them into their collective `sort_order` positions, and appends unnumbered cues. MARKERs and pinned cues are not moved.
+Sorts each prefix group's STANDARD cues among themselves and writes them back into the `sort_order`
+slots that group already occupied, so groups keep their relative placement. MARKERs and unparseable
+numbers never move. Auto numbers are recomputed afterwards from the new positions.
 
-Response: `{ updatedCues: [...], pinnedCount, nullNumberCount }`. HTTP 400 if no participating cues.
+Response: `{ updatedCues: [...], pinnedCount, nullNumberCount }` — `pinnedCount` is the number of
+unparseable numbers left in place. No longer returns 400 when nothing was eligible; a stack that
+needs no sorting simply comes back unchanged.
+
+Both this and `reorder` also call `FxEngine.repriorityCues`, since cue priority is derived from
+`sort_order` — see [cues-engineering.md](cues-engineering.md) §Priority.
 
 ### DTOs
 
 - `NewCueStack` — name, palette, loop
 - `CueStackDetails` — full stack with ordered cues, activeCueId, canEdit, canDelete
-- `CueStackCueEntry` — id, name, sortOrder, paletteSize, presetCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, notes, cueType
+- `CueStackCueEntry` — id, name, sortOrder, paletteSize, presetCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, cueNumberAuto, notes, cueType
 - `CueStackActivateResponse` — stackId, cueId, cueName, effectCount
 - `CueStackDeactivateResponse` — stackId, removedCount
 - `SortByNumberResponse` — updatedCues, pinnedCount, nullNumberCount

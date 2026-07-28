@@ -558,6 +558,7 @@ class ProjectImporter(private val state: State) {
             fadeDurationMs = c.fadeDurationMs
             fadeCurve = c.fadeCurve
             cueNumber = c.cueNumber
+            cueNumberAuto = c.cueNumberAuto
             notes = c.notes
             cueType = c.cueType
             stomp = c.stomp
