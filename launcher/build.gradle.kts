@@ -1,7 +1,7 @@
 plugins {
-    kotlin("jvm") version "2.2.21"
+    kotlin("jvm")
     application
-    id("com.gradleup.shadow") version "8.3.5"
+    id("com.gradleup.shadow")
 }
 
 kotlin {
@@ -39,8 +39,23 @@ tasks.named<JavaExec>("run") {
 // plugin merges kotlin-stdlib (the only non-JDK dep) into a single self-contained
 // jar so the install layout stays to three flat jars. mergeServiceFiles() mirrors
 // the root shadowJar config — kept in sync if launcher ever picks up SPI deps.
+// This subproject declares no `version`, so the plain `jar` task's default output name is
+// also `launcher.jar` — the same path shadowJar writes. Whichever task ran last won, so
+// `stageJpackageInput` could stage the *thin* jar (no kotlin-stdlib, no Main-Class) and
+// produce an installer whose tray launcher dies with NoClassDefFoundError on Intrinsics.
+// Give the thin jar a classifier so only shadowJar owns `launcher.jar`.
+tasks.jar {
+    archiveClassifier.set("thin")
+}
+
 tasks.shadowJar {
     archiveFileName.set("launcher.jar")
+    // See the root build's shadowJar for why INCLUDE is needed and why preserve-first is
+    // paired with it. This module only bundles kotlin-stdlib, so there is nothing to
+    // preserve-first today — mergeServiceFiles() is kept in sync with the root config in
+    // case launcher ever picks up SPI deps, and failOnDuplicateEntries will flag it if so.
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    failOnDuplicateEntries.set(true)
     mergeServiceFiles()
 }
 

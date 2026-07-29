@@ -4,8 +4,10 @@ A professional stage/event lighting control system built in Kotlin using Ktor. C
 
 ## Tech Stack
 
-- **Kotlin 1.9.23** on JVM 17
-- **Ktor 2.3.9** (web server, WebSockets, REST API)
+- **Kotlin 2.4.10** on JVM toolchain 24 (runs on the LTS JDK 25)
+- **Ktor 3.5.1** (web server, WebSockets, REST API) — version comes from the
+  `io.ktor.plugin` declaration in `build.gradle.kts`; the artifacts are versionless
+  and resolved from its BOM
 - **PostgreSQL** with Exposed ORM and HikariCP
 - **ArtNet4j** for DMX protocol
 - **Kotlin Scripting** for embedded lighting DSL

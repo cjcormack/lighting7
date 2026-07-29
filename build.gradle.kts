@@ -1,6 +1,5 @@
 import java.io.ByteArrayOutputStream
 
-val ktor_version: String by project
 val kotlin_version: String by project
 val logback_version: String by project
 
@@ -12,15 +11,32 @@ val lightingReactPath: String by project
 val kotlinCompilerServerPath: String by project
 
 plugins {
-    // Kotlin 2.2.x is required by ktmidi-jvm-desktop's transitive stdlib. Upgrading from
-    // 2.1.21 to 2.2.21 may regress kotlin-compiler-server (empty responses from completion
-    // / highlight endpoints); user accepted that short-term risk in exchange for a clean
-    // compile path against ktmidi and a Java 22+ toolchain.
-    kotlin("jvm") version "2.2.21"
-    id("io.ktor.plugin") version "3.3.3"
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.2.21"
+    // Kotlin floor is 2.2.x: ktmidi-jvm-desktop's transitive stdlib needs it (dropping
+    // below 2.2 reintroduces the type-resolution regressions recorded in
+    // docs/plans/completed/control-surface-plan.md).
+    //
+    // We sit at 2.4.10 rather than 2.2.21 because of a *compiler bug*, not a Ktor
+    // requirement — io.ktor.plugin 3.5.x does not itself demand 2.4. On 2.2.21 the newer
+    // Ktor toolchain trips an internal compiler error in the IR const-evaluation
+    // interpreter (`InterpreterMethodNotFoundError: Unknown function: toUByte(kotlin.Int)`)
+    // while compiling this project's test sources — plain `0.toUByte()` assertions in
+    // EasingCurveTest. If that is fixed in a later 2.2.x/2.3.x patch, 2.4 stops being a
+    // floor; don't read it as one.
+    //
+    // KNOWN BREAKAGE — in-app script editor: the kotlin-compiler-server fork pins its
+    // runtime library dirs to 2.1.21 (hardcoded via `compilerServerKotlinVersion` below and
+    // in LauncherMain.kt). Kotlin only reads metadata from its own minor plus one, so a
+    // 2.1.21 compiler tolerated 2.2 metadata with a warning but *rejects* the 2.4 metadata
+    // this build now emits. Completion/highlighting therefore fails hard on every Lighting7
+    // symbol ("compiled with an incompatible version of Kotlin … binary version 2.4.0,
+    // expected 2.1.0") for scripts that compile and run correctly in the app itself.
+    // Fixing that means rebuilding the fork on 2.4.10 and updating
+    // `compilerServerKotlinVersion` + LauncherMain.kt's --libraries.folder.* flags.
+    kotlin("jvm")
+    id("io.ktor.plugin") version "3.5.1"
+    id("org.jetbrains.kotlin.plugin.serialization")
     id("com.github.node-gradle.node") version "7.1.0"
-    id("com.gradleup.shadow") version "8.3.5"
+    id("com.gradleup.shadow")
     id("maven-publish")
 }
 
@@ -28,7 +44,7 @@ group = "uk.me.cormack"
 version = "0.0.1"
 
 kotlin {
-    // Kotlin 2.2.21 supports up to JVM target 24. ktmidi-jvm-desktop (LibreMidiAccess)
+    // Kotlin 2.4.10 supports JVM target 24. ktmidi-jvm-desktop (LibreMidiAccess)
     // uses the Java 22+ Foreign Function & Memory API, so we need ≥ 22. Target 24 (= non-LTS)
     // compiles and the app runs happily on the LTS JDK 25.
     jvmToolchain(24)
@@ -42,12 +58,30 @@ repositories {
     mavenCentral()
 }
 
+// Two legacy API jars ship the same `javax.*` packages as their maintained `jakarta.*`
+// successors, which already resolve here — so the fat jar would contain two byte-different
+// copies of ~220 classes and the winner would be decided by classpath order:
+//
+//   javax.validation:validation-api:1.1.0.Final  (via io.swagger:swagger-core, from
+//       io.github.smiley4:ktor-openapi)  is superseded by jakarta.validation-api:2.0.2
+//   javax.xml.bind:jaxb-api:2.3.0  (via ch.bildspur:artnet4j)  is superseded by
+//       jakarta.xml.bind:jakarta.xml.bind-api:2.3.3
+//
+// Both jakarta artifacts still use the `javax.*` namespace and are API-compatible supersets
+// (2.0.2 adds valueextraction, ClockProvider, @NotEmpty/@Email), so the consumers above keep
+// linking. Dropping the legacy pair is what makes shadowJar's `failOnDuplicateEntries`
+// achievable — see the fat-jar section below.
+configurations.configureEach {
+    exclude(group = "javax.validation", module = "validation-api")
+    exclude(group = "javax.xml.bind", module = "jaxb-api")
+}
+
 dependencies {
     implementation("io.ktor:ktor-server-core")
     implementation("io.ktor:ktor-server-resources")
     implementation("io.ktor:ktor-server-host-common")
-    implementation("io.github.smiley4:ktor-openapi:5.4.0")
-    implementation("io.github.smiley4:ktor-swagger-ui:5.4.0")
+    implementation("io.github.smiley4:ktor-openapi:5.7.0")
+    implementation("io.github.smiley4:ktor-swagger-ui:5.7.0")
     implementation("io.ktor:ktor-server-content-negotiation")
     implementation("io.ktor:ktor-server-status-pages")
     implementation("io.ktor:ktor-serialization-kotlinx-json")
@@ -68,8 +102,8 @@ dependencies {
 
     // MIDI control-surface transport (Phase 0 of plans/completed/control-surface-plan.md).
     // ktmidi-jvm-desktop brings LibreMidiAccess (native libremidi via Panama FFM).
-    implementation("dev.atsushieno:ktmidi-jvm:0.11.2")
-    implementation("dev.atsushieno:ktmidi-jvm-desktop:0.11.2")
+    implementation("dev.atsushieno:ktmidi-jvm:0.12.0")
+    implementation("dev.atsushieno:ktmidi-jvm-desktop:0.12.0")
     // CoreMIDI4J — javax.sound.midi service provider for macOS that uses CoreMIDI directly
     // with proper hot-plug notifications. Built-in JVM sound API and libremidi both cache
     // the port list and miss disconnects; CoreMIDI4J registers notification callbacks and
@@ -82,6 +116,14 @@ dependencies {
     implementation("io.ktor:ktor-client-content-negotiation")
     implementation("io.ktor:ktor-client-encoding")
 
+    // Not referenced anywhere in src/ or the bundled fx/*.kts effects — but user lighting
+    // scripts live in the `DaoScripts` table, not this repo, and every script definition
+    // compiles them with `dependenciesFromCurrentContext(wholeClasspath = true)`. So the
+    // whole runtime classpath IS the script API surface, and a stored script may already
+    // import kotlinx.datetime. It resolves transitively via ktmidi-jvm today; declaring it
+    // explicitly pins that guarantee so a future ktmidi bump that drops the dependency
+    // can't silently remove `kotlinx.datetime.*` from the script API and break a cue
+    // mid-show. Keep at the version ktmidi resolves unless scripts are known to need more.
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
 
     implementation("org.jetbrains.kotlin:kotlin-scripting-common")
@@ -91,7 +133,7 @@ dependencies {
 
     // mDNS (Bonjour) advertisement so iPad / LAN clients reach the backend at
     // `lighting7-<hostname>.local:8413` without entering an IP. See MdnsService.kt.
-    implementation("org.jmdns:jmdns:3.5.12")
+    implementation("org.jmdns:jmdns:3.6.3")
 
     // JGit for the cloud-sync per-project working tree (phase 3 of plans/cloud-sync.md).
     // Pinned to the last 6.x release on Maven Central — the 7.x line bumps to JDK 17+
@@ -224,6 +266,52 @@ tasks.named("compileKotlin") {
 
 tasks.shadowJar {
     archiveFileName.set("lighting7.jar")
+
+    // Shadow 9 applies DuplicatesStrategy.EXCLUDE by default, which drops duplicate
+    // entries *before* the transformers below run — that would defeat both
+    // mergeServiceFiles() (the SPI merging described above) and the built-in
+    // KotlinModuleMetadataTransformer. INCLUDE lets every copy reach the transformers,
+    // which is what actually merges them into one entry.
+    //
+    // INCLUDE alone is NOT safe, because several dependencies genuinely ship the same
+    // entry. Within a single jar, ZipFile/JarFile builds its lookup map from the central
+    // directory and a later duplicate OVERWRITES an earlier one, so `getEntry` returns the
+    // LAST copy — the opposite of the first-found copy that EXCLUDE used to keep. Verified
+    // empirically: with plain INCLUDE, `javax/validation/Configuration.class` resolved to
+    // the 1723-byte validation-api 1.1.0.Final copy instead of the 2117-byte
+    // jakarta.validation-api 2.0.2 one, silently downgrading the effective Bean Validation
+    // API to a mixed 1.1/2.0 surface that swagger-core (behind `GET /openapi`) can fail on
+    // with NoSuchMethodError.
+    //
+    // Duplicate *classes* are handled at the dependency level (see the `exclude`s near
+    // `repositories` above) — Shadow's resource transformers never see `.class` entries, so
+    // they cannot fix that case. What remains here is duplicated *resources*:
+    // `kotlin/**/*.kotlin_builtins` (which the scripting host reads), a couple of JSON
+    // schema files, and licence/notice text. PreserveFirstFoundResourceTransformer keeps
+    // first-found for those while leaving service-file and kotlin_module merging intact.
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    transform(com.github.jengelman.gradle.plugins.shadow.transformers.PreserveFirstFoundResourceTransformer::class.java) {
+        include("kotlin/*.kotlin_builtins")
+        include("kotlin/**/*.kotlin_builtins")
+        include("draftv3/schema")
+        include("draftv4/schema")
+        include("jnijavacpp.cpp")
+        // Licence/notice text duplicated across dependencies — keep the first and move on.
+        include("META-INF/LICENSE*")
+        include("META-INF/NOTICE*")
+        include("META-INF/AL2.0")
+        include("META-INF/ASL-2.0.txt")
+        include("META-INF/LGPL2.1")
+        include("META-INF/LGPL-3.0.txt")
+        include("META-INF/DEPENDENCIES")
+        include("META-INF/thirdparty-LICENSE")
+        include("META-INF/FastDoubleParser-*")
+        include("META-INF/io.netty.versions.properties")
+    }
+    // Guard: with INCLUDE, any *new* duplicate a future dependency bump introduces would
+    // otherwise be resolved silently by classpath order. Fail the build instead so the
+    // pattern list above stays honest.
+    failOnDuplicateEntries.set(true)
     mergeServiceFiles()
 }
 
@@ -236,6 +324,15 @@ tasks.shadowJar {
 // The launcher spawns this JAR with `java -jar ... --server.port=8321 --server.address=127.0.0.1`.
 // The fork lives at `kotlinCompilerServerPath` (default `../kotlin-compiler-server`); override
 // via `-PkotlinCompilerServerPath=...` if it lives elsewhere.
+
+// The Kotlin version the kotlin-compiler-server fork was built against. This names the
+// `<version>[-js|-wasm]/` library directories the fork's `:dependencies:copy*` tasks emit
+// and that its application.properties reads at runtime — it is the FORK's Kotlin version,
+// deliberately independent of this project's `kotlin("jvm")` version above. Keep it equal
+// to LauncherMain.kt's `--libraries.folder.*` flags. See the plugins block for the metadata
+// incompatibility that the current 2.1.21-vs-2.4.10 gap causes in the script editor.
+val compilerServerKotlinVersion: String =
+    (findProperty("compilerServerKotlinVersion") as String?) ?: "2.1.21"
 
 val compilerServerDir = file(kotlinCompilerServerPath)
 val compilerServerOutput = layout.buildDirectory.file("distributions/kotlin-compiler-server.jar")
@@ -363,12 +460,12 @@ tasks.register("assembleCompilerServer") {
     }
 
     val outputFile = compilerServerOutput.get().asFile
-    // The doLast block reads bootJar's output jar and the fork's `2.1.21*/` lib dirs;
+    // The doLast block reads bootJar's output jar and the fork's `<kotlin>*/` lib dirs;
     // declare them as inputs so this task is properly UP-TO-DATE-checked and the 38 MB
     // recursive copy gets skipped when nothing has changed since the last run.
     inputs.files(fileTree(compilerServerDir) {
         include("build/libs/*.jar")
-        include("2.1.21*/**")
+        include("$compilerServerKotlinVersion*/**")
     })
     // outputs.dir covers both the bootJar copy and the staged lib dirs.
     outputs.dir(outputFile.parentFile)
@@ -388,14 +485,17 @@ tasks.register("assembleCompilerServer") {
         jar.copyTo(outputFile, overwrite = true)
         logger.lifecycle("Copied ${jar.name} → ${outputFile.relativeTo(rootDir)}")
 
-        // application.properties pins the runtime library dirs to `2.1.21[-js|-wasm|…]`. Other
+        // application.properties pins the runtime library dirs to
+        // `$compilerServerKotlinVersion[-js|-wasm|…]`. Other
         // top-level `2.x.y/` directories in the fork (e.g. `2.3.0/` for the compiler-server's
         // own version) are build-time artefacts the runtime never reads — skip them.
         val libDirs = compilerServerDir.listFiles { f ->
-            f.isDirectory && f.name.startsWith("2.1.21")
+            f.isDirectory && f.name.startsWith(compilerServerKotlinVersion)
         } ?: emptyArray()
         require(libDirs.isNotEmpty()) {
-            "Expected `2.1.21[-js|-wasm|…]` library directories in $compilerServerDir after bootJar — none found. The fork's :dependencies:copy* tasks should produce them."
+            "Expected `$compilerServerKotlinVersion[-js|-wasm|…]` library directories in $compilerServerDir after bootJar — none found. " +
+                "Either the fork's :dependencies:copy* tasks did not run, or the fork was rebuilt on a different Kotlin version — " +
+                "in which case set -PcompilerServerKotlinVersion=<version> (and update LauncherMain.kt's --libraries.folder.* flags)."
         }
         libDirs.forEach { src ->
             val dest = File(outputFile.parentFile, src.name)
@@ -477,11 +577,11 @@ val stageJpackageInput = tasks.register<Copy>("stageJpackageInput") {
     from(tasks.shadowJar) { include("lighting7.jar") }
     from(rootProject.layout.buildDirectory.file("distributions/kotlin-compiler-server.jar"))
     from(project(":launcher").layout.buildDirectory.file("libs/launcher.jar"))
-    // assembleCompilerServer stages 2.1.21/ (and friends) next to the jar in
+    // assembleCompilerServer stages <kotlin>/ (and friends) next to the jar in
     // build/distributions/. Forward them so the launcher's compiler-server child can
     // resolve them relative to its workingDir at runtime.
     from(rootProject.layout.buildDirectory.dir("distributions")) {
-        include("2.1.21*/**")
+        include("$compilerServerKotlinVersion*/**")
     }
     into(jpackageInputDir)
 }
