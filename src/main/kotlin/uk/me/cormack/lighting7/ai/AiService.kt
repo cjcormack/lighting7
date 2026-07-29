@@ -2,9 +2,10 @@ package uk.me.cormack.lighting7.ai
 
 import io.ktor.server.config.*
 import kotlinx.serialization.json.*
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.detectCapabilities

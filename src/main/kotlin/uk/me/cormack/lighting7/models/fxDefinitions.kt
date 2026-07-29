@@ -1,11 +1,12 @@
 package uk.me.cormack.lighting7.models
 
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
-import org.jetbrains.exposed.sql.json.json
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.json.json
+import org.jetbrains.exposed.v1.core.java.javaUUID
 import uk.me.cormack.lighting7.fx.EffectMode
 import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.ParameterInfo
@@ -23,7 +24,7 @@ object DaoFxDefinitions : IntIdTable("fx_definitions") {
     val project = reference("project_id", DaoProjects)
     val defaultStepTiming = bool("default_step_timing").default(false)
     val timingSource = enumerationByName<TimingSource>("timing_source", 20).default(TimingSource.BEAT)
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     init {
         // Scoped to the project, not global: definitions are always loaded per project

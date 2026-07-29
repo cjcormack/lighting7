@@ -1,9 +1,10 @@
 package uk.me.cormack.lighting7.models
 
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 /**
  * One conflicting record inside a [DaoSyncSession]. Today `conflictKind` is always
@@ -24,7 +25,7 @@ object DaoSyncSessionConflicts : IntIdTable("sync_session_conflict") {
     // `targetTable` rather than `tableName` to avoid shadowing `Table.tableName` —
     // same workaround as `syncState.kt` / `machineOverrides.kt`.
     val targetTable = varchar("table_name", 64)
-    val recordUuid = uuid("record_uuid")
+    val recordUuid = javaUUID("record_uuid")
     /** `EDIT_EDIT` only in Phase 5. */
     val conflictKind = varchar("conflict_kind", 32)
     /** `LOCAL`, `REMOTE`, `MANUAL`, or null (unresolved). */

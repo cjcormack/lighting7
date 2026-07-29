@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.sync
 
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.After
 import org.junit.Before
 import org.junit.Test

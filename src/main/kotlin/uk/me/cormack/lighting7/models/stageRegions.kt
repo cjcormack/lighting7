@@ -1,9 +1,10 @@
 package uk.me.cormack.lighting7.models
 
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 /**
  * A rectangular platform that makes up part of the playable stage surface. Multiple
@@ -26,7 +27,7 @@ object DaoStageRegions : IntIdTable("stage_regions") {
     val heightM = double("height_m").nullable()
     val yawDeg = double("yaw_deg").nullable()
     val sortOrder = integer("sort_order").default(0)
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, name)

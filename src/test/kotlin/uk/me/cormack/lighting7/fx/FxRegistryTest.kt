@@ -120,9 +120,18 @@ class FxRegistryTest {
         val loader = FxFileLoader(compiler)
         val loaded = loader.loadBuiltInEffects(registry)
 
-        // Check we have a reasonable number of effects loaded
-        assertTrue(loaded >= 25, "Expected at least 25 effects loaded, got $loaded")
-        assertTrue(registry.size >= 25, "Expected at least 25 effects registered, got ${registry.size}")
+        // Two independent assertions, because either alone has a blind spot. The exact check
+        // catches effects that silently fail to compile (the old `>= 25` passed with six
+        // missing, so a real shortfall showed up only as a rare flake). But it is measured
+        // against the same hand-maintained index the loader reads, so a merge that deleted
+        // entries *and* their .fx.kts files would keep it green — hence the absolute floor too.
+        val indexed = FxFileLoader::class.java.classLoader
+            .getResource("fx/index.txt")!!.readText().lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("#") }
+        assertTrue(indexed.size >= 25, "fx/index.txt should list at least 25 effects, got ${indexed.size}")
+        assertEquals(indexed.size, loaded, "Every effect in fx/index.txt should load")
+        assertEquals(indexed.size, registry.size, "Every loaded effect should be registered")
 
         // Spot-check key effects exist across categories
         assertNotNull(registry.getRegistration("SineWave"), "SineWave should be registered")

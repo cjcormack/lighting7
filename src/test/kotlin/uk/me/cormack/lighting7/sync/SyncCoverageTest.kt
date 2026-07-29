@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.sync
 
-import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.v1.core.Table
 import org.junit.After
 import org.junit.Before
 import org.junit.Test

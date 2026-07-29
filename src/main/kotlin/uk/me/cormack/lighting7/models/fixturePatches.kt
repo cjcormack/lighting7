@@ -1,9 +1,10 @@
 package uk.me.cormack.lighting7.models
 
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 /**
  * Stage geometry ([stageX]/[stageY]/[stageZ], [baseYawDeg], [basePitchDeg]) is FOH-relative,
@@ -31,7 +32,7 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
     val beamAngleDeg = integer("beam_angle_deg").nullable()
     val gelCode = varchar("gel_code", 20).nullable()
     val kindOverride = varchar("kind_override", 32).nullable()
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, key)

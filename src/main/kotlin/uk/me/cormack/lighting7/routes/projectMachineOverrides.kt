@@ -5,7 +5,7 @@ import io.ktor.server.application.call
 import io.ktor.server.resources.get
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.Overrides
 

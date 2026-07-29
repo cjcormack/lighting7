@@ -14,10 +14,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.SqlExpressionBuilder
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.ImportError
@@ -206,8 +206,8 @@ internal fun Route.routeApiRestProjects(state: State) {
                 // project with leftover extra books is fully cleaned before its cues go,
                 // avoiding orphaned anchors pointing at deleted cue rows.
                 DaoPromptBook.find { DaoPromptBooks.project eq project.id }.forEach { book ->
-                    DaoPromptBookAnchors.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnchors.promptBook eq book.id } }
-                    DaoPromptBookAnnotations.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnnotations.promptBook eq book.id } }
+                    DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.promptBook eq book.id }
+                    DaoPromptBookAnnotations.deleteWhere { DaoPromptBookAnnotations.promptBook eq book.id }
                     book.delete()
                 }
 

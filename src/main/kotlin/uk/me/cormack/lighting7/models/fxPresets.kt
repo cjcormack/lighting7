@@ -2,11 +2,12 @@ package uk.me.cormack.lighting7.models
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
-import org.jetbrains.exposed.sql.json.json
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.json.json
+import org.jetbrains.exposed.v1.core.java.javaUUID
 import uk.me.cormack.lighting7.fx.AssignmentHealth
 
 @Serializable
@@ -62,7 +63,7 @@ object DaoFxPresets : IntIdTable("fx_presets") {
     val fixtureType = varchar("fixture_type", 255)
     val effects = json<List<FxPresetEffectDto>>("effects", Json)
     val palette = json<List<String>>("palette", Json).default(emptyList())
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, fixtureType, name)
@@ -91,7 +92,7 @@ object DaoFxPresetPropertyAssignments : IntIdTable("fx_preset_property_assignmen
     val fadeDurationMs = long("fade_duration_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
     val elementKey = varchar("element_key", 255).nullable()
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 }
 
 class DaoFxPresetPropertyAssignment(id: EntityID<Int>) : IntEntity(id) {

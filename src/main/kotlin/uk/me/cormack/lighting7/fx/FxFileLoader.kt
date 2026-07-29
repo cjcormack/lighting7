@@ -5,6 +5,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
+import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -48,14 +49,14 @@ class FxFileLoader(
     ): Int {
         this::class.java.classLoader.getResource("fx")
             ?: run {
-                System.err.println("FxFileLoader: fx/ resource directory not found")
+                logger.error("fx/ resource directory not found — no built-in effects will load")
                 return 0
             }
 
         // Read the index file which lists all .fx.kts files
         val indexResource = this::class.java.classLoader.getResource("fx/index.txt")
         if (indexResource == null) {
-            System.err.println("FxFileLoader: fx/index.txt not found, no built-in effects to load")
+            logger.error("fx/index.txt not found — no built-in effects will load")
             return 0
         }
 
@@ -68,7 +69,7 @@ class FxFileLoader(
             try {
                 val resource = this::class.java.classLoader.getResource("fx/$relativePath")
                 if (resource == null) {
-                    System.err.println("FxFileLoader: Could not find resource fx/$relativePath")
+                    logger.error("fx/index.txt lists fx/{} but that resource is missing", relativePath)
                     return@mapNotNull null
                 }
                 val (metadata, scriptBody) = parseFxFile(resource.readText())
@@ -83,8 +84,7 @@ class FxFileLoader(
                     },
                 )
             } catch (e: Exception) {
-                System.err.println("FxFileLoader: Error loading fx/$relativePath: ${e.message}")
-                e.printStackTrace()
+                logger.error("Failed to parse built-in fx/{}", relativePath, e)
                 null
             }
         }
@@ -99,25 +99,71 @@ class FxFileLoader(
         // shares one BasicJvmScriptingHost across workers; the FxScriptCompiler cache is a
         // ConcurrentHashMap and this path is exercised by FxRegistryTest, but if a JDK/host combo
         // ever proves unsafe under concurrency, `fx.parallelCompile=false` forces sequential.
-        fun compileOne(p: ParsedFx): CompiledFxScript? {
+        // `progress` advances only when an effect reaches its FINAL state. A failure in the
+        // parallel pass is not final — it may still be retried below — so counting it here
+        // would drive the (monotonic) boot bar to done == total before the sequential retry
+        // even starts, leaving the UI reporting "compiled" while it recompiles in silence.
+        fun compileOne(p: ParsedFx, isFinalAttempt: Boolean): CompiledFxScript? {
             val compiled = try {
                 compiler.compile(p.scriptBody, p.effectMode)
             } catch (e: Exception) {
-                System.err.println("FxFileLoader: Error compiling fx/${p.relativePath}: ${e.message}")
+                logger.warn("Compiling fx/{} threw", p.relativePath, e)
                 null
             }
-            progress?.invoke(completed.incrementAndGet(), total)
+            val succeeded = compiled != null && compiled.isSuccess
+            if (succeeded || isFinalAttempt) progress?.invoke(completed.incrementAndGet(), total)
             return compiled
         }
 
-        val compiledResults: List<Pair<ParsedFx, CompiledFxScript?>> = if (parallel && parsed.size > 1) {
+        val compileInParallel = parallel && parsed.size > 1
+        val firstPass: List<Pair<ParsedFx, CompiledFxScript?>> = if (compileInParallel) {
             runBlocking {
                 coroutineScope {
-                    parsed.map { p -> async(Dispatchers.Default) { p to compileOne(p) } }.awaitAll()
+                    parsed.map { p -> async(Dispatchers.Default) { p to compileOne(p, false) } }.awaitAll()
                 }
             }
         } else {
-            parsed.map { p -> p to compileOne(p) }
+            parsed.map { p -> p to compileOne(p, true) }
+        }
+
+        // Stage 2b: re-run the failures with no concurrency, but ONLY when the first pass was
+        // actually parallel — the sole thing this pass can establish is whether contention on
+        // the scripting host shared across workers caused the failure. After a sequential first
+        // pass the conditions are identical, so a retry would just double the compile cost and
+        // reach the same answer.
+        //
+        // Note what this cannot fix: when the compiled-script disk cache is enabled
+        // (ScriptCache.kt, the default) the host resolves a jar keyed by source + config +
+        // build fingerprint, so a *corrupt cached jar* fails identically on the retry. Clearing
+        // `<appDataDir>/script-cache` is the fix for that, which is why the failure log below
+        // says so rather than blaming the build outright.
+        val failedFirstPass = firstPass.count { (_, c) -> c == null || !c.isSuccess }
+        val compiledResults: List<Pair<ParsedFx, CompiledFxScript?>> = if (failedFirstPass == 0 || !compileInParallel) {
+            firstPass
+        } else {
+            logger.warn(
+                "{} of {} built-in effect(s) failed the parallel compile; retrying sequentially",
+                failedFirstPass, total,
+            )
+            firstPass.map { (p, compiled) ->
+                if (compiled != null && compiled.isSuccess) {
+                    p to compiled
+                } else {
+                    // compile() caches failures (so a user hammering "Test" on a broken script
+                    // doesn't re-run the compiler each time), so drop the entry or the retry
+                    // would just hand back the cached error without recompiling.
+                    compiler.invalidate(p.scriptBody, p.effectMode)
+                    val retried = compileOne(p, true)
+                    if (retried != null && retried.isSuccess) {
+                        logger.warn(
+                            "fx/{} compiled on sequential retry — the parallel compile pass is " +
+                                "unreliable on this JVM; consider fx.parallelCompile=false",
+                            p.relativePath,
+                        )
+                    }
+                    p to (retried ?: compiled)
+                }
+            }
         }
 
         // Stage 3: register (serial). Also per-file try/catch so a bad factory/registration for
@@ -125,10 +171,20 @@ class FxFileLoader(
         var count = 0
         for ((p, compiled) in compiledResults) {
             if (compiled == null || !compiled.isSuccess) {
-                System.err.println("FxFileLoader: Failed to compile fx/${p.relativePath}:")
-                compiled?.diagnostics?.forEach { d ->
-                    System.err.println("  ${d.severity}: ${d.message} ${d.location ?: ""}")
-                }
+                // ERROR, not a warning: built-in effects ship with the app, so the library is
+                // now incomplete for everyone on this build. Name the script cache explicitly —
+                // a poisoned cached jar produces exactly this and is fixed by clearing it, and
+                // it is not something an operator would guess from a bare compile error.
+                logger.error(
+                    "Failed to compile built-in fx/{}: {}. If this persists across restarts, try " +
+                        "clearing the compiled-script cache (<appDataDir>/script-cache) or set " +
+                        "scriptCache.enabled=false to rule it out.",
+                    p.relativePath,
+                    compiled?.diagnostics
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.joinToString("; ") { d -> "${d.severity}: ${d.message} ${d.location ?: ""}" }
+                        ?: "no diagnostics (the compiler threw — see the preceding warning)",
+                )
                 continue
             }
 
@@ -165,16 +221,28 @@ class FxFileLoader(
 
                 count++
             } catch (e: Exception) {
-                System.err.println("FxFileLoader: Error registering fx/${p.relativePath}: ${e.message}")
-                e.printStackTrace()
+                logger.error("Failed to register built-in fx/{}", p.relativePath, e)
             }
         }
 
-        println("FxFileLoader: Loaded $count built-in effects")
+        // Compare against the number of files the INDEX listed, not `total` (= parse successes).
+        // Measuring against parse successes cannot see anything lost in stage 1: if a regex or
+        // enum change made every file fail to parse, `total` and `count` would both be 0 and this
+        // would cheerfully report success at INFO while the effect library was empty.
+        if (count < files.size) {
+            logger.error(
+                "Loaded only {} of the {} built-in effects listed in fx/index.txt — the effect library is incomplete",
+                count, files.size,
+            )
+        } else {
+            logger.info("Loaded {} built-in effects", count)
+        }
         return count
     }
 
     companion object {
+        private val logger = LoggerFactory.getLogger(FxFileLoader::class.java)
+
         private val FRONTMATTER_REGEX = Regex("""/\*---\s*\n(.*?)\n\s*---\*/""", RegexOption.DOT_MATCHES_ALL)
 
         /**

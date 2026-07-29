@@ -1,9 +1,10 @@
 package uk.me.cormack.lighting7.models
 
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 object DaoUniverseConfigs : IntIdTable("universe_configs") {
     val project = reference("project_id", DaoProjects)
@@ -11,7 +12,7 @@ object DaoUniverseConfigs : IntIdTable("universe_configs") {
     val universe = integer("universe")
     val controllerType = varchar("controller_type", 20).default("ARTNET")
     val address = varchar("address", 255).nullable()
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, subnet, universe)

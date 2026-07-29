@@ -1,10 +1,11 @@
 package uk.me.cormack.lighting7.models
 
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 // ─── Enums ─────────────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ object DaoCueTriggers : IntIdTable("cue_triggers") {
     val randomWindowMs = long("random_window_ms").nullable()
     val script = reference("script_id", DaoScripts)
     val sortOrder = integer("sort_order").default(0)
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 }
 
 class DaoCueTrigger(id: EntityID<Int>) : IntEntity(id) {

@@ -1,9 +1,10 @@
 package uk.me.cormack.lighting7.models
 
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 /**
  * Singleton machine identity. One row per install — bootstrapped on first
@@ -13,7 +14,7 @@ import org.jetbrains.exposed.dao.id.IntIdTable
  * never synced to the cloud repo.
  */
 object DaoInstalls : IntIdTable("installs") {
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
     val friendlyName = varchar("friendly_name", 100)
     val createdAtMs = long("created_at_ms")
 }

@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.sync
 
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.core.eq
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -192,5 +193,5 @@ class ProjectImporterReplaceTest {
     }
 }
 
-private infix fun org.jetbrains.exposed.sql.Op<Boolean>.and(other: org.jetbrains.exposed.sql.Op<Boolean>): org.jetbrains.exposed.sql.Op<Boolean> =
-    org.jetbrains.exposed.sql.AndOp(listOf(this, other))
+private infix fun org.jetbrains.exposed.v1.core.Op<Boolean>.and(other: org.jetbrains.exposed.v1.core.Op<Boolean>): org.jetbrains.exposed.v1.core.Op<Boolean> =
+    org.jetbrains.exposed.v1.core.AndOp(listOf(this, other))

@@ -1,11 +1,12 @@
 package uk.me.cormack.lighting7.models
 
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
-import org.jetbrains.exposed.sql.json.json
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.json.json
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 // ─── Cue stack types ──────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ object DaoCueStacks : IntIdTable("cue_stacks") {
     val type = varchar("type", 20).default("STACK")
     /** Display text for a `SEPARATOR` row; null/unused for a `STACK`. */
     val label = varchar("label", 255).nullable()
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     // The (project, name) unique index is created as a *partial* index (WHERE type='STACK') in
     // State.kt so that multiple separators can share a name — Exposed's uniqueIndex() can't express

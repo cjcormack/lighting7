@@ -8,7 +8,7 @@ A professional stage/event lighting control system built in Kotlin using Ktor. C
 - **Ktor 3.5.1** (web server, WebSockets, REST API) — version comes from the
   `io.ktor.plugin` declaration in `build.gradle.kts`; the artifacts are versionless
   and resolved from its BOM
-- **PostgreSQL** with Exposed ORM and HikariCP
+- **SQLite** (embedded, via `sqlite-jdbc`) with Exposed ORM and HikariCP
 - **ArtNet4j** for DMX protocol
 - **Kotlin Scripting** for embedded lighting DSL
 
@@ -25,7 +25,7 @@ A professional stage/event lighting control system built in Kotlin using Ktor. C
 ### Configuration
 
 1. Copy `example.local.conf` to `local.conf`
-2. Configure PostgreSQL connection settings
+2. Optionally set `database.path` — empty uses `<appDataDir>/lighting7.db`
 3. Set project name
 
 ### Pre-commit checks
@@ -273,7 +273,15 @@ group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrateg
 
 ## Database
 
-Uses Exposed ORM with PostgreSQL. Tables auto-create on startup via `SchemaUtils.createMissingTablesAndColumns`.
+Uses Exposed ORM over an embedded SQLite file (`org.sqlite.JDBC`, pooled by HikariCP
+with `maximumPoolSize = 1` — SQLite has a single writer and a larger pool produces
+`SQLITE_BUSY` under load). The DB path comes from `database.path` in `local.conf`,
+defaulting to `<appDataDir>/lighting7.db`. Tables auto-create on startup via
+`SchemaUtils.createMissingTablesAndColumns`.
+
+Some helpers (e.g. `StateMigrations.kt`'s table-existence check) are written
+dialect-agnostically and mention PostgreSQL, but no PostgreSQL driver is on the
+classpath — SQLite is the only supported backend.
 
 Key tables:
 - `DaoProjects` - Project definitions

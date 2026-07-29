@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.dmx
 
+import java.util.concurrent.CountDownLatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -86,6 +87,43 @@ class PacketRateCounterTest {
         assertEquals((threads * perThread).toLong(), counter.total)
         // After advancing one second, the rate should reflect every recorded packet.
         assertEquals((threads * perThread).toDouble(), counter.packetsPerSecond(nowMs + 1_000L))
+    }
+
+    @Test
+    fun `concurrent first writes to a stale bucket do not lose count`() {
+        // Regression test. The reset-then-increment window is widest on the FIRST write to a
+        // stale bucket: every thread sees the old second, one wins the race to claim the
+        // bucket, and any increment the others landed in between used to be wiped by the
+        // reset — dropping packets from the rate while `total` still counted them. Many short
+        // rounds against a fresh counter, with the threads released together, hammer exactly
+        // that window; the pre-fix implementation loses counts here reliably.
+        repeat(200) { round ->
+            val counter = PacketRateCounter(windowSeconds = 30)
+            val threads = 8
+            val perThread = 200
+            // Different second each round (same slot, since the step is a whole window), so
+            // every round takes the stale-bucket replacement path rather than a plain bump.
+            val nowMs = 1_000_000L + round * 30_000L
+            val start = CountDownLatch(1)
+            val workers = (0 until threads).map {
+                Thread {
+                    start.await()
+                    repeat(perThread) { counter.record(nowMs) }
+                }
+            }
+            workers.forEach { it.start() }
+            start.countDown()
+            workers.forEach { it.join() }
+
+            val expected = (threads * perThread).toLong()
+            assertEquals(expected, counter.total, "round $round: total")
+            // The bucket sum must agree with `total` — that divergence was the symptom.
+            assertEquals(
+                expected.toDouble(),
+                counter.packetsPerSecond(nowMs + 1_000L),
+                "round $round: rate lost packets that total counted",
+            )
+        }
     }
 
     @Test

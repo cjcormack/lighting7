@@ -1,9 +1,10 @@
 package uk.me.cormack.lighting7.models
 
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 /**
  * Per-record per-field machine-local override values. Generic by design — any
@@ -17,7 +18,7 @@ object DaoMachineOverrides : IntIdTable("machine_overrides") {
     val project = reference("project_id", DaoProjects)
     // Named `targetTable` to avoid shadowing Exposed's `Table.tableName` property.
     val targetTable = varchar("table_name", 64)
-    val recordUuid = uuid("record_uuid")
+    val recordUuid = javaUUID("record_uuid")
     val fieldName = varchar("field_name", 64)
     val valueJson = text("value_json")
 

@@ -47,6 +47,15 @@ class FxScriptCompiler(
      * @param effectMode Determines which base class and lambda signature to use
      * @return The compiled script with extracted lambda, or an error result
      */
+    /**
+     * Compile and cache, keyed by effect mode + script content.
+     *
+     * Failures are cached too, deliberately: the common case for a failing compile is a user
+     * editing a broken FX definition and hitting "Test" repeatedly, and each miss runs the
+     * whole Kotlin compiler inside [kotlinx.coroutines.runBlocking] on a request thread. Callers
+     * that want to force a genuine recompile — e.g. [FxFileLoader]'s retry pass, which is
+     * distinguishing a transient failure from a real one — must call [invalidate] first.
+     */
     fun compile(script: String, effectMode: EffectMode): CompiledFxScript {
         val cacheKey = "${effectMode.name}-${script.cacheKey()}"
         return cache.getOrPut(cacheKey) {

@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.midi
 
-import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.v1.jdbc.Database
 
 /**
  * Shared test-only [Database] instance for tests that exercise only the in-memory paths

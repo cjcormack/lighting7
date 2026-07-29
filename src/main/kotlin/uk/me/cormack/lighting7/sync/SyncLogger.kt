@@ -1,11 +1,13 @@
 package uk.me.cormack.lighting7.sync
 
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.SqlExpressionBuilder
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.lessEq
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoSyncLogEntries
@@ -42,12 +44,10 @@ class SyncLogger(private val state: State) {
         val capped = limit.coerceIn(1, MAX_LIST_LIMIT)
         return transaction(state.database) {
             DaoSyncLogEntry.find {
-                with(SqlExpressionBuilder) {
-                    if (beforeId != null) {
-                        (DaoSyncLogEntries.project eq projectId) and (DaoSyncLogEntries.id less beforeId)
-                    } else {
-                        DaoSyncLogEntries.project eq projectId
-                    }
+                if (beforeId != null) {
+                    (DaoSyncLogEntries.project eq projectId) and (DaoSyncLogEntries.id less beforeId)
+                } else {
+                    DaoSyncLogEntries.project eq projectId
                 }
             }
                 .orderBy(DaoSyncLogEntries.id to SortOrder.DESC)
@@ -78,9 +78,7 @@ class SyncLogger(private val state: State) {
             if (cutoff != null) {
                 val cutoffId: Int = cutoff.id.value
                 DaoSyncLogEntries.deleteWhere {
-                    with(SqlExpressionBuilder) {
-                        (DaoSyncLogEntries.project eq projectId) and (DaoSyncLogEntries.id lessEq cutoffId)
-                    }
+                    (DaoSyncLogEntries.project eq projectId) and (DaoSyncLogEntries.id lessEq cutoffId)
                 }
             }
             row.toDto()

@@ -10,7 +10,7 @@ import io.ktor.server.routing.post as routingPost
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.state.appDataDir

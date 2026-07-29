@@ -2,12 +2,13 @@ package uk.me.cormack.lighting7.models
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.json.json
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.json.json
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 // ─── Enums ──────────────────────────────────────────────────────────────
 
@@ -84,7 +85,7 @@ object DaoPromptBooks : IntIdTable("prompt_books") {
      * shown matches the script's own numbering. Default 0 — no cover page.
      */
     val coverPages = integer("cover_pages").default(0)
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     init {
         // One prompt book per project: a project's show has a single script.
@@ -116,7 +117,7 @@ object DaoPromptBookAnchors : IntIdTable("prompt_book_anchors") {
 
     /** Cached display label ("LX 12", "Q14") — rendering convenience, not identity. */
     val label = varchar("label", 64).nullable()
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     init {
         // One anchor per cue per book: the anchor map is keyed by cue.
@@ -160,7 +161,7 @@ object DaoPromptBookAnnotations : IntIdTable("prompt_book_annotations") {
 
     /** NOTE severity (NOTE/WARN/SAFETY) driving the callout colour; null → NOTE. */
     val tone = varchar("tone", 16).nullable()
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 }
 
 class DaoPromptBookAnnotation(id: EntityID<Int>) : IntEntity(id) {

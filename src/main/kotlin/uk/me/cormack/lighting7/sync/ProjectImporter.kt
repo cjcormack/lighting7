@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.sync
 
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.builtins.ListSerializer
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
@@ -23,8 +23,8 @@ import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
-import org.jetbrains.exposed.sql.SqlExpressionBuilder
-import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import uk.me.cormack.lighting7.models.DaoPromptBook
 import uk.me.cormack.lighting7.models.DaoPromptBooks
 import uk.me.cormack.lighting7.models.DaoPromptBookAnchor
@@ -195,8 +195,8 @@ class ProjectImporter(private val state: State) {
             // pre-collapse project with leftover extra books is fully cleaned before its
             // cues go, avoiding orphaned anchors pointing at deleted cue rows.
             DaoPromptBook.find { DaoPromptBooks.project eq project.id }.forEach { book ->
-                DaoPromptBookAnchors.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnchors.promptBook eq book.id } }
-                DaoPromptBookAnnotations.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnnotations.promptBook eq book.id } }
+                DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.promptBook eq book.id }
+                DaoPromptBookAnnotations.deleteWhere { DaoPromptBookAnnotations.promptBook eq book.id }
                 book.delete()
             }
             project.cues.forEach { cue ->

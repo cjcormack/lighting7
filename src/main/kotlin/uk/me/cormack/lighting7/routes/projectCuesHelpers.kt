@@ -3,12 +3,13 @@ package uk.me.cormack.lighting7.routes
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
-import org.jetbrains.exposed.dao.with
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.SqlExpressionBuilder
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.dao.with
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.core.inList
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.Fixture
@@ -475,7 +476,7 @@ internal fun deleteCueChildren(cue: DaoCue) {
  * Returns the number removed so callers know whether to fire promptBookChanged.
  */
 internal fun deletePromptBookAnchorsForCue(cue: DaoCue): Int =
-    DaoPromptBookAnchors.deleteWhere { with(SqlExpressionBuilder) { DaoPromptBookAnchors.cue eq cue.id } }
+    DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.cue eq cue.id }
 
 // ─── Apply logic ────────────────────────────────────────────────────────
 

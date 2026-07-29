@@ -2,9 +2,10 @@
 package uk.me.cormack.lighting7.fx
 
 import kotlinx.coroutines.*
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.*

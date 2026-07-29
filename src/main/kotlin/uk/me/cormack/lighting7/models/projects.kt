@@ -1,9 +1,11 @@
 package uk.me.cormack.lighting7.models
 
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
+import org.jetbrains.exposed.v1.core.eq
 
 /**
  * Projects table - the base columns are defined here.
@@ -24,7 +26,7 @@ object DaoProjects: IntIdTable("projects") {
     val stageWidthM = double("stage_width_m").nullable()
     val stageDepthM = double("stage_depth_m").nullable()
     val stageHeightM = double("stage_height_m").nullable()
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 }
 
 class DaoProject(id: EntityID<Int>) : IntEntity(id) {

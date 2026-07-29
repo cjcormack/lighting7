@@ -2,7 +2,8 @@ package uk.me.cormack.lighting7.sync
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.serializer
-import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.models.DaoMachineOverride
 import uk.me.cormack.lighting7.models.DaoMachineOverrides
 import uk.me.cormack.lighting7.models.DaoProject

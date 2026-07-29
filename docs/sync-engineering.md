@@ -137,8 +137,18 @@ never appear in exported files.
 The DAO declaration is:
 
 ```kotlin
-val uuid = uuid("uuid").autoGenerate()
+import org.jetbrains.exposed.v1.core.java.javaUUID
+
+val uuid = javaUUID("uuid").autoGenerate()
 ```
+
+Use `javaUUID()`, **not** `uuid()`. Since Exposed 1.x, `Table.uuid()` returns a
+`Column<kotlin.uuid.Uuid>`, whereas this whole identity layer — `ProjectExporter`,
+`ProjectImporter`, the sync DTOs and the canonical JSON — is built on
+`java.util.UUID`. `javaUUID()` is the `java.util.UUID` column type. Both share the
+same `BasicUuidColumnType` (which is where `sqlType()` lives), so the two store
+identically on disk; the difference is purely the Kotlin type you get back, and
+mixing them would fracture the identity layer.
 
 `autoGenerate()` ensures every new row gets a UUID. UUID-collision protection
 on import is enforced at the application layer in `ProjectImporter` (a

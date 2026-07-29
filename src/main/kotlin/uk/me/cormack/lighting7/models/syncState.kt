@@ -1,9 +1,10 @@
 package uk.me.cormack.lighting7.models
 
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 /**
  * Per-record cloud-sync watermark. One row per `(project, tableName, recordUuid)` —
@@ -23,7 +24,7 @@ object DaoSyncStates : IntIdTable("sync_state") {
     // Named `targetTable` to avoid shadowing Exposed's `Table.tableName` property — same
     // workaround as `machineOverrides.kt`. The DB column is still `table_name`.
     val targetTable = varchar("table_name", 64)
-    val recordUuid = uuid("record_uuid")
+    val recordUuid = javaUUID("record_uuid")
     val lastSyncedSha = varchar("last_synced_sha", 64)
     val lastSyncedHash = varchar("last_synced_hash", 64)
     val lastSyncedIsDeleted = bool("last_synced_is_deleted").default(false)

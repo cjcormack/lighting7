@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import kotlinx.coroutines.*
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.TogglePresetTarget

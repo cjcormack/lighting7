@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.models
 
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.Transaction
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.parseExtendedColour
@@ -165,13 +165,13 @@ internal object LegacyStaticEffectMigration {
     }
 
     /**
-     * Run the migration on the current [Transaction]. Reads every legacy static ad-hoc effect
+     * Run the migration on the current [JdbcTransaction]. Reads every legacy static ad-hoc effect
      * row, converts each via [convertRow], INSERTs converted rows, and DELETEs the originals.
      * Idempotent — becomes a no-op once the legacy rows are gone.
      *
      * @return a summary of rows converted vs skipped. Callers log at info/warn.
      */
-    fun run(tx: Transaction): Summary {
+    fun run(tx: JdbcTransaction): Summary {
         val rows = tx.readLegacyRows()
         if (rows.isEmpty()) return Summary(0, 0)
 
@@ -219,7 +219,7 @@ internal object LegacyStaticEffectMigration {
         else -> null
     }
 
-    private fun Transaction.readLegacyRows(): List<LegacyRow> {
+    private fun JdbcTransaction.readLegacyRows(): List<LegacyRow> {
         val out = ArrayList<LegacyRow>()
         exec(
             """SELECT id, cue_id, target_type, target_key, effect_type, category, property_name, parameters, sort_order
@@ -249,7 +249,7 @@ internal object LegacyStaticEffectMigration {
         return out
     }
 
-    private fun Transaction.insertAssignment(row: ConvertedRow) {
+    private fun JdbcTransaction.insertAssignment(row: ConvertedRow) {
         val escapedTargetType = row.targetType.replace("'", "''")
         val escapedTargetKey = row.targetKey.replace("'", "''")
         val escapedPropertyName = row.propertyName.replace("'", "''")

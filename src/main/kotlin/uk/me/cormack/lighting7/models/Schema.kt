@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.models
 
-import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Every table in the schema, in FK-safe creation order.

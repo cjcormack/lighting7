@@ -116,16 +116,6 @@ dependencies {
     implementation("io.ktor:ktor-client-content-negotiation")
     implementation("io.ktor:ktor-client-encoding")
 
-    // Not referenced anywhere in src/ or the bundled fx/*.kts effects — but user lighting
-    // scripts live in the `DaoScripts` table, not this repo, and every script definition
-    // compiles them with `dependenciesFromCurrentContext(wholeClasspath = true)`. So the
-    // whole runtime classpath IS the script API surface, and a stored script may already
-    // import kotlinx.datetime. It resolves transitively via ktmidi-jvm today; declaring it
-    // explicitly pins that guarantee so a future ktmidi bump that drops the dependency
-    // can't silently remove `kotlinx.datetime.*` from the script API and break a cue
-    // mid-show. Keep at the version ktmidi resolves unless scripts are known to need more.
-    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
-
     implementation("org.jetbrains.kotlin:kotlin-scripting-common")
     implementation("org.jetbrains.kotlin:kotlin-scripting-jvm")
     implementation("org.jetbrains.kotlin:kotlin-scripting-jvm-host")
@@ -136,9 +126,11 @@ dependencies {
     implementation("org.jmdns:jmdns:3.6.3")
 
     // JGit for the cloud-sync per-project working tree (phase 3 of plans/cloud-sync.md).
-    // Pinned to the last 6.x release on Maven Central — the 7.x line bumps to JDK 17+
-    // which we already meet, but keeps a smaller transitive footprint on jlink runtimes.
-    implementation("org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r")
+    // Previously pinned to 6.10.0 on the grounds that 7.x carried a larger transitive
+    // footprint for jlink runtimes. That turned out not to be true: 7.7.1 resolves the same
+    // three transitives as 6.10.0 (JavaEWAH, slf4j-api, commons-codec), with only
+    // commons-codec moving 1.17.0 -> 1.22.0. Pin lifted.
+    implementation("org.eclipse.jgit:org.eclipse.jgit:7.7.1.202607240634-r")
 
     // Cross-platform OS-keychain access for storing GitHub PATs (cloud-sync phase 4).
     // Wraps macOS Security framework, libsecret, and Windows Credential Manager via JNA.

@@ -2,11 +2,12 @@ package uk.me.cormack.lighting7.models
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
-import org.jetbrains.exposed.sql.json.json
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.json.json
+import org.jetbrains.exposed.v1.core.java.javaUUID
 import uk.me.cormack.lighting7.fx.AssignmentHealth
 
 // ─── DTOs (used for API serialization) ──────────────────────────────────
@@ -121,7 +122,7 @@ object DaoCues : IntIdTable("cues") {
      * source. See `docs/lighting-composition-model.md` §"Stomp".
      */
     val stomp = bool("stomp").default(false)
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     // Cue names are deliberately *not* unique. The old uniqueIndex(project, name) predates cue
     // stacks; with a project owning many stacks, two stacks may legitimately both hold a
@@ -165,7 +166,7 @@ object DaoCuePresetApplications : IntIdTable("cue_preset_applications") {
     val intervalMs = long("interval_ms").nullable()
     val randomWindowMs = long("random_window_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 }
 
 class DaoCuePresetApplication(id: EntityID<Int>) : IntEntity(id) {
@@ -202,7 +203,7 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
     val intervalMs = long("interval_ms").nullable()
     val randomWindowMs = long("random_window_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 }
 
 class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
@@ -248,7 +249,7 @@ object DaoCuePropertyAssignments : IntIdTable("cue_property_assignments") {
     val fadeDurationMs = long("fade_duration_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
     val moveInDark = bool("move_in_dark").default(false)
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 }
 
 class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {

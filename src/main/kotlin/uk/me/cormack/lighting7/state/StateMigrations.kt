@@ -1,12 +1,15 @@
 package uk.me.cormack.lighting7.state
 
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.Transaction
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.or
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.or
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.isNotNull
+import org.jetbrains.exposed.v1.core.isNull
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCueStack
@@ -31,7 +34,7 @@ private val logger = LoggerFactory.getLogger("StateMigrations")
  * that SQLite does not accept; SQLite installs are fresh-start so the latest schema
  * produced by `createMissingTablesAndColumns` already matches the post-migration shape.
  */
-internal fun Transaction.runStateMigrations(database: Database) {
+internal fun JdbcTransaction.runStateMigrations(database: Database) {
     if (database.dialect is PostgreSQLDialect) {
         migrateDropShowSessions()
         migrateProjectActiveEntryFk()
@@ -118,7 +121,7 @@ private fun blankStandardCueCount(stack: DaoCueStack): Long =
  * Bootstraps the singleton install identity. On first launch creates one row with `friendlyName`
  * defaulting to the system hostname (or "lighting7" if hostname lookup fails). Idempotent.
  */
-private fun Transaction.ensureInstallRow() {
+private fun JdbcTransaction.ensureInstallRow() {
     if (DaoInstall.all().firstOrNull() != null) return
     val hostname = runCatching { java.net.InetAddress.getLocalHost().hostName }
         .getOrNull()
@@ -138,7 +141,7 @@ private fun Transaction.ensureInstallRow() {
  * on rows whose `address` is non-null. `setUniverseAddress` upserts so a stale partial-migration
  * row gets overwritten cleanly.
  */
-private fun Transaction.migrateUniverseAddressesToOverrides() {
+private fun JdbcTransaction.migrateUniverseAddressesToOverrides() {
     val toMigrate = DaoUniverseConfig.find { DaoUniverseConfigs.address.isNotNull() }.toList()
     if (toMigrate.isEmpty()) return
     var migrated = 0
@@ -157,7 +160,7 @@ private fun Transaction.migrateUniverseAddressesToOverrides() {
  *
  * Safe to run repeatedly — checks for the old columns before doing anything.
  */
-private fun Transaction.migrateApplyPresetTriggers() {
+private fun JdbcTransaction.migrateApplyPresetTriggers() {
     var hasActionType = false
     exec(
         """SELECT 1 FROM information_schema.columns
@@ -248,7 +251,7 @@ private fun Transaction.migrateApplyPresetTriggers() {
  *
  * Safe to run repeatedly — only updates rows that still have the old type values.
  */
-private fun Transaction.migrateTriggerTypes() {
+private fun JdbcTransaction.migrateTriggerTypes() {
     exec("UPDATE cue_triggers SET trigger_type = 'ACTIVATION' WHERE trigger_type IN ('DELAYED', 'RECURRING')")
 }
 
@@ -260,7 +263,7 @@ private fun Transaction.migrateTriggerTypes() {
  *
  * Safe to run repeatedly — checks for the column before doing anything.
  */
-private fun Transaction.migrateFxDefinitionsDropBuiltin() {
+private fun JdbcTransaction.migrateFxDefinitionsDropBuiltin() {
     var hasIsBuiltin = false
     exec(
         """SELECT 1 FROM information_schema.columns
@@ -288,7 +291,7 @@ private fun Transaction.migrateFxDefinitionsDropBuiltin() {
  *
  * Safe to run repeatedly — checks the column's nullability before doing anything.
  */
-private fun Transaction.migrateFxPresetsFixtureTypeNotNull() {
+private fun JdbcTransaction.migrateFxPresetsFixtureTypeNotNull() {
     var isNullable = false
     exec(
         """SELECT 1 FROM information_schema.columns
@@ -323,7 +326,7 @@ private fun Transaction.migrateFxPresetsFixtureTypeNotNull() {
  *
  * Safe to run repeatedly — uses DROP COLUMN IF EXISTS.
  */
-private fun Transaction.migrateDropScriptBasedMode() {
+private fun JdbcTransaction.migrateDropScriptBasedMode() {
     var hasMode = false
     exec(
         """SELECT 1 FROM information_schema.columns
@@ -351,7 +354,7 @@ private fun Transaction.migrateDropScriptBasedMode() {
  *
  * Safe to run repeatedly — uses IF EXISTS guards.
  */
-private fun Transaction.migrateDropScenesAndChases() {
+private fun JdbcTransaction.migrateDropScenesAndChases() {
     var hasScenesTable = false
     exec(
         """SELECT 1 FROM information_schema.tables
@@ -379,7 +382,7 @@ private fun Transaction.migrateDropScenesAndChases() {
  *
  * Safe to run repeatedly — uses IF EXISTS guards.
  */
-private fun Transaction.migrateDropRunLoop() {
+private fun JdbcTransaction.migrateDropRunLoop() {
     var hasRunLoopColumn = false
     exec(
         """SELECT 1 FROM information_schema.columns
@@ -405,7 +408,7 @@ private fun Transaction.migrateDropRunLoop() {
  *
  * Safe to run repeatedly — uses IF EXISTS guard.
  */
-private fun Transaction.migrateDropTrackChangedScript() {
+private fun JdbcTransaction.migrateDropTrackChangedScript() {
     var hasColumn = false
     exec(
         """SELECT 1 FROM information_schema.columns
@@ -433,7 +436,7 @@ private fun Transaction.migrateDropTrackChangedScript() {
  * Safe to run repeatedly — gated on `rigging_position` column existence. Once the
  * column is gone, the migration is a no-op.
  */
-private fun Transaction.migrateRiggingsV3() {
+private fun JdbcTransaction.migrateRiggingsV3() {
     var hasColumn = false
     exec(
         """SELECT 1 FROM information_schema.columns
@@ -497,7 +500,7 @@ private fun Transaction.migrateRiggingsV3() {
  *
  * Safe to run repeatedly — gated on the column's existence, then `DROP COLUMN IF EXISTS`.
  */
-private fun Transaction.migrateDropSyncEnabled() {
+private fun JdbcTransaction.migrateDropSyncEnabled() {
     var hasColumn = false
     exec(
         """SELECT 1 FROM information_schema.columns
@@ -523,7 +526,7 @@ private fun Transaction.migrateDropSyncEnabled() {
  *
  * Safe to run repeatedly — uses IF EXISTS guards.
  */
-private fun Transaction.migrateDropShowSessions() {
+private fun JdbcTransaction.migrateDropShowSessions() {
     var hasTable = false
     exec(
         """SELECT 1 FROM information_schema.tables
@@ -550,7 +553,7 @@ private fun Transaction.migrateDropShowSessions() {
  *
  * Safe to run repeatedly — checks for the constraint before adding.
  */
-private fun Transaction.migrateProjectActiveEntryFk() {
+private fun JdbcTransaction.migrateProjectActiveEntryFk() {
     var hasConstraint = false
     exec(
         """SELECT 1 FROM information_schema.table_constraints
@@ -597,7 +600,7 @@ private fun Transaction.migrateProjectActiveEntryFk() {
  *  3. Resolve `projects.active_entry_id` → `projects.active_stack_id` (markers resolve to null).
  *  4. Drop the `show_entries` table (the inert `active_entry_id` column is left in place on SQLite).
  */
-internal fun Transaction.migrateCollapseShowIntoStacks(database: Database) {
+internal fun JdbcTransaction.migrateCollapseShowIntoStacks(database: Database) {
     // ── Step 1: rescue standalone cues ──────────────────────────────────────
     val standaloneByProject = linkedMapOf<Int, MutableList<Int>>()
     exec("SELECT id, project_id FROM cues WHERE cue_stack_id IS NULL") { rs ->
@@ -725,7 +728,7 @@ internal fun Transaction.migrateCollapseShowIntoStacks(database: Database) {
 }
 
 /** Dialect-agnostic table-existence check (SQLite `sqlite_master`, PostgreSQL `information_schema`). */
-private fun Transaction.tableExists(database: Database, table: String): Boolean {
+private fun JdbcTransaction.tableExists(database: Database, table: String): Boolean {
     var exists = false
     val sql = if (database.dialect is PostgreSQLDialect) {
         "SELECT 1 FROM information_schema.tables WHERE table_name = '$table'"
@@ -737,7 +740,7 @@ private fun Transaction.tableExists(database: Database, table: String): Boolean 
 }
 
 /** Dialect-agnostic column-existence check. */
-private fun Transaction.columnExists(database: Database, table: String, column: String): Boolean {
+private fun JdbcTransaction.columnExists(database: Database, table: String, column: String): Boolean {
     var exists = false
     if (database.dialect is PostgreSQLDialect) {
         exec(

@@ -1,14 +1,15 @@
 package uk.me.cormack.lighting7.models
 
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 object DaoFixtureGroups : IntIdTable("fixture_groups") {
     val project = reference("project_id", DaoProjects)
     val name = varchar("name", 100)
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, name)
@@ -31,7 +32,7 @@ object DaoFixtureGroupMembers : IntIdTable("fixture_group_members") {
     val sortOrder = integer("sort_order").default(0)
     val panOffset = double("pan_offset").default(0.0)
     val tiltOffset = double("tilt_offset").default(0.0)
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     init {
         uniqueIndex(group, fixturePatch)

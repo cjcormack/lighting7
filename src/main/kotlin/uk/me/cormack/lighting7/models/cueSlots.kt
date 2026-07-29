@@ -1,10 +1,11 @@
 package uk.me.cormack.lighting7.models
 
-import org.jetbrains.exposed.dao.IntEntity
-import org.jetbrains.exposed.dao.IntEntityClass
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
-import org.jetbrains.exposed.sql.ReferenceOption
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.java.javaUUID
 
 // ─── Cue Slots table ──────────────────────────────────────────────────
 
@@ -14,7 +15,7 @@ object DaoCueSlots : IntIdTable("cue_slots") {
     val slotIndex = integer("slot_index")
     val cue = optReference("cue_id", DaoCues, onDelete = ReferenceOption.CASCADE)
     val cueStack = optReference("cue_stack_id", DaoCueStacks, onDelete = ReferenceOption.CASCADE)
-    val uuid = uuid("uuid").autoGenerate()
+    val uuid = javaUUID("uuid").autoGenerate()
 
     init {
         uniqueIndex(project, page, slotIndex)
