@@ -17,7 +17,7 @@ A professional stage and event lighting control system built in Kotlin. Control 
 
 - JDK 21+ on `PATH` for Gradle (the project's Kotlin toolchain pins JVM 24 — Gradle's foojay resolver auto-downloads a matching JDK if your system JDK differs).
 - Network access to ArtNet devices for DMX output.
-- For the in-app script editor (optional): a checkout of the [`kotlin-compiler-server`](https://github.com/JetBrains/kotlin-compiler-server) fork at `../kotlin-compiler-server` (override path with `-PkotlinCompilerServerPath=...`).
+- For the in-app script editor (optional): a checkout of the [`kotlin-compiler-server`](https://github.com/JetBrains/kotlin-compiler-server) fork at `../kotlin-compiler-server` (override path with `-PkotlinCompilerServerPath=...`), on the branch matching `compilerServerKotlinVersion` in [`gradle.properties`](gradle.properties). That branch must stay within one Kotlin minor of `kotlin_version`, or the editor rejects every Lighting7 symbol as "compiled with an incompatible version of Kotlin".
 - For frontend builds: a checkout of [`lighting-react`](../lighting-react) at `../lighting-react` (override with `-PlightingReactPath=...`). The Gradle build invokes its `npm run build` and bakes the output into the JAR.
 
 SQLite is used for persistence — there is no database server to install. The DB file is created on first launch under the platform's app data dir:
@@ -65,13 +65,35 @@ Starts the backend on:
 
 To override defaults (database path, mDNS name, compiler-server URL, frontend static path), drop a `local.conf` next to the working directory or in the app data dir. See [`example.local.conf`](example.local.conf) for the schema.
 
+`./gradlew run` does **not** start the compiler server, so the in-app script editor has no
+completion or highlighting backend. For that, either run the whole stack through the launcher:
+
+```bash
+./gradlew :launcher:run          # spawns compiler server + backend, opens a browser
+```
+
+or run the compiler server on its own in a second terminal alongside `./gradlew run`:
+
+```bash
+./gradlew runCompilerServer      # foreground on 127.0.0.1:8321, Ctrl-C to stop
+```
+
+Both require the `kotlin-compiler-server` fork checked out and clean (see [Requirements](#requirements)).
+`runCompilerServer` re-runs the fork's `bootJar` each time; for a tight restart loop add
+`-PreuseStagedCompilerServer` to skip the build chain and run what's already staged in
+`build/distributions/`. Override the port with `-PcompilerServerPort=9321`. Check it's up with
+`curl http://127.0.0.1:8321/health`.
+
+> Don't use `-x runCompilerServerBootJar` for that: `-x` also prunes the uncommitted-changes guard
+> while still running the patch-revert step, which would `git checkout -- .` your fork.
+
 `./gradlew test` is the standard pre-commit check.
 
 ## Building Installers
 
 `./gradlew packageMac` / `./gradlew packageWindows` produce double-clickable installers that bundle a trimmed JRE — target machines need **no** JDK, no Postgres, no Docker, no Node.
 
-Pre-requisite: the `kotlin-compiler-server` fork must be checked out and clean (the `assembleCompilerServer` task patches it in place via `git`, runs `bootJar`, then reverts).
+Pre-requisite: the `kotlin-compiler-server` fork must be checked out on the `compilerServerKotlinVersion` branch and clean (the `assembleCompilerServer` task patches it in place via `git`, runs `bootJar`, then reverts).
 
 ### macOS
 

@@ -16,9 +16,9 @@ on:
         type: boolean
         default: false
       kotlin_compiler_server_ref:
-        description: "Ref (tag/branch/commit) of JetBrains/kotlin-compiler-server to check out. The build's sed patches assume a 2.1.21-compatible tree."
+        description: "Ref (tag/branch/commit) of JetBrains/kotlin-compiler-server to check out. Leave blank to use `compilerServerKotlinVersion` from gradle.properties, which is what the build expects — an override must name a tree emitting `<compilerServerKotlinVersion>*/` library dirs and whose Kotlin supports the project's JVM target."
         type: string
-        default: "2.1.21"
+        default: ""
 
 concurrency:
   group: windows-build-${{ github.ref }}
@@ -42,11 +42,28 @@ jobs:
           repository: cjcormack/lighting-react
           path: lighting-react
 
+      # The fork ref has to match `compilerServerKotlinVersion` in gradle.properties: the build
+      # scans the checkout for `<that version>*/` library dirs and hard-fails when none match, and
+      # it injects `-jvm-target <project toolchain>` into the fork's compiler. Deriving the default
+      # from the property keeps a Kotlin bump from silently breaking this job.
+      - name: Resolve kotlin-compiler-server ref
+        shell: bash
+        run: |
+          ref="${{ inputs.kotlin_compiler_server_ref }}"
+          if [ -z "$ref" ]; then
+            ref=$(grep -E '^compilerServerKotlinVersion=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+            [ -n "$ref" ] || { echo "::error::compilerServerKotlinVersion missing from gradle.properties"; exit 1; }
+            echo "Using compilerServerKotlinVersion from gradle.properties: $ref"
+          else
+            echo "Using dispatch override: $ref"
+          fi
+          echo "KCS_REF=$ref" >> "$GITHUB_ENV"
+
       - name: Checkout kotlin-compiler-server
         uses: actions/checkout@v4
         with:
           repository: JetBrains/kotlin-compiler-server
-          ref: ${{ inputs.kotlin_compiler_server_ref }}
+          ref: ${{ env.KCS_REF }}
           path: kotlin-compiler-server
 
       # JDK 24 is the primary JDK for the lighting7 build (Liberica ships `jmods/`,

@@ -23,15 +23,12 @@ plugins {
     // EasingCurveTest. If that is fixed in a later 2.2.x/2.3.x patch, 2.4 stops being a
     // floor; don't read it as one.
     //
-    // KNOWN BREAKAGE — in-app script editor: the kotlin-compiler-server fork pins its
-    // runtime library dirs to 2.1.21 (hardcoded via `compilerServerKotlinVersion` below and
-    // in LauncherMain.kt). Kotlin only reads metadata from its own minor plus one, so a
-    // 2.1.21 compiler tolerated 2.2 metadata with a warning but *rejects* the 2.4 metadata
-    // this build now emits. Completion/highlighting therefore fails hard on every Lighting7
-    // symbol ("compiled with an incompatible version of Kotlin … binary version 2.4.0,
-    // expected 2.1.0") for scripts that compile and run correctly in the app itself.
-    // Fixing that means rebuilding the fork on 2.4.10 and updating
-    // `compilerServerKotlinVersion` + LauncherMain.kt's --libraries.folder.* flags.
+    // The in-app script editor's kotlin-compiler-server fork tracks this version: keep the
+    // fork checked out on its matching upstream branch and `compilerServerKotlinVersion` in
+    // gradle.properties in step with the version here. Kotlin only reads metadata from its own
+    // minor plus one, so a fork more than one minor behind rejects every Lighting7 symbol in the
+    // editor ("compiled with an incompatible version of Kotlin … binary version 2.4.0, expected
+    // 2.1.0") even though the same scripts compile and run correctly in the app itself.
     kotlin("jvm")
     id("io.ktor.plugin") version "3.5.1"
     id("org.jetbrains.kotlin.plugin.serialization")
@@ -43,11 +40,17 @@ plugins {
 group = "uk.me.cormack"
 version = "0.0.1"
 
+// Kotlin 2.4.10 supports JVM target 24. ktmidi-jvm-desktop (LibreMidiAccess) uses the Java 22+
+// Foreign Function & Memory API, so we need ≥ 22. Target 24 (= non-LTS) compiles and the app runs
+// happily on the LTS JDK 25.
+//
+// Held in a val because the kotlin-compiler-server patch below has to compile scripts at this same
+// target — Kotlin won't inline a function from a module built for a higher target than the current
+// one, which would break every `inline`/`reified` helper the scripting DSL exposes.
+val jvmToolchainVersion = 24
+
 kotlin {
-    // Kotlin 2.4.10 supports JVM target 24. ktmidi-jvm-desktop (LibreMidiAccess)
-    // uses the Java 22+ Foreign Function & Memory API, so we need ≥ 22. Target 24 (= non-LTS)
-    // compiles and the app runs happily on the LTS JDK 25.
-    jvmToolchain(24)
+    jvmToolchain(jvmToolchainVersion)
 }
 
 application {
@@ -308,23 +311,27 @@ tasks.shadowJar {
 }
 
 // ─── kotlin-compiler-server bootJar packaging ──────────────────────────
-// Mirrors build-kotlin-compiler-server.sh: applies the same patches the bash
-// script applies (jvm-target 17, lighting-libs jarDependency), runs `bootJar`
-// in the user's JetBrains fork, copies the resulting fat JAR to
+// Patches the user's JetBrains fork in place (`-jvm-target`, lighting-libs
+// kotlinDependency), runs `bootJar` there, copies the resulting fat JAR to
 // build/distributions/kotlin-compiler-server.jar, then reverts the fork tree.
 //
 // The launcher spawns this JAR with `java -jar ... --server.port=8321 --server.address=127.0.0.1`.
 // The fork lives at `kotlinCompilerServerPath` (default `../kotlin-compiler-server`); override
 // via `-PkotlinCompilerServerPath=...` if it lives elsewhere.
 
-// The Kotlin version the kotlin-compiler-server fork was built against. This names the
-// `<version>[-js|-wasm]/` library directories the fork's `:dependencies:copy*` tasks emit
-// and that its application.properties reads at runtime — it is the FORK's Kotlin version,
-// deliberately independent of this project's `kotlin("jvm")` version above. Keep it equal
-// to LauncherMain.kt's `--libraries.folder.*` flags. See the plugins block for the metadata
-// incompatibility that the current 2.1.21-vs-2.4.10 gap causes in the script editor.
+// The Kotlin version the kotlin-compiler-server fork is checked out at. Names the
+// `<version>[-js|-wasm]/` library directories the fork's `:dependencies:copy*` tasks emit and
+// that its generated application.properties reads at runtime. Declared in gradle.properties;
+// the launcher reads the same value from a generated resource, so the six
+// `--libraries.folder.*` flags can no longer drift from it. See the plugins block for why it
+// has to stay within one minor of this project's Kotlin version.
+// `isNotBlank` matters as much as the null check: a blank version makes the `startsWith(version)`
+// scan in assembleCompilerServer match *every* top-level directory in the fork (`.git/`, `build/`,
+// …) and recursively copy gigabytes of them into build/distributions while still satisfying
+// `require(libDirs.isNotEmpty())`.
 val compilerServerKotlinVersion: String =
-    (findProperty("compilerServerKotlinVersion") as String?) ?: "2.1.21"
+    (findProperty("compilerServerKotlinVersion") as String?)?.takeIf { it.isNotBlank() }
+        ?: error("compilerServerKotlinVersion is not set or is blank — declare it in gradle.properties.")
 
 val compilerServerDir = file(kotlinCompilerServerPath)
 val compilerServerOutput = layout.buildDirectory.file("distributions/kotlin-compiler-server.jar")
@@ -334,16 +341,44 @@ abstract class ApplyCompilerServerPatches : DefaultTask() {
     @get:org.gradle.api.tasks.InputDirectory
     abstract val forkDir: DirectoryProperty
 
+    /**
+     * JVM target for scripts the compiler server compiles. Must match the target the Lighting7
+     * jar was built with: Kotlin refuses to inline a function from a module built for a *higher*
+     * JVM target than the one currently being compiled, which would break every `inline`/`reified`
+     * helper in the scripting DSL.
+     */
+    @get:Input
+    abstract val jvmTarget: Property<Int>
+
+    /**
+     * Absolute path to the staged Lighting7 jar inside the fork's `lighting-libs/`, as a plain
+     * `@Input` string rather than an `@InputFile`. The jar's *content* is already covered by the
+     * [forkDir] snapshot (it is staged inside that tree); what needs tracking here is the **path**,
+     * because it is baked into the generated `files("…")` literal — so bumping `project.version`
+     * has to re-run the patch rather than leave the fork pointed at a stale jar name. Tracking it as
+     * a String also sidesteps the missing-file validation an `@InputFile` would impose.
+     */
+    @get:Input
+    abstract val lightingJarPath: Property<String>
+
     @TaskAction
     fun apply() {
         val dir = forkDir.get().asFile
-        val kotlinEnv = dir.resolve("common/src/main/kotlin/component/KotlinEnvironment.kt")
+        // Upstream moved this file into a package directory somewhere between 2.1 and 2.4; accept
+        // either layout so a fork on an older branch still patches.
+        val kotlinEnv = listOf(
+            "common/src/main/kotlin/com/compiler/server/common/components/KotlinEnvironment.kt",
+            "common/src/main/kotlin/component/KotlinEnvironment.kt",
+        ).map(dir::resolve).firstOrNull { it.exists() }
+            ?: error(
+                "kotlin-compiler-server fork at $dir has no KotlinEnvironment.kt at either known path. " +
+                    "The fork has drifted; update ApplyCompilerServerPatches."
+            )
         val depsBuild = dir.resolve("dependencies/build.gradle.kts")
-        require(kotlinEnv.exists()) { "kotlin-compiler-server fork is missing $kotlinEnv" }
         require(depsBuild.exists()) { "kotlin-compiler-server fork is missing $depsBuild" }
 
         val anchor1 = "val additionalCompilerArguments: List<String> = listOf("
-        val patch1 = "        \"-jvm-target\", \"17\","
+        val patch1 = "        \"-jvm-target\", \"${jvmTarget.get()}\","
         val envText = kotlinEnv.readText()
         require(envText.contains(anchor1)) {
             "Anchor not found in $kotlinEnv: `$anchor1`. The fork has drifted; update ApplyCompilerServerPatches."
@@ -353,7 +388,21 @@ abstract class ApplyCompilerServerPatches : DefaultTask() {
         }
 
         val anchor2 = "kotlinWasmDependency(libs.kotlin.stdlib.wasm.js)"
-        val patch2 = "    kotlinDependency(files(\"/kotlin-compiler-server/lighting-libs/Lighting7-0.0.1.jar\"))"
+        // Absolute, and forward-slashed so the generated Kotlin string literal stays valid on
+        // Windows. A relative path would resolve against the fork's `:dependencies` subproject
+        // rather than its root, and silently contribute nothing: Gradle's `files()` tolerates
+        // missing paths, and the fork's `Copy` task skips them — so the editor would come up with
+        // no Lighting7 symbols at all rather than failing the build.
+        //
+        // Escaped because this lands inside a Kotlin string literal in the fork's build script: a
+        // `$` in the checkout path would otherwise be read as a template expression and fail the
+        // fork's *own* build script compilation with an "unresolved reference" in a file the
+        // developer never touched.
+        val jarPath = lightingJarPath.get()
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("$", "\\$")
+        val patch2 = "    kotlinDependency(files(\"$jarPath\"))"
         val depsText = depsBuild.readText()
         require(depsText.contains(anchor2)) {
             "Anchor not found in $depsBuild: `$anchor2`. The fork has drifted; update ApplyCompilerServerPatches."
@@ -394,11 +443,15 @@ val stageCompilerServerLightingJar = tasks.register<Copy>("stageCompilerServerLi
 }
 
 val applyCompilerServerPatches = tasks.register<ApplyCompilerServerPatches>("applyCompilerServerPatches") {
-    description = "Apply jvm-target 17 + lighting-libs kotlinDependency patches to the fork (mirrors build-kotlin-compiler-server.sh)."
+    description = "Apply jvm-target + lighting-libs kotlinDependency patches to the kotlin-compiler-server fork."
     group = "build"
     dependsOn(checkCompilerServerClean, stageCompilerServerLightingJar)
     onlyIf { compilerServerDir.exists() }
     forkDir.set(compilerServerDir)
+    jvmTarget.set(jvmToolchainVersion)
+    lightingJarPath.set(
+        compilerServerDir.resolve("lighting-libs/$compilerServerLightingJarName").invariantSeparatorsPath
+    )
 }
 
 val runCompilerServerBootJar = tasks.register<Exec>("runCompilerServerBootJar") {
@@ -486,8 +539,8 @@ tasks.register("assembleCompilerServer") {
         } ?: emptyArray()
         require(libDirs.isNotEmpty()) {
             "Expected `$compilerServerKotlinVersion[-js|-wasm|…]` library directories in $compilerServerDir after bootJar — none found. " +
-                "Either the fork's :dependencies:copy* tasks did not run, or the fork was rebuilt on a different Kotlin version — " +
-                "in which case set -PcompilerServerKotlinVersion=<version> (and update LauncherMain.kt's --libraries.folder.* flags)."
+                "Either the fork's :dependencies:copy* tasks did not run, or the fork is checked out on a different Kotlin " +
+                "version — in which case update `compilerServerKotlinVersion` in gradle.properties to match its branch."
         }
         libDirs.forEach { src ->
             val dest = File(outputFile.parentFile, src.name)
@@ -495,6 +548,89 @@ tasks.register("assembleCompilerServer") {
             src.copyRecursively(dest)
             logger.lifecycle("Copied ${src.name}/ → ${dest.relativeTo(rootDir)}/")
         }
+    }
+}
+
+// Dev convenience: run the compiler server in the foreground so `./gradlew run` (backend only,
+// no launcher) has a script-editor backend to talk to. `:launcher:run` already spawns its own —
+// use this when you want the backend under the Gradle `run` task or an IDE debugger instead.
+//
+// Passes the six `--libraries.folder.*` flags explicitly rather than leaning on the jar's
+// CWD-relative application.properties. That costs a few lines but exercises the same flag wiring
+// the packaged launcher uses, so a broken `compilerServerKotlinVersion` fails here in dev rather
+// than only in an installer.
+//
+// `Exec` declares no outputs, so the `assembleCompilerServer` chain — including the fork's
+// `bootJar` — re-runs on every invocation. It's incremental and adds only a few seconds, but for a
+// tight edit/restart loop where the fork hasn't changed, `-PreuseStagedCompilerServer` drops the
+// build chain entirely and just runs what is already staged in build/distributions/.
+//
+// Do NOT reach for `-x runCompilerServerBootJar` for that: `-x` also prunes
+// `checkCompilerServerClean` (reachable only through the excluded task) while leaving
+// `revertCompilerServerPatches` in the graph, so it would run `git checkout -- .` in the
+// developer's fork with the uncommitted-changes guard gone — silently destroying work.
+val reuseStagedCompilerServer = findProperty("reuseStagedCompilerServer") != null
+
+tasks.register<Exec>("runCompilerServer") {
+    description = "Run the bundled kotlin-compiler-server in the foreground on 127.0.0.1:8321 (Ctrl-C to stop)."
+    group = "application"
+    if (!reuseStagedCompilerServer) {
+        dependsOn("assembleCompilerServer")
+    }
+
+    val jarFile = compilerServerOutput.get().asFile
+    val libsDir = jarFile.parentFile
+    // NOT `libsDir`: build/distributions is `assembleCompilerServer`'s declared `outputs.dir`, and
+    // the server's bundled logback writes `./logs/spring-boot-logger.log` relative to its CWD.
+    // Logging into that directory would permanently dirty the task's output snapshot — forcing a
+    // 38 MB jar + multi-hundred-MB library re-copy on every later build — and that re-copy
+    // `deleteRecursively()`s the very `$compilerServerKotlinVersion*` dirs a server running in
+    // another terminal is reading from. Give it its own scratch dir instead; the explicit
+    // `--libraries.folder.*` flags below are absolute, so CWD has no bearing on resolution.
+    workingDir = layout.buildDirectory.dir("compiler-server-dev").get().asFile
+
+    val port = (findProperty("compilerServerPort") as String?) ?: "8321"
+
+    // Resolve java from the project's toolchain, not the Gradle JVM: scripts are compiled at
+    // `-jvm-target $jvmToolchainVersion`, which needs a JDK at least that new. Gradle itself only
+    // requires 21, so `System.getProperty("java.home")` could hand back a JDK too old to compile
+    // anything and the failure would surface as a confusing per-script error at runtime.
+    val launcher = javaToolchains.launcherFor {
+        languageVersion.set(JavaLanguageVersion.of(jvmToolchainVersion))
+    }
+
+    doFirst {
+        // Explicitly actionable, because every other compiler-server task just `onlyIf`-skips when
+        // the fork is missing. Skipping an explicitly requested *run* task looks like a silent
+        // success, and exec'ing anyway gives a bare "Unable to access jarfile" with the real cause
+        // buried lines above.
+        if (!jarFile.isFile) {
+            throw GradleException(
+                "No compiler-server jar at $jarFile.\n" +
+                    if (reuseStagedCompilerServer) {
+                        "-PreuseStagedCompilerServer skips the build chain, but nothing is staged yet. " +
+                            "Run `./gradlew assembleCompilerServer` once first."
+                    } else {
+                        "assembleCompilerServer produced nothing — check out the kotlin-compiler-server " +
+                            "fork at ${compilerServerDir.absolutePath} on the `$compilerServerKotlinVersion` " +
+                            "branch, or point -PkotlinCompilerServerPath=... at it."
+                    }
+            )
+        }
+        workingDir.mkdirs()
+        commandLine(
+            launcher.get().executablePath.asFile.absolutePath,
+            "-jar", jarFile.absolutePath,
+            "--server.port=$port",
+            "--server.address=127.0.0.1",
+            "--libraries.folder.jvm=${libsDir.resolve(compilerServerKotlinVersion)}",
+            "--libraries.folder.js=${libsDir.resolve("$compilerServerKotlinVersion-js")}",
+            "--libraries.folder.wasm=${libsDir.resolve("$compilerServerKotlinVersion-wasm")}",
+            "--libraries.folder.compose-wasm=${libsDir.resolve("$compilerServerKotlinVersion-compose-wasm")}",
+            "--libraries.folder.compose-wasm-compiler-plugins=${libsDir.resolve("$compilerServerKotlinVersion-compose-wasm-compiler-plugins")}",
+            "--libraries.folder.compiler-plugins=${libsDir.resolve("$compilerServerKotlinVersion-compiler-plugins")}",
+        )
+        logger.lifecycle("kotlin-compiler-server → http://127.0.0.1:$port/ (health: /health)")
     }
 }
 
@@ -560,7 +696,12 @@ val buildRuntime = tasks.register<Exec>("buildRuntime") {
     )
 }
 
-val stageJpackageInput = tasks.register<Copy>("stageJpackageInput") {
+// `Sync`, not `Copy`: jpackage stages this directory wholesale, and a `Copy` never removes files
+// that have disappeared from its source. After a `compilerServerKotlinVersion` bump the previous
+// version's `<old>*/` library dirs would still be sitting here from an earlier run — the include
+// pattern simply stops matching them — and would ride along into the installer as tens of MB of
+// dead weight the runtime never reads, in a deliverable whose whole point is a trimmed bundle.
+val stageJpackageInput = tasks.register<Sync>("stageJpackageInput") {
     description = "Stage launcher.jar + lighting7.jar + kotlin-compiler-server.jar (+ kotlin lib dirs) into build/jpackage-input/."
     group = "distribution"
 
