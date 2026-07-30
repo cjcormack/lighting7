@@ -56,7 +56,7 @@ class CollapseShowMigrationTest : RouteIntegrationTest() {
             a.id.value to b.id.value
         }
 
-        transaction(state.database) { migrateCollapseShowIntoStacks(state.database) }
+        transaction(state.database) { migrateCollapseShowIntoStacks() }
 
         transaction(state.database) {
             val a = DaoCueStack.findById(aId)!!

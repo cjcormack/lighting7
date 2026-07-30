@@ -104,9 +104,8 @@ truncated number.
 **Backfill.** Because `renumberAutoCues` only runs off a mutation, cues that predate the feature
 would stay blank until something touched their stack. `backfillAutoCueNumbers()` in
 [StateMigrations.kt](../src/main/kotlin/uk/me/cormack/lighting7/state/StateMigrations.kt) walks every
-stack once at startup. It sits *outside* the PostgreSQL dialect gate so it runs on SQLite installs
-too, is idempotent (stacks with no blanks are skipped; a settled stack writes nothing), and logs and
-skips any stack that fails rather than taking startup down.
+stack once at startup. It is idempotent (stacks with no blanks are skipped; a settled stack writes
+nothing), and logs and skips any stack that fails rather than taking startup down.
 
 ### Key Design Decisions
 

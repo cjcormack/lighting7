@@ -127,7 +127,7 @@ private fun Application.registerMdns(state: State) {
 
 /**
  * Wire HTTP + routing + sockets over an externally-provided [State]. Tests use this
- * to mount routes against an ephemeral Postgres without re-entering the heavyweight
+ * to mount routes against a throwaway SQLite database without re-entering the heavyweight
  * [State.initializeShow] bootstrap. Prod continues through [module].
  */
 fun Application.moduleWithState(state: State) {

@@ -75,18 +75,16 @@ fun Application.configureErrorHandling() {
 }
 
 /**
- * SQLite reports uniqueness failures as `SQLITE_CONSTRAINT_UNIQUE` / "UNIQUE constraint failed:";
- * Postgres (used by the cloud-sync deployment) as SQLSTATE 23505. Match on the text rather than
- * the driver so the same handler covers both.
+ * SQLite reports uniqueness failures as `SQLITE_CONSTRAINT_UNIQUE` / "UNIQUE constraint failed:".
+ * Matched on the message text rather than the SQLSTATE because the driver reports its extended
+ * result code in the message and leaves `sqlState` unhelpfully generic.
  */
 private fun ExposedSQLException.isUniqueConstraintViolation(): Boolean {
     val text = generateSequence(this as Throwable) { it.cause }
         .mapNotNull { it.message }
         .joinToString(" ")
     return text.contains("UNIQUE constraint failed", ignoreCase = true) ||
-        text.contains("SQLITE_CONSTRAINT_UNIQUE", ignoreCase = true) ||
-        text.contains("duplicate key value violates unique constraint", ignoreCase = true) ||
-        sqlState == "23505"
+        text.contains("SQLITE_CONSTRAINT_UNIQUE", ignoreCase = true)
 }
 
 /**

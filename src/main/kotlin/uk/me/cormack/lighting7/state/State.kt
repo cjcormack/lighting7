@@ -698,7 +698,7 @@ class State(val config: ApplicationConfig) {
                     WHERE cue_number IS NOT NULL AND cue_type = 'STANDARD'
             """.trimIndent())
 
-            runStateMigrations(database)
+            runStateMigrations()
         }
 
         // Deliberately after the schema transaction, with a transaction per stack: a stack this

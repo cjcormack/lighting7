@@ -279,9 +279,9 @@ with `maximumPoolSize = 1` — SQLite has a single writer and a larger pool prod
 defaulting to `<appDataDir>/lighting7.db`. Tables auto-create on startup via
 `SchemaUtils.createMissingTablesAndColumns`.
 
-Some helpers (e.g. `StateMigrations.kt`'s table-existence check) are written
-dialect-agnostically and mention PostgreSQL, but no PostgreSQL driver is on the
-classpath — SQLite is the only supported backend.
+SQLite is the only supported backend. The historical PostgreSQL-gated migrations
+in `StateMigrations.kt` were unreachable dead code and have been removed —
+recoverable from git history if PostgreSQL ever returns.
 
 Key tables:
 - `DaoProjects` - Project definitions
