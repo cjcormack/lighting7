@@ -31,3 +31,10 @@ out/
 
 # Frontend bundle staged into the classpath by Gradle's copyFrontend task.
 src/main/resources/static/
+/.kotlin/errors/errors-1785343642012.log
+/.kotlin/errors/errors-1785343699944.log
+/.claude/worktrees/charming-stonebraker-fea630/
+/.claude/worktrees/jovial-shtern-bc737f/
+/.claude/worktrees/quizzical-satoshi-7db80b/
+/.claude/launch.json
+/.claude/scheduled_tasks.lock
