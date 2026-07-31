@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
+import uk.me.cormack.lighting7.dmx.ChannelChange
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.dmx.Universe
@@ -49,7 +50,35 @@ class Show(
     val directWriteStore = DirectWriteStore()
     val layer3Resolver = Layer3Resolver()
     val layerResolver = LayerResolver(layer3Resolver, directWriteStore)
-    val parkManager = ParkManager(state.database, project.id.value)
+    val parkManager = ParkManager(
+        state.database,
+        project.id.value,
+        // Releasing park must not move the output: push the parked value into the layers
+        // below park before the override is dropped. Writing both the direct-write store
+        // (Layer 4) and the controller buffer makes an unpark settle exactly where a manual
+        // `updateChannel` of the same value would — so a running effect resets to the parked
+        // value rather than to 0. `fixtures` is empty at construction time and populated by
+        // `start()`; the lambda resolves the controller per call, so there is no ordering
+        // dependency here.
+        unparkValueSink = { values ->
+            for ((universe, channel, value) in values) {
+                directWriteStore.put(universe, channel, value)
+                val controller = fixtures.controllerOrNull(Universe(0, universe)) ?: continue
+                try {
+                    // Preferred path: goes through the channel changer, so it also cancels any
+                    // fade still running underneath the park.
+                    controller.setValuesSuspend(listOf(channel to ChannelChange(value, 0)))
+                } catch (_: IllegalStateException) {
+                    // `ArtNetController` registers its per-channel changers from a coroutine in
+                    // `init`, so a write in the window just after a patch rebuild finds none and
+                    // throws. `handlePark` has no error handling above it — an escape here would
+                    // tear down the operator's WebSocket. Write the buffer directly instead:
+                    // a controller whose changers haven't started can have no fade to cancel.
+                    controller.restoreState(mapOf(channel to value))
+                }
+            }
+        },
+    )
     val fxEngine = FxEngine(
         fixtures = fixtures,
         masterClock = MasterClock(),

@@ -22,6 +22,26 @@ data class ParkedChannel(
 )
 
 /**
+ * Hand-off sink invoked when park is released on a channel.
+ *
+ * Park sits above every other layer, so the value underneath it is whatever the
+ * layers below happened to leave there — usually 0, or a stale value from before the
+ * channel was parked. Dropping the override without doing anything else therefore
+ * snaps the output from the parked value to that unrelated one. On a hard-powered
+ * fixture hung off a dimmer that snap is the hazard park exists to prevent, so the
+ * parked value is written *down* into the layers below before the override goes away:
+ * unparking hands control back at the value the rig is already emitting, and
+ * park → unpark → park is a no-op on the wire.
+ *
+ * Implementations must make the handed-off value the resolved output of the layers
+ * below park — in production that means both the direct-write store (Layer 4) and the
+ * controller's channel buffer, i.e. exactly what a manual `updateChannel` would do.
+ */
+fun interface UnparkValueSink {
+    suspend fun handOff(values: List<ParkedChannel>)
+}
+
+/**
  * Manages parked DMX channels — channels locked at a fixed output value
  * that overrides all other sources (scenes, scripts, effects, manual control).
  *
@@ -31,6 +51,7 @@ data class ParkedChannel(
 class ParkManager(
     private val database: Database,
     private val projectId: Int,
+    private val unparkValueSink: UnparkValueSink? = null,
 ) : ParkSource {
     // In-memory park state: universe -> (channel -> value)
     private val parkedChannels = ConcurrentHashMap<Int, ConcurrentHashMap<Int, UByte>>()
@@ -86,9 +107,17 @@ class ParkManager(
     }
 
     /**
-     * Unpark a channel.
+     * Unpark a channel, leaving the output where it was.
+     *
+     * The parked value is handed down to the layers below park *before* the override is
+     * removed, so no transmit frame can land in the window where park is gone but the
+     * old value underneath is still in place. See [UnparkValueSink].
      */
     suspend fun unpark(universe: Int, channel: Int) {
+        parkedChannels[universe]?.get(channel)?.let { parkedValue ->
+            unparkValueSink?.handOff(listOf(ParkedChannel(universe, channel, parkedValue)))
+        }
+
         parkedChannels[universe]?.remove(channel)
 
         transaction(database) {
@@ -103,9 +132,12 @@ class ParkManager(
     }
 
     /**
-     * Unpark all channels.
+     * Unpark all channels, leaving every output where it was. Same hand-off ordering as
+     * [unpark].
      */
     suspend fun unparkAll() {
+        getAllParked().takeIf { it.isNotEmpty() }?.let { unparkValueSink?.handOff(it) }
+
         parkedChannels.clear()
 
         transaction(database) {

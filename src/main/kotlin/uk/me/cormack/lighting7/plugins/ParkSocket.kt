@@ -60,11 +60,13 @@ suspend fun handlePark(scope: SocketScope, message: ParkInMessage) {
         is ParkStateInMessage -> scope.send(buildParkStateMessage(scope.state))
         is ParkChannelInMessage -> {
             parkManager.park(message.universe, message.channel, message.value)
-            controllers.controller(Universe(0, message.universe)).requestTransmit()
+            // Null-safe: a park row can outlive the universe it names (patch edit, project
+            // import), and a missing controller is nothing to transmit to — not a crash.
+            controllers.controllerOrNull(Universe(0, message.universe))?.requestTransmit()
         }
         is UnparkChannelInMessage -> {
             parkManager.unpark(message.universe, message.channel)
-            controllers.controller(Universe(0, message.universe)).requestTransmit()
+            controllers.controllerOrNull(Universe(0, message.universe))?.requestTransmit()
         }
         is UnparkAllInMessage -> {
             parkManager.unparkAll()

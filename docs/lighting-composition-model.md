@@ -30,6 +30,8 @@ Implementation note: parking is applied at transmit time in `ArtNetController` (
 
 Rationale: parking protects specific channels during maintenance, rigging checks, or troubleshooting. It must be unconditional and must not be overwritten by cue-apply, effects, or direct writes.
 
+**Releasing park does not move the output.** Whatever sits under a parked channel is unrelated to what the rig is emitting — usually 0 — so `ParkManager.unpark` / `unparkAll` first hand the parked value *down* into Layer 4 (`DirectWriteStore`) and the controller buffer, then drop the override. The hand-off happens before the entry is removed, so no transmit frame lands in a window where park is gone but the stale value underneath is still in place. Net effect: unparking settles exactly where a manual `updateChannel` of the same value would, and `park → unpark → park` is a no-op on the wire. Rigs park hard-powered fixtures hung off a dimmer, where an unpark-to-0 snap is a safety failure rather than a cosmetic one.
+
 ## Layer 2 — Effects
 
 Tempo-synchronised `FxInstance`s that modulate property values each tick. Driven by the Master Clock (24 ticks/beat).
@@ -185,7 +187,7 @@ Per frame:
 - Layer 1: parked → 128.
 - Output: 128.
 
-The effect runs and consumes cycles, but parking wins. De-parking channel 12 immediately restores effect output.
+The effect runs and consumes cycles, but parking wins. De-parking channel 12 immediately restores effect output — and leaves 128 behind as the Layer 4 value the effect resets to, so the channel doesn't drop through to the Layer 5 baseline of 0 on the way.
 
 ### Example 2 — direct write below a running effect
 

@@ -396,6 +396,11 @@ defence-in-depth implementation of that rule. See
 The FX engine also consults `ParkManager.isParked` during effect reset to skip reset work for
 fully-parked properties (an optimization; the transmit-time override would handle it anyway).
 
+Unparking hands the parked value down to the layers below (direct-write store + controller
+buffer) *before* removing the override, via the `UnparkValueSink` that `Show` wires into
+`ParkManager` — so releasing park never moves the output and park/unpark is a safe toggle.
+Regression coverage: `UnparkPreservesValueTest`.
+
 ## Thread Safety
 
 - `currentValues`: `ConcurrentHashMap` for thread-safe reads

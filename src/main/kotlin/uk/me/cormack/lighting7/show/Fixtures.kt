@@ -140,6 +140,16 @@ class Fixtures {
         checkNotNull(controllerRegister[controllerKey]) { "Controller '$controllerKey' not found" }
     }
 
+    /**
+     * Controller for [universe], or `null` if none is registered. For callers that can
+     * legitimately run against a universe the current patch no longer covers — e.g. a
+     * parked-channel row left behind by a patch edit — where a missing controller is a
+     * no-op rather than a programming error.
+     */
+    fun controllerOrNull(universe: Universe): DmxController? = registerLock.read {
+        controllerRegister[universe.controllerKey()]
+    }
+
     fun untypedFixture(key: String): Fixture = registerLock.read {
         checkNotNull(fixtureRegister[key]) { "Fixture '$key' not found" }
     }
