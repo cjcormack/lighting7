@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
@@ -322,6 +323,208 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
         }
     }
 
+    // PUT /{projectId}/patches/placements — bulk placement update.
+    //
+    // One transaction, one broadcast. The frontend's align/distribute/nudge and
+    // array-along-truss operations move many fixtures as a single user action; the
+    // per-patch PUT above would mean N requests, N `patchListChanged` broadcasts
+    // and 2N client refetches for one click.
+    //
+    // **Every key must be in [METADATA_ONLY_PUT_KEYS].** That single rule is what
+    // makes this route both safe and fast:
+    //   - it guarantees `DbFixtureLoader.loadFixtures` is never needed, *by
+    //     construction* rather than by someone remembering to check;
+    //   - it keeps `key`, `startChannel` and group membership — whose uniqueness
+    //     and channel-overlap validation is inherently per-patch — out of the bulk
+    //     path entirely.
+    // A body carrying anything else is a 400, not a silent partial apply.
+    put<ProjectPatchPlacementsResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<BulkPlacementRequest>()
+
+            if (request.updates.isEmpty()) {
+                call.respond(BulkPlacementResponse(updated = emptyList(), failed = emptyList()))
+                return@withProject
+            }
+            if (request.updates.size > MAX_BULK_PLACEMENTS) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse("At most $MAX_BULK_PLACEMENTS placements per request"),
+                )
+                return@withProject
+            }
+
+            // Pre-validate everything OUTSIDE the transaction, same rationale as the
+            // single PUT: a bad request should 400 rather than roll back a write.
+            val prepared = mutableListOf<Pair<Int, JsonObject>>()
+            val failures = mutableListOf<BulkPlacementFailure>()
+            for (entry in request.updates) {
+                val patchId = entry["patchId"].nullableInt()
+                if (patchId == null) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorResponse("Every entry must carry an integer patchId"),
+                    )
+                    return@withProject
+                }
+                val disallowed = entry.keys.filter { it != "patchId" && it !in METADATA_ONLY_PUT_KEYS }
+                if (disallowed.isNotEmpty()) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorResponse(
+                            "Keys not allowed on the bulk placement route: ${disallowed.sorted().joinToString(", ")}",
+                        ),
+                    )
+                    return@withProject
+                }
+                val stageError = validateStageMetadata(
+                    stageX = entry["stageX"].nullableDouble(),
+                    stageY = entry["stageY"].nullableDouble(),
+                    stageZ = entry["stageZ"].nullableDouble(),
+                    baseYawDeg = entry["baseYawDeg"].nullableDouble(),
+                    basePitchDeg = entry["basePitchDeg"].nullableDouble(),
+                    beamAngleDeg = entry["beamAngleDeg"].nullableInt(),
+                )
+                if (stageError != null) {
+                    if (request.atomic) {
+                        call.respond(HttpStatusCode.BadRequest, ErrorResponse("patch $patchId: $stageError"))
+                        return@withProject
+                    }
+                    failures.add(BulkPlacementFailure(patchId, stageError))
+                    continue
+                }
+                prepared.add(patchId to entry)
+            }
+
+            val outcome = transaction(state.database) {
+                // One query for every patch, indexed by id — not findById in a loop.
+                val ids = prepared.map { it.first }
+                val byId = DaoFixturePatch.find {
+                    (DaoFixturePatches.project eq project.id) and (DaoFixturePatches.id inList ids)
+                }.associateBy { it.id.value }
+
+                // Resolve each DISTINCT rigging once; resolveRiggingForProject does a
+                // find() per call, and a 40-fixture hang would repeat it 40 times.
+                val riggingUuids = prepared.mapNotNull { (_, e) ->
+                    if ("riggingUuid" in e) e["riggingUuid"].nullableString() else null
+                }.distinct()
+                val riggingByUuid = riggingUuids.associateWith { resolveRiggingForProject(project, it) }
+
+                // SECOND validation pass, and it has to come before the FIRST mutation.
+                //
+                // The checks below can only be made once the rows have been read, so
+                // they can't join the pre-transaction pass. They must still all run
+                // before anything is assigned, because `return@transaction` is a NORMAL
+                // return and Exposed commits on a normal return — aborting from inside
+                // the mutation loop would flush every entry already assigned while the
+                // response said 400 and no `patchListChanged()` was broadcast. The
+                // client rolls its optimistic write back on a 400, so that half-applied
+                // batch would sit in the database unseen by every client until some
+                // unrelated refetch surfaced it.
+                //
+                // Validating first means an atomic abort returns with a clean entity
+                // cache, so the commit that follows writes nothing.
+                val kindOverrides = mutableMapOf<Int, String?>()
+                val fatal = mutableListOf<BulkPlacementFailure>()
+                for ((patchId, entry) in prepared) {
+                    if (byId[patchId] == null) {
+                        fatal.add(BulkPlacementFailure(patchId, "Patch not found in this project"))
+                        continue
+                    }
+                    if ("riggingUuid" in entry) {
+                        val uuidStr = entry["riggingUuid"].nullableString()
+                        if (uuidStr != null && riggingByUuid[uuidStr] == null) {
+                            fatal.add(BulkPlacementFailure(patchId, "Rigging $uuidStr not found"))
+                            continue
+                        }
+                    }
+                    if ("kindOverride" in entry) {
+                        try {
+                            kindOverrides[patchId] = normaliseKindOverride(entry["kindOverride"].nullableString())
+                        } catch (e: IllegalArgumentException) {
+                            fatal.add(BulkPlacementFailure(patchId, e.message ?: "Invalid kindOverride"))
+                            continue
+                        }
+                    }
+                }
+                if (request.atomic && fatal.isNotEmpty()) {
+                    return@transaction BulkOutcome(null, fatal.first().error, emptyList(), emptyList())
+                }
+                failures.addAll(fatal)
+                val rejected = fatal.map { it.patchId }.toSet()
+
+                val updated = mutableListOf<FixturePatchDto>()
+                val warnings = mutableListOf<String>()
+                for ((patchId, entry) in prepared) {
+                    if (patchId in rejected) continue
+                    val patch = byId[patchId] ?: continue
+
+                    if ("riggingUuid" in entry) {
+                        val uuidStr = entry["riggingUuid"].nullableString()
+                        patch.rigging = if (uuidStr == null) null else riggingByUuid[uuidStr]
+                    }
+                    if ("stageX" in entry) patch.stageX = entry["stageX"].nullableDouble()
+                    if ("stageY" in entry) patch.stageY = entry["stageY"].nullableDouble()
+                    if ("stageZ" in entry) patch.stageZ = entry["stageZ"].nullableDouble()
+                    if ("baseYawDeg" in entry) patch.baseYawDeg = entry["baseYawDeg"].nullableDouble()
+                    if ("basePitchDeg" in entry) patch.basePitchDeg = entry["basePitchDeg"].nullableDouble()
+                    if ("beamAngleDeg" in entry) patch.beamAngleDeg = entry["beamAngleDeg"].nullableInt()
+                    if ("gelCode" in entry) patch.gelCode = normaliseGelCode(entry["gelCode"].nullableString())
+                    // Already normalised (and validated) in the pass above.
+                    if ("kindOverride" in entry) patch.kindOverride = kindOverrides[patchId]
+                    if ("stageHidden" in entry) {
+                        patch.stageHidden = entry["stageHidden"].nullableBoolean() ?: false
+                    }
+
+                    // The server is the only party that authoritatively knows the bar's
+                    // length at write time, so it's the only place an off-the-end
+                    // placement can be caught. Non-fatal: report, never clamp — silently
+                    // moving a fixture the user positioned is worse than telling them.
+                    val rig = patch.rigging
+                    val localX = patch.stageX
+                    if (rig != null && localX != null) {
+                        val half = (rig.lengthM ?: 0.0) / 2.0
+                        if (half > 0.0 && kotlin.math.abs(localX) > half + 1e-6) {
+                            warnings.add(
+                                "${patch.key}: ${"%.2f".format(localX)} m is past the end of ${rig.name} (±${"%.2f".format(half)} m)",
+                            )
+                        }
+                    }
+
+                    updated.add(patch.toDto())
+                }
+                BulkOutcome(updated, null, failures.toList(), warnings)
+            }
+
+            if (outcome.error != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.error))
+                return@withProject
+            }
+
+            val updated = outcome.updated ?: emptyList()
+            if (state.isCurrentProject(project)) {
+                // The key allowlist guarantees the fixture registry is untouched, so
+                // only the metadata cache needs refreshing — never loadFixtures.
+                for (dto in updated) {
+                    state.show.fixtures.setPatchMetadata(
+                        dto.key,
+                        Fixtures.FixturePatchMetadata(gelCode = dto.gelCode),
+                    )
+                }
+            }
+            // Exactly once, after the commit — the whole point of this route.
+            state.show.fixtures.patchListChanged()
+
+            call.respond(
+                BulkPlacementResponse(
+                    updated = updated,
+                    failed = outcome.failures,
+                    warnings = outcome.warnings,
+                ),
+            )
+        }
+    }
+
     // DELETE /{projectId}/patches/{patchId} - Delete a patch
     delete<ProjectPatchResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
@@ -356,10 +559,59 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
 @Resource("/{projectId}/patches")
 data class ProjectPatchesResource(val projectId: String)
 
+/**
+ * Bulk placement sub-collection.
+ *
+ * Declared BEFORE [ProjectPatchResource] so the literal `/placements` segment is
+ * matched before the `{patchId}` capture — `patchId` is typed `Int` so it could
+ * not actually swallow it, but relying on that would be fragile.
+ */
+@Resource("/placements")
+data class ProjectPatchPlacementsResource(val parent: ProjectPatchesResource)
+
 @Resource("/{patchId}")
 data class ProjectPatchResource(val parent: ProjectPatchesResource, val patchId: Int)
 
 // DTOs
+
+/** Upper bound on one bulk request, so a runaway client can't hold a transaction open. */
+private const val MAX_BULK_PLACEMENTS = 500
+
+@Serializable
+data class BulkPlacementRequest(
+    /**
+     * One entry per patch. Each MUST carry `patchId`; every other key follows the
+     * same convention as `PUT /patches/{id}` — absent means unchanged, an explicit
+     * JSON null clears the value.
+     *
+     * Typed as raw [JsonObject] rather than a DTO precisely to inherit that
+     * tri-state behaviour: a typed DTO can't distinguish "absent" from "null"
+     * without a companion `setStageX: Boolean` beside every field.
+     */
+    val updates: List<JsonObject>,
+    /** Reject the whole batch on the first bad entry (default), or apply the good ones. */
+    val atomic: Boolean = true,
+)
+
+@Serializable
+data class BulkPlacementFailure(val patchId: Int, val error: String)
+
+@Serializable
+data class BulkPlacementResponse(
+    val updated: List<FixturePatchDto>,
+    val failed: List<BulkPlacementFailure>,
+    /** Non-fatal notices, e.g. a fixture placed past the end of its truss. */
+    val warnings: List<String> = emptyList(),
+)
+
+/** Internal carrier so the transaction block can report a fatal error or a result. */
+private data class BulkOutcome(
+    val updated: List<FixturePatchDto>?,
+    val error: String?,
+    val failures: List<BulkPlacementFailure>,
+    val warnings: List<String>,
+)
+
 @Serializable
 data class FixturePatchDto(
     val id: Int,
@@ -422,7 +674,7 @@ data class CreatePatchRequest(
  * key to this set is only safe if the loader ignores it during fixture
  * instantiation.
  */
-private val METADATA_ONLY_PUT_KEYS = setOf(
+internal val METADATA_ONLY_PUT_KEYS = setOf(
     "stageX",
     "stageY",
     "stageZ",
@@ -482,7 +734,7 @@ private fun resolveRiggingForProject(project: DaoProject, uuidStr: String): DaoR
  * tight enough to catch unit mistakes (mm, pixels). String-field normalisation lives in
  * [normaliseRiggingPosition] / [normaliseGelCode].
  */
-private fun validateStageMetadata(
+internal fun validateStageMetadata(
     stageX: Double?,
     stageY: Double?,
     stageZ: Double?,
