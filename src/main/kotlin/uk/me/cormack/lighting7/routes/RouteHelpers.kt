@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.routes
 
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
@@ -22,6 +23,9 @@ internal fun JsonElement?.nullableLong(): Long? =
 
 internal fun JsonElement?.nullableDouble(): Double? =
     if (this == null || this is JsonNull) null else jsonPrimitive.double
+
+internal fun JsonElement?.nullableBoolean(): Boolean? =
+    if (this == null || this is JsonNull) null else jsonPrimitive.boolean
 
 /**
  * Range-check a stage coordinate. Coordinates are FOH-relative metres (see

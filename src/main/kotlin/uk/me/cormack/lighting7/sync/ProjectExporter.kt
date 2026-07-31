@@ -253,6 +253,7 @@ class ProjectExporter(private val state: State) {
                     beamAngleDeg = p.beamAngleDeg,
                     gelCode = p.gelCode,
                     kindOverride = p.kindOverride,
+                    stageHidden = p.stageHidden,
                 )
             }
 

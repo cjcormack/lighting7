@@ -135,6 +135,70 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         assertNull(finalGet.gelCode)
     }
 
+    /**
+     * `stageHidden` is a non-nullable boolean, so it has no "clear to null"
+     * state — but it must still round-trip, default to false on create, survive
+     * an unrelated PUT, and count as metadata-only (no fixture rebuild: hiding
+     * a patch in the Stage view must not disturb live DMX output).
+     */
+    @Test
+    fun `stageHidden round-trips and does not rebuild the fixtures registry`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val createResp = client.post("/api/rest/project/$projectId/patches") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePatchRequest(
+                    universe = 0,
+                    fixtureTypeKey = "generic-dimmer",
+                    key = "dim-hard-power",
+                    name = "Hard Power",
+                    startChannel = 30,
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, createResp.status, createResp.bodyAsText())
+        val created = createResp.body<FixturePatchDto>()
+        assertEquals(false, created.stageHidden, "patches are shown on the stage by default")
+        val patchId = created.id
+
+        val before = state.show.fixtures.untypedFixture("dim-hard-power")
+
+        val hide = client.put("/api/rest/project/$projectId/patches/$patchId") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("stageHidden", JsonPrimitive(true)) })
+        }
+        assertEquals(HttpStatusCode.OK, hide.status, hide.bodyAsText())
+        assertEquals(true, hide.body<FixturePatchDto>().stageHidden)
+        assertSame(
+            before,
+            state.show.fixtures.untypedFixture("dim-hard-power"),
+            "hiding a patch must not rebuild the runtime fixture",
+        )
+
+        assertEquals(
+            true,
+            client.get("/api/rest/project/$projectId/patches/$patchId").body<FixturePatchDto>().stageHidden,
+            "stageHidden must persist",
+        )
+
+        // Survives a PUT that touches something else entirely.
+        val unrelated = client.put("/api/rest/project/$projectId/patches/$patchId") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("stageX", JsonPrimitive(2.0)) })
+        }
+        assertEquals(HttpStatusCode.OK, unrelated.status, unrelated.bodyAsText())
+        assertEquals(true, unrelated.body<FixturePatchDto>().stageHidden)
+
+        val show = client.put("/api/rest/project/$projectId/patches/$patchId") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("stageHidden", JsonPrimitive(false)) })
+        }
+        assertEquals(HttpStatusCode.OK, show.status, show.bodyAsText())
+        assertEquals(false, show.body<FixturePatchDto>().stageHidden)
+    }
+
     @Test
     fun `stage metadata validation rejects out-of-range values`() = testApplication {
         mountTestApp(state)

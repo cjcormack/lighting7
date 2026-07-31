@@ -465,6 +465,7 @@ class ProjectImporter(private val state: State) {
             beamAngleDeg = p.beamAngleDeg
             gelCode = p.gelCode
             kindOverride = p.kindOverride
+            stageHidden = p.stageHidden
             this.uuid = uuid
         }
         uuid to dao

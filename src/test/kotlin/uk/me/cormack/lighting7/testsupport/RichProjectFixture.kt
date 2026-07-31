@@ -145,6 +145,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
                 gelCode = "L201"
                 kindOverride = "wash"
             }
+            // Patch 4 has no stage geometry at all — the stand-in for the case
+            // stageHidden exists for (real DMX, not a stage object).
+            if (i == 4) stageHidden = true
         }
     }
     val groupA = DaoFixtureGroup.new { this.project = project; name = "front-wash" }

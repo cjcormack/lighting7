@@ -32,6 +32,11 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
     val beamAngleDeg = integer("beam_angle_deg").nullable()
     val gelCode = varchar("gel_code", 20).nullable()
     val kindOverride = varchar("kind_override", 32).nullable()
+    /** Omit this patch from the Stage view's 2D/3D renders. For patches that
+     *  are real DMX but not stage objects — a dimmer driving hard power, a
+     *  hazer's fan channel. Purely presentational: the fixture still patches,
+     *  still outputs, and still participates in groups, cues and FX. */
+    val stageHidden = bool("stage_hidden").default(false)
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -58,5 +63,6 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var beamAngleDeg by DaoFixturePatches.beamAngleDeg
     var gelCode by DaoFixturePatches.gelCode
     var kindOverride by DaoFixturePatches.kindOverride
+    var stageHidden by DaoFixturePatches.stageHidden
     var uuid by DaoFixturePatches.uuid
 }

@@ -162,6 +162,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.beamAngleDeg = request.beamAngleDeg
                     this.gelCode = normalisedGelCode
                     this.kindOverride = normalisedKindOverride
+                    this.stageHidden = request.stageHidden
                 }
 
                 // Assign to group if specified
@@ -267,6 +268,10 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
                 if ("kindOverride" in body) {
                     patch.kindOverride = normalisedKindOverride
+                }
+                // Non-nullable column: an explicit JSON null is read as "show it".
+                if ("stageHidden" in body) {
+                    patch.stageHidden = body["stageHidden"].nullableBoolean() ?: false
                 }
 
                 body["removeFromGroupId"].nullableInt()?.let { groupId ->
@@ -379,6 +384,7 @@ data class FixturePatchDto(
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
     val kindOverride: String? = null,
+    val stageHidden: Boolean = false,
 )
 
 @Serializable
@@ -405,6 +411,7 @@ data class CreatePatchRequest(
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
     val kindOverride: String? = null,
+    val stageHidden: Boolean = false,
 )
 
 /**
@@ -425,6 +432,7 @@ private val METADATA_ONLY_PUT_KEYS = setOf(
     "beamAngleDeg",
     "gelCode",
     "kindOverride",
+    "stageHidden",
 )
 
 // Helpers
@@ -455,6 +463,7 @@ private fun DaoFixturePatch.toDto(): FixturePatchDto {
         beamAngleDeg = beamAngleDeg,
         gelCode = gelCode,
         kindOverride = kindOverride,
+        stageHidden = stageHidden,
     )
 }
 
