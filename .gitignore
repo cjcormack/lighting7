@@ -29,6 +29,9 @@ out/
 /.nb-gradle/
 /local.conf
 
+### macOS ###
+.DS_Store
+
 # Frontend bundle staged into the classpath by Gradle's copyFrontend task.
 src/main/resources/static/
 /.kotlin/errors/errors-1785343642012.log
