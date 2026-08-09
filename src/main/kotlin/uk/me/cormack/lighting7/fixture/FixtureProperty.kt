@@ -37,6 +37,22 @@ enum class PropertyCategory(val defaultComposition: CompositionRule) {
     AMBER(CompositionRule.LTP),
     WHITE(CompositionRule.LTP),
     SPEED(CompositionRule.LTP),
+
+    // Beam-shaping roles. All LTP: these are mechanical selections and positions, so
+    // max()-ing two contributors is meaningless — the same reasoning as PAN/TILT. Splitting
+    // them out of SETTING/OTHER is what lets the 3D stage view recognise them; it already
+    // keys off category this way for pan/tilt. A ZOOM slider reuses the existing
+    // degMin/degMax annotation fields, where they mean "full beam angle at DMX min / max".
+    GOBO(CompositionRule.LTP),
+    GOBO_ROTATION(CompositionRule.LTP),
+    PRISM(CompositionRule.LTP),
+    FOCUS(CompositionRule.LTP),
+    ZOOM(CompositionRule.LTP),
+    IRIS(CompositionRule.LTP),
+    FROST(CompositionRule.LTP),
+    LED_MACRO(CompositionRule.LTP),
+    MOVEMENT_MACRO(CompositionRule.LTP),
+
     SETTING(CompositionRule.LTP),
     OTHER(CompositionRule.LTP),
 }

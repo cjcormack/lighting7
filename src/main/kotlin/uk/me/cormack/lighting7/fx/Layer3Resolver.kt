@@ -151,8 +151,17 @@ class Layer3Resolver {
             }
             return when (category) {
                 PropertyCategory.COLOUR -> runCatching { PropertyValue.Colour(resolveColour(trimmed, palette)) }.getOrNull()
-                PropertyCategory.SETTING, PropertyCategory.OTHER ->
+                // Wheel-like roles read as discrete selections. Which arm a category lands
+                // in is now only a labelling choice: PropertyChannelWriter resolves both
+                // Setting and Slider through the same single-byte-channel path, precisely
+                // because category doesn't predict the backing shape (gobo rotation is a
+                // DmxFixtureSetting on the Fusion and a DmxSlider on the MAC 250).
+                PropertyCategory.SETTING, PropertyCategory.OTHER,
+                PropertyCategory.GOBO, PropertyCategory.GOBO_ROTATION,
+                PropertyCategory.PRISM,
+                PropertyCategory.LED_MACRO, PropertyCategory.MOVEMENT_MACRO ->
                     trimmed.toUByteParam()?.let { PropertyValue.Setting(it) }
+                // Continuous positions: FOCUS, ZOOM, IRIS, FROST, PAN/TILT, DIMMER…
                 else ->
                     trimmed.toUByteParam()?.let { PropertyValue.Slider(it) }
             }

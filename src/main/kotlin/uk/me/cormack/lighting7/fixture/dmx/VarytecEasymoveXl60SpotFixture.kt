@@ -142,14 +142,14 @@ sealed class VarytecEasymoveXl60SpotFixture(
             transaction, universe, firstChannel + 2, Colour.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Gobo wheel", category = PropertyCategory.SETTING)
+        @FixtureProperty("Gobo wheel", category = PropertyCategory.GOBO)
         val gobo = DmxFixtureSetting(
             transaction, universe, firstChannel + 3, Gobo.entries.toTypedArray(),
         )
 
         @FixtureProperty(
             "Gobo spin (0 stop, 1–127 forward, 128–255 reverse)",
-            category = PropertyCategory.SETTING,
+            category = PropertyCategory.GOBO_ROTATION,
         )
         val goboSpin: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 

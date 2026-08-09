@@ -178,7 +178,7 @@ sealed class Scantastic4Fixture(
         @FixtureProperty("Auto scroll speed", category = PropertyCategory.SPEED)
         val autoScrollSpeed = DmxSlider(transaction, universe, firstChannel + 5)
 
-        @FixtureProperty("Movement macros", category = PropertyCategory.SETTING)
+        @FixtureProperty("Movement macros", category = PropertyCategory.MOVEMENT_MACRO)
         val movementMacros = DmxSlider(transaction, universe, firstChannel + 6)
 
         @FixtureProperty("Scanning speed", category = PropertyCategory.SPEED)
@@ -298,7 +298,7 @@ sealed class Scantastic4Fixture(
             return elements[index]
         }
 
-        @FixtureProperty("Movement macros", category = PropertyCategory.SETTING)
+        @FixtureProperty("Movement macros", category = PropertyCategory.MOVEMENT_MACRO)
         val movementMacros = DmxSlider(transaction, universe, firstChannel + 14)
 
         @FixtureProperty("Scanning speed", category = PropertyCategory.SPEED)

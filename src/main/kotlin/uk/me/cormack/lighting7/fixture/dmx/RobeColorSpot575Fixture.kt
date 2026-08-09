@@ -288,23 +288,23 @@ sealed class RobeColorSpot575Fixture(
             transaction, universe, firstChannel + 7, Colour2.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Static gobo wheel", category = PropertyCategory.SETTING)
+        @FixtureProperty("Static gobo wheel", category = PropertyCategory.GOBO)
         val staticGobo = DmxFixtureSetting(
             transaction, universe, firstChannel + 8, StaticGobo.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Rotating gobo wheel", category = PropertyCategory.SETTING)
+        @FixtureProperty("Rotating gobo wheel", category = PropertyCategory.GOBO)
         val rotatingGobo = DmxFixtureSetting(
             transaction, universe, firstChannel + 9, RotGobo.entries.toTypedArray(),
         )
 
         @FixtureProperty(
             "Gobo indexing/rotation (semantics depend on rotating gobo wheel mode)",
-            category = PropertyCategory.SETTING,
+            category = PropertyCategory.GOBO_ROTATION,
         )
         val goboRotation: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
-        @FixtureProperty("Prism", category = PropertyCategory.SETTING)
+        @FixtureProperty("Prism", category = PropertyCategory.PRISM)
         val prism = DmxFixtureSetting(
             transaction, universe, firstChannel + 11, Prism.entries.toTypedArray(),
         )
@@ -312,16 +312,16 @@ sealed class RobeColorSpot575Fixture(
         @FixtureProperty("Prism rotation (CW / no-rot / CCW)", category = PropertyCategory.SETTING)
         val prismRotation: Slider = DmxSlider(transaction, universe, firstChannel + 12)
 
-        @FixtureProperty("Frost", category = PropertyCategory.OTHER)
+        @FixtureProperty("Frost", category = PropertyCategory.FROST)
         val frost: Slider = DmxSlider(transaction, universe, firstChannel + 13)
 
-        @FixtureProperty("Iris", category = PropertyCategory.OTHER)
+        @FixtureProperty("Iris", category = PropertyCategory.IRIS)
         val iris: Slider = DmxSlider(transaction, universe, firstChannel + 14)
 
-        @FixtureProperty("Zoom", category = PropertyCategory.OTHER)
+        @FixtureProperty("Zoom", category = PropertyCategory.ZOOM)
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 15)
 
-        @FixtureProperty("Focus", category = PropertyCategory.OTHER)
+        @FixtureProperty("Focus", category = PropertyCategory.FOCUS)
         val focus: Slider = DmxSlider(transaction, universe, firstChannel + 16)
 
         /**

@@ -208,21 +208,21 @@ sealed class MartinMac250Fixture(
             transaction, universe, firstChannel + 2, Colour.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Gobo wheel", category = PropertyCategory.SETTING)
+        @FixtureProperty("Gobo wheel", category = PropertyCategory.GOBO)
         val gobo = DmxFixtureSetting(
             transaction, universe, firstChannel + 3, Gobo.entries.toTypedArray(),
         )
 
         @FixtureProperty(
             "Gobo rotation (CCW / stop / CW)",
-            category = PropertyCategory.SETTING,
+            category = PropertyCategory.GOBO_ROTATION,
         )
         val goboRotation: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty("Focus", category = PropertyCategory.OTHER)
+        @FixtureProperty("Focus", category = PropertyCategory.FOCUS)
         val focus: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
-        @FixtureProperty("Prism", category = PropertyCategory.SETTING)
+        @FixtureProperty("Prism", category = PropertyCategory.PRISM)
         val prism = DmxFixtureSetting(
             transaction, universe, firstChannel + 6, Prism.entries.toTypedArray(),
         )

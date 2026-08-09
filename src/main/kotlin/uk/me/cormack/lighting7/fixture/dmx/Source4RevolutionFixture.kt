@@ -145,10 +145,10 @@ sealed class Source4RevolutionFixture(
         @FixtureProperty("Media frame", category = PropertyCategory.OTHER)
         val mediaFrame: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
-        @FixtureProperty("Focus", category = PropertyCategory.OTHER)
+        @FixtureProperty("Focus", category = PropertyCategory.FOCUS)
         val focus: Slider = DmxSlider(transaction, universe, firstChannel + 6)
 
-        @FixtureProperty("Zoom (wide → narrow)", category = PropertyCategory.OTHER)
+        @FixtureProperty("Zoom (wide → narrow)", category = PropertyCategory.ZOOM)
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 7)
 
         @FixtureProperty("Focus fade time", category = PropertyCategory.SPEED)
@@ -169,7 +169,7 @@ sealed class Source4RevolutionFixture(
 
         // Ch 14 (Reserved) intentionally not exposed — see class doc.
 
-        @FixtureProperty("Iris (open → closed)", category = PropertyCategory.OTHER)
+        @FixtureProperty("Iris (open → closed)", category = PropertyCategory.IRIS)
         val iris: Slider = DmxSlider(transaction, universe, firstChannel + 14)
 
         @FixtureProperty("Forward beam wheel position", category = PropertyCategory.SETTING)

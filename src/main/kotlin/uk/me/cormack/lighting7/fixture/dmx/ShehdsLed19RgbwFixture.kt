@@ -170,7 +170,10 @@ sealed class ShehdsLed19RgbwFixture(
         @FixtureProperty("Pan/tilt speed", category = PropertyCategory.SPEED)
         val panTiltSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty("Zoom (narrow → wide)", category = PropertyCategory.OTHER)
+        @FixtureProperty(
+            "Zoom (narrow → wide)", category = PropertyCategory.ZOOM,
+            degMin = 15.0, degMax = 60.0,
+        )
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
         @FixtureProperty(category = PropertyCategory.DIMMER)
@@ -296,7 +299,10 @@ sealed class ShehdsLed19RgbwFixture(
         @FixtureProperty(category = PropertyCategory.WHITE, bundleWithColour = true)
         override val white: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
-        @FixtureProperty("Zoom (narrow → wide)", category = PropertyCategory.OTHER)
+        @FixtureProperty(
+            "Zoom (narrow → wide)", category = PropertyCategory.ZOOM,
+            degMin = 15.0, degMax = 60.0,
+        )
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 11)
 
         @FixtureProperty("Built-in program", category = PropertyCategory.SETTING)

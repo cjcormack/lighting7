@@ -188,10 +188,10 @@ sealed class Fusion100SpotMkIIFixture(
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 210.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("LED macro", category = PropertyCategory.SETTING)
+        @FixtureProperty("LED macro", category = PropertyCategory.LED_MACRO)
         val ledMacro = DmxFixtureSetting(transaction, universe, firstChannel + 2, LedMacro.entries.toTypedArray())
 
-        @FixtureProperty("Pan/tilt macro", category = PropertyCategory.SETTING)
+        @FixtureProperty("Pan/tilt macro", category = PropertyCategory.MOVEMENT_MACRO)
         val panTiltMacro = DmxFixtureSetting(transaction, universe, firstChannel + 3, PanTiltMacro.entries.toTypedArray())
 
         @FixtureProperty("Motor mode", category = PropertyCategory.SETTING)
@@ -245,16 +245,16 @@ sealed class Fusion100SpotMkIIFixture(
         @FixtureProperty("Colour", category = PropertyCategory.COLOUR)
         val colour = DmxFixtureSetting(transaction, universe, firstChannel + 3, Colour.entries.toTypedArray())
 
-        @FixtureProperty("Gobo", category = PropertyCategory.SETTING)
+        @FixtureProperty("Gobo", category = PropertyCategory.GOBO)
         val gobo = DmxFixtureSetting(transaction, universe, firstChannel + 4, Gobo.entries.toTypedArray())
 
-        @FixtureProperty("Gobo rotation", category = PropertyCategory.SETTING)
+        @FixtureProperty("Gobo rotation", category = PropertyCategory.GOBO_ROTATION)
         val goboRotation = DmxFixtureSetting(transaction, universe, firstChannel + 5, GoboRotation.entries.toTypedArray())
 
-        @FixtureProperty("Focus", category = PropertyCategory.OTHER)
+        @FixtureProperty("Focus", category = PropertyCategory.FOCUS)
         val focus = DmxSlider(transaction, universe, firstChannel + 6)
 
-        @FixtureProperty("Prism", category = PropertyCategory.SETTING)
+        @FixtureProperty("Prism", category = PropertyCategory.PRISM)
         val prism = DmxFixtureSetting(transaction, universe, firstChannel + 7, PrismMode.entries.toTypedArray())
     }
 
@@ -333,22 +333,22 @@ sealed class Fusion100SpotMkIIFixture(
         @FixtureProperty("Colour", category = PropertyCategory.COLOUR)
         val colour = DmxFixtureSetting(transaction, universe, firstChannel + 7, Colour.entries.toTypedArray())
 
-        @FixtureProperty("Gobo", category = PropertyCategory.SETTING)
+        @FixtureProperty("Gobo", category = PropertyCategory.GOBO)
         val gobo = DmxFixtureSetting(transaction, universe, firstChannel + 8, Gobo.entries.toTypedArray())
 
-        @FixtureProperty("Gobo rotation", category = PropertyCategory.SETTING)
+        @FixtureProperty("Gobo rotation", category = PropertyCategory.GOBO_ROTATION)
         val goboRotation = DmxFixtureSetting(transaction, universe, firstChannel + 9, GoboRotation.entries.toTypedArray())
 
-        @FixtureProperty("Focus", category = PropertyCategory.OTHER)
+        @FixtureProperty("Focus", category = PropertyCategory.FOCUS)
         val focus = DmxSlider(transaction, universe, firstChannel + 10)
 
-        @FixtureProperty("Prism", category = PropertyCategory.SETTING)
+        @FixtureProperty("Prism", category = PropertyCategory.PRISM)
         val prism = DmxFixtureSetting(transaction, universe, firstChannel + 11, PrismMode.entries.toTypedArray())
 
-        @FixtureProperty("LED macro", category = PropertyCategory.SETTING)
+        @FixtureProperty("LED macro", category = PropertyCategory.LED_MACRO)
         val ledMacro = DmxFixtureSetting(transaction, universe, firstChannel + 12, LedMacro.entries.toTypedArray())
 
-        @FixtureProperty("Pan/tilt macro", category = PropertyCategory.SETTING)
+        @FixtureProperty("Pan/tilt macro", category = PropertyCategory.MOVEMENT_MACRO)
         val panTiltMacro = DmxFixtureSetting(transaction, universe, firstChannel + 13, PanTiltMacro.entries.toTypedArray())
 
         @FixtureProperty("Motor mode", category = PropertyCategory.SETTING)
