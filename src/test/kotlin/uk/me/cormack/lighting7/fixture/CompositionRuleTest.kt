@@ -25,4 +25,18 @@ class CompositionRuleTest {
         assertEquals(CompositionRule.LTP, PropertyCategory.SETTING.defaultComposition)
         assertEquals(CompositionRule.LTP, PropertyCategory.OTHER.defaultComposition)
     }
+
+    @Test
+    fun `beam-shaping categories are all LTP — mechanical selections and positions`() {
+        assertEquals(CompositionRule.LTP, PropertyCategory.GOBO.defaultComposition)
+        assertEquals(CompositionRule.LTP, PropertyCategory.GOBO_ROTATION.defaultComposition)
+        assertEquals(CompositionRule.LTP, PropertyCategory.PRISM.defaultComposition)
+        assertEquals(CompositionRule.LTP, PropertyCategory.PRISM_ROTATION.defaultComposition)
+        assertEquals(CompositionRule.LTP, PropertyCategory.FOCUS.defaultComposition)
+        assertEquals(CompositionRule.LTP, PropertyCategory.ZOOM.defaultComposition)
+        assertEquals(CompositionRule.LTP, PropertyCategory.IRIS.defaultComposition)
+        assertEquals(CompositionRule.LTP, PropertyCategory.FROST.defaultComposition)
+        assertEquals(CompositionRule.LTP, PropertyCategory.LED_MACRO.defaultComposition)
+        assertEquals(CompositionRule.LTP, PropertyCategory.MOVEMENT_MACRO.defaultComposition)
+    }
 }

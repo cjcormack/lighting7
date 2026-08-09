@@ -46,6 +46,7 @@ enum class PropertyCategory(val defaultComposition: CompositionRule) {
     GOBO(CompositionRule.LTP),
     GOBO_ROTATION(CompositionRule.LTP),
     PRISM(CompositionRule.LTP),
+    PRISM_ROTATION(CompositionRule.LTP),
     FOCUS(CompositionRule.LTP),
     ZOOM(CompositionRule.LTP),
     IRIS(CompositionRule.LTP),

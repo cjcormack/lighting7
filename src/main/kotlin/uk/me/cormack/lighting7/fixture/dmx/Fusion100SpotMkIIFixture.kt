@@ -74,13 +74,19 @@ sealed class Fusion100SpotMkIIFixture(
      * Gobo wheel positions.
      * 8CH mode CH5 / 15CH mode CH9.
      */
-    enum class Gobo(override val level: UByte) : DmxFixtureSettingValue {
+    enum class Gobo(
+        override val level: UByte,
+        // The manual names the slots only GOBO_1..5, so these are a plausible
+        // spread for the stage view, not the fixture's actual artwork. The
+        // rainbow positions keep the wheel moving and stay null (open).
+        override val gobo: GoboPattern? = null,
+    ) : DmxFixtureGoboSettingValue {
         OPEN_WHITE(0u),
-        GOBO_1(9u),
-        GOBO_2(34u),
-        GOBO_3(59u),
-        GOBO_4(84u),
-        GOBO_5(109u),
+        GOBO_1(9u, GoboPattern.DOTS),
+        GOBO_2(34u, GoboPattern.BREAKUP),
+        GOBO_3(59u, GoboPattern.TRIPLE),
+        GOBO_4(84u, GoboPattern.RINGS),
+        GOBO_5(109u, GoboPattern.STARBURST),
         RAINBOW_EFFECT(134u),
         REVERSE_RAINBOW_EFFECT(195u);
     }
@@ -102,9 +108,12 @@ sealed class Fusion100SpotMkIIFixture(
      * Prism mode.
      * 8CH mode CH8 / 15CH mode CH12.
      */
-    enum class PrismMode(override val level: UByte) : DmxFixtureSettingValue {
+    enum class PrismMode(
+        override val level: UByte,
+        override val prismFacets: Int? = null,
+    ) : DmxFixturePrismSettingValue {
         OPEN(0u),
-        PRISM(8u);
+        PRISM(8u, 3);
     }
 
     /**

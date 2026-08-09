@@ -92,24 +92,30 @@ sealed class MartinMac250Fixture(
      * and forward/reverse scroll. Indices below match the personality's
      * `VIEW RANGES` capture.
      */
-    enum class Gobo(override val level: UByte) : DmxFixtureSettingValue {
+    enum class Gobo(
+        override val level: UByte,
+        // Patterns follow the manual's slot names; each shake variant shares
+        // its base slot's artwork. Scroll positions stay null — the wheel is
+        // physically moving, so open is the honest approximation.
+        override val gobo: GoboPattern? = null,
+    ) : DmxFixtureGoboSettingValue {
         OPEN(0u),
-        CONE(10u),
-        BAR(20u),
-        FAN_HAT(30u),
-        TRIPLE(40u),
-        DEC_BEAM(50u),
-        FIBROID(60u),
-        RND_HOLES_BLUE(70u),
-        PYS_CIR_MAG(80u),
-        PYS_CIR_SHAKE(90u),
-        RND_HOLES_SHAKE(105u),
-        FIBROID_SHAKE(120u),
-        DEC_BEAM_SHAKE(135u),
-        TRIPLE_SHAKE(150u),
-        FAN_HAT_SHAKE(165u),
-        BAR_SHAKE(180u),
-        CONE_SHAKE(195u),
+        CONE(10u, GoboPattern.CONE),
+        BAR(20u, GoboPattern.BARS),
+        FAN_HAT(30u, GoboPattern.FAN),
+        TRIPLE(40u, GoboPattern.TRIPLE),
+        DEC_BEAM(50u, GoboPattern.BEAM_SPLIT),
+        FIBROID(60u, GoboPattern.FIBROID),
+        RND_HOLES_BLUE(70u, GoboPattern.HOLES),
+        PYS_CIR_MAG(80u, GoboPattern.CIRCLES),
+        PYS_CIR_SHAKE(90u, GoboPattern.CIRCLES),
+        RND_HOLES_SHAKE(105u, GoboPattern.HOLES),
+        FIBROID_SHAKE(120u, GoboPattern.FIBROID),
+        DEC_BEAM_SHAKE(135u, GoboPattern.BEAM_SPLIT),
+        TRIPLE_SHAKE(150u, GoboPattern.TRIPLE),
+        FAN_HAT_SHAKE(165u, GoboPattern.FAN),
+        BAR_SHAKE(180u, GoboPattern.BARS),
+        CONE_SHAKE(195u, GoboPattern.CONE),
         SCROLL_CW(210u),
         SCROLL_CCW(233u),
     }
@@ -120,20 +126,25 @@ sealed class MartinMac250Fixture(
      * 000–019 prism off, 020–149 rotation bands (CCW / no rot / CW),
      * 150–215 prism off again, 216–255 eight indexed macros.
      */
-    enum class Prism(override val level: UByte) : DmxFixtureSettingValue {
+    enum class Prism(
+        override val level: UByte,
+        // The MAC's prism is a 3-facet; the macros are prism+gobo combination
+        // programs with the prism in the beam.
+        override val prismFacets: Int? = null,
+    ) : DmxFixturePrismSettingValue {
         PRISM_OFF(0u),
-        ROT_CCW(20u),
-        NO_ROT(80u),
-        ROT_CW(90u),
+        ROT_CCW(20u, 3),
+        NO_ROT(80u, 3),
+        ROT_CW(90u, 3),
         PRISM_OFF_2(150u),
-        MACRO_1(216u),
-        MACRO_2(221u),
-        MACRO_3(226u),
-        MACRO_4(231u),
-        MACRO_5(236u),
-        MACRO_6(241u),
-        MACRO_7(246u),
-        MACRO_8(251u),
+        MACRO_1(216u, 3),
+        MACRO_2(221u, 3),
+        MACRO_3(226u, 3),
+        MACRO_4(231u, 3),
+        MACRO_5(236u, 3),
+        MACRO_6(241u, 3),
+        MACRO_7(246u, 3),
+        MACRO_8(251u, 3),
     }
 
     /**

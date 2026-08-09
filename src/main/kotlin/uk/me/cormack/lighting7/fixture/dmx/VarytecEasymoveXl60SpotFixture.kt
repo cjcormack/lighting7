@@ -70,14 +70,20 @@ sealed class VarytecEasymoveXl60SpotFixture(
      * (slow → fast), 193–255 reverse wheel rotation. Gobo *spin* (rotation
      * of the selected gobo around its own axis) is on a separate channel.
      */
-    enum class Gobo(override val level: UByte) : DmxFixtureSettingValue {
+    enum class Gobo(
+        override val level: UByte,
+        // GOBO_1..6 are unnamed in the manual; a plausible spread, chosen
+        // mostly disjoint from the Fusion's so the two rigs read differently
+        // on stage. Wheel-rotation bands stay null (open).
+        override val gobo: GoboPattern? = null,
+    ) : DmxFixtureGoboSettingValue {
         OPEN(0u),
-        GOBO_1(30u),
-        GOBO_2(50u),
-        GOBO_3(70u),
-        GOBO_4(90u),
-        GOBO_5(110u),
-        GOBO_6(124u),
+        GOBO_1(30u, GoboPattern.SPOKES),
+        GOBO_2(50u, GoboPattern.DOTS),
+        GOBO_3(70u, GoboPattern.CLOUDS),
+        GOBO_4(90u, GoboPattern.BARS),
+        GOBO_5(110u, GoboPattern.RINGS),
+        GOBO_6(124u, GoboPattern.STARBURST),
         WHEEL_FORWARD(160u),
         WHEEL_REVERSE(225u),
     }

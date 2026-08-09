@@ -158,7 +158,7 @@ class Layer3Resolver {
                 // DmxFixtureSetting on the Fusion and a DmxSlider on the MAC 250).
                 PropertyCategory.SETTING, PropertyCategory.OTHER,
                 PropertyCategory.GOBO, PropertyCategory.GOBO_ROTATION,
-                PropertyCategory.PRISM,
+                PropertyCategory.PRISM, PropertyCategory.PRISM_ROTATION,
                 PropertyCategory.LED_MACRO, PropertyCategory.MOVEMENT_MACRO ->
                     trimmed.toUByteParam()?.let { PropertyValue.Setting(it) }
                 // Continuous positions: FOCUS, ZOOM, IRIS, FROST, PAN/TILT, DIMMER…

@@ -300,7 +300,11 @@ data class SettingOption(
     val name: String,
     val level: Int,
     val displayName: String,
-    val colourPreview: String? = null
+    val colourPreview: String? = null,
+    /** Lowercase [uk.me.cormack.lighting7.fixture.dmx.GoboPattern] name, or null when open/no-op. */
+    val gobo: String? = null,
+    /** Prism facet count at this position, or null when the prism is out. */
+    val prismFacets: Int? = null,
 )
 
 @Serializable

@@ -3,6 +3,8 @@ package uk.me.cormack.lighting7.fixture
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColourSettingValue
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureGoboSettingValue
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixturePrismSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.*
@@ -124,23 +126,7 @@ abstract class DmxFixture(
                     }
                 }
                 is DmxFixtureSetting<*> -> {
-                    descriptors.add(
-                        SettingPropertyDescriptor(
-                            name = prop.name,
-                            displayName = displayName,
-                            category = prop.category.name.lowercase(),
-                            channel = ChannelRef(universe.universe, value.channelNo),
-                            options = value.sortedValues.map { settingValue ->
-                                SettingOption(
-                                    name = settingValue.name,
-                                    level = settingValue.level.toInt(),
-                                    displayName = settingValue.name.formatSettingName(),
-                                    colourPreview = (settingValue as? DmxFixtureColourSettingValue)?.colourPreview
-                                )
-                            },
-                            compactDisplay = prop.compactDisplay.serialized()
-                        )
-                    )
+                    descriptors.add(buildSettingDescriptor(prop, value, displayName))
                 }
             }
         }
@@ -307,23 +293,7 @@ abstract class DmxFixture(
                     }
                 }
                 is DmxFixtureSetting<*> -> {
-                    descriptors.add(
-                        SettingPropertyDescriptor(
-                            name = prop.name,
-                            displayName = displayName,
-                            category = prop.category.name.lowercase(),
-                            channel = ChannelRef(universe.universe, value.channelNo),
-                            options = value.sortedValues.map { settingValue ->
-                                SettingOption(
-                                    name = settingValue.name,
-                                    level = settingValue.level.toInt(),
-                                    displayName = settingValue.name.formatSettingName(),
-                                    colourPreview = (settingValue as? DmxFixtureColourSettingValue)?.colourPreview
-                                )
-                            },
-                            compactDisplay = prop.compactDisplay.serialized()
-                        )
-                    )
+                    descriptors.add(buildSettingDescriptor(prop, value, displayName))
                 }
             }
         }
@@ -350,6 +320,32 @@ abstract class DmxFixture(
 
         return descriptors
     }
+
+    // One construction site for setting descriptors: fixture-level and
+    // element-level properties used to carry two byte-identical copies of this
+    // block, so a new per-option field added to one silently missed multi-cell
+    // fixtures in the other.
+    private fun buildSettingDescriptor(
+        prop: Fixture.Property,
+        setting: DmxFixtureSetting<*>,
+        displayName: String,
+    ): SettingPropertyDescriptor = SettingPropertyDescriptor(
+        name = prop.name,
+        displayName = displayName,
+        category = prop.category.name.lowercase(),
+        channel = ChannelRef(universe.universe, setting.channelNo),
+        options = setting.sortedValues.map { settingValue ->
+            SettingOption(
+                name = settingValue.name,
+                level = settingValue.level.toInt(),
+                displayName = settingValue.name.formatSettingName(),
+                colourPreview = (settingValue as? DmxFixtureColourSettingValue)?.colourPreview,
+                gobo = (settingValue as? DmxFixtureGoboSettingValue)?.gobo?.serialized(),
+                prismFacets = (settingValue as? DmxFixturePrismSettingValue)?.prismFacets,
+            )
+        },
+        compactDisplay = prop.compactDisplay.serialized()
+    )
 
     private fun buildSliderDescriptor(
         prop: Fixture.Property,

@@ -113,26 +113,32 @@ sealed class RobeColorSpot575Fixture(
      * forward/reverse scroll. `level` values are taken from the indexed-
      * positioning band starts (065–109).
      */
-    enum class StaticGobo(override val level: UByte) : DmxFixtureSettingValue {
+    enum class StaticGobo(
+        override val level: UByte,
+        // The manual names the slots only Gobo 1..9, so these are a plausible
+        // spread; shake variants share their base slot's artwork, and the
+        // scroll/random bands stay null (open) because the wheel is moving.
+        override val gobo: GoboPattern? = null,
+    ) : DmxFixtureGoboSettingValue {
         OPEN(0u),
-        GOBO_1(65u),
-        GOBO_2(70u),
-        GOBO_3(75u),
-        GOBO_4(80u),
-        GOBO_5(85u),
-        GOBO_6(90u),
-        GOBO_7(95u),
-        GOBO_8(100u),
-        GOBO_9(105u),
-        GOBO_1_SHAKE(110u),
-        GOBO_2_SHAKE(120u),
-        GOBO_3_SHAKE(130u),
-        GOBO_4_SHAKE(140u),
-        GOBO_5_SHAKE(150u),
-        GOBO_6_SHAKE(160u),
-        GOBO_7_SHAKE(170u),
-        GOBO_8_SHAKE(180u),
-        GOBO_9_SHAKE(190u),
+        GOBO_1(65u, GoboPattern.DOTS),
+        GOBO_2(70u, GoboPattern.BREAKUP),
+        GOBO_3(75u, GoboPattern.SPOKES),
+        GOBO_4(80u, GoboPattern.BARS),
+        GOBO_5(85u, GoboPattern.RINGS),
+        GOBO_6(90u, GoboPattern.TRIPLE),
+        GOBO_7(95u, GoboPattern.CLOUDS),
+        GOBO_8(100u, GoboPattern.STARS),
+        GOBO_9(105u, GoboPattern.STARBURST),
+        GOBO_1_SHAKE(110u, GoboPattern.DOTS),
+        GOBO_2_SHAKE(120u, GoboPattern.BREAKUP),
+        GOBO_3_SHAKE(130u, GoboPattern.SPOKES),
+        GOBO_4_SHAKE(140u, GoboPattern.BARS),
+        GOBO_5_SHAKE(150u, GoboPattern.RINGS),
+        GOBO_6_SHAKE(160u, GoboPattern.TRIPLE),
+        GOBO_7_SHAKE(170u, GoboPattern.CLOUDS),
+        GOBO_8_SHAKE(180u, GoboPattern.STARS),
+        GOBO_9_SHAKE(190u, GoboPattern.STARBURST),
         SCROLL_CW(202u),
         SCROLL_CCW(224u),
         RANDOM(244u),
@@ -146,41 +152,64 @@ sealed class RobeColorSpot575Fixture(
      * the index position or rotation speed. Shake variants (60–199) come
      * in two flavours: shake-while-indexed and shake-while-rotating.
      */
-    enum class RotGobo(override val level: UByte) : DmxFixtureSettingValue {
+    enum class RotGobo(
+        override val level: UByte,
+        /** Physical gobo slot 1..7; 0 = none. Four mode variants (index /
+         *  rotate / shake-index / shake-rotate) address the same glass, so the
+         *  slot→artwork map lives once in [SLOT_PATTERNS] and all variants of
+         *  a slot agree by construction. */
+        private val slot: Int = 0,
+    ) : DmxFixtureGoboSettingValue {
         OPEN(0u),
-        INDEX_GOBO_1(4u),
-        INDEX_GOBO_2(8u),
-        INDEX_GOBO_3(12u),
-        INDEX_GOBO_4(16u),
-        INDEX_GOBO_5(20u),
-        INDEX_GOBO_6(24u),
-        INDEX_GOBO_7(28u),
-        ROTATE_GOBO_1(32u),
-        ROTATE_GOBO_2(36u),
-        ROTATE_GOBO_3(40u),
-        ROTATE_GOBO_4(44u),
-        ROTATE_GOBO_5(48u),
-        ROTATE_GOBO_6(52u),
-        ROTATE_GOBO_7(56u),
-        SHAKE_INDEX_GOBO_1(60u),
-        SHAKE_INDEX_GOBO_2(70u),
-        SHAKE_INDEX_GOBO_3(80u),
-        SHAKE_INDEX_GOBO_4(90u),
-        SHAKE_INDEX_GOBO_5(100u),
-        SHAKE_INDEX_GOBO_6(110u),
-        SHAKE_INDEX_GOBO_7(120u),
-        SHAKE_ROTATE_GOBO_1(130u),
-        SHAKE_ROTATE_GOBO_2(140u),
-        SHAKE_ROTATE_GOBO_3(150u),
-        SHAKE_ROTATE_GOBO_4(160u),
-        SHAKE_ROTATE_GOBO_5(170u),
-        SHAKE_ROTATE_GOBO_6(180u),
-        SHAKE_ROTATE_GOBO_7(190u),
+        INDEX_GOBO_1(4u, 1),
+        INDEX_GOBO_2(8u, 2),
+        INDEX_GOBO_3(12u, 3),
+        INDEX_GOBO_4(16u, 4),
+        INDEX_GOBO_5(20u, 5),
+        INDEX_GOBO_6(24u, 6),
+        INDEX_GOBO_7(28u, 7),
+        ROTATE_GOBO_1(32u, 1),
+        ROTATE_GOBO_2(36u, 2),
+        ROTATE_GOBO_3(40u, 3),
+        ROTATE_GOBO_4(44u, 4),
+        ROTATE_GOBO_5(48u, 5),
+        ROTATE_GOBO_6(52u, 6),
+        ROTATE_GOBO_7(56u, 7),
+        SHAKE_INDEX_GOBO_1(60u, 1),
+        SHAKE_INDEX_GOBO_2(70u, 2),
+        SHAKE_INDEX_GOBO_3(80u, 3),
+        SHAKE_INDEX_GOBO_4(90u, 4),
+        SHAKE_INDEX_GOBO_5(100u, 5),
+        SHAKE_INDEX_GOBO_6(110u, 6),
+        SHAKE_INDEX_GOBO_7(120u, 7),
+        SHAKE_ROTATE_GOBO_1(130u, 1),
+        SHAKE_ROTATE_GOBO_2(140u, 2),
+        SHAKE_ROTATE_GOBO_3(150u, 3),
+        SHAKE_ROTATE_GOBO_4(160u, 4),
+        SHAKE_ROTATE_GOBO_5(170u, 5),
+        SHAKE_ROTATE_GOBO_6(180u, 6),
+        SHAKE_ROTATE_GOBO_7(190u, 7),
         OPEN_END(200u),
         SCROLL_CW(202u),
         SCROLL_CCW(224u),
         RANDOM(244u),
-        AUTO_RANDOM(250u),
+        AUTO_RANDOM(250u);
+
+        override val gobo: GoboPattern? get() = SLOT_PATTERNS.getOrNull(slot - 1)
+
+        companion object {
+            /** Rotating-wheel artwork, slots 1..7 — a plausible spread chosen
+             *  disjoint from [StaticGobo]'s so wheel switches are visible. */
+            private val SLOT_PATTERNS = listOf(
+                GoboPattern.SWIRL,
+                GoboPattern.FIBROID,
+                GoboPattern.HOLES,
+                GoboPattern.CONE,
+                GoboPattern.FAN,
+                GoboPattern.BEAM_SPLIT,
+                GoboPattern.STARS,
+            )
+        }
     }
 
     /**
@@ -189,25 +218,30 @@ sealed class RobeColorSpot575Fixture(
      * 000–019 prism off, 020–127 3-facet rotating prism, 128–255 sixteen
      * indexed prism+gobo macros (8-DMX-step bands).
      */
-    enum class Prism(override val level: UByte) : DmxFixtureSettingValue {
+    enum class Prism(
+        override val level: UByte,
+        // The macros are prism+gobo combination programs — the 3-facet prism
+        // is in the beam for all of them.
+        override val prismFacets: Int? = null,
+    ) : DmxFixturePrismSettingValue {
         OFF(0u),
-        ROTATING_3_FACET(20u),
-        MACRO_1(128u),
-        MACRO_2(136u),
-        MACRO_3(144u),
-        MACRO_4(152u),
-        MACRO_5(160u),
-        MACRO_6(168u),
-        MACRO_7(176u),
-        MACRO_8(184u),
-        MACRO_9(192u),
-        MACRO_10(200u),
-        MACRO_11(208u),
-        MACRO_12(216u),
-        MACRO_13(224u),
-        MACRO_14(232u),
-        MACRO_15(240u),
-        MACRO_16(248u),
+        ROTATING_3_FACET(20u, 3),
+        MACRO_1(128u, 3),
+        MACRO_2(136u, 3),
+        MACRO_3(144u, 3),
+        MACRO_4(152u, 3),
+        MACRO_5(160u, 3),
+        MACRO_6(168u, 3),
+        MACRO_7(176u, 3),
+        MACRO_8(184u, 3),
+        MACRO_9(192u, 3),
+        MACRO_10(200u, 3),
+        MACRO_11(208u, 3),
+        MACRO_12(216u, 3),
+        MACRO_13(224u, 3),
+        MACRO_14(232u, 3),
+        MACRO_15(240u, 3),
+        MACRO_16(248u, 3),
     }
 
     /**
@@ -309,7 +343,10 @@ sealed class RobeColorSpot575Fixture(
             transaction, universe, firstChannel + 11, Prism.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Prism rotation (CW / no-rot / CCW)", category = PropertyCategory.SETTING)
+        @FixtureProperty(
+            "Prism rotation (0 no rot, 1–127 CW fast→slow, 128–129 stop, 130–255 CCW slow→fast)",
+            category = PropertyCategory.PRISM_ROTATION,
+        )
         val prismRotation: Slider = DmxSlider(transaction, universe, firstChannel + 12)
 
         @FixtureProperty("Frost", category = PropertyCategory.FROST)
