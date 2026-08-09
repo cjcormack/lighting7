@@ -176,11 +176,40 @@ class PropertyChannelWriterTest {
     }
 
     @Test
-    fun `value kind mismatch with property type returns empty list`() {
-        // "mode" is a Setting property; a Slider PropertyValue targeting it should drop.
+    fun `a slider value drives a setting-backed property`() {
+        // "mode" is backed by a DmxFixtureSetting. A Slider PropertyValue must still write
+        // it: Slider-vs-Setting is chosen from the property's *category*, which doesn't
+        // predict the backing shape (gobo rotation is a DmxFixtureSetting on the Equinox
+        // Fusion 100 but a plain DmxSlider on the Martin MAC 250). Dropping the write is
+        // what left several fixtures' gobo/prism/macro channels undriveable from a cue.
         val writes = PropertyChannelWriter.resolve(
             hex(),
             "mode",
+            Layer3Resolver.PropertyValue.Slider(100u),
+        )
+        assertEquals(1, writes.size)
+        assertEquals(100u.toUByte(), writes.single().value)
+    }
+
+    @Test
+    fun `a setting value drives a slider-backed property`() {
+        // The mirror image: "dimmer" is a DmxSlider, targeted by a Setting PropertyValue.
+        val writes = PropertyChannelWriter.resolve(
+            hex(),
+            "dimmer",
+            Layer3Resolver.PropertyValue.Setting(200u),
+        )
+        assertEquals(1, writes.size)
+        assertEquals(200u.toUByte(), writes.single().value)
+    }
+
+    @Test
+    fun `a byte value targeting a multi-channel property returns empty list`() {
+        // rgbColour is a DmxColour — no single backing channel, so there is nothing
+        // sensible to write one byte to. This one genuinely must drop.
+        val writes = PropertyChannelWriter.resolve(
+            hex(),
+            "rgbColour",
             Layer3Resolver.PropertyValue.Slider(100u),
         )
         assertTrue(writes.isEmpty())

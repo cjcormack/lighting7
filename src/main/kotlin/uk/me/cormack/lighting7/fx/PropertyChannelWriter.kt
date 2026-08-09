@@ -55,8 +55,9 @@ object PropertyChannelWriter {
         propertyName: String,
         value: Layer3Resolver.PropertyValue,
     ): List<PropertyChannelResolver.ChannelWrite> = when (value) {
-        is Layer3Resolver.PropertyValue.Slider -> resolveSlider(fixture, propertyName, value.value)
-        is Layer3Resolver.PropertyValue.Setting -> resolveSetting(fixture, propertyName, value.channelValue)
+        is Layer3Resolver.PropertyValue.Slider -> resolveByteChannel(fixture, propertyName, value.value)
+        is Layer3Resolver.PropertyValue.Setting ->
+            resolveByteChannel(fixture, propertyName, value.channelValue)
         is Layer3Resolver.PropertyValue.Colour -> resolveColour(fixture, propertyName, value.value)
         is Layer3Resolver.PropertyValue.Position -> resolvePosition(fixture, value.pan, value.tilt)
     }
@@ -87,14 +88,28 @@ object PropertyChannelWriter {
                 extendedChannelWrite((fixture as? WithAmber)?.amber, 0u, PropertyCategory.AMBER)?.let { add(it) }
                 extendedChannelWrite((fixture as? WithUv)?.uv, 0u, PropertyCategory.UV)?.let { add(it) }
             }
+            // resolved.category, not a hardcoded SETTING — a gobo or prism wheel is backed
+            // by a DmxFixtureSetting but no longer carries the SETTING category, and the
+            // clear path must key off the same category the write path used.
             is DmxFixtureSetting<*> -> listOf(
-                PropertyChannelResolver.ChannelWrite(raw.universe, raw.channelNo, 0u, PropertyCategory.SETTING)
+                PropertyChannelResolver.ChannelWrite(raw.universe, raw.channelNo, 0u, resolved.category)
             )
             else -> emptyList()
         }
     }
 
-    private fun resolveSlider(
+    /**
+     * A single-channel property carrying one [UByte], whichever descriptor shape backs it.
+     *
+     * [Layer3Resolver.PropertyValue.Slider] and [Layer3Resolver.PropertyValue.Setting] are
+     * chosen from the property's *category*, but the category does not determine the
+     * backing shape: `goboRotation` is a [DmxFixtureSetting] on the Equinox Fusion 100 and a
+     * plain [DmxSlider] on the Martin MAC 250, Robe ColorSpot 575 and Varytec Easymove. Both
+     * are one DMX channel taking one byte, so insisting on a particular shape only ever
+     * throws the write away — which is why several fixtures' gobo, prism and macro channels
+     * could not be driven from a cue at all.
+     */
+    private fun resolveByteChannel(
         fixture: GroupableFixture,
         propertyName: String,
         value: UByte,
@@ -103,32 +118,18 @@ object PropertyChannelWriter {
             logger.debug("Property '{}' not found on fixture '{}'", propertyName, fixture.targetKey)
             return emptyList()
         }
-        val raw = resolved.value
-        if (raw !is DmxSlider) {
-            logger.debug(
-                "Slider value targeted non-slider property '{}' (type {}) on '{}'",
-                propertyName, raw::class.simpleName, fixture.targetKey,
-            )
-            return emptyList()
+        val (universe, channelNo) = when (val raw = resolved.value) {
+            is DmxSlider -> raw.universe to raw.channelNo
+            is DmxFixtureSetting<*> -> raw.universe to raw.channelNo
+            else -> {
+                logger.debug(
+                    "Byte value targeted property '{}' with no single backing channel (type {}) on '{}'",
+                    propertyName, raw::class.simpleName, fixture.targetKey,
+                )
+                return emptyList()
+            }
         }
-        return listOf(PropertyChannelResolver.ChannelWrite(raw.universe, raw.channelNo, value, resolved.category))
-    }
-
-    private fun resolveSetting(
-        fixture: GroupableFixture,
-        propertyName: String,
-        value: UByte,
-    ): List<PropertyChannelResolver.ChannelWrite> {
-        val resolved = resolveProperty(fixture, propertyName) ?: return emptyList()
-        val raw = resolved.value
-        if (raw !is DmxFixtureSetting<*>) {
-            logger.debug(
-                "Setting value targeted non-setting property '{}' (type {}) on '{}'",
-                propertyName, raw::class.simpleName, fixture.targetKey,
-            )
-            return emptyList()
-        }
-        return listOf(PropertyChannelResolver.ChannelWrite(raw.universe, raw.channelNo, value, PropertyCategory.SETTING))
+        return listOf(PropertyChannelResolver.ChannelWrite(universe, channelNo, value, resolved.category))
     }
 
     private fun resolveColour(
