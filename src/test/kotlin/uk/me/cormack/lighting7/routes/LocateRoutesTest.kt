@@ -3,24 +3,12 @@ package uk.me.cormack.lighting7.routes
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
-import uk.me.cormack.lighting7.models.DaoFixtureGroup
-import uk.me.cormack.lighting7.models.DaoFixtureGroupMember
-import uk.me.cormack.lighting7.models.DaoFixturePatch
-import uk.me.cormack.lighting7.models.DaoFixturePatches
-import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.DaoUniverseConfig
-import uk.me.cormack.lighting7.show.DbFixtureLoader
+import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
@@ -108,43 +96,11 @@ class LocateRoutesTest : RouteIntegrationTest() {
     }
 
     private suspend fun toggle(client: HttpClient, type: String, key: String): HttpResponse =
-        client.post("/api/rest/locate/toggle") {
-            contentType(ContentType.Application.Json)
-            setBody(ToggleLocateRequest(type, key))
-        }
+        LocateTestSupport.toggleLocate(client, type, key)
 
-    private fun seedHex(key: String, startChannel: Int) {
-        transaction(state.database) {
-            val project = DaoProject.findById(projectId)!!
-            DaoFixturePatch.new {
-                this.project = project
-                universeConfig = DaoUniverseConfig.all().first()
-                fixtureTypeKey = "hex"
-                this.key = key
-                displayName = key
-                this.startChannel = startChannel
-                sortOrder = startChannel
-            }
-        }
-        reloadFixtures()
-    }
+    private fun seedHex(key: String, startChannel: Int) =
+        LocateTestSupport.seedHex(state, projectId, key, startChannel)
 
-    private fun seedGroup(name: String, vararg memberKeys: String) {
-        transaction(state.database) {
-            val project = DaoProject.findById(projectId)!!
-            val group = DaoFixtureGroup.new { this.project = project; this.name = name }
-            memberKeys.forEachIndexed { index, memberKey ->
-                DaoFixtureGroupMember.new {
-                    this.group = group
-                    fixturePatch = DaoFixturePatch.find { DaoFixturePatches.key eq memberKey }.first()
-                    sortOrder = index
-                }
-            }
-        }
-        reloadFixtures()
-    }
-
-    private fun reloadFixtures() {
-        DbFixtureLoader.loadFixtures(projectId, state.show.fixtures, state.database, parkSource = state.show.parkManager)
-    }
+    private fun seedGroup(name: String, vararg memberKeys: String) =
+        LocateTestSupport.seedGroup(state, projectId, name, *memberKeys)
 }

@@ -37,11 +37,17 @@ class LocateManager {
      * Toggle [target]'s locate state.
      *
      * Inactive → run [assert] and record its writes; a target that resolves to zero writes
-     * (e.g. a fixture with no DMX-backed properties) is reported inactive rather than stuck
-     * as an un-releasable entry. Active → hand the recorded writes to [clear] as one batch,
-     * then re-run [assert] for every remaining entry whose writes overlap the cleared set so
-     * overlapping locates stay asserted; a re-assert that comes back empty (stale target)
-     * drops its entry.
+     * (e.g. a fixture with no DMX-backed properties, or one whose every channel is parked) is
+     * reported inactive rather than stuck as an un-releasable entry. Active → hand the
+     * recorded writes to [clear] as one batch, then re-run [assert] for every remaining entry
+     * whose writes overlap the cleared set so overlapping locates stay asserted.
+     *
+     * [assert] returns null for a *stale* target (rekeyed fixture, rebuilt group), which is
+     * the only thing that drops an existing entry on the re-assert path. An empty list is not
+     * staleness: a still-present target whose properties have since become unassertable — the
+     * operator parked it while it was located — keeps its locate state and simply holds no
+     * writes, rather than silently un-locating itself because an unrelated overlapping locate
+     * was released.
      *
      * Both callbacks run with the manager's lock held and MUST NOT throw — a throw here
      * would leave Layer-4 channels asserted with no bookkeeping row to release them. The
@@ -49,7 +55,7 @@ class LocateManager {
      */
     fun toggle(
         target: TargetRef,
-        assert: (TargetRef) -> List<LocateWrite>,
+        assert: (TargetRef) -> List<LocateWrite>?,
         clear: (List<LocateWrite>) -> Unit,
     ): ToggleOutcome = synchronized(lock) {
         val existing = active.remove(target)
@@ -59,11 +65,11 @@ class LocateManager {
             for ((other, writes) in active.entries.toList()) {
                 if (writes.none { it in cleared }) continue
                 val next = assert(other)
-                if (next.isEmpty()) active.remove(other) else active[other] = next
+                if (next == null) active.remove(other) else active[other] = next
             }
             ToggleOutcome(active = false, writeCount = existing.size)
         } else {
-            val writes = assert(target)
+            val writes = assert(target).orEmpty()
             if (writes.isNotEmpty()) active[target] = writes
             ToggleOutcome(active = writes.isNotEmpty(), writeCount = writes.size)
         }

@@ -434,6 +434,49 @@ Consequences:
   check), both as an optimisation and because the transmit-time parking override would
   discard the composition result anyway.
 
+### Locate versus park
+
+The Locate toggle (`routes/lightLocate.kt`) asserts its centre-and-open-white values as
+Layer-4 writes and applies "locate wins": `FxEngine.removeEffectsCoveringFixtures` deletes
+every effect painting the channels it writes, because `publishLayer4ForKeys` skips
+effect-covered keys and a surviving effect would repaint over the locate on the next tick.
+
+Park sits above all of that at transmit time, so a locate cannot move a parked channel —
+and a locate that *only* writes parked channels would delete the operator's effects in
+exchange for nothing visible. Two filters keep the two sides honest:
+
+- **`applyLocate` drops unpublishable assignments** before it computes the covered-key set,
+  using `FxEngine.layer4Publishability`. That helper applies the *same two guards
+  `publishLayer4ForKeys` applies*, in the same order and through the same helpers
+  (`inferTargetForProperty`, then `allChannelsParked`), so the pre-filter cannot disagree
+  with what the write then does — which matters because `ColourTarget` scopes its
+  white/amber/UV channels by `bundleWithColour` while `PropertyChannelWriter.channelsFor`
+  enumerates them by trait. It reports `UNRESOLVED` (no DMX-backed channels) and
+  `PARK_MASKED` separately, and the latter surfaces as `parkMasked` on the toggle response so
+  the UI can distinguish "parked" from "nothing to write".
+- **`removeEffectsCoveringFixtures` spares park-masked effects.** Matching stays by fixture
+  key rather than by (fixture, property) — a locate write can share a DMX channel with a
+  differently-named property, e.g. dimmer and shutter on one channel — but an effect whose
+  own property is fully parked on every fixture it paints is invisible, so removing it costs
+  the operator an effect and changes nothing on stage.
+
+Consequences:
+
+- A wholly parked fixture or group is a no-op locate: zero writes, `active: false`,
+  `parkMasked: true`, no effects removed, nothing registered in `LocateManager`.
+- Partial parking still locates: the unparked properties are asserted and the effects on
+  *those* properties are removed, while parked channels keep emitting their parked value and
+  the effects park was already masking survive.
+- A target that becomes park-masked while located keeps its locate state. `LocateManager`'s
+  re-assert path drops an entry only when the assert callback reports the target *stale*
+  (returns null), not merely write-less, so releasing an overlapping group locate can't
+  silently un-locate a parked member.
+- Unparking a channel that a locate wrote to hands the *parked* value down into the
+  `DirectWriteStore` (see `UnparkValueSink`), so releasing park never snaps the output up to
+  the locate level.
+
+Covered by `routes/LocateParkInteractionTest.kt`.
+
 ### Effect iteration order
 
 Effects are iterated in sorted order (`priority` ascending, `id` ascending as a stable

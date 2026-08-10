@@ -59,16 +59,22 @@ internal fun Route.routeApiRestLocate(state: State) {
             }
 
             var effectsRemoved = 0
+            var parkMasked = false
             val outcome = state.show.locateManager.toggle(
                 target,
                 assert = { t ->
                     val result = applyLocate(state, t)
-                    if (t == target) effectsRemoved = result.effectsRemoved
-                    result.writes
+                    if (t == target) {
+                        effectsRemoved = result.effectsRemoved
+                        parkMasked = result.parkMasked
+                    }
+                    if (result.stale) null else result.writes
                 },
                 clear = { writes -> clearLocateWrites(state, writes) },
             )
-            call.respond(ToggleLocateResponse(outcome.active, outcome.writeCount, effectsRemoved))
+            call.respond(
+                ToggleLocateResponse(outcome.active, outcome.writeCount, effectsRemoved, parkMasked)
+            )
         }
     }
 }
@@ -76,6 +82,10 @@ internal fun Route.routeApiRestLocate(state: State) {
 private data class LocateApplyResult(
     val writes: List<LocateManager.LocateWrite>,
     val effectsRemoved: Int,
+    /** The target no longer resolves — [LocateManager] should drop its bookkeeping entry. */
+    val stale: Boolean = false,
+    /** Every property locate would have written is parked, so the toggle did nothing. */
+    val parkMasked: Boolean = false,
 )
 
 /**
@@ -85,9 +95,19 @@ private data class LocateApplyResult(
  * so a single group-level property write would be wrong.
  *
  * Never throws ([LocateManager.toggle] holds its lock across this): a target that goes
- * stale mid-flight resolves to zero writes, effect removal only happens once the target is
- * known to produce at least one write (a zero-write locate must not destroy effects), and
- * a failed publish still returns the bookkeeping rows for whatever may have landed.
+ * stale mid-flight reports itself stale (and asserts nothing), effect removal only happens
+ * once the target is known to produce at least one write (a zero-write locate must not
+ * destroy effects), and a failed publish still returns the bookkeeping rows for whatever may
+ * have landed.
+ *
+ * Assignments that a Layer-4 publish would skip are dropped before anything else happens —
+ * [FxEngine.layer4Publishability] answers with the publish's own guards, so this filter can't
+ * disagree with what the write then does. Two reasons it says no: the property has no
+ * DMX-backed channels, or park masks every channel it has. Either way the write would achieve
+ * nothing, and letting it through would have "locate wins" destroy the effects covering it in
+ * exchange. A target whose every property is unpublishable therefore resolves to zero writes
+ * and reports itself inactive, leaving the rig exactly as it was; [LocateApplyResult.parkMasked]
+ * distinguishes "everything is parked" from "nothing to write" for the response.
  */
 private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
     val engine = state.show.fxEngine
@@ -97,11 +117,22 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
             is TargetRef.Group -> state.show.fixtures.untypedGroup(target.key).fixtures
         }
     } catch (_: IllegalStateException) {
-        return LocateApplyResult(emptyList(), 0)
+        return LocateApplyResult(emptyList(), 0, stale = true)
     }
 
-    val assignments = fixtures.flatMap { LocateValueResolver.resolve(it) }
-    if (assignments.isEmpty()) return LocateApplyResult(emptyList(), 0)
+    val (assignments, unpublishable) = fixtures
+        .flatMap { LocateValueResolver.resolve(it) }
+        .partition {
+            engine.layer4Publishability(it.target, it.propertyName) ==
+                FxEngine.Layer4Publishability.PUBLISHABLE
+        }
+    if (assignments.isEmpty()) {
+        val parkMasked = unpublishable.any {
+            engine.layer4Publishability(it.target, it.propertyName) ==
+                FxEngine.Layer4Publishability.PARK_MASKED
+        }
+        return LocateApplyResult(emptyList(), 0, parkMasked = parkMasked)
+    }
 
     // "Locate wins": remove every effect painting a key this locate writes to. An element's
     // parent key is included because a parent-scoped effect repaints element channels.
@@ -171,4 +202,11 @@ internal data class ToggleLocateResponse(
     val active: Boolean,
     val writeCount: Int,
     val effectsRemoved: Int,
+    /**
+     * True when the toggle came back inactive *because* park masks every property locate
+     * would have written. Without it `active = false, writeCount = 0` is indistinguishable
+     * from "this target has no DMX-backed properties", and an operator staring at a fixture
+     * that refuses to light has no way to tell that it is merely parked.
+     */
+    val parkMasked: Boolean = false,
 )

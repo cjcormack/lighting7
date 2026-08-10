@@ -1200,13 +1200,20 @@ class FxEngine(
      * fixture would survive them — and [publishLayer4ForKeys] skips effect-covered keys, so
      * the surviving effect would silently repaint over the locate on the next tick.
      *
+     * Effects that park masks entirely are spared ([parkMasksEffectEntirely]). Matching is by
+     * fixture key rather than by (fixture, property) — deliberately, because a caller's write
+     * can share a DMX channel with a differently-named property (dimmer/shutter on one
+     * channel) — but a park-masked effect is invisible on every channel it paints, so nothing
+     * that overwrites it needs it gone.
+     *
      * @return Number of effects removed
      */
     fun removeEffectsCoveringFixtures(fixtureKeys: Set<String>): Int {
         if (fixtureKeys.isEmpty()) return 0
         val toRemove = activeEffects.values.filter { effect ->
-            effect.target.targetKey in fixtureKeys ||
+            val covered = effect.target.targetKey in fixtureKeys ||
                 resolveEffectFixtureKeys(effect).any { it in fixtureKeys }
+            covered && !parkMasksEffectEntirely(effect)
         }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
@@ -1684,6 +1691,74 @@ class FxEngine(
     ): Boolean {
         val pm = parkManager ?: return false
         return target.isPropertyFullyParked(fixture, pm)
+    }
+
+    /** Whether a Layer-4 write of one property would reach the wire, and if not, why. */
+    enum class Layer4Publishability {
+        /** The property resolves to channels and at least one of them is unparked. */
+        PUBLISHABLE,
+
+        /** Every channel backing the property is parked — park wins at transmit. */
+        PARK_MASKED,
+
+        /** The property has no DMX-backed channels on this fixture; a write is a no-op. */
+        UNRESOLVED,
+    }
+
+    /**
+     * Would a Layer-4 write of [propertyName] on [fixture] actually reach the wire?
+     *
+     * This is the public, resolved-by-name form of the two guards [publishLayer4ForKeys]
+     * applies per key — [inferTargetForProperty] returning null, and [allChannelsParked] —
+     * *in that order and via the same helpers*, so a caller that pre-filters on this can never
+     * disagree with what the publish then does. Resolving park through
+     * [FxTarget.isPropertyFullyParked] rather than enumerating channels directly matters:
+     * [ColourTarget] scopes its extended white/amber/UV channels by `bundleWithColour`, which
+     * is not the same set [PropertyChannelWriter.channelsFor] enumerates by trait.
+     *
+     * Locate is the caller: it must know *before* "locate wins" removes the effects covering a
+     * property whether writing that property can achieve anything, because removal is
+     * destructive and a write that publish would skip buys nothing in exchange.
+     */
+    fun layer4Publishability(
+        fixture: uk.me.cormack.lighting7.fixture.GroupableFixture,
+        propertyName: String,
+    ): Layer4Publishability {
+        val key = Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)
+        val target = inferTargetForProperty(fixture, key) ?: return Layer4Publishability.UNRESOLVED
+        if (PropertyChannelWriter.channelsFor(fixture, propertyName).isEmpty()) {
+            // A property whose descriptor exists but is not DMX-backed (e.g. `position` on a
+            // Hue-backed head): `writeLayer4Properties` resolves zero channels for it.
+            return Layer4Publishability.UNRESOLVED
+        }
+        return if (allChannelsParked(target, fixture)) {
+            Layer4Publishability.PARK_MASKED
+        } else {
+            Layer4Publishability.PUBLISHABLE
+        }
+    }
+
+    /**
+     * Is [effect] wholly masked by park — every fixture it paints has its target property
+     * fully parked?
+     *
+     * Such an effect cannot reach the wire, so removing it is pure loss: the operator gets no
+     * visible change in exchange for an effect they have to rebuild. Anything we cannot
+     * resolve (missing fixture, unresolvable property, an effect whose fixture set comes back
+     * empty) counts as *not* masked, so the coarse remove-it behaviour stays the default.
+     */
+    private fun parkMasksEffectEntirely(effect: FxInstance): Boolean {
+        if (parkManager == null) return false
+        val fixtureKeys = resolveEffectFixtureKeys(effect)
+        if (fixtureKeys.isEmpty()) return false
+        return fixtureKeys.all { fixtureKey ->
+            val fixture = try {
+                fixtures.untypedGroupableFixture(fixtureKey)
+            } catch (_: Exception) {
+                return false
+            }
+            layer4Publishability(fixture, effect.target.propertyName) == Layer4Publishability.PARK_MASKED
+        }
     }
 
     /**
