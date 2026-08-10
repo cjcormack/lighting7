@@ -188,42 +188,88 @@ object PropertyChannelWriter {
     }
 
     /** Reflection result — the backing value and its declared category. */
-    private data class ResolvedProperty(val value: Any, val category: PropertyCategory)
+    internal data class ResolvedProperty(val value: Any, val category: PropertyCategory)
+
+    /** One catalogued element property: the reflection accessor plus its declared category. */
+    private data class ElementProperty(val classProperty: KProperty1<Any, *>, val category: PropertyCategory)
+
+    /**
+     * Per-element-class catalogue of `@FixtureProperty` members, built once per class.
+     * Elements have no equivalent of the precomputed [Fixture.fixtureProperties], and the
+     * FX tick resolves element properties every frame — a `memberProperties` scan per call
+     * would allocate on the hot path ([FxTarget.isPropertyFullyParked] forbids that).
+     */
+    private val elementCatalogues =
+        java.util.concurrent.ConcurrentHashMap<kotlin.reflect.KClass<*>, Map<String, ElementProperty>>()
+
+    private fun elementCatalogue(element: FixtureElement<*>): Map<String, ElementProperty> =
+        elementCatalogues.getOrPut(element::class) {
+            element::class.memberProperties.mapNotNull { prop ->
+                val ann = prop.annotations.filterIsInstance<FixtureProperty>().firstOrNull()
+                    ?: return@mapNotNull null
+                @Suppress("UNCHECKED_CAST")
+                prop.name to ElementProperty(prop as KProperty1<Any, *>, ann.category)
+            }.toMap()
+        }
 
     /**
      * Look up a property by name on [fixture], returning its current backing value and its
      * [PropertyCategory]. Handles both [Fixture] (via the pre-built [Fixture.fixtureProperties]
-     * catalogue) and [FixtureElement] (ad-hoc reflection on the element class's
-     * `@FixtureProperty`-annotated members). Returns null if the property is absent or its
-     * backing value is null / reflection fails.
+     * catalogue) and [FixtureElement] (via the per-class [elementCatalogue]). Returns null if
+     * the property is absent or its backing value is null / reflection fails.
+     *
+     * Internal because it is the one place that resolves a property name on *either* shape of
+     * [GroupableFixture] — [FxTarget] getters, [FxEngine.inferTargetForProperty] and
+     * [LocateValueResolver] reuse it rather than duplicating the element reflection.
      */
-    private fun resolveProperty(fixture: GroupableFixture, propertyName: String): ResolvedProperty? {
+    internal fun resolveProperty(fixture: GroupableFixture, propertyName: String): ResolvedProperty? {
         return when (fixture) {
             is Fixture -> {
                 val property = fixture.fixtureProperty(propertyName) ?: return null
-                val raw = try {
-                    property.classProperty.call(fixture)
-                } catch (e: Exception) {
-                    logger.warn("Failed to read property '{}' on '{}': {}", propertyName, fixture.key, e.message)
-                    null
-                } ?: return null
+                val raw = readProperty(property.classProperty, fixture, propertyName, fixture.key) ?: return null
                 ResolvedProperty(raw, property.category)
             }
             is FixtureElement<*> -> {
-                val entry = fixture::class.memberProperties
-                    .firstOrNull { it.name == propertyName && it.annotations.any { ann -> ann is FixtureProperty } }
-                    ?: return null
-                val ann = entry.annotations.filterIsInstance<FixtureProperty>().first()
-                val raw = try {
-                    @Suppress("UNCHECKED_CAST")
-                    (entry as KProperty1<Any, *>).call(fixture)
-                } catch (e: Exception) {
-                    logger.warn("Failed to read property '{}' on element '{}': {}", propertyName, fixture.elementKey, e.message)
-                    null
-                } ?: return null
-                ResolvedProperty(raw, ann.category)
+                val entry = elementCatalogue(fixture)[propertyName] ?: return null
+                val raw = readProperty(entry.classProperty, fixture, propertyName, fixture.elementKey) ?: return null
+                ResolvedProperty(raw, entry.category)
             }
             else -> null
         }
+    }
+
+    /** A named, resolved property — [resolveProperty]'s shape plus the property name. */
+    internal data class NamedProperty(val name: String, val category: PropertyCategory, val value: Any)
+
+    /**
+     * Enumerate every `@FixtureProperty` on [fixture] with its resolved backing value, in one
+     * pass — the enumeration counterpart of [resolveProperty], for callers (locate) that walk
+     * all properties rather than looking one up by name.
+     */
+    internal fun resolvedProperties(fixture: GroupableFixture): List<NamedProperty> = when (fixture) {
+        is Fixture -> fixture.fixtureProperties.mapNotNull { property ->
+            val raw = readProperty(property.classProperty, fixture, property.name, fixture.key)
+                ?: return@mapNotNull null
+            NamedProperty(property.name, property.category, raw)
+        }
+        is FixtureElement<*> -> elementCatalogue(fixture).mapNotNull { (name, entry) ->
+            val raw = readProperty(entry.classProperty, fixture, name, fixture.elementKey)
+                ?: return@mapNotNull null
+            NamedProperty(name, entry.category, raw)
+        }
+        else -> emptyList()
+    }
+
+    private fun readProperty(
+        classProperty: KProperty1<*, *>,
+        receiver: GroupableFixture,
+        propertyName: String,
+        ownerKey: String,
+    ): Any? = try {
+        @Suppress("UNCHECKED_CAST")
+        (classProperty as KProperty1<Any, *>).call(receiver)
+    } catch (e: Exception) {
+        logger.warn("Failed to read property '{}' on '{}': {}", propertyName, ownerKey, e.message)
+        null
     }
 }

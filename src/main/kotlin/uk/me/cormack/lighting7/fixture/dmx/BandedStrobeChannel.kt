@@ -39,7 +39,7 @@ open class BandedStrobeChannel(
     channelNo: Int,
     private val strobeMin: UByte,
     private val strobeMax: UByte,
-    private val fullOnValue: UByte = 0u,
+    override val fullOnValue: UByte = 0u,
     max: UByte = 255u,
     private val zeroIntensityIsFullOn: Boolean = false,
 ) : DmxSlider(transaction, universe, channelNo, max = max), Strobe {

@@ -86,6 +86,7 @@ class Show(
         layerResolver = layerResolver,
         parkManager = parkManager,
     )
+    val locateManager = LocateManager()
     val cueStackManager = CueStackManager(fxEngine)
 
     /**

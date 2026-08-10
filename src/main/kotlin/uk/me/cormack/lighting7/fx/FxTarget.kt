@@ -233,10 +233,8 @@ data class SliderTarget(
             "white" -> (fixture as? WithWhite)?.white
             "amber" -> (fixture as? WithAmber)?.amber
             else -> {
-                // Look up arbitrary slider properties via fixture reflection
-                val f = fixture as? Fixture ?: return null
-                val prop = f.fixtureProperties.find { it.name == propertyName } ?: return null
-                prop.classProperty.call(f) as? Slider
+                // Look up arbitrary slider properties by name — fixtures and elements alike
+                PropertyChannelWriter.resolveProperty(fixture, propertyName)?.value as? Slider
             }
         }
     }
@@ -571,11 +569,8 @@ data class SettingTarget(
         return parkManager.isParked(setting.universe.universe, setting.channelNo)
     }
 
-    private fun getSetting(fixture: GroupableFixture): DmxFixtureSetting<*>? {
-        val f = fixture as? Fixture ?: return null
-        val prop = f.fixtureProperties.find { it.name == propertyName } ?: return null
-        return prop.classProperty.call(f) as? DmxFixtureSetting<*>
-    }
+    private fun getSetting(fixture: GroupableFixture): DmxFixtureSetting<*>? =
+        PropertyChannelWriter.resolveProperty(fixture, propertyName)?.value as? DmxFixtureSetting<*>
 
     companion object {
         /** Create a setting target for a group */

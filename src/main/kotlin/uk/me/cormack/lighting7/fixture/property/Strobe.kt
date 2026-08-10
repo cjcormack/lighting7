@@ -19,6 +19,16 @@ package uk.me.cormack.lighting7.fixture.property
  */
 interface Strobe {
     /**
+     * The channel value [fullOn] writes — the "shutter open, no strobe" level.
+     *
+     * Exposed so value-level consumers (locate, Layer-4 property writes) can assert
+     * "shutter open" without a transaction. Override whenever [fullOn] writes anything
+     * other than 0; a mismatch means locate opens the shutter to a different level than
+     * [fullOn] would.
+     */
+    val fullOnValue: UByte get() = 0u
+
+    /**
      * Set to full on mode (no strobing).
      * This typically sets the strobe channel to the "no strobe" value
      * while maintaining current dimmer/colour settings.

@@ -515,6 +515,66 @@ class FxEngine(
         channels
     }
 
+    /** One entry of a [writeLayer4Properties] batch. */
+    data class Layer4PropertyWrite(
+        val fixture: GroupableFixture,
+        val propertyName: String,
+        val value: Layer3Resolver.PropertyValue,
+    )
+
+    /**
+     * Batch counterpart of [writeLayer4Property]: resolve and store every write, then publish
+     * all affected keys under one [cueAssignmentsLock] acquisition and one controller
+     * transaction. A locate on a large group is hundreds of property writes — issuing them
+     * one-by-one would take the lock, rescan the active effects and commit a DMX transaction
+     * per property.
+     *
+     * Returns one channel-write list per input entry (empty where the property didn't
+     * resolve), in input order, so callers can record which entries actually landed.
+     */
+    fun writeLayer4Properties(
+        writes: List<Layer4PropertyWrite>,
+    ): List<List<PropertyChannelResolver.ChannelWrite>> {
+        val resolved = writes.map { PropertyChannelWriter.resolve(it.fixture, it.propertyName, it.value) }
+        val keys = HashSet<Layer3Resolver.Key>()
+        for ((index, channelWrites) in resolved.withIndex()) {
+            if (channelWrites.isEmpty()) continue
+            for (w in channelWrites) directWriteStore.put(w.universe.universe, w.channel, w.value)
+            keys += Layer3Resolver.Key.fixture(writes[index].fixture.targetKey, writes[index].propertyName)
+        }
+        if (keys.isNotEmpty()) {
+            synchronized(cueAssignmentsLock) {
+                publishLayer4ForKeys(keys)
+            }
+        }
+        return resolved
+    }
+
+    /**
+     * Batch counterpart of [clearLayer4Property]: clear every (fixture, property) pair's
+     * channels from the [DirectWriteStore], then cascade all affected keys back to Layer 3 /
+     * baseline under one lock acquisition and one controller transaction.
+     */
+    fun clearLayer4Properties(
+        clears: List<Pair<GroupableFixture, String>>,
+    ): List<PropertyChannelResolver.ChannelWrite> {
+        val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
+        val keys = HashSet<Layer3Resolver.Key>()
+        for ((fixture, propertyName) in clears) {
+            val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
+            if (channels.isEmpty()) continue
+            for (c in channels) directWriteStore.clear(c.universe.universe, c.channel)
+            keys += Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)
+            all += channels
+        }
+        if (keys.isNotEmpty()) {
+            synchronized(cueAssignmentsLock) {
+                publishLayer4ForKeys(keys)
+            }
+        }
+        return all
+    }
+
     /** Single-fixture write scaffold — resolve via [perFixture], `put` each, publish the key. */
     private inline fun applyLayer4Write(
         targetKey: String,
@@ -623,8 +683,10 @@ class FxEngine(
     /**
      * Infer the [FxTarget] kind for a Layer 4 publish from the backing DMX property type on
      * [fixture]. Mirrors the type-dispatch that [resolveTargetForLayer3Key] does from a
-     * [Layer3Resolver.PropertyValue], but walks the fixture's declared `@FixtureProperty`
-     * reflection instead — the clear path doesn't have a value in hand.
+     * [Layer3Resolver.PropertyValue], but resolves the backing value by name via
+     * [PropertyChannelWriter.resolveProperty] instead — the clear path doesn't have a value
+     * in hand. Handles [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement]s
+     * as well as whole fixtures.
      *
      * Returns null when the property can't be resolved; caller should skip that key.
      */
@@ -636,14 +698,8 @@ class FxEngine(
             if (fixture !is WithPosition) return null
             return PositionTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
         }
-        val f = fixture as? Fixture ?: return null
-        val property = f.fixtureProperty(key.propertyName) ?: return null
-        val raw = try {
-            property.classProperty.call(f)
-        } catch (_: Exception) {
-            return null
-        } ?: return null
-        return when (raw) {
+        val resolved = PropertyChannelWriter.resolveProperty(fixture, key.propertyName) ?: return null
+        return when (resolved.value) {
             is DmxColour -> ColourTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
             is DmxFixtureSetting<*> -> SettingTarget(key.targetKey, key.propertyName)
             is DmxSlider -> SliderTarget(key.targetKey, key.propertyName)
@@ -1123,6 +1179,34 @@ class FxEngine(
     fun removeEffectsForGroup(groupName: String): Int {
         val toRemove = activeEffects.values.filter {
             it.isGroupEffect && it.target.targetKey == groupName
+        }
+        toRemove.forEach { activeEffects.remove(it.id) }
+        if (toRemove.isNotEmpty()) {
+            rebuildSortedSnapshots()
+            resetUncoveredProperties(toRemove)
+            emitStateUpdate()
+        }
+        return toRemove.size
+    }
+
+    /**
+     * Remove every effect that paints any of [fixtureKeys] (fixture or element keys) —
+     * whether it targets one of them directly, targets a parent fixture that expands to
+     * them, or reaches them through *any* group membership. One snapshot rebuild and one
+     * state broadcast regardless of how many effects go.
+     *
+     * This is the "locate wins" primitive: [removeEffectsForFixture] / [removeEffectsForGroup]
+     * match only their own target key, so an effect on a *different* group containing the
+     * fixture would survive them — and [publishLayer4ForKeys] skips effect-covered keys, so
+     * the surviving effect would silently repaint over the locate on the next tick.
+     *
+     * @return Number of effects removed
+     */
+    fun removeEffectsCoveringFixtures(fixtureKeys: Set<String>): Int {
+        if (fixtureKeys.isEmpty()) return 0
+        val toRemove = activeEffects.values.filter { effect ->
+            effect.target.targetKey in fixtureKeys ||
+                resolveEffectFixtureKeys(effect).any { it in fixtureKeys }
         }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
