@@ -15,7 +15,8 @@ import uk.me.cormack.lighting7.fixture.GroupableFixture
  *
  * This object is the single read site for the cascade during a tick's effect-reset pass. Its
  * reads are allocation-free and lock-free: Layer 3 is a volatile [Map] reference swapped on
- * cue apply, and Layer 4 is a [ConcurrentHashMap] of `Long → UByte`.
+ * cue apply, and Layer 4 is a concurrent map of packed channel key to owner-stacked slot
+ * whose top value is read without allocating (see [DirectWriteStore]).
  *
  * Layer 1 (parking) is handled separately — the caller should consult [ParkManager.isParked]
  * *before* calling [fallbackFor] and skip the property entirely for parked channels.

@@ -457,48 +457,56 @@ class FxEngine(
 
     // --- Layer 4 property writes ---
     //
-    // Sticky direct writes at property-value granularity. Callers (preset toggle, future REST
-    // property endpoints) hand a typed `PropertyValue`; the writer resolves it to channel
-    // writes, sits them in `DirectWriteStore`, and publishes via `LayerResolver.fallbackFor`
+    // Sticky direct writes at property-value granularity. Callers (preset toggle, locate,
+    // future REST property endpoints) hand a typed `PropertyValue` plus their
+    // `DirectWriteOwner`; the writer resolves it to channel writes, sits them in
+    // `DirectWriteStore` under that owner, and publishes via `LayerResolver.fallbackFor`
     // — so Layer 3 (cues) correctly overrides Layer 4 and running effects keep painting.
+    // Clears remove only the caller's own entries; channels fall back to the most recent
+    // surviving owner before cascading to Layer 3 / baseline.
 
     /**
-     * Lay a [value] onto Layer 4 for [propertyName] of [fixture] and publish immediately.
-     * Returns the resolved channel writes so callers can record them for later clearing.
+     * Lay a [value] onto Layer 4 for [propertyName] of [fixture] as [owner] and publish
+     * immediately. Returns the resolved channel writes so callers can record them for later
+     * clearing.
      *
      * Accepts any [GroupableFixture] — a [Fixture] or a [FixtureElement]. For elements the
      * Layer 3 publish key is the element's own key so subsequent reads see the write.
      */
     fun writeLayer4Property(
+        owner: DirectWriteOwner,
         fixture: GroupableFixture,
         propertyName: String,
         value: Layer3Resolver.PropertyValue,
-    ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4Write(fixture.targetKey, propertyName) {
+    ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4Write(owner, fixture.targetKey, propertyName) {
         PropertyChannelWriter.resolve(fixture, propertyName, value)
     }
 
     /** Group overload — fan out to every member (including sub-groups). */
     fun writeLayer4GroupProperty(
+        owner: DirectWriteOwner,
         group: FixtureGroup<*>,
         propertyName: String,
         value: Layer3Resolver.PropertyValue,
     ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4GroupOperation(group, propertyName) { f ->
         val writes = PropertyChannelWriter.resolve(f, propertyName, value)
-        for (w in writes) directWriteStore.put(w.universe.universe, w.channel, w.value)
+        for (w in writes) directWriteStore.put(owner, w.universe.universe, w.channel, w.value)
         writes
     }
 
     /**
-     * Clear Layer 4 writes for [propertyName] on [fixture]. Channels cascade back to Layer 3
-     * (if a cue still asserts them) or Layer 5 baseline. Accepts any [GroupableFixture].
+     * Clear [owner]'s Layer 4 writes for [propertyName] on [fixture]. Channels cascade back
+     * to the most recent surviving Layer 4 owner, Layer 3 (if a cue still asserts them), or
+     * Layer 5 baseline. Accepts any [GroupableFixture].
      */
     fun clearLayer4Property(
+        owner: DirectWriteOwner,
         fixture: GroupableFixture,
         propertyName: String,
     ): List<PropertyChannelResolver.ChannelWrite> {
         val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
         if (channels.isEmpty()) return channels
-        for (c in channels) directWriteStore.clear(c.universe.universe, c.channel)
+        for (c in channels) directWriteStore.clear(owner, c.universe.universe, c.channel)
         synchronized(cueAssignmentsLock) {
             publishLayer4ForKeys(setOf(Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)))
         }
@@ -507,11 +515,12 @@ class FxEngine(
 
     /** Group overload for [clearLayer4Property]. */
     fun clearLayer4GroupProperty(
+        owner: DirectWriteOwner,
         group: FixtureGroup<*>,
         propertyName: String,
     ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4GroupOperation(group, propertyName) { f ->
         val channels = PropertyChannelWriter.channelsFor(f, propertyName)
-        for (c in channels) directWriteStore.clear(c.universe.universe, c.channel)
+        for (c in channels) directWriteStore.clear(owner, c.universe.universe, c.channel)
         channels
     }
 
@@ -533,13 +542,14 @@ class FxEngine(
      * resolve), in input order, so callers can record which entries actually landed.
      */
     fun writeLayer4Properties(
+        owner: DirectWriteOwner,
         writes: List<Layer4PropertyWrite>,
     ): List<List<PropertyChannelResolver.ChannelWrite>> {
         val resolved = writes.map { PropertyChannelWriter.resolve(it.fixture, it.propertyName, it.value) }
         val keys = HashSet<Layer3Resolver.Key>()
         for ((index, channelWrites) in resolved.withIndex()) {
             if (channelWrites.isEmpty()) continue
-            for (w in channelWrites) directWriteStore.put(w.universe.universe, w.channel, w.value)
+            for (w in channelWrites) directWriteStore.put(owner, w.universe.universe, w.channel, w.value)
             keys += Layer3Resolver.Key.fixture(writes[index].fixture.targetKey, writes[index].propertyName)
         }
         if (keys.isNotEmpty()) {
@@ -551,11 +561,13 @@ class FxEngine(
     }
 
     /**
-     * Batch counterpart of [clearLayer4Property]: clear every (fixture, property) pair's
-     * channels from the [DirectWriteStore], then cascade all affected keys back to Layer 3 /
-     * baseline under one lock acquisition and one controller transaction.
+     * Batch counterpart of [clearLayer4Property]: clear [owner]'s entries for every
+     * (fixture, property) pair's channels from the [DirectWriteStore], then cascade all
+     * affected keys back to the surviving Layer 4 owner / Layer 3 / baseline under one lock
+     * acquisition and one controller transaction.
      */
     fun clearLayer4Properties(
+        owner: DirectWriteOwner,
         clears: List<Pair<GroupableFixture, String>>,
     ): List<PropertyChannelResolver.ChannelWrite> {
         val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
@@ -563,7 +575,7 @@ class FxEngine(
         for ((fixture, propertyName) in clears) {
             val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
             if (channels.isEmpty()) continue
-            for (c in channels) directWriteStore.clear(c.universe.universe, c.channel)
+            for (c in channels) directWriteStore.clear(owner, c.universe.universe, c.channel)
             keys += Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)
             all += channels
         }
@@ -577,13 +589,14 @@ class FxEngine(
 
     /** Single-fixture write scaffold — resolve via [perFixture], `put` each, publish the key. */
     private inline fun applyLayer4Write(
+        owner: DirectWriteOwner,
         targetKey: String,
         propertyName: String,
         perFixture: () -> List<PropertyChannelResolver.ChannelWrite>,
     ): List<PropertyChannelResolver.ChannelWrite> {
         val writes = perFixture()
         if (writes.isEmpty()) return writes
-        for (w in writes) directWriteStore.put(w.universe.universe, w.channel, w.value)
+        for (w in writes) directWriteStore.put(owner, w.universe.universe, w.channel, w.value)
         synchronized(cueAssignmentsLock) {
             publishLayer4ForKeys(setOf(Layer3Resolver.Key.fixture(targetKey, propertyName)))
         }

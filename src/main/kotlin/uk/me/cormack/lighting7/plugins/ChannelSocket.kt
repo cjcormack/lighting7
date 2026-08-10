@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fx.DirectWriteOwner
 import uk.me.cormack.lighting7.state.State
 
 // ─── Inbound ────────────────────────────────────────────────────────────
@@ -98,7 +99,7 @@ suspend fun handleChannel(scope: SocketScope, message: ChannelInMessage) {
         is UpdateChannelInMessage -> {
             val controller = state.show.fixtures.controller(Universe(0, message.universe))
             controller.setValue(message.id, message.level, message.fadeTime)
-            state.show.directWriteStore.put(message.universe, message.id, message.level)
+            state.show.directWriteStore.put(DirectWriteOwner.BUSKING, message.universe, message.id, message.level)
         }
         is UniversesStateInMessage -> {
             scope.send(UniversesStateOutMessage(buildUniverseList(state)))

@@ -562,21 +562,30 @@ internal fun swapPresetPreviewSlot(
  * propertyAssignments) collapses to a clear. See [swapPresetPreviewSlot] for the
  * concurrency + idempotency contract.
  */
+/**
+ * Synthetic negative preset id for a project's preview slot. Deterministic per project so
+ * the install and clear paths (and successive preview pushes) always resolve the same
+ * [DirectWriteOwner], and negative so it can never collide with a real preset's id.
+ */
+private fun previewPresetId(projectKey: String): Int =
+    -((projectKey.hashCode() and Int.MAX_VALUE).coerceAtLeast(1))
+
 internal fun applyPresetPreview(
     state: State,
     projectKey: String,
     request: PresetPreviewRequest,
 ): PresetPreviewResponse {
+    // Synthetic preset id keeps log lines and the Layer-4 owner distinct from real toggles.
+    val syntheticPresetId = previewPresetId(projectKey)
+    val previewOwner = DirectWriteOwner.preset(syntheticPresetId)
     val writes = swapPresetPreviewSlot(
         projectKey,
         request,
-        clear = { clearPresetToggleWrite(state, it) },
+        clear = { clearPresetToggleWrite(state, previewOwner, it) },
         install = {
             if (request.targets.isEmpty() || request.propertyAssignments.isEmpty()) {
                 emptyList()
             } else {
-                // Synthetic preset id keeps log lines distinct from real toggles.
-                val syntheticPresetId = -((projectKey.hashCode() and Int.MAX_VALUE).coerceAtLeast(1))
                 applyPresetLayer4Writes(
                     state,
                     presetId = syntheticPresetId,
@@ -593,7 +602,8 @@ internal fun applyPresetPreview(
 /** Clear the project's active preview, if any. */
 internal fun clearPresetPreview(state: State, projectKey: String) {
     val cleared = presetPreviewStates.remove(projectKey) ?: return
-    cleared.writes.forEach { clearPresetToggleWrite(state, it) }
+    val owner = DirectWriteOwner.preset(previewPresetId(projectKey))
+    cleared.writes.forEach { clearPresetToggleWrite(state, owner, it) }
 }
 
 /**
@@ -616,6 +626,7 @@ internal fun togglePresetOnTargets(
     presetPalette: List<ExtendedColour> = emptyList(),
 ): TogglePresetResponse {
     val engine = state.show.fxEngine
+    val owner = DirectWriteOwner.preset(presetId)
     lateinit var response: TogglePresetResponse
 
     presetToggleStates.compute(presetId) { _, existing ->
@@ -640,7 +651,7 @@ internal fun togglePresetOnTargets(
                     if (engine.removeEffect(fx.id)) removedCount++
                 }
             }
-            existing?.forEach { clearPresetToggleWrite(state, it) }
+            existing?.forEach { clearPresetToggleWrite(state, owner, it) }
             response = TogglePresetResponse(action = "removed", effectCount = removedCount)
             null
         } else {
@@ -648,7 +659,7 @@ internal fun togglePresetOnTargets(
             for (effectsOnTarget in presetEffectsByTarget) {
                 effectsOnTarget.forEach { engine.removeEffect(it.id) }
             }
-            existing?.forEach { clearPresetToggleWrite(state, it) }
+            existing?.forEach { clearPresetToggleWrite(state, owner, it) }
 
             val writes = applyPresetLayer4Writes(state, presetId, presetPropertyAssignments, targets, presetPalette)
 
@@ -686,6 +697,7 @@ private fun applyPresetLayer4Writes(
 ): List<PresetToggleWrite> {
     if (presetPropertyAssignments.isEmpty()) return emptyList()
     val engine = state.show.fxEngine
+    val owner = DirectWriteOwner.preset(presetId)
 
     // Layer 4 writes don't belong to a cue — preset palette cascades straight to the global.
     val rows = buildLayer3AssignmentsForPreset(
@@ -705,7 +717,7 @@ private fun applyPresetLayer4Writes(
         } catch (_: IllegalStateException) {
             continue
         }
-        val resolved = engine.writeLayer4Property(fixture, row.propertyName, row.value)
+        val resolved = engine.writeLayer4Property(owner, fixture, row.propertyName, row.value)
         if (resolved.isNotEmpty()) {
             writes += PresetToggleWrite(row.targetKey, row.propertyName)
         }
@@ -713,14 +725,25 @@ private fun applyPresetLayer4Writes(
     return writes
 }
 
-/** Clear a single recorded Layer-4 assertion. Silently tolerates a stale record. */
-private fun clearPresetToggleWrite(state: State, write: PresetToggleWrite) {
+/**
+ * Clear a single recorded Layer-4 assertion made by the preset owning [owner]. Only that
+ * owner's entries are released — a busked level, locate, or another preset's write on the
+ * same channels survives.
+ *
+ * A stale record (rekeyed fixture, rebuilt group) can't be cleared per-channel because the
+ * property no longer resolves; it falls back to sweeping every entry the owner still holds.
+ * All of a preset's writes are released together, so the sweep can't take back a write that
+ * should stay — and without it the stranded entries would outlive the bookkeeping and
+ * resurface later as ghost values when an owner stacked above them clears.
+ */
+private fun clearPresetToggleWrite(state: State, owner: DirectWriteOwner, write: PresetToggleWrite) {
     val fixture = try {
         state.show.fixtures.untypedGroupableFixture(write.fixtureKey)
     } catch (_: IllegalStateException) {
+        state.show.directWriteStore.clearOwner(owner)
         return
     }
-    state.show.fxEngine.clearLayer4Property(fixture, write.propertyName)
+    state.show.fxEngine.clearLayer4Property(owner, fixture, write.propertyName)
 }
 
 /**

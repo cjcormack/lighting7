@@ -115,6 +115,42 @@ Layer 4 writes are **sticky** — they persist until explicitly released. Effect
 - `clearAssignment` is called for the target, or
 - A fresh `updateChannel` sets a new value for the channel.
 
+### Layer 4 ownership
+
+Layer 4 has several independent writers — manual busking (`updateChannel`, and the unpark
+hand-down which behaves identically), MIDI surface faders, surface flash buttons, FX preset
+toggles / editor previews, and Locate. Each write into the `DirectWriteStore` is tagged with
+a `DirectWriteOwner`, and every channel holds a small **recency-ordered stack** of per-owner
+entries rather than a single flat value:
+
+- **Put**: installs or refreshes the owner's entry and moves it to the top. The most recent
+  write wins on the wire regardless of which subsystem made it — busking over a located
+  fixture updates the output exactly as it did with the old flat map.
+- **Clear**: removes only the caller's own entry. If other owners still hold the channel, it
+  falls back to the **most recent surviving owner's value** (then Layer 3, then baseline).
+  Releasing a Locate no longer wipes a busked dimmer level; toggling a preset off no longer
+  destroys a locate or another preset's write on shared channels.
+- **Read** (`get`, on the 50 Hz effect-reset hot path) returns the top of the stack —
+  O(1) and allocation-free; a channel held by a single owner (the overwhelmingly common
+  case) stores one entry, not a stack.
+
+Precedence is **recency**, not a fixed owner hierarchy: whichever subsystem wrote last is
+what the operator sees, matching console intuition (the thing you just touched is the thing
+that changed). Ownership only matters on *release*, where it guarantees you can only take
+back your own contribution.
+
+Owners: `busking` (web `updateChannel` + unpark hand-down), `surface` (MIDI faders),
+`flash` (flash press/release — separate from `surface` so releasing a flash restores the
+fader or busked level underneath), `preset:{id}` (one per preset, previews use a synthetic
+negative id), and `locate`.
+
+One deliberate exception: **all Locate targets share the single `locate` owner**, so
+locate-vs-locate overlap (releasing a group locate while a member is individually located)
+is *not* resolved by the store's fallback — same-owner writes overwrite each other.
+`LocateManager` keeps its own re-assert loop for that case, which also re-resolves locate
+values and drops stale targets on the way — semantics a stored-value fallback could not
+replicate.
+
 Interaction with cue-edit sessions: when a client holds an active `cueEdit` session, `updateChannel` is replaced by `cueEdit.setChannel`, which routes the write into the cue's Layer 3 property assignments rather than Layer 4. See [Cue edit sessions](#cue-edit-sessions) below.
 
 **Control surfaces write Layer 4** the same way the web UI does. A surface fader bound to `group.dimmer` routes through the same `DirectWriteStore` that `updateChannel` uses; during a cue-edit session it routes into Layer 3 via `cueEdit.*` just like the frontend. Surfaces are not a separate layer — they are another client of the existing routing. Flash buttons write an ephemeral Layer 4 entry on press and clear it on release. Blackout and Grand Master are applied at transmit time (alongside parking), not as composition layers. See [control-surface-plan.md](plans/completed/control-surface-plan.md).

@@ -16,8 +16,11 @@ import uk.me.cormack.lighting7.models.TargetRef
  * A plain lock (not per-key compute) because toggle-off must also *re-assert* other active
  * locates whose writes overlap the cleared ones — e.g. releasing a group locate while one of
  * its members is still individually located must leave that member in locate state, not
- * cascade it back to the show. Locates number in single digits, so cross-key work under one
- * lock is simple and plenty fast.
+ * cascade it back to the show. Every locate shares the single `DirectWriteOwner.LOCATE`
+ * owner in the `DirectWriteStore`, so the store's per-owner fallback cannot arbitrate
+ * between two locates — this re-assert loop is what does, and it additionally re-resolves
+ * values and drops stale targets, which a stored-value fallback could not. Locates number
+ * in single digits, so cross-key work under one lock is simple and plenty fast.
  */
 class LocateManager {
     /** One recorded Layer-4 assertion: which target key and property name were written. */

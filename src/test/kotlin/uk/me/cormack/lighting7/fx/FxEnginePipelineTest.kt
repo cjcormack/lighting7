@@ -176,7 +176,7 @@ class FxEnginePipelineTest {
     fun `Worked Example 2 — sticky direct write persists with ADDITIVE effect on top`() {
         val rig = newRig(firstChannel = 1)
         // Layer 4 sticky write: operator dragged dimmer to 180.
-        rig.directWriteStore.put(universe = 0, channel = 1, value = 180u)
+        rig.directWriteStore.put(DirectWriteOwner.BUSKING, universe = 0, channel = 1, value = 180u)
 
         // Additive effect range 0..30 so composition is deterministic: 180 + 30 = 210 whenever
         // StaticValue emits its constant.
@@ -194,7 +194,7 @@ class FxEnginePipelineTest {
     @Test
     fun `Worked Example 2 regression — effect reset falls through to Layer 4 not zero`() {
         val rig = newRig(firstChannel = 1)
-        rig.directWriteStore.put(universe = 0, channel = 1, value = 180u)
+        rig.directWriteStore.put(DirectWriteOwner.BUSKING, universe = 0, channel = 1, value = 180u)
 
         // First tick paints 180 + 30 = 210 (see above). Removing the effect should leave the
         // sticky 180 on the stage, NOT drop to zero — this is the pre-Phase-0 regression.
@@ -303,7 +303,7 @@ class FxEnginePipelineTest {
     fun `SineWave plus updateChannel at 180 — direct write remains visible as effect baseline`() {
         val rig = newRig(firstChannel = 1)
         // updateChannel equivalent: direct write onto Layer 4.
-        rig.directWriteStore.put(universe = 0, channel = 1, value = 180u)
+        rig.directWriteStore.put(DirectWriteOwner.BUSKING, universe = 0, channel = 1, value = 180u)
         // Immediately paint the sticky value onto the controller so any tick that runs
         // without a cue reset reads 180 as the fallback baseline (matches the real
         // updateChannel socket handler which writes through the controller).
@@ -466,7 +466,7 @@ class FxEnginePipelineTest {
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
         val red = ExtendedColour(Color(255, 0, 0), uv = 128u)
-        rig.engine.writeLayer4Property(hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+        rig.engine.writeLayer4Property(DirectWriteOwner.BUSKING, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
 
         // Hex R/G/B at channels 2/3/4, UV at channel 7.
         assertEquals(255u.toUByte(), rig.controller.currentValues[2], "red painted")
@@ -481,16 +481,16 @@ class FxEnginePipelineTest {
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
         val red = ExtendedColour(Color(255, 0, 0))
-        rig.engine.writeLayer4Property(hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+        rig.engine.writeLayer4Property(DirectWriteOwner.BUSKING, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
         assertEquals(255u.toUByte(), rig.controller.currentValues[2])
 
         // Simulate updateChannel on the green channel — controller write + directWriteStore put.
-        rig.directWriteStore.put(0, 3, 128u)
+        rig.directWriteStore.put(DirectWriteOwner.BUSKING, 0, 3, 128u)
         rig.controller.setValue(3, 128u, 0L)
         assertEquals(128u.toUByte(), rig.controller.currentValues[3], "manual channel write wins")
 
         // Writing the same colour again overwrites the green channel back to 0.
-        rig.engine.writeLayer4Property(hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+        rig.engine.writeLayer4Property(DirectWriteOwner.BUSKING, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
         assertEquals(0u.toUByte(), rig.controller.currentValues[3], "Layer 4 re-write stomps previous")
     }
 
@@ -500,6 +500,7 @@ class FxEnginePipelineTest {
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
         rig.engine.writeLayer4Property(
+            DirectWriteOwner.BUSKING,
             hex, "rgbColour",
             Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(255, 0, 0))),
         )
@@ -525,12 +526,13 @@ class FxEnginePipelineTest {
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
         rig.engine.writeLayer4Property(
+            DirectWriteOwner.BUSKING,
             hex, "rgbColour",
             Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(200, 100, 50), uv = 128u)),
         )
         assertEquals(200u.toUByte(), rig.controller.currentValues[2])
 
-        rig.engine.clearLayer4Property(hex, "rgbColour")
+        rig.engine.clearLayer4Property(DirectWriteOwner.BUSKING, hex, "rgbColour")
         assertEquals(0u.toUByte(), rig.controller.currentValues[2], "red cleared")
         assertEquals(0u.toUByte(), rig.controller.currentValues[3], "green cleared")
         assertEquals(0u.toUByte(), rig.controller.currentValues[4], "blue cleared")
@@ -548,11 +550,11 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
-        rig.engine.writeLayer4Property(hex, "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
+        rig.engine.writeLayer4Property(DirectWriteOwner.BUSKING, hex, "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
         assertEquals(180u.toUByte(), rig.directWriteStore.get(0, 1))
 
-        rig.engine.clearLayer4Property(hex, "dimmer")
+        rig.engine.clearLayer4Property(DirectWriteOwner.BUSKING, hex, "dimmer")
         assertEquals(0u.toUByte(), rig.controller.currentValues[1])
         assertNull(rig.directWriteStore.get(0, 1))
     }

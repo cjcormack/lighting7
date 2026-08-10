@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.CueStackManager
+import uk.me.cormack.lighting7.fx.DirectWriteOwner
 import uk.me.cormack.lighting7.fx.DirectWriteStore
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.CueEditSessionHandler
@@ -69,6 +70,7 @@ class DefaultSurfaceActions(
 
     private val fixtures: Fixtures get() = state.show.fixtures
     private val directWriteStore: DirectWriteStore get() = state.show.directWriteStore
+    private val fxEngine get() = state.show.fxEngine
     private val cueStackManager: CueStackManager get() = state.show.cueStackManager
     private val globalScalerState: GlobalScalerState get() = state.show.globalScalerState
 
@@ -84,7 +86,7 @@ class DefaultSurfaceActions(
             upsertCueAssignment(session, TargetRef.Fixture(fixtureKey), fixture, propertyName, midiValue7Bit)
             return
         }
-        val writes = directWriteStore.putProperty(fixture, propertyName, midiValue7Bit)
+        val writes = directWriteStore.putProperty(DirectWriteOwner.SURFACE, fixture, propertyName, midiValue7Bit)
         pushToControllers(writes)
     }
 
@@ -105,7 +107,7 @@ class DefaultSurfaceActions(
             upsertCueAssignment(session, TargetRef.Group(groupName), first, propertyName, midiValue7Bit)
             return
         }
-        val writes = directWriteStore.putGroupProperty(group, propertyName, midiValue7Bit)
+        val writes = directWriteStore.putGroupProperty(DirectWriteOwner.SURFACE, group, propertyName, midiValue7Bit)
         pushToControllers(writes)
     }
 
@@ -152,7 +154,7 @@ class DefaultSurfaceActions(
     override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {
         val fixture = fixtures.tryUntypedFixture(fixtureKey) ?: return
         val writes = buildFlashWrites(fixture, propertyName, max)
-        for (w in writes) directWriteStore.put(w.universe.universe, w.channel, w.value)
+        for (w in writes) directWriteStore.put(DirectWriteOwner.FLASH, w.universe.universe, w.channel, w.value)
         pushToControllers(writes)
     }
 
@@ -163,7 +165,7 @@ class DefaultSurfaceActions(
             if (member is Fixture) {
                 val memberWrites = buildFlashWrites(member, propertyName, max)
                 all += memberWrites
-                for (c in memberWrites) directWriteStore.put(c.universe.universe, c.channel, c.value)
+                for (c in memberWrites) directWriteStore.put(DirectWriteOwner.FLASH, c.universe.universe, c.channel, c.value)
             }
         }
         pushToControllers(all)
@@ -184,24 +186,16 @@ class DefaultSurfaceActions(
 
     override fun flashFixturePropertyRelease(fixtureKey: String, propertyName: String) {
         val fixture = fixtures.tryUntypedFixture(fixtureKey) ?: return
-        val cleared = directWriteStore.clearProperty(fixture, propertyName)
-        // Write zero through the controllers so the immediate output reverts; the composition
-        // resolver will take over on the next tick.
-        for (w in cleared) {
-            try {
-                fixtures.controller(w.universe).setValue(w.channel, 0u, 0)
-            } catch (_: Exception) { /* controller may have been removed */ }
-        }
+        // Release through the engine, not a raw controller write: clearLayer4Property
+        // publishes the full Layer 3 → surviving Layer 4 → baseline cascade in one
+        // transaction and skips keys a running effect covers. A raw write here forced
+        // cue-lit channels to 0 until the next cue change or effect tick repainted them.
+        fxEngine.clearLayer4Property(DirectWriteOwner.FLASH, fixture, propertyName)
     }
 
     override fun flashGroupPropertyRelease(groupName: String, propertyName: String) {
         val group = fixtures.tryUntypedGroup(groupName) ?: return
-        val cleared = directWriteStore.clearGroupProperty(group, propertyName)
-        for (w in cleared) {
-            try {
-                fixtures.controller(w.universe).setValue(w.channel, 0u, 0)
-            } catch (_: Exception) { /* best-effort */ }
-        }
+        fxEngine.clearLayer4GroupProperty(DirectWriteOwner.FLASH, group, propertyName)
     }
 
     @OptIn(DelicateCoroutinesApi::class)

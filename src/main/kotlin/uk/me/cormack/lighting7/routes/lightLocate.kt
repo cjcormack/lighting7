@@ -10,6 +10,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
+import uk.me.cormack.lighting7.fx.DirectWriteOwner
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.LocateValueResolver
 import uk.me.cormack.lighting7.models.TargetRef
@@ -72,6 +73,14 @@ internal fun Route.routeApiRestLocate(state: State) {
                 },
                 clear = { writes -> clearLocateWrites(state, writes) },
             )
+            // Stale-record backstop: a locate whose fixture was rekeyed mid-toggle skips its
+            // per-channel clear in [clearLocateWrites], stranding LOCATE entries that would
+            // later resurface as ghost values. Once nothing is located at all, no LOCATE
+            // entry is legitimate, so sweep the owner. (Single-operator toggles are serial;
+            // a concurrent toggle-on racing this sweep would merely need re-toggling.)
+            if (!outcome.active && state.show.locateManager.activeTargets.value.isEmpty()) {
+                state.show.directWriteStore.clearOwner(DirectWriteOwner.LOCATE)
+            }
             call.respond(
                 ToggleLocateResponse(outcome.active, outcome.writeCount, effectsRemoved, parkMasked)
             )
@@ -146,6 +155,7 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
 
     val writes = try {
         engine.writeLayer4Properties(
+            DirectWriteOwner.LOCATE,
             assignments.map { FxEngine.Layer4PropertyWrite(it.target, it.propertyName, it.value) },
         ).zip(assignments) { resolved, assignment ->
             if (resolved.isEmpty()) null
@@ -160,9 +170,10 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
 }
 
 /**
- * Release the recorded Layer-4 assertions in one batched publish. Never throws; stale
- * records (rekeyed fixture, rebuilt group) are silently skipped, matching the preset
- * toggle's release semantics.
+ * Release the recorded Layer-4 assertions in one batched publish. Only the [DirectWriteOwner.LOCATE]
+ * entries are cleared — a busked level or preset write on the same channels becomes visible
+ * again instead of being wiped. Never throws; stale records (rekeyed fixture, rebuilt group)
+ * are silently skipped, matching the preset toggle's release semantics.
  */
 private fun clearLocateWrites(state: State, writes: List<LocateManager.LocateWrite>) {
     val clears = writes.mapNotNull { write ->
@@ -175,7 +186,7 @@ private fun clearLocateWrites(state: State, writes: List<LocateManager.LocateWri
     }
     if (clears.isEmpty()) return
     try {
-        state.show.fxEngine.clearLayer4Properties(clears)
+        state.show.fxEngine.clearLayer4Properties(DirectWriteOwner.LOCATE, clears)
     } catch (_: Exception) {
         // Bookkeeping is already updated; a throw here would strand the manager mid-toggle.
         // Unpublished channels cascade on the next effect tick or Layer-3 republish.

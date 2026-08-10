@@ -82,7 +82,7 @@ class FxEnginePublishLayer3Test {
     fun `removeCueAssignments releases the channel back to direct-write value`() {
         val rig = newRig(firstChannel = 1)
         // Sticky direct write at Layer 4.
-        rig.directWriteStore.put(universe = 0, channel = 1, value = 55u)
+        rig.directWriteStore.put(DirectWriteOwner.BUSKING, universe = 0, channel = 1, value = 55u)
 
         rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 180u)))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
@@ -115,7 +115,7 @@ class FxEnginePublishLayer3Test {
     @Test
     fun `clearAllCueAssignments releases every previously-asserted channel`() {
         val rig = newRig(firstChannel = 1)
-        rig.directWriteStore.put(universe = 0, channel = 1, value = 30u)
+        rig.directWriteStore.put(DirectWriteOwner.BUSKING, universe = 0, channel = 1, value = 30u)
 
         rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 180u)))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
@@ -358,9 +358,9 @@ class FxEnginePublishLayer3Test {
     fun `colour release falls through to Layer 4 when direct writes exist`() {
         val rig = newRig(firstChannel = 1)
         // Layer 4 holds a dim red across the RGB channels.
-        rig.directWriteStore.put(0, 2, 40u)
-        rig.directWriteStore.put(0, 3, 10u)
-        rig.directWriteStore.put(0, 4, 10u)
+        rig.directWriteStore.put(DirectWriteOwner.BUSKING, 0, 2, 40u)
+        rig.directWriteStore.put(DirectWriteOwner.BUSKING, 0, 3, 10u)
+        rig.directWriteStore.put(DirectWriteOwner.BUSKING, 0, 4, 10u)
 
         val assignment = Layer3Resolver.Assignment(
             cueId = 10, priority = 1, fadeWeight = 1.0,

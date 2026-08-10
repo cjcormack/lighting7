@@ -62,7 +62,10 @@ class Show(
         // dependency here.
         unparkValueSink = { values ->
             for ((universe, channel, value) in values) {
-                directWriteStore.put(universe, channel, value)
+                // BUSKING because an unpark settles "exactly where a manual updateChannel
+                // would" — the handed-down value must be releasable/overwritable by the
+                // same owner the operator's own channel writes use.
+                directWriteStore.put(DirectWriteOwner.BUSKING, universe, channel, value)
                 val controller = fixtures.controllerOrNull(Universe(0, universe)) ?: continue
                 try {
                     // Preferred path: goes through the channel changer, so it also cancels any
