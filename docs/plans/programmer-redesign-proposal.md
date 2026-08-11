@@ -1,6 +1,11 @@
 # Programmer Redesign — Proposal
 
-**Status**: Proposal (2026-08-11). Not yet scheduled.
+**Status**: In progress — **Session 1 (backend programmer core) landed 2026-08-11**:
+`ProgrammerStore` + owner slots + touched flag + channel sideband, layer reorder with
+all-FX suppression (per the confirmed widening of §3.1's cue-FX rule to manual FX too, so
+"locate wins" survives non-destructively), programmer-FX priority band, blind gate, fades,
+provenance + `provenanceState` broadcast, all six writers migrated, `ChannelSocket` bypass
+deleted, `programmer.*` WS + REST clear-all, docs renumbered. Sessions 2–5 not yet started.
 **Scope**: lighting7 (backend) + lighting-react (frontend).
 **Supersedes-in-part**: the "no programmer buffer" decision in
 [composition-model-prior-art.md](../research/composition-model-prior-art.md)

@@ -365,7 +365,7 @@ case, not multi-master sync. Import:
 `sync/ProjectCloner.kt`: export the source to a temp dir → mint fresh UUIDs →
 import under the new name. There is deliberately no table-by-table clone
 walker. The previous hand-written one covered 5 of 21 project-owned tables, so
-clones silently lost their patch list, fixture groups, universes, Layer 3
+clones silently lost their patch list, fixture groups, universes, cue-layer
 assignments, cue triggers, cue slots, FX definitions, riggings, stage regions,
 parked channels, surface bindings and prompt book. Routing clone through
 export/import means a table is cloned the moment it's wired into the exporter

@@ -237,6 +237,58 @@ class SocketMessageWireFormatTest {
         assertIs<CueEditBeginEditInMessage>(decoded)
     }
 
+    // ─── Programmer domain ──────────────────────────────────────────────────
+
+    @Test
+    fun `programmer domain — set routes via ProgrammerInMessage`() {
+        val raw = """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200"}"""
+        val decoded = json.decodeFromString<InMessage>(raw)
+        assertIs<ProgrammerInMessage>(decoded)
+        val leaf = assertIs<ProgrammerSetInMessage>(decoded)
+        assertEquals("hex-1", leaf.targetKey)
+        assertEquals("200", leaf.value)
+        assertEquals(null, leaf.fadeMs, "fadeMs is optional and defaults to null")
+    }
+
+    @Test
+    fun `programmer domain — clearAll and setBlind parse with optional fadeMs`() {
+        val clearAll = json.decodeFromString<InMessage>("""{"type":"programmer.clearAll","fadeMs":500}""")
+        assertEquals(500L, assertIs<ProgrammerClearAllInMessage>(clearAll).fadeMs)
+
+        val blind = json.decodeFromString<InMessage>("""{"type":"programmer.setBlind","blind":true}""")
+        assertTrue(assertIs<ProgrammerSetBlindInMessage>(blind).blind)
+    }
+
+    @Test
+    fun `programmer domain — provenanceState round-trips with discriminator`() {
+        val out = ProvenanceStateOutMessage(
+            entries = listOf(
+                ProvenanceEntryDto("hex-1", "dimmer", source = "PROGRAMMER"),
+                ProvenanceEntryDto("hex-2", "rgbColour", source = "CUE", cueId = 42),
+            ),
+        )
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"provenanceState""""))
+        assertEquals(out, assertIs<ProvenanceStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
+    @Test
+    fun `programmer domain — state out message round-trips with discriminator`() {
+        val out = ProgrammerStateOutMessage(
+            blind = false,
+            entries = listOf(
+                ProgrammerEntryDto(
+                    targetKey = "hex-1", propertyName = "dimmer", value = "200",
+                    owner = "web", touched = true, sourceGroup = null, owners = listOf("web"),
+                ),
+            ),
+            channels = listOf(ProgrammerChannelDto(0, 7, 55u, "unpark", touched = false)),
+        )
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"programmer.state""""))
+        assertEquals(out, assertIs<ProgrammerStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
     // ─── Broadcast domain (out-only) ────────────────────────────────────────
 
     @Test

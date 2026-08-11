@@ -4,6 +4,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.ParkManager
+import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
@@ -46,16 +48,17 @@ class FxEngine(
     private val fixtures: Fixtures,
     val masterClock: MasterClock,
     /**
-     * Layer 4 sticky direct-write store. Read during effect reset so that manual `updateChannel`
-     * writes remain visible under running effects. Defaults to a fresh empty store for tests;
-     * the real show wires in the per-project store from [uk.me.cormack.lighting7.show.Show].
+     * PROGRAMMER-layer store: sticky manual property entries + the raw-channel sideband.
+     * Read during effect reset so that manual writes remain visible under running effects.
+     * Defaults to a fresh empty store for tests; the real show wires in the per-project
+     * store from [uk.me.cormack.lighting7.show.Show].
      */
-    val directWriteStore: DirectWriteStore = DirectWriteStore(),
+    val programmerStore: ProgrammerStore = ProgrammerStore(),
     /**
-     * Layer 3 composition resolver. Resolves per-cue property assignments to the composed
-     * value that sits below effects. Phase 0: always empty input. Phase 1 wires real data.
+     * Cue-layer composition resolver. Resolves per-cue property assignments to the composed
+     * value that sits below effects.
      */
-    val layerResolver: LayerResolver = LayerResolver(Layer3Resolver(), directWriteStore),
+    val layerResolver: LayerResolver = LayerResolver(Layer3Resolver(), programmerStore),
     /**
      * Layer 1 park query. If non-null, the engine skips effect reset / apply for channels
      * that are parked. The parked value is still re-applied at transmit time in
@@ -74,6 +77,39 @@ class FxEngine(
 
     @Volatile private var lastTickMs: Long = 0L
     @Volatile private var lastWallClockTickMs: Long = 0L
+
+    // Per-tick programmer suppression snapshot, cached on the store's epoch so the 50 Hz
+    // loops rebuild it only when the programmer actually changed. Both tick loops may race
+    // the rebuild; they compute identical values, so last-write-wins is benign.
+    @Volatile private var suppressionCache: Map<String, Set<String>> = emptyMap()
+    @Volatile private var suppressionCacheEpoch: Long = -1L
+
+    /**
+     * fixtureKey → property names with an active programmer entry, or empty when blind is
+     * engaged (blind removes the programmer from the merge, so effects paint normally).
+     * An entry here suppresses every effect on that (fixture, property) except effects in
+     * the programmer priority band — the "programmer wins over effects" rule.
+     */
+    private fun programmerSuppression(): Map<String, Set<String>> {
+        if (programmerStore.blind) return emptyMap()
+        val epoch = programmerStore.epoch
+        if (epoch != suppressionCacheEpoch) {
+            suppressionCache = programmerStore.activePropertiesByFixture()
+            suppressionCacheEpoch = epoch
+        }
+        return suppressionCache
+    }
+
+    private fun isSuppressed(
+        suppression: Map<String, Set<String>>,
+        fixtureKey: String,
+        propertyName: String,
+        effect: FxInstance,
+    ): Boolean {
+        if (suppression.isEmpty()) return false
+        if (isProgrammerFxPriority(effect.priority)) return false
+        return suppression[fixtureKey]?.contains(propertyName) == true
+    }
 
     private fun rebuildSortedSnapshots() {
         synchronized(effectSnapshotLock) {
@@ -108,12 +144,168 @@ class FxEngine(
     companion object {
         /** Wall-clock tick interval in milliseconds (50Hz) */
         const val WALL_CLOCK_INTERVAL_MS = 20L
+
+        /** Coalescing window for provenance recomputes — see [emitProvenanceUpdate]. */
+        const val PROVENANCE_COALESCE_MS = 50L
+
+        /**
+         * Reserved priority band for programmer-owned effects (Session 2's busking FX).
+         * Strictly above every cue-derived priority
+         * (`cueDerivedPriority(stackId, sort) = stackId*1M + sort*1K + 1` in
+         * `routes/projectCuesHelpers.kt`) and every manual effect (priority 0). Effects in
+         * this band are exempt from programmer suppression — they modulate *on top of*
+         * programmer values rather than being overridden by them.
+         */
+        const val PROGRAMMER_FX_PRIORITY_BASE = Int.MAX_VALUE - 1_000_000
+
+        /** True when [priority] sits in the programmer-owned effect band. */
+        fun isProgrammerFxPriority(priority: Int): Boolean = priority >= PROGRAMMER_FX_PRIORITY_BASE
     }
 
     private val _fxStateFlow = MutableSharedFlow<FxStateUpdate>(replay = 1, extraBufferCapacity = 1)
 
     /** Flow of FX state updates for WebSocket broadcasting */
     val fxStateFlow: SharedFlow<FxStateUpdate> = _fxStateFlow.asSharedFlow()
+
+    // --- Provenance ---
+
+    /** Which layer produced the current winning value for one (target, property). */
+    enum class ProvenanceSource { PARKED, PROGRAMMER, EFFECT, CUE }
+
+    /**
+     * The winning contributor for one (target, property) — the "who owns this value"
+     * answer. BASELINE keys are omitted from snapshots entirely (absence = baseline).
+     */
+    data class ProvenanceEntry(
+        val targetKey: String,
+        val propertyName: String,
+        val source: ProvenanceSource,
+        val cueId: Int? = null,
+        val cueStackId: Int? = null,
+        val effectId: Long? = null,
+    )
+
+    // Conflated: recomputed on layer events only (programmer mutation, cue republish,
+    // effect lifecycle, park change) — never per frame. Full-state snapshots rather than
+    // diffs: the entry set is small (the union of active keys) and event-rate, so diffing
+    // buys nothing over the conflation.
+    private val _provenanceFlow = MutableSharedFlow<List<ProvenanceEntry>>(
+        replay = 1,
+        extraBufferCapacity = 1,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
+    )
+
+    /** Flow of full provenance snapshots for WebSocket broadcasting. */
+    val provenanceFlow: SharedFlow<List<ProvenanceEntry>> = _provenanceFlow.asSharedFlow()
+
+    // Coalesces provenance recomputes: emitProvenanceUpdate is called from every
+    // layer-event site — including per-MIDI-CC programmer writes and per-crossfade-tick
+    // Layer 3 republishes that run while holding [cueAssignmentsLock] — so the marker must
+    // be near-free and the O(effects + keys) recompute must happen off the caller's
+    // thread, outside any lock. `dirty` is flipped false *before* computing so a mutation
+    // landing mid-compute schedules a fresh cycle.
+    private val provenanceDirty = java.util.concurrent.atomic.AtomicBoolean(false)
+    @Volatile private var provenanceScope: CoroutineScope? = null
+
+    /**
+     * Mark provenance stale and schedule a coalesced recompute + broadcast. Called from
+     * every layer-event site (programmer writes/clears/blind, Layer 3 republish, effect
+     * lifecycle changes via [emitStateUpdate]) and by the park handlers. Cheap enough to
+     * call while holding locks. Before [start] wires a scope (unit tests), the recompute
+     * runs synchronously so assertions stay deterministic.
+     */
+    fun emitProvenanceUpdate() {
+        val scope = provenanceScope
+        if (scope == null) {
+            _provenanceFlow.tryEmit(computeProvenance())
+            return
+        }
+        if (provenanceDirty.compareAndSet(false, true)) {
+            scope.launch(Dispatchers.Default) {
+                delay(PROVENANCE_COALESCE_MS)
+                provenanceDirty.set(false)
+                _provenanceFlow.tryEmit(computeProvenance())
+            }
+        }
+    }
+
+    /**
+     * Compute the winning contributor for every key any layer currently covers. Winner
+     * order mirrors the output stack: park → programmer (unless blind) → highest-priority
+     * running effect → cue layer. Keys nothing covers are omitted (baseline).
+     */
+    fun computeProvenance(): List<ProvenanceEntry> {
+        val programmerKeys = if (programmerStore.blind) {
+            emptySet()
+        } else {
+            val keys = HashSet(programmerStore.activeKeys())
+            // Sideband slots drive the wire too (raw pan/tilt drags, unpark hand-downs):
+            // attribute them to the property covering the channel. Channels with no
+            // backing property stay unreported — there is no (target, property) to name.
+            for (entry in programmerStore.channelEntries()) {
+                resolveChannelCoveringKey(entry.universe, entry.channel)?.let { keys.add(it) }
+            }
+            keys
+        }
+
+        // Highest-priority running effect per (fixtureKey, propertyName).
+        val effectByKey = HashMap<Pair<String, String>, FxInstance>()
+        for (effect in activeEffects.values) {
+            if (!effect.isRunning) continue
+            val propertyName = effect.target.propertyName
+            for (fixtureKey in resolveEffectFixtureKeys(effect)) {
+                val k = fixtureKey to propertyName
+                val current = effectByKey[k]
+                if (current == null || sortedEffectsComparator.compare(effect, current) > 0) {
+                    effectByKey[k] = effect
+                }
+            }
+        }
+
+        val layer3State = layerResolver.currentLayer3State
+        val layer3Winners = layerResolver.currentLayer3Winners
+
+        val keys = HashSet<Layer3Resolver.Key>(programmerKeys)
+        keys.addAll(layer3State.keys)
+        for ((pair, _) in effectByKey) {
+            keys.add(Layer3Resolver.Key.fixture(pair.first, pair.second))
+        }
+
+        val entries = ArrayList<ProvenanceEntry>(keys.size)
+        for (key in keys) {
+            val fixture = try {
+                fixtures.untypedGroupableFixture(key.targetKey)
+            } catch (_: Exception) {
+                continue
+            }
+            val target = inferTargetForProperty(fixture, key)
+
+            val parked = target != null && allChannelsParked(target, fixture)
+            val programmerActive = key in programmerKeys
+            val effect = effectByKey[key.targetKey to key.propertyName]
+            // A programmer entry suppresses non-band effects, so it outranks them here too;
+            // a band effect modulates on top of the programmer and wins the provenance.
+            val bandEffect = effect != null && isProgrammerFxPriority(effect.priority)
+
+            val entry = when {
+                parked -> ProvenanceEntry(key.targetKey, key.propertyName, ProvenanceSource.PARKED)
+                programmerActive && (effect == null || !bandEffect) ->
+                    ProvenanceEntry(key.targetKey, key.propertyName, ProvenanceSource.PROGRAMMER)
+                effect != null -> ProvenanceEntry(
+                    key.targetKey, key.propertyName, ProvenanceSource.EFFECT,
+                    cueId = effect.cueId, cueStackId = effect.cueStackId, effectId = effect.id,
+                )
+                key in layer3State -> ProvenanceEntry(
+                    key.targetKey, key.propertyName, ProvenanceSource.CUE,
+                    cueId = layer3Winners[key],
+                )
+                else -> continue
+            }
+            entries.add(entry)
+        }
+        entries.sortWith(compareBy({ it.targetKey }, { it.propertyName }))
+        return entries
+    }
 
     // --- Palette ---
 
@@ -455,191 +647,397 @@ class FxEngine(
         return changed
     }
 
-    // --- Layer 4 property writes ---
+    // --- Programmer property writes ---
     //
-    // Sticky direct writes at property-value granularity. Callers (preset toggle, locate,
-    // future REST property endpoints) hand a typed `PropertyValue` plus their
-    // `DirectWriteOwner`; the writer resolves it to channel writes, sits them in
-    // `DirectWriteStore` under that owner, and publishes via `LayerResolver.fallbackFor`
-    // — so Layer 3 (cues) correctly overrides Layer 4 and running effects keep painting.
-    // Clears remove only the caller's own entries; channels fall back to the most recent
-    // surviving owner before cascading to Layer 3 / baseline.
+    // Sticky manual values at property granularity. Callers (web busking, MIDI faders,
+    // flash, locate, preset toggles) hand a typed `PropertyValue` plus their
+    // `ProgrammerOwner`; the writer stores one property-level slot in `ProgrammerStore`
+    // under that owner and publishes via `LayerResolver.fallbackFor`. Clears remove only
+    // the caller's own slot; the property falls back to the most recent surviving owner
+    // before cascading to the layers below.
+    //
+    // `fadeMs` is accepted on every write/clear and threaded to the publish; half (a)
+    // ignores it (snap), half (b) drives the DmxController ramp for keys no running effect
+    // covers.
 
     /**
-     * Lay a [value] onto Layer 4 for [propertyName] of [fixture] as [owner] and publish
-     * immediately. Returns the resolved channel writes so callers can record them for later
-     * clearing.
+     * Lay a [value] onto the programmer for [propertyName] of [fixture] as [owner] and
+     * publish immediately. Returns the resolved channel writes so callers can record
+     * whether the write landed (empty = the property didn't resolve; nothing was stored).
+     *
+     * [absorbSideband] drops raw-channel sideband slots under the property's channels so a
+     * stale unpark or raw-channel value cannot resurface when this entry clears. Sticky
+     * operator writes (web, faders) absorb; momentary owners (flash, locate, presets) pass
+     * false so their release still reveals whatever the sideband held.
      *
      * Accepts any [GroupableFixture] — a [Fixture] or a [FixtureElement]. For elements the
-     * Layer 3 publish key is the element's own key so subsequent reads see the write.
+     * publish key is the element's own key so subsequent reads see the write.
      */
-    fun writeLayer4Property(
-        owner: DirectWriteOwner,
+    fun writeProgrammerProperty(
+        owner: ProgrammerOwner,
         fixture: GroupableFixture,
         propertyName: String,
         value: Layer3Resolver.PropertyValue,
-    ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4Write(owner, fixture.targetKey, propertyName) {
-        PropertyChannelWriter.resolve(fixture, propertyName, value)
+        touched: Boolean = true,
+        sourceGroup: String? = null,
+        absorbSideband: Boolean = true,
+        fadeMs: Long = 0,
+    ): List<PropertyChannelResolver.ChannelWrite> {
+        val writes = PropertyChannelWriter.resolve(fixture, propertyName, value)
+        if (writes.isEmpty()) return writes
+        programmerStore.put(owner, fixture.targetKey, propertyName, value, touched, sourceGroup)
+        if (absorbSideband) absorbSidebandUnder(writes)
+        synchronized(cueAssignmentsLock) {
+            publishCascadeForKeys(setOf(Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)), fadeMs)
+        }
+        emitProvenanceUpdate()
+        return writes
     }
 
-    /** Group overload — fan out to every member (including sub-groups). */
-    fun writeLayer4GroupProperty(
-        owner: DirectWriteOwner,
+    /** Group overload — fan out to every member, tagging slots with the group name (§7.1). */
+    fun writeProgrammerGroupProperty(
+        owner: ProgrammerOwner,
         group: FixtureGroup<*>,
         propertyName: String,
         value: Layer3Resolver.PropertyValue,
-    ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4GroupOperation(group, propertyName) { f ->
-        val writes = PropertyChannelWriter.resolve(f, propertyName, value)
-        for (w in writes) directWriteStore.put(owner, w.universe.universe, w.channel, w.value)
-        writes
-    }
+        touched: Boolean = true,
+        absorbSideband: Boolean = true,
+        fadeMs: Long = 0,
+    ): List<PropertyChannelResolver.ChannelWrite> = writeProgrammerProperties(
+        owner,
+        group.fixtures.filterIsInstance<Fixture>().map {
+            ProgrammerPropertyWrite(it, propertyName, value, sourceGroup = group.name)
+        },
+        touched = touched,
+        absorbSideband = absorbSideband,
+        fadeMs = fadeMs,
+    ).flatten()
 
     /**
-     * Clear [owner]'s Layer 4 writes for [propertyName] on [fixture]. Channels cascade back
-     * to the most recent surviving Layer 4 owner, Layer 3 (if a cue still asserts them), or
-     * Layer 5 baseline. Accepts any [GroupableFixture].
+     * Clear [owner]'s programmer entry for [propertyName] on [fixture]. The property
+     * cascades back to the most recent surviving owner, the cue layer (if a cue asserts
+     * it), or baseline. Accepts any [GroupableFixture].
      */
-    fun clearLayer4Property(
-        owner: DirectWriteOwner,
+    fun clearProgrammerProperty(
+        owner: ProgrammerOwner,
         fixture: GroupableFixture,
         propertyName: String,
+        fadeMs: Long = 0,
     ): List<PropertyChannelResolver.ChannelWrite> {
         val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
+        programmerStore.clear(owner, fixture.targetKey, propertyName)
         if (channels.isEmpty()) return channels
-        for (c in channels) directWriteStore.clear(owner, c.universe.universe, c.channel)
         synchronized(cueAssignmentsLock) {
-            publishLayer4ForKeys(setOf(Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)))
+            publishCascadeForKeys(setOf(Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)), fadeMs)
         }
+        emitProvenanceUpdate()
         return channels
     }
 
-    /** Group overload for [clearLayer4Property]. */
-    fun clearLayer4GroupProperty(
-        owner: DirectWriteOwner,
+    /** Group overload for [clearProgrammerProperty]. */
+    fun clearProgrammerGroupProperty(
+        owner: ProgrammerOwner,
         group: FixtureGroup<*>,
         propertyName: String,
-    ): List<PropertyChannelResolver.ChannelWrite> = applyLayer4GroupOperation(group, propertyName) { f ->
-        val channels = PropertyChannelWriter.channelsFor(f, propertyName)
-        for (c in channels) directWriteStore.clear(owner, c.universe.universe, c.channel)
-        channels
-    }
+        fadeMs: Long = 0,
+    ): List<PropertyChannelResolver.ChannelWrite> = clearProgrammerProperties(
+        owner,
+        group.fixtures.filterIsInstance<Fixture>().map { it to propertyName },
+        fadeMs = fadeMs,
+    )
 
-    /** One entry of a [writeLayer4Properties] batch. */
-    data class Layer4PropertyWrite(
+    /** One entry of a [writeProgrammerProperties] batch. */
+    data class ProgrammerPropertyWrite(
         val fixture: GroupableFixture,
         val propertyName: String,
         val value: Layer3Resolver.PropertyValue,
+        /** Group name when this entry came from a group control, else null (§7.1). */
+        val sourceGroup: String? = null,
     )
 
     /**
-     * Batch counterpart of [writeLayer4Property]: resolve and store every write, then publish
-     * all affected keys under one [cueAssignmentsLock] acquisition and one controller
+     * Batch counterpart of [writeProgrammerProperty]: store every entry, then publish all
+     * affected keys under one [cueAssignmentsLock] acquisition and one controller
      * transaction. A locate on a large group is hundreds of property writes — issuing them
      * one-by-one would take the lock, rescan the active effects and commit a DMX transaction
      * per property.
      *
      * Returns one channel-write list per input entry (empty where the property didn't
-     * resolve), in input order, so callers can record which entries actually landed.
+     * resolve — nothing stored for that entry), in input order, so callers can record which
+     * entries actually landed.
      */
-    fun writeLayer4Properties(
-        owner: DirectWriteOwner,
-        writes: List<Layer4PropertyWrite>,
+    fun writeProgrammerProperties(
+        owner: ProgrammerOwner,
+        writes: List<ProgrammerPropertyWrite>,
+        touched: Boolean = true,
+        absorbSideband: Boolean = true,
+        fadeMs: Long = 0,
     ): List<List<PropertyChannelResolver.ChannelWrite>> {
         val resolved = writes.map { PropertyChannelWriter.resolve(it.fixture, it.propertyName, it.value) }
         val keys = HashSet<Layer3Resolver.Key>()
         for ((index, channelWrites) in resolved.withIndex()) {
             if (channelWrites.isEmpty()) continue
-            for (w in channelWrites) directWriteStore.put(owner, w.universe.universe, w.channel, w.value)
-            keys += Layer3Resolver.Key.fixture(writes[index].fixture.targetKey, writes[index].propertyName)
+            val write = writes[index]
+            programmerStore.put(
+                owner, write.fixture.targetKey, write.propertyName, write.value, touched, write.sourceGroup,
+            )
+            if (absorbSideband) absorbSidebandUnder(channelWrites)
+            keys += Layer3Resolver.Key.fixture(write.fixture.targetKey, write.propertyName)
         }
         if (keys.isNotEmpty()) {
             synchronized(cueAssignmentsLock) {
-                publishLayer4ForKeys(keys)
+                publishCascadeForKeys(keys, fadeMs)
             }
+            emitProvenanceUpdate()
         }
         return resolved
     }
 
     /**
-     * Batch counterpart of [clearLayer4Property]: clear [owner]'s entries for every
-     * (fixture, property) pair's channels from the [DirectWriteStore], then cascade all
-     * affected keys back to the surviving Layer 4 owner / Layer 3 / baseline under one lock
-     * acquisition and one controller transaction.
+     * Batch counterpart of [clearProgrammerProperty]: clear [owner]'s slot for every
+     * (fixture, property) pair, then cascade all affected keys back to the surviving owner /
+     * cue layer / baseline under one lock acquisition and one controller transaction.
      */
-    fun clearLayer4Properties(
-        owner: DirectWriteOwner,
+    fun clearProgrammerProperties(
+        owner: ProgrammerOwner,
         clears: List<Pair<GroupableFixture, String>>,
+        fadeMs: Long = 0,
     ): List<PropertyChannelResolver.ChannelWrite> {
         val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
         val keys = HashSet<Layer3Resolver.Key>()
         for ((fixture, propertyName) in clears) {
+            programmerStore.clear(owner, fixture.targetKey, propertyName)
             val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
             if (channels.isEmpty()) continue
-            for (c in channels) directWriteStore.clear(owner, c.universe.universe, c.channel)
             keys += Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)
             all += channels
         }
         if (keys.isNotEmpty()) {
             synchronized(cueAssignmentsLock) {
-                publishLayer4ForKeys(keys)
+                publishCascadeForKeys(keys, fadeMs)
             }
+            emitProvenanceUpdate()
         }
         return all
     }
 
-    /** Single-fixture write scaffold — resolve via [perFixture], `put` each, publish the key. */
-    private inline fun applyLayer4Write(
-        owner: DirectWriteOwner,
-        targetKey: String,
-        propertyName: String,
-        perFixture: () -> List<PropertyChannelResolver.ChannelWrite>,
-    ): List<PropertyChannelResolver.ChannelWrite> {
-        val writes = perFixture()
-        if (writes.isEmpty()) return writes
-        for (w in writes) directWriteStore.put(owner, w.universe.universe, w.channel, w.value)
-        synchronized(cueAssignmentsLock) {
-            publishLayer4ForKeys(setOf(Layer3Resolver.Key.fixture(targetKey, propertyName)))
-        }
-        return writes
-    }
-
     /**
-     * Group-loop scaffold shared by the write / clear group overloads. [perFixture] does the
-     * per-member `DirectWriteStore` mutation and returns the resolved channel list; non-empty
-     * lists contribute their fixture's key to a single batched publish.
+     * Release **every** owner's slot on each (fixture, property) pair — the operator
+     * "clear this entry" gesture — with one store sweep, one locked cascade publish, and
+     * one provenance update. Clearing owner-by-owner would transmit each surviving owner's
+     * value as an intermediate step (and, with [fadeMs] > 0, restart the ramp per owner);
+     * this releases each property in a single step to whatever sits below the programmer.
      */
-    private inline fun applyLayer4GroupOperation(
-        group: FixtureGroup<*>,
-        propertyName: String,
-        perFixture: (Fixture) -> List<PropertyChannelResolver.ChannelWrite>,
+    fun clearProgrammerEntries(
+        clears: List<Pair<GroupableFixture, String>>,
+        fadeMs: Long = 0,
     ): List<PropertyChannelResolver.ChannelWrite> {
         val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
         val keys = HashSet<Layer3Resolver.Key>()
-        for (member in group.fixtures) {
-            val f = member as? Fixture ?: continue
-            val result = perFixture(f)
-            if (result.isEmpty()) continue
-            all += result
-            keys += Layer3Resolver.Key.fixture(f.key, propertyName)
+        var clearedAny = false
+        for ((fixture, propertyName) in clears) {
+            for (slot in programmerStore.slotsFor(fixture.targetKey, propertyName)) {
+                programmerStore.clear(slot.owner, fixture.targetKey, propertyName)
+                clearedAny = true
+            }
+            val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
+            if (channels.isEmpty()) continue
+            keys += Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)
+            all += channels
         }
         if (keys.isNotEmpty()) {
             synchronized(cueAssignmentsLock) {
-                publishLayer4ForKeys(keys)
+                publishCascadeForKeys(keys, fadeMs)
             }
         }
+        if (clearedAny) emitProvenanceUpdate()
         return all
     }
 
     /**
-     * Transmit the composed Layer 3 → Layer 4 → Layer 5 fallback for each affected
-     * (fixtureKey, propertyName) key. Same publish machinery as [publishLayer3ToControllers],
-     * scoped to a caller-supplied key set rather than the full Layer 3 diff.
+     * Raw-channel write into the programmer's sideband — the compatibility path for
+     * `updateChannel` on channels the property model can't lift (position axes, channels
+     * with no backing property) and for unpark hand-downs.
      *
-     * Skips keys a currently-running effect covers (the effect tick handles those) and
-     * fully-parked targets. Callers hold [cueAssignmentsLock] so this doesn't race with a
-     * concurrent Layer 3 republish or fade-weight update reading the same `layer3State`.
+     * When [coveringKey] identifies the (fixture, property) whose channels include this one,
+     * the key is republished so the sideband value reaches the wire through the normal
+     * cascade. When the channel has no backing property at all ([coveringKey] = null),
+     * nothing below it exists in the cascade — the value is written straight to the
+     * controller.
      */
-    private fun publishLayer4ForKeys(keys: Set<Layer3Resolver.Key>) {
+    fun writeProgrammerChannel(
+        owner: ProgrammerOwner,
+        universe: Int,
+        channel: Int,
+        value: UByte,
+        coveringKey: Layer3Resolver.Key?,
+        touched: Boolean = true,
+        fadeMs: Long = 0,
+    ) {
+        programmerStore.putChannel(owner, universe, channel, value, touched)
+        if (coveringKey != null) {
+            synchronized(cueAssignmentsLock) {
+                publishCascadeForKeys(setOf(coveringKey), fadeMs)
+            }
+        } else if (!programmerStore.blind) {
+            fixtures.controllerOrNull(Universe(0, universe))
+                ?.setValue(channel, value, fadeMs)
+        }
+        emitProvenanceUpdate()
+    }
+
+    /**
+     * Sweep the entire programmer — every owner's property entries and the raw-channel
+     * sideband — and release everything to the layers below in one pass. The operator
+     * escape hatch behind `programmer.clearAll` and `POST /api/rest/programmer/clear-all`.
+     *
+     * Property-backed state (including sideband slots whose channel a property covers)
+     * releases through the normal cascade publish. Sideband channels with no backing
+     * property have nothing below them; they release to DMX 0.
+     *
+     * Returns the number of entries removed (properties + sideband channels). Callers that
+     * own toggle bookkeeping (locate, preset toggles) must reset it themselves — see
+     * `clearProgrammerCompletely` in `routes/programmer.kt`.
+     */
+    fun clearProgrammerAll(fadeMs: Long = 0): Int {
+        val keys = HashSet(programmerStore.activeKeys())
+        val channelEntries = programmerStore.channelEntries()
+        val count = programmerStore.size + channelEntries.size
+        if (count == 0) return 0
+
+        // Map each sideband channel to the property that covers it (so it releases through
+        // the cascade) or remember it as unbacked (released to 0 below).
+        val unbacked = mutableListOf<Pair<Int, Int>>()
+        for (entry in channelEntries) {
+            val key = resolveChannelCoveringKey(entry.universe, entry.channel)
+            if (key != null) keys += key else unbacked += entry.universe to entry.channel
+        }
+
+        programmerStore.clearAll()
+
+        if (keys.isNotEmpty()) {
+            synchronized(cueAssignmentsLock) {
+                publishCascadeForKeys(keys, fadeMs)
+            }
+        }
+        for ((universe, channel) in unbacked) {
+            fixtures.controllerOrNull(Universe(0, universe))
+                ?.setValue(channel, 0u, fadeMs)
+        }
+        emitProvenanceUpdate()
+        return count
+    }
+
+    /**
+     * Set the programmer's blind gate and republish every key it holds so the change lands
+     * on stage: entering blind releases programmer-held properties to the layers below;
+     * exiting restores the staged values. The stored programmer state is untouched either
+     * way. [fadeMs] rides the same publish plumbing as clears (snap in half (a)).
+     */
+    fun setProgrammerBlind(blind: Boolean, fadeMs: Long = 0) {
+        if (programmerStore.blind == blind) return
+        programmerStore.blind = blind
+
+        val keys = HashSet(programmerStore.activeKeys())
+        val unbacked = mutableListOf<ProgrammerStore.ChannelEntryView>()
+        for (entry in programmerStore.channelEntries()) {
+            val key = resolveChannelCoveringKey(entry.universe, entry.channel)
+            if (key != null) keys += key else unbacked += entry
+        }
+        if (keys.isNotEmpty()) {
+            synchronized(cueAssignmentsLock) {
+                publishCascadeForKeys(keys, fadeMs)
+            }
+        }
+        // Unbacked sideband channels have no cascade below them: blind writes 0, unblind
+        // restores the sideband value.
+        for (entry in unbacked) {
+            val value = if (blind) {
+                0u.toUByte()
+            } else {
+                (entry.slots.firstOrNull()?.value?.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+                    ?: continue
+            }
+            fixtures.controllerOrNull(Universe(0, entry.universe))
+                ?.setValue(entry.channel, value, fadeMs)
+        }
+        emitProvenanceUpdate()
+    }
+
+    /** Drop all sideband slots under the given channel writes — see [writeProgrammerProperty]. */
+    private fun absorbSidebandUnder(writes: List<PropertyChannelResolver.ChannelWrite>) {
+        programmerStore.clearChannelsAbsorbedBy(
+            writes.map { packChannelKey(it.universe.universe, it.channel) }
+        )
+    }
+
+    /**
+     * The (fixture, property) key whose channels include (universe, channel), or null when
+     * no property backs the channel. Walks the owning fixture's property catalogue plus the
+     * position axes — the same channel set [FxTarget.fallbackFromProgrammer]'s sideband
+     * lookups consult.
+     */
+    fun resolveChannelCoveringKey(universe: Int, channel: Int): Layer3Resolver.Key? {
+        val mappings = fixtures.getChannelMappings()
+        val fixtureKey = mappings[universe]?.get(channel)?.fixtureKey ?: return null
+        val fixture = try {
+            fixtures.untypedFixture(fixtureKey)
+        } catch (_: Exception) {
+            return null
+        }
+
+        for (prop in fixture.fixtureProperties) {
+            val value = try {
+                prop.classProperty.call(fixture)
+            } catch (_: Exception) {
+                continue
+            } ?: continue
+            when (value) {
+                is DmxSlider -> if (value.channelNo == channel) {
+                    return Layer3Resolver.Key.fixture(fixture.key, prop.name)
+                }
+                is DmxFixtureSetting<*> -> if (value.channelNo == channel) {
+                    return Layer3Resolver.Key.fixture(fixture.key, prop.name)
+                }
+                is DmxColour -> if (
+                    channel == value.redSlider.channelNo ||
+                    channel == value.greenSlider.channelNo ||
+                    channel == value.blueSlider.channelNo
+                ) {
+                    return Layer3Resolver.Key.fixture(fixture.key, prop.name)
+                }
+            }
+        }
+
+        val positionFixture = fixture as? WithPosition
+        if (positionFixture != null) {
+            val pan = positionFixture.pan as? DmxSlider
+            val tilt = positionFixture.tilt as? DmxSlider
+            if (pan?.channelNo == channel || tilt?.channelNo == channel) {
+                return Layer3Resolver.Key.fixture(fixture.key, "position")
+            }
+        }
+        return null
+    }
+
+    /**
+     * Transmit the composed cascade fallback (cue layer → programmer → baseline) for each
+     * affected (fixtureKey, propertyName) key. Same publish machinery as
+     * [publishLayer3ToControllers], scoped to a caller-supplied key set rather than the
+     * full Layer 3 diff.
+     *
+     * Skips keys a currently-running effect covers and fully-parked targets. The
+     * effect-covered skip stays valid with the programmer above effects because the tick's
+     * reset pass is programmer-aware: it repaints suppressed keys with programmer values
+     * within one frame (≤20 ms) — the consequence is that writes/clears on effect-covered
+     * keys settle on the next tick and do **not** fade. Callers hold [cueAssignmentsLock]
+     * so this doesn't race with a concurrent Layer 3 republish or fade-weight update
+     * reading the same `layer3State`.
+     *
+     * [fadeMs] > 0 drives the per-channel [uk.me.cormack.lighting7.dmx.TickerState] ramp
+     * for the uncovered keys this publish writes.
+     */
+    private fun publishCascadeForKeys(keys: Set<Layer3Resolver.Key>, fadeMs: Long = 0) {
         if (keys.isEmpty()) return
 
         // Empty effects is the common preset-toggle case; skip the scan and transaction alloc.
@@ -671,7 +1069,7 @@ class FxEngine(
                 fixturesWithTx.untypedGroupableFixture(key.targetKey)
             } catch (e: Exception) {
                 System.err.println(
-                    "FX Engine: Layer 4 publish could not find fixture '${key.targetKey}': ${e.message}"
+                    "FX Engine: cascade publish could not find fixture '${key.targetKey}': ${e.message}"
                 )
                 continue
             }
@@ -681,11 +1079,11 @@ class FxEngine(
 
             try {
                 val fallback = layerResolver.fallbackFor(target, fixture, key.targetKey)
-                target.resetToFallback(fixture, fallback)
+                target.resetToFallback(fixture, fallback, fadeMs)
                 wrote = true
             } catch (e: Exception) {
                 System.err.println(
-                    "FX Engine: failed to publish Layer 4 for ${key.targetKey}.${key.propertyName}: ${e.message}"
+                    "FX Engine: failed to publish cascade for ${key.targetKey}.${key.propertyName}: ${e.message}"
                 )
             }
         }
@@ -694,7 +1092,7 @@ class FxEngine(
     }
 
     /**
-     * Infer the [FxTarget] kind for a Layer 4 publish from the backing DMX property type on
+     * Infer the [FxTarget] kind for a cascade publish from the backing DMX property type on
      * [fixture]. Mirrors the type-dispatch that [resolveTargetForLayer3Key] does from a
      * [Layer3Resolver.PropertyValue], but resolves the backing value by name via
      * [PropertyChannelWriter.resolveProperty] instead — the clear path doesn't have a value
@@ -741,6 +1139,7 @@ class FxEngine(
         }
         val afterState = layerResolver.currentLayer3State
         publishLayer3ToControllers(beforeState, afterState)
+        emitProvenanceUpdate()
     }
 
     /**
@@ -931,9 +1330,13 @@ class FxEngine(
      */
     fun start(scope: CoroutineScope) {
         masterClock.start(scope)
+        provenanceScope = scope
 
         // Emit initial palette so new WebSocket subscribers get it immediately
         emitPaletteUpdate()
+        // Seed the provenance replay so subscribers connecting before any layer event get
+        // a (usually empty) snapshot instead of nothing.
+        emitProvenanceUpdate()
 
         // BPM-synced processing loop (24 ticks per beat)
         processingJob = scope.launch(Dispatchers.Default) {
@@ -955,6 +1358,7 @@ class FxEngine(
      * Stop the FX engine and all active effects.
      */
     fun stop() {
+        provenanceScope = null
         processingJob?.cancel()
         processingJob = null
         wallClockJob?.cancel()
@@ -1203,41 +1607,6 @@ class FxEngine(
     }
 
     /**
-     * Remove every effect that paints any of [fixtureKeys] (fixture or element keys) —
-     * whether it targets one of them directly, targets a parent fixture that expands to
-     * them, or reaches them through *any* group membership. One snapshot rebuild and one
-     * state broadcast regardless of how many effects go.
-     *
-     * This is the "locate wins" primitive: [removeEffectsForFixture] / [removeEffectsForGroup]
-     * match only their own target key, so an effect on a *different* group containing the
-     * fixture would survive them — and [publishLayer4ForKeys] skips effect-covered keys, so
-     * the surviving effect would silently repaint over the locate on the next tick.
-     *
-     * Effects that park masks entirely are spared ([parkMasksEffectEntirely]). Matching is by
-     * fixture key rather than by (fixture, property) — deliberately, because a caller's write
-     * can share a DMX channel with a differently-named property (dimmer/shutter on one
-     * channel) — but a park-masked effect is invisible on every channel it paints, so nothing
-     * that overwrites it needs it gone.
-     *
-     * @return Number of effects removed
-     */
-    fun removeEffectsCoveringFixtures(fixtureKeys: Set<String>): Int {
-        if (fixtureKeys.isEmpty()) return 0
-        val toRemove = activeEffects.values.filter { effect ->
-            val covered = effect.target.targetKey in fixtureKeys ||
-                resolveEffectFixtureKeys(effect).any { it in fixtureKeys }
-            covered && !parkMasksEffectEntirely(effect)
-        }
-        toRemove.forEach { activeEffects.remove(it.id) }
-        if (toRemove.isNotEmpty()) {
-            rebuildSortedSnapshots()
-            resetUncoveredProperties(toRemove)
-            emitStateUpdate()
-        }
-        return toRemove.size
-    }
-
-    /**
      * Remove all effects that were applied as part of a specific cue.
      *
      * @param cueId The cue ID whose effects should be removed
@@ -1333,6 +1702,11 @@ class FxEngine(
         // ratcheting across ticks and keeps direct writes + cue state visible under effects.
         resetActiveProperties(fixturesWithTx, beatEffects)
 
+        // Programmer suppression: any non-band effect skips its apply on (fixture,
+        // property) pairs the programmer holds — the reset pass has already painted the
+        // programmer value there, and the effect must not repaint over it.
+        val suppression = programmerSuppression()
+
         // Iterate in priority-ascending order. Under non-OVERRIDE blend modes, higher-priority
         // effects compose on top and dominate.
         for (effect in beatEffects) {
@@ -1340,9 +1714,9 @@ class FxEngine(
 
             try {
                 if (effect.isGroupEffect) {
-                    processGroupEffect(tick, effect, fixturesWithTx, deltaMs)
+                    processGroupEffect(tick, effect, fixturesWithTx, deltaMs, suppression)
                 } else {
-                    processFixtureEffect(tick, effect, fixturesWithTx, deltaMs)
+                    processFixtureEffect(tick, effect, fixturesWithTx, deltaMs, suppression)
                 }
             } catch (e: Exception) {
                 System.err.println("FX Engine error processing effect ${effect.id}: ${e.message}")
@@ -1395,14 +1769,16 @@ class FxEngine(
         // Reset properties controlled by WALL_CLOCK effects to the layer below.
         resetActiveProperties(fixturesWithTx, wallClockEffects)
 
+        val suppression = programmerSuppression()
+
         for (effect in wallClockEffects) {
             if (!effect.isRunning) continue
 
             try {
                 if (effect.isGroupEffect) {
-                    processWallClockGroupEffect(syntheticTick, effect, fixturesWithTx, deltaMs)
+                    processWallClockGroupEffect(syntheticTick, effect, fixturesWithTx, deltaMs, suppression)
                 } else {
-                    processWallClockFixtureEffect(syntheticTick, effect, fixturesWithTx, deltaMs)
+                    processWallClockFixtureEffect(syntheticTick, effect, fixturesWithTx, deltaMs, suppression)
                 }
             } catch (e: Exception) {
                 System.err.println("FX Engine error processing wall-clock effect ${effect.id}: ${e.message}")
@@ -1420,6 +1796,7 @@ class FxEngine(
         effect: FxInstance,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long,
+        suppression: Map<String, Set<String>> = emptyMap(),
     ) {
         val fixtureKey = effect.target.targetKey
         val fixture = try {
@@ -1430,12 +1807,14 @@ class FxEngine(
 
         if (effect.target.fixtureHasProperty(fixture)) {
             val effectPhase = effect.calculateWallClockPhase()
-            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE, fixturesWithTx, fixtureKey)
-            effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
+            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE, fixturesWithTx, fixtureKey, suppression)
+            if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
+                effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
+            }
         } else if (fixture is MultiElementFixture<*>) {
             val elements = fixture.elements
             if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
-                processWallClockMultiElementEffect(tick, effect, fixturesWithTx, elements, deltaMs)
+                processWallClockMultiElementEffect(tick, effect, fixturesWithTx, elements, deltaMs, suppression)
             }
         }
     }
@@ -1449,6 +1828,7 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         elements: List<uk.me.cormack.lighting7.fixture.group.FixtureElement<*>>,
         deltaMs: Long,
+        suppression: Map<String, Set<String>> = emptyMap(),
     ) {
         val filter = effect.elementFilter
         val elementCount = elements.size
@@ -1474,8 +1854,10 @@ class FxEngine(
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, element.elementKey)
-            effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, element.elementKey, suppression)
+            if (!isSuppressed(suppression, element.elementKey, effect.target.propertyName, effect)) {
+                effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
+            }
         }
     }
 
@@ -1487,6 +1869,7 @@ class FxEngine(
         effect: FxInstance,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long,
+        suppression: Map<String, Set<String>> = emptyMap(),
     ) {
         val groupName = effect.target.targetKey
         val group = try {
@@ -1508,8 +1891,10 @@ class FxEngine(
                 val memberPhase = effect.calculateWallClockPhaseForMember(member, groupSize)
                 val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
                 val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, member.key)
-                effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
+                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, member.key, suppression)
+                if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
+                    effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
+                }
             }
             return
         }
@@ -1527,12 +1912,12 @@ class FxEngine(
                     } catch (_: Exception) { continue }
 
                     if (parentFixture is MultiElementFixture<*>) {
-                        processWallClockMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements, deltaMs)
+                        processWallClockMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements, deltaMs, suppression)
                     }
                 }
             }
             ElementMode.FLAT -> {
-                processWallClockGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers, deltaMs)
+                processWallClockGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers, deltaMs, suppression)
             }
         }
     }
@@ -1546,6 +1931,7 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         allMembers: List<uk.me.cormack.lighting7.fixture.group.GroupMember<*>>,
         deltaMs: Long,
+        suppression: Map<String, Set<String>> = emptyMap(),
     ) {
         val filter = effect.elementFilter
 
@@ -1586,8 +1972,10 @@ class FxEngine(
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, flatElement.elementKey)
-            effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, flatElement.elementKey, suppression)
+            if (!isSuppressed(suppression, flatElement.elementKey, effect.target.propertyName, effect)) {
+                effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
+            }
         }
     }
 
@@ -1606,15 +1994,19 @@ class FxEngine(
         context: EffectContext,
         fixturesWithTx: Fixtures.FixturesWithTransaction? = null,
         fixtureKey: String? = null,
+        suppression: Map<String, Set<String>> = emptyMap(),
     ): FxOutput {
         // Composite effects produce multiple outputs
         if (effect.effect is CompositeEffect && effect.compositeTargets != null) {
             val outputs = (effect.effect as CompositeEffect).calculateComposite(phase, context)
-            // Apply secondary outputs to their targets
+            // Apply secondary outputs to their targets — each constituent property is
+            // suppression-checked individually.
             val secondaryTargets = effect.compositeTargets!!
             for ((outputType, target) in secondaryTargets) {
                 val output = outputs[outputType]?.scaled(effect.intensityMultiplier) ?: continue
-                if (fixturesWithTx != null && fixtureKey != null) {
+                if (fixturesWithTx != null && fixtureKey != null &&
+                    !isSuppressed(suppression, fixtureKey, target.propertyName, effect)
+                ) {
                     target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
                 }
             }
@@ -1706,8 +2098,8 @@ class FxEngine(
         return target.isPropertyFullyParked(fixture, pm)
     }
 
-    /** Whether a Layer-4 write of one property would reach the wire, and if not, why. */
-    enum class Layer4Publishability {
+    /** Whether a programmer write of one property would reach the wire, and if not, why. */
+    enum class ProgrammerPublishability {
         /** The property resolves to channels and at least one of them is unparked. */
         PUBLISHABLE,
 
@@ -1719,9 +2111,9 @@ class FxEngine(
     }
 
     /**
-     * Would a Layer-4 write of [propertyName] on [fixture] actually reach the wire?
+     * Would a programmer write of [propertyName] on [fixture] actually reach the wire?
      *
-     * This is the public, resolved-by-name form of the two guards [publishLayer4ForKeys]
+     * This is the public, resolved-by-name form of the two guards [publishCascadeForKeys]
      * applies per key — [inferTargetForProperty] returning null, and [allChannelsParked] —
      * *in that order and via the same helpers*, so a caller that pre-filters on this can never
      * disagree with what the publish then does. Resolving park through
@@ -1729,48 +2121,25 @@ class FxEngine(
      * [ColourTarget] scopes its extended white/amber/UV channels by `bundleWithColour`, which
      * is not the same set [PropertyChannelWriter.channelsFor] enumerates by trait.
      *
-     * Locate is the caller: it must know *before* "locate wins" removes the effects covering a
-     * property whether writing that property can achieve anything, because removal is
-     * destructive and a write that publish would skip buys nothing in exchange.
+     * Locate is the caller: it must know whether writing a property can achieve anything
+     * before recording a toggle write for it — an unpublishable write would strand a
+     * bookkeeping row for a value that never reached the wire.
      */
-    fun layer4Publishability(
+    fun programmerPublishability(
         fixture: uk.me.cormack.lighting7.fixture.GroupableFixture,
         propertyName: String,
-    ): Layer4Publishability {
+    ): ProgrammerPublishability {
         val key = Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)
-        val target = inferTargetForProperty(fixture, key) ?: return Layer4Publishability.UNRESOLVED
+        val target = inferTargetForProperty(fixture, key) ?: return ProgrammerPublishability.UNRESOLVED
         if (PropertyChannelWriter.channelsFor(fixture, propertyName).isEmpty()) {
             // A property whose descriptor exists but is not DMX-backed (e.g. `position` on a
-            // Hue-backed head): `writeLayer4Properties` resolves zero channels for it.
-            return Layer4Publishability.UNRESOLVED
+            // Hue-backed head): `writeProgrammerProperties` resolves zero channels for it.
+            return ProgrammerPublishability.UNRESOLVED
         }
         return if (allChannelsParked(target, fixture)) {
-            Layer4Publishability.PARK_MASKED
+            ProgrammerPublishability.PARK_MASKED
         } else {
-            Layer4Publishability.PUBLISHABLE
-        }
-    }
-
-    /**
-     * Is [effect] wholly masked by park — every fixture it paints has its target property
-     * fully parked?
-     *
-     * Such an effect cannot reach the wire, so removing it is pure loss: the operator gets no
-     * visible change in exchange for an effect they have to rebuild. Anything we cannot
-     * resolve (missing fixture, unresolvable property, an effect whose fixture set comes back
-     * empty) counts as *not* masked, so the coarse remove-it behaviour stays the default.
-     */
-    private fun parkMasksEffectEntirely(effect: FxInstance): Boolean {
-        if (parkManager == null) return false
-        val fixtureKeys = resolveEffectFixtureKeys(effect)
-        if (fixtureKeys.isEmpty()) return false
-        return fixtureKeys.all { fixtureKey ->
-            val fixture = try {
-                fixtures.untypedGroupableFixture(fixtureKey)
-            } catch (_: Exception) {
-                return false
-            }
-            layer4Publishability(fixture, effect.target.propertyName) == Layer4Publishability.PARK_MASKED
+            ProgrammerPublishability.PUBLISHABLE
         }
     }
 
@@ -1786,6 +2155,7 @@ class FxEngine(
         effect: FxInstance,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long = 0L,
+        suppression: Map<String, Set<String>> = emptyMap(),
     ) {
         val fixtureKey = effect.target.targetKey
         val fixture = try {
@@ -1799,13 +2169,15 @@ class FxEngine(
         if (effect.target.fixtureHasProperty(fixture)) {
             // Direct application to the parent fixture
             val effectPhase = effect.calculatePhase(tick, masterClock)
-            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE, fixturesWithTx, fixtureKey)
-            effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
+            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE, fixturesWithTx, fixtureKey, suppression)
+            if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
+                effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
+            }
         } else if (fixture is MultiElementFixture<*>) {
             // Parent doesn't have the property — check if elements do
             val elements = fixture.elements
             if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
-                processMultiElementEffect(tick, effect, fixturesWithTx, elements, deltaMs)
+                processMultiElementEffect(tick, effect, fixturesWithTx, elements, deltaMs, suppression)
             }
         }
         // If neither parent nor elements have the property, silently skip
@@ -1823,6 +2195,7 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         elements: List<uk.me.cormack.lighting7.fixture.group.FixtureElement<*>>,
         deltaMs: Long = 0L,
+        suppression: Map<String, Set<String>> = emptyMap(),
     ) {
         val filter = effect.elementFilter
         val elementCount = elements.size
@@ -1853,8 +2226,10 @@ class FxEngine(
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, element.elementKey)
-            effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, element.elementKey, suppression)
+            if (!isSuppressed(suppression, element.elementKey, effect.target.propertyName, effect)) {
+                effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
+            }
         }
     }
 
@@ -1876,6 +2251,7 @@ class FxEngine(
         effect: FxInstance,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long = 0L,
+        suppression: Map<String, Set<String>> = emptyMap(),
     ) {
         val groupName = effect.target.targetKey
         val group = try {
@@ -1902,8 +2278,10 @@ class FxEngine(
                 )
                 val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
                 val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, member.key)
-                effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
+                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, member.key, suppression)
+                if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
+                    effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
+                }
             }
             return
         }
@@ -1922,13 +2300,13 @@ class FxEngine(
                     } catch (_: Exception) { continue }
 
                     if (parentFixture is MultiElementFixture<*>) {
-                        processMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements, deltaMs)
+                        processMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements, deltaMs, suppression)
                     }
                 }
             }
             ElementMode.FLAT -> {
                 // Collect all elements across all fixtures into one flat list
-                processGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers, deltaMs)
+                processGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers, deltaMs, suppression)
             }
         }
     }
@@ -1946,6 +2324,7 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         allMembers: List<uk.me.cormack.lighting7.fixture.group.GroupMember<*>>,
         deltaMs: Long = 0L,
+        suppression: Map<String, Set<String>> = emptyMap(),
     ) {
         val filter = effect.elementFilter
 
@@ -1993,8 +2372,10 @@ class FxEngine(
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, flatElement.elementKey)
-            effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, flatElement.elementKey, suppression)
+            if (!isSuppressed(suppression, flatElement.elementKey, effect.target.propertyName, effect)) {
+                effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
+            }
         }
     }
 
@@ -2227,5 +2608,7 @@ class FxEngine(
             activeEffectIds = activeEffects.keys.toList(),
             effectStates = states
         ))
+        // Effect lifecycle changes move provenance winners — piggyback on the same sites.
+        emitProvenanceUpdate()
     }
 }

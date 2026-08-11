@@ -30,6 +30,19 @@ class MockDmxController(
     /** Returns the writes to [channelNo] only, in order. */
     fun writesTo(channelNo: Int): List<UByte> = _writeLog.filter { it.first == channelNo }.map { it.second }
 
+    private val _changeLog = mutableListOf<Pair<Int, ChannelChange>>()
+
+    /**
+     * Ordered log of every (channel, [ChannelChange]) the controller has received —
+     * unlike [writeLog] this keeps the change's `fadeMs`, so tests can assert that a
+     * publish requested a ramp rather than a snap.
+     */
+    val changeLog: List<Pair<Int, ChannelChange>> get() = _changeLog.toList()
+
+    /** Returns the [ChannelChange]s for [channelNo] only, in order. */
+    fun changesTo(channelNo: Int): List<ChannelChange> =
+        _changeLog.filter { it.first == channelNo }.map { it.second }
+
     override val currentValues: Map<Int, UByte>
         get() = values.toMap()
 
@@ -37,17 +50,20 @@ class MockDmxController(
         valuesToSet.forEach { (channel, change) ->
             values[channel] = change.newValue
             _writeLog.add(channel to change.newValue)
+            _changeLog.add(channel to change)
         }
     }
 
     override fun setValue(channelNo: Int, channelChange: ChannelChange) {
         values[channelNo] = channelChange.newValue
         _writeLog.add(channelNo to channelChange.newValue)
+        _changeLog.add(channelNo to channelChange)
     }
 
     override fun setValue(channelNo: Int, channelValue: UByte, fadeMs: Long) {
         values[channelNo] = channelValue
         _writeLog.add(channelNo to channelValue)
+        _changeLog.add(channelNo to ChannelChange(channelValue, fadeMs))
     }
 
     override fun getValue(channelNo: Int): UByte {

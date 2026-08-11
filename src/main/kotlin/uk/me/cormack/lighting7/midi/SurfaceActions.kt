@@ -4,11 +4,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.CueStackManager
-import uk.me.cormack.lighting7.fx.DirectWriteOwner
-import uk.me.cormack.lighting7.fx.DirectWriteStore
+import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.CueEditSessionHandler
 import uk.me.cormack.lighting7.plugins.CueEditSessionState
@@ -16,19 +16,19 @@ import uk.me.cormack.lighting7.show.Fixtures
 
 /**
  * Port between [SurfaceInputRouter] and the rest of the application. Production wires this
- * to [DefaultSurfaceActions], which delegates into [Fixtures], [DirectWriteStore],
- * [CueStackManager], and [GlobalScalerState]. Tests can supply a recording fake so the
- * router can be exercised without a running show.
+ * to [DefaultSurfaceActions], which delegates into [Fixtures], the programmer layer
+ * ([ProgrammerStore] via [FxEngine]), [CueStackManager], and [GlobalScalerState]. Tests can
+ * supply a recording fake so the router can be exercised without a running show.
  *
  * All methods are fire-and-forget from the router's perspective — implementations handle
- * their own thread coordination (DirectWriteStore is lock-free; cue stack activation is
+ * their own thread coordination (the programmer store is lock-free; cue stack activation is
  * dispatched onto [GlobalScope] by [DefaultSurfaceActions]).
  */
 interface SurfaceActions {
     /**
      * Write a continuous value (0..127 MIDI 7-bit) to a fixture property. The production
      * implementation transparently routes into the active cue's Layer 3 when a cue-edit
-     * session is open on the current project, otherwise hits Layer 4.
+     * session is open on the current project, otherwise writes a programmer entry.
      */
     fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte)
 
@@ -54,7 +54,8 @@ interface SurfaceActions {
 
 /**
  * Production [SurfaceActions] implementation. Wraps the show's services and writes through
- * to both the [DirectWriteStore] (Layer 4) and the DMX controller so values show up live.
+ * the FX engine's programmer API, which stores the entry and publishes the composed cascade
+ * to the DMX controller in one step — there is no separate raw controller write.
  *
  * All dependencies are resolved through [state] on every call, so project switches that
  * swap the [uk.me.cormack.lighting7.show.Show] instance automatically route subsequent
@@ -69,7 +70,6 @@ class DefaultSurfaceActions(
     }
 
     private val fixtures: Fixtures get() = state.show.fixtures
-    private val directWriteStore: DirectWriteStore get() = state.show.directWriteStore
     private val fxEngine get() = state.show.fxEngine
     private val cueStackManager: CueStackManager get() = state.show.cueStackManager
     private val globalScalerState: GlobalScalerState get() = state.show.globalScalerState
@@ -86,8 +86,11 @@ class DefaultSurfaceActions(
             upsertCueAssignment(session, TargetRef.Fixture(fixtureKey), fixture, propertyName, midiValue7Bit)
             return
         }
-        val writes = directWriteStore.putProperty(DirectWriteOwner.SURFACE, fixture, propertyName, midiValue7Bit)
-        pushToControllers(writes)
+        val value = PropertyChannelResolver.toPropertyValue(fixture, propertyName, midiValue7Bit) ?: run {
+            logger.debug("Surface write: property '{}' on '{}' not fader-writable", propertyName, fixtureKey)
+            return
+        }
+        fxEngine.writeProgrammerProperty(ProgrammerOwner.SURFACE, fixture, propertyName, value)
     }
 
     override fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte) {
@@ -107,8 +110,14 @@ class DefaultSurfaceActions(
             upsertCueAssignment(session, TargetRef.Group(groupName), first, propertyName, midiValue7Bit)
             return
         }
-        val writes = directWriteStore.putGroupProperty(DirectWriteOwner.SURFACE, group, propertyName, midiValue7Bit)
-        pushToControllers(writes)
+        // Convert per member — sliders scale through each member's own min..max sub-range.
+        val writes = group.fixtures.filterIsInstance<Fixture>().mapNotNull { member ->
+            PropertyChannelResolver.toPropertyValue(member, propertyName, midiValue7Bit)?.let {
+                FxEngine.ProgrammerPropertyWrite(member, propertyName, it, sourceGroup = groupName)
+            }
+        }
+        if (writes.isEmpty()) return
+        fxEngine.writeProgrammerProperties(ProgrammerOwner.SURFACE, writes)
     }
 
     /**
@@ -153,49 +162,36 @@ class DefaultSurfaceActions(
 
     override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {
         val fixture = fixtures.tryUntypedFixture(fixtureKey) ?: return
-        val writes = buildFlashWrites(fixture, propertyName, max)
-        for (w in writes) directWriteStore.put(DirectWriteOwner.FLASH, w.universe.universe, w.channel, w.value)
-        pushToControllers(writes)
+        val value = PropertyChannelResolver.flashPropertyValue(fixture, propertyName, max) ?: return
+        // Momentary owner: don't absorb the sideband — release must reveal what was under it.
+        fxEngine.writeProgrammerProperty(
+            ProgrammerOwner.FLASH, fixture, propertyName, value, absorbSideband = false,
+        )
     }
 
     override fun flashGroupPropertyPress(groupName: String, propertyName: String, max: UByte) {
         val group = fixtures.tryUntypedGroup(groupName) ?: return
-        val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
-        for (member in group.fixtures) {
-            if (member is Fixture) {
-                val memberWrites = buildFlashWrites(member, propertyName, max)
-                all += memberWrites
-                for (c in memberWrites) directWriteStore.put(DirectWriteOwner.FLASH, c.universe.universe, c.channel, c.value)
+        // Clamp per member — slider max can differ across heterogeneous group members.
+        val writes = group.fixtures.filterIsInstance<Fixture>().mapNotNull { member ->
+            PropertyChannelResolver.flashPropertyValue(member, propertyName, max)?.let {
+                FxEngine.ProgrammerPropertyWrite(member, propertyName, it, sourceGroup = groupName)
             }
         }
-        pushToControllers(all)
-    }
-
-    private fun buildFlashWrites(
-        fixture: Fixture,
-        propertyName: String,
-        max: UByte,
-    ): List<PropertyChannelResolver.ChannelWrite> {
-        // Resolve channels once with a throwaway value; we override value below.
-        val channels = PropertyChannelResolver.resolveFixtureProperty(fixture, propertyName, 127u)
-        if (channels.isEmpty()) return emptyList()
-        val sliderMax = fixtureSliderMaxFor(fixture, propertyName)
-        val clamped = if (sliderMax != null) minOf(max, sliderMax) else max
-        return channels.map { it.copy(value = clamped) }
+        if (writes.isEmpty()) return
+        fxEngine.writeProgrammerProperties(ProgrammerOwner.FLASH, writes, absorbSideband = false)
     }
 
     override fun flashFixturePropertyRelease(fixtureKey: String, propertyName: String) {
         val fixture = fixtures.tryUntypedFixture(fixtureKey) ?: return
-        // Release through the engine, not a raw controller write: clearLayer4Property
-        // publishes the full Layer 3 → surviving Layer 4 → baseline cascade in one
-        // transaction and skips keys a running effect covers. A raw write here forced
-        // cue-lit channels to 0 until the next cue change or effect tick repainted them.
-        fxEngine.clearLayer4Property(DirectWriteOwner.FLASH, fixture, propertyName)
+        // Release pops only the FLASH slot: the property cascades to the surviving owner
+        // underneath (fader/busk level), then the cue layer, then baseline — in one
+        // transaction, skipping keys a running effect covers.
+        fxEngine.clearProgrammerProperty(ProgrammerOwner.FLASH, fixture, propertyName)
     }
 
     override fun flashGroupPropertyRelease(groupName: String, propertyName: String) {
         val group = fixtures.tryUntypedGroup(groupName) ?: return
-        fxEngine.clearLayer4GroupProperty(DirectWriteOwner.FLASH, group, propertyName)
+        fxEngine.clearProgrammerGroupProperty(ProgrammerOwner.FLASH, group, propertyName)
     }
 
     @OptIn(DelicateCoroutinesApi::class)
@@ -242,34 +238,6 @@ class DefaultSurfaceActions(
 
     override fun toggleBlackout(): Boolean = globalScalerState.toggleBlackout()
     override fun toggleGrandMaster(): Boolean = globalScalerState.toggleGrandMaster()
-
-    private fun pushToControllers(writes: List<PropertyChannelResolver.ChannelWrite>) {
-        if (writes.isEmpty()) return
-        val byUniverse = writes.groupBy { it.universe }
-        for ((universe, group) in byUniverse) {
-            val controller = try {
-                fixtures.controller(universe)
-            } catch (_: Exception) {
-                continue
-            }
-            for (w in group) controller.setValue(w.channel, w.value, 0)
-        }
-    }
-
-    /**
-     * Look up the DmxSlider's `max` for a fixture property, returning null if the property
-     * isn't a slider (e.g. colour). Used by Flash press to avoid writing past a dimmer's
-     * configured cap.
-     */
-    private fun fixtureSliderMaxFor(fixture: Fixture, propertyName: String): UByte? {
-        val property = fixture.fixtureProperty(propertyName) ?: return null
-        val raw = try {
-            property.classProperty.call(fixture)
-        } catch (_: Exception) {
-            return null
-        }
-        return (raw as? uk.me.cormack.lighting7.fixture.dmx.DmxSlider)?.max
-    }
 }
 
 // --- Small helpers that turn the existing throwing lookups into nullable returns.

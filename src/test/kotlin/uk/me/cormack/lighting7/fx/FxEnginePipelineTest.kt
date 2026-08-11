@@ -18,7 +18,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * End-to-end Layer 2 → 3 → 4 → 5 pipeline test. Each test case matches a Worked Example from
+ * End-to-end effects → cue layer → programmer → baseline pipeline test. Each test case matches a Worked Example from
  * [docs/lighting-composition-model.md](../../../../../../../../docs/lighting-composition-model.md),
  * plus a regression test for the Phase 0 smoke-check items that the 2026-04-19d review flagged
  * as missing automated coverage.
@@ -41,7 +41,7 @@ class FxEnginePipelineTest {
         val controller: MockDmxController,
         val fixtures: Fixtures,
         val engine: FxEngine,
-        val directWriteStore: DirectWriteStore,
+        val programmerStore: ProgrammerStore,
         val masterClock: MasterClock,
         val parkSource: MutableParkSource,
     )
@@ -69,15 +69,15 @@ class FxEnginePipelineTest {
             addController(controller)
             addFixture(HexFixture(universe, "hex-a", "Hex A", firstChannel))
         }
-        val directWriteStore = DirectWriteStore()
+        val programmerStore = ProgrammerStore()
         val masterClock = MasterClock()
         val engine = FxEngine(
             fixtures = fixtures,
             masterClock = masterClock,
-            directWriteStore = directWriteStore,
-            layerResolver = LayerResolver(Layer3Resolver(), directWriteStore),
+            programmerStore = programmerStore,
+            layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
         )
-        return Rig(controller, fixtures, engine, directWriteStore, masterClock, parkSource)
+        return Rig(controller, fixtures, engine, programmerStore, masterClock, parkSource)
     }
 
     /**
@@ -173,40 +173,101 @@ class FxEnginePipelineTest {
     // ─── Worked Example 2: direct write below a running effect ──────────────
 
     @Test
-    fun `Worked Example 2 — sticky direct write persists with ADDITIVE effect on top`() {
+    fun `Worked Example 2 — a programmer value suppresses a manual effect on its property`() {
         val rig = newRig(firstChannel = 1)
-        // Layer 4 sticky write: operator dragged dimmer to 180.
-        rig.directWriteStore.put(DirectWriteOwner.BUSKING, universe = 0, channel = 1, value = 180u)
+        // Programmer sticky write: operator dragged dimmer to 180.
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
 
-        // Additive effect range 0..30 so composition is deterministic: 180 + 30 = 210 whenever
-        // StaticValue emits its constant.
+        // The programmer sits above effects: a manual (priority 0) effect on the same
+        // property is suppressed — the reset pass paints 180 and the apply is skipped.
         val effect = makeStaticDimmer(value = 30u, blendMode = BlendMode.ADDITIVE)
         rig.engine.addEffect(effect)
 
         rig.engine.processBeatTick(tick(0))
 
         assertEquals(
-            210u.toUByte(), rig.controller.currentValues[1],
-            "direct write must persist under effect reset; ADDITIVE composes 180 + 30 = 210",
+            180u.toUByte(), rig.controller.currentValues[1],
+            "the programmer value must win over the effect — no ADDITIVE composition on top",
         )
     }
 
     @Test
-    fun `Worked Example 2 regression — effect reset falls through to Layer 4 not zero`() {
+    fun `a programmer-band effect is exempt from suppression and composes over the value`() {
         val rig = newRig(firstChannel = 1)
-        rig.directWriteStore.put(DirectWriteOwner.BUSKING, universe = 0, channel = 1, value = 180u)
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
 
-        // First tick paints 180 + 30 = 210 (see above). Removing the effect should leave the
-        // sticky 180 on the stage, NOT drop to zero — this is the pre-Phase-0 regression.
+        // Same effect, but in the reserved programmer priority band — Session 2's
+        // programmer-owned busking FX. It modulates on top of the programmer value.
+        val effect = makeStaticDimmer(
+            value = 30u, blendMode = BlendMode.ADDITIVE, priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE,
+        )
+        rig.engine.addEffect(effect)
+
+        rig.engine.processBeatTick(tick(0))
+
+        assertEquals(
+            210u.toUByte(), rig.controller.currentValues[1],
+            "band effects compose over the programmer value: 180 + 30 = 210",
+        )
+    }
+
+    @Test
+    fun `a suppressed effect's removal leaves the programmer value on stage`() {
+        val rig = newRig(firstChannel = 1)
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
+
         val effect = makeStaticDimmer(value = 30u, blendMode = BlendMode.ADDITIVE)
         val id = rig.engine.addEffect(effect)
         rig.engine.processBeatTick(tick(0))
-        assertEquals(210u.toUByte(), rig.controller.currentValues[1])
+        assertEquals(180u.toUByte(), rig.controller.currentValues[1], "suppressed while running")
 
         rig.engine.removeEffect(id)
         assertEquals(
             180u.toUByte(), rig.controller.currentValues[1],
-            "effect removal must reset to Layer 4 sticky value, not to zero",
+            "effect removal must reset to the programmer sticky value, not to zero",
+        )
+    }
+
+    @Test
+    fun `suppression is per property — the same effect elsewhere still applies`() {
+        val rig = newRig(firstChannel = 1)
+        // Programmer holds the dimmer; an effect on the white slider is untouched.
+        rig.engine.writeProgrammerProperty(
+            ProgrammerOwner.WEB, rig.fixtures.fixture<HexFixture>("hex-a"), "dimmer",
+            Layer3Resolver.PropertyValue.Slider(180u),
+        )
+
+        val whiteEffect = FxInstance(
+            effect = StaticValue(value = 90u),
+            target = SliderTarget("hex-a", "white"),
+            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            blendMode = BlendMode.OVERRIDE,
+        )
+        rig.engine.addEffect(whiteEffect)
+        rig.engine.processBeatTick(tick(0))
+
+        assertEquals(180u.toUByte(), rig.controller.currentValues[1], "dimmer holds the programmer value")
+        assertEquals(90u.toUByte(), rig.controller.currentValues[6], "white effect applies normally")
+    }
+
+    @Test
+    fun `clearing the programmer entry lets a suppressed effect resume`() {
+        val rig = newRig(firstChannel = 1)
+        val hex = rig.fixtures.fixture<HexFixture>("hex-a")
+        rig.engine.writeProgrammerProperty(
+            ProgrammerOwner.WEB, hex, "dimmer", Layer3Resolver.PropertyValue.Slider(180u),
+        )
+
+        val effect = makeStaticDimmer(value = 30u, blendMode = BlendMode.OVERRIDE)
+        rig.engine.addEffect(effect)
+        rig.engine.processBeatTick(tick(0))
+        assertEquals(180u.toUByte(), rig.controller.currentValues[1], "suppressed under the programmer")
+
+        rig.engine.clearProgrammerProperty(ProgrammerOwner.WEB, hex, "dimmer")
+        rig.engine.processBeatTick(tick(1))
+        assertEquals(
+            30u.toUByte(), rig.controller.currentValues[1],
+            "with the entry cleared the effect paints again on the next tick",
         )
     }
 
@@ -302,8 +363,8 @@ class FxEnginePipelineTest {
     @Test
     fun `SineWave plus updateChannel at 180 — direct write remains visible as effect baseline`() {
         val rig = newRig(firstChannel = 1)
-        // updateChannel equivalent: direct write onto Layer 4.
-        rig.directWriteStore.put(DirectWriteOwner.BUSKING, universe = 0, channel = 1, value = 180u)
+        // updateChannel equivalent: the shim lifts the dimmer channel to a programmer entry.
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
         // Immediately paint the sticky value onto the controller so any tick that runs
         // without a cue reset reads 180 as the fallback baseline (matches the real
         // updateChannel socket handler which writes through the controller).
@@ -318,14 +379,14 @@ class FxEnginePipelineTest {
         rig.engine.addEffect(effect)
 
         // Drive several ticks. Under OVERRIDE the effect replaces the baseline each tick —
-        // the guarantee here is that removing the effect falls back to 180 (Layer 4 sticky),
-        // i.e. the effect reset path observes the direct write, not zero.
+        // the guarantee here is that removing the effect falls back to 180 (programmer
+        // sticky), i.e. the effect reset path observes the manual write, not zero.
         for (n in 0L..4L) rig.engine.processBeatTick(tick(n))
 
         rig.engine.removeEffect(effect.id)
         assertEquals(
             180u.toUByte(), rig.controller.currentValues[1],
-            "post-removal reset must fall through Layer 3 (empty) → Layer 4 (180)",
+            "post-removal reset must fall through the cue layer (empty) → programmer (180)",
         )
     }
 
@@ -452,7 +513,7 @@ class FxEnginePipelineTest {
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
 
         rig.engine.clearAllCueAssignments()
-        // Layer 3 cleared. Next beat tick should reset to Layer 4 (empty) → Layer 5 (0),
+        // Layer 3 cleared. Next beat tick should reset to programmer (empty) → baseline (0),
         // then compose max(0, 40) = 40.
         rig.engine.processBeatTick(tick(1))
         assertEquals(40u.toUByte(), rig.controller.currentValues[1])
@@ -461,12 +522,12 @@ class FxEnginePipelineTest {
     // ─── Worked Example 6: Layer 4 property-level writes ────────────────────
 
     @Test
-    fun `Worked Example 6 — writeLayer4Property paints RGB and UV channels`() {
+    fun `Worked Example 6 — writeProgrammerProperty paints RGB and UV channels`() {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
         val red = ExtendedColour(Color(255, 0, 0), uv = 128u)
-        rig.engine.writeLayer4Property(DirectWriteOwner.BUSKING, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
 
         // Hex R/G/B at channels 2/3/4, UV at channel 7.
         assertEquals(255u.toUByte(), rig.controller.currentValues[2], "red painted")
@@ -476,73 +537,78 @@ class FxEnginePipelineTest {
     }
 
     @Test
-    fun `Worked Example 6 — updateChannel after Layer 4 write wins (channel-keyed last-write-wins)`() {
+    fun `Worked Example 6 — a newer raw channel write wins over a programmer colour entry`() {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
         val red = ExtendedColour(Color(255, 0, 0))
-        rig.engine.writeLayer4Property(DirectWriteOwner.BUSKING, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
         assertEquals(255u.toUByte(), rig.controller.currentValues[2])
 
-        // Simulate updateChannel on the green channel — controller write + directWriteStore put.
-        rig.directWriteStore.put(DirectWriteOwner.BUSKING, 0, 3, 128u)
-        rig.controller.setValue(3, 128u, 0L)
+        // A raw channel write lands in the sideband; being newer than the colour entry it
+        // wins recency arbitration for its channel.
+        rig.engine.writeProgrammerChannel(
+            ProgrammerOwner.WEB, 0, 3, 128u,
+            coveringKey = Layer3Resolver.Key.fixture("hex-a", "rgbColour"),
+        )
         assertEquals(128u.toUByte(), rig.controller.currentValues[3], "manual channel write wins")
 
-        // Writing the same colour again overwrites the green channel back to 0.
-        rig.engine.writeLayer4Property(DirectWriteOwner.BUSKING, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
-        assertEquals(0u.toUByte(), rig.controller.currentValues[3], "Layer 4 re-write stomps previous")
+        // Writing the colour again is newer still — and absorbs the sideband slot.
+        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+        assertEquals(0u.toUByte(), rig.controller.currentValues[3], "programmer re-write stomps previous")
+        assertNull(rig.programmerStore.getChannel(0, 3), "sideband slot absorbed by the property write")
     }
 
     @Test
-    fun `Worked Example 6 — Layer 3 cue overrides Layer 4 preset on same property`() {
+    fun `Worked Example 6 — a programmer value overrides a cue on the same property`() {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
-        rig.engine.writeLayer4Property(
-            DirectWriteOwner.BUSKING,
+        rig.engine.writeProgrammerProperty(
+            ProgrammerOwner.WEB,
             hex, "rgbColour",
             Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(255, 0, 0))),
         )
-        assertEquals(255u.toUByte(), rig.controller.currentValues[2], "Layer 4 red on stage")
+        assertEquals(255u.toUByte(), rig.controller.currentValues[2], "programmer red on stage")
 
-        // Layer 3 cue with blue should override.
+        // A cue with blue publishes underneath — the programmer keeps winning.
         rig.engine.setCueAssignments(
             10,
             listOf(colourAssignment(cueId = 10, priority = 1, color = Color(0, 0, 255))),
         )
-        assertEquals(0u.toUByte(), rig.controller.currentValues[2], "cue overrides Layer 4 red")
-        assertEquals(255u.toUByte(), rig.controller.currentValues[4], "cue blue on stage")
+        assertEquals(255u.toUByte(), rig.controller.currentValues[2], "programmer red beats the cue")
+        assertEquals(0u.toUByte(), rig.controller.currentValues[4], "cue blue held below")
 
-        // Clear the cue: Layer 4 red re-emerges.
+        // Clear the programmer entry: the cue's blue lands.
+        rig.engine.clearProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour")
+        assertEquals(0u.toUByte(), rig.controller.currentValues[2], "red released")
+        assertEquals(255u.toUByte(), rig.controller.currentValues[4], "cue blue emerges")
+
+        // And removing the cue cascades to baseline.
         rig.engine.removeCueAssignments(10)
-        assertEquals(255u.toUByte(), rig.controller.currentValues[2], "Layer 4 red re-emerges")
         assertEquals(0u.toUByte(), rig.controller.currentValues[4], "cue blue cleared")
     }
 
     @Test
-    fun `Worked Example 6 — clearLayer4Property cascades back to Layer 5 baseline`() {
+    fun `Worked Example 6 — clearProgrammerProperty cascades back to baseline`() {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
-        rig.engine.writeLayer4Property(
-            DirectWriteOwner.BUSKING,
+        rig.engine.writeProgrammerProperty(
+            ProgrammerOwner.WEB,
             hex, "rgbColour",
             Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(200, 100, 50), uv = 128u)),
         )
         assertEquals(200u.toUByte(), rig.controller.currentValues[2])
 
-        rig.engine.clearLayer4Property(DirectWriteOwner.BUSKING, hex, "rgbColour")
+        rig.engine.clearProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour")
         assertEquals(0u.toUByte(), rig.controller.currentValues[2], "red cleared")
         assertEquals(0u.toUByte(), rig.controller.currentValues[3], "green cleared")
         assertEquals(0u.toUByte(), rig.controller.currentValues[4], "blue cleared")
         assertEquals(0u.toUByte(), rig.controller.currentValues[7], "uv cleared")
 
-        // DirectWriteStore no longer holds these channels.
-        assertNull(rig.directWriteStore.get(0, 2))
-        assertNull(rig.directWriteStore.get(0, 3))
-        assertNull(rig.directWriteStore.get(0, 4))
-        assertNull(rig.directWriteStore.get(0, 7))
+        // The programmer no longer holds the property.
+        assertNull(rig.programmerStore.get("hex-a", "rgbColour"))
     }
 
     @Test
@@ -550,13 +616,16 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
-        rig.engine.writeLayer4Property(DirectWriteOwner.BUSKING, hex, "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
+        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
-        assertEquals(180u.toUByte(), rig.directWriteStore.get(0, 1))
+        assertEquals(
+            Layer3Resolver.PropertyValue.Slider(180u),
+            rig.programmerStore.get("hex-a", "dimmer")?.value?.resolved,
+        )
 
-        rig.engine.clearLayer4Property(DirectWriteOwner.BUSKING, hex, "dimmer")
+        rig.engine.clearProgrammerProperty(ProgrammerOwner.WEB, hex, "dimmer")
         assertEquals(0u.toUByte(), rig.controller.currentValues[1])
-        assertNull(rig.directWriteStore.get(0, 1))
+        assertNull(rig.programmerStore.get("hex-a", "dimmer"))
     }
 
     @Test

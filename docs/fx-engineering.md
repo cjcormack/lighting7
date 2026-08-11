@@ -3,8 +3,8 @@
 This document describes the effects subsystem for tempo-synchronized lighting effects.
 
 > **See also**: [lighting-composition-model.md](lighting-composition-model.md) for the
-> layered composition model. Effects are **Layer 2**: they sit above property assignments
-> (Layer 3) and direct writes (Layer 4), and below parking (Layer 1). The per-tick reset-to-
+> layered composition model. Effects are **Layer 3**: they sit above cue property
+> assignments (Layer 4) and below the programmer (Layer 2) and parking (Layer 1). The per-tick reset-to-
 > neutral pass resets each property to the **layer below** (via `LayerResolver`), not to
 > hardcoded zero, so direct writes and cue state remain visible under running effects. Effect
 > iteration is a sorted pass (priority ascending, id-ascending tie-break) rather than
@@ -413,21 +413,35 @@ How effect output combines with fixture's base value:
 Before processing effects each tick, the engine resets all FX-controlled properties to
 the value of **the layer below** (not to a hardcoded neutral). This is a core invariant of
 the composition model — see
-[lighting-composition-model.md §Layer 2](lighting-composition-model.md#layer-2--effects).
+[lighting-composition-model.md §Layer 3 — Effects](lighting-composition-model.md#layer-3--effects).
 
 The fallback is resolved by `LayerResolver.fallbackFor(target, fixture, key)`, which
-consults:
+composes:
 
-1. **Layer 3** — `Layer3Resolver`'s composed cue property assignment for this target, if
-   any. (Empty in Phase 0; populated in Phase 1.)
-2. **Layer 4** — `DirectWriteStore.get(universe, channel)` for sticky direct writes.
+1. **Layer 2 (programmer)** — sticky manual property entries and the raw-channel sideband
+   held in `ProgrammerStore`, unless the blind gate is engaged. A programmer entry wins
+   over everything below, and additionally **suppresses** the effect's own apply on that
+   (fixture, property) — see below.
+2. **Layer 4** — `Layer3Resolver`'s composed cue property assignment for this target, if
+   any. (The class name predates the renumber.)
 3. **Layer 5** — fixture baseline (0 for sliders, black for colour, 128 for pan/tilt).
+
+### Programmer suppression and the priority band
+
+An active programmer entry (blind off) suppresses **every** effect on its (fixture,
+property) — cue-owned and manual alike: the reset pass paints the programmer value and the
+apply loop skips that pair (per fixture, so a group effect keeps painting other members;
+per property, so composite constituents are checked individually). Effects in the reserved
+**programmer priority band** (`FxEngine.PROGRAMMER_FX_PRIORITY_BASE`, strictly above every
+cue-derived priority) are exempt — they are programmer-owned FX and modulate on top of
+programmer values. The suppression snapshot is rebuilt only when `ProgrammerStore.epoch`
+changes, keeping the 50 Hz path allocation-flat.
 
 Consequences:
 
-- Direct writes (`updateChannel`, MIDI surface faders at Layer 4) persist visibly under
-  running effects rather than resetting to zero on every tick. This is the user-visible
-  behavioural change delivered by Phase 0.
+- Manual values (`updateChannel` shim, MIDI surface faders — programmer entries) persist
+  visibly under running effects, and on properties they hold, *win outright* — the effect
+  freezes until the entry clears, then resumes on the next tick.
 - `MAX` and `ADDITIVE` blend modes do not ratchet upward across ticks — the reset clears
   the accumulator before each effect iteration.
 - Parked channels are skipped entirely by the reset + apply pass (`ParkManager.isParked`
@@ -437,43 +451,37 @@ Consequences:
 ### Locate versus park
 
 The Locate toggle (`routes/lightLocate.kt`) asserts its centre-and-open-white values as
-Layer-4 writes and applies "locate wins": `FxEngine.removeEffectsCoveringFixtures` deletes
-every effect painting the channels it writes, because `publishLayer4ForKeys` skips
-effect-covered keys and a surviving effect would repaint over the locate on the next tick.
+programmer entries (owner `locate`). "Locate wins" is **non-destructive** since the
+programmer redesign: the entries suppress every effect covering the written properties for
+as long as the locate holds, and releasing the locate lets them resume — nothing is
+removed. (`ToggleLocateResponse.effectsRemoved` is kept at a constant 0 for frontend
+compatibility until the Session 2 sweep.)
 
-Park sits above all of that at transmit time, so a locate cannot move a parked channel —
-and a locate that *only* writes parked channels would delete the operator's effects in
-exchange for nothing visible. Two filters keep the two sides honest:
-
-- **`applyLocate` drops unpublishable assignments** before it computes the covered-key set,
-  using `FxEngine.layer4Publishability`. That helper applies the *same two guards
-  `publishLayer4ForKeys` applies*, in the same order and through the same helpers
-  (`inferTargetForProperty`, then `allChannelsParked`), so the pre-filter cannot disagree
-  with what the write then does — which matters because `ColourTarget` scopes its
-  white/amber/UV channels by `bundleWithColour` while `PropertyChannelWriter.channelsFor`
-  enumerates them by trait. It reports `UNRESOLVED` (no DMX-backed channels) and
-  `PARK_MASKED` separately, and the latter surfaces as `parkMasked` on the toggle response so
-  the UI can distinguish "parked" from "nothing to write".
-- **`removeEffectsCoveringFixtures` spares park-masked effects.** Matching stays by fixture
-  key rather than by (fixture, property) — a locate write can share a DMX channel with a
-  differently-named property, e.g. dimmer and shutter on one channel — but an effect whose
-  own property is fully parked on every fixture it paints is invisible, so removing it costs
-  the operator an effect and changes nothing on stage.
+Park sits above all of that at transmit time, so a locate cannot move a parked channel.
+One filter keeps the sides honest: **`applyLocate` drops unpublishable assignments** using
+`FxEngine.programmerPublishability`. That helper applies the *same two guards the cascade
+publish applies*, in the same order and through the same helpers
+(`inferTargetForProperty`, then `allChannelsParked`), so the pre-filter cannot disagree
+with what the write then does — which matters because `ColourTarget` scopes its
+white/amber/UV channels by `bundleWithColour` while `PropertyChannelWriter.channelsFor`
+enumerates them by trait. It reports `UNRESOLVED` (no DMX-backed channels) and
+`PARK_MASKED` separately, and the latter surfaces as `parkMasked` on the toggle response so
+the UI can distinguish "parked" from "nothing to write".
 
 Consequences:
 
 - A wholly parked fixture or group is a no-op locate: zero writes, `active: false`,
-  `parkMasked: true`, no effects removed, nothing registered in `LocateManager`.
-- Partial parking still locates: the unparked properties are asserted and the effects on
-  *those* properties are removed, while parked channels keep emitting their parked value and
-  the effects park was already masking survive.
+  `parkMasked: true`, nothing registered in `LocateManager`, and no effect is disturbed.
+- Partial parking still locates: the unparked properties are asserted (suppressing the
+  effects on *those* properties), while parked channels keep emitting their parked value.
 - A target that becomes park-masked while located keeps its locate state. `LocateManager`'s
   re-assert path drops an entry only when the assert callback reports the target *stale*
   (returns null), not merely write-less, so releasing an overlapping group locate can't
   silently un-locate a parked member.
 - Unparking a channel that a locate wrote to hands the *parked* value down into the
-  `DirectWriteStore` (see `UnparkValueSink`), so releasing park never snaps the output up to
-  the locate level.
+  programmer's channel sideband (see `UnparkValueSink`); the hand-down is newer than the
+  locate entry, so recency arbitration keeps the output at the parked value rather than
+  snapping up to the locate level.
 
 Covered by `routes/LocateParkInteractionTest.kt`.
 
@@ -1054,7 +1062,7 @@ on the **same** property:
 
 1. **Beat and wall-clock effects on the same property** — both loops reset to the
    layer below (via `LayerResolver`) before applying their effects. Each loop sees the
-   other loop's effect output as Layer 2 accumulator state *within its own tick*, but
+   other loop's effect output as Layer 3 accumulator state *within its own tick*, but
    because reset always goes back to L3/L4/L5, the two loops don't compound indefinitely.
    The effective behaviour is that the last-run loop for a given frame wins for OVERRIDE,
    and ADDITIVE/MAX compose naturally.

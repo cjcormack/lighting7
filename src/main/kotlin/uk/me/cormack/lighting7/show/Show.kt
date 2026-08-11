@@ -47,25 +47,27 @@ class Show(
             }
         }
     }
-    val directWriteStore = DirectWriteStore()
+    val programmerStore = ProgrammerStore()
     val layer3Resolver = Layer3Resolver()
-    val layerResolver = LayerResolver(layer3Resolver, directWriteStore)
+    val layerResolver = LayerResolver(layer3Resolver, programmerStore)
     val parkManager = ParkManager(
         state.database,
         project.id.value,
         // Releasing park must not move the output: push the parked value into the layers
-        // below park before the override is dropped. Writing both the direct-write store
-        // (Layer 4) and the controller buffer makes an unpark settle exactly where a manual
-        // `updateChannel` of the same value would — so a running effect resets to the parked
+        // below park before the override is dropped. Writing both the programmer's channel
+        // sideband and the controller buffer makes an unpark settle exactly where a manual
+        // channel write of the same value would — so a running effect resets to the parked
         // value rather than to 0. `fixtures` is empty at construction time and populated by
         // `start()`; the lambda resolves the controller per call, so there is no ordering
         // dependency here.
         unparkValueSink = { values ->
             for ((universe, channel, value) in values) {
-                // BUSKING because an unpark settles "exactly where a manual updateChannel
-                // would" — the handed-down value must be releasable/overwritable by the
-                // same owner the operator's own channel writes use.
-                directWriteStore.put(DirectWriteOwner.BUSKING, universe, channel, value)
+                // Channel sideband with owner UNPARK and touched = false: the hand-down is
+                // channel-shaped by nature (lifting one channel to a property entry would
+                // freeze its sibling channels into the programmer) and it is not an
+                // operator edit, so Record and the Update checklist (Session 3) must not
+                // see it. A later deliberate property write absorbs it; Clear releases it.
+                programmerStore.putChannel(ProgrammerOwner.UNPARK, universe, channel, value, touched = false)
                 val controller = fixtures.controllerOrNull(Universe(0, universe)) ?: continue
                 try {
                     // Preferred path: goes through the channel changer, so it also cancels any
@@ -85,7 +87,7 @@ class Show(
     val fxEngine = FxEngine(
         fixtures = fixtures,
         masterClock = MasterClock(),
-        directWriteStore = directWriteStore,
+        programmerStore = programmerStore,
         layerResolver = layerResolver,
         parkManager = parkManager,
     )

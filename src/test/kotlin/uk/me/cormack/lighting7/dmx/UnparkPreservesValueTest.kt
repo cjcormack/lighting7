@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
  * park/unpark a one-way door when operators expect a toggle.
  *
  * These tests pin the property that `park → unpark → park` never moves the output, and
- * that the hand-off lands in *both* layers below park (direct-write store and controller
+ * that the hand-off lands in *both* layers below park (programmer sideband and controller
  * buffer) so an effect reset-to-neutral can't quietly undo it.
  *
  * Companion coverage: [ArtNetParkSafetyTest] (park wins at transmit time) and
@@ -50,8 +50,12 @@ class UnparkPreservesValueTest : RouteIntegrationTest() {
             "unpark must hand the parked value down, not drop the channel to the 0 underneath",
         )
         assertEquals(
-            255u.toUByte(), state.show.directWriteStore.get(0, 5),
-            "the handed-off value must be sticky at Layer 4 so an effect reset resumes from it",
+            255u.toUByte(), state.show.programmerStore.getChannel(0, 5),
+            "the handed-off value must be sticky in the programmer sideband so an effect reset resumes from it",
+        )
+        assertEquals(
+            false, state.show.programmerStore.channelEntries().single().slots.single().touched,
+            "an unpark hand-down is not an operator edit — Record must not see it",
         )
     }
 
@@ -108,8 +112,8 @@ class UnparkPreservesValueTest : RouteIntegrationTest() {
 
         assertEquals(0u.toUByte(), controller.getValue(42))
         assertNull(
-            state.show.directWriteStore.get(0, 42),
-            "a no-op unpark must not plant a sticky Layer 4 write",
+            state.show.programmerStore.getChannel(0, 42),
+            "a no-op unpark must not plant a sticky programmer entry",
         )
     }
 

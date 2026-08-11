@@ -3,8 +3,8 @@
 This document describes the Cue system — named snapshots that bundle a colour palette with FX preset applications and ad-hoc effects.
 
 > **See also**: [lighting-composition-model.md](lighting-composition-model.md). Cues contribute
-> at **Layer 3** (property assignments, when Phase 1 lands) and own the ad-hoc effects they
-> spawn at **Layer 2**. Cue-owned effects receive a derived priority so composition across
+> at **Layer 4** (property assignments) and own the ad-hoc effects they
+> spawn at **Layer 3**. Cue-owned effects receive a derived priority so composition across
 > restarts and reapplies is deterministic. The `stomp` flag (see below) removes other cues'
 > ad-hoc effects when a stomping cue applies and overlaps their targets.
 
@@ -197,12 +197,12 @@ in [`projectCues.kt`](../src/main/kotlin/uk/me/cormack/lighting7/routes/projectC
 The engine iterates effects in priority-ascending order, id-ascending tie-break. Higher
 priority composes later, so under non-OVERRIDE blend modes a later-positioned cue dominates
 earlier cues on the same property. See
-[lighting-composition-model.md](lighting-composition-model.md) §"Layer 2".
+[lighting-composition-model.md](lighting-composition-model.md) §"Layer 3 — Effects". Note that a property held by the programmer (Layer 2) suppresses cue-owned effects on it entirely.
 
 Because priority is derived from `sortOrder`, **reordering a stack changes precedence**. Priority
 is stamped at apply time, so the reorder / `add-cue` / `sort-by-cue-number` handlers call
 `FxEngine.repriorityCues(cueId → priority)` after writing sort orders. That restamps both layers a
-cue can own — `FxInstance.priority` and the Layer 3 `Assignment.priority` rows — so cues already on
+cue can own — `FxInstance.priority` and the Layer 4 `Assignment.priority` rows — so cues already on
 stage compose in the new order without needing to be re-applied. Crossfade weights are left
 untouched, and cues whose derived priority didn't change are skipped, which makes the ordinary
 single-live-cue reorder a no-op.
@@ -212,7 +212,7 @@ single-live-cue reorder a no-op.
 `DaoCues.stomp: Boolean` (default false) — when a stomping cue applies, the engine calls
 `FxEngine.stompForCue(stompingCueId, overlap)` to remove ad-hoc effects owned by *other*
 cues that target the overlap set. Phase 0 derives the overlap from the stomping cue's own
-ad-hoc effect targets; Phase 1 will switch to Layer 3 property assignments once they land.
+ad-hoc effect targets; Phase 1 will switch to Layer 4 property assignments once they land.
 Manual effects and effects owned by the stomping cue itself are never stomped. See
 [lighting-composition-model.md](lighting-composition-model.md) §"Stomp".
 

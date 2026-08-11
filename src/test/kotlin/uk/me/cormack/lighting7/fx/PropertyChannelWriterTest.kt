@@ -300,12 +300,12 @@ class PropertyChannelWriterTest {
             addController(controller)
             addFixture(HexFixture(universe, "hex-1", "Hex 1", 1))
         }
-        val directWriteStore = DirectWriteStore()
+        val programmerStore = ProgrammerStore()
         val engine = FxEngine(
             fixtures = fixtures,
             masterClock = MasterClock(),
-            directWriteStore = directWriteStore,
-            layerResolver = LayerResolver(Layer3Resolver(), directWriteStore),
+            programmerStore = programmerStore,
+            layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
         )
 
         // Cue-apply path: assignment → setCueAssignments → publishLayer3ToControllers → controller bytes.
@@ -350,12 +350,12 @@ class PropertyChannelWriterTest {
             addController(controller)
             addFixture(HexFixture(universe, "hex-1", "Hex 1", 1))
         }
-        val directWriteStore = DirectWriteStore()
+        val programmerStore = ProgrammerStore()
         val engine = FxEngine(
             fixtures = fixtures,
             masterClock = MasterClock(),
-            directWriteStore = directWriteStore,
-            layerResolver = LayerResolver(Layer3Resolver(), directWriteStore),
+            programmerStore = programmerStore,
+            layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
         )
 
         val assignment = Layer3Resolver.Assignment(

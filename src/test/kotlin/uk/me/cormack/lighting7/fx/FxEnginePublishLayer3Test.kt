@@ -29,7 +29,7 @@ class FxEnginePublishLayer3Test {
         val controller: MockDmxController,
         val fixtures: Fixtures,
         val engine: FxEngine,
-        val directWriteStore: DirectWriteStore,
+        val programmerStore: ProgrammerStore,
     )
 
     /**
@@ -43,14 +43,14 @@ class FxEnginePublishLayer3Test {
             addController(controller)
             addFixture(HexFixture(universe, "hex-a", "Hex A", firstChannel))
         }
-        val directWriteStore = DirectWriteStore()
+        val programmerStore = ProgrammerStore()
         val engine = FxEngine(
             fixtures = fixtures,
             masterClock = MasterClock(),
-            directWriteStore = directWriteStore,
-            layerResolver = LayerResolver(Layer3Resolver(), directWriteStore),
+            programmerStore = programmerStore,
+            layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
         )
-        return Rig(controller, fixtures, engine, directWriteStore)
+        return Rig(controller, fixtures, engine, programmerStore)
     }
 
     private fun slider(
@@ -79,23 +79,32 @@ class FxEnginePublishLayer3Test {
     }
 
     @Test
-    fun `removeCueAssignments releases the channel back to direct-write value`() {
+    fun `a programmer value wins over a cue and survives its release`() {
         val rig = newRig(firstChannel = 1)
-        // Sticky direct write at Layer 4.
-        rig.directWriteStore.put(DirectWriteOwner.BUSKING, universe = 0, channel = 1, value = 55u)
+        // Sticky programmer write — sits ABOVE the cue layer.
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(55u))
 
         rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 180u)))
-        assertEquals(180u.toUByte(), rig.controller.currentValues[1])
+        assertEquals(
+            55u.toUByte(), rig.controller.currentValues[1],
+            "the programmer value overrides the cue's assignment",
+        )
 
         rig.engine.removeCueAssignments(10)
         assertEquals(
             55u.toUByte(), rig.controller.currentValues[1],
-            "release should fall through to Layer 4 sticky write, not zero"
+            "the programmer value stands after the cue releases",
         )
+
+        // Clearing the programmer entry with no cue below cascades to baseline.
+        rig.engine.clearProgrammerProperty(
+            ProgrammerOwner.WEB, rig.fixtures.fixture<uk.me.cormack.lighting7.fixture.dmx.HexFixture>("hex-a"), "dimmer",
+        )
+        assertEquals(0u.toUByte(), rig.controller.currentValues[1])
     }
 
     @Test
-    fun `removeCueAssignments with no layer 4 releases to baseline zero`() {
+    fun `removeCueAssignments with no programmer entry releases to baseline zero`() {
         val rig = newRig(firstChannel = 1)
         rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 180u)))
         rig.engine.removeCueAssignments(10)
@@ -115,15 +124,18 @@ class FxEnginePublishLayer3Test {
     @Test
     fun `clearAllCueAssignments releases every previously-asserted channel`() {
         val rig = newRig(firstChannel = 1)
-        rig.directWriteStore.put(DirectWriteOwner.BUSKING, universe = 0, channel = 1, value = 30u)
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(30u))
 
         rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 180u)))
-        assertEquals(180u.toUByte(), rig.controller.currentValues[1])
+        assertEquals(
+            30u.toUByte(), rig.controller.currentValues[1],
+            "the programmer value overrides the cue while both are present",
+        )
 
         rig.engine.clearAllCueAssignments()
         assertEquals(
             30u.toUByte(), rig.controller.currentValues[1],
-            "clearAllCueAssignments should release to Layer 4"
+            "clearAllCueAssignments leaves the programmer value on stage"
         )
     }
 
@@ -355,12 +367,13 @@ class FxEnginePublishLayer3Test {
     }
 
     @Test
-    fun `colour release falls through to Layer 4 when direct writes exist`() {
+    fun `a programmer colour wins over a cue colour and survives its release`() {
         val rig = newRig(firstChannel = 1)
-        // Layer 4 holds a dim red across the RGB channels.
-        rig.directWriteStore.put(DirectWriteOwner.BUSKING, 0, 2, 40u)
-        rig.directWriteStore.put(DirectWriteOwner.BUSKING, 0, 3, 10u)
-        rig.directWriteStore.put(DirectWriteOwner.BUSKING, 0, 4, 10u)
+        // The programmer holds a dim red on the colour property.
+        rig.programmerStore.put(
+            ProgrammerOwner.WEB, "hex-a", "rgbColour",
+            Layer3Resolver.PropertyValue.Colour(ExtendedColour(java.awt.Color(40, 10, 10))),
+        )
 
         val assignment = Layer3Resolver.Assignment(
             cueId = 10, priority = 1, fadeWeight = 1.0,
@@ -371,10 +384,10 @@ class FxEnginePublishLayer3Test {
             ),
         )
         rig.engine.setCueAssignments(10, listOf(assignment))
-        assertEquals(255u.toUByte(), rig.controller.currentValues[2])
+        assertEquals(40u.toUByte(), rig.controller.currentValues[2], "programmer red beats the cue's white")
 
         rig.engine.removeCueAssignments(10)
-        assertEquals(40u.toUByte(), rig.controller.currentValues[2], "red falls back to Layer 4")
+        assertEquals(40u.toUByte(), rig.controller.currentValues[2], "programmer red stands after the cue")
         assertEquals(10u.toUByte(), rig.controller.currentValues[3])
         assertEquals(10u.toUByte(), rig.controller.currentValues[4])
     }

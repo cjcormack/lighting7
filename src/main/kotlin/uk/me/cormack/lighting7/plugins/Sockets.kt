@@ -78,19 +78,29 @@ fun Application.configureSockets(state: State) {
             setupProjectSubscriptions(scope)
             setupSurfaceSubscriptions(scope)
             setupCloudSyncSubscriptions(scope)
+            setupProgrammerSubscriptions(scope)
 
             try {
                 for (frame in incoming) {
-                    when (val message = converter?.deserialize<InMessage>(frame)) {
-                        is ChannelInMessage -> handleChannel(scope, message)
-                        is ParkInMessage -> handlePark(scope, message)
-                        is FxInMessage -> handleFx(scope, message)
-                        is PaletteInMessage -> handlePalette(scope, message)
-                        is GroupInMessage -> handleGroup(scope, message)
-                        is ProjectInMessage -> handleProject(scope, message)
-                        is SurfaceInMessage -> handleSurface(scope, message)
-                        is CueEditInMessage -> handleCueEdit(scope, message)
-                        null -> TODO()
+                    // Per-message guard: one bad frame (unknown universe, stale fixture key,
+                    // malformed payload) must not tear down the operator's whole socket.
+                    try {
+                        when (val message = converter?.deserialize<InMessage>(frame)) {
+                            is ChannelInMessage -> handleChannel(scope, message)
+                            is ParkInMessage -> handlePark(scope, message)
+                            is FxInMessage -> handleFx(scope, message)
+                            is PaletteInMessage -> handlePalette(scope, message)
+                            is GroupInMessage -> handleGroup(scope, message)
+                            is ProjectInMessage -> handleProject(scope, message)
+                            is SurfaceInMessage -> handleSurface(scope, message)
+                            is CueEditInMessage -> handleCueEdit(scope, message)
+                            is ProgrammerInMessage -> handleProgrammer(scope, message)
+                            null -> System.err.println("WS /api: undeserializable frame ignored")
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        System.err.println("WS /api: error handling frame: ${e.message}")
                     }
                 }
             } finally {

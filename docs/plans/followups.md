@@ -123,6 +123,45 @@ risks breaking visual regressions until the next consumer pays for itself.
 
 ## Backend / composition model
 
+### `FU-PROG-L3RESOLVER-RENAME` — rename `Layer3Resolver` to `CueAssignmentResolver`
+
+**Status**: Ready (standalone mechanical commit)
+**Origin**: Programmer redesign Session 1 (2026-08), decision §5.9
+
+The programmer redesign renumbered the layer stack (cue property assignments are
+now **Layer 4**), but `Layer3Resolver`, `Layer3Resolver.Key`,
+`LayerResolver.currentLayer3State`, `republishLayer3Assignments`, and
+`publishLayer3ToControllers` keep the old number baked into their names — a
+deliberate Session 1 scope cut (~25-file mechanical churn in the middle of
+delicate engine surgery). The KDoc on each names the mismatch. Do the rename as
+its own commit with no behavioural changes: `Layer3Resolver` →
+`CueAssignmentResolver`, `currentLayer3State` → `currentCueLayerState`, and the
+`*Layer3*` engine internals to match. Grep docs afterwards — the composition
+model doc points at this item.
+
+### `FU-PROG-EFFECTSREMOVED-FIELD` — drop `ToggleLocateResponse.effectsRemoved`
+
+**Status**: Blocked (needs the Session 2 frontend work)
+**Origin**: Programmer redesign Session 1 (2026-08), §3.2 locate simplification
+
+Locate no longer removes effects (programmer suppression replaced destruction),
+so `effectsRemoved` is a constant 0 kept only because the lighting-react
+frontend reads it. When Session 2 rewires the frontend onto the programmer,
+remove the field from `ToggleLocateResponse` and the frontend type together.
+
+### `FU-PROG-PROVENANCE-STACKID` — cue-source provenance lacks `cueStackId`
+
+**Status**: Blocked (needed by Session 3's Update-without-Include checklist)
+**Origin**: Programmer redesign Session 1 (2026-08), §3.3 scope cut
+
+`FxEngine.computeProvenance` reports the winning `cueId` for CUE-source entries
+(via `LayerResolver.currentLayer3Winners`) but not the owning stack — the
+engine's assignment map doesn't carry cueId → stackId. Session 3's Mode B
+checklist groups overridden cues by stack, so when building it, extend
+`setCueAssignments` callers (they hold `CueApplyData.cueStackId`) to record the
+mapping and fill `ProvenanceEntry.cueStackId` for CUE sources. EFFECT sources
+already carry it from the `FxInstance`.
+
 ---
 
 ## Distribution

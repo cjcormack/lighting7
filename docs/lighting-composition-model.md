@@ -1,9 +1,10 @@
 # Lighting Composition Model
 
-This document specifies how lighting7 composes the DMX channel output sent each frame. It is the source of truth for priority rules, blending, direct-write semantics, cue crossfades, and `cueEdit` session behaviour.
+This document specifies how lighting7 composes the DMX channel output sent each frame. It is the source of truth for priority rules, blending, programmer semantics, cue crossfades, and `cueEdit` session behaviour.
 
 Related:
 - Strategic plan for adopting this model: [cue-authoring-unification-plan.md](plans/completed/cue-authoring-unification-plan.md).
+- The programmer redesign that introduced Layer 2 and renumbered the stack: [programmer-redesign-proposal.md](plans/programmer-redesign-proposal.md).
 - Effect engine details: [fx-engineering.md](fx-engineering.md).
 - DMX transport and parking: [dmx-engineering.md](dmx-engineering.md).
 - Prior-art survey that drove these decisions: [research/composition-model-prior-art.md](research/composition-model-prior-art.md).
@@ -14,13 +15,18 @@ Per frame, the DMX output for each channel is resolved by walking an ordered lay
 
 ```
 Layer 1  Parking                     absolute override per channel
-Layer 2  Effects                     tempo-synced FX, priority-ordered, blend modes
-Layer 3  Property Assignments        deterministic per-cue state, per-category HTP/LTP
-Layer 4  Direct Live Writes          sticky manual channel writes
+Layer 2  Programmer                  sticky manual values + programmer-owned FX; blind gate
+Layer 3  Effects                     tempo-synced FX, priority-ordered, blend modes
+Layer 4  Cue Property Assignments    deterministic per-cue state, per-category HTP/LTP
 Layer 5  Baseline / defaults         usually 0
 ```
 
-Intuition: parking (Layer 1) sits on top for safety. Playbacks (Layer 3) assert state. Effects (Layer 2) modulate over that state. Direct live writes (Layer 4) fill gaps not covered by a cue. Defaults (Layer 5) fall through.
+Intuition: parking (Layer 1) sits on top for safety. The programmer (Layer 2) is the operator's hands — whatever was touched manually wins, console-style. Effects (Layer 3) modulate over the playback state, except where the programmer holds a property. Playbacks (Layer 4) assert state. Defaults (Layer 5) fall through.
+
+> **Historical note.** Before the programmer redesign the manual layer ("Direct Live
+> Writes") sat *below* playbacks at the old Layer 4, and Effects/Assignments were Layers
+> 2/3. Code symbols that predate the renumber (`Layer3Resolver`, `Layer3Resolver.Key`)
+> still name the cue-assignment layer by its old number; their KDoc says so.
 
 ## Layer 1 — Parking
 
@@ -28,11 +34,68 @@ The `ParkManager` holds per-channel overrides. If a channel is parked, the trans
 
 Implementation note: parking is applied at transmit time in `ArtNetController` (after Layer 2–4 composition has already written to the controller's `currentValues`). This is an optimisation — conceptually, parking is Layer 1 and the pre-composition pipeline can short-circuit for parked channels.
 
-Rationale: parking protects specific channels during maintenance, rigging checks, or troubleshooting. It must be unconditional and must not be overwritten by cue-apply, effects, or direct writes.
+Rationale: parking protects specific channels during maintenance, rigging checks, or troubleshooting. It must be unconditional and must not be overwritten by cue-apply, effects, or manual writes.
 
-**Releasing park does not move the output.** Whatever sits under a parked channel is unrelated to what the rig is emitting — usually 0 — so `ParkManager.unpark` / `unparkAll` first hand the parked value *down* into Layer 4 (`DirectWriteStore`) and the controller buffer, then drop the override. The hand-off happens before the entry is removed, so no transmit frame lands in a window where park is gone but the stale value underneath is still in place. Net effect: unparking settles exactly where a manual `updateChannel` of the same value would, and `park → unpark → park` is a no-op on the wire. Rigs park hard-powered fixtures hung off a dimmer, where an unpark-to-0 snap is a safety failure rather than a cosmetic one.
+**Releasing park does not move the output.** Whatever sits under a parked channel is unrelated to what the rig is emitting — usually 0 — so `ParkManager.unpark` / `unparkAll` first hand the parked value *down* into the programmer's channel sideband (owner `unpark`, `touched = false`) and the controller buffer, then drop the override. The hand-off happens before the entry is removed, so no transmit frame lands in a window where park is gone but the stale value underneath is still in place. Net effect: unparking settles exactly where a manual channel write of the same value would, and `park → unpark → park` is a no-op on the wire. Rigs park hard-powered fixtures hung off a dimmer, where an unpark-to-0 snap is a safety failure rather than a cosmetic one.
 
-## Layer 2 — Effects
+## Layer 2 — Programmer
+
+The console-style programmer: a sparse per-(fixture, property) overlay of sticky manual values held in `ProgrammerStore`. It is simultaneously the live override for busking and the staging buffer that Record serialises (Session 3 of the redesign). **An active programmer entry wins over cue values and suppresses effects on that property** — for HTP categories too (predictability beats max-merge in a busking-first system).
+
+Writers: web busking (`programmer.*` ops and the `updateChannel` compatibility shim), MIDI surface faders, surface flash buttons, FX preset toggles / editor previews, Locate, and the unpark hand-down.
+
+### Ownership
+
+Each (fixture, property) holds a small **recency-ordered stack** of per-owner slots rather than a single flat value:
+
+- **Put**: installs or refreshes the owner's slot and moves it to the top. The most recent write wins on the wire regardless of which subsystem made it — busking over a located fixture updates the output, matching console intuition (the thing you just touched is the thing that changed).
+- **Clear**: removes only the caller's own slot. If other owners still hold the property, it falls back to the **most recent surviving owner's value** (then the cue layer, then baseline). Releasing a Locate no longer wipes a busked dimmer level; toggling a preset off no longer destroys a locate or another preset's write on a shared property; releasing a flash restores the fader level underneath.
+- **Read** (`get`, on the 50 Hz effect-reset hot path) returns the top of the stack — O(1) and allocation-free.
+
+Owners: `web` (busking UI + `updateChannel` shim), `surface` (MIDI faders), `flash` (flash press/release — separate from `surface` so releasing a flash restores the fader or busked level underneath), `preset:{id}` (one per preset, previews use a synthetic negative id), `locate`, `unpark` (park-release hand-down), and `include` (reserved for Session 3).
+
+One deliberate exception: **all Locate targets share the single `locate` owner**, so locate-vs-locate overlap (releasing a group locate while a member is individually located) is *not* resolved by the store's fallback — same-owner writes overwrite each other. `LocateManager` keeps its own re-assert loop for that case, which also re-resolves locate values and drops stale targets on the way.
+
+### Touched flag
+
+Every slot carries a sticky `touched` flag — never value-diffed. `true` marks an operator edit and is what Record and the Update checklist (Session 3) read. `false` marks a mechanical hand-down: the `unpark` owner's slots, which must be releasable like any manual write but must never leak into a recorded cue.
+
+### Channel sideband
+
+Raw channels with no property-level lift live in a parallel per-channel map with the same owner-slot semantics:
+
+- channels with **no backing property** (`updateChannel` on an unmapped channel),
+- **pan/tilt axes** written as raw channels (lifting one axis to a `position` entry would freeze the other axis too),
+- **every unpark hand-down** (inherently channel-shaped — lifting one channel would freeze its property's sibling channels).
+
+Across granularities, **recency arbitrates**: a property entry and a sideband slot covering the same channel compare write sequence numbers and the newer wins — an unpark hand-down beats an older locate entry on the channel it covers. A deliberate operator property write (`web`/`surface`) additionally *absorbs* the sideband beneath its channels so a stale raw value cannot resurface when the entry clears; momentary owners (flash, locate, presets) do not absorb, so their release reveals what the sideband held.
+
+### Effect suppression
+
+A property with an active programmer entry (blind off) suppresses **every** effect on it — cue-owned and manual alike. The tick's reset pass paints the programmer value; the effect's apply is skipped for that (fixture, property) only, so a group effect keeps painting its other members. Clearing the entry lets the effect resume on the next tick — this is what makes Locate non-destructive (it used to remove covering effects; now they freeze under the locate and resume on release).
+
+Exempt: effects in the reserved **programmer priority band** (`FxEngine.PROGRAMMER_FX_PRIORITY_BASE`, strictly above every cue-derived priority). These are programmer-owned FX (Session 2's busking effects) and modulate *on top of* programmer values. Sideband channel slots do not suppress effects — only property entries do.
+
+### Blind
+
+`programmer.setBlind { blind, fadeMs? }` gates the programmer's contribution out of the merge without touching the stored state: entering blind releases programmer-held properties to the layers below (cues → baseline), effects resume painting, and writes made while blind stage silently. Exiting restores exactly what was staged. `touched` flags survive the round trip.
+
+### Fades
+
+Clears, blind transitions, and sets accept an optional `fadeMs`, driving the per-channel `DmxController` ramp (`TickerState`). **Fades apply only to properties no running effect covers; effect-covered properties settle on the next tick and snap** — the 50 Hz tick writes covered channels every frame with fade 0 through the conflated channel changer, which would kill any ramp mid-flight. Settings (discrete wheels) always snap regardless of `fadeMs`.
+
+### Clearing
+
+- `programmer.clearEntry { target, propertyName, fadeMs? }` — releases every owner's slot on one property.
+- `programmer.clearAll { fadeMs? }` / `POST /api/rest/programmer/clear-all` — the escape hatch: sweeps every owner's entries (property + sideband) and republishes everything in one pass. Also resets locate and preset-toggle bookkeeping so the toggles stay consistent with the swept store. Sideband channels with no backing property release to DMX 0 (nothing sits below them).
+
+Deterministic release: clearing a programmer entry re-resolves the cascade below it — the property lands on the surviving owner, the cue layer, or baseline, never on a stale snapshot.
+
+### Provenance
+
+The engine maintains, per (target, property), the identity of the winning contributor — `PARKED`, `PROGRAMMER`, `EFFECT` (with `effectId`/`cueId`), or `CUE` (with the winning `cueId`); baseline keys are omitted. Recomputed on layer events only (programmer mutation, cue republish, effect lifecycle, park change) — never per frame — and broadcast as a full-state `provenanceState` WS message. This powers ownership colouring in the programmer sheet (Session 2) and the Update-without-Include checklist (Session 3).
+
+## Layer 3 — Effects
 
 Tempo-synchronised `FxInstance`s that modulate property values each tick. Driven by the Master Clock (24 ticks/beat).
 
@@ -40,20 +103,16 @@ Tempo-synchronised `FxInstance`s that modulate property values each tick. Driven
 
 Deterministic. Effects sort by:
 
-1. Explicit `priority` field on the `FxInstance` (higher priority composes later so it "wins" against earlier same-channel contributions).
+1. Explicit `priority` field on the `FxInstance` (higher priority composes later so it "wins" against earlier same-channel contributions). Manual effects default to 0; cue-owned effects get a derived priority (`stackId·1M + sort·1K + 1`); the programmer band sits above both.
 2. Tie-break: cue-stack position for cue-owned effects, creation timestamp for manual / ad-hoc effects.
-
-The pre-refactor `ConcurrentHashMap` iteration left the order undefined. It is replaced by a sorted pass.
 
 ### Per-tick reset
 
 At the start of each beat tick, properties touched by at least one active effect are reset to the **layer below** (not to hardcoded zero):
 
-- If Layer 3 contributes to this property, reset to the Layer 3 composed value.
-- Else if Layer 4 has a sticky direct write for this property, reset to that value.
+- If the programmer holds this property (and blind is off), reset to the programmer value — and skip the effect's apply for it (suppression, above).
+- Else if Layer 4 contributes to this property, reset to the composed cue value.
 - Else reset to the Layer 5 baseline.
-
-This fixes the pre-refactor bug where direct writes disappeared under running effects.
 
 ### Blend modes
 
@@ -71,11 +130,16 @@ Multi-effect composition on the same property: start from the reset baseline, it
 
 Each `FxInstance` carries an `intensityMultiplier` in `[0, 1]`. The effect's output is scaled by this multiplier before the blend. It is used for manual and scripted effect fades.
 
-Cue transitions do **not** drive `intensityMultiplier`. On a cue change, outgoing effects are removed immediately and incoming effects start at full intensity; only Layer 3 property assignments crossfade (via per-cue fade weights). This matches Eos / grandMA / Hog 4 and avoids the drop-to-0 artefact that came from scaling OVERRIDE-blend effect outputs by a crossfade multiplier.
+Cue transitions do **not** drive `intensityMultiplier`. On a cue change, outgoing effects are removed immediately and incoming effects start at full intensity; only Layer 4 property assignments crossfade (via per-cue fade weights). This matches Eos / grandMA / Hog 4 and avoids the drop-to-0 artefact that came from scaling OVERRIDE-blend effect outputs by a crossfade multiplier.
 
-## Layer 3 — Property Assignments
+## Layer 4 — Cue Property Assignments
 
-Deterministic per-cue state — the "this cue asserts property X = value" layer. Contributed by active cues via the `CuePropertyAssignment` collection (introduced in Phase 1).
+Deterministic per-cue state — the "this cue asserts property X = value" layer. Contributed by active cues via the `CuePropertyAssignment` collection.
+
+> Code note: this layer is composed by `Layer3Resolver` / consumed via
+> `LayerResolver.currentLayer3State` — the class names carry the pre-renumber "Layer 3"
+> and are kept to avoid churning ~25 files; a rename to `CueAssignmentResolver` is queued
+> in [followups.md](plans/followups.md).
 
 ### Composition rules by `PropertyCategory`
 
@@ -105,55 +169,7 @@ For each (fixture, property) pair:
 
 Each active cue has a fade weight in `[0, 1]` tracking its crossfade progress. During a cue transition, outgoing cues fade `1 → 0` and incoming cues fade `0 → 1` over the cue fade time. The weight feeds both the crossfade interpolation for `LTP` categories and the scaled `max` for `HTP` categories.
 
-## Layer 4 — Direct Live Writes
-
-Transient writes from `updateChannel` that are not scoped to a cue-edit session. Visible when no higher layer is writing to the channel.
-
-Layer 4 writes are **sticky** — they persist until explicitly released. Effect reset-to-neutral no longer clobbers them. They remain until:
-
-- A new cue is triggered whose Layer 3 contribution covers the channel, or
-- `clearAssignment` is called for the target, or
-- A fresh `updateChannel` sets a new value for the channel.
-
-### Layer 4 ownership
-
-Layer 4 has several independent writers — manual busking (`updateChannel`, and the unpark
-hand-down which behaves identically), MIDI surface faders, surface flash buttons, FX preset
-toggles / editor previews, and Locate. Each write into the `DirectWriteStore` is tagged with
-a `DirectWriteOwner`, and every channel holds a small **recency-ordered stack** of per-owner
-entries rather than a single flat value:
-
-- **Put**: installs or refreshes the owner's entry and moves it to the top. The most recent
-  write wins on the wire regardless of which subsystem made it — busking over a located
-  fixture updates the output exactly as it did with the old flat map.
-- **Clear**: removes only the caller's own entry. If other owners still hold the channel, it
-  falls back to the **most recent surviving owner's value** (then Layer 3, then baseline).
-  Releasing a Locate no longer wipes a busked dimmer level; toggling a preset off no longer
-  destroys a locate or another preset's write on shared channels.
-- **Read** (`get`, on the 50 Hz effect-reset hot path) returns the top of the stack —
-  O(1) and allocation-free; a channel held by a single owner (the overwhelmingly common
-  case) stores one entry, not a stack.
-
-Precedence is **recency**, not a fixed owner hierarchy: whichever subsystem wrote last is
-what the operator sees, matching console intuition (the thing you just touched is the thing
-that changed). Ownership only matters on *release*, where it guarantees you can only take
-back your own contribution.
-
-Owners: `busking` (web `updateChannel` + unpark hand-down), `surface` (MIDI faders),
-`flash` (flash press/release — separate from `surface` so releasing a flash restores the
-fader or busked level underneath), `preset:{id}` (one per preset, previews use a synthetic
-negative id), and `locate`.
-
-One deliberate exception: **all Locate targets share the single `locate` owner**, so
-locate-vs-locate overlap (releasing a group locate while a member is individually located)
-is *not* resolved by the store's fallback — same-owner writes overwrite each other.
-`LocateManager` keeps its own re-assert loop for that case, which also re-resolves locate
-values and drops stale targets on the way — semantics a stored-value fallback could not
-replicate.
-
-Interaction with cue-edit sessions: when a client holds an active `cueEdit` session, `updateChannel` is replaced by `cueEdit.setChannel`, which routes the write into the cue's Layer 3 property assignments rather than Layer 4. See [Cue edit sessions](#cue-edit-sessions) below.
-
-**Control surfaces write Layer 4** the same way the web UI does. A surface fader bound to `group.dimmer` routes through the same `DirectWriteStore` that `updateChannel` uses; during a cue-edit session it routes into Layer 3 via `cueEdit.*` just like the frontend. Surfaces are not a separate layer — they are another client of the existing routing. Flash buttons write an ephemeral Layer 4 entry on press and clear it on release. Blackout and Grand Master are applied at transmit time (alongside parking), not as composition layers. See [control-surface-plan.md](plans/completed/control-surface-plan.md).
+Interaction with cue-edit sessions: when a client holds an active `cueEdit` session, surface fader writes route into the cue's Layer 4 property assignments (via `cueEdit.setProperty`) rather than the programmer. See [Cue edit sessions](#cue-edit-sessions) below.
 
 ## Layer 5 — Baseline / defaults
 
@@ -161,7 +177,7 @@ Per-fixture baseline values: typically 0 (blackout) for intensity-like channels,
 
 ## Crossfade behaviour
 
-When a cue transitions (outgoing → incoming), each property's Layer 3 contribution crossfades according to a per-category rule:
+When a cue transitions (outgoing → incoming), each property's Layer 4 contribution crossfades according to a per-category rule:
 
 - **Sliders** (`DIMMER`, `UV`, `STROBE`, `PAN`, `TILT`, `PAN_FINE`, `TILT_FINE`, `AMBER`, `WHITE`, `SPEED`): linear interpolation between outgoing and incoming values, weighted by fade progress.
 - **Colour** (`COLOUR`): linear interpolation in RGB space. HSV / LAB modes reserved for future.
@@ -174,11 +190,9 @@ Fade time source: cue-level fade time by default. The data model supports per-pr
 
 ## Stomp
 
-A cue carries a `stomp: Boolean` (default `false`). When a stomping cue applies, the FX engine removes ad-hoc effects tagged with *other cue IDs* that target properties covered by this cue's Layer 3 assignments. This matches grandMA3's `Stomp` — a new cue cleanly takes over from in-flight phasers without chasing them.
+A cue carries a `stomp: Boolean` (default `false`). When a stomping cue applies, the FX engine removes ad-hoc effects tagged with *other cue IDs* that target properties covered by this cue's Layer 4 assignments. This matches grandMA3's `Stomp` — a new cue cleanly takes over from in-flight phasers without chasing them.
 
-Scope: stomp only removes ad-hoc effects owned by other cues. Manual (un-cued) effects are not stomped. Effects owned by this cue itself are not stomped — they co-exist with its Layer 3.
-
-Data-model support lands in Phase 0. Authoring UX for the flag lands in a later phase.
+Scope: stomp only removes ad-hoc effects owned by other cues. Manual (un-cued) effects are not stomped. Effects owned by this cue itself are not stomped — they co-exist with its Layer 4.
 
 ## Cue edit sessions
 
@@ -186,28 +200,31 @@ Operators edit cues through an active editing session, managed by `cueEdit.*` so
 
 ### Lifecycle
 
-- `cueEdit.beginEdit { cueId, mode }` — server snapshots the cue's Layer 3 property assignments (the pre-edit baseline) and stores it for the session. In Live mode the cue is activated on stage for the session (if not already active). In Blind mode the session does not toggle stage activation.
-- `cueEdit.setChannel / setProperty / setPalette / addPresetApplication / addAdHocEffect / clearAssignment` — edits auto-persist into the cue. In Live mode the server also performs the transient stage-side write for instant feedback. In Blind mode there is no transient write, but edits still propagate to stage naturally via Layer 3 re-composition if the cue is already active via the playback stack (see below).
-- `cueEdit.discardChanges { cueId }` — restores the cue's Layer 3 property assignments from the session-start snapshot. Stage reflects the restored state on the next composition pass if the cue is active (in either mode). Equivalent in spirit to EOS `Release` / grandMA `Clear`.
+- `cueEdit.beginEdit { cueId, mode }` — server snapshots the cue's Layer 4 property assignments (the pre-edit baseline) and stores it for the session. In Live mode the cue is activated on stage for the session (if not already active). In Blind mode the session does not toggle stage activation.
+- `cueEdit.setChannel / setProperty / setPalette / addPresetApplication / addAdHocEffect / clearAssignment` — edits auto-persist into the cue. In Live mode the server also performs the transient stage-side write for instant feedback. In Blind mode there is no transient write, but edits still propagate to stage naturally via Layer 4 re-composition if the cue is already active via the playback stack (see below).
+- `cueEdit.discardChanges { cueId }` — restores the cue's Layer 4 property assignments from the session-start snapshot. Stage reflects the restored state on the next composition pass if the cue is active (in either mode). Equivalent in spirit to EOS `Release` / grandMA `Clear`.
 - `cueEdit.setMode { cueId, mode }` — transitions mid-session. Live → Blind drops the session-owned stage activation but keeps the session open; if the cue is also active via the stack it remains on stage. Blind → Live activates the cue on stage for the session if it is not already active.
 - `cueEdit.endEdit { cueId }` — closes the session. In Live mode, drops the session-owned stage activation (the cue stays on stage if the stack is also running it). In Blind mode, is a stage no-op. The snapshot is dropped.
 
 ### Live vs Blind
 
-The modes differ in whether the edit session itself activates the cue on stage. They do **not** differ in whether edits to an *already-active* cue are visible — those always are, because Layer 3 re-composes each frame.
+The modes differ in whether the edit session itself activates the cue on stage. They do **not** differ in whether edits to an *already-active* cue are visible — those always are, because Layer 4 re-composes each frame.
 
 - **Live** (default on the Cues page): starting an edit activates the cue on stage. Edits reflect in real time. What you see is what you save.
 - **Blind**: starting an edit does not activate the cue. Two cases:
   - *Cue is not active via the stack*: edits persist silently and become visible when the cue is next fired. Useful for preparing an upcoming cue while a different look is on stage.
-  - *Cue is already active via the stack* (the common case during a running show): edits persist and are visible on stage on the next composition pass, because the cue's Layer 3 contribution recomposes with the new values. This lets the operator tweak the current live look without any separate "live override" flow, while edits to *other* inactive cues in the same session remain invisible until fired.
+  - *Cue is already active via the stack* (the common case during a running show): edits persist and are visible on stage on the next composition pass, because the cue's Layer 4 contribution recomposes with the new values. This lets the operator tweak the current live look without any separate "live override" flow, while edits to *other* inactive cues in the same session remain invisible until fired.
+
+Naming note: the cue-edit session's Live/Blind *mode* and the programmer's **Blind** gate are different mechanisms that coexist. UI labels must distinguish them — "Blind" stays with the programmer gate (console muscle memory); the cue-edit mode toggle is relabelled "Preview edit" wherever both are visible.
 
 ## Divergences from industry consoles
 
 For readers familiar with EOS, grandMA, Hog, MagicQ, or Avolites:
 
-- **No Update command**: auto-persist with snapshot-based discard replaces the traditional buffer + commit flow (EOS `Update`, grandMA `Store /merge`). Operators coming from pro consoles will briefly look for one — `discardChanges` is the escape hatch.
+- **The programmer exists but Record/Include/Update land in Session 3** of the [redesign](plans/programmer-redesign-proposal.md). Until then, cue authoring auto-persists through `cueEdit` sessions with snapshot-based discard; the programmer is the busking/override surface.
 - **No HTP/LTP toggle on cues**: the composition rule is a property-category intrinsic, not a per-cue choice. We do not need the EOS / Hog "this cuelist is HTP for intensity" switch because the category already declares it.
-- **No "programmer" layer above playbacks**: direct writes are Layer 4, *below* playbacks' Layer 3. Pro consoles place the programmer above playbacks. For us, direct writes are sticky but not supreme. During cue authoring, `cueEdit.setChannel` routes writes into Layer 3, which yields the effective operator behaviour — edits stick, win over effects, and persist on re-trigger.
+- **Programmer wins HTP categories too**: MagicQ's `Programmer overrides HTP chans` setting collapsed to an always-on rule — busking-first system, predictability beats max-merge.
+- **Non-tracking**: cues are complete states; there is no tracking apparatus (block/unblock/trace/cue-only).
 
 ## Worked examples
 
@@ -218,37 +235,37 @@ Setup: dimmer on channel 12 is parked at 128. A `Pulse` effect targets channel 1
 Per frame:
 - Layer 5 baseline: 0.
 - Layer 4: empty.
-- Layer 3: empty.
-- Layer 2: effect computes, say, 200.
+- Layer 3: effect computes, say, 200.
+- Layer 2: empty.
 - Layer 1: parked → 128.
 - Output: 128.
 
-The effect runs and consumes cycles, but parking wins. De-parking channel 12 immediately restores effect output — and leaves 128 behind as the Layer 4 value the effect resets to, so the channel doesn't drop through to the Layer 5 baseline of 0 on the way.
+The effect runs and consumes cycles, but parking wins. De-parking channel 12 immediately restores effect output — and leaves 128 behind as an `unpark` sideband slot in the programmer that the effect resets to, so the channel doesn't drop through to the Layer 5 baseline of 0 on the way.
 
-### Example 2 — direct write below a running effect
+### Example 2 — programmer value over a running effect
 
-Setup: operator drags dimmer on channel 7 to 180. No cue is open for edit. A `SineWave` effect targets channel 7 with `blendMode: ADDITIVE`, output range `0..50`.
+Setup: operator drags dimmer on channel 7 to 180 (the `updateChannel` shim lifts it to a `web` programmer entry on the fixture's `dimmer` property). A `SineWave` effect targets the same property with `blendMode: ADDITIVE`.
 
 Per frame:
 - Layer 5: 0.
-- Layer 4: 180 (sticky).
-- Layer 3: empty.
-- Layer 2: reset target for this property = Layer 4 value = 180. Effect computes +30 → blended = `(180 + 30).coerceIn(0, 255)` = 210.
+- Layer 4: empty.
+- Layer 3: the effect is **suppressed** on this property — the programmer holds it.
+- Layer 2: 180 (sticky, `touched`).
 - Layer 1: not parked.
-- Output: 210.
+- Output: 180.
 
-The direct write persists visibly — the effect wiggles on top of 180 rather than resetting the dimmer to 0.
+The operator's value wins outright — no wiggle on top. Clearing the entry (`programmer.clearEntry`, optionally with a fade) releases the property and the effect resumes painting on the next tick. Had the effect been in the programmer priority band (a Session 2 busking effect), it would have composed `180 + 30 = 210` on top instead.
 
 ### Example 3 — two cues contributing HTP dimmer
 
-Setup: Cue A active, `dimmer = 100` on fixture F. Cue B active on top of A, `dimmer = 180` on F. Both fully faded in (weight = 1.0).
+Setup: Cue A active, `dimmer = 100` on fixture F. Cue B active on top of A, `dimmer = 180` on F. Both fully faded in (weight = 1.0). The programmer holds nothing on F.
 
 - Category `DIMMER` → `HTP`.
 - Contributors: A = 100 × 1.0 = 100; B = 180 × 1.0 = 180.
 - Composition: `max(100, 180)` = 180.
-- Layer 3 output: 180.
+- Layer 4 output: 180.
 
-While cue A is fading out (weight = 0.5), A contributes 50; `max(50, 180)` = 180. Cue B dominates smoothly without jumping.
+While cue A is fading out (weight = 0.5), A contributes 50; `max(50, 180)` = 180. Cue B dominates smoothly without jumping. Had the operator busked F's dimmer to 40, the programmer entry would output 40 regardless — programmer beats HTP.
 
 ### Example 4 — two cues contributing LTP colour
 
@@ -256,15 +273,23 @@ Setup: Cue A active, `colour = #FF0000` (red) on fixture F. Cue B most recently 
 
 - Category `COLOUR` → `LTP`.
 - Resolver picks B (most recent activation).
-- Layer 3 output: blue.
+- Layer 4 output: blue.
 
 While cue B is fading in (weight = 0.6), the resolver linearly interpolates in RGB space between A and B: `(1 - 0.6) · (255, 0, 0) + 0.6 · (0, 0, 255)` = `(102, 0, 153)` — fades through purple. Once B is fully in, output is pure blue.
 
-### Example 5 — cue edit session with discard
+### Example 5 — busk over a cue, then clear with a fade
 
-Setup: operator opens cue 42 (currently contains `dimmer = 200`, `colour = amber`) in Live mode.
+Setup: cue 42 is on stage with `dimmer = 200` on fixture F. The operator busks F's dimmer to 60.
 
-1. `cueEdit.beginEdit { cueId: 42, mode: 'live' }` — server snapshots `{ dimmer: 200, colour: amber }`. Cue goes live on stage.
-2. Operator sets `colour = cyan`, `dimmer = 50`. Layer 3 now holds the new values; stage shows dim cyan.
-3. Operator calls `cueEdit.discardChanges { cueId: 42 }`. Server restores the snapshot; Layer 3 reverts to `{ dimmer: 200, colour: amber }`. Stage shows bright amber on the next composition pass.
-4. Operator calls `cueEdit.endEdit { cueId: 42 }`. Session closes, snapshot dropped, cue deactivates (or hands back to the stack).
+1. The programmer holds `F.dimmer = 60` (`web`, touched). Output: 60 — the programmer beats the cue.
+2. The cue keeps recomposing underneath at 200; nothing visible changes while the entry holds.
+3. `programmer.clearEntry { fadeMs: 1000 }` — the property ramps 60 → 200 over one second via the `DmxController` ramp (no effect covers it), landing exactly on the cue value.
+4. Had a running effect covered `F.dimmer`, the publish would skip it and the next tick would snap the property back to effect-over-cue output — fades never fight the 50 Hz tick.
+
+### Example 6 — blind busking
+
+Setup: cue 42 on stage (`dimmer = 200`). Programmer blind is engaged.
+
+1. `programmer.setBlind { blind: true }` — stage unchanged (nothing staged yet).
+2. Operator busks `F.dimmer = 60`. The entry is stored (`touched`) but the output stays 200 — blind excludes the programmer from the merge.
+3. `programmer.setBlind { blind: false, fadeMs: 500 }` — the staged 60 lands with a half-second fade.

@@ -12,7 +12,7 @@ Related:
 ## Overview
 
 Control surfaces are *another client of the composition model* — not a parallel pipeline.
-A fader bound to a fixture dimmer writes **Layer 4** (the same `DirectWriteStore` the web UI
+A fader bound to a fixture dimmer writes the **programmer** (Layer 2 — the same `ProgrammerStore` the web UI
 `updateChannel` message uses). A button bound to cue-stack GO dispatches through the same
 `CueStackManager` the REST API does. Blackout and Grand Master are applied as `TransmitModifier`s
 on the ArtNet controller, alongside parking. There is no "surface mode" in the engine.
@@ -54,7 +54,7 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │    ├─ ControlSurfaceBindingService.resolve(…) → ResolvedBinding?         │
   │    │                                                                     │
   │    └─ SurfaceActions dispatch by BindingTarget variant:                  │
-  │         ├─ FixtureProperty / GroupProperty → DirectWriteStore (L4)       │
+  │         ├─ FixtureProperty / GroupProperty → ProgrammerStore (L2)        │
   │         ├─ CueStackGo / Back / Pause / FireCue → CueStackManager         │
   │         ├─ Flash → L4 write on press, clear on release                   │
   │         ├─ Blackout / GrandMasterToggle → GlobalScalerState              │
@@ -135,7 +135,7 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 |---|---|
 | `SurfaceInputRouter.kt` | Per-device `CoroutineName("SurfaceRouter-$displayKey")` collector. Pipeline: `matchEvent → soft-takeover gate → binding resolve → SurfaceActions dispatch`. |
 | `SurfaceActions.kt` | Port interface between router and show services. Production: `DefaultSurfaceActions` resolves `state.show.*` on every call so project switches route cleanly. Tests: `RecordingActions`. |
-| `PropertyChannelResolver.kt` | `object` for **MIDI surface input only**: takes a 7-bit MIDI value and produces `List<ChannelWrite>`. Sliders scale to each channel's native `min..max`; Colour fans the 7-bit value to R/G/B; Settings return empty (enum bindings are button-only — Open Question 7). For property-value → channel resolution at the effects layer (preset-toggle Layer 4, future REST property writes, "preview on selection"), see `fx/PropertyChannelWriter` which accepts full-range `Layer3Resolver.PropertyValue` variants and handles Colour + Position without MIDI-7bit scaling. |
+| `PropertyChannelResolver.kt` | `object` for **MIDI surface input only**: takes a 7-bit MIDI value and produces `List<ChannelWrite>`. Sliders scale to each channel's native `min..max`; Colour fans the 7-bit value to R/G/B; Settings return empty (enum bindings are button-only — Open Question 7). For property-value → channel resolution elsewhere (preset toggles, locate, programmer publishes), see `fx/PropertyChannelWriter` which accepts full-range `Layer3Resolver.PropertyValue` variants and handles Colour + Position without MIDI-7bit scaling. |
 | `ActiveBankState.kt` | Ephemeral `deviceTypeKey → bank` map backed by a `ConcurrentHashMap` fast-lookup plus a `changes: SharedFlow<BankChange>` for WS broadcast. Not persisted. |
 | `FlashStateTracker.kt` | Lock-free `Set<Int>` of currently-held binding IDs (overlapping presses don't clobber release semantics). Exposes `changes: SharedFlow<FlashChange>`. |
 | `GlobalScalerState.kt` | Show-scoped `TransmitModifier` implementation of Blackout + Grand Master. Walks fixtures on `fixturesChanged` to classify intensity-category channels into a packed-`Long` `AtomicReference<Set<Long>>` for allocation-free hot-path lookup. On toggle, calls `DmxController.requestTransmit()` on every attached controller so the change is visible within the next frame rather than up to 25 ms later. The `blackoutEnabled` / `grandMasterEnabled` flags read through to a project-scoped `GlobalScalerStateHolder` so state survives project switches within a session. |
@@ -231,13 +231,13 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 
 | Variant | Control type | Effect |
 |---|---|---|
-| `FixtureProperty(fixtureKey, propertyName)` | Continuous | Layer 4 write via `DirectWriteStore.putProperty`; channels derived through `PropertyChannelResolver` |
+| `FixtureProperty(fixtureKey, propertyName)` | Continuous | Programmer write via `FxEngine.writeProgrammerProperty` (owner `surface`); value typed through `PropertyChannelResolver.toPropertyValue` |
 | `GroupProperty(groupName, propertyName)` | Continuous | Same, fanned out across group members |
 | `CueStackGo(stackId)` | Button | `CueStackManager.activateAtFirstCue` or `advanceStack(FORWARD)` on press |
 | `CueStackBack(stackId)` | Button | `CueStackManager.advanceStack(BACKWARD)` |
 | `CueStackPause(stackId)` | Button | `CueStackManager.pauseAutoAdvance(stackId)` |
 | `FireCue(cueId)` | Button | `CueStackManager.fireCue(cueId)` |
-| `Flash(target, max)` | Button (momentary) | Press: Layer 4 write at `minOf(max, sliderMax)`. Release: clear entry + write 0 immediately so composition resolver takes over |
+| `Flash(target, max)` | Button (momentary) | Press: programmer write (owner `flash`) at `minOf(max, sliderMax)`. Release: clear the `flash` slot — the property cascades to the surviving owner / cue layer / baseline in one publish |
 | `Blackout` | Button | `GlobalScalerState.toggleBlackout()` |
 | `GrandMasterToggle` | Button | `GlobalScalerState.toggleGrandMaster()` |
 | `SetBank(deviceTypeKey, bank)` | Button / bank-button | `ActiveBankState.setBank(deviceTypeKey, bank)` |
@@ -245,7 +245,7 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 **Related non-MIDI path.** Phase 7 of `docs/plans/completed/cue-authoring-unification-plan.md` adds a
 separate FX-layer resolver, `fx/PropertyChannelWriter`, for property-value → channel
 resolution without 7-bit MIDI scaling. The surface-input path above keeps using
-`PropertyChannelResolver` for 7-bit input; Layer 4 writes originating elsewhere
+`PropertyChannelResolver` for 7-bit input; programmer writes originating elsewhere
 (preset-toggle, future REST property writes, "preview on selection") go through
 `FxEngine.writeLayer4Property` which delegates to `PropertyChannelWriter`. Both resolvers
 emit the same `PropertyChannelResolver.ChannelWrite` shape, so downstream consumers
@@ -297,19 +297,19 @@ Motor faders default to `IMMEDIATE` policy (they're driven to the logical value,
 ### 5. Dispatch via SurfaceActions
 
 See the `BindingTarget variants` table above. `DefaultSurfaceActions` is a fire-and-forget port — it handles its own thread coordination:
-- `DirectWriteStore` is lock-free (`ConcurrentHashMap`)
+- `ProgrammerStore` is lock-free (`ConcurrentHashMap`)
 - Cue stack operations dispatch onto `GlobalScope` with `OptIn(DelicateCoroutinesApi)` — the router thread never blocks on show services
 - Dependencies are resolved through `state.show.*` on every call, so `ProjectManager.switchProject` doesn't leak stale references
 
 ### Flash lifecycle
 
-Press: `PropertyChannelResolver.resolveFixtureProperty` computes the channel list; for each channel, `DefaultSurfaceActions.buildFlashWrites` clamps to `minOf(max, sliderMax)` so a Flash at 255 respects a fixture's configured lamp cap (`DmxSlider.max`). Writes land in `DirectWriteStore` at the slider's native `max` and are pushed directly to the controller for immediate response.
+Press: `PropertyChannelResolver.flashPropertyValue` types the press value, clamping to `minOf(max, sliderMax)` so a Flash at 255 respects a fixture's configured lamp cap (`DmxSlider.max`). The write lands as a programmer slot (owner `flash`) and the engine publishes the composed cascade — store and wire can no longer disagree.
 
-Release: `DirectWriteStore.clearProperty` returns the cleared `ChannelWrite`s; we write 0 through the controllers so the immediate output reverts. On the next tick, the composition resolver re-evaluates — Layer 3 or Layer 5 takes over.
+Release: `FxEngine.clearProgrammerProperty` pops the `flash` slot and publishes the composed cascade in one transaction — the surviving owner, the cue layer, or baseline takes over immediately.
 
 ## Feedback path (SurfaceFeedbackPublisher)
 
-Feedback has exactly **one observation point for composition**: a `FixturesChangeListener.channelsChanged` callback attached to every `ArtNetController` via `Fixtures.registerListener`. That single listener fires on every transmit tick where a channel changed. Because every composition path (Layer 1 parking, Layer 2 FX, Layer 3 cues, Layer 4 direct writes) converges at the transmit boundary, the feedback observer sees every change regardless of origin. This is a deliberate design choice — avoiding a tree of per-layer observers keeps feedback decoupled from *how* a value got there.
+Feedback has exactly **one observation point for composition**: a `FixturesChangeListener.channelsChanged` callback attached to every `ArtNetController` via `Fixtures.registerListener`. That single listener fires on every transmit tick where a channel changed. Because every composition path (Layer 1 parking, Layer 2 programmer, Layer 3 FX, Layer 4 cues) converges at the transmit boundary, the feedback observer sees every change regardless of origin. This is a deliberate design choice — avoiding a tree of per-layer observers keeps feedback decoupled from *how* a value got there.
 
 ### Reverse index
 
@@ -359,16 +359,16 @@ All subscribers are cancelled together on `SurfaceFeedbackPublisher.stop()`.
 
 | Surface event | Writes to | Layer | Notes |
 |---|---|---|---|
-| Fader → FixtureProperty | `DirectWriteStore.putProperty` | **Layer 4** | Sticky; visible under running effects |
-| Fader → GroupProperty | `DirectWriteStore.putGroupProperty` | **Layer 4** | Fanned to members |
-| Flash press | `DirectWriteStore.put` (ephemeral) | **Layer 4** | Cleared on release; writes 0 immediately |
+| Fader → FixtureProperty | `FxEngine.writeProgrammerProperty` | **Layer 2 (programmer)** | Sticky; wins over cues and suppresses effects on the property |
+| Fader → GroupProperty | `FxEngine.writeProgrammerProperties` | **Layer 2 (programmer)** | Fanned to members, slots tagged with the source group |
+| Flash press | `FxEngine.writeProgrammerProperty` (owner `flash`) | **Layer 2 (programmer)** | Cleared on release; cascade republished |
 | Blackout toggle | `GlobalScalerState` (`TransmitModifier`) | **post-composition mask** | Only affects intensity categories |
 | Grand Master toggle | Same as Blackout | **post-composition mask** | Binary in v1; continuous fader deferred |
 | Bank-button press | `ActiveBankState.setBank` | *(no layer — routing state)* | Swaps the binding resolution axis |
-| Cue stack buttons | `CueStackManager.*` | *(Layer 3 via cue apply)* | Same path as REST / UI |
-| Fire cue | `CueStackManager.fireCue` | *(Layer 3)* | |
+| Cue stack buttons | `CueStackManager.*` | *(Layer 4 via cue apply)* | Same path as REST / UI |
+| Fire cue | `CueStackManager.fireCue` | *(Layer 4)* | |
 
-Phase 6 adds **cueEdit-aware property writes**: when a cue-edit session is open for the project, `DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty` transparently route to `cueEdit.setProperty` (Layer 3) instead of Layer 4. The router itself is session-agnostic — branching lives inside the action impl (which is already State-coupled). Matches the frontend `EditorContext` pattern: surfaces become another client of the same session. See [control-surface-plan.md](plans/completed/control-surface-plan.md) §Phase 6.
+Phase 6 adds **cueEdit-aware property writes**: when a cue-edit session is open for the project, `DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty` transparently route to `cueEdit.setProperty` (the cue layer) instead of the programmer. The router itself is session-agnostic — branching lives inside the action impl (which is already State-coupled). Matches the frontend `EditorContext` pattern: surfaces become another client of the same session. See [control-surface-plan.md](plans/completed/control-surface-plan.md) §Phase 6.
 
 ## Threading model
 
@@ -379,10 +379,10 @@ Phase 6 adds **cueEdit-aware property writes**: when a cue-edit session is open 
 | `SurfaceFeedbackPublisher` transmit listener | ArtNet transmit thread | `AtomicReference<Index>` swap |
 | `SurfaceFeedbackPublisher` subscribers | `Dispatchers.Default` | StateFlow / SharedFlow |
 | `ControlSurfaceBindingService` cache mutations | per-project `Mutex` via `lockFor(projectId)` | ConcurrentHashMap reads |
-| `DirectWriteStore` | any thread | lock-free `ConcurrentHashMap<Long, UByte>` |
+| `ProgrammerStore` | any thread | lock-free `ConcurrentHashMap` slot stacks |
 | Cue stack dispatch | `GlobalScope` (fire-and-forget) | service's own coordination |
 
-The router thread never blocks on show services. Property writes to `DirectWriteStore` are lock-free. Cue stack operations and fire-cue dispatches land on `GlobalScope` so the router keeps draining MIDI events even during slow cue transitions.
+The router thread never blocks on show services. Programmer store mutations are lock-free (the engine's publish serialises on its own lock). Cue stack operations and fire-cue dispatches land on `GlobalScope` so the router keeps draining MIDI events even during slow cue transitions.
 
 ## State wiring
 

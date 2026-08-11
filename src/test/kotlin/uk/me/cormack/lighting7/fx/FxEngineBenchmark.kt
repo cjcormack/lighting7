@@ -68,12 +68,12 @@ class FxEngineBenchmark {
                 }
             }
         }
-        val directWriteStore = DirectWriteStore()
+        val programmerStore = ProgrammerStore()
         val engine = FxEngine(
             fixtures = fixtures,
             masterClock = MasterClock(),
-            directWriteStore = directWriteStore,
-            layerResolver = LayerResolver(Layer3Resolver(), directWriteStore),
+            programmerStore = programmerStore,
+            layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
         )
 
         // Populate half the fixtures with cue-level Layer 3 dimmer assignments so

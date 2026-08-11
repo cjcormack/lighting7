@@ -19,6 +19,7 @@ import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
+import uk.me.cormack.lighting7.testsupport.programmerChannel
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -30,10 +31,10 @@ import kotlin.test.assertTrue
  * fixture's unparked channels still take their locate values.
  *
  * Two consequences pinned here beyond the output itself. A fixture whose every locatable
- * channel is parked is a no-op locate: inactive, `parkMasked` so the UI can say why, and it
- * does *not* let "locate wins" remove the effects covering it. And an effect whose own
- * property is park-masked survives even when the locate is real, because park makes that
- * effect invisible whatever locate writes.
+ * channel is parked is a no-op locate: inactive, `parkMasked` so the UI can say why, and no
+ * programmer entries land. And since the programmer redesign, "locate wins" is
+ * non-destructive: effects covering located properties are *suppressed* while the locate
+ * holds and resume when it releases — nothing is removed.
  */
 class LocateParkInteractionTest : RouteIntegrationTest() {
 
@@ -60,7 +61,7 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
         assertEquals(255u.toUByte(), controller.getEffectiveValue(3), "unparked green takes the locate value")
         // A store entry is the proof the shutter was written: BandedStrobeChannel's open level
         // is 0u, which an untouched channel also reads as, so the channel value alone says nothing.
-        assertEquals(0u.toUByte(), state.show.directWriteStore.get(0, 8), "shutter opened for locate")
+        assertEquals(0u.toUByte(), programmerChannel(state, 0, 8), "shutter opened for locate")
         assertEquals(0u.toUByte(), controller.getEffectiveValue(8))
 
         val off: ToggleLocateResponse = toggle(client, "fixture", "hex-park").body()
@@ -71,18 +72,19 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `unparking hands off the parked value over a locate value sitting in Layer 4`() = testApplication {
+    fun `unparking hands off the parked value over a locate value in the programmer`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-unpark", startChannel = 1)
 
         // Red only: `colour` stays publishable (green/blue unparked), so locate *does* write
-        // 255 into Layer 4 for the parked red channel — the case the hand-off has to overwrite.
+        // 255 into the programmer for the parked red channel — the case the hand-off has to
+        // overwrite.
         runBlocking { state.show.parkManager.park(0, 2, 11u) }
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
 
         assertTrue(toggle(client, "fixture", "hex-unpark").body<ToggleLocateResponse>().active)
-        assertEquals(255u.toUByte(), state.show.directWriteStore.get(0, 2), "locate wrote under the park")
+        assertEquals(255u.toUByte(), programmerChannel(state, 0, 2), "locate wrote under the park")
         assertEquals(11u.toUByte(), controller.getEffectiveValue(2), "park still wins on the wire")
 
         runBlocking { state.show.parkManager.unpark(0, 2) }
@@ -94,8 +96,8 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
         )
         assertEquals(
             11u.toUByte(),
-            state.show.directWriteStore.get(0, 2),
-            "the hand-off overwrites the locate value at Layer 4, so nothing republishes 255",
+            programmerChannel(state, 0, 2),
+            "the hand-off sits above the locate value in the programmer, so nothing republishes 255",
         )
     }
 
@@ -113,13 +115,13 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
         val on: ToggleLocateResponse = toggle(client, "fixture", "hex-masked").body()
         assertFalse(on.active, "nothing locate writes could be seen under park")
         assertEquals(0, on.writeCount)
-        assertEquals(0, on.effectsRemoved, "locate must not destroy effects it cannot outshine")
+        assertEquals(0, on.effectsRemoved, "locate never removes effects")
         assertTrue(on.parkMasked, "the response says park is why, not 'nothing to write'")
         assertTrue(
             state.show.fxEngine.getActiveEffects().any { it.id == effectId },
             "the operator's effect survives a park-masked locate",
         )
-        assertNull(state.show.directWriteStore.get(0, 1), "no Layer-4 assertion landed")
+        assertNull(programmerChannel(state, 0, 1), "no programmer assertion landed")
         assertTrue(
             client.get("/api/rest/locate").body<LocateStateResponse>().targets.isEmpty(),
             "a no-op locate is not registered as active",
@@ -127,7 +129,7 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a real locate spares the effects park masks and removes the rest`() = testApplication {
+    fun `a real locate suppresses covering effects instead of removing them`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-partial", startChannel = 1)
@@ -140,17 +142,19 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
         val on: ToggleLocateResponse = toggle(client, "fixture", "hex-partial").body()
         assertTrue(on.active, "colour and strobe are unparked, so the locate is real")
         assertFalse(on.parkMasked, "partially parked is not park-masked")
-        assertNull(state.show.directWriteStore.get(0, 1), "the parked dimmer property is skipped")
-        assertEquals(255u.toUByte(), state.show.directWriteStore.get(0, 3), "green still asserted")
+        assertNull(programmerChannel(state, 0, 1), "the parked dimmer property is skipped")
+        assertEquals(255u.toUByte(), programmerChannel(state, 0, 3), "green still asserted")
 
+        // "Locate wins" is non-destructive now: both effects survive; the strobe effect is
+        // suppressed by the programmer entry for as long as the locate holds.
         val remaining = state.show.fxEngine.getActiveEffects().map { it.id }.toSet()
-        assertTrue(
-            maskedEffect in remaining,
-            "the dimmer effect is invisible under park — removing it would cost the operator " +
-                "an effect and change nothing on stage",
-        )
-        assertFalse(liveEffect in remaining, "the strobe effect would repaint the locate, so it goes")
-        assertEquals(1, on.effectsRemoved)
+        assertTrue(maskedEffect in remaining, "park-masked effect untouched")
+        assertTrue(liveEffect in remaining, "covering effect suppressed, not removed")
+        assertEquals(0, on.effectsRemoved, "nothing is ever removed by locate")
+
+        // Releasing the locate lets the strobe effect resume painting on the next tick.
+        assertFalse(toggle(client, "fixture", "hex-partial").body<ToggleLocateResponse>().active)
+        assertTrue(liveEffect in state.show.fxEngine.getActiveEffects().map { it.id }.toSet())
     }
 
     @Test

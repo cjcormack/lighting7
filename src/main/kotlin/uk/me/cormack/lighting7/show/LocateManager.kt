@@ -10,14 +10,14 @@ import uk.me.cormack.lighting7.models.TargetRef
  *
  * Records, per located target, the Layer-4 property writes it asserted so toggle-off knows
  * exactly what to clear. Deliberately in-memory only: the writes themselves live in the
- * equally in-memory `DirectWriteStore`, so a restart drops the state and the output together
+ * equally in-memory `ProgrammerStore`, so a restart drops the state and the output together
  * — same contract as the preset toggle bookkeeping in `routes/projectFxPresets.kt`.
  *
  * A plain lock (not per-key compute) because toggle-off must also *re-assert* other active
  * locates whose writes overlap the cleared ones — e.g. releasing a group locate while one of
  * its members is still individually located must leave that member in locate state, not
- * cascade it back to the show. Every locate shares the single `DirectWriteOwner.LOCATE`
- * owner in the `DirectWriteStore`, so the store's per-owner fallback cannot arbitrate
+ * cascade it back to the show. Every locate shares the single `ProgrammerOwner.LOCATE`
+ * owner in the `ProgrammerStore`, so the store's per-owner fallback cannot arbitrate
  * between two locates — this re-assert loop is what does, and it additionally re-resolves
  * values and drops stale targets, which a stored-value fallback could not. Locates number
  * in single digits, so cross-key work under one lock is simple and plenty fast.
@@ -78,5 +78,37 @@ class LocateManager {
         }
         _activeTargets.value = active.keys.toSet()
         outcome
+    }
+
+    /**
+     * Drop all locate bookkeeping without running any release callbacks. Used by
+     * programmer clear-all, which sweeps every `LOCATE` store entry itself — running the
+     * per-target clears afterwards would double-release, and leaving the bookkeeping would
+     * desync the toggles (a "located" fixture whose writes are long gone).
+     */
+    fun reset() = synchronized(lock) {
+        active.clear()
+        _activeTargets.value = emptySet()
+    }
+
+    /**
+     * Drop the bookkeeping rows matching one released (targetKey, propertyName) write —
+     * used when a programmer entry clear takes a `LOCATE` slot out from under the manager,
+     * so a target whose every write has been cleared stops reporting itself located.
+     * Targets with other writes remaining keep their locate state (consistent with the
+     * write-less-is-not-stale rule in [toggle]).
+     */
+    fun pruneWrite(targetKey: String, propertyName: String) = synchronized(lock) {
+        val write = LocateWrite(targetKey, propertyName)
+        var changed = false
+        val iterator = active.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (write !in entry.value) continue
+            changed = true
+            val remaining = entry.value.filter { it != write }
+            if (remaining.isEmpty()) iterator.remove() else entry.setValue(remaining)
+        }
+        if (changed) _activeTargets.value = active.keys.toSet()
     }
 }

@@ -31,15 +31,15 @@ data class PaletteCascade(
 }
 
 /**
- * Layer 3 composition resolver — merges [CuePropertyAssignment] rows from active cues into
- * a per-(target, property) value stream that [LayerResolver] consumes.
+ * Cue-layer composition resolver — merges [CuePropertyAssignment] rows from active cues
+ * into a per-(target, property) value stream that [LayerResolver] consumes.
  *
- * Phase 0: the resolver has full HTP / LTP / fade-weight / specificity logic, but no real
- * assignments exist in the system yet (Phase 1 introduces the `cue_property_assignments`
- * table). Callers pass an empty list and receive an empty map. The full logic is unit-tested
- * with synthetic inputs per the spec's Worked Examples.
+ * Naming note: cue property assignments are **Layer 4** since the programmer redesign
+ * renumbered the stack; this class (and `Layer3*` engine internals) keep the old number to
+ * avoid a ~25-file mechanical churn — see `FU-PROG-L3RESOLVER-RENAME` in
+ * `docs/plans/followups.md`.
  *
- * See `docs/lighting-composition-model.md` §"Layer 3".
+ * See `docs/lighting-composition-model.md` §"Layer 4 — Cue Property Assignments".
  */
 class Layer3Resolver {
 

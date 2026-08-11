@@ -127,24 +127,44 @@ sealed class FxTarget {
      * Called each tick before effect output is applied so accumulative blend modes compose
      * over the correct baseline, and also when an effect is removed and no other active
      * effect still covers the same property. The [fallback] is computed by the caller via
-     * [LayerResolver.fallbackFor] and represents the Layer 3 / Layer 4 / Layer 5 cascade
-     * result — it replaces the previous hardcoded zero that clobbered direct writes.
+     * [LayerResolver.fallbackFor] and represents the programmer → cue layer → baseline
+     * cascade result — it replaces the previous hardcoded zero that clobbered manual writes.
      *
      * @param fixture The fixture or element to reset
      * @param fallback The value to reset to (usually from [LayerResolver])
+     * @param fadeMs Optional ramp duration for the write. 0 (the default) snaps — the tick
+     *   loop always snaps; only explicit clear/blind/set publishes pass a fade, and only
+     *   for keys no running effect covers (a covered key's ramp would be killed by the
+     *   next tick's snap write through the conflated channel changer).
      */
-    abstract fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput)
+    abstract fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long = 0)
 
     /**
-     * Compute the [FxOutput] value representing Layer 4 (sticky direct writes) falling
-     * through to Layer 5 (fixture baseline) for this target + fixture. [LayerResolver]
-     * consults this when no Layer 3 assignment covers the property.
+     * Compose the programmer layer's contribution for this target + fixture over [below]
+     * (the already-resolved cue-layer-or-baseline value). Returns [below] unchanged when
+     * the programmer holds nothing here.
      *
-     * Each target subclass knows how to map its property to channel address(es) via the
-     * fixture's patch, so channel-level Layer 4 lookups are localized here rather than in
-     * [LayerResolver].
+     * Within the programmer, recency ([ProgrammerStore.Slot.seq]) arbitrates across the
+     * granularities that can cover a component: the property-level entry, related property
+     * entries (a Colour entry supplies its bundled W/A/UV sliders and vice versa), and the
+     * raw-channel sideband. Components the programmer does not cover come from [below] —
+     * so a raw write on one colour channel overlays a cue's colour rather than blacking
+     * out the rest. Each target subclass knows how to map its property to channel
+     * address(es) via the fixture's patch, so channel-level lookups are localized here
+     * rather than in [LayerResolver].
      */
-    abstract fun fallbackFromDirectWrites(fixture: GroupableFixture, store: DirectWriteStore): FxOutput
+    abstract fun composeProgrammerOver(
+        fixture: GroupableFixture,
+        store: ProgrammerStore,
+        below: FxOutput,
+    ): FxOutput
+
+    /**
+     * The fixture baseline (Layer 5) value for this target: 0 for sliders and settings,
+     * black for colour, 128/128 centred for pan/tilt. The bottom of the cascade — returned
+     * when no layer above contributes.
+     */
+    abstract fun baselineFallback(fixture: GroupableFixture): FxOutput
 
     /**
      * True when every DMX channel backing this target on [fixture] is parked. Used by
@@ -164,11 +184,12 @@ sealed class FxTarget {
         fixtures: Fixtures.FixturesWithTransaction,
         fixtureKey: String,
         fallback: FxOutput,
+        fadeMs: Long = 0,
     ) {
         val fixture = try {
             fixtures.untypedGroupableFixture(fixtureKey)
         } catch (_: Exception) { return }
-        resetToFallback(fixture, fallback)
+        resetToFallback(fixture, fallback, fadeMs)
     }
 }
 
@@ -207,18 +228,69 @@ data class SliderTarget(
         return getSlider(fixture) != null
     }
 
-    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput) {
+    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
         if (fallback !is FxOutput.Slider) return
         val slider = getSlider(fixture) ?: return
-        slider.value = fallback.value
+        if (fadeMs > 0) slider.fadeToValue(fallback.value, fadeMs) else slider.value = fallback.value
     }
 
-    override fun fallbackFromDirectWrites(fixture: GroupableFixture, store: DirectWriteStore): FxOutput {
-        // Layer 4 lookup is only meaningful for DMX sliders. Non-DMX sliders (Hue-backed,
-        // etc.) fall through to baseline.
-        val dmx = getSlider(fixture) as? DmxSlider ?: return FxOutput.Slider(0u)
-        val sticky = store.get(dmx.universe.universe, dmx.channelNo) ?: 0u.toUByte()
-        return FxOutput.Slider(sticky)
+    override fun composeProgrammerOver(
+        fixture: GroupableFixture,
+        store: ProgrammerStore,
+        below: FxOutput,
+    ): FxOutput {
+        // Up to three programmer sources can cover a slider: its own property entry, a
+        // Colour entry on the fixture's colour property (for bundled W/A/UV sliders), and
+        // the raw-channel sideband. Recency ([ProgrammerStore.Slot.seq]) arbitrates.
+        var bestSeq = Long.MIN_VALUE
+        var best: UByte? = null
+
+        store.get(fixture.targetKey, propertyName)?.let { slot ->
+            when (val v = slot.value.resolved) {
+                is Layer3Resolver.PropertyValue.Slider -> { best = v.value; bestSeq = slot.seq }
+                is Layer3Resolver.PropertyValue.Setting -> { best = v.channelValue; bestSeq = slot.seq }
+                else -> {}
+            }
+        }
+        bundledComponentFromColourEntry(fixture, store)?.let { (seq, component) ->
+            if (seq > bestSeq) { best = component; bestSeq = seq }
+        }
+        // Sideband lookup is only meaningful for DMX sliders (Hue-backed etc. have no channel).
+        (getSlider(fixture) as? DmxSlider)?.let { dmx ->
+            store.getChannelSlot(dmx.universe.universe, dmx.channelNo)?.let { slot ->
+                val v = (slot.value.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+                if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
+            }
+        }
+        return best?.let { FxOutput.Slider(it) } ?: below
+    }
+
+    override fun baselineFallback(fixture: GroupableFixture): FxOutput = FxOutput.Slider(0u)
+
+    /**
+     * When this target is a `bundleWithColour` W/A/UV slider and the programmer holds a
+     * Colour entry on the fixture's colour property, extract the matching component with
+     * the entry's write sequence — the property-level twin of the channel-level
+     * composition ColourTarget performs in the other direction.
+     */
+    private fun bundledComponentFromColourEntry(
+        fixture: GroupableFixture,
+        store: ProgrammerStore,
+    ): Pair<Long, UByte>? {
+        if (fixture !is Fixture) return null
+        val prop = fixture.fixtureProperty(propertyName) ?: return null
+        if (!prop.bundleWithColour) return null
+        val colourProp = fixture.fixtureProperties.find { it.category == PropertyCategory.COLOUR }
+            ?: return null
+        val slot = store.get(fixture.targetKey, colourProp.name) ?: return null
+        val colour = (slot.value.resolved as? Layer3Resolver.PropertyValue.Colour)?.value ?: return null
+        val component = when (prop.category) {
+            PropertyCategory.WHITE -> colour.white
+            PropertyCategory.AMBER -> colour.amber
+            PropertyCategory.UV -> colour.uv
+            else -> return null
+        }
+        return slot.seq to component
     }
 
     override fun isPropertyFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean {
@@ -297,40 +369,115 @@ data class ColourTarget(
         return FxOutput.Colour(colour?.value ?: Color.BLACK)
     }
 
-    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput) {
+    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
         if (fallback !is FxOutput.Colour) return
         val colour = (fixture as? WithColour)?.rgbColour ?: return
         val ext = fallback.color
-        colour.value = ext.color
+        if (fadeMs > 0) colour.fadeToColour(ext.color, fadeMs) else colour.value = ext.color
 
         // Apply extended channels (W/A/UV) to bundled slider properties using the fallback values.
         if (fixture is Fixture) {
-            setExtendedChannel(fixture, PropertyCategory.WHITE, ext.white)
-            setExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber)
-            setExtendedChannel(fixture, PropertyCategory.UV, ext.uv)
+            setExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, fadeMs)
+            setExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, fadeMs)
+            setExtendedChannel(fixture, PropertyCategory.UV, ext.uv, fadeMs)
         }
     }
 
-    override fun fallbackFromDirectWrites(fixture: GroupableFixture, store: DirectWriteStore): FxOutput {
-        val dmxColour = (fixture as? WithColour)?.rgbColour as? DmxColour
-            ?: return FxOutput.Colour(ExtendedColour.BLACK)
-        val u = dmxColour.universe.universe
-        val r = store.get(u, dmxColour.redSlider.channelNo) ?: 0u.toUByte()
-        val g = store.get(u, dmxColour.greenSlider.channelNo) ?: 0u.toUByte()
-        val b = store.get(u, dmxColour.blueSlider.channelNo) ?: 0u.toUByte()
+    override fun composeProgrammerOver(
+        fixture: GroupableFixture,
+        store: ProgrammerStore,
+        below: FxOutput,
+    ): FxOutput {
+        // Compose per component, arbitrating each by write recency across the granularities
+        // that can cover it: the Colour property entry, the bundled W/A/UV sliders' own
+        // property entries, and the raw-channel sideband. This is the same channel set the
+        // old channel-level store composed; components the programmer does not cover come
+        // from [below] (e.g. a raw write on just the red channel overlays a cue's colour).
+        val colourSlot = store.get(fixture.targetKey, propertyName)
+        val colourValue = (colourSlot?.value?.resolved as? Layer3Resolver.PropertyValue.Colour)?.value
+        val colourSeq = if (colourValue != null) colourSlot!!.seq else Long.MIN_VALUE
 
-        var white: UByte = 0u
-        var amber: UByte = 0u
-        var uv: UByte = 0u
-        if (fixture is Fixture) {
-            white = extendedChannelFromStore(fixture, PropertyCategory.WHITE, store) ?: 0u
-            amber = extendedChannelFromStore(fixture, PropertyCategory.AMBER, store) ?: 0u
-            uv = extendedChannelFromStore(fixture, PropertyCategory.UV, store) ?: 0u
+        val dmxColour = (fixture as? WithColour)?.rgbColour as? DmxColour
+        if (colourValue == null && dmxColour == null) return below
+
+        fun component(entryComponent: UByte?, channelNo: Int?): UByte? {
+            val side = if (dmxColour != null && channelNo != null) {
+                store.getChannelSlot(dmxColour.universe.universe, channelNo)
+            } else null
+            val sideValue = (side?.value?.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+            return when {
+                sideValue != null && side!!.seq > colourSeq -> sideValue
+                entryComponent != null -> entryComponent
+                else -> sideValue
+            }
         }
 
+        val r = component(colourValue?.color?.red?.toUByte(), dmxColour?.redSlider?.channelNo)
+        val g = component(colourValue?.color?.green?.toUByte(), dmxColour?.greenSlider?.channelNo)
+        val b = component(colourValue?.color?.blue?.toUByte(), dmxColour?.blueSlider?.channelNo)
+
+        var white: UByte? = null
+        var amber: UByte? = null
+        var uv: UByte? = null
+        if (fixture is Fixture) {
+            white = extendedComponent(fixture, PropertyCategory.WHITE, colourValue?.white, colourSeq, store)
+            amber = extendedComponent(fixture, PropertyCategory.AMBER, colourValue?.amber, colourSeq, store)
+            uv = extendedComponent(fixture, PropertyCategory.UV, colourValue?.uv, colourSeq, store)
+        } else {
+            white = colourValue?.white
+            amber = colourValue?.amber
+            uv = colourValue?.uv
+        }
+
+        if (r == null && g == null && b == null && white == null && amber == null && uv == null) {
+            return below
+        }
+        val belowColour = (below as? FxOutput.Colour)?.color ?: ExtendedColour.BLACK
         return FxOutput.Colour(
-            ExtendedColour(Color(r.toInt(), g.toInt(), b.toInt()), white, amber, uv)
+            ExtendedColour(
+                Color(
+                    (r ?: belowColour.color.red.toUByte()).toInt(),
+                    (g ?: belowColour.color.green.toUByte()).toInt(),
+                    (b ?: belowColour.color.blue.toUByte()).toInt(),
+                ),
+                white ?: belowColour.white,
+                amber ?: belowColour.amber,
+                uv ?: belowColour.uv,
+            )
         )
+    }
+
+    override fun baselineFallback(fixture: GroupableFixture): FxOutput =
+        FxOutput.Colour(ExtendedColour.BLACK)
+
+    /**
+     * Resolve one bundled W/A/UV component by recency across: the Colour entry's component
+     * ([entryComponent] at [colourSeq]), the bundled slider's own property entry, and the
+     * slider's sideband channel. Null when nothing in the programmer covers it.
+     */
+    private fun extendedComponent(
+        fixture: Fixture,
+        category: PropertyCategory,
+        entryComponent: UByte?,
+        colourSeq: Long,
+        store: ProgrammerStore,
+    ): UByte? {
+        val prop = fixture.fixtureProperties.find { it.bundleWithColour && it.category == category }
+            ?: return entryComponent
+        var bestSeq = if (entryComponent != null) colourSeq else Long.MIN_VALUE
+        var best = entryComponent
+
+        store.get(fixture.key, prop.name)?.let { slot ->
+            val v = (slot.value.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+            if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
+        }
+        ((prop.classProperty.call(fixture) as? Slider) as? DmxSlider)?.let { dmx ->
+            store.getChannelSlot(dmx.universe.universe, dmx.channelNo)?.let { slot ->
+                val v = (slot.value.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+                if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
+            }
+        }
+        return best
     }
 
     override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
@@ -370,20 +517,10 @@ data class ColourTarget(
         slider.value = applySliderBlendMode(base, value, blendMode)
     }
 
-    private fun setExtendedChannel(fixture: Fixture, category: PropertyCategory, value: UByte) {
+    private fun setExtendedChannel(fixture: Fixture, category: PropertyCategory, value: UByte, fadeMs: Long = 0) {
         val prop = fixture.fixtureProperties.find { it.bundleWithColour && it.category == category } ?: return
         val slider = prop.classProperty.call(fixture) as? Slider ?: return
-        slider.value = value
-    }
-
-    private fun extendedChannelFromStore(
-        fixture: Fixture,
-        category: PropertyCategory,
-        store: DirectWriteStore,
-    ): UByte? {
-        val prop = fixture.fixtureProperties.find { it.bundleWithColour && it.category == category } ?: return null
-        val dmx = (prop.classProperty.call(fixture) as? Slider) as? DmxSlider ?: return null
-        return store.get(dmx.universe.universe, dmx.channelNo)
+        if (fadeMs > 0) slider.fadeToValue(value, fadeMs) else slider.value = value
     }
 
     private fun applyRgbBlendMode(base: Color, effect: Color, mode: BlendMode): Color {
@@ -466,21 +603,55 @@ data class PositionTarget(
         )
     }
 
-    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput) {
+    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
         if (fallback !is FxOutput.Position) return
         val positionFixture = fixture as? WithPosition ?: return
-        positionFixture.pan.value = fallback.pan
-        positionFixture.tilt.value = fallback.tilt
+        if (fadeMs > 0) {
+            positionFixture.pan.fadeToValue(fallback.pan, fadeMs)
+            positionFixture.tilt.fadeToValue(fallback.tilt, fadeMs)
+        } else {
+            positionFixture.pan.value = fallback.pan
+            positionFixture.tilt.value = fallback.tilt
+        }
     }
 
-    override fun fallbackFromDirectWrites(fixture: GroupableFixture, store: DirectWriteStore): FxOutput {
-        val positionFixture = fixture as? WithPosition ?: return FxOutput.Position(128u, 128u)
-        val pan = (positionFixture.pan as? DmxSlider)
-            ?.let { store.get(it.universe.universe, it.channelNo) } ?: 128u.toUByte()
-        val tilt = (positionFixture.tilt as? DmxSlider)
-            ?.let { store.get(it.universe.universe, it.channelNo) } ?: 128u.toUByte()
-        return FxOutput.Position(pan, tilt)
+    override fun composeProgrammerOver(
+        fixture: GroupableFixture,
+        store: ProgrammerStore,
+        below: FxOutput,
+    ): FxOutput {
+        // Per-axis recency arbitration between a Position property entry and the axis's
+        // sideband channel slot (raw pan/tilt writes stay channel-shaped in the sideband).
+        val posSlot = store.get(fixture.targetKey, propertyName)
+        val posValue = posSlot?.value?.resolved as? Layer3Resolver.PropertyValue.Position
+        val posSeq = if (posValue != null) posSlot!!.seq else Long.MIN_VALUE
+
+        val positionFixture = fixture as? WithPosition
+        if (posValue == null && positionFixture == null) return below
+
+        fun axis(entryValue: UByte?, slider: Slider?): UByte? {
+            val dmx = slider as? DmxSlider
+            val side = dmx?.let { store.getChannelSlot(it.universe.universe, it.channelNo) }
+            val sideValue = (side?.value?.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+            return when {
+                sideValue != null && side!!.seq > posSeq -> sideValue
+                entryValue != null -> entryValue
+                else -> sideValue
+            }
+        }
+
+        val pan = axis(posValue?.pan, positionFixture?.pan)
+        val tilt = axis(posValue?.tilt, positionFixture?.tilt)
+        if (pan == null && tilt == null) return below
+        // Components the programmer does not cover come from the layer below.
+        val belowPos = below as? FxOutput.Position
+        return FxOutput.Position(
+            pan ?: belowPos?.pan ?: 128u,
+            tilt ?: belowPos?.tilt ?: 128u,
+        )
     }
+
+    override fun baselineFallback(fixture: GroupableFixture): FxOutput = FxOutput.Position(128u, 128u)
 
     override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
         return fixture is WithPosition
@@ -547,18 +718,38 @@ data class SettingTarget(
         return FxOutput.Slider(currentLevel)
     }
 
-    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput) {
+    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
+        // Settings are discrete — snap regardless of fadeMs (a wheel mid-ramp is garbage).
         if (fallback !is FxOutput.Slider) return
         val setting = getSetting(fixture) ?: return
         val transaction = setting.transaction ?: return
         transaction.setValue(setting.universe, setting.channelNo, fallback.value)
     }
 
-    override fun fallbackFromDirectWrites(fixture: GroupableFixture, store: DirectWriteStore): FxOutput {
-        val setting = getSetting(fixture) ?: return FxOutput.Slider(0u)
-        val sticky = store.get(setting.universe.universe, setting.channelNo) ?: 0u.toUByte()
-        return FxOutput.Slider(sticky)
+    override fun composeProgrammerOver(
+        fixture: GroupableFixture,
+        store: ProgrammerStore,
+        below: FxOutput,
+    ): FxOutput {
+        var bestSeq = Long.MIN_VALUE
+        var best: UByte? = null
+        store.get(fixture.targetKey, propertyName)?.let { slot ->
+            when (val v = slot.value.resolved) {
+                is Layer3Resolver.PropertyValue.Setting -> { best = v.channelValue; bestSeq = slot.seq }
+                is Layer3Resolver.PropertyValue.Slider -> { best = v.value; bestSeq = slot.seq }
+                else -> {}
+            }
+        }
+        getSetting(fixture)?.let { setting ->
+            store.getChannelSlot(setting.universe.universe, setting.channelNo)?.let { slot ->
+                val v = (slot.value.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+                if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
+            }
+        }
+        return best?.let { FxOutput.Slider(it) } ?: below
     }
+
+    override fun baselineFallback(fixture: GroupableFixture): FxOutput = FxOutput.Slider(0u)
 
     override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
         return getSetting(fixture) != null

@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
+import uk.me.cormack.lighting7.testsupport.programmerChannel
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -20,8 +21,8 @@ import kotlin.test.assertTrue
 /**
  * `GET /api/rest/locate` + `POST /api/rest/locate/toggle` — the Locate toggle.
  *
- * Behaviours pinned here: toggle-on asserts Layer-4 writes (visible in the
- * `DirectWriteStore`) and registers the target; toggle-off clears both; releasing a group
+ * Behaviours pinned here: toggle-on asserts programmer writes (visible in the
+ * `ProgrammerStore`) and registers the target; toggle-off clears both; releasing a group
  * locate re-asserts a still-active fixture locate whose writes overlap (the console
  * expectation — the individually-located member must stay in locate state); unknown
  * targets 404 and unknown target types 400 without touching any state.
@@ -29,7 +30,7 @@ import kotlin.test.assertTrue
 class LocateRoutesTest : RouteIntegrationTest() {
 
     @Test
-    fun `fixture locate toggles Layer-4 writes on and off`() = testApplication {
+    fun `fixture locate toggles programmer writes on and off`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-loc", startChannel = 1)
@@ -39,20 +40,19 @@ class LocateRoutesTest : RouteIntegrationTest() {
         assertTrue(on.writeCount > 0, "hex resolves dimmer + colour + strobe")
 
         // Hex at channel 1: dimmer=1, R/G/B=2/3/4, amber=5, white=6, uv=7, strobe=8.
-        val store = state.show.directWriteStore
-        assertEquals(255u.toUByte(), store.get(0, 1), "dimmer full")
-        assertEquals(255u.toUByte(), store.get(0, 2), "red full")
-        assertEquals(255u.toUByte(), store.get(0, 6), "white engine full")
-        assertEquals(0u.toUByte(), store.get(0, 7), "uv zeroed by the colour fan-out")
-        assertEquals(0u.toUByte(), store.get(0, 8), "shutter open")
+        assertEquals(255u.toUByte(), programmerChannel(state, 0, 1), "dimmer full")
+        assertEquals(255u.toUByte(), programmerChannel(state, 0, 2), "red full")
+        assertEquals(255u.toUByte(), programmerChannel(state, 0, 6), "white engine full")
+        assertEquals(0u.toUByte(), programmerChannel(state, 0, 7), "uv zeroed by the colour fan-out")
+        assertEquals(0u.toUByte(), programmerChannel(state, 0, 8), "shutter open")
 
         val listed: LocateStateResponse = client.get("/api/rest/locate").body()
         assertEquals(listOf(LocateTargetDto("fixture", "hex-loc")), listed.targets)
 
         val off: ToggleLocateResponse = toggle(client, "fixture", "hex-loc").body()
         assertFalse(off.active)
-        assertNull(store.get(0, 1), "writes cleared — channels cascade back")
-        assertNull(store.get(0, 8))
+        assertNull(programmerChannel(state, 0, 1), "writes cleared — channels cascade back")
+        assertNull(programmerChannel(state, 0, 8))
         assertTrue(client.get("/api/rest/locate").body<LocateStateResponse>().targets.isEmpty())
     }
 
@@ -68,14 +68,13 @@ class LocateRoutesTest : RouteIntegrationTest() {
         assertTrue(toggle(client, "fixture", "hex-a").body<ToggleLocateResponse>().active)
         assertTrue(toggle(client, "group", "locate-band").body<ToggleLocateResponse>().active)
 
-        val store = state.show.directWriteStore
-        assertEquals(255u.toUByte(), store.get(0, 1), "member a dimmer")
-        assertEquals(255u.toUByte(), store.get(0, 20), "member b dimmer")
+        assertEquals(255u.toUByte(), programmerChannel(state, 0, 1), "member a dimmer")
+        assertEquals(255u.toUByte(), programmerChannel(state, 0, 20), "member b dimmer")
 
         // Releasing the group must not release the still-active fixture locate on hex-a.
         assertFalse(toggle(client, "group", "locate-band").body<ToggleLocateResponse>().active)
-        assertEquals(255u.toUByte(), store.get(0, 1), "hex-a re-asserted by its own locate")
-        assertNull(store.get(0, 20), "hex-b released with the group")
+        assertEquals(255u.toUByte(), programmerChannel(state, 0, 1), "hex-a re-asserted by its own locate")
+        assertNull(programmerChannel(state, 0, 20), "hex-b released with the group")
 
         val listed: LocateStateResponse = client.get("/api/rest/locate").body()
         assertEquals(listOf(LocateTargetDto("fixture", "hex-a")), listed.targets)

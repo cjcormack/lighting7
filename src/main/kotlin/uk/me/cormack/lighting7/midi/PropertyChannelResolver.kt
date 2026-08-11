@@ -145,31 +145,30 @@ object PropertyChannelResolver {
     }
 
     /**
-     * Phase 6: serialize a MIDI 7-bit value for [propertyName] on [fixture] into the string
-     * form consumed by [uk.me.cormack.lighting7.fx.Layer3Resolver.parseAssignmentValue] —
-     * i.e. the value that sits in `CuePropertyAssignment.value`.
+     * Convert a MIDI 7-bit value for [propertyName] on [fixture] into a typed
+     * [Layer3Resolver.PropertyValue] — the form the programmer store and cue assignments
+     * both consume.
      *
-     * - [DmxSlider] → `"0".."255"`, scaled through the slider's own `min..max` sub-range so a
-     *   fader at 100% produces the slider's own max rather than raw DMX 255.
-     * - [DmxColour] → `"#rrggbb"` grey, each axis set to the full 7→8-bit scaled value. Matches
-     *   [resolveFixtureProperty]'s fan-out semantics (all three channels carry the same value).
+     * - [DmxSlider] → [Layer3Resolver.PropertyValue.Slider], scaled through the slider's own
+     *   `min..max` sub-range so a fader at 100% produces the slider's own max rather than
+     *   raw DMX 255.
+     * - [DmxColour] → [Layer3Resolver.PropertyValue.Colour] grey, each axis set to the full
+     *   7→8-bit scaled value. Matches [resolveFixtureProperty]'s fan-out semantics (all
+     *   three channels carry the same value).
      * - [DmxFixtureSetting] and unknown types → `null`. Settings are bindable only to buttons.
-     *
-     * Output format is produced via [uk.me.cormack.lighting7.fx.Layer3Resolver.PropertyValue.serialize]
-     * so this path round-trips through `parseAssignmentValue` by construction.
      */
-    fun serializeToAssignmentValue(
+    fun toPropertyValue(
         fixture: Fixture,
         propertyName: String,
         midiValue7Bit: UByte,
-    ): String? {
+    ): Layer3Resolver.PropertyValue? {
         val property = fixture.fixtureProperty(propertyName) ?: return null
         val raw = try {
             property.classProperty.call(fixture)
         } catch (_: Exception) {
             return null
         } ?: return null
-        val value: Layer3Resolver.PropertyValue = when (raw) {
+        return when (raw) {
             is DmxSlider -> Layer3Resolver.PropertyValue.Slider(
                 scaleWithinRange(midiValue7Bit, raw.min, raw.max),
             )
@@ -177,9 +176,57 @@ object PropertyChannelResolver {
                 val dmx = scale7BitToDmx(midiValue7Bit).toInt()
                 Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(dmx, dmx, dmx)))
             }
-            else -> return null
+            else -> null
         }
-        return value.serialize()
+    }
+
+    /**
+     * Serialize a MIDI 7-bit value for [propertyName] on [fixture] into the string form
+     * consumed by [uk.me.cormack.lighting7.fx.Layer3Resolver.parseAssignmentValue] — i.e.
+     * the value that sits in `CuePropertyAssignment.value`. See [toPropertyValue] for the
+     * per-type semantics; output is produced via
+     * [uk.me.cormack.lighting7.fx.Layer3Resolver.PropertyValue.serialize] so this path
+     * round-trips through `parseAssignmentValue` by construction.
+     */
+    fun serializeToAssignmentValue(
+        fixture: Fixture,
+        propertyName: String,
+        midiValue7Bit: UByte,
+    ): String? = toPropertyValue(fixture, propertyName, midiValue7Bit)?.serialize()
+
+    /**
+     * The typed value a flash press should assert for [propertyName] on [fixture] at the
+     * binding's 0..255 [max] level.
+     *
+     * - [DmxSlider] → [Layer3Resolver.PropertyValue.Slider] clamped to the slider's own
+     *   `max` so a flash never writes past a dimmer's configured cap.
+     * - [DmxColour] → grey at [max] — the "brightness on a colour" fallback, matching the
+     *   fader semantics above. The extended W/A/UV components are 0: a flash asserts the
+     *   whole colour property, where the old channel-level press left W/A/UV untouched —
+     *   and because the programmer sits above cues, a cue-driven white/amber/UV on the
+     *   fixture is forced to 0 for as long as the flash is held (release restores it).
+     *   Deliberate: a flash press is "this colour, now", not a partial overlay.
+     * - [DmxFixtureSetting] and unknown types → `null`. Flash on a setting is disallowed.
+     */
+    fun flashPropertyValue(
+        fixture: Fixture,
+        propertyName: String,
+        max: UByte,
+    ): Layer3Resolver.PropertyValue? {
+        val property = fixture.fixtureProperty(propertyName) ?: return null
+        val raw = try {
+            property.classProperty.call(fixture)
+        } catch (_: Exception) {
+            return null
+        } ?: return null
+        return when (raw) {
+            is DmxSlider -> Layer3Resolver.PropertyValue.Slider(minOf(max, raw.max))
+            is DmxColour -> {
+                val v = max.toInt()
+                Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(v, v, v)))
+            }
+            else -> null
+        }
     }
 
     /**

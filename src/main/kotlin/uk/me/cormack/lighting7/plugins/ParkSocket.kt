@@ -63,14 +63,17 @@ suspend fun handlePark(scope: SocketScope, message: ParkInMessage) {
             // Null-safe: a park row can outlive the universe it names (patch edit, project
             // import), and a missing controller is nothing to transmit to — not a crash.
             controllers.controllerOrNull(Universe(0, message.universe))?.requestTransmit()
+            scope.state.show.fxEngine.emitProvenanceUpdate()
         }
         is UnparkChannelInMessage -> {
             parkManager.unpark(message.universe, message.channel)
             controllers.controllerOrNull(Universe(0, message.universe))?.requestTransmit()
+            scope.state.show.fxEngine.emitProvenanceUpdate()
         }
         is UnparkAllInMessage -> {
             parkManager.unparkAll()
             controllers.controllers.forEach { it.requestTransmit() }
+            scope.state.show.fxEngine.emitProvenanceUpdate()
         }
     }
 }
