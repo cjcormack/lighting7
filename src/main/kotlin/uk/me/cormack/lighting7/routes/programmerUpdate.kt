@@ -1,0 +1,256 @@
+package uk.me.cormack.lighting7.routes
+
+import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.state.State
+
+/** One cue Update would overwrite, with a sample of the properties driving that. */
+@Serializable
+data class ProgrammerChecklistCueDto(
+    val cueId: Int,
+    val cueNumber: String? = null,
+    /** True when [cueNumber] was derived from position rather than typed — rendered dimmed. */
+    val cueNumberAuto: Boolean = false,
+    val cueName: String,
+    val isActive: Boolean,
+    val keyCount: Int,
+    /** Keys the cue drives through an effect rather than a property assignment. */
+    val viaEffectKeyCount: Int,
+    val sample: List<ProgrammerChecklistKeyDto>,
+)
+
+/** One (fixture, property) the programmer is currently overriding. */
+@Serializable
+data class ProgrammerChecklistKeyDto(
+    val targetKey: String,
+    val propertyName: String,
+    /** The programmer's winning value, serialised. */
+    val currentValue: String,
+    /** The value underneath, serialised — null when nothing but baseline is below. */
+    val cueValue: String? = null,
+    val viaEffect: Boolean = false,
+)
+
+/** Overridden cues, grouped by the stack they belong to. */
+@Serializable
+data class ProgrammerChecklistStackDto(
+    /** Null bucket: the cue's stack couldn't be determined. */
+    val cueStackId: Int? = null,
+    val cueStackName: String? = null,
+    val isActive: Boolean = false,
+    val cues: List<ProgrammerChecklistCueDto>,
+)
+
+/**
+ * The Mode B answer: everything the programmer is currently sitting on top of, so the client
+ * can ask which of it to write.
+ */
+@Serializable
+data class ProgrammerUpdateChecklistDto(
+    val stacks: List<ProgrammerChecklistStackDto>,
+    /** Touched keys with no cue underneath — programmer over baseline. */
+    val unattributed: List<ProgrammerChecklistKeyDto>,
+    val totalKeys: Int,
+)
+
+/** How many rows in the sample list per cue. Enough to recognise the cue, short enough to read. */
+private const val CHECKLIST_SAMPLE_SIZE = 8
+
+/**
+ * The programmer entries Update should write back to the cue that was Included.
+ *
+ * The rule — write back only what changed since Include — is what makes Update
+ * reference-preserving before palette refs exist at all.
+ *
+ * Include parses a cue row into a concrete value and stores it in an `INCLUDE` slot. Because
+ * the store keeps a per-owner slot stack, that slot survives underneath any later `WEB` write,
+ * so comparing the winning value against it answers "did the operator change this?" exactly.
+ * Rows the operator never touched are not rewritten — which means a cue row stored as the
+ * positional palette ref `"P1"` is still `"P1"` afterwards. Write everything back instead and
+ * the first Update after any Include would silently harden every ref in the cue into a literal.
+ *
+ * Values that are new since the Include (no INCLUDE slot) are always written: that is the
+ * operator adding a fixture to the cue.
+ */
+internal fun changedSinceInclude(
+    state: State,
+    mask: Set<PropertyMaskGroup>?,
+): Pair<List<RecordEntry>, List<RecordSkip>> {
+    val store = state.show.programmerStore
+    val (entries, skips) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
+    val changed = entries.filter { entry ->
+        val included = store.valueFor(ProgrammerOwner.INCLUDE, entry.fixtureKey, entry.propertyName)
+        included == null || included.resolved != entry.value
+    }
+    return changed to skips
+}
+
+/**
+ * Build the Mode B checklist: which cues (grouped by stack) the programmer's touched entries
+ * are currently overriding.
+ *
+ * Uses [FxEngine.underlyingSources] rather than provenance: provenance correctly reports the
+ * programmer as the winner, which is precisely the answer this can't use. The Layer 3 winner
+ * map is computed at publish time and knows nothing about the programmer, so it already is
+ * "the cue underneath".
+ */
+internal fun buildUpdateChecklist(
+    state: State,
+    mask: Set<PropertyMaskGroup>?,
+): ProgrammerUpdateChecklistDto {
+    val engine = state.show.fxEngine
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
+    if (entries.isEmpty()) {
+        return ProgrammerUpdateChecklistDto(emptyList(), emptyList(), 0)
+    }
+
+    val byKey = entries.associateBy { Layer3Resolver.Key.fixture(it.fixtureKey, it.propertyName) }
+    val layer3State = engine.layerResolver.currentLayer3State
+    val sources = engine.underlyingSources(byKey.keys)
+
+    val unattributed = ArrayList<ProgrammerChecklistKeyDto>()
+    val byCue = LinkedHashMap<Int, MutableList<ProgrammerChecklistKeyDto>>()
+    val stackOf = HashMap<Int, Int?>()
+
+    for (source in sources) {
+        val entry = byKey[source.key] ?: continue
+        val dto = ProgrammerChecklistKeyDto(
+            targetKey = entry.fixtureKey,
+            propertyName = entry.propertyName,
+            currentValue = entry.value.serialize(),
+            cueValue = layer3State[source.key]?.serialize(),
+            viaEffect = source.viaEffectId != null,
+        )
+        val cueId = source.cueId
+        if (cueId == null) {
+            unattributed.add(dto)
+        } else {
+            byCue.getOrPut(cueId) { mutableListOf() }.add(dto)
+            stackOf.putIfAbsent(cueId, source.cueStackId)
+        }
+    }
+
+    if (byCue.isEmpty()) {
+        return ProgrammerUpdateChecklistDto(
+            emptyList(), unattributed.sortedWith(keyOrder), entries.size,
+        )
+    }
+
+    // One read for every cue's name/number and, where the engine map didn't have it, its
+    // stack. A cue whose assignments are empty but whose effects are running has no engine
+    // stack entry, so the DB is the fallback rather than the primary.
+    data class CueMeta(
+        val name: String,
+        val number: String?,
+        val numberAuto: Boolean,
+        val stackId: Int?,
+        val stackName: String?,
+    )
+    val meta = transaction(state.database) {
+        byCue.keys.associateWith { cueId ->
+            DaoCue.findById(cueId)?.let { cue ->
+                CueMeta(
+                    cue.name, cue.cueNumber, cue.cueNumberAuto,
+                    cue.cueStack.id.value, cue.cueStack.name,
+                )
+            }
+        }
+    }
+
+    val cueDtos = byCue.map { (cueId, keys) ->
+        val cueMeta = meta[cueId]
+        val stackId = stackOf[cueId] ?: cueMeta?.stackId
+        val sorted = keys.sortedWith(keyOrder)
+        Triple(
+            stackId,
+            cueMeta?.stackName,
+            ProgrammerChecklistCueDto(
+                cueId = cueId,
+                cueNumber = cueMeta?.number,
+                cueNumberAuto = cueMeta?.numberAuto ?: false,
+                cueName = cueMeta?.name ?: "Cue $cueId",
+                isActive = stackId != null &&
+                    state.show.cueStackManager.getActiveCueId(stackId) == cueId,
+                keyCount = keys.size,
+                viaEffectKeyCount = keys.count { it.viaEffect },
+                sample = sorted.take(CHECKLIST_SAMPLE_SIZE),
+            ),
+        )
+    }
+
+    val stacks = cueDtos
+        .groupBy { it.first }
+        .map { (stackId, group) ->
+            ProgrammerChecklistStackDto(
+                cueStackId = stackId,
+                cueStackName = group.firstNotNullOfOrNull { it.second },
+                isActive = stackId != null && state.show.cueStackManager.getActiveCueId(stackId) != null,
+                cues = group.map { it.third }.sortedWith(
+                    compareBy({ it.cueNumber ?: "" }, { it.cueId }),
+                ),
+            )
+        }
+        .sortedWith(compareBy(nullsLast()) { it.cueStackId })
+
+    return ProgrammerUpdateChecklistDto(stacks, unattributed.sortedWith(keyOrder), entries.size)
+}
+
+private val keyOrder = compareBy(
+    ProgrammerChecklistKeyDto::targetKey,
+    ProgrammerChecklistKeyDto::propertyName,
+)
+
+/**
+ * The touched entries whose underlying source is [cueId] — the rows a Mode B commit writes to
+ * that cue.
+ *
+ * Scoping matters: a checklist commit naming two cues must not smear one cue's overrides onto
+ * the other. Each cue gets only the keys it was actually underneath.
+ */
+internal fun entriesUnderlyingCue(
+    state: State,
+    cueId: Int,
+    mask: Set<PropertyMaskGroup>?,
+): List<RecordEntry> {
+    val engine = state.show.fxEngine
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
+    if (entries.isEmpty()) return emptyList()
+    val byKey = entries.associateBy { Layer3Resolver.Key.fixture(it.fixtureKey, it.propertyName) }
+    return engine.underlyingSources(byKey.keys)
+        .filter { it.cueId == cueId }
+        .mapNotNull { byKey[it.key] }
+}
+
+/**
+ * Package [entries] as a recording for the cue write path, with the band FX the operator has
+ * running.
+ *
+ * Update applies MERGE semantics — it never deletes. Removing content from a cue is
+ * `Record REMOVE`; conflating the two would make an Update after a Clear-and-rebuild silently
+ * strip everything the operator didn't happen to re-set.
+ */
+internal fun recordingForUpdate(
+    state: State,
+    entries: List<RecordEntry>,
+    includeFx: Boolean,
+): ProgrammerRecording {
+    val collapsed = collapseRecordingToAssignments(entries, state.show.fixtures)
+    val bandEffects = if (includeFx) {
+        state.show.fxEngine.getActiveEffects()
+            .filter { FxEngine.isProgrammerFxPriority(it.priority) }
+    } else emptyList()
+    val (presetApps, adHoc) = fxInstancesToCueChildren(bandEffects, mask = null, state.show.fixtures)
+    return ProgrammerRecording(
+        rows = collapsed.rows,
+        presetApplications = presetApps,
+        adHocEffects = adHoc,
+        palette = null,
+        groupRowsEmitted = collapsed.groupRows,
+        skipped = collapsed.skipped,
+    )
+}

@@ -273,6 +273,41 @@ class SocketMessageWireFormatTest {
     }
 
     @Test
+    fun `programmer domain — set accepts an optional sourceGroup hint`() {
+        // For clients that fan a group gesture out to members (group virtual dimmer, Highlight
+        // release) rather than sending targetType=group. Optional, so existing senders are
+        // unaffected.
+        val withHint = json.decodeFromString<InMessage>(
+            """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200","sourceGroup":"front-wash"}"""
+        )
+        assertEquals("front-wash", assertIs<ProgrammerSetInMessage>(withHint).sourceGroup)
+
+        val without = json.decodeFromString<InMessage>(
+            """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200"}"""
+        )
+        assertEquals(null, assertIs<ProgrammerSetInMessage>(without).sourceGroup)
+    }
+
+    @Test
+    fun `programmer domain — includeTarget round-trips, including the cleared form`() {
+        val set = ProgrammerIncludeTargetOutMessage(
+            IncludedTargetDto(kind = "CUE", cueId = 42, cueStackId = 7, cueName = "Look 1", cueNumber = "1"),
+        )
+        val encoded = json.encodeToString<OutMessage>(set)
+        assertTrue(encoded.contains(""""type":"programmer.includeTarget""""))
+        assertEquals(set, assertIs<ProgrammerIncludeTargetOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+
+        // Clear sends a null target; the client must be able to tell "no target" from "no message".
+        val cleared = ProgrammerIncludeTargetOutMessage(null)
+        assertEquals(
+            cleared,
+            assertIs<ProgrammerIncludeTargetOutMessage>(
+                json.decodeFromString<OutMessage>(json.encodeToString<OutMessage>(cleared)),
+            ),
+        )
+    }
+
+    @Test
     fun `programmer domain — state out message round-trips with discriminator`() {
         val out = ProgrammerStateOutMessage(
             blind = false,

@@ -142,10 +142,17 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
     // "Locate wins" is now non-destructive: the programmer sits above effects, so the
     // entries written below suppress every effect covering them for as long as the locate
     // holds — and releasing the locate lets the effects resume. Nothing is removed.
+    // A group locate fans out to members, but the gesture was group-scoped — carry the hint so
+    // a later Record can collapse the entries back to a group row instead of emitting one row
+    // per member.
+    val sourceGroup = (target as? TargetRef.Group)?.key
+
     val writes = try {
         engine.writeProgrammerProperties(
             ProgrammerOwner.LOCATE,
-            assignments.map { FxEngine.ProgrammerPropertyWrite(it.target, it.propertyName, it.value) },
+            assignments.map {
+                FxEngine.ProgrammerPropertyWrite(it.target, it.propertyName, it.value, sourceGroup)
+            },
             // Momentary owner: don't absorb the sideband — release must reveal what was
             // under it (an unpark hand-down, a raw channel write).
             absorbSideband = false,

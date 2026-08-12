@@ -29,13 +29,17 @@ import kotlin.test.assertNotNull
 
 /**
  * End-to-end HTTP + WebSocket round-trip: POST /patches → WS cueEdit (beginEdit →
- * setProperty → endEdit) → POST snapshot-from-live → GET. Closes the gap named in
- * `FU-TEST-HTTP-ROUNDTRIP`.
+ * setProperty → endEdit) → POST programmer/record (STAGE_SNAPSHOT) → GET. Closes the gap named
+ * in `FU-TEST-HTTP-ROUNDTRIP`.
+ *
+ * The capture step used to be `POST /cues/{id}/snapshot-from-live`, which Session 3 replaced
+ * with `programmer.record { source: STAGE_SNAPSHOT, mode: UPDATE_EXISTING }` — the same
+ * capture, now one source among several rather than its own endpoint.
  */
 class HttpRoundTripTest : RouteIntegrationTest() {
 
     @Test
-    fun `patch then cueEdit then snapshot-from-live then GET round-trips through HTTP + WS`() = testApplication {
+    fun `patch then cueEdit then stage-snapshot record then GET round-trips through HTTP + WS`() = testApplication {
         mountTestApp(state)
         val client = createWsClient()
 
@@ -85,9 +89,17 @@ class HttpRoundTripTest : RouteIntegrationTest() {
             assertEquals("dimmer", changed.propertyName)
             assertEquals("200", changed.value)
 
-            val snapResp = client.post(
-                "/api/rest/project/$projectId/cues/$targetCueId/snapshot-from-live"
-            )
+            val snapResp = client.post("/api/rest/programmer/record") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ProgrammerRecordRequest(
+                        projectId = projectId.toString(),
+                        mode = "UPDATE_EXISTING",
+                        source = "STAGE_SNAPSHOT",
+                        cueId = targetCueId,
+                    )
+                )
+            }
             assertEquals(HttpStatusCode.OK, snapResp.status, "snapshot body: ${snapResp.bodyAsText()}")
 
             sendSerialized<InMessage>(CueEditEndEditInMessage(sourceCueId))

@@ -161,6 +161,10 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 stack.cues.forEach { cue ->
                     deleteCueChildren(cue)
                     removedAnchors += deletePromptBookAnchorsForCue(cue)
+                    // Same reason the single-cue delete does this: a deleted cue can't be
+                    // Updated into, and a surviving target leaves every client's programmer
+                    // indicator offering a cue that no longer exists.
+                    state.show.programmerStore.clearIncludeTargetForCue(cue.id.value)
                     cue.delete()
                 }
 

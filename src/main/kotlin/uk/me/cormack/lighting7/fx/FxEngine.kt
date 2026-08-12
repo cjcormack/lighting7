@@ -248,19 +248,7 @@ class FxEngine(
             keys
         }
 
-        // Highest-priority running effect per (fixtureKey, propertyName).
-        val effectByKey = HashMap<Pair<String, String>, FxInstance>()
-        for (effect in activeEffects.values) {
-            if (!effect.isRunning) continue
-            val propertyName = effect.target.propertyName
-            for (fixtureKey in resolveEffectFixtureKeys(effect)) {
-                val k = fixtureKey to propertyName
-                val current = effectByKey[k]
-                if (current == null || sortedEffectsComparator.compare(effect, current) > 0) {
-                    effectByKey[k] = effect
-                }
-            }
-        }
+        val effectByKey = highestPriorityEffectByKey()
 
         val layer3State = layerResolver.currentLayer3State
         val layer3Winners = layerResolver.currentLayer3Winners
@@ -295,16 +283,86 @@ class FxEngine(
                     key.targetKey, key.propertyName, ProvenanceSource.EFFECT,
                     cueId = effect.cueId, cueStackId = effect.cueStackId, effectId = effect.id,
                 )
-                key in layer3State -> ProvenanceEntry(
-                    key.targetKey, key.propertyName, ProvenanceSource.CUE,
-                    cueId = layer3Winners[key],
-                )
+                key in layer3State -> {
+                    val winningCueId = layer3Winners[key]
+                    ProvenanceEntry(
+                        key.targetKey, key.propertyName, ProvenanceSource.CUE,
+                        cueId = winningCueId,
+                        cueStackId = winningCueId?.let { cueStackIdFor(it) },
+                    )
+                }
                 else -> continue
             }
             entries.add(entry)
         }
         entries.sortWith(compareBy({ it.targetKey }, { it.propertyName }))
         return entries
+    }
+
+    /**
+     * Highest-priority running effect per `(fixtureKey, propertyName)`. Shared by
+     * [computeProvenance] and [underlyingSources] so the two can't disagree about which
+     * effect is driving a property.
+     */
+    private fun highestPriorityEffectByKey(
+        include: (FxInstance) -> Boolean = { true },
+    ): Map<Pair<String, String>, FxInstance> {
+        val effectByKey = HashMap<Pair<String, String>, FxInstance>()
+        for (effect in activeEffects.values) {
+            if (!effect.isRunning) continue
+            if (!include(effect)) continue
+            val propertyName = effect.target.propertyName
+            for (fixtureKey in resolveEffectFixtureKeys(effect)) {
+                val k = fixtureKey to propertyName
+                val current = effectByKey[k]
+                if (current == null || sortedEffectsComparator.compare(effect, current) > 0) {
+                    effectByKey[k] = effect
+                }
+            }
+        }
+        return effectByKey
+    }
+
+    /**
+     * What would own each of [keys] if the programmer weren't there — the "which cue am I
+     * sitting on top of" question behind Update's Mode B checklist.
+     *
+     * This is deliberately *not* [computeProvenance]: provenance reports the programmer as the
+     * winner (correctly — it is what's on stage), which is exactly the answer Mode B can't use.
+     * `currentLayer3Winners` is computed at Layer 3 publish time and knows nothing about the
+     * programmer, so it already *is* "the cue underneath". Keys with no cue row fall back to
+     * the highest-priority running cue-owned effect; programmer-band effects are skipped
+     * because they are part of the same busk being written back, not something underneath it.
+     *
+     * Keys with no cue and no cue-owned effect are still returned, with nulls — the caller
+     * buckets them as "programmer over baseline", which is a materially different offer to the
+     * operator ("record a new cue") than "you're overriding cue 3".
+     */
+    data class UnderlyingSource(
+        val key: Layer3Resolver.Key,
+        val cueId: Int?,
+        val cueStackId: Int?,
+        val viaEffectId: Long?,
+    )
+
+    fun underlyingSources(keys: Collection<Layer3Resolver.Key>): List<UnderlyingSource> {
+        if (keys.isEmpty()) return emptyList()
+        val layer3Winners = layerResolver.currentLayer3Winners
+        // Band effects are excluded from the *scan*, not filtered from its result. Filtering
+        // afterwards would lose the cue underneath: band effects always outrank cue-derived
+        // priorities, so a single top-priority-per-key map would only ever hold the band one,
+        // and a cue driving that property through its own FX would report as unattributed.
+        val effectByKey = highestPriorityEffectByKey { !isProgrammerFxPriority(it.priority) }
+        return keys.map { key ->
+            val cueId = layer3Winners[key]
+            if (cueId != null) {
+                UnderlyingSource(key, cueId, cueStackIdFor(cueId), viaEffectId = null)
+            } else {
+                val effect = effectByKey[key.targetKey to key.propertyName]
+                    ?.takeIf { it.cueId != null }
+                UnderlyingSource(key, effect?.cueId, effect?.cueStackId, effect?.id)
+            }
+        }
     }
 
     // --- Palette ---
@@ -423,6 +481,17 @@ class FxEngine(
     // [updateCueFadeWeights] / Phase 1b in `docs/plans/completed/cue-authoring-unification-plan.md`.
     private val cueFadeWeights = HashMap<Int, Double>()
 
+    // cueId → the stack that cue belongs to, recorded when its assignments are published.
+    //
+    // The Layer 3 machinery is keyed by cue alone (`cueAssignments`, and the resolver's
+    // `currentLayer3Winners: Key → cueId`), so a CUE-sourced provenance entry had nowhere to
+    // read a stack from and always reported null — the wire-format asymmetry against EFFECT
+    // sources that `FU-PROG-PROVENANCE-STACKID` tracked. Every caller of [setCueAssignments]
+    // holds a stack id, so recording it here costs one map write per publish and lets both
+    // provenance and [underlyingSources] answer "which stack" without touching the DB.
+    // Guarded by [cueAssignmentsLock], like the two maps above.
+    private val cueStackIds = HashMap<Int, Int>()
+
     private val cueAssignmentsLock = Any()
 
     /**
@@ -440,20 +509,28 @@ class FxEngine(
      * incoming cue at 0 without briefly flashing its full value onto stage. A weight of 1.0
      * (the default) clears any prior entry in the fade-weight map so reapplying a cue resets
      * it to steady state. Clamped to `[0, 1]`.
+     *
+     * [cueStackId] records which stack the cue belongs to so CUE-sourced provenance and
+     * [underlyingSources] can name it. Defaulted to null rather than required: plenty of
+     * engine-level tests publish assignments for a bare cue id with no stack behind them, and
+     * a null simply means "stack unknown", which is what those callers mean.
      */
     fun setCueAssignments(
         cueId: Int,
         assignments: List<Layer3Resolver.Assignment>,
         weight: Double = 1.0,
+        cueStackId: Int? = null,
     ) {
         synchronized(cueAssignmentsLock) {
             if (assignments.isEmpty()) {
                 val removed = cueAssignments.remove(cueId) != null
                 cueFadeWeights.remove(cueId)
+                cueStackIds.remove(cueId)
                 if (removed) republishLayer3Assignments()
                 return
             }
             cueAssignments[cueId] = assignments
+            if (cueStackId != null) cueStackIds[cueId] = cueStackId
             val clamped = weight.coerceIn(0.0, 1.0)
             if (clamped >= 1.0) {
                 cueFadeWeights.remove(cueId)
@@ -562,6 +639,7 @@ class FxEngine(
             if (mutable.isEmpty()) {
                 cueAssignments.remove(cueId)
                 cueFadeWeights.remove(cueId)
+                cueStackIds.remove(cueId)
             } else {
                 cueAssignments[cueId] = mutable
             }
@@ -574,6 +652,7 @@ class FxEngine(
         synchronized(cueAssignmentsLock) {
             val removed = cueAssignments.remove(cueId) != null
             cueFadeWeights.remove(cueId)
+            cueStackIds.remove(cueId)
             if (removed) {
                 republishLayer3Assignments()
             }
@@ -586,9 +665,13 @@ class FxEngine(
             if (cueAssignments.isEmpty() && cueFadeWeights.isEmpty()) return
             cueAssignments.clear()
             cueFadeWeights.clear()
+            cueStackIds.clear()
             republishLayer3Assignments()
         }
     }
+
+    /** Which stack [cueId]'s currently-published assignments belong to, if it named one. */
+    fun cueStackIdFor(cueId: Int): Int? = synchronized(cueAssignmentsLock) { cueStackIds[cueId] }
 
     /**
      * Snapshot the set of cue ids currently contributing Layer 3 assignments. Used by
@@ -2499,6 +2582,13 @@ class FxEngine(
 
         transaction.apply()
     }
+
+    /**
+     * The fixture/element keys [effect] currently writes to. Public form of
+     * [resolveEffectFixtureKeys] — used by Include to report which heads a spawned group
+     * effect covers, so the sheet can select them.
+     */
+    fun fixtureKeysCoveredBy(effect: FxInstance): List<String> = resolveEffectFixtureKeys(effect)
 
     /**
      * Resolve all fixture/element keys that an effect was writing to.

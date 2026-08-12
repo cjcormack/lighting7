@@ -747,6 +747,10 @@ private fun applyPresetProgrammerWrites(
         cascade = PaletteCascade(preset = presetPalette, global = engine.getPalette()),
     )
 
+    // The builder fans group targets out to members, dropping the group identity on the way.
+    // Recover it so the resulting programmer entries can be recorded back as a group row.
+    val groupHints = groupHintsForTargets(state.show.fixtures, targets.map { it.target })
+
     val writes = ArrayList<PresetToggleWrite>(rows.size)
     for (row in rows) {
         val fixture = try {
@@ -757,7 +761,9 @@ private fun applyPresetProgrammerWrites(
         // Momentary owner: don't absorb the sideband — toggle-off must reveal what was
         // under it.
         val resolved = engine.writeProgrammerProperty(
-            owner, fixture, row.propertyName, row.value, absorbSideband = false,
+            owner, fixture, row.propertyName, row.value,
+            sourceGroup = groupHints[row.targetKey],
+            absorbSideband = false,
         )
         if (resolved.isNotEmpty()) {
             writes += PresetToggleWrite(row.targetKey, row.propertyName)

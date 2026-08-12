@@ -40,7 +40,7 @@ Rationale: parking protects specific channels during maintenance, rigging checks
 
 ## Layer 2 — Programmer
 
-The console-style programmer: a sparse per-(fixture, property) overlay of sticky manual values held in `ProgrammerStore`. It is simultaneously the live override for busking and the staging buffer that Record serialises (Session 3 of the redesign). **An active programmer entry wins over cue values and suppresses effects on that property** — for HTP categories too (predictability beats max-merge in a busking-first system).
+The console-style programmer: a sparse per-(fixture, property) overlay of sticky manual values held in `ProgrammerStore`. It is simultaneously the live override for busking and the staging buffer that [Record](#record--include--update) serialises. **An active programmer entry wins over cue values and suppresses effects on that property** — for HTP categories too (predictability beats max-merge in a busking-first system).
 
 Writers: web busking (`programmer.*` ops and the `updateChannel` compatibility shim), MIDI surface faders, surface flash buttons, FX preset toggles / editor previews, Locate, and the unpark hand-down.
 
@@ -52,13 +52,13 @@ Each (fixture, property) holds a small **recency-ordered stack** of per-owner sl
 - **Clear**: removes only the caller's own slot. If other owners still hold the property, it falls back to the **most recent surviving owner's value** (then the cue layer, then baseline). Releasing a Locate no longer wipes a busked dimmer level; toggling a preset off no longer destroys a locate or another preset's write on a shared property; releasing a flash restores the fader level underneath.
 - **Read** (`get`, on the 50 Hz effect-reset hot path) returns the top of the stack — O(1) and allocation-free.
 
-Owners: `web` (busking UI + `updateChannel` shim), `surface` (MIDI faders), `flash` (flash press/release — separate from `surface` so releasing a flash restores the fader or busked level underneath), `preset:{id}` (one per preset, previews use a synthetic negative id), `locate`, `unpark` (park-release hand-down), and `include` (reserved for Session 3).
+Owners: `web` (busking UI + `updateChannel` shim), `surface` (MIDI faders), `flash` (flash press/release — separate from `surface` so releasing a flash restores the fader or busked level underneath), `preset:{id}` (one per preset, previews use a synthetic negative id), `locate`, `unpark` (park-release hand-down), and `include` (cue contents loaded by [Include](#record--include--update); its slot survives underneath a later operator write, which is how Update tells an edit from an untouched include).
 
 One deliberate exception: **all Locate targets share the single `locate` owner**, so locate-vs-locate overlap (releasing a group locate while a member is individually located) is *not* resolved by the store's fallback — same-owner writes overwrite each other. `LocateManager` keeps its own re-assert loop for that case, which also re-resolves locate values and drops stale targets on the way.
 
 ### Touched flag
 
-Every slot carries a sticky `touched` flag — never value-diffed. `true` marks an operator edit and is what Record and the Update checklist (Session 3) read. `false` marks a mechanical hand-down: the `unpark` owner's slots, which must be releasable like any manual write but must never leak into a recorded cue.
+Every slot carries a sticky `touched` flag — never value-diffed. `true` marks an operator edit and is what Record and the Update checklist read. `false` marks a mechanical hand-down: the `unpark` owner's slots, which must be releasable like any manual write but must never leak into a recorded cue.
 
 ### Channel sideband
 
@@ -91,9 +91,82 @@ Clears, blind transitions, and sets accept an optional `fadeMs`, driving the per
 
 Deterministic release: clearing a programmer entry re-resolves the cascade below it — the property lands on the surviving owner, the cue layer, or baseline, never on a stale snapshot.
 
+Clear also drops the include target (below): nothing is staged afterwards, so an Update offering that target would silently write nothing.
+
+### The `sourceGroup` hint
+
+`programmer.set` / `setColour` / `setPosition` against `targetType: "group"` fan out to member fixtures, stamping each slot with the group's name. Record uses that hint to decide whether it may re-emit a group-shaped cue row.
+
+Clients that fan a group-scoped gesture out *themselves* — a group virtual dimmer over members with different property shapes, a Highlight release restoring per-fixture values — can pass the hint explicitly via an optional `sourceGroup` field. It is validated server-side (the named group must exist and must contain the target fixture) and dropped with a warn otherwise, so a client cannot conjure a group row out of a write that never came from a group control. The two backend fan-out sites, group Locate and group preset toggles, pass it directly.
+
+### The include target
+
+`ProgrammerStore.lastIncludedTarget` records what Include last loaded, and is what a bare Update writes back to. It is set by Include and by any Record that names a cue (record-then-tweak-then-Update being the obvious next gesture), cleared by Clear and by deleting the cue, and left alone by `clearEntry`, `setBlind`, and a successful Update — Update is repeatable.
+
+It reaches the client two ways: on `programmer.state` as `lastIncluded`, and as a `programmer.includeTarget` push. That push is a **broadcast**, unlike every other programmer reply, because the programmer is shared: a second tab's Update button must offer the same target.
+
 ### Provenance
 
-The engine maintains, per (target, property), the identity of the winning contributor — `PARKED`, `PROGRAMMER`, `EFFECT` (with `effectId`/`cueId`), or `CUE` (with the winning `cueId`); baseline keys are omitted. Recomputed on layer events only (programmer mutation, cue republish, effect lifecycle, park change) — never per frame — and broadcast as a full-state `provenanceState` WS message. This powers ownership colouring in the programmer sheet and the Update-without-Include checklist (Session 3). Because programmer mutations reply only to the connection that made them, `provenanceState` is also the frontend's signal to re-read `programmer.state` — it is the one broadcast that fires for a write made by a MIDI surface, a locate, or another browser tab.
+The engine maintains, per (target, property), the identity of the winning contributor — `PARKED`, `PROGRAMMER`, `EFFECT` (with `effectId`/`cueId`), or `CUE` (with the winning `cueId` **and** `cueStackId`); baseline keys are omitted. Recomputed on layer events only (programmer mutation, cue republish, effect lifecycle, park change) — never per frame — and broadcast as a full-state `provenanceState` WS message. This powers ownership colouring in the programmer sheet. Note that Update's Mode B checklist does *not* read provenance: provenance correctly names the programmer as the winner, which is precisely the answer "what am I sitting on top of?" cannot use. `FxEngine.underlyingSources` answers that from the programmer-independent Layer 3 winner map instead. Because programmer mutations reply only to the connection that made them, `provenanceState` is also the frontend's signal to re-read `programmer.state` — it is the one broadcast that fires for a write made by a MIDI surface, a locate, or another browser tab.
+
+### Record / Include / Update
+
+The programmer's authoring loop, exposed as three REST endpoints under `/api/rest/programmer`
+(REST rather than `programmer.*` WS ops because each needs a structured reply the fire-and-forget
+WS channel can't carry, and because they mutate cues).
+
+**Mask.** All three can be scoped to the console attribute families — `INTENSITY`, `POSITION`,
+`COLOUR`, `BEAM` (`fx/PropertyMask.kt`). Deliberately coarser than `PropertyCategory`: the same
+physical attribute is annotated differently across heads (a gobo wheel is a `DmxFixtureSetting` on
+one fixture and a plain slider on another), so a category-level mask would be fixture-dependent and
+silently miss heads. Omitting the mask, or naming all four groups, means "everything".
+
+**`record { mode, source, mask?, ... }`** writes the programmer into a cue.
+
+- **Source** — `TOUCHED` (default) takes property entries whose winning slot is an operator edit;
+  `ALL` also takes untouched slots, which today means unpark hand-downs (channel-shaped by
+  construction, so `touched = false` only ever appears in the sideband); `STAGE_SNAPSHOT` captures
+  composed stage state plus running effects and the live palette. Recording *from the programmer*
+  rather than from composed state is the point: what you busked is what records.
+- **Sideband** — a slot whose channel a property covers is lifted into a property row; one with no
+  backing property cannot be (cue assignments have no channel form) and is reported as a skip
+  rather than silently dropped. Element-keyed entries are skipped for the same reason: cue
+  assignments resolve fixture keys, not element keys.
+- **Group shape** — a `sourceGroup` hint only *nominates* a group row. It is emitted iff every
+  member of the named group holds an entry for that property with an identical value. A stale or
+  missing hint therefore degrades to per-fixture rows — verbose, never wrong.
+- **Mode** — `CREATE` makes a cue in a stack; `MERGE` upserts; `REMOVE` deletes the rows the
+  recording names; `UPDATE_EXISTING` replaces the cue's in-mask content. **Triggers and timed
+  children are never touched by any mode** — they are not programmer state, and `CueTriggerManager`
+  owns the timed ones. Recording into the live cue of a stack republishes its Layer 3, or the DB
+  and the published layer would disagree and the next Clear would snap the rig back.
+
+**`include { cueId, mask? }`** loads a cue's assignments and immediate FX into the programmer as
+`INCLUDE`-owned slots and programmer-band effects, and returns the fixture keys for the sheet to
+select (MagicQ's "Select Heads on Include"). Two details earn their keep: an FX child the cue is
+already running is *not* re-spawned (there is no FX-vs-FX suppression, so a band duplicate would
+double-apply), and spawned instances leave `cueId` null so `removeEffectsForCue` can't sweep the
+operator's programmer out from under them when the cue stops.
+
+**`update { targets?, mask? }`** writes back.
+
+- **Mode A** — with an include target, only entries that *changed since Include* are written. The
+  INCLUDE slot survives underneath the operator's write, so the comparison needs no extra state.
+  This is also what makes Update reference-preserving before palette refs exist: a cue row stored
+  as `"P1"` is parsed to a colour at include time, and because the operator didn't touch it, it is
+  not written back — the ref survives. Writing everything back would harden every ref in the cue on
+  the first Update after any Include.
+- **Mode B** — with nothing included, the server answers with the cues the programmer is currently
+  overriding, grouped by stack, and the client confirms which to write. Keys with no cue underneath
+  are bucketed separately ("record a new cue instead"). A commit writes each cue only the keys it
+  was actually underneath.
+- Update applies MERGE semantics and never deletes. Removing content from a cue is `record REMOVE`.
+
+**The cueEdit guard**, asymmetric because the risks are: opening a cue-edit session on the current
+include target *warns*, and Include on a cue with an open session warns (Include only reads).
+Record and Update targeting a cue with an open session are a **409 unless forced** — `beginEdit`
+snapshots the cue's assignments and Discard restores that snapshot wholesale, so anything written
+underneath would be silently reverted.
 
 ## Layer 3 — Effects
 
@@ -221,7 +294,7 @@ Naming note: the cue-edit session's Live/Blind *mode* and the programmer's **Bli
 
 For readers familiar with EOS, grandMA, Hog, MagicQ, or Avolites:
 
-- **The programmer exists but Record/Include/Update land in Session 3** of the [redesign](plans/programmer-redesign-proposal.md). Until then, cue authoring auto-persists through `cueEdit` sessions with snapshot-based discard; the programmer is the busking/override surface.
+- **Two cue-authoring paths coexist**: the programmer's Record/Include/Update loop (stage-driven) and `cueEdit` sessions (a bound form over the cue document, auto-persisting with snapshot-based discard). Most consoles have only the former. See the guard below.
 - **No HTP/LTP toggle on cues**: the composition rule is a property-category intrinsic, not a per-cue choice. We do not need the EOS / Hog "this cuelist is HTP for intensity" switch because the category already declares it.
 - **Programmer wins HTP categories too**: MagicQ's `Programmer overrides HTP chans` setting collapsed to an always-on rule — busking-first system, predictability beats max-merge.
 - **Non-tracking**: cues are complete states; there is no tracking apparatus (block/unblock/trace/cue-only).

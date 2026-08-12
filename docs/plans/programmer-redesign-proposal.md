@@ -1,6 +1,25 @@
 # Programmer Redesign — Proposal
 
-**Status**: In progress — **Session 2 (programmer UI) landed 2026-08-12**: programmer sheet
+**Status**: In progress — **Session 3 (Record / Include / Update) landed 2026-08-12**:
+`POST /api/rest/programmer/{record,include,update}` (REST, not WS ops — each needs a structured
+reply the fire-and-forget programmer channel can't carry); I/P/C/B attribute mask
+(`fx/PropertyMask.kt`); `RecordSource` TOUCHED/ALL/STAGE_SNAPSHOT with sideband lifting and skip
+reporting; group-shaped record gated on a uniformity test rather than trusting the `sourceGroup`
+hint (§7 resolved — see below); `ProgrammerStore.lastIncludedTarget` + `programmer.includeTarget`
+broadcast; Include spawns the cue's FX into the programmer band, skipping children the cue is
+already running; Update Mode A writes back only what changed since Include (which is what preserves
+untouched palette refs) and Mode B returns the provenance-derived checklist grouped by stack;
+`FU-PROG-PROVENANCE-STACKID` closed; asymmetric cueEdit guard (warn on open, 409-unless-forced on
+write); `snapshot-from-live` deleted in favour of `record { source: STAGE_SNAPSHOT }`, which also
+fixes §1's lossiness by overlaying the programmer on the capture; `sourceGroup` gap closed at group
+Locate, group preset toggles, and via a validated optional protocol field for client-side fan-outs.
+**Vis-source selector deliberately severed** — `FU-PROG-VIS-SOURCE` in
+[followups.md](followups.md), since `Next GO` needs a backend preview-compose path that doesn't
+exist. §7's open question resolved: Record emits a group row **only** when a `sourceGroup` hint
+names a group whose every member holds a matching, equal-valued entry; otherwise fixture rows. The
+hint is a candidate, not an authority, so a stale one degrades to verbosity rather than to a wrong
+cue.
+**Session 2 (programmer UI) landed 2026-08-12**: programmer sheet
 (`/programmer`) + FX sheet (`/programmer/fx`) on the fixtures-list machinery with per-cell
 ownership colouring and blind-staged values; always-visible programmer indicator (app header
 + ShowBar); Clear (timed) / Blind toolbar with Record/Include/Update as disabled Session-3
@@ -473,9 +492,16 @@ this proposal fall off the backlog, since nothing re-reads a shipped proposal.
 
 ## 7. Open questions
 
-1. **Group entries in the programmer** — store group-shaped entries (better
-   record shape, matches cue assignments) vs always fan to fixtures with
-   group hints at record time (matches how group controls write today).
-   Recommendation: store group-shaped when the write came from a group
-   control, fixture-shaped otherwise; the specificity rule already handles
-   overlap.
+1. ~~**Group entries in the programmer**~~ — **resolved in Session 3.** Entries stay
+   fixture-shaped in the store (which is what Session 1 built); the group identity survives
+   as the `sourceGroup` hint on each member's slot. At Record time the hint *nominates* a
+   group row, and one is emitted only when every member of that group holds an entry for the
+   property with an identical value.
+
+   The recommendation above ("store group-shaped when the write came from a group control")
+   would have made the hint authoritative, and it isn't: it reflects only the winning slot,
+   and a member overridden afterwards would silently be dragged back to the group's value by
+   the recorded row. Gating on the uniformity test means a stale or missing hint degrades to
+   per-fixture rows — more verbose, never wrong — and it is the same rule
+   `captureLayer3AssignmentsFromSnapshot` already applies to the stage snapshot, so both
+   record paths preserve operator-authored group shape identically.

@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.routes.readOutputColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
@@ -207,46 +208,21 @@ private fun currentExtendedColour(
     dmxColour: DmxColour,
     universe: Int,
 ): ExtendedColour {
-    val controller = state.show.fixtures.controllerOrNull(Universe(0, universe))
-    fun current(channelNo: Int): Int = controller?.currentValues?.get(channelNo)?.toInt() ?: 0
-    val programmer = state.show.programmerStore
-    fun sideband(channelNo: Int): Int? = programmer.getChannel(universe, channelNo)?.toInt()
-
-    // Prefer an existing programmer colour entry (successive component drags compose),
-    // then the wire value.
-    (programmer.get(fixtureKey, propertyName)?.value?.resolved as? Layer3Resolver.PropertyValue.Colour)
+    // Prefer an existing programmer colour entry so successive component drags compose,
+    // then fall through to the shared wire+sideband read. That read is shared with Record's
+    // sideband lifting ([readOutputColour]) so the two can't disagree about which channels
+    // count as part of the colour; the entry preference is this path's own rule, because
+    // Record has already applied its own precedence before it gets there.
+    (state.show.programmerStore.get(fixtureKey, propertyName)?.value?.resolved
+        as? Layer3Resolver.PropertyValue.Colour)
         ?.let { return it.value }
 
-    val white: UByte
-    val amber: UByte
-    val uv: UByte
     val fixture = try {
         state.show.fixtures.untypedFixture(fixtureKey)
     } catch (_: Exception) {
         null
     }
-    if (fixture != null) {
-        fun bundled(category: uk.me.cormack.lighting7.fixture.PropertyCategory): UByte {
-            val prop = fixture.fixtureProperties.find { it.bundleWithColour && it.category == category }
-                ?: return 0u
-            val dmx = prop.classProperty.call(fixture) as? DmxSlider ?: return 0u
-            return (sideband(dmx.channelNo) ?: current(dmx.channelNo)).toUByte()
-        }
-        white = bundled(uk.me.cormack.lighting7.fixture.PropertyCategory.WHITE)
-        amber = bundled(uk.me.cormack.lighting7.fixture.PropertyCategory.AMBER)
-        uv = bundled(uk.me.cormack.lighting7.fixture.PropertyCategory.UV)
-    } else {
-        white = 0u; amber = 0u; uv = 0u
-    }
-
-    return ExtendedColour(
-        Color(
-            sideband(dmxColour.redSlider.channelNo) ?: current(dmxColour.redSlider.channelNo),
-            sideband(dmxColour.greenSlider.channelNo) ?: current(dmxColour.greenSlider.channelNo),
-            sideband(dmxColour.blueSlider.channelNo) ?: current(dmxColour.blueSlider.channelNo),
-        ),
-        white, amber, uv,
-    )
+    return readOutputColour(state, fixture, dmxColour, universe)
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────

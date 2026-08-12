@@ -29,6 +29,7 @@ import uk.me.cormack.lighting7.routes.buildLayer3AssignmentsForCue
 import uk.me.cormack.lighting7.routes.buildLayer3AssignmentsForPreset
 import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
 import uk.me.cormack.lighting7.routes.cueDerivedPriority
+import uk.me.cormack.lighting7.routes.republishCueLayer3
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
 import uk.me.cormack.lighting7.routes.toPropertyAssignmentDtos
 import uk.me.cormack.lighting7.state.State
@@ -146,6 +147,13 @@ sealed class CueEditOutMessage : OutMessage()
 data class CueEditSessionStartedOutMessage(
     val cueId: Int,
     val mode: String,
+    /**
+     * Set when the session opened on a cue that is also loaded in the programmer via Include.
+     * The session still opens — the operator may well know what they're doing — but the two
+     * paths will fight over the same rows, so say so. Additive and defaulted, so older clients
+     * deserialise unchanged.
+     */
+    val warning: String? = null,
 ) : CueEditOutMessage()
 
 @Serializable
@@ -301,7 +309,19 @@ object CueEditSessionHandler {
 
         state.cueEditSessionRegistry.register(handle, state.projectManager.currentProject.id.value, newSession)
         state.cueEditLatencyTracker.onBeginEdit()
-        return CueEditSessionStartedOutMessage(cueId, mode.name)
+
+        // Warn rather than refuse: cue-edit only reads the cue to open, so nothing is lost yet.
+        // What bites later is that this session snapshotted the cue's assignments and Discard
+        // restores that snapshot wholesale — so a programmer Update landing underneath would be
+        // silently reverted. (The mirror check, on Record/Update, is a hard 409 for that reason.)
+        val includeConflict = state.show.programmerStore.lastIncludedTarget?.cueId == cueId
+        return CueEditSessionStartedOutMessage(
+            cueId, mode.name,
+            warning = if (includeConflict) {
+                "This cue is loaded in the programmer (Include). Programmer Update and " +
+                    "cue-edit Discard will fight over the same rows."
+            } else null,
+        )
     }
 
     /**
@@ -851,37 +871,8 @@ object CueEditSessionHandler {
      * Combines the cue's own property assignments with property assignments from each
      * immediate preset application (timed presets don't contribute — matches [applyCue]).
      */
-    private fun republishLayer3(state: State, cueId: Int, applyData: CueApplyData) {
-        val engine = state.show.fxEngine
-        val cascade = PaletteCascade(
-            cue = applyData.palette.toPaletteColours(),
-            global = engine.getPalette(),
-        )
-        val cueOwn = buildLayer3AssignmentsForCue(state.show.fixtures, applyData, cascade)
-        val priority = cueDerivedPriority(applyData)
-        val presetRows = transaction(state.database) {
-            applyData.presetApplications
-                .filter { it.delayMs == null && it.intervalMs == null }
-                .flatMap { app ->
-                    val preset = DaoFxPreset.findById(app.presetId) ?: return@flatMap emptyList()
-                    buildLayer3AssignmentsForPreset(
-                        state.show.fixtures, cueId, priority,
-                        app.presetId, preset.toPropertyAssignmentDtos(), app.targets,
-                        cascade = cascade.copy(preset = preset.palette.toPaletteColours()),
-                    )
-                }
-        }
-        val combined = when {
-            presetRows.isEmpty() -> cueOwn
-            cueOwn.isEmpty() -> presetRows
-            else -> cueOwn + presetRows
-        }
-        if (combined.isNotEmpty()) {
-            state.show.fxEngine.setCueAssignments(cueId, combined)
-        } else {
-            state.show.fxEngine.removeCueAssignments(cueId)
-        }
-    }
+    private fun republishLayer3(state: State, cueId: Int, applyData: CueApplyData) =
+        republishCueLayer3(state, cueId, applyData)
 
     /**
      * Walk the fixture that owns [channel] in [universe] and identify the property it backs.

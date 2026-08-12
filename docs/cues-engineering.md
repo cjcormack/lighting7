@@ -106,6 +106,21 @@ All endpoints are scoped under `/api/rest/project/{projectId}/cues`.
 | POST | `/{projectId}/cues/{cueId}/stop` | Stop a running cue, removing its effects |
 | POST | `/{projectId}/cues/from-state` | Create cue from current FX/palette state |
 
+Writing the *programmer* into a cue lives outside this namespace, under
+`/api/rest/programmer` — see [the composition model](lighting-composition-model.md#record--include--update):
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/programmer/record` | Write the programmer into a cue (`CREATE`/`MERGE`/`REMOVE`/`UPDATE_EXISTING`, optional I/P/C/B mask) |
+| POST | `/programmer/include` | Load a cue's assignments + FX into the programmer for editing |
+| POST | `/programmer/update` | Write programmer edits back — to the include target, or to cues named from the Mode B checklist |
+
+`POST /{projectId}/cues/{cueId}/snapshot-from-live` was removed in the programmer redesign's
+Session 3. Capturing the stage is now `POST /programmer/record { source: "STAGE_SNAPSHOT",
+mode: "UPDATE_EXISTING", cueId }` — the same capture, plus the programmer overlay the old route
+could not see (it read Layer 4 only, so anything busked was silently dropped), and preserving
+triggers and timed effects the old route left to chance.
+
 ### Apply Semantics
 
 When a cue is applied:
@@ -141,7 +156,8 @@ The version supplier sums both versions to ensure cache invalidation when either
 
 ### From-State Capture
 
-The `from-state` endpoint captures the current FxEngine state:
+The `from-state` endpoint and `programmer/record { source: "STAGE_SNAPSHOT" }` share
+`captureCurrentState`, which captures the current FxEngine state:
 - Effects with a non-null `presetId` are grouped by preset into `CuePresetApplicationDto` entries, deduplicating targets
 - Effects without a `presetId` (ad-hoc) are captured as full `CueAdHocEffectDto` entries with all fields
 

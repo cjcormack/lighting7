@@ -2,6 +2,9 @@ package uk.me.cormack.lighting7.plugins
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.ExtendedColour
@@ -25,6 +28,12 @@ sealed class ProgrammerInMessage : InMessage()
  * [Layer3Resolver.PropertyValue.serialize]): `"0".."255"` for sliders and settings,
  * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) or a palette ref (`"P1"`) for colours,
  * `"pan,tilt"` for `position`.
+ *
+ * [sourceGroup] is for clients that fan a group-scoped gesture out to member fixtures rather
+ * than sending `targetType: "group"` — a group virtual dimmer over heterogeneous members, a
+ * Highlight release restoring per-fixture values. It only ever widens the shape Record can
+ * emit, and it is validated (see [ProgrammerHandler.validateSourceGroup]), so a client cannot
+ * assert a hint it hasn't earned.
  */
 @Serializable
 @SerialName("programmer.set")
@@ -34,6 +43,7 @@ data class ProgrammerSetInMessage(
     val propertyName: String,
     val value: String,
     val fadeMs: Long? = null,
+    val sourceGroup: String? = null,
 ) : ProgrammerInMessage()
 
 /** Typed colour write — avoids string round-trips for colour pickers. */
@@ -50,6 +60,8 @@ data class ProgrammerSetColourInMessage(
     val a: UByte? = null,
     val uv: UByte? = null,
     val fadeMs: Long? = null,
+    /** See [ProgrammerSetInMessage.sourceGroup]. */
+    val sourceGroup: String? = null,
 ) : ProgrammerInMessage()
 
 /** Typed position write. */
@@ -61,6 +73,8 @@ data class ProgrammerSetPositionInMessage(
     val pan: UByte,
     val tilt: UByte,
     val fadeMs: Long? = null,
+    /** See [ProgrammerSetInMessage.sourceGroup]. */
+    val sourceGroup: String? = null,
 ) : ProgrammerInMessage()
 
 /** Clear one programmer entry (all owners) on a fixture or group property. */
@@ -152,12 +166,38 @@ data class ProgrammerChannelDto(
     val touched: Boolean,
 )
 
+/**
+ * What Include last loaded, and therefore what a bare Update writes back to. Null means
+ * nothing is staged from a cue.
+ */
+@Serializable
+data class IncludedTargetDto(
+    /** `CUE` today; Session 4 adds `PALETTE`. */
+    val kind: String,
+    val cueId: Int,
+    val cueStackId: Int? = null,
+    val cueName: String? = null,
+    val cueNumber: String? = null,
+)
+
 @Serializable
 @SerialName("programmer.state")
 data class ProgrammerStateOutMessage(
     val blind: Boolean,
     val entries: List<ProgrammerEntryDto>,
     val channels: List<ProgrammerChannelDto>,
+    val lastIncluded: IncludedTargetDto? = null,
+) : ProgrammerOutMessage()
+
+/**
+ * Pushed when the include target changes — set by Include or Record, cleared by Clear.
+ * Broadcast (not unicast) because the programmer is shared: a second tab's Update button
+ * must offer the same target.
+ */
+@Serializable
+@SerialName("programmer.includeTarget")
+data class ProgrammerIncludeTargetOutMessage(
+    val target: IncludedTargetDto? = null,
 ) : ProgrammerOutMessage()
 
 @Serializable
@@ -193,8 +233,37 @@ data class ProvenanceStateOutMessage(
 
 // ── Subscriptions ────────────────────────────────────────────────────────────
 
+/**
+ * Resolve the store's include target into its wire form, naming the cue.
+ *
+ * The cue name/number lookup lives here rather than on [ProgrammerStore] deliberately: the
+ * store is DB-free and on the 50 Hz read path, and this runs once per include-target change.
+ */
+internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.IncludedTarget?): IncludedTargetDto? {
+    if (target == null) return null
+    val cue = try {
+        transaction(state.database) {
+            DaoCue.findById(target.cueId)?.let { it.name to it.cueNumber }
+        }
+    } catch (_: Exception) {
+        null
+    }
+    return IncludedTargetDto(
+        kind = target.kind.name,
+        cueId = target.cueId,
+        cueStackId = target.cueStackId,
+        cueName = cue?.first,
+        cueNumber = cue?.second,
+    )
+}
+
 /** Stream provenance snapshots to the connection. Replay(1) delivers the latest on connect. */
 fun setupProgrammerSubscriptions(scope: SocketScope) {
+    // StateFlow replays its current value, so a tab opened mid-show sees the live include
+    // target immediately rather than only after the next Include.
+    scope.subscribe(scope.state.show.programmerStore.lastIncludedTargetFlow) { target ->
+        scope.send(ProgrammerIncludeTargetOutMessage(includedTargetDto(scope.state, target)))
+    }
     scope.subscribe(scope.state.show.fxEngine.provenanceFlow) { entries ->
         scope.send(
             ProvenanceStateOutMessage(
@@ -219,7 +288,10 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
     val state = scope.state
     val reply: OutMessage = when (message) {
         is ProgrammerSetInMessage -> withTarget(message.targetType, message.targetKey) { target ->
-            ProgrammerHandler.set(state, target, message.propertyName, message.value, message.fadeMs ?: 0)
+            ProgrammerHandler.set(
+                state, target, message.propertyName, message.value, message.fadeMs ?: 0,
+                message.sourceGroup,
+            )
         }
         is ProgrammerSetColourInMessage -> withTarget(message.targetType, message.targetKey) { target ->
             val colour = ExtendedColour(
@@ -231,12 +303,14 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
             ProgrammerHandler.setTyped(
                 state, target, message.propertyName,
                 Layer3Resolver.PropertyValue.Colour(colour), message.fadeMs ?: 0,
+                message.sourceGroup,
             )
         }
         is ProgrammerSetPositionInMessage -> withTarget(message.targetType, message.targetKey) { target ->
             ProgrammerHandler.setTyped(
                 state, target, "position",
                 Layer3Resolver.PropertyValue.Position(message.pan, message.tilt), message.fadeMs ?: 0,
+                message.sourceGroup,
             )
         }
         is ProgrammerClearEntryInMessage -> withTarget(message.targetType, message.targetKey) { target ->
@@ -268,6 +342,7 @@ private inline fun withTarget(
 // ── Handler ─────────────────────────────────────────────────────────────────
 
 object ProgrammerHandler {
+    private val logger = LoggerFactory.getLogger(ProgrammerHandler::class.java)
 
     /** Parse [value] against the property's category, then delegate to [setTyped]. */
     fun set(
@@ -276,12 +351,13 @@ object ProgrammerHandler {
         propertyName: String,
         value: String,
         fadeMs: Long,
+        sourceGroup: String? = null,
     ): OutMessage {
         val typed = parseValue(state, target, propertyName, value)
             ?: return ProgrammerErrorOutMessage(
                 "Value '$value' doesn't parse for ${target.discriminator} '${target.key}' property '$propertyName'"
             )
-        return setTyped(state, target, propertyName, typed, fadeMs)
+        return setTyped(state, target, propertyName, typed, fadeMs, sourceGroup)
     }
 
     /** Write a typed value as a WEB programmer entry and report the stored form. */
@@ -291,6 +367,7 @@ object ProgrammerHandler {
         propertyName: String,
         value: Layer3Resolver.PropertyValue,
         fadeMs: Long,
+        sourceGroup: String? = null,
     ): OutMessage {
         val engine = state.show.fxEngine
         val landed = when (target) {
@@ -301,7 +378,9 @@ object ProgrammerHandler {
                     return ProgrammerErrorOutMessage("Unknown fixture '${target.key}'")
                 }
                 engine.writeProgrammerProperty(
-                    ProgrammerOwner.WEB, fixture, propertyName, value, fadeMs = fadeMs,
+                    ProgrammerOwner.WEB, fixture, propertyName, value,
+                    sourceGroup = validateSourceGroup(state, sourceGroup, target.key),
+                    fadeMs = fadeMs,
                 ).isNotEmpty()
             }
             is TargetRef.Group -> {
@@ -403,7 +482,36 @@ object ProgrammerHandler {
                 touched = top.touched,
             )
         }.sortedWith(compareBy({ it.universe }, { it.channel }))
-        return ProgrammerStateOutMessage(store.blind, entries, channels)
+        return ProgrammerStateOutMessage(
+            store.blind, entries, channels, includedTargetDto(state, store.lastIncludedTarget),
+        )
+    }
+
+    /**
+     * Accept a client-supplied `sourceGroup` hint only when the named group exists and
+     * actually contains [fixtureKey].
+     *
+     * The hint widens what Record may emit — an unearned one would let a client conjure a
+     * group-shaped cue row out of a write that never came from a group control — so it is
+     * checked against the patch rather than trusted. A rejected hint is dropped, not an
+     * error: the write itself is still valid and the only cost is a more verbose recording.
+     */
+    private fun validateSourceGroup(state: State, sourceGroup: String?, fixtureKey: String): String? {
+        if (sourceGroup == null) return null
+        val group = try {
+            state.show.fixtures.untypedGroup(sourceGroup)
+        } catch (_: Exception) {
+            logger.warn("programmer.set: unknown sourceGroup '{}' — hint dropped", sourceGroup)
+            return null
+        }
+        if (group.fixtures.none { it.targetKey == fixtureKey }) {
+            logger.warn(
+                "programmer.set: sourceGroup '{}' does not contain '{}' — hint dropped",
+                sourceGroup, fixtureKey,
+            )
+            return null
+        }
+        return sourceGroup
     }
 
     /**

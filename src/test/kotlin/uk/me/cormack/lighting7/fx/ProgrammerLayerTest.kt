@@ -256,4 +256,110 @@ class ProgrammerLayerTest {
         val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
         assertEquals(FxEngine.ProvenanceSource.EFFECT, entry.source, "band effects modulate on top")
     }
+
+    @Test
+    fun `a CUE provenance entry names the stack the cue was published from`() {
+        // `FU-PROG-PROVENANCE-STACKID`: the cue layer is keyed by cue alone, so this used to be
+        // permanently null while EFFECT sources carried it — the asymmetry Update's Mode B
+        // checklist needs closed in order to group overridden cues by stack.
+        val rig = newRig()
+        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
+
+        val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
+        assertEquals(FxEngine.ProvenanceSource.CUE, entry.source)
+        assertEquals(10, entry.cueId)
+        assertEquals(7, entry.cueStackId)
+        assertEquals(7, rig.engine.cueStackIdFor(10))
+
+        rig.engine.removeCueAssignments(10)
+        assertNull(rig.engine.cueStackIdFor(10), "the mapping goes with the assignments")
+    }
+
+    @Test
+    fun `underlyingSources names the cue beneath an active programmer entry`() {
+        // This is exactly what computeProvenance deliberately does *not* report: with the
+        // programmer on top, provenance says PROGRAMMER (correctly), so Mode B needs the
+        // programmer-independent Layer 3 winner map instead.
+        val rig = newRig()
+        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
+        rig.engine.writeProgrammerProperty(
+            ProgrammerOwner.WEB, rig.hex(), "dimmer", Layer3Resolver.PropertyValue.Slider(180u),
+        )
+
+        assertEquals(
+            FxEngine.ProvenanceSource.PROGRAMMER,
+            rig.engine.computeProvenance().first { it.propertyName == "dimmer" }.source,
+        )
+
+        val key = Layer3Resolver.Key.fixture("hex-a", "dimmer")
+        val source = rig.engine.underlyingSources(listOf(key)).single()
+        assertEquals(10, source.cueId, "the cue underneath, not the programmer on top")
+        assertEquals(7, source.cueStackId)
+        assertNull(source.viaEffectId)
+    }
+
+    @Test
+    fun `underlyingSources falls back to a cue-owned effect, and ignores band effects`() {
+        val rig = newRig()
+        val key = Layer3Resolver.Key.fixture("hex-a", "dimmer")
+
+        val cueEffect = FxInstance(
+            effect = StaticValue(60u),
+            target = SliderTarget("hex-a", "dimmer"),
+            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            blendMode = BlendMode.OVERRIDE,
+        ).also { it.cueId = 42; it.cueStackId = 5 }
+        val cueEffectId = rig.engine.addEffect(cueEffect)
+
+        val viaEffect = rig.engine.underlyingSources(listOf(key)).single()
+        assertEquals(42, viaEffect.cueId, "a cue driving the property through an FX still counts")
+        assertEquals(5, viaEffect.cueStackId)
+        assertEquals(cueEffectId, viaEffect.viaEffectId)
+
+        rig.engine.removeEffect(cueEffectId)
+        rig.engine.addEffect(
+            FxInstance(
+                effect = StaticValue(30u),
+                target = SliderTarget("hex-a", "dimmer"),
+                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                blendMode = BlendMode.OVERRIDE,
+            ).also { it.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE },
+        )
+        val bandOnly = rig.engine.underlyingSources(listOf(key)).single()
+        assertNull(
+            bandOnly.cueId,
+            "a programmer-band effect is part of the busk being written back, not something under it",
+        )
+    }
+
+    @Test
+    fun `a band effect does not hide the cue effect underneath it`() {
+        // Band effects outrank every cue-derived priority, so a "highest priority per key" scan
+        // that included them would only ever surface the band one — and filtering it out
+        // afterwards would report the key as unattributed even though a cue is driving it.
+        val rig = newRig()
+        val key = Layer3Resolver.Key.fixture("hex-a", "dimmer")
+
+        val cueEffectId = rig.engine.addEffect(
+            FxInstance(
+                effect = StaticValue(60u),
+                target = SliderTarget("hex-a", "dimmer"),
+                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                blendMode = BlendMode.OVERRIDE,
+            ).also { it.cueId = 42; it.cueStackId = 5 },
+        )
+        rig.engine.addEffect(
+            FxInstance(
+                effect = StaticValue(30u),
+                target = SliderTarget("hex-a", "dimmer"),
+                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                blendMode = BlendMode.ADDITIVE,
+            ).also { it.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE },
+        )
+
+        val source = rig.engine.underlyingSources(listOf(key)).single()
+        assertEquals(42, source.cueId, "the cue's own effect is still what's underneath")
+        assertEquals(5, source.cueStackId)
+        assertEquals(cueEffectId, source.viaEffectId)
+    }
 }

@@ -1,5 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -45,7 +48,12 @@ value class ProgrammerOwner(val id: String) {
          */
         val UNPARK = ProgrammerOwner("unpark")
 
-        /** Reserved for Include (Session 3) — cue contents loaded into the programmer. */
+        /**
+         * Cue contents loaded into the programmer by Include (`routes/programmerInclude.kt`).
+         * Its own slot survives underneath a later operator write, which is what lets Update
+         * tell "the operator changed this" from "this is just what I included" — see
+         * [ProgrammerStore.valueFor].
+         */
         val INCLUDE = ProgrammerOwner("include")
 
         /**
@@ -70,6 +78,28 @@ sealed interface ProgrammerValue {
 
     /** A literal value, not derived from any palette. */
     data class Hard(override val resolved: Layer3Resolver.PropertyValue) : ProgrammerValue
+}
+
+/**
+ * What Include last pulled into the programmer, and therefore what Update writes back to
+ * when no explicit targets are given (Mode A).
+ *
+ * [kind] exists so Session 4 can add `PALETTE` without changing the field's shape; today only
+ * [Kind.CUE] is ever constructed. [cueStackId] is carried so the client can name the stack in
+ * the indicator without a second lookup.
+ */
+data class IncludedTarget(
+    val kind: Kind,
+    val cueId: Int,
+    val cueStackId: Int?,
+) {
+    enum class Kind {
+        CUE,
+    }
+
+    companion object {
+        fun cue(cueId: Int, cueStackId: Int?) = IncludedTarget(Kind.CUE, cueId, cueStackId)
+    }
 }
 
 /**
@@ -170,6 +200,35 @@ class ProgrammerStore {
      */
     @Volatile
     var blind: Boolean = false
+
+    /**
+     * What Include last loaded, and therefore what a bare Update writes back to (Mode A).
+     * Null means nothing is staged from a cue, so Update falls through to the
+     * provenance-derived checklist (Mode B).
+     *
+     * A [StateFlow] rather than a plain field so the WebSocket layer can push changes with
+     * replay-on-connect (a freshly-opened tab gets the current target without polling) and
+     * without adding a method to `FixturesChangeListener` for something no other subsystem
+     * cares about.
+     */
+    private val _lastIncludedTarget = MutableStateFlow<IncludedTarget?>(null)
+
+    val lastIncludedTargetFlow: StateFlow<IncludedTarget?> = _lastIncludedTarget.asStateFlow()
+
+    var lastIncludedTarget: IncludedTarget?
+        get() = _lastIncludedTarget.value
+        set(value) {
+            _lastIncludedTarget.value = value
+        }
+
+    /**
+     * Drop the include target if it points at [cueId]. Called when a cue is deleted, so a
+     * later Update can't write into a row that no longer exists. (Update re-validates the
+     * target against the DB anyway — this just keeps the operator's indicator honest.)
+     */
+    fun clearIncludeTargetForCue(cueId: Int) {
+        _lastIncludedTarget.value = _lastIncludedTarget.value?.takeIf { it.cueId != cueId }
+    }
 
     private val epochCounter = AtomicLong(0)
 
@@ -338,10 +397,17 @@ class ProgrammerStore {
         return swept
     }
 
-    /** Remove every entry for every owner — property entries and sideband. */
+    /**
+     * Remove every entry for every owner — property entries and sideband.
+     *
+     * Also drops [lastIncludedTarget]: Clear releases everything Include staged, so there is
+     * nothing left to write back and a surviving target would offer an Update that silently
+     * did nothing.
+     */
     fun clearAll() {
         properties.clear()
         channels.clear()
+        _lastIncludedTarget.value = null
         bumpEpoch()
     }
 

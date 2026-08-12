@@ -28,13 +28,26 @@ import uk.me.cormack.lighting7.state.State
  */
 object LocateTestSupport {
     /** Patch one `hex` fixture at [startChannel] and reload the show's fixtures. */
-    fun seedHex(state: State, projectId: Int, key: String, startChannel: Int) {
+    fun seedHex(state: State, projectId: Int, key: String, startChannel: Int) =
+        seedFixture(state, projectId, "hex", key, startChannel)
+
+    /**
+     * Patch one fixture of [fixtureTypeKey] and reload. Generalises [seedHex] for tests that
+     * need something a hex isn't — a moving head, for pan/tilt.
+     */
+    fun seedFixture(
+        state: State,
+        projectId: Int,
+        fixtureTypeKey: String,
+        key: String,
+        startChannel: Int,
+    ) {
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             DaoFixturePatch.new {
                 this.project = project
                 universeConfig = DaoUniverseConfig.all().first()
-                fixtureTypeKey = "hex"
+                this.fixtureTypeKey = fixtureTypeKey
                 this.key = key
                 displayName = key
                 this.startChannel = startChannel

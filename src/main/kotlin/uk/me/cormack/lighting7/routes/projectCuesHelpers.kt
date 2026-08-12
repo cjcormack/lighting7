@@ -154,12 +154,22 @@ internal fun captureCurrentState(state: State): CapturedState {
  * shape after surface edits (Phase 6 group-scoped `DefaultSurfaceActions.writeGroupProperty`).
  */
 private fun captureLayer3Assignments(state: State): List<CuePropertyAssignmentDto> {
-    val layer3Snapshot = state.show.fxEngine.layerResolver.currentLayer3State
+    val engine = state.show.fxEngine
+    val programmerOverlay = programmerOverlayForSnapshot(state)
+    val layer3Snapshot = if (programmerOverlay.values.isEmpty()) {
+        engine.layerResolver.currentLayer3State
+    } else {
+        // The programmer sits above the cue layer, so what's on stage is the cue snapshot with
+        // the programmer's entries laid over it. Reading Layer 3 alone is precisely the
+        // "Record is lossy" bug: everything busked through a fader, Locate, or the programmer
+        // sheet was invisible to the capture.
+        HashMap(engine.layerResolver.currentLayer3State).apply { putAll(programmerOverlay.values) }
+    }
     if (layer3Snapshot.isEmpty()) return emptyList()
 
-    val activeCueIds = state.show.fxEngine.activeCueAssignmentIds()
+    val activeCueIds = engine.activeCueAssignmentIds()
 
-    val groupHints: Set<Pair<String, String>> = if (activeCueIds.isEmpty()) {
+    val cueGroupHints: Set<Pair<String, String>> = if (activeCueIds.isEmpty()) {
         emptySet()
     } else transaction(state.database) {
         val hints = LinkedHashSet<Pair<String, String>>()
@@ -176,7 +186,51 @@ private fun captureLayer3Assignments(state: State): List<CuePropertyAssignmentDt
         hints
     }
 
+    // Group shape can come from either side: a cue's own group rows, or a group-scoped
+    // programmer write sitting on top of them.
+    val groupHints = if (programmerOverlay.groupHints.isEmpty()) {
+        cueGroupHints
+    } else {
+        LinkedHashSet(cueGroupHints).apply { addAll(programmerOverlay.groupHints) }
+    }
+
     return captureLayer3AssignmentsFromSnapshot(layer3Snapshot, groupHints, state.show.fixtures)
+}
+
+/** The programmer's contribution to a stage snapshot: winning values plus their group hints. */
+private data class ProgrammerOverlay(
+    val values: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue>,
+    val groupHints: Set<Pair<String, String>>,
+)
+
+/**
+ * The programmer's winning property entries, keyed for overlay onto a Layer 3 snapshot.
+ *
+ * Empty while blind: a *stage* snapshot must describe the stage, and blind means the
+ * programmer is deliberately not reaching it.
+ *
+ * Built from [collectProgrammerEntries] rather than walking the store directly, so the stage
+ * snapshot and `programmer.record`'s own sources agree on two things they must not disagree
+ * about: sideband slots that a property covers (a raw pan/tilt drag is part of the stage and
+ * has to be in a stage snapshot), and which of a property entry and a covering sideband slot
+ * is the newer write.
+ *
+ * `ALL`, not `TOUCHED`: a stage snapshot describes the rig, so mechanical hand-downs count.
+ * Unmasked, because the caller masks the collapsed rows afterwards.
+ */
+private fun programmerOverlayForSnapshot(state: State): ProgrammerOverlay {
+    val store = state.show.programmerStore
+    if (store.blind || (store.size == 0 && !store.hasSidebandEntries)) {
+        return ProgrammerOverlay(emptyMap(), emptySet())
+    }
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.ALL, mask = null)
+    val values = HashMap<Layer3Resolver.Key, Layer3Resolver.PropertyValue>(entries.size)
+    val hints = LinkedHashSet<Pair<String, String>>()
+    for (entry in entries) {
+        values[Layer3Resolver.Key.fixture(entry.fixtureKey, entry.propertyName)] = entry.value
+        entry.sourceGroup?.let { hints.add(it to entry.propertyName) }
+    }
+    return ProgrammerOverlay(values, hints)
 }
 
 /** Pure snapshot-collapse pass — extracted from [captureLayer3Assignments] for DB-less testing. */
@@ -575,7 +629,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         else -> cueOwnAssignments + presetRows
     }
     if (layer3Assignments.isNotEmpty()) {
-        engine.setCueAssignments(cueData.cueId, layer3Assignments)
+        engine.setCueAssignments(cueData.cueId, layer3Assignments, cueStackId = cueData.cueStackId)
     } else {
         // Re-applying a cue that lost its assignments must clear any stale state.
         engine.removeCueAssignments(cueData.cueId)
@@ -817,6 +871,74 @@ internal fun buildLayer3AssignmentsForCue(
             // for the same member overrides via [Layer3Resolver.applySpecificity].
             for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true))
         }
+    }
+    return out
+}
+
+/**
+ * Republish Layer 3 for [cueId] from pre-built [applyData], combining the cue's own property
+ * assignments with those of each immediate preset application (timed presets don't contribute
+ * — matching [applyCue]). Effects are left alone: this is the Layer 3 half of an apply.
+ *
+ * Used by cue-edit persists and by Record/Update after they rewrite a cue that is currently
+ * live. Without it the DB rows and the published layer disagree, and the next Clear would
+ * snap the rig back to the cue's pre-edit values.
+ */
+internal fun republishCueLayer3(state: State, cueId: Int, applyData: CueApplyData) {
+    val engine = state.show.fxEngine
+    val cascade = PaletteCascade(
+        cue = applyData.palette.toPaletteColours(),
+        global = engine.getPalette(),
+    )
+    val cueOwn = buildLayer3AssignmentsForCue(state.show.fixtures, applyData, cascade)
+    val priority = cueDerivedPriority(applyData)
+    val presetRows = transaction(state.database) {
+        applyData.presetApplications
+            .filter { it.delayMs == null && it.intervalMs == null }
+            .flatMap { app ->
+                val preset = DaoFxPreset.findById(app.presetId) ?: return@flatMap emptyList()
+                buildLayer3AssignmentsForPreset(
+                    state.show.fixtures, cueId, priority,
+                    app.presetId, preset.toPropertyAssignmentDtos(), app.targets,
+                    cascade = cascade.copy(preset = preset.palette.toPaletteColours()),
+                )
+            }
+    }
+    val combined = when {
+        presetRows.isEmpty() -> cueOwn
+        cueOwn.isEmpty() -> presetRows
+        else -> cueOwn + presetRows
+    }
+    if (combined.isNotEmpty()) {
+        engine.setCueAssignments(cueId, combined, cueStackId = applyData.cueStackId)
+    } else {
+        engine.removeCueAssignments(cueId)
+    }
+}
+
+/**
+ * `memberFixtureKey → groupKey` for every group in [targets], so a writer that fans a
+ * group-scoped gesture out to members can still stamp `sourceGroup` on each programmer slot.
+ *
+ * Without the hint, Record sees N unrelated fixture entries and emits N cue rows where the
+ * operator wrote one group row. Groups are visited in sorted key order and the first group
+ * claiming a member wins, so overlapping groups produce a stable (if arbitrary) hint rather
+ * than one that flips between calls.
+ */
+internal fun groupHintsForTargets(
+    fixtures: uk.me.cormack.lighting7.show.Fixtures,
+    targets: List<TargetRef>,
+): Map<String, String> {
+    val groupKeys = targets.filterIsInstance<TargetRef.Group>().map { it.key }.distinct().sorted()
+    if (groupKeys.isEmpty()) return emptyMap()
+    val out = HashMap<String, String>()
+    for (groupKey in groupKeys) {
+        val group = try {
+            fixtures.untypedGroup(groupKey)
+        } catch (_: IllegalStateException) {
+            continue
+        }
+        for (member in group.fixtures) out.putIfAbsent(member.targetKey, groupKey)
     }
     return out
 }
@@ -1095,7 +1217,7 @@ internal fun createFixtureTargetForCue(
 /**
  * Infer effect category from property name for from-state capture.
  */
-private fun categoryFromPropertyName(propertyName: String): String {
+internal fun categoryFromPropertyName(propertyName: String): String {
     return when (propertyName.lowercase()) {
         "dimmer" -> "dimmer"
         "colour", "color", "rgbcolour" -> "colour"
@@ -1115,11 +1237,35 @@ internal fun createInstanceFromPresetForCue(
     cueId: Int,
 ): FxInstance {
     val engine = state.show.fxEngine
+    return createInstanceFromPreset(
+        presetEffect, fxTarget, presetId, state,
+        paletteSupplier = { engine.getCuePalette(cueId) ?: engine.getPalette() },
+        paletteVersionSupplier = { engine.getCuePaletteVersion(cueId) + engine.paletteVersion },
+    )
+}
+
+/**
+ * Build an [FxInstance] from a preset effect definition with caller-supplied palette suppliers.
+ *
+ * Split out of [createInstanceFromPresetForCue] for Include. That function's supplier reads
+ * `getCuePalette(cueId) ?: getPalette()`, which silently falls back to the *global* palette
+ * when the cue isn't live — so including a non-running cue whose FX use a palette ref (`P1`)
+ * would resolve it against the wrong colours. Include passes a snapshot of the included cue's
+ * own palette instead.
+ */
+internal fun createInstanceFromPreset(
+    presetEffect: FxPresetEffectDto,
+    fxTarget: FxTarget,
+    presetId: Int?,
+    state: State,
+    paletteSupplier: () -> List<ExtendedColour>,
+    paletteVersionSupplier: () -> Long,
+): FxInstance {
     val effect = state.show.fxRegistry.createEffect(
         presetEffect.effectType,
         presetEffect.parameters,
-        paletteSupplier = { engine.getCuePalette(cueId) ?: engine.getPalette() },
-        paletteVersionSupplier = { engine.getCuePaletteVersion(cueId) + engine.paletteVersion },
+        paletteSupplier = paletteSupplier,
+        paletteVersionSupplier = paletteVersionSupplier,
     )
     val timing = FxTiming(presetEffect.beatDivision)
     val blendMode = try {

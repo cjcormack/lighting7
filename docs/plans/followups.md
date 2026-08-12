@@ -149,18 +149,50 @@ leaving `effectsRemoved` a constant 0 kept only because the lighting-react front
 read it. Session 2 removed the field from `ToggleLocateResponse` and from
 `lighting-react`'s `ToggleLocateResponse` type in the same change.
 
-### `FU-PROG-PROVENANCE-STACKID` — cue-source provenance lacks `cueStackId`
+### `FU-PROG-VIS-SOURCE` — Stage3D vis-source selector
 
-**Status**: Blocked (needed by Session 3's Update-without-Include checklist)
-**Origin**: Programmer redesign Session 1 (2026-08), §3.3 scope cut
+**Status**: Ready (severed from Session 3, which shipped without it)
+**Origin**: Programmer redesign §3.7 / Session 3 (2026-08)
 
-`FxEngine.computeProvenance` reports the winning `cueId` for CUE-source entries
-(via `LayerResolver.currentLayer3Winners`) but not the owning stack — the
-engine's assignment map doesn't carry cueId → stackId. Session 3's Mode B
-checklist groups overridden cues by stack, so when building it, extend
-`setCueAssignments` callers (they hold `CueApplyData.cueStackId`) to record the
-mapping and fill `ProvenanceEntry.cueStackId` for CUE sources. EFFECT sources
-already carry it from the `FxInstance`.
+Stage3D renders the final merged DMX output only. The proposal asks for a source
+selector: `Output` (today) / `Output + Programmer` (see blind edits over the live
+show) / `Programmer only` / `Next GO` (preview the next cue in the active stack).
+
+Two are cheap and one is not:
+
+- `Output + Programmer` is identical to `Output` unless Blind is on, so it only
+  needs work for the blind case.
+- `Programmer only` has a shortcut nobody has used yet: `ProgrammerState.channels`
+  (`src/api/programmerWsApi.ts`) already arrives on every `programmer.state`
+  snapshot and is consumed by nothing. It refreshes on the 100 ms provenance
+  debounce rather than at wire rate, and `ProgrammerApi` exposes no per-channel
+  subscribe, so a `subscribeToChannelValue` mirroring `channelsApi` is the missing
+  piece.
+- `Next GO` has no data behind it at all — there is no client-side cue resolver,
+  and turning Layer 4 assignments into channel values in the browser would mean
+  reimplementing the backend merge. It needs a backend preview-compose endpoint or
+  WS channel first.
+
+Note when picking this up: `FixtureModel`'s value reads all funnel through
+`getChannelValue` / `useLiveColour`, so swapping the source is largely "inject a
+value provider instead of importing `lightingApi.channels`". Also note the preview
+pane is Chromium while the rig is driven from Safari, so a clean preview is not
+proof for WebGL-adjacent changes.
+
+---
+
+### `FU-PROG-RECORD-SELECTION-SCOPE` — scope Record to the current selection
+
+**Status**: Ready (small)
+**Origin**: Programmer redesign Session 3 (2026-08)
+
+`programmer.record` takes an attribute mask but no *fixture* scope, so it always
+records the whole programmer. MagicQ's `Rec All Chans` / selection-scoped record is
+the missing half: "record just these heads into this cue". The shape is a
+`targetKeys: List<String>` filter on `collectProgrammerEntries`, plus a "selected
+fixtures only" checkbox in `RecordSheet.tsx` fed from the sheet's selection — which
+means the selection has to become readable outside `FixturesListContainer` (today
+only the *write* direction exists, via `store/includeSelection.ts`).
 
 ---
 

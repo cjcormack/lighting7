@@ -293,6 +293,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             }
 
             if (result != null) {
+                // A deleted cue can't be Updated into. Update re-validates its target anyway,
+                // but dropping it here keeps the programmer indicator from offering a cue that
+                // no longer exists.
+                state.show.programmerStore.clearIncludeTargetForCue(resource.cueId)
                 state.show.fixtures.cueListChanged()
                 state.show.fixtures.cueStackListChanged()
                 if (result > 0) state.show.fixtures.promptBookChanged()
@@ -490,45 +494,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         }
     }
 
-    // POST /{projectId}/cues/{cueId}/snapshot-from-live - Capture live state into the cue (current project only)
-    post<SnapshotFromLiveResource> { resource ->
-        withCurrentProject(
-            state,
-            resource.parent.projectId,
-            { p -> "Cannot snapshot cues from project '${p.name}' - only the current project can be modified" },
-        ) { project ->
-            val captured = captureCurrentState(state)
-
-            val cueDetails = transaction(state.database) {
-                val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
-                if (cue.project.id != project.id) return@transaction null
-
-                // Wholesale replace children with the captured live state. Same semantics as
-                // PATCH'ing all four arrays at once.
-                cue.presetApplications.forEach { it.delete() }
-                cue.adHocEffects.forEach { it.delete() }
-                cue.propertyAssignments.forEach { it.delete() }
-                // Palette: replace the cue's stored palette with the captured one.
-                cue.palette = captured.palette
-                createCueChildren(
-                    cue,
-                    presetApplications = captured.presetApplications,
-                    adHocEffects = captured.adHocEffects,
-                    propertyAssignments = captured.propertyAssignments,
-                    triggers = emptyList(),
-                )
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
-            }
-
-            if (cueDetails != null) {
-                state.show.fixtures.cueListChanged()
-                call.respond(cueDetails)
-            } else {
-                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
-            }
-        }
-    }
-
     // GET /{projectId}/cues/current-state - Get current palette and active effects without creating a cue
     get<CueCurrentStateResource> { resource ->
         withCurrentProject(
@@ -573,9 +538,6 @@ data class ApplyCueResource(val parent: ProjectCuesResource, val cueId: Int)
 
 @Resource("/{cueId}/stop")
 data class StopCueResource(val parent: ProjectCuesResource, val cueId: Int)
-
-@Resource("/{cueId}/snapshot-from-live")
-data class SnapshotFromLiveResource(val parent: ProjectCuesResource, val cueId: Int)
 
 @Resource("/current-state")
 data class CueCurrentStateResource(val parent: ProjectCuesResource)

@@ -123,6 +123,25 @@ enum class BlendMode {
  * @param timing Timing configuration relative to master clock
  * @param blendMode How to blend effect output with fixture value
  */
+/**
+ * Which cue FX child an Include-spawned programmer-band instance came from, so Update can
+ * write the operator's edits back over that child rather than beside it.
+ *
+ * [childSortOrder] is the child's `sortOrder` in the cue, which is what identifies it once
+ * the DTO has been turned into a live instance.
+ */
+data class ProgrammerFxOrigin(
+    val cueId: Int,
+    val kind: Kind,
+    val presetId: Int?,
+    val childSortOrder: Int,
+) {
+    enum class Kind {
+        AD_HOC,
+        PRESET_APPLICATION,
+    }
+}
+
 class FxInstance(
     val effect: Effect,
     val target: FxTarget,
@@ -140,6 +159,17 @@ class FxInstance(
 
     /** If this effect belongs to a cue stack, the stack ID. Null otherwise. */
     var cueStackId: Int? = null
+
+    /**
+     * Set when Include spawned this instance into the programmer band from a cue's FX child,
+     * naming the child it came from so Update can replace that child in place instead of
+     * appending a duplicate.
+     *
+     * Distinct from [cueId]/[cueStackId], which stay null on included instances on purpose:
+     * a band effect must not be swept by `removeEffectsForCue` when the cue it was included
+     * from stops. Cleared for free by `removeProgrammerBandEffects()`.
+     */
+    var programmerOrigin: ProgrammerFxOrigin? = null
 
     /**
      * Composition priority. Effects with lower priority compose first; higher priority effects
