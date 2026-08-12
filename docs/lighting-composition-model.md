@@ -74,7 +74,7 @@ Across granularities, **recency arbitrates**: a property entry and a sideband sl
 
 A property with an active programmer entry (blind off) suppresses **every** effect on it — cue-owned and manual alike. The tick's reset pass paints the programmer value; the effect's apply is skipped for that (fixture, property) only, so a group effect keeps painting its other members. Clearing the entry lets the effect resume on the next tick — this is what makes Locate non-destructive (it used to remove covering effects; now they freeze under the locate and resume on release).
 
-Exempt: effects in the reserved **programmer priority band** (`FxEngine.PROGRAMMER_FX_PRIORITY_BASE`, strictly above every cue-derived priority). These are programmer-owned FX (Session 2's busking effects) and modulate *on top of* programmer values. Sideband channel slots do not suppress effects — only property entries do.
+Exempt: effects in the reserved **programmer priority band** (`FxEngine.PROGRAMMER_FX_PRIORITY_BASE`, strictly above every cue-derived priority). These are programmer-owned FX — the busking pad creates them by passing `programmerOwned: true` on the FX add routes — and they modulate *on top of* programmer values rather than being suppressed by them. They are also exempt from the cue auto-tag in `addEffect`, so a busk started while an FX_APPLICATION script runs isn't swept by that cue's teardown. Sideband channel slots do not suppress effects — only property entries do.
 
 ### Blind
 
@@ -87,13 +87,13 @@ Clears, blind transitions, and sets accept an optional `fadeMs`, driving the per
 ### Clearing
 
 - `programmer.clearEntry { target, propertyName, fadeMs? }` — releases every owner's slot on one property.
-- `programmer.clearAll { fadeMs? }` / `POST /api/rest/programmer/clear-all` — the escape hatch: sweeps every owner's entries (property + sideband) and republishes everything in one pass. Also resets locate and preset-toggle bookkeeping so the toggles stay consistent with the swept store. Sideband channels with no backing property release to DMX 0 (nothing sits below them).
+- `programmer.clearAll { fadeMs? }` / `POST /api/rest/programmer/clear-all` — the operator's Clear: sweeps every owner's entries (property + sideband) **and removes every effect in the programmer priority band**, then republishes everything in one pass. Also resets locate and preset-toggle bookkeeping so the toggles stay consistent with the swept store. Sideband channels with no backing property release to DMX 0 (nothing sits below them). Both counts come back — `cleared` (entries) and `effectsCleared` (band FX). Band effects are removed *before* the store sweep so the single cascade republish that follows covers both.
 
 Deterministic release: clearing a programmer entry re-resolves the cascade below it — the property lands on the surviving owner, the cue layer, or baseline, never on a stale snapshot.
 
 ### Provenance
 
-The engine maintains, per (target, property), the identity of the winning contributor — `PARKED`, `PROGRAMMER`, `EFFECT` (with `effectId`/`cueId`), or `CUE` (with the winning `cueId`); baseline keys are omitted. Recomputed on layer events only (programmer mutation, cue republish, effect lifecycle, park change) — never per frame — and broadcast as a full-state `provenanceState` WS message. This powers ownership colouring in the programmer sheet (Session 2) and the Update-without-Include checklist (Session 3).
+The engine maintains, per (target, property), the identity of the winning contributor — `PARKED`, `PROGRAMMER`, `EFFECT` (with `effectId`/`cueId`), or `CUE` (with the winning `cueId`); baseline keys are omitted. Recomputed on layer events only (programmer mutation, cue republish, effect lifecycle, park change) — never per frame — and broadcast as a full-state `provenanceState` WS message. This powers ownership colouring in the programmer sheet and the Update-without-Include checklist (Session 3). Because programmer mutations reply only to the connection that made them, `provenanceState` is also the frontend's signal to re-read `programmer.state` — it is the one broadcast that fires for a write made by a MIDI surface, a locate, or another browser tab.
 
 ## Layer 3 — Effects
 
@@ -254,7 +254,7 @@ Per frame:
 - Layer 1: not parked.
 - Output: 180.
 
-The operator's value wins outright — no wiggle on top. Clearing the entry (`programmer.clearEntry`, optionally with a fade) releases the property and the effect resumes painting on the next tick. Had the effect been in the programmer priority band (a Session 2 busking effect), it would have composed `180 + 30 = 210` on top instead.
+The operator's value wins outright — no wiggle on top. Clearing the entry (`programmer.clearEntry`, optionally with a fade) releases the property and the effect resumes painting on the next tick. Had the effect been in the programmer priority band (a busking-pad effect), it would have composed `180 + 30 = 210` on top instead.
 
 ### Example 3 — two cues contributing HTP dimmer
 

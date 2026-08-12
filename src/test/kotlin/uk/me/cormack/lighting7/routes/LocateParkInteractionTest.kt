@@ -115,7 +115,6 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
         val on: ToggleLocateResponse = toggle(client, "fixture", "hex-masked").body()
         assertFalse(on.active, "nothing locate writes could be seen under park")
         assertEquals(0, on.writeCount)
-        assertEquals(0, on.effectsRemoved, "locate never removes effects")
         assertTrue(on.parkMasked, "the response says park is why, not 'nothing to write'")
         assertTrue(
             state.show.fxEngine.getActiveEffects().any { it.id == effectId },
@@ -150,7 +149,6 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
         val remaining = state.show.fxEngine.getActiveEffects().map { it.id }.toSet()
         assertTrue(maskedEffect in remaining, "park-masked effect untouched")
         assertTrue(liveEffect in remaining, "covering effect suppressed, not removed")
-        assertEquals(0, on.effectsRemoved, "nothing is ever removed by locate")
 
         // Releasing the locate lets the strobe effect resume painting on the next tick.
         assertFalse(toggle(client, "fixture", "hex-partial").body<ToggleLocateResponse>().active)

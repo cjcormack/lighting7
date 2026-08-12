@@ -1383,10 +1383,15 @@ class FxEngine(
         effect.id = id
         effect.startedAtMs = System.currentTimeMillis()
 
-        // Auto-tag with CueContext if set and effect doesn't already have a cueId
-        currentCueContext?.let { ctx ->
-            if (effect.cueId == null) effect.cueId = ctx.cueId
-            if (effect.cueStackId == null) effect.cueStackId = ctx.cueStackId
+        // Auto-tag with CueContext if set and effect doesn't already have a cueId.
+        // Programmer-band effects are exempt: they belong to the operator's programmer, not
+        // to whatever cue happens to be running an FX_APPLICATION script at the time, and a
+        // stray cue tag would let `removeEffectsForCue` sweep them out from under a busk.
+        if (!isProgrammerFxPriority(effect.priority)) {
+            currentCueContext?.let { ctx ->
+                if (effect.cueId == null) effect.cueId = ctx.cueId
+                if (effect.cueStackId == null) effect.cueStackId = ctx.cueStackId
+            }
         }
 
         if (effect.effect is StatefulEffect) {
@@ -1597,6 +1602,28 @@ class FxEngine(
         val toRemove = activeEffects.values.filter {
             it.isGroupEffect && it.target.targetKey == groupName
         }
+        toRemove.forEach { activeEffects.remove(it.id) }
+        if (toRemove.isNotEmpty()) {
+            rebuildSortedSnapshots()
+            resetUncoveredProperties(toRemove)
+            emitStateUpdate()
+        }
+        return toRemove.size
+    }
+
+    /**
+     * Remove every effect in the programmer's reserved priority band ([PROGRAMMER_FX_PRIORITY_BASE])
+     * — the busking effects the operator added on top of their programmer values. Cue-owned and
+     * plain manual effects are untouched.
+     *
+     * Kept independently callable (rather than folded into [clearProgrammerAll]) because the
+     * programmer's Clear is specified as "programmer values **and** programmer FX", and a
+     * clear-FX-only variant wants the same sweep without touching stored values.
+     *
+     * @return Number of effects removed
+     */
+    fun removeProgrammerBandEffects(): Int {
+        val toRemove = activeEffects.values.filter { isProgrammerFxPriority(it.priority) }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             rebuildSortedSnapshots()

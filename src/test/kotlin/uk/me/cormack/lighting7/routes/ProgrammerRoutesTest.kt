@@ -2,8 +2,12 @@ package uk.me.cormack.lighting7.routes
 
 import io.ktor.client.call.body
 import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
+import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.Layer3Resolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.models.FxPresetPropertyAssignmentDto
@@ -109,6 +113,51 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         // than believing it is still active.
         val reapplied = togglePresetOnTargets(state, presetId, emptyList(), assignments, targets, null)
         assertEquals("applied", reapplied.action)
+    }
+
+    @Test
+    fun `programmerOwned stamps the priority band and clear-all sweeps it`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-band", startChannel = 1)
+
+        val banded: AddEffectResponse = client.post("/api/rest/fx/add") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                AddEffectRequest(
+                    effectType = "SineWave",
+                    fixtureKey = "hex-band",
+                    propertyName = "dimmer",
+                    programmerOwned = true,
+                )
+            )
+        }.body()
+
+        val plain: AddEffectResponse = client.post("/api/rest/fx/add") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                AddEffectRequest(
+                    effectType = "SineWave",
+                    fixtureKey = "hex-band",
+                    propertyName = "strobe",
+                )
+            )
+        }.body()
+
+        val bandInstance = state.show.fxEngine.getEffect(banded.effectId)!!
+        assertTrue(
+            FxEngine.isProgrammerFxPriority(bandInstance.priority),
+            "programmerOwned lands in the reserved band, above every cue-derived priority",
+        )
+        assertEquals(0, state.show.fxEngine.getEffect(plain.effectId)!!.priority)
+
+        val response: ProgrammerClearAllResponse =
+            client.post("/api/rest/programmer/clear-all").body()
+        assertEquals(1, response.effectsCleared, "only the band effect is swept")
+
+        val surviving = state.show.fxEngine.getActiveEffects().map { it.id }.toSet()
+        assertTrue(banded.effectId !in surviving, "programmer FX go with the programmer values")
+        assertTrue(plain.effectId in surviving, "plain manual effects are not the programmer's")
     }
 
     @Test

@@ -118,6 +118,8 @@ internal fun Route.routeApiRestGroups(state: State) {
                         parameters = instance.effect.parameters,
                         presetId = instance.presetId,
                         cueId = instance.cueId,
+                        programmerOwned = FxEngine.isProgrammerFxPriority(instance.priority),
+                        intensityMultiplier = instance.intensityMultiplier,
                     )
                 }
                 call.respond(dtos)
@@ -199,7 +201,12 @@ data class AddGroupFxRequest(
     val parameters: Map<String, String> = emptyMap(),
     val elementMode: String = "PER_FIXTURE",  // PER_FIXTURE or FLAT
     val elementFilter: String = "ALL",
-    val stepTiming: Boolean? = null
+    val stepTiming: Boolean? = null,
+    /**
+     * Create this effect in the programmer's reserved priority band
+     * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]). See [AddEffectRequest.programmerOwned].
+     */
+    val programmerOwned: Boolean = false,
 )
 
 @Serializable
@@ -224,6 +231,10 @@ data class GroupEffectDto(
     val parameters: Map<String, String>,
     val presetId: Int? = null,
     val cueId: Int? = null,
+    /** True when this effect sits in the programmer's reserved priority band. */
+    val programmerOwned: Boolean = false,
+    /** Fade envelope in `[0, 1]`; the effect's output is scaled by this before blending. */
+    val intensityMultiplier: Double = 1.0,
 )
 
 @Serializable
@@ -416,6 +427,8 @@ private fun applyGroupEffect(
         this.elementFilter = elFilter
         request.stepTiming?.let { this.stepTiming = it }
     }
+
+    markProgrammerOwned(instance, request.programmerOwned)
 
     return engine.addEffect(instance)
 }

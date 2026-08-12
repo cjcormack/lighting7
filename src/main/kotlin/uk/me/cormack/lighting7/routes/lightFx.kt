@@ -83,6 +83,8 @@ internal fun Route.routeApiRestFx(state: State) {
                 val registration = state.show.fxRegistry.getRegistration(request.effectType)
                 registration?.timingSource?.let { instance.timingSource = it }
 
+                markProgrammerOwned(instance, request.programmerOwned)
+
                 val effectId = state.show.fxEngine.addEffect(instance)
                 call.respond(AddEffectResponse(effectId))
             } catch (e: Exception) {
@@ -245,7 +247,15 @@ data class AddEffectRequest(
     val parameters: Map<String, String> = emptyMap(),
     val distributionStrategy: String? = null,
     val elementFilter: String? = null,
-    val stepTiming: Boolean? = null
+    val stepTiming: Boolean? = null,
+    /**
+     * Create this effect in the programmer's reserved priority band
+     * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]) rather than as a plain manual effect. Band
+     * effects compose *on top of* programmer values instead of being suppressed by them,
+     * and are swept by `programmer.clearAll`. Set by the busking UI; scripts and cue
+     * authoring leave it false.
+     */
+    val programmerOwned: Boolean = false,
 )
 
 @Serializable
@@ -276,7 +286,11 @@ data class IndirectEffectDto(
     val currentPhase: Double,
     val parameters: Map<String, String>,
     val distributionStrategy: String,
-    val stepTiming: Boolean = false
+    val stepTiming: Boolean = false,
+    /** True when this effect sits in the programmer's reserved priority band. */
+    val programmerOwned: Boolean = false,
+    /** Fade envelope in `[0, 1]`; the effect's output is scaled by this before blending. */
+    val intensityMultiplier: Double = 1.0,
 )
 
 @Serializable
@@ -312,10 +326,24 @@ data class EffectDto(
     val presetId: Int? = null,
     val cueId: Int? = null,
     val timingSource: String = "BEAT",
+    /** True when this effect sits in the programmer's reserved priority band. */
+    val programmerOwned: Boolean = false,
+    /** Fade envelope in `[0, 1]`; the effect's output is scaled by this before blending. */
+    val intensityMultiplier: Double = 1.0,
 )
 
 
 // Helper functions
+
+/**
+ * Stamp an effect into the programmer's reserved priority band when the request asked for
+ * it. Shared by the fixture (`/fx/add`) and group (`/groups/{name}/fx`) add routes so the
+ * two can't drift. Must run *before* [FxEngine.addEffect], which reads the priority to
+ * decide whether to auto-tag the effect with the running cue context.
+ */
+internal fun markProgrammerOwned(instance: FxInstance, programmerOwned: Boolean) {
+    if (programmerOwned) instance.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE
+}
 
 private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDto(
     id = id,
@@ -339,6 +367,8 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
     presetId = presetId,
     cueId = cueId,
     timingSource = timingSource.name,
+    programmerOwned = FxEngine.isProgrammerFxPriority(priority),
+    intensityMultiplier = intensityMultiplier,
 )
 
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(
@@ -353,7 +383,9 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     currentPhase = lastPhase,
     parameters = effect.parameters,
     distributionStrategy = distributionStrategy.javaClass.simpleName,
-    stepTiming = stepTiming
+    stepTiming = stepTiming,
+    programmerOwned = FxEngine.isProgrammerFxPriority(priority),
+    intensityMultiplier = intensityMultiplier,
 )
 
 private fun createTargetFromRequest(request: AddEffectRequest, state: State): FxTarget {

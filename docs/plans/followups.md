@@ -139,15 +139,15 @@ its own commit with no behavioural changes: `Layer3Resolver` →
 `*Layer3*` engine internals to match. Grep docs afterwards — the composition
 model doc points at this item.
 
-### `FU-PROG-EFFECTSREMOVED-FIELD` — drop `ToggleLocateResponse.effectsRemoved`
+### ~~`FU-PROG-EFFECTSREMOVED-FIELD` — drop `ToggleLocateResponse.effectsRemoved`~~
 
-**Status**: Blocked (needs the Session 2 frontend work)
+**Status**: Done (Programmer redesign Session 2, 2026-08)
 **Origin**: Programmer redesign Session 1 (2026-08), §3.2 locate simplification
 
-Locate no longer removes effects (programmer suppression replaced destruction),
-so `effectsRemoved` is a constant 0 kept only because the lighting-react
-frontend reads it. When Session 2 rewires the frontend onto the programmer,
-remove the field from `ToggleLocateResponse` and the frontend type together.
+Locate stopped removing effects when programmer suppression replaced destruction,
+leaving `effectsRemoved` a constant 0 kept only because the lighting-react frontend
+read it. Session 2 removed the field from `ToggleLocateResponse` and from
+`lighting-react`'s `ToggleLocateResponse` type in the same change.
 
 ### `FU-PROG-PROVENANCE-STACKID` — cue-source provenance lacks `cueStackId`
 

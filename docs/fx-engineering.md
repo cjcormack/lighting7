@@ -454,8 +454,8 @@ The Locate toggle (`routes/lightLocate.kt`) asserts its centre-and-open-white va
 programmer entries (owner `locate`). "Locate wins" is **non-destructive** since the
 programmer redesign: the entries suppress every effect covering the written properties for
 as long as the locate holds, and releasing the locate lets them resume — nothing is
-removed. (`ToggleLocateResponse.effectsRemoved` is kept at a constant 0 for frontend
-compatibility until the Session 2 sweep.)
+removed. (`ToggleLocateResponse.effectsRemoved` was dropped in Session 2, once the frontend
+that read it no longer existed.)
 
 Park sits above all of that at transmit time, so a locate cannot move a parked channel.
 One filter keeps the sides honest: **`applyLocate` drops unpublishable assignments** using

@@ -26,24 +26,35 @@ internal fun Route.routeApiRestProgrammer(state: State) {
                 ProgrammerClearAllRequest()
             }
             val cleared = clearProgrammerCompletely(state, request.fadeMs ?: 0)
-            call.respond(ProgrammerClearAllResponse(cleared))
+            call.respond(ProgrammerClearAllResponse(cleared.entryCount, cleared.effectsCleared))
         }
     }
 }
 
+/** What a full programmer clear swept: stored entries, and programmer-band FX instances. */
+internal data class ProgrammerClearOutcome(val entryCount: Int, val effectsCleared: Int)
+
 /**
  * The full programmer clear: reset the toggle bookkeeping that tracks programmer entries
- * (locate targets, preset toggles and previews) *first*, then sweep and republish the store
- * in one pass. Order matters — the store sweep releases every owner's entries, so running
- * the subsystems' own release paths afterwards would double-release, and leaving their
- * bookkeeping would desync the toggles.
+ * (locate targets, preset toggles and previews) *first*, then remove the programmer-band FX,
+ * then sweep and republish the store in one pass. Order matters twice over —
  *
- * Returns the number of entries removed.
+ * - bookkeeping first: the store sweep releases every owner's entries, so running the
+ *   subsystems' own release paths afterwards would double-release, and leaving their
+ *   bookkeeping would desync the toggles;
+ * - band FX before the store sweep: removing them restores the cascade under their targets
+ *   while the programmer still holds its values, so the single [FxEngine.clearProgrammerAll]
+ *   republish that follows lands every affected key once instead of twice.
+ *
+ * Clear is specified as "programmer values **and** programmer FX" — busking effects created
+ * with `programmerOwned` therefore go with the values they were modulating.
  */
-internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): Int {
+internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): ProgrammerClearOutcome {
     state.show.locateManager.reset()
     resetPresetProgrammerBookkeeping()
-    return state.show.fxEngine.clearProgrammerAll(fadeMs)
+    val effectsCleared = state.show.fxEngine.removeProgrammerBandEffects()
+    val entryCount = state.show.fxEngine.clearProgrammerAll(fadeMs)
+    return ProgrammerClearOutcome(entryCount, effectsCleared)
 }
 
 @Resource("/clear-all")
@@ -53,4 +64,4 @@ private class ProgrammerClearAllResource
 internal data class ProgrammerClearAllRequest(val fadeMs: Long? = null)
 
 @Serializable
-internal data class ProgrammerClearAllResponse(val cleared: Int)
+internal data class ProgrammerClearAllResponse(val cleared: Int, val effectsCleared: Int = 0)

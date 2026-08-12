@@ -119,6 +119,8 @@ data class ProgrammerEntryClearedOutMessage(
 @SerialName("programmer.cleared")
 data class ProgrammerClearedOutMessage(
     val entryCount: Int,
+    /** Programmer-band FX instances swept alongside the values. */
+    val effectsCleared: Int = 0,
 ) : ProgrammerOutMessage()
 
 @Serializable
@@ -242,7 +244,7 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
         }
         is ProgrammerClearAllInMessage -> {
             val cleared = clearProgrammerCompletely(state, message.fadeMs ?: 0)
-            ProgrammerClearedOutMessage(cleared)
+            ProgrammerClearedOutMessage(cleared.entryCount, cleared.effectsCleared)
         }
         is ProgrammerSetBlindInMessage -> {
             state.show.fxEngine.setProgrammerBlind(message.blind, message.fadeMs ?: 0)

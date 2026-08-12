@@ -1,11 +1,19 @@
 # Programmer Redesign — Proposal
 
-**Status**: In progress — **Session 1 (backend programmer core) landed 2026-08-11**:
+**Status**: In progress — **Session 2 (programmer UI) landed 2026-08-12**: programmer sheet
+(`/programmer`) + FX sheet (`/programmer/fx`) on the fixtures-list machinery with per-cell
+ownership colouring and blind-staged values; always-visible programmer indicator (app header
++ ShowBar); Clear (timed) / Blind toolbar with Record/Include/Update as disabled Session-3
+placeholders; embeddable pane in the Program view; every property-shaped writer rewired onto
+`programmer.set`/`setColour`/`setPosition`; busking property pads write programmer values and
+its FX are programmer-owned (`programmerOwned: true` → priority band, swept by Clear);
+cue-edit Blind relabelled "Preview edit"; `FU-PROG-EFFECTSREMOVED-FIELD` done.
+**Session 1 (backend programmer core) landed 2026-08-11**:
 `ProgrammerStore` + owner slots + touched flag + channel sideband, layer reorder with
 all-FX suppression (per the confirmed widening of §3.1's cue-FX rule to manual FX too, so
 "locate wins" survives non-destructively), programmer-FX priority band, blind gate, fades,
 provenance + `provenanceState` broadcast, all six writers migrated, `ChannelSocket` bypass
-deleted, `programmer.*` WS + REST clear-all, docs renumbered. Sessions 2–5 not yet started.
+deleted, `programmer.*` WS + REST clear-all, docs renumbered.
 **Scope**: lighting7 (backend) + lighting-react (frontend).
 **Supersedes-in-part**: the "no programmer buffer" decision in
 [composition-model-prior-art.md](../research/composition-model-prior-art.md)

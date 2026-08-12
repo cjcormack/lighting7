@@ -80,7 +80,7 @@ internal fun Route.routeApiRestLocate(state: State) {
                 state.show.programmerStore.clearOwner(ProgrammerOwner.LOCATE)
             }
             call.respond(
-                ToggleLocateResponse(outcome.active, outcome.writeCount, effectsRemoved = 0, parkMasked)
+                ToggleLocateResponse(outcome.active, outcome.writeCount, parkMasked)
             )
         }
     }
@@ -204,12 +204,6 @@ internal data class ToggleLocateRequest(val type: String, val key: String)
 internal data class ToggleLocateResponse(
     val active: Boolean,
     val writeCount: Int,
-    /**
-     * Always 0 since the programmer redesign: locate suppresses effects instead of
-     * destroying them. Kept (deprecated) because the frontend reads the field; remove in
-     * the Session 2 frontend sweep.
-     */
-    val effectsRemoved: Int = 0,
     /**
      * True when the toggle came back inactive *because* park masks every property locate
      * would have written. Without it `active = false, writeCount = 0` is indistinguishable
