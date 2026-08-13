@@ -252,4 +252,102 @@ class FxEngineCueAssignmentsTest {
         val uv = state[Layer3Resolver.Key.fixture("fx-1", "uv")] as Layer3Resolver.PropertyValue.Slider
         assertEquals(180u.toUByte(), uv.value)
     }
+
+    // ─── replaceCueAssignments (palette-edit republish) ─────────────────────
+
+    /** LTP, so the highest priority wins outright rather than values merging. */
+    private fun ltpSlider(cueId: Int, priority: Int, value: UByte) = Layer3Resolver.Assignment(
+        cueId = cueId,
+        priority = priority,
+        fadeWeight = 1.0,
+        targetKey = "fx-1",
+        targetIsGroup = false,
+        propertyName = "dimmer",
+        category = PropertyCategory.DIMMER,
+        compositionOverride = CompositionRule.LTP,
+        value = Layer3Resolver.PropertyValue.Slider(value),
+    )
+
+    private fun FxEngine.dimmer(): UByte {
+        val value = layerResolver.currentLayer3State[Layer3Resolver.Key.fixture("fx-1", "dimmer")]
+        assertIs<Layer3Resolver.PropertyValue.Slider>(value)
+        return value.value
+    }
+
+    @Test
+    fun `replaceCueAssignments swaps rows for several cues in one pass`() {
+        val engine = newEngine()
+        engine.setCueAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1_000, value = 100u)))
+        engine.setCueAssignments(20, listOf(ltpSlider(cueId = 20, priority = 2_000, value = 200u)))
+
+        val replaced = engine.replaceCueAssignments(
+            mapOf(
+                10 to listOf(ltpSlider(cueId = 10, priority = 1_000, value = 10u)),
+                20 to listOf(ltpSlider(cueId = 20, priority = 2_000, value = 50u)),
+            )
+        )
+
+        assertEquals(2, replaced)
+        assertEquals(50u.toUByte(), engine.dimmer(), "the higher-priority cue's new value wins")
+    }
+
+    @Test
+    fun `replaceCueAssignments leaves fade weights alone, unlike setCueAssignments`() {
+        // The highest-severity hazard in the palette work. setCueAssignments defaults `weight` to
+        // 1.0 and *clears* the cue's fade-weight entry, so routing a palette edit through it would
+        // snap an in-flight crossfade to fully-in. A palette edit touches every referencing cue at
+        // once, which makes that likely rather than theoretical. This test pins both halves: the
+        // new function preserves the weight, and the old one demonstrably does not.
+        val engine = newEngine()
+        // A weight only means anything against something to fade *from*, so this is the real
+        // crossfade shape: cue 20 coming in over cue 10, half way there.
+        engine.setCueAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1_000, value = 100u)))
+        val incoming = listOf(ltpSlider(cueId = 20, priority = 2_000, value = 200u))
+        engine.setCueAssignments(20, incoming)
+        engine.updateCueFadeWeights(mapOf(20 to 0.5))
+
+        val midFade = engine.dimmer()
+        assertTrue(
+            midFade in 100u.toUByte()..199u.toUByte(),
+            "precondition: cue 20 half-faded should sit between the two values, got $midFade",
+        )
+
+        engine.replaceCueAssignments(mapOf(20 to incoming))
+        assertEquals(midFade, engine.dimmer(), "replacing rows must not disturb the fade")
+
+        // Contrast, and the reason replaceCueAssignments exists at all.
+        engine.setCueAssignments(20, incoming)
+        assertEquals(
+            200u.toUByte(), engine.dimmer(),
+            "setCueAssignments clears the weight and snaps the fade — that is the hazard",
+        )
+    }
+
+    @Test
+    fun `replaceCueAssignments skips cues that are no longer live`() {
+        // A cue can stop being live between a caller's scan and the replace; that is a no-op, not
+        // a resurrection.
+        val engine = newEngine()
+        engine.setCueAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1_000, value = 100u)))
+
+        val replaced = engine.replaceCueAssignments(
+            mapOf(99 to listOf(ltpSlider(cueId = 99, priority = 9_000, value = 250u)))
+        )
+
+        assertEquals(0, replaced)
+        assertEquals(100u.toUByte(), engine.dimmer())
+        assertNull(
+            engine.layerResolver.currentLayer3State[Layer3Resolver.Key.fixture("fx-1", "other")],
+        )
+    }
+
+    @Test
+    fun `replaceCueAssignments with empty rows drops the cue's contribution`() {
+        val engine = newEngine()
+        engine.setCueAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1_000, value = 100u)))
+
+        engine.replaceCueAssignments(mapOf(10 to emptyList()))
+
+        assertNull(engine.layerResolver.currentLayer3State[Layer3Resolver.Key.fixture("fx-1", "dimmer")])
+    }
 }
