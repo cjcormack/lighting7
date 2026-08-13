@@ -16,6 +16,8 @@ import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.sync.dto.CueTriggerJson
 import uk.me.cormack.lighting7.sync.dto.FixtureGroupJson
+import uk.me.cormack.lighting7.sync.dto.PaletteEntryJson
+import uk.me.cormack.lighting7.sync.dto.PaletteJson
 import uk.me.cormack.lighting7.sync.dto.FixtureGroupMemberJson
 import uk.me.cormack.lighting7.sync.dto.FixturePatchJson
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
@@ -59,6 +61,7 @@ import java.util.UUID
  * /stageRegions/{uuid}.json
  * /fixtureGroups/{uuid}.json       -- members embedded inline
  * /fxPresets/{uuid}.json           -- propertyAssignments embedded inline
+ * /palettes/{uuid}.json            -- entries embedded inline
  * /fxDefinitions/{uuid}.json
  * /cueSlots/{uuid}.json
  * /parkedChannels/{uuid}.json
@@ -293,6 +296,29 @@ class ProjectExporter(private val state: State) {
                     effects = p.effects,
                     palette = p.palette,
                     propertyAssignments = assignments,
+                )
+            }
+
+            count += writeAll(targetDir, "palettes", project.palettes.toList(), PaletteJson.serializer(), { it.uuid }, liveKeys) { p ->
+                val entries = p.entries
+                    .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
+                    .map { e ->
+                        PaletteEntryJson(
+                            uuid = e.uuid.toString(),
+                            targetType = e.targetType,
+                            targetKey = e.targetKey,
+                            propertyName = e.propertyName,
+                            value = e.value,
+                            sortOrder = e.sortOrder,
+                        )
+                    }
+                PaletteJson(
+                    uuid = p.uuid.toString(),
+                    name = p.name,
+                    type = p.type,
+                    notes = p.notes,
+                    sortOrder = p.sortOrder,
+                    entries = entries,
                 )
             }
 

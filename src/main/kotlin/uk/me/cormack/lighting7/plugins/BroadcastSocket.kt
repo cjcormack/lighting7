@@ -40,6 +40,17 @@ data object RiggingListChangedOutMessage : BroadcastOutMessage()
 @SerialName("stageRegionListChanged")
 data object StageRegionListChangedOutMessage : BroadcastOutMessage()
 
+/**
+ * Named-palette CRUD only — created, renamed, deleted. Deliberately *not* fired when a
+ * palette's contents change: the client treats this as a cache-invalidation signal, so
+ * emitting it per resolution would be an invalidation storm. A contents change publishes
+ * `provenanceState` instead (see `routes/paletteRepublish.kt`), which is what drives the
+ * programmer sheet to re-read resolved ref values.
+ */
+@Serializable
+@SerialName("paletteListChanged")
+data object PaletteListChangedOutMessage : BroadcastOutMessage()
+
 @Serializable
 @SerialName("showChanged")
 data class ShowChangedOutMessage(
@@ -96,6 +107,7 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         override fun patchListChanged() = fire(PatchListChangedOutMessage)
         override fun riggingListChanged() = fire(RiggingListChangedOutMessage)
         override fun stageRegionListChanged() = fire(StageRegionListChangedOutMessage)
+        override fun paletteListChanged() = fire(PaletteListChangedOutMessage)
 
         override fun showChanged(
             projectId: Int,

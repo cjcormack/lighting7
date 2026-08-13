@@ -21,6 +21,10 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFxDefinition
 import uk.me.cormack.lighting7.models.DaoFxPreset
 import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPaletteEntry
+import uk.me.cormack.lighting7.models.PaletteType
+import uk.me.cormack.lighting7.fx.paletteRefValue
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoPromptBook
@@ -215,6 +219,38 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         elementKey = "head-1"
     }
 
+    // 2 named palettes of different types, each with non-default notes/sortOrder — a defaulted
+    // field is omitted from canonical JSON entirely, so a copier that dropped it would still
+    // look correct. The COLOUR palette carries both a fixture row and a group row so the
+    // expansion-and-specificity path is exercised end to end.
+    val colourPalette = DaoPalette.new {
+        this.project = project
+        name = "Warm Amber"; type = PaletteType.COLOUR.name
+        notes = "act one wash"; sortOrder = 3
+    }
+    DaoPaletteEntry.new {
+        palette = colourPalette; targetType = "fixture"; targetKey = "hex-1"
+        propertyName = "colour"; value = "#ff8800"; sortOrder = 0
+    }
+    DaoPaletteEntry.new {
+        palette = colourPalette; targetType = "group"; targetKey = "front-wash"
+        propertyName = "colour"; value = "#ffaa44"; sortOrder = 1
+    }
+    val positionPalette = DaoPalette.new {
+        this.project = project
+        name = "Downstage Centre"; type = PaletteType.POSITION.name
+        notes = "vocal spot"; sortOrder = 1
+    }
+    DaoPaletteEntry.new {
+        palette = positionPalette; targetType = "fixture"; targetKey = "hex-3"
+        propertyName = "position"; value = "120,64"; sortOrder = 0
+    }
+    // Presets share the cue value grammar, so they can hold refs too — same clone guarantee.
+    DaoFxPresetPropertyAssignment.new {
+        this.preset = preset; propertyName = "colour"
+        value = paletteRefValue(colourPalette.uuid); sortOrder = 2
+    }
+
     // 2 cue stacks, 3 cues, with property assignments + ad-hoc + preset apps + triggers
     val stack1 = DaoCueStack.new {
         this.project = project; name = "show-1"; palette = emptyList(); loop = false
@@ -246,6 +282,14 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         cue = cue1; targetType = "group"; targetKey = "front-wash"
         propertyName = "position"; value = "120,64"; sortOrder = 1
         moveInDark = true
+    }
+    // A named-palette reference, stored as `ref:{uuid}` in the opaque value column. This is
+    // the row that proves the reference survives a clone: ExportUuidRemapper mints a fresh
+    // uuid for the palette and must rewrite this string to match, so the clone's row points
+    // at the clone's palette rather than at the original's (or at nothing).
+    DaoCuePropertyAssignment.new {
+        cue = cue1; targetType = "fixture"; targetKey = "hex-2"
+        propertyName = "colour"; value = paletteRefValue(colourPalette.uuid); sortOrder = 2
     }
     DaoCueAdHocEffect.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"

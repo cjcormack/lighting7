@@ -14,6 +14,7 @@ import org.jetbrains.exposed.v1.core.Table
  */
 val ALL_TABLES: List<Table> = listOf(
     DaoProjects, DaoScripts, DaoFxPresets, DaoFxPresetPropertyAssignments,
+    DaoPalettes, DaoPaletteEntries,
     DaoCueStacks, DaoCues,
     DaoCuePresetApplications, DaoCueAdHocEffects, DaoCuePropertyAssignments, DaoCueTriggers,
     DaoAiConversations, DaoCueSlots,

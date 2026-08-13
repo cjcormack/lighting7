@@ -5,6 +5,8 @@ import org.jetbrains.exposed.v1.core.eq
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import uk.me.cormack.lighting7.fx.isPaletteRefValue
+import uk.me.cormack.lighting7.fx.paletteRefValue
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
@@ -104,6 +106,50 @@ class ProjectCloneTest {
         )
         // Every identity in the export is a row the clone copied, plus the project row itself.
         assertEquals(cloneUuids.size - 1, result.recordsCloned, "recordsCloned does not match the graph")
+    }
+
+    /**
+     * A named-palette reference lives inside an opaque `value` string, not in a `{table}Uuid`
+     * field, so it is remapped only because [ExportUuidRemapper] substitutes uuids across the
+     * whole JSON text. That is the property the `ref:{uuid}` form (rather than `ref:{intId}`)
+     * depends on, and it is worth asserting head-on: the byte-comparison test above passes
+     * whether or not the ref was rewritten (an un-rewritten ref inverts back to the source's
+     * own value), and `clone mints fresh identities` catches it only as an opaque set
+     * intersection. Neither names the failure.
+     */
+    @Test
+    fun `clone rewires a palette reference to the clone's own palette`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-refs", description = null)
+
+        transaction(state.database) {
+            val clone = DaoProject.findById(result.projectId)!!
+            val source = DaoProject.findById(sourceId)!!
+
+            val clonePalette = clone.palettes.single { it.name == "Warm Amber" }
+            val sourcePalette = source.palettes.single { it.name == "Warm Amber" }
+            assertNotEquals(
+                sourcePalette.uuid, clonePalette.uuid,
+                "clone must mint a fresh palette identity",
+            )
+
+            val refRows = clone.cues
+                .flatMap { it.propertyAssignments }
+                .filter { isPaletteRefValue(it.value) }
+            assertEquals(1, refRows.size, "expected the fixture's single ref'd cue row in the clone")
+            assertEquals(
+                paletteRefValue(clonePalette.uuid), refRows.single().value,
+                "clone's cue row must reference the clone's palette, not the source's",
+            )
+
+            val presetRefRows = clone.fxPresets
+                .flatMap { it.propertyAssignments }
+                .filter { isPaletteRefValue(it.value) }
+            assertEquals(
+                paletteRefValue(clonePalette.uuid), presetRefRows.single().value,
+                "clone's preset row must reference the clone's palette, not the source's",
+            )
+        }
     }
 
     @Test

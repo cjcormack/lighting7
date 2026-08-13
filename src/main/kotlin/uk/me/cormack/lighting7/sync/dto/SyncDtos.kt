@@ -106,6 +106,35 @@ data class FxPresetJson(
     val propertyAssignments: List<FxPresetPropertyAssignmentJson> = emptyList(),
 )
 
+@Serializable
+data class PaletteEntryJson(
+    val uuid: String,
+    val targetType: String,
+    val targetKey: String,
+    val propertyName: String,
+    val value: String,
+    val sortOrder: Int = 0,
+)
+
+/**
+ * Named palette — portable show content, entries embedded inline.
+ *
+ * Nothing here needs reference remapping: entries address fixtures and groups by *key*, the
+ * same as cue assignments do. Conversely, a cue or preset assignment that references this
+ * palette stores `ref:{uuid}` in its opaque `value` string, and [uk.me.cormack.lighting7.sync.ExportUuidRemapper]
+ * rewrites that occurrence along with this record's own `uuid` — which is why the reference is
+ * a uuid rather than an int id.
+ */
+@Serializable
+data class PaletteJson(
+    val uuid: String,
+    val name: String,
+    val type: String,
+    val notes: String? = null,
+    val sortOrder: Int = 0,
+    val entries: List<PaletteEntryJson> = emptyList(),
+)
+
 /**
  * Universe config — portable subset only. The `address` column (machine-local controller IP)
  * is intentionally omitted; Phase 2 introduces machine_override for per-install IPs.

@@ -20,6 +20,8 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFxDefinition
 import uk.me.cormack.lighting7.models.DaoFxPreset
 import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPaletteEntry
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
@@ -46,6 +48,7 @@ import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.sync.dto.CueTriggerJson
+import uk.me.cormack.lighting7.sync.dto.PaletteJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookAnchorJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookAnnotationJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookJson
@@ -209,6 +212,10 @@ class ProjectImporter(private val state: State) {
                 preset.propertyAssignments.forEach { it.delete() }
                 preset.delete()
             }
+            project.palettes.forEach { palette ->
+                palette.entries.forEach { it.delete() }
+                palette.delete()
+            }
             project.fixtureGroups.forEach { group ->
                 group.members.forEach { it.delete() }
                 group.delete()
@@ -281,6 +288,7 @@ class ProjectImporter(private val state: State) {
         val scriptMap = importScripts(sourceDir, project)
         importFxDefinitions(sourceDir, project)
         val fxPresetMap = importFxPresets(sourceDir, project)
+        importPalettes(sourceDir, project)
         val universeMap = importUniverseConfigs(sourceDir, project)
         val riggingMap = importRiggings(sourceDir, project)
         importStageRegions(sourceDir, project)
@@ -373,6 +381,38 @@ class ProjectImporter(private val state: State) {
             }
             uuid to dao
         }
+
+    /**
+     * Palettes and their entries. Returns nothing: cue and preset rows reference a palette by
+     * the `ref:{uuid}` string inside their opaque `value` column, not through a FK, so no
+     * uuid → DAO map is needed downstream.
+     */
+    private fun importPalettes(dir: Path, project: DaoProject) {
+        readDir(dir.resolve("palettes")) { json ->
+            val p = canonicalDecode(PaletteJson.serializer(), json)
+            val uuid = UUID.fromString(p.uuid)
+            val dao = DaoPalette.new {
+                this.project = project
+                name = p.name
+                type = p.type
+                notes = p.notes
+                sortOrder = p.sortOrder
+                this.uuid = uuid
+            }
+            p.entries.forEach { e ->
+                DaoPaletteEntry.new {
+                    palette = dao
+                    targetType = e.targetType
+                    targetKey = e.targetKey
+                    propertyName = e.propertyName
+                    value = e.value
+                    sortOrder = e.sortOrder
+                    this.uuid = UUID.fromString(e.uuid)
+                }
+            }
+            uuid to dao
+        }
+    }
 
     private fun importUniverseConfigs(dir: Path, project: DaoProject): Map<UUID, DaoUniverseConfig> =
         readDir(dir.resolve("universeConfigs")) { json ->

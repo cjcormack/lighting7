@@ -16,6 +16,7 @@ interface FixturesChangeListener {
     fun controllersChanged()
     fun fixturesChanged()
     fun presetListChanged()
+    fun paletteListChanged()
     fun cueListChanged()
     fun cueStackListChanged()
     fun cueSlotListChanged()
@@ -298,6 +299,12 @@ class Fixtures {
     fun stageRegionListChanged() {
         changeListeners.forEach {
             it.stageRegionListChanged()
+        }
+    }
+
+    fun paletteListChanged() {
+        changeListeners.forEach {
+            it.paletteListChanged()
         }
     }
 

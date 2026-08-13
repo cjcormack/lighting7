@@ -19,6 +19,8 @@ import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoFxDefinitions
 import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignments
+import uk.me.cormack.lighting7.models.DaoPaletteEntries
+import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.models.DaoFxPresets
 import uk.me.cormack.lighting7.models.DaoInstalls
 import uk.me.cormack.lighting7.models.DaoMachineOverrides
@@ -100,6 +102,8 @@ class SyncCoverageTest {
         DaoFxDefinitions to Disposition.Portable("fxDefinitions"),
         DaoFxPresets to Disposition.Portable("fxPresets"),
         DaoFxPresetPropertyAssignments to Disposition.Portable("fxPresets", "propertyAssignments"),
+        DaoPalettes to Disposition.Portable("palettes"),
+        DaoPaletteEntries to Disposition.Portable("palettes", "entries"),
         DaoUniverseConfigs to Disposition.Portable("universeConfigs"),
         DaoRiggings to Disposition.Portable("riggings"),
         DaoStageRegions to Disposition.Portable("stageRegions"),

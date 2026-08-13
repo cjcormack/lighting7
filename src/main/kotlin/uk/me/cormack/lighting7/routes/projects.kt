@@ -225,6 +225,11 @@ internal fun Route.routeApiRestProjects(state: State) {
                     preset.propertyAssignments.forEach { it.delete() }
                     preset.delete()
                 }
+                // Entries before palettes, for the same no-ON-DELETE-cascade reason.
+                project.palettes.forEach { palette ->
+                    palette.entries.forEach { it.delete() }
+                    palette.delete()
+                }
                 project.fixtureGroups.forEach { group ->
                     group.members.forEach { it.delete() }
                     group.delete()
@@ -305,6 +310,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         // Script, Preset, Cue, and Cue Stack endpoints are defined in separate files
         routeApiRestProjectScripts(state)
         routeApiRestProjectFxPresets(state)
+        routeApiRestProjectPalettes(state)
         routeApiRestProjectCues(state)
         routeApiRestProjectCueStacks(state)
         routeApiRestProjectCueSlots(state)
