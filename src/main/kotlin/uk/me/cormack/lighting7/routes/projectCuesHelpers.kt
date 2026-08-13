@@ -614,12 +614,13 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // Publish Layer 3 before applying effects so the effect reset pass sees the cue's baseline
     // instead of Layer 5 zero. Combines the cue's own assignments with each immediate preset's
     // property assignments.
-    val cueOwnAssignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData, cascade)
+    val cueOwnAssignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData, cascade, state.show.paletteRegistry)
     val presetRows = immediatePresets.flatMap { ip ->
         buildLayer3AssignmentsForPreset(
             state.show.fixtures, cueData.cueId, priority,
             ip.presetId, ip.assignments, ip.targets,
             cascade = cascade.copy(preset = ip.palette),
+            paletteRegistry = state.show.paletteRegistry,
         )
     }
 
@@ -792,11 +793,18 @@ private fun fixtureCategoryFor(
  *
  * Assignments whose fixture, group, or property cannot be resolved are logged at warn and
  * skipped — missing data must not break cue apply.
+ *
+ * A row whose value is a named-palette reference (`ref:{uuid}`) resolves **per member** against
+ * [paletteRegistry], taking each member's *own* property category rather than the reference
+ * fixture's: a palette is per-fixture by construction, and a mixed-type group is exactly the case
+ * it exists to serve. Literal rows keep the single parse before the fanout, so the common path
+ * pays nothing for this. A ref that doesn't resolve skips only the members it can't resolve.
  */
 internal fun buildLayer3AssignmentsForCue(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
     cueData: CueApplyData,
     cascade: PaletteCascade = PaletteCascade.EMPTY,
+    paletteRegistry: PaletteRegistry? = null,
 ): List<Layer3Resolver.Assignment> {
     if (cueData.propertyAssignments.isEmpty()) return emptyList()
     val priority = cueDerivedPriority(cueData)
@@ -811,6 +819,7 @@ internal fun buildLayer3AssignmentsForCue(
         // memberKeys is empty iff the target is a Fixture — used below as the fanout discriminator.
         val memberKeys: List<String>
         val referenceFixture: Fixture
+        val targetFixtures: List<Fixture>
         when (target) {
             is TargetRef.Group -> {
                 val group = try {
@@ -826,6 +835,7 @@ internal fun buildLayer3AssignmentsForCue(
                 }
                 memberKeys = members.map { it.key }
                 referenceFixture = members.first()
+                targetFixtures = members
             }
             is TargetRef.Fixture -> {
                 referenceFixture = try {
@@ -835,7 +845,57 @@ internal fun buildLayer3AssignmentsForCue(
                     continue
                 }
                 memberKeys = emptyList()
+                targetFixtures = listOf(referenceFixture)
             }
+        }
+
+        // Assignment.fadeWeight always 1.0 here — crossfade progress is applied per-cue by
+        // [FxEngine.updateCueFadeWeights] at publish time, not baked into individual rows.
+        fun row(
+            key: String,
+            isGroup: Boolean,
+            category: PropertyCategory,
+            override: CompositionRule,
+            value: Layer3Resolver.PropertyValue,
+            paletteUuid: java.util.UUID? = null,
+        ) = Layer3Resolver.Assignment(
+            cueId = cueData.cueId,
+            priority = priority,
+            fadeWeight = 1.0,
+            targetKey = key,
+            targetIsGroup = isGroup,
+            propertyName = canonical,
+            category = category,
+            compositionOverride = override,
+            value = value,
+            moveInDark = assignment.moveInDark,
+            paletteUuid = paletteUuid,
+        )
+
+        if (isPaletteRefValue(assignment.value)) {
+            for (fixture in targetFixtures) {
+                val (category, override) = fixtureCategoryFor(fixture, canonical) ?: run {
+                    logger.warn("cue {}: property '{}' not found on '{}' — skipping", cueData.cueId, assignment.propertyName, fixture.key)
+                    continue
+                }
+                val resolution = resolveAssignmentValueForFixture(
+                    paletteRegistry, fixture.key, canonical, category, assignment.value, effectivePalette,
+                )
+                val value = resolution.value ?: run {
+                    logger.warn(
+                        "cue {}: {} — skipping {}.{}",
+                        cueData.cueId, describeAssignmentHealth(resolution.health), fixture.key, assignment.propertyName,
+                    )
+                    continue
+                }
+                out.add(
+                    row(
+                        fixture.key, isGroup = memberKeys.isNotEmpty(), category, override, value,
+                        paletteUuid = resolution.paletteUuid,
+                    )
+                )
+            }
+            continue
         }
 
         val (category, override) = fixtureCategoryFor(referenceFixture, canonical) ?: run {
@@ -848,28 +908,13 @@ internal fun buildLayer3AssignmentsForCue(
             continue
         }
 
-        // Assignment.fadeWeight always 1.0 here — crossfade progress is applied per-cue by
-        // [FxEngine.updateCueFadeWeights] at publish time, not baked into individual rows.
-        fun row(key: String, isGroup: Boolean) = Layer3Resolver.Assignment(
-            cueId = cueData.cueId,
-            priority = priority,
-            fadeWeight = 1.0,
-            targetKey = key,
-            targetIsGroup = isGroup,
-            propertyName = canonical,
-            category = category,
-            compositionOverride = override,
-            value = parsed,
-            moveInDark = assignment.moveInDark,
-        )
-
         if (memberKeys.isEmpty()) {
-            out.add(row(target.key, isGroup = false))
+            out.add(row(target.key, isGroup = false, category, override, parsed))
         } else {
             // Emit only per-member rows; the group-level key isn't a resolvable fixture at
             // publish time. Mark these as targetIsGroup=true so a direct fixture-level row
             // for the same member overrides via [Layer3Resolver.applySpecificity].
-            for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true))
+            for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true, category, override, parsed))
         }
     }
     return out
@@ -886,11 +931,32 @@ internal fun buildLayer3AssignmentsForCue(
  */
 internal fun republishCueLayer3(state: State, cueId: Int, applyData: CueApplyData) {
     val engine = state.show.fxEngine
+    val combined = buildCombinedCueLayer3Rows(state, cueId, applyData)
+    if (combined.isNotEmpty()) {
+        engine.setCueAssignments(cueId, combined, cueStackId = applyData.cueStackId)
+    } else {
+        engine.removeCueAssignments(cueId)
+    }
+}
+
+/**
+ * The rows [republishCueLayer3] would publish: the cue's own assignments plus those of each
+ * *immediate* preset application (timed presets don't contribute — matching [applyCue]).
+ *
+ * Split out from [republishCueLayer3] so a caller that needs to rebuild several cues can publish
+ * them in one pass — see `republishForPaletteEdit`, where publishing per cue would take the engine
+ * lock and transmit once per cue for what is a single operator edit.
+ */
+internal fun buildCombinedCueLayer3Rows(
+    state: State,
+    cueId: Int,
+    applyData: CueApplyData,
+): List<Layer3Resolver.Assignment> {
     val cascade = PaletteCascade(
         cue = applyData.palette.toPaletteColours(),
-        global = engine.getPalette(),
+        global = state.show.fxEngine.getPalette(),
     )
-    val cueOwn = buildLayer3AssignmentsForCue(state.show.fixtures, applyData, cascade)
+    val cueOwn = buildLayer3AssignmentsForCue(state.show.fixtures, applyData, cascade, state.show.paletteRegistry)
     val priority = cueDerivedPriority(applyData)
     val presetRows = transaction(state.database) {
         applyData.presetApplications
@@ -901,18 +967,14 @@ internal fun republishCueLayer3(state: State, cueId: Int, applyData: CueApplyDat
                     state.show.fixtures, cueId, priority,
                     app.presetId, preset.toPropertyAssignmentDtos(), app.targets,
                     cascade = cascade.copy(preset = preset.palette.toPaletteColours()),
+                    paletteRegistry = state.show.paletteRegistry,
                 )
             }
     }
-    val combined = when {
+    return when {
         presetRows.isEmpty() -> cueOwn
         cueOwn.isEmpty() -> presetRows
         else -> cueOwn + presetRows
-    }
-    if (combined.isNotEmpty()) {
-        engine.setCueAssignments(cueId, combined, cueStackId = applyData.cueStackId)
-    } else {
-        engine.removeCueAssignments(cueId)
     }
 }
 
@@ -969,6 +1031,7 @@ internal fun buildLayer3AssignmentsForPreset(
     presetAssignments: List<FxPresetPropertyAssignmentDto>,
     applyTargets: List<CueTargetDto>,
     cascade: PaletteCascade = PaletteCascade.EMPTY,
+    paletteRegistry: PaletteRegistry? = null,
 ): List<Layer3Resolver.Assignment> {
     if (presetAssignments.isEmpty() || applyTargets.isEmpty()) return emptyList()
     val effectivePalette = cascade.effective
@@ -1034,6 +1097,72 @@ internal fun buildLayer3AssignmentsForPreset(
                 )
                 continue
             }
+            fun row(
+                key: String,
+                isGroup: Boolean,
+                rowCategory: PropertyCategory = category,
+                rowOverride: CompositionRule = override,
+                value: Layer3Resolver.PropertyValue,
+                paletteUuid: java.util.UUID? = null,
+            ) = Layer3Resolver.Assignment(
+                cueId = cueId,
+                priority = priority,
+                fadeWeight = 1.0,
+                targetKey = key,
+                targetIsGroup = isGroup,
+                propertyName = canonical,
+                category = rowCategory,
+                compositionOverride = rowOverride,
+                value = value,
+                paletteUuid = paletteUuid,
+            )
+
+            val isGroup = memberFixtures.isNotEmpty()
+            val fanout = memberFixtures.ifEmpty { listOf(referenceFixture) }
+
+            if (isPaletteRefValue(assignment.value)) {
+                // Element-scoped refs can't resolve: palettes are fixture-shaped by construction
+                // (Record rejects element targets outright — see RecordSkipReason.ELEMENT_TARGET),
+                // so there is never an entry to find for an element key.
+                if (elementKey != null) {
+                    logger.warn(
+                        "preset {} (cue {}): palette refs are not supported on element-scoped rows " +
+                            "('{}' element '{}') — skipping",
+                        presetId, cueId, assignment.propertyName, elementKey,
+                    )
+                    continue
+                }
+                for (fixture in fanout) {
+                    // Per-member category, as in the cue builder: a mixed-type group is the case
+                    // per-fixture palettes exist for.
+                    val (memberCategory, memberOverride) = fixtureCategoryFor(fixture, canonical) ?: run {
+                        logger.warn(
+                            "preset {} (cue {}): property '{}' not on '{}' — skipping that member",
+                            presetId, cueId, assignment.propertyName, fixture.key,
+                        )
+                        continue
+                    }
+                    val resolution = resolveAssignmentValueForFixture(
+                        paletteRegistry, fixture.key, canonical, memberCategory, assignment.value, effectivePalette,
+                    )
+                    val value = resolution.value ?: run {
+                        logger.warn(
+                            "preset {} (cue {}): {} — skipping {}.{}",
+                            presetId, cueId, describeAssignmentHealth(resolution.health),
+                            fixture.key, assignment.propertyName,
+                        )
+                        continue
+                    }
+                    out.add(
+                        row(
+                            fixture.key, isGroup, memberCategory, memberOverride, value,
+                            paletteUuid = resolution.paletteUuid,
+                        )
+                    )
+                }
+                continue
+            }
+
             val parsed = Layer3Resolver.parseAssignmentValue(category, canonical, assignment.value, effectivePalette) ?: run {
                 logger.warn(
                     "preset {} (cue {}): invalid value '{}' for {}.{} — skipping",
@@ -1042,20 +1171,6 @@ internal fun buildLayer3AssignmentsForPreset(
                 continue
             }
 
-            fun row(key: String, isGroup: Boolean) = Layer3Resolver.Assignment(
-                cueId = cueId,
-                priority = priority,
-                fadeWeight = 1.0,
-                targetKey = key,
-                targetIsGroup = isGroup,
-                propertyName = canonical,
-                category = category,
-                compositionOverride = override,
-                value = parsed,
-            )
-
-            val isGroup = memberFixtures.isNotEmpty()
-            val fanout = memberFixtures.ifEmpty { listOf(referenceFixture) }
             if (elementKey != null) {
                 for (fixture in fanout) {
                     val element = findElement(fixture, elementKey)
@@ -1066,12 +1181,12 @@ internal fun buildLayer3AssignmentsForPreset(
                         )
                         continue
                     }
-                    out.add(row(element.elementKey, isGroup = isGroup))
+                    out.add(row(element.elementKey, isGroup = isGroup, value = parsed))
                 }
             } else if (!isGroup) {
-                out.add(row(targetRef.key, isGroup = false))
+                out.add(row(targetRef.key, isGroup = false, value = parsed))
             } else {
-                for (member in fanout) out.add(row(member.key, isGroup = true))
+                for (member in fanout) out.add(row(member.key, isGroup = true, value = parsed))
             }
         }
     }

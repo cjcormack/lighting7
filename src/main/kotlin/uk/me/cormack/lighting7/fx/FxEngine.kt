@@ -18,6 +18,7 @@ import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.midi.PropertyChannelResolver
 import uk.me.cormack.lighting7.show.Fixtures
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.awt.Color
@@ -542,6 +543,40 @@ class FxEngine(
     }
 
     /**
+     * Replace several live cues' Layer 3 rows in one locked mutation with a single republish —
+     * the [repriorityCues] shape, for callers that rebuilt rows rather than re-prioritised them.
+     * Returns the number of cues actually replaced.
+     *
+     * **Crossfade weights are deliberately left alone**, and that is the whole reason this exists
+     * rather than a loop over [setCueAssignments]. That function's `weight` defaults to 1.0 and
+     * *clears* the cue's [cueFadeWeights] entry, so using it here would snap any in-flight
+     * crossfade on an affected cue to fully-in. A palette edit touches every cue that references
+     * the palette at once, which makes that a likely accident rather than a theoretical one.
+     *
+     * Cues absent from [cueAssignments] are skipped: a cue that stopped being live between the
+     * caller's scan and this call has nothing to republish.
+     */
+    fun replaceCueAssignments(updates: Map<Int, List<Layer3Resolver.Assignment>>): Int {
+        if (updates.isEmpty()) return 0
+        var replaced = 0
+        synchronized(cueAssignmentsLock) {
+            for ((cueId, rows) in updates) {
+                if (cueId !in cueAssignments) continue
+                if (rows.isEmpty()) {
+                    cueAssignments.remove(cueId)
+                    // Weight and stack id intentionally survive removal here too: the cue is still
+                    // mid-fade as far as CueStackManager is concerned, and it owns that lifecycle.
+                } else {
+                    cueAssignments[cueId] = rows
+                }
+                replaced++
+            }
+            if (replaced > 0) republishLayer3Assignments()
+        }
+        return replaced
+    }
+
+    /**
      * Update the crossfade weight for one or more cues atomically. Only cues present in
      * [cueAssignments] have an effect — unknown cue ids are ignored (silent no-op) because a
      * crossfade tick may fire during the tiny window between an outgoing cue's end-of-fade
@@ -765,10 +800,13 @@ class FxEngine(
         sourceGroup: String? = null,
         absorbSideband: Boolean = true,
         fadeMs: Long = 0,
+        paletteUuid: UUID? = null,
     ): List<PropertyChannelResolver.ChannelWrite> {
         val writes = PropertyChannelWriter.resolve(fixture, propertyName, value)
         if (writes.isEmpty()) return writes
-        programmerStore.put(owner, fixture.targetKey, propertyName, value, touched, sourceGroup)
+        programmerStore.putValue(
+            owner, fixture.targetKey, propertyName, programmerValueOf(value, paletteUuid), touched, sourceGroup,
+        )
         if (absorbSideband) absorbSidebandUnder(writes)
         synchronized(cueAssignmentsLock) {
             publishCascadeForKeys(setOf(Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)), fadeMs)
@@ -777,7 +815,14 @@ class FxEngine(
         return writes
     }
 
-    /** Group overload — fan out to every member, tagging slots with the group name (§7.1). */
+    /**
+     * Group overload — fan out to every member, tagging slots with the group name (§7.1).
+     *
+     * Deliberately takes **no** `paletteUuid`: one value applied to every member is the opposite of
+     * what a palette reference means, since a palette resolves per fixture. A caller writing a
+     * reference to a group resolves it per member and calls [writeProgrammerProperties] with a
+     * per-entry `paletteUuid` — see `ProgrammerHandler.setPaletteRef`.
+     */
     fun writeProgrammerGroupProperty(
         owner: ProgrammerOwner,
         group: FixtureGroup<*>,
@@ -836,6 +881,11 @@ class FxEngine(
         val value: Layer3Resolver.PropertyValue,
         /** Group name when this entry came from a group control, else null (§7.1). */
         val sourceGroup: String? = null,
+        /**
+         * Set when [value] came from resolving a named-palette reference for this fixture, so the
+         * stored slot remembers the reference instead of only its current literal.
+         */
+        val paletteUuid: UUID? = null,
     )
 
     /**
@@ -861,8 +911,13 @@ class FxEngine(
         for ((index, channelWrites) in resolved.withIndex()) {
             if (channelWrites.isEmpty()) continue
             val write = writes[index]
-            programmerStore.put(
-                owner, write.fixture.targetKey, write.propertyName, write.value, touched, write.sourceGroup,
+            programmerStore.putValue(
+                owner,
+                write.fixture.targetKey,
+                write.propertyName,
+                programmerValueOf(write.value, write.paletteUuid),
+                touched,
+                write.sourceGroup,
             )
             if (absorbSideband) absorbSidebandUnder(channelWrites)
             keys += Layer3Resolver.Key.fixture(write.fixture.targetKey, write.propertyName)
@@ -1120,6 +1175,22 @@ class FxEngine(
      * [fadeMs] > 0 drives the per-channel [uk.me.cormack.lighting7.dmx.TickerState] ramp
      * for the uncovered keys this publish writes.
      */
+    /**
+     * Republish programmer keys whose stored values were rewritten *in place* — a palette edit
+     * re-resolving its [ProgrammerValue.Ref] slots, or Make Hard.
+     *
+     * The public door onto [publishCascadeForKeys] for callers that mutated
+     * [ProgrammerStore] directly rather than through a `writeProgrammer*` entry point, and so
+     * have nothing to publish from. Takes the lock and emits provenance the same way those do.
+     */
+    fun republishProgrammerKeys(keys: Set<Layer3Resolver.Key>, fadeMs: Long = 0) {
+        if (keys.isEmpty()) return
+        synchronized(cueAssignmentsLock) {
+            publishCascadeForKeys(keys, fadeMs)
+        }
+        emitProvenanceUpdate()
+    }
+
     private fun publishCascadeForKeys(keys: Set<Layer3Resolver.Key>, fadeMs: Long = 0) {
         if (keys.isEmpty()) return
 

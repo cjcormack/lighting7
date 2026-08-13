@@ -326,4 +326,122 @@ class ProgrammerStoreTest {
         // lcm(8, 5) = 40 distinct (fixture, property) pairs.
         assertEquals(40, store.size)
     }
+
+    // ─── Palette references ────────────────────────────────────────────────
+
+    private val paletteA: java.util.UUID =
+        java.util.UUID.fromString("2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02")
+    private val paletteB: java.util.UUID =
+        java.util.UUID.fromString("9b7e2c10-4a5d-4c88-b0f3-1de4a7c93b55")
+
+    @Test
+    fun `a Ref reads through resolved exactly like a Hard`() {
+        // The property every hot read path depends on: nothing on the tick loop branches on which
+        // variant it has.
+        val store = ProgrammerStore()
+        store.putValue(web, "hex-1", "dimmer", ProgrammerValue.Ref(paletteA, slider(180)))
+        assertEquals(180u.toUByte(), store.topSlider("hex-1", "dimmer"))
+        assertEquals(paletteA, store.get("hex-1", "dimmer")?.value?.paletteUuidOrNull)
+    }
+
+    @Test
+    fun `a Hard value reports no palette`() {
+        val store = ProgrammerStore()
+        store.put(web, "hex-1", "dimmer", slider(180))
+        assertNull(store.get("hex-1", "dimmer")?.value?.paletteUuidOrNull)
+    }
+
+    @Test
+    fun `programmerValueOf wraps by whether a palette was involved`() {
+        assertEquals(ProgrammerValue.Hard(slider(10)), programmerValueOf(slider(10), null))
+        assertEquals(ProgrammerValue.Ref(paletteA, slider(10)), programmerValueOf(slider(10), paletteA))
+    }
+
+    @Test
+    fun `rewriteSlotValues re-resolves refs and reports only changed keys`() {
+        val store = ProgrammerStore()
+        store.putValue(web, "hex-1", "dimmer", ProgrammerValue.Ref(paletteA, slider(100)))
+        store.putValue(web, "hex-2", "dimmer", ProgrammerValue.Ref(paletteB, slider(100)))
+        store.put(web, "hex-3", "dimmer", slider(100))
+
+        val changed = store.rewriteSlotValues { _, _, slot ->
+            val ref = slot.value as? ProgrammerValue.Ref ?: return@rewriteSlotValues null
+            if (ref.paletteUuid != paletteA) null else ProgrammerValue.Ref(paletteA, slider(200))
+        }
+
+        assertEquals(setOf(Layer3Resolver.Key.fixture("hex-1", "dimmer")), changed)
+        assertEquals(200u.toUByte(), store.topSlider("hex-1", "dimmer"))
+        assertEquals(100u.toUByte(), store.topSlider("hex-2", "dimmer"), "another palette is untouched")
+        assertEquals(100u.toUByte(), store.topSlider("hex-3", "dimmer"), "a literal is untouched")
+    }
+
+    @Test
+    fun `rewriteSlotValues preserves owner, touched, sourceGroup and seq`() {
+        // seq preservation is load-bearing: it arbitrates a property entry against a sideband slot
+        // covering the same channel, so bumping it here would let a palette edit outrank a *newer*
+        // raw channel write and silently change what Record captures. touched and sourceGroup
+        // matter because neither a re-resolve nor a harden is an operator edit.
+        val store = ProgrammerStore()
+        store.putValue(
+            locate, "hex-1", "dimmer", ProgrammerValue.Ref(paletteA, slider(100)),
+            touched = false, sourceGroup = "front-wash",
+        )
+        val before = store.get("hex-1", "dimmer")!!
+
+        store.rewriteSlotValues { _, _, _ -> ProgrammerValue.Ref(paletteA, slider(200)) }
+
+        val after = store.get("hex-1", "dimmer")!!
+        assertEquals(before.owner, after.owner)
+        assertEquals(before.touched, after.touched)
+        assertEquals(before.sourceGroup, after.sourceGroup)
+        assertEquals(before.seq, after.seq, "seq must survive a re-resolve")
+        assertEquals(200u.toUByte(), store.topSlider("hex-1", "dimmer"))
+    }
+
+    @Test
+    fun `hardening a ref bumps the epoch even though no value moved`() {
+        // Make Hard changes slot identity without changing the resolved value, so `changed` is
+        // empty — but epoch-cached consumers still have to re-read.
+        val store = ProgrammerStore()
+        store.putValue(web, "hex-1", "dimmer", ProgrammerValue.Ref(paletteA, slider(100)))
+        val epochBefore = store.epoch
+
+        val changed = store.rewriteSlotValues { _, _, slot ->
+            (slot.value as? ProgrammerValue.Ref)?.let { ProgrammerValue.Hard(it.resolved) }
+        }
+
+        assertTrue(changed.isEmpty(), "the resolved value did not move, so nothing needs republishing")
+        assertTrue(store.epoch > epochBefore, "but the store did mutate")
+        assertNull(store.get("hex-1", "dimmer")?.value?.paletteUuidOrNull, "the ref is gone")
+        assertEquals(100u.toUByte(), store.topSlider("hex-1", "dimmer"), "the value stayed put")
+    }
+
+    @Test
+    fun `rewriteSlotValues rewrites slots below the winner too`() {
+        // A ref under a later literal write must still re-resolve: releasing the literal reveals
+        // it, and it would otherwise reveal a stale value.
+        val store = ProgrammerStore()
+        store.putValue(locate, "hex-1", "dimmer", ProgrammerValue.Ref(paletteA, slider(100)))
+        store.put(web, "hex-1", "dimmer", slider(50))
+
+        store.rewriteSlotValues { _, _, slot ->
+            (slot.value as? ProgrammerValue.Ref)?.let { ProgrammerValue.Ref(paletteA, slider(200)) }
+        }
+
+        assertEquals(50u.toUByte(), store.topSlider("hex-1", "dimmer"), "the winner is unaffected")
+        assertEquals(
+            slider(200),
+            (store.valueFor(locate, "hex-1", "dimmer") as ProgrammerValue.Ref).resolved,
+            "the buried ref re-resolved",
+        )
+    }
+
+    @Test
+    fun `rewriteSlotValues leaves everything alone when the transform declines`() {
+        val store = ProgrammerStore()
+        store.put(web, "hex-1", "dimmer", slider(100))
+        val epochBefore = store.epoch
+        assertTrue(store.rewriteSlotValues { _, _, _ -> null }.isEmpty())
+        assertEquals(epochBefore, store.epoch, "a no-op sweep must not bump the epoch")
+    }
 }

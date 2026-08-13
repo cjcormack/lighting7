@@ -220,4 +220,126 @@ class BuildLayer3AssignmentsForCueTest {
             uk.me.cormack.lighting7.fx.FxEngine.PropertyKey("hex-2", "rgbColour"),
         ), overlap)
     }
+
+    // ─── Named-palette references ──────────────────────────────────────────
+
+    private val paletteUuid: java.util.UUID =
+        java.util.UUID.fromString("2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02")
+
+    /** A registry over [fixtures] holding [entries] under [paletteUuid]. */
+    private fun registryFor(
+        fixtures: Fixtures,
+        vararg entries: uk.me.cormack.lighting7.fx.PaletteEntryRow,
+    ) = uk.me.cormack.lighting7.fx.PaletteRegistry(
+        fixtures = { fixtures },
+        loader = { requested ->
+            if (requested != paletteUuid) null else uk.me.cormack.lighting7.fx.PaletteSnapshot(
+                paletteId = 1,
+                paletteUuid = paletteUuid,
+                name = "Warm Amber",
+                type = uk.me.cormack.lighting7.models.PaletteType.COLOUR,
+                entries = entries.toList(),
+            )
+        },
+    )
+
+    private fun refAssignment(targetType: String, targetKey: String, propertyName: String = "colour") =
+        CuePropertyAssignmentDto(
+            targetType = targetType,
+            targetKey = targetKey,
+            propertyName = propertyName,
+            value = uk.me.cormack.lighting7.fx.paletteRefValue(paletteUuid),
+        )
+
+    @Test
+    fun `a fixture ref resolves to the palette's literal for that fixture`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val out = buildLayer3AssignmentsForCue(
+            fixtures,
+            cueData(refAssignment("fixture", "hex-1")),
+            paletteRegistry = registryFor(
+                fixtures,
+                uk.me.cormack.lighting7.fx.PaletteEntryRow(
+                    uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-1"), "colour", "#ff8800",
+                ),
+            ),
+        )
+        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        assertEquals(ExtendedColour(Color(0xff, 0x88, 0x00)), v.value)
+    }
+
+    @Test
+    fun `a group ref fans out to per-member literals, not one shared value`() {
+        // The whole point of per-fixture palettes: each member can hold a different value.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val out = buildLayer3AssignmentsForCue(
+            fixtures,
+            cueData(refAssignment("group", "front-wash")),
+            paletteRegistry = registryFor(
+                fixtures,
+                uk.me.cormack.lighting7.fx.PaletteEntryRow(
+                    uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-1"), "colour", "#ff8800",
+                ),
+                uk.me.cormack.lighting7.fx.PaletteEntryRow(
+                    uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-2"), "colour", "#00ff00",
+                ),
+            ),
+        )
+        assertEquals(2, out.size)
+        assertTrue(out.all { it.targetIsGroup }, "member rows from a group expansion stay marked")
+        val byKey = out.associateBy { it.targetKey }
+        assertEquals(
+            ExtendedColour(Color(0xff, 0x88, 0x00)),
+            assertIs<Layer3Resolver.PropertyValue.Colour>(byKey.getValue("hex-1").value).value,
+        )
+        assertEquals(
+            ExtendedColour(Color(0x00, 0xff, 0x00)),
+            assertIs<Layer3Resolver.PropertyValue.Colour>(byKey.getValue("hex-2").value).value,
+        )
+    }
+
+    @Test
+    fun `a member the palette does not cover is skipped, the others still resolve`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val out = buildLayer3AssignmentsForCue(
+            fixtures,
+            cueData(refAssignment("group", "front-wash")),
+            paletteRegistry = registryFor(
+                fixtures,
+                uk.me.cormack.lighting7.fx.PaletteEntryRow(
+                    uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-1"), "colour", "#ff8800",
+                ),
+            ),
+        )
+        assertEquals(listOf("hex-1"), out.map { it.targetKey }, "hex-2 is uncovered and skipped")
+    }
+
+    @Test
+    fun `a ref to a missing palette skips the row rather than lighting it white`() {
+        // Guards the ordering hazard: the literal colour parser answers white for junk, so an
+        // unintercepted ref would produce a confident wrong colour instead of nothing.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val out = buildLayer3AssignmentsForCue(
+            fixtures,
+            cueData(refAssignment("fixture", "hex-1")),
+            paletteRegistry = null,
+        )
+        assertTrue(out.isEmpty())
+    }
+
+    @Test
+    fun `a positional palette ref is unaffected by the named-ref path`() {
+        // Both palette systems coexist; `P1` still indexes the ordered colour list.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val out = buildLayer3AssignmentsForCue(
+            fixtures,
+            cueData(CuePropertyAssignmentDto(
+                targetType = "fixture", targetKey = "hex-1", propertyName = "colour", value = "P1",
+            )),
+            cascade = PaletteCascade(cue = listOf(ExtendedColour(Color(0x11, 0x22, 0x33)))),
+            paletteRegistry = registryFor(fixtures),
+        )
+        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        assertEquals(ExtendedColour(Color(0x11, 0x22, 0x33)), v.value)
+    }
 }

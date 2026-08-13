@@ -250,7 +250,7 @@ class CueStackManager(
             cue = fxEngine.getStackPalette(stackId) ?: emptyList(),
             global = fxEngine.getPalette(),
         )
-        val layer3Assignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData, stackCascade)
+        val layer3Assignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData, stackCascade, state.show.paletteRegistry)
         val incomingStartWeight = if (useCrossfade) 0.0 else 1.0
         if (layer3Assignments.isNotEmpty()) {
             fxEngine.setCueAssignments(

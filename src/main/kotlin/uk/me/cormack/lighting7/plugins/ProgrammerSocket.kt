@@ -11,6 +11,12 @@ import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.Layer3Resolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
+import uk.me.cormack.lighting7.fx.canonicalPropertyName
+import uk.me.cormack.lighting7.fx.isPaletteRefValue
+import uk.me.cormack.lighting7.fx.paletteRefValue
+import uk.me.cormack.lighting7.fx.parsePaletteRef
+import uk.me.cormack.lighting7.fx.resolveAssignmentValueForFixture
+import uk.me.cormack.lighting7.fx.paletteUuidOrNull
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
 import uk.me.cormack.lighting7.routes.prunePresetToggleWrite
@@ -26,8 +32,12 @@ sealed class ProgrammerInMessage : InMessage()
  * Set a programmer value on a fixture or group property. [value] uses the same canonical
  * string form as cue assignments ([Layer3Resolver.parseAssignmentValue] /
  * [Layer3Resolver.PropertyValue.serialize]): `"0".."255"` for sliders and settings,
- * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) or a palette ref (`"P1"`) for colours,
+ * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) or a positional palette ref (`"P1"`) for colours,
  * `"pan,tilt"` for `position`.
+ *
+ * [value] may also be a **named-palette reference** (`"ref:{paletteUuid}"`) for any property. That
+ * form resolves per fixture, so on a group each member can land on a different literal; members the
+ * palette doesn't cover are skipped rather than given a neighbour's value.
  *
  * [sourceGroup] is for clients that fan a group-scoped gesture out to member fixtures rather
  * than sending `targetType: "group"` — a group virtual dimmer over heterogeneous members, a
@@ -148,7 +158,28 @@ data class ProgrammerBlindStateOutMessage(
 data class ProgrammerEntryDto(
     val targetKey: String,
     val propertyName: String,
+    /**
+     * The canonical literal, or `ref:{paletteUuid}` when this entry references a named palette —
+     * the same grammar a stored cue assignment uses, so one client-side parser covers both.
+     */
     val value: String,
+    /**
+     * For a `ref:` entry, the literal it currently resolves to **for this target and property**.
+     * Null otherwise. Per-target rather than per-palette, which is load-bearing for position
+     * palettes where every head legitimately reads differently.
+     */
+    val resolvedValue: String? = null,
+    /** Set on a `ref:` entry: the referenced palette's identity and name, denormalised. */
+    val paletteUuid: String? = null,
+    val paletteId: Int? = null,
+    val paletteName: String? = null,
+    val paletteType: String? = null,
+    /**
+     * False when the palette still exists but no longer covers this target — the entry keeps its
+     * last resolved value (silently dropping an operator's programmer entry mid-show is worse)
+     * and the sheet marks it broken.
+     */
+    val paletteResolved: Boolean? = null,
     val owner: String,
     val touched: Boolean,
     val sourceGroup: String? = null,
@@ -172,7 +203,7 @@ data class ProgrammerChannelDto(
  */
 @Serializable
 data class IncludedTargetDto(
-    /** `CUE` today; Session 4 adds `PALETTE`. */
+    /** `CUE` or `PALETTE`. */
     val kind: String,
     val cueId: Int,
     val cueStackId: Int? = null,
@@ -353,11 +384,91 @@ object ProgrammerHandler {
         fadeMs: Long,
         sourceGroup: String? = null,
     ): OutMessage {
+        // A named-palette reference resolves *per fixture*, so it can't go through the
+        // single-typed-value path: on a group each member may legitimately get a different
+        // literal, which is the entire reason palette entries are per-fixture.
+        if (isPaletteRefValue(value)) {
+            return setPaletteRef(state, target, propertyName, value, fadeMs, sourceGroup)
+        }
         val typed = parseValue(state, target, propertyName, value)
             ?: return ProgrammerErrorOutMessage(
                 "Value '$value' doesn't parse for ${target.discriminator} '${target.key}' property '$propertyName'"
             )
         return setTyped(state, target, propertyName, typed, fadeMs, sourceGroup)
+    }
+
+    /**
+     * Write a named-palette reference as programmer entries, resolving it per fixture.
+     *
+     * Members the palette doesn't cover are **skipped, not fabricated** — copying one head's
+     * value onto another is exactly what per-fixture entries exist to prevent. An error comes back
+     * only when *nothing* resolved, so applying a partially-covering palette to a broad selection
+     * does the part it can and reports the rest.
+     */
+    private fun setPaletteRef(
+        state: State,
+        target: TargetRef,
+        propertyName: String,
+        value: String,
+        fadeMs: Long,
+        sourceGroup: String?,
+    ): OutMessage {
+        val paletteUuid = parsePaletteRef(value)
+            ?: return ProgrammerErrorOutMessage("Malformed palette reference '$value'")
+        if (state.show.paletteRegistry.snapshot(paletteUuid) == null) {
+            return ProgrammerErrorOutMessage("Palette $paletteUuid not found")
+        }
+
+        val fixtures: List<GroupableFixture> = when (target) {
+            is TargetRef.Fixture -> listOfNotNull(
+                runCatching { state.show.fixtures.untypedGroupableFixture(target.key) }.getOrNull()
+                    ?: return ProgrammerErrorOutMessage("Unknown fixture '${target.key}'"),
+            )
+            is TargetRef.Group -> runCatching {
+                state.show.fixtures.untypedGroup(target.key).fixtures.filterIsInstance<Fixture>()
+            }.getOrNull() ?: return ProgrammerErrorOutMessage("Unknown group '${target.key}'")
+        }
+
+        val groupName = when (target) {
+            is TargetRef.Group -> target.key
+            is TargetRef.Fixture -> validateSourceGroup(state, sourceGroup, target.key)
+        }
+
+        val writes = fixtures.mapNotNull { fixture ->
+            val category = if (propertyName.equals("position", ignoreCase = true)) {
+                uk.me.cormack.lighting7.fixture.PropertyCategory.OTHER
+            } else {
+                PropertyChannelWriter.resolveProperty(fixture, propertyName)?.category
+            } ?: return@mapNotNull null
+            val resolution = resolveAssignmentValueForFixture(
+                state.show.paletteRegistry, fixture.targetKey, canonicalPropertyName(propertyName),
+                category, value, state.show.fxEngine.getPalette(),
+            )
+            val resolved = resolution.value ?: return@mapNotNull null
+            uk.me.cormack.lighting7.fx.FxEngine.ProgrammerPropertyWrite(
+                fixture, propertyName, resolved, sourceGroup = groupName, paletteUuid = paletteUuid,
+            )
+        }
+
+        if (writes.isEmpty()) {
+            return ProgrammerErrorOutMessage(
+                "Palette $paletteUuid covers no '$propertyName' value for " +
+                    "${target.discriminator} '${target.key}'"
+            )
+        }
+
+        val landed = state.show.fxEngine
+            .writeProgrammerProperties(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
+            .any { it.isNotEmpty() }
+        if (!landed) {
+            return ProgrammerErrorOutMessage(
+                "Property '$propertyName' resolved no channels on ${target.discriminator} '${target.key}'"
+            )
+        }
+        // Report the *reference*, not the literal: the client shows a ref badge off this value.
+        return ProgrammerEntryChangedOutMessage(
+            target.discriminator, target.key, propertyName, value,
+        )
     }
 
     /** Write a typed value as a WEB programmer entry and report the stored form. */
@@ -462,10 +573,29 @@ object ProgrammerHandler {
         val store = state.show.programmerStore
         val entries = store.entries().map { entry ->
             val top = entry.slots.first()
+            val paletteUuid = top.value.paletteUuidOrNull
+            val palette = paletteUuid?.let { state.show.paletteRegistry.snapshot(it) }
             ProgrammerEntryDto(
                 targetKey = entry.fixtureKey,
                 propertyName = entry.propertyName,
-                value = top.value.resolved.serialize(),
+                value = if (paletteUuid == null) {
+                    top.value.resolved.serialize()
+                } else {
+                    paletteRefValue(paletteUuid)
+                },
+                resolvedValue = if (paletteUuid == null) null else top.value.resolved.serialize(),
+                paletteUuid = paletteUuid?.toString(),
+                paletteId = palette?.paletteId,
+                paletteName = palette?.name,
+                paletteType = palette?.type?.name,
+                paletteResolved = if (paletteUuid == null) {
+                    null
+                } else {
+                    palette != null &&
+                        state.show.paletteRegistry.literalFor(
+                            paletteUuid, entry.fixtureKey, entry.propertyName,
+                        ) != null
+                },
                 owner = top.owner.id,
                 touched = top.touched,
                 sourceGroup = top.sourceGroup,

@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import uk.me.cormack.lighting7.dmx.packChannelKey
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -68,9 +69,13 @@ value class ProgrammerOwner(val id: String) {
 }
 
 /**
- * A value held by the programmer. Sealed so Session 4 can add
- * `Ref(paletteId, resolved)` — a palette reference that resolves per-fixture at compose
- * time — without touching every consumer.
+ * A value held by the programmer.
+ *
+ * Both variants carry a concrete [resolved] value, so every read path — including
+ * [FxTarget.composeProgrammerOver] and `fallbackFromProgrammer` on the 50 Hz tick — reads
+ * `.resolved` without caring which it has. A [Ref] additionally remembers *where* its value came
+ * from, which is what lets Record write a reference back out and Update leave an untouched one
+ * alone instead of silently hardening it.
  */
 sealed interface ProgrammerValue {
     /** The concrete value the entry contributes to the cascade. */
@@ -78,7 +83,37 @@ sealed interface ProgrammerValue {
 
     /** A literal value, not derived from any palette. */
     data class Hard(override val resolved: Layer3Resolver.PropertyValue) : ProgrammerValue
+
+    /**
+     * A named-palette reference plus the literal it currently resolves to *for this fixture and
+     * property* (per-fixture, which is the whole point of a palette — a position palette's value
+     * for one head is meaningless on another).
+     *
+     * The resolved value is cached rather than looked up per read: the alternative is a palette
+     * lookup inside the tick loop. The cost of caching is that a palette edit must re-resolve
+     * these slots and republish — see `routes/paletteRepublish.kt`, which is the mechanism the
+     * whole feature rests on.
+     */
+    data class Ref(
+        val paletteUuid: UUID,
+        override val resolved: Layer3Resolver.PropertyValue,
+    ) : ProgrammerValue
 }
+
+/** The palette this value references, or null when it is a literal. */
+val ProgrammerValue.paletteUuidOrNull: UUID?
+    get() = (this as? ProgrammerValue.Ref)?.paletteUuid
+
+/**
+ * Wrap a resolved value as a [ProgrammerValue.Ref] when it came from [paletteUuid], else as a
+ * [ProgrammerValue.Hard]. Keeps the "did this come from a palette?" branch in one place rather
+ * than at each of the engine's write entry points.
+ */
+fun programmerValueOf(
+    value: Layer3Resolver.PropertyValue,
+    paletteUuid: UUID?,
+): ProgrammerValue =
+    if (paletteUuid == null) ProgrammerValue.Hard(value) else ProgrammerValue.Ref(paletteUuid, value)
 
 /**
  * What Include last pulled into the programmer, and therefore what Update writes back to
@@ -254,8 +289,22 @@ class ProgrammerStore {
         value: Layer3Resolver.PropertyValue,
         touched: Boolean = true,
         sourceGroup: String? = null,
+    ) = putValue(owner, fixtureKey, propertyName, ProgrammerValue.Hard(value), touched, sourceGroup)
+
+    /**
+     * As [put], but for a caller that already has a [ProgrammerValue] — i.e. one writing a
+     * [ProgrammerValue.Ref]. [put] stays the common door so the many literal call sites don't
+     * have to name the wrapper.
+     */
+    fun putValue(
+        owner: ProgrammerOwner,
+        fixtureKey: String,
+        propertyName: String,
+        value: ProgrammerValue,
+        touched: Boolean = true,
+        sourceGroup: String? = null,
     ) {
-        val slot = Slot(owner, ProgrammerValue.Hard(value), touched, sourceGroup, seq = bumpEpoch())
+        val slot = Slot(owner, value, touched, sourceGroup, seq = bumpEpoch())
         val byProperty = properties.computeIfAbsent(fixtureKey) { ConcurrentHashMap() }
         byProperty.compute(propertyName) { _, holder -> withSlot(holder, slot) }
     }
@@ -442,6 +491,59 @@ class ProgrammerStore {
         for ((packed, holder) in channels) {
             add(ChannelEntryView(unpackUniverse(packed), unpackChannel(packed), holder.all()))
         }
+    }
+
+    /**
+     * Rewrite slot *values* in place, leaving every other property of each slot alone. Returns the
+     * keys whose winning value actually changed, so the caller can republish only those.
+     *
+     * [transform] receives `(fixtureKey, propertyName, slot)` and answers a replacement value, or
+     * null to leave that slot as it is. Used to re-resolve [ProgrammerValue.Ref] slots after a
+     * palette edit, and to harden them (Make Hard).
+     *
+     * **[Slot.seq] is preserved deliberately.** Re-resolving a reference is not a new operator
+     * write. `seq` is what arbitrates a property entry against a channel-sideband slot covering the
+     * same channel, so bumping it here would let a palette edit quietly outrank a *newer* raw
+     * channel drag — changing which value Record captures, for a reason no operator could see.
+     * [touched] and [sourceGroup] survive for the same reason: neither a re-resolve nor a harden
+     * is an edit, and Record and the Update checklist read both.
+     */
+    fun rewriteSlotValues(
+        transform: (fixtureKey: String, propertyName: String, slot: Slot) -> ProgrammerValue?,
+    ): Set<Layer3Resolver.Key> {
+        val changed = HashSet<Layer3Resolver.Key>()
+        // Tracked separately from [changed]: hardening a ref replaces the slot without moving its
+        // resolved value, so there is nothing to republish but the store *has* mutated and
+        // epoch-cached consumers must re-read.
+        var mutated = false
+        for ((fixtureKey, byProperty) in properties) {
+            for (propertyName in byProperty.keys) {
+                byProperty.computeIfPresent(propertyName) { _, holder ->
+                    val before = holder.top.value.resolved
+                    var any = false
+                    val rewritten = holder.all().map { slot ->
+                        val next = transform(fixtureKey, propertyName, slot)
+                        if (next == null || next == slot.value) {
+                            slot
+                        } else {
+                            any = true
+                            Slot(slot.owner, next, slot.touched, slot.sourceGroup, slot.seq)
+                        }
+                    }
+                    if (!any) return@computeIfPresent holder
+                    mutated = true
+                    val next = if (rewritten.size == 1) Single(rewritten[0]) else Stack(rewritten)
+                    if (next.top.value.resolved != before) {
+                        changed.add(Layer3Resolver.Key.fixture(fixtureKey, propertyName))
+                    }
+                    next
+                }
+            }
+        }
+        // One bump for the whole sweep: per-tick consumers cache on `epoch` and only need to know
+        // that *something* moved.
+        if (mutated) bumpEpoch()
+        return changed
     }
 
     /** The (fixture, property) keys currently holding at least one slot. Cold path. */

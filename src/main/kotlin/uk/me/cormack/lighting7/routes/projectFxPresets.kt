@@ -745,6 +745,7 @@ private fun applyPresetProgrammerWrites(
         presetAssignments = presetPropertyAssignments,
         applyTargets = targets.map { CueTargetDto(type = it.type, key = it.key) },
         cascade = PaletteCascade(preset = presetPalette, global = engine.getPalette()),
+        paletteRegistry = state.show.paletteRegistry,
     )
 
     // The builder fans group targets out to members, dropping the group identity on the way.
@@ -764,6 +765,9 @@ private fun applyPresetProgrammerWrites(
             owner, fixture, row.propertyName, row.value,
             sourceGroup = groupHints[row.targetKey],
             absorbSideband = false,
+            // A preset row may itself be a `ref:` — keep the reference so a palette edit still
+            // moves the toggled preset instead of freezing it at the value it resolved to.
+            paletteUuid = row.paletteUuid,
         )
         if (resolved.isNotEmpty()) {
             writes += PresetToggleWrite(row.targetKey, row.propertyName)

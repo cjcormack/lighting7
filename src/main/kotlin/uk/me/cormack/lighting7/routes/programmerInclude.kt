@@ -82,13 +82,14 @@ internal fun includeCueIntoProgrammer(
     )
     val priority = cueDerivedPriority(cueData)
 
-    val cueOwnRows = buildLayer3AssignmentsForCue(fixtures, cueData, cascade)
+    val cueOwnRows = buildLayer3AssignmentsForCue(fixtures, cueData, cascade, state.show.paletteRegistry)
     val presetRows = immediatePresets.flatMap { preset ->
         buildLayer3AssignmentsForPreset(
             fixtures, cueData.cueId, priority,
             preset.presetId, presetPropertyAssignments(state, preset.presetId),
             preset.application.targets,
             cascade = cascade.copy(preset = preset.palette),
+            paletteRegistry = state.show.paletteRegistry,
         )
     }
 
@@ -114,6 +115,11 @@ internal fun includeCueIntoProgrammer(
         writes += FxEngine.ProgrammerPropertyWrite(
             fixture, row.propertyName, row.value,
             sourceGroup = groupHints[row.targetKey to canonicalPropertyName(row.propertyName)],
+            // Carry the reference, not just the literal it resolved to. Including a cue to look at
+            // or tweak it must not silently harden its palette refs — that would both stop a later
+            // palette edit moving the cue and make the next Update write literals back over rows
+            // the operator never touched.
+            paletteUuid = row.paletteUuid,
         )
         fixtureKeys += row.targetKey
     }

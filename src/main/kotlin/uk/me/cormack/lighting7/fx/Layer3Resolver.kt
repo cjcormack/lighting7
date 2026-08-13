@@ -4,6 +4,7 @@ import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.models.TargetRef
 import java.awt.Color
+import java.util.UUID
 
 /**
  * Scoped palette cascade for resolving colour palette refs (`"P1"`, `"P2"`, …) in Layer 3
@@ -79,6 +80,16 @@ class Layer3Resolver {
         val compositionOverride: CompositionRule = CompositionRule.UNSET,
         val value: PropertyValue,
         val moveInDark: Boolean = false,
+        /**
+         * Set when [value] came from resolving a named-palette reference for this row's fixture.
+         *
+         * Composition ignores it — a resolved reference composes exactly like the literal it
+         * resolved to. It exists so consumers that lift these rows *back* into the programmer
+         * (Include, the FX-preset toggle) can store a [ProgrammerValue.Ref] rather than a
+         * [ProgrammerValue.Hard], which is what keeps a later palette edit moving them and stops
+         * Update silently hardening a reference the operator never touched.
+         */
+        val paletteUuid: UUID? = null,
     )
 
     /**

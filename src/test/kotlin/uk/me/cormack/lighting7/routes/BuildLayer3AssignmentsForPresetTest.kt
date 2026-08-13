@@ -327,4 +327,88 @@ class BuildLayer3AssignmentsForPresetTest {
         assertEquals(1, out.size)
         assertEquals("bar-1", out.single().targetKey)
     }
+
+    // ─── Named-palette references ──────────────────────────────────────────
+
+    private val paletteUuid: java.util.UUID =
+        java.util.UUID.fromString("2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02")
+
+    private fun registryFor(
+        fixtures: Fixtures,
+        vararg entries: uk.me.cormack.lighting7.fx.PaletteEntryRow,
+    ) = uk.me.cormack.lighting7.fx.PaletteRegistry(
+        fixtures = { fixtures },
+        loader = { requested ->
+            if (requested != paletteUuid) null else uk.me.cormack.lighting7.fx.PaletteSnapshot(
+                paletteId = 1,
+                paletteUuid = paletteUuid,
+                name = "Warm Amber",
+                type = uk.me.cormack.lighting7.models.PaletteType.COLOUR,
+                entries = entries.toList(),
+            )
+        },
+    )
+
+    private fun colourRow(fixtureKey: String, value: String) =
+        uk.me.cormack.lighting7.fx.PaletteEntryRow(
+            uk.me.cormack.lighting7.models.TargetRef.Fixture(fixtureKey), "colour", value,
+        )
+
+    private val refValue get() = uk.me.cormack.lighting7.fx.paletteRefValue(paletteUuid)
+
+    @Test
+    fun `a preset ref fans out to per-member literals`() {
+        // Preset assignments share the cue value grammar, so refs work here too.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val out = buildLayer3AssignmentsForPreset(
+            fixtures, cueId, priority, presetId,
+            presetAssignments = listOf(
+                FxPresetPropertyAssignmentDto(propertyName = "colour", value = refValue),
+            ),
+            applyTargets = listOf(CueTargetDto(type = "group", key = "front-wash")),
+            paletteRegistry = registryFor(
+                fixtures, colourRow("hex-1", "#ff8800"), colourRow("hex-2", "#00ff00"),
+            ),
+        )
+        assertEquals(2, out.size)
+        val byKey = out.associateBy { it.targetKey }
+        assertEquals(
+            ExtendedColour(Color(0xff, 0x88, 0x00)),
+            assertIs<Layer3Resolver.PropertyValue.Colour>(byKey.getValue("hex-1").value).value,
+        )
+        assertEquals(
+            ExtendedColour(Color(0x00, 0xff, 0x00)),
+            assertIs<Layer3Resolver.PropertyValue.Colour>(byKey.getValue("hex-2").value).value,
+        )
+    }
+
+    @Test
+    fun `an element-scoped ref is skipped, because palettes are fixture-shaped`() {
+        // Record rejects element targets outright (RecordSkipReason.ELEMENT_TARGET), so a palette
+        // can never hold an entry for an element key — there is nothing to resolve against.
+        val fixtures = fixturesWithTwoQuadBarsInAGroup()
+        val out = buildLayer3AssignmentsForPreset(
+            fixtures, cueId, priority, presetId,
+            presetAssignments = listOf(
+                FxPresetPropertyAssignmentDto(propertyName = "colour", value = refValue, elementKey = "head-1"),
+            ),
+            applyTargets = listOf(CueTargetDto(type = "fixture", key = "bar-1")),
+            paletteRegistry = registryFor(fixtures, colourRow("bar-1", "#ff8800")),
+        )
+        assertTrue(out.isEmpty(), "an element-scoped ref resolves to nothing rather than to the parent's value")
+    }
+
+    @Test
+    fun `a preset ref with no registry skips rather than resolving to white`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val out = buildLayer3AssignmentsForPreset(
+            fixtures, cueId, priority, presetId,
+            presetAssignments = listOf(
+                FxPresetPropertyAssignmentDto(propertyName = "colour", value = refValue),
+            ),
+            applyTargets = listOf(CueTargetDto(type = "fixture", key = "hex-1")),
+            paletteRegistry = null,
+        )
+        assertTrue(out.isEmpty())
+    }
 }

@@ -17,6 +17,8 @@ import uk.me.cormack.lighting7.state.State
  *   entries and the channel sideband) back to the layers below. The WS `programmer.clearAll`
  *   op is the same operation.
  * - `record` / `include` / `update` are the authoring loop.
+ * - `make-hard` replaces the programmer's palette references with the literals they currently
+ *   resolve to — the explicit escape hatch from reference-preserving Update.
  *
  * Why these three are REST rather than `programmer.*` WS ops, unlike every other programmer
  * operation: they all need a *structured reply* — the created cue, the fixture keys to select,
@@ -37,6 +39,7 @@ internal fun Route.routeApiRestProgrammer(state: State) {
             call.respond(ProgrammerClearAllResponse(cleared.entryCount, cleared.effectsCleared))
         }
 
+        post<ProgrammerMakeHardResource> { handleProgrammerMakeHard(state) }
         post<ProgrammerRecordResource> { handleProgrammerRecord(state) }
         post<ProgrammerIncludeResource> { handleProgrammerInclude(state) }
         post<ProgrammerUpdateResource> { handleProgrammerUpdate(state) }

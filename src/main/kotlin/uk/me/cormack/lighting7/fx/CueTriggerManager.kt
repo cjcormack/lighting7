@@ -114,6 +114,7 @@ class CueTriggerManager(
                     state.show.fixtures, cueId, priority,
                     presetApp.presetId, presetAssignments, presetApp.targets,
                     cascade = baseCascade.copy(preset = presetPalette),
+                    paletteRegistry = state.show.paletteRegistry,
                 )
                 fxEngine.replaceCueAssignmentSubset(cueId, priorLayer3Rows, newRows)
                 newRows
