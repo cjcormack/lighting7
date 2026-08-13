@@ -8,6 +8,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.RoutingContext
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
@@ -57,7 +58,7 @@ internal data class ProgrammerConflictResponse(
 )
 
 private const val CODE_CUE_EDIT_SESSION_OPEN = "CUE_EDIT_SESSION_OPEN"
-private const val CODE_INCLUDE_TARGET_GONE = "INCLUDE_TARGET_GONE"
+internal const val CODE_INCLUDE_TARGET_GONE = "INCLUDE_TARGET_GONE"
 
 // ── Record ──────────────────────────────────────────────────────────────────
 
@@ -229,7 +230,9 @@ private fun defaultRecordedCueName(stack: DaoCueStack): String =
 @Serializable
 internal data class ProgrammerIncludeRequest(
     val projectId: String = "current",
-    val cueId: Int,
+    /** Exactly one of [cueId] / [paletteId]. */
+    val cueId: Int? = null,
+    val paletteId: Int? = null,
     val mask: List<String>? = null,
     val includeFx: Boolean = true,
     val fadeMs: Long? = null,
@@ -237,9 +240,17 @@ internal data class ProgrammerIncludeRequest(
 
 @Serializable
 internal data class ProgrammerIncludeResponse(
-    val cueId: Int,
+    /** `CUE` or `PALETTE`. */
+    val kind: String = "CUE",
+    /** Null when a palette was included. */
+    val cueId: Int? = null,
     val cueStackId: Int? = null,
-    val cueName: String,
+    val paletteId: Int? = null,
+    /**
+     * The cue's or the palette's name. Named `name` rather than `cueName` because it is now
+     * either; a field called `cueName` holding a palette name is a lie.
+     */
+    val name: String,
     val entriesWritten: Int,
     /** For "Select Heads on Include" — the client selects these in the programmer sheet. */
     val fixtureKeys: List<String>,
@@ -260,12 +271,22 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
+    if ((request.cueId == null) == (request.paletteId == null)) {
+        return call.respond(
+            HttpStatusCode.BadRequest,
+            ErrorResponse("Include needs exactly one of cueId or paletteId"),
+        )
+    }
+
+    if (request.paletteId != null) {
+        return handleIncludePalette(state, request, mask)
+    }
 
     withCurrentProject(state, request.projectId, { p ->
         "Cannot include from project '${p.name}' — only the current project can be modified"
     }) { project ->
         val cueData = transaction(state.database) {
-            DaoCue.findById(request.cueId)
+            DaoCue.findById(request.cueId!!)
                 ?.takeIf { it.project.id == project.id }
                 ?.let { buildCueApplyData(it) }
         }
@@ -278,7 +299,7 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
         // Include only *reads* the cue, so an open cue-edit session is a caution, not a
         // conflict — unlike Record/Update, which write underneath it.
         val open = state.cueEditSessionRegistry.activeSession(project.id.value)
-        if (open?.session?.cueId == request.cueId) {
+        if (open?.session?.cueId == cueData.cueId) {
             warnings += "A cue-edit session is open on this cue — its Discard will revert " +
                 "anything Update writes back."
         }
@@ -294,9 +315,10 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
 
         call.respond(
             ProgrammerIncludeResponse(
+                kind = IncludedTarget.Kind.CUE.name,
                 cueId = cueData.cueId,
                 cueStackId = cueData.cueStackId,
-                cueName = cueData.cueName,
+                name = cueData.cueName,
                 entriesWritten = outcome.entriesWritten,
                 fixtureKeys = outcome.fixtureKeys,
                 groupKeys = outcome.groupKeys,
@@ -335,12 +357,29 @@ internal data class ProgrammerUpdateResult(
     val republishedLive: Boolean,
 )
 
+/** Mode A written back into a palette rather than a cue. */
+@Serializable
+internal data class ProgrammerPaletteUpdateResult(
+    val paletteId: Int,
+    val paletteName: String,
+    val paletteType: String,
+    val entriesWritten: Int,
+    /** What the re-resolve moved: live consumers of the palette. */
+    val programmerKeysRefreshed: Int,
+    val cuesRepublished: List<Int>,
+)
+
 @Serializable
 internal data class ProgrammerUpdateResponse(
     val applied: Boolean,
     /** `A` (include target), `B` (explicit targets), or `CHECKLIST` (nothing written). */
     val mode: String,
     val results: List<ProgrammerUpdateResult> = emptyList(),
+    /**
+     * Set when Mode A's include target was a palette. A separate field rather than a nullable
+     * `cueId` on [ProgrammerUpdateResult], so existing clients reading `results` are unaffected.
+     */
+    val paletteResult: ProgrammerPaletteUpdateResult? = null,
     val checklist: ProgrammerUpdateChecklistDto? = null,
     val skipped: List<ProgrammerSkipDto> = emptyList(),
     val warnings: List<String> = emptyList(),
@@ -382,7 +421,16 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
         }
 
         val modeLabel = if (request.targets != null) "B" else "A"
-        val cueIds = request.targets ?: listOf(includeTarget!!.cueId)
+
+        // Mode A into a palette. Mode B stays cue-only on purpose: its premise is "which cue am I
+        // sitting on top of", answered from the Layer 3 winner map — and a palette is not in the
+        // output cascade at all, so there is no palette equivalent to derive.
+        if (modeLabel == "A" && includeTarget!!.kind == IncludedTarget.Kind.PALETTE) {
+            updateIncludedPalette(state, project, includeTarget, mask)
+            return@withCurrentProject
+        }
+
+        val cueIds = request.targets ?: listOf(includeTarget!!.cueId!!)
 
         if (!request.force) {
             val open = state.cueEditSessionRegistry.activeSession(project.id.value)

@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.ExtendedColour
@@ -203,12 +204,17 @@ data class ProgrammerChannelDto(
  */
 @Serializable
 data class IncludedTargetDto(
-    /** `CUE` or `PALETTE`. */
+    /** `CUE` or `PALETTE`, and which of the two id/name pairs below is populated. */
     val kind: String,
-    val cueId: Int,
+    /** Null when [kind] is `PALETTE`. */
+    val cueId: Int? = null,
     val cueStackId: Int? = null,
     val cueName: String? = null,
     val cueNumber: String? = null,
+    /** Null when [kind] is `CUE`. */
+    val paletteId: Int? = null,
+    val paletteName: String? = null,
+    val paletteType: String? = null,
 )
 
 @Serializable
@@ -272,12 +278,21 @@ data class ProvenanceStateOutMessage(
  */
 internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.IncludedTarget?): IncludedTargetDto? {
     if (target == null) return null
-    val cue = try {
-        transaction(state.database) {
-            DaoCue.findById(target.cueId)?.let { it.name to it.cueNumber }
+    val cue = target.cueId?.let { cueId ->
+        try {
+            transaction(state.database) { DaoCue.findById(cueId)?.let { it.name to it.cueNumber } }
+        } catch (_: Exception) {
+            null
         }
-    } catch (_: Exception) {
-        null
+    }
+    val palette = target.paletteId?.let { paletteId ->
+        try {
+            transaction(state.database) {
+                DaoPalette.findById(paletteId)?.let { it.name to it.type }
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
     return IncludedTargetDto(
         kind = target.kind.name,
@@ -285,6 +300,9 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
         cueStackId = target.cueStackId,
         cueName = cue?.first,
         cueNumber = cue?.second,
+        paletteId = target.paletteId,
+        paletteName = palette?.first,
+        paletteType = palette?.second,
     )
 }
 

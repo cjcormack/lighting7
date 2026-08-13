@@ -21,6 +21,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.models.PaletteType
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.plugins.includedTargetDto
 import uk.me.cormack.lighting7.state.State
 
 private val logger = LoggerFactory.getLogger("programmerPaletteRecord")
@@ -197,7 +198,7 @@ private fun resolvePaletteTarget(
     return Triple(palette, type, null)
 }
 
-private data class PaletteWriteOutcome(
+internal data class PaletteWriteOutcome(
     val paletteId: Int,
     val paletteUuid: java.util.UUID,
     val written: Int,
@@ -217,7 +218,7 @@ private data class PaletteWriteOutcome(
  *
  * Must be called inside a transaction.
  */
-private fun writeRecordingIntoPalette(
+internal fun writeRecordingIntoPalette(
     palette: DaoPalette,
     collapsed: CollapsedAssignments,
     mode: RecordMode,
@@ -328,4 +329,202 @@ internal fun expandTargetsToFixtureKeys(state: State, targets: List<CueTargetDto
         }
     }
     return out
+}
+
+/**
+ * Mode A Update where the include target is a palette: write back what changed since Include.
+ *
+ * The "only what changed" rule is what keeps a palette's untouched entries untouched, exactly as it
+ * does for a cue — Include stakes an INCLUDE slot per entry, and anything still matching it was not
+ * edited. MERGE rather than replace, so entries outside the current selection or mask survive.
+ */
+internal suspend fun RoutingContext.updateIncludedPalette(
+    state: State,
+    project: DaoProject,
+    includeTarget: uk.me.cormack.lighting7.fx.IncludedTarget,
+    mask: Set<PropertyMaskGroup>?,
+) {
+    val paletteId = includeTarget.paletteId!!
+    val located = transaction(state.database) {
+        DaoPalette.findById(paletteId)?.takeIf { it.project.id == project.id }?.let {
+            Triple(it.name, it.type, it.paletteType)
+        }
+    }
+    if (located == null) {
+        // Stale target: the palette was deleted since Include. Clear it so the indicator stops
+        // offering it, and say so rather than silently writing nothing.
+        state.show.programmerStore.clearIncludeTargetForPalette(paletteId)
+        call.respond(
+            HttpStatusCode.Conflict,
+            ProgrammerConflictResponse(
+                "The palette that was included no longer exists in this project.",
+                CODE_INCLUDE_TARGET_GONE,
+                paletteId,
+            ),
+        )
+        return
+    }
+    val (paletteName, paletteTypeName, paletteType) = located
+
+    // The palette's own type narrows the mask further — an Update can't put a position into a
+    // colour palette even if the operator's mask allowed positions through.
+    val effectiveMask = if (paletteType == null) mask else (mask?.intersect(setOf(paletteType)) ?: setOf(paletteType))
+    val (changed, skips) = changedSinceInclude(state, effectiveMask)
+    val collapsed = collapseRecordingToAssignments(changed, state.show.fixtures, preserveRefs = false)
+
+    val outcome = transaction(state.database) {
+        writeRecordingIntoPalette(DaoPalette.findById(paletteId)!!, collapsed, RecordMode.MERGE)
+    }
+    val republish = republishForPaletteEdit(state, outcome.paletteUuid)
+    state.show.fixtures.paletteListChanged()
+
+    logger.info(
+        "update-palette '{}': {} entr{} written, {} programmer key(s) refreshed, {} cue(s) republished",
+        paletteName, outcome.written, if (outcome.written == 1) "y" else "ies",
+        republish.programmerKeysRefreshed, republish.cuesRepublished.size,
+    )
+    call.respond(
+        ProgrammerUpdateResponse(
+            applied = outcome.written > 0,
+            mode = "A",
+            paletteResult = ProgrammerPaletteUpdateResult(
+                paletteId = paletteId,
+                paletteName = paletteName,
+                paletteType = paletteTypeName,
+                entriesWritten = outcome.written,
+                programmerKeysRefreshed = republish.programmerKeysRefreshed,
+                cuesRepublished = republish.cuesRepublished,
+            ),
+            skipped = skips.map { it.toDto() },
+        )
+    )
+}
+
+/**
+ * Load a palette's entries into the programmer as the edit buffer, and mark it as the include
+ * target so a bare Update writes back to it.
+ *
+ * Writes **[ProgrammerValue.Hard]** slots, not refs: you are editing the palette's own contents, and
+ * a slot referencing the palette it is about to rewrite is meaningless. Contrast Include-a-cue,
+ * which does write refs — there the reference is part of what the cue means.
+ *
+ * Group rows expand to members, and a member the palette covers directly wins over the group row,
+ * matching how the palette resolves at compose time.
+ */
+internal fun includePaletteIntoProgrammer(
+    state: State,
+    palette: DaoPalette,
+    mask: Set<PropertyMaskGroup>?,
+    fadeMs: Long,
+): PaletteIncludeOutcome {
+    val expanded = state.show.paletteRegistry.expanded(palette.uuid)
+        ?: return PaletteIncludeOutcome(0, emptyList(), emptyList())
+
+    val writes = ArrayList<uk.me.cormack.lighting7.fx.FxEngine.ProgrammerPropertyWrite>()
+    val skips = ArrayList<RecordSkip>()
+    val fixtureKeys = LinkedHashSet<String>()
+
+    // Which group each member was covered by, so the slot keeps the operator's group shape and a
+    // later Record can collapse back to a group row.
+    val groupHints = HashMap<Pair<String, String>, String>()
+    for (entry in expanded.snapshot.entries) {
+        val group = entry.target as? TargetRef.Group ?: continue
+        val members = runCatching {
+            state.show.fixtures.untypedGroup(group.key).fixtures
+                .filterIsInstance<uk.me.cormack.lighting7.fixture.Fixture>()
+        }.getOrNull() ?: continue
+        for (member in members) {
+            groupHints[member.key to canonicalPropertyName(entry.propertyName)] = group.key
+        }
+    }
+
+    for ((fixtureKey, byProperty) in expanded.byFixture) {
+        val fixture = runCatching { state.show.fixtures.untypedGroupableFixture(fixtureKey) }.getOrNull()
+        if (fixture == null) {
+            skips += RecordSkip(fixtureKey, reason = RecordSkipReason.MISSING_FIXTURE)
+            continue
+        }
+        for ((propertyName, literal) in byProperty) {
+            val group = uk.me.cormack.lighting7.fx.maskGroupForProperty(fixture, propertyName)
+            if (group == null) {
+                skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MISSING_PROPERTY)
+                continue
+            }
+            if (!uk.me.cormack.lighting7.fx.maskAllows(mask, group)) {
+                skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MASKED_OUT)
+                continue
+            }
+            val category = uk.me.cormack.lighting7.fx.PropertyChannelWriter
+                .resolveProperty(fixture, propertyName)?.category
+                ?: uk.me.cormack.lighting7.fixture.PropertyCategory.OTHER
+            val value = uk.me.cormack.lighting7.fx.Layer3Resolver
+                .parseAssignmentValue(category, propertyName, literal)
+            if (value == null) {
+                skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MISSING_PROPERTY)
+                continue
+            }
+            writes += uk.me.cormack.lighting7.fx.FxEngine.ProgrammerPropertyWrite(
+                fixture, propertyName, value,
+                sourceGroup = groupHints[fixtureKey to propertyName],
+            )
+            fixtureKeys += fixtureKey
+        }
+    }
+
+    if (writes.isNotEmpty()) {
+        // One batched write, as Include-a-cue does: a large palette is hundreds of properties and
+        // per-property publishing would visibly stutter the rig.
+        state.show.fxEngine.writeProgrammerProperties(
+            uk.me.cormack.lighting7.fx.ProgrammerOwner.INCLUDE, writes, fadeMs = fadeMs,
+        )
+    }
+    state.show.programmerStore.lastIncludedTarget =
+        uk.me.cormack.lighting7.fx.IncludedTarget.palette(palette.id.value, palette.uuid)
+
+    return PaletteIncludeOutcome(writes.size, fixtureKeys.toList(), skips)
+}
+
+internal data class PaletteIncludeOutcome(
+    val entriesWritten: Int,
+    val fixtureKeys: List<String>,
+    val skipped: List<RecordSkip>,
+)
+
+/** `POST /programmer/include` with a `paletteId`: load a palette in as the edit buffer. */
+internal suspend fun RoutingContext.handleIncludePalette(
+    state: State,
+    request: ProgrammerIncludeRequest,
+    mask: Set<PropertyMaskGroup>?,
+) {
+    withCurrentProject(state, request.projectId, { p ->
+        "Cannot include from project '${p.name}' — only the current project can be modified"
+    }) { project ->
+        val palette = transaction(state.database) {
+            DaoPalette.findById(request.paletteId!!)?.takeIf { it.project.id == project.id }
+        }
+        if (palette == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Palette not found in current project"))
+            return@withCurrentProject
+        }
+        val name = transaction(state.database) { palette.name }
+
+        val outcome = includePaletteIntoProgrammer(state, palette, mask, request.fadeMs ?: 0)
+        call.respond(
+            ProgrammerIncludeResponse(
+                kind = uk.me.cormack.lighting7.fx.IncludedTarget.Kind.PALETTE.name,
+                paletteId = request.paletteId,
+                name = name,
+                entriesWritten = outcome.entriesWritten,
+                fixtureKeys = outcome.fixtureKeys,
+                // A palette's group rows expand to members before they reach the programmer, so
+                // there is no group-shaped selection to hand back.
+                groupKeys = emptyList(),
+                fxSpawned = 0,
+                fxAlreadyRunning = 0,
+                fxTimedSkipped = 0,
+                lastIncluded = includedTargetDto(state, state.show.programmerStore.lastIncludedTarget),
+                skipped = outcome.skipped.map { it.toDto() },
+            ),
+        )
+    }
 }

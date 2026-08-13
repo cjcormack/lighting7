@@ -31,6 +31,7 @@ import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
+import uk.me.cormack.lighting7.fx.paletteUuidOrNull
 
 class PaletteRoutesTest : RouteIntegrationTest() {
 
@@ -379,5 +380,157 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         )
         assertEquals(HttpStatusCode.BadRequest, resp.status)
         assertTrue(resp.bodyAsText().contains("not POSITION"), resp.bodyAsText())
+    }
+
+    // ─── Include / Update round trip ───────────────────────────────────────
+
+    @Test
+    fun `include a palette, edit, update writes back only what changed`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 20)
+
+        val palette = client.post("/api/rest/project/$projectId/palettes") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePaletteRequest(
+                    name = "Warm Amber", type = PaletteType.COLOUR.name,
+                    entries = listOf(
+                        colourEntry("hex-1", "#ff8800", 0),
+                        colourEntry("hex-2", "#ffaa44", 1),
+                    ),
+                )
+            )
+        }.body<PaletteDetails>()
+
+        // Include: the palette's entries land in the programmer as the edit buffer.
+        val included = client.post("/api/rest/programmer/include") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"projectId":"$projectId","paletteId":${palette.id}}""")
+        }
+        assertEquals(HttpStatusCode.OK, included.status, included.bodyAsText())
+        val incBody = included.body<ProgrammerIncludeResponse>()
+        assertEquals("PALETTE", incBody.kind)
+        assertEquals("Warm Amber", incBody.name)
+        assertEquals(2, incBody.entriesWritten)
+
+        // Included slots are Hard: you are editing the palette's own contents, and a slot
+        // referencing the palette it is about to rewrite would be meaningless.
+        assertEquals(
+            null, state.show.programmerStore.get("hex-1", "rgbColour")!!.value.paletteUuidOrNull,
+        )
+
+        // Edit exactly one of them.
+        writeProgrammerColour("hex-1", "#0000ff")
+
+        val updated = client.post("/api/rest/programmer/update") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"projectId":"$projectId"}""")
+        }
+        assertEquals(HttpStatusCode.OK, updated.status, updated.bodyAsText())
+        val result = updated.body<ProgrammerUpdateResponse>().paletteResult!!
+        assertEquals(palette.id, result.paletteId)
+        assertEquals(
+            1, result.entriesWritten,
+            "only the edited entry is written back — hex-2 was untouched since Include",
+        )
+
+        val after = client.get("/api/rest/project/$projectId/palettes/${palette.id}")
+            .body<PaletteDetails>()
+        assertEquals(
+            mapOf("hex-1" to "#0000ff", "hex-2" to "#ffaa44"),
+            after.entries.associate { it.targetKey to it.value },
+        )
+    }
+
+    @Test
+    fun `deleting the included palette drops the include target, so Update offers the checklist`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+
+            val palette = client.post("/api/rest/project/$projectId/palettes") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    CreatePaletteRequest(
+                        name = "Warm", type = PaletteType.COLOUR.name,
+                        entries = listOf(colourEntry("hex-1", "#ff8800")),
+                    )
+                )
+            }.body<PaletteDetails>()
+
+            client.post("/api/rest/programmer/include") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"projectId":"$projectId","paletteId":${palette.id}}""")
+            }
+            writeProgrammerColour("hex-1", "#0000ff")
+            client.delete("/api/rest/project/$projectId/palettes/${palette.id}?force=true")
+
+            // Delete clears the include target, so Update has nothing to write back to and falls
+            // through to the checklist rather than erroring — the indicator stops offering a
+            // palette that no longer exists.
+            val resp = client.post("/api/rest/programmer/update") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"projectId":"$projectId"}""")
+            }
+            assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+            assertEquals("CHECKLIST", resp.body<ProgrammerUpdateResponse>().mode)
+        }
+
+    @Test
+    fun `a palette that vanished without going through DELETE is reported, not silently ignored`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+
+            val palette = client.post("/api/rest/project/$projectId/palettes") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    CreatePaletteRequest(
+                        name = "Warm", type = PaletteType.COLOUR.name,
+                        entries = listOf(colourEntry("hex-1", "#ff8800")),
+                    )
+                )
+            }.body<PaletteDetails>()
+
+            client.post("/api/rest/programmer/include") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"projectId":"$projectId","paletteId":${palette.id}}""")
+            }
+            writeProgrammerColour("hex-1", "#0000ff")
+
+            // Bypass the route: an import replacing the project, or another process, can remove the
+            // row without the include target ever being cleared. Update must notice rather than
+            // write nothing and claim success.
+            transaction(state.database) {
+                uk.me.cormack.lighting7.models.DaoPalette.findById(palette.id)!!.let {
+                    it.entries.forEach { entry -> entry.delete() }
+                    it.delete()
+                }
+            }
+
+            val resp = client.post("/api/rest/programmer/update") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"projectId":"$projectId"}""")
+            }
+            assertEquals(HttpStatusCode.Conflict, resp.status, resp.bodyAsText())
+            assertTrue(resp.bodyAsText().contains("no longer exists"), resp.bodyAsText())
+        }
+
+    @Test
+    fun `include needs exactly one of cueId or paletteId`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        listOf("{}", """{"cueId":1,"paletteId":2}""").forEach { body ->
+            val resp = client.post("/api/rest/programmer/include") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"projectId":"$projectId",${body.trim('{', '}')}}""".replace(",}", "}"))
+            }
+            assertEquals(HttpStatusCode.BadRequest, resp.status, "for body $body: ${resp.bodyAsText()}")
+        }
     }
 }

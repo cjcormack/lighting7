@@ -119,21 +119,32 @@ fun programmerValueOf(
  * What Include last pulled into the programmer, and therefore what Update writes back to
  * when no explicit targets are given (Mode A).
  *
- * [kind] exists so Session 4 can add `PALETTE` without changing the field's shape; today only
- * [Kind.CUE] is ever constructed. [cueStackId] is carried so the client can name the stack in
- * the indicator without a second lookup.
+ * [targetId] is a cue id or a palette id depending on [kind]; [cueId] / [paletteId] narrow it.
+ * [cueStackId] is carried so the client can name the stack in the indicator without a second
+ * lookup, and [paletteUuid] so a re-import can't leave the indicator pointing at a stranger.
  */
 data class IncludedTarget(
     val kind: Kind,
-    val cueId: Int,
-    val cueStackId: Int?,
+    val targetId: Int,
+    val cueStackId: Int? = null,
+    val paletteUuid: UUID? = null,
 ) {
     enum class Kind {
         CUE,
+        PALETTE,
     }
+
+    /** The cue id, or null when a palette is included. */
+    val cueId: Int? get() = targetId.takeIf { kind == Kind.CUE }
+
+    /** The palette id, or null when a cue is included. */
+    val paletteId: Int? get() = targetId.takeIf { kind == Kind.PALETTE }
 
     companion object {
         fun cue(cueId: Int, cueStackId: Int?) = IncludedTarget(Kind.CUE, cueId, cueStackId)
+
+        fun palette(paletteId: Int, paletteUuid: UUID) =
+            IncludedTarget(Kind.PALETTE, paletteId, paletteUuid = paletteUuid)
     }
 }
 
@@ -263,6 +274,11 @@ class ProgrammerStore {
      */
     fun clearIncludeTargetForCue(cueId: Int) {
         _lastIncludedTarget.value = _lastIncludedTarget.value?.takeIf { it.cueId != cueId }
+    }
+
+    /** As [clearIncludeTargetForCue], for a deleted palette. */
+    fun clearIncludeTargetForPalette(paletteId: Int) {
+        _lastIncludedTarget.value = _lastIncludedTarget.value?.takeIf { it.paletteId != paletteId }
     }
 
     private val epochCounter = AtomicLong(0)

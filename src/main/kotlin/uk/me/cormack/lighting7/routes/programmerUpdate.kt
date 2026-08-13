@@ -5,6 +5,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.Layer3Resolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.paletteUuidOrNull
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.state.State
@@ -85,7 +86,13 @@ internal fun changedSinceInclude(
     val (entries, skips) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
     val changed = entries.filter { entry ->
         val included = store.valueFor(ProgrammerOwner.INCLUDE, entry.fixtureKey, entry.propertyName)
-        included == null || included.resolved != entry.value
+            // New since Include — the operator adding a fixture to the cue.
+            ?: return@filter true
+        // Reference identity *and* value, tested independently. A value-only test would write an
+        // untouched ref back and harden it, because a ref resolves to exactly the literal it was
+        // included as. A ref-only test would drop an explicit Make Hard, which leaves the literal
+        // identical and must still persist.
+        included.paletteUuidOrNull != entry.paletteUuid || included.resolved != entry.value
     }
     return changed to skips
 }
@@ -98,6 +105,12 @@ internal fun changedSinceInclude(
  * programmer as the winner, which is precisely the answer this can't use. The Layer 3 winner
  * map is computed at publish time and knows nothing about the programmer, so it already is
  * "the cue underneath".
+ *
+ * **Cue-only, deliberately, and there is no palette equivalent to add.** This checklist's premise
+ * is "which cue am I sitting on top of", answered from the output cascade — and a palette is not in
+ * that cascade at all. It contributes by being *resolved into* cue and programmer values, so
+ * nothing here can attribute a key to one. Writing back to a palette therefore only happens via
+ * Mode A, where Include named the palette explicitly.
  */
 internal fun buildUpdateChecklist(
     state: State,

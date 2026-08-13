@@ -256,6 +256,9 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                 is PaletteDeleteOutcome.Deleted -> {
                     // Forced deletion leaves the referencing rows dangling on purpose; they now
                     // report MissingPalette health and are skipped at apply.
+                    // The include indicator must stop offering a palette that no longer exists —
+                    // Update re-validates anyway, but a stale indicator is its own bug.
+                    state.show.programmerStore.clearIncludeTargetForPalette(resource.paletteId)
                     state.show.fixtures.paletteListChanged()
                     call.respond(HttpStatusCode.NoContent)
                 }
