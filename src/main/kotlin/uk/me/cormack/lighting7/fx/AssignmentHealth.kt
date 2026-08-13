@@ -12,8 +12,10 @@ import kotlinx.serialization.Serializable
  * `docs/plans/completed/control-surface-plan.md` §"Phase 7" for the sibling binding-health pattern this
  * intentionally mirrors — both subsystems consume the same ADT via
  * [PersistedFixtureReferenceValidator] and [uk.me.cormack.lighting7.midi.BindingHealthEvaluator].
- * Cue / preset consumers only ever see [Ok] / [MissingFixture] / [MissingGroup] /
- * [MissingProperty]; the binding-specific variants are produced only by the surface evaluator.
+ * Cue / preset consumers see [Ok] / [MissingFixture] / [MissingGroup] / [MissingProperty], plus
+ * the named-palette variants [MissingPalette] / [MissingPaletteEntry] / [PaletteTypeMismatch] on
+ * rows whose value is a `ref:` (see [parsePaletteRef]); the binding-specific variants are
+ * produced only by the surface evaluator.
  */
 @Serializable
 sealed class AssignmentHealth {
@@ -38,6 +40,43 @@ sealed class AssignmentHealth {
     @Serializable
     @SerialName("missingProperty")
     data class MissingProperty(val targetKey: String, val propertyName: String) : AssignmentHealth()
+
+    /**
+     * The row's value is `ref:{paletteUuid}` but no palette with that uuid exists — it was
+     * deleted with `?force=true`, or the row arrived from an import whose palette folder was
+     * incomplete. The row is skipped at apply rather than guessed at.
+     */
+    @Serializable
+    @SerialName("missingPalette")
+    data class MissingPalette(val paletteUuid: String) : AssignmentHealth()
+
+    /**
+     * The referenced palette exists but holds no entry covering this target and property, so
+     * there is nothing to resolve to. Reached both by an honest gap (the palette simply doesn't
+     * cover this head) and by a type mismatch (a COLOUR palette referenced from a `position`
+     * row can never have a matching entry) — [PaletteTypeMismatch] separates the latter out on
+     * read for diagnosability, but resolution treats them the same.
+     */
+    @Serializable
+    @SerialName("missingPaletteEntry")
+    data class MissingPaletteEntry(
+        val paletteUuid: String,
+        val targetKey: String,
+        val propertyName: String,
+    ) : AssignmentHealth()
+
+    /**
+     * The referenced palette is of a type that cannot cover this property — a COLOUR palette on
+     * a `position` row. Produced by the read-path validator only, to name the cause behind what
+     * resolution reports as a [MissingPaletteEntry].
+     */
+    @Serializable
+    @SerialName("paletteTypeMismatch")
+    data class PaletteTypeMismatch(
+        val paletteUuid: String,
+        val paletteType: String,
+        val propertyGroup: String,
+    ) : AssignmentHealth()
 
     /**
      * A cue stack referenced by a `cueStackGo` / `cueStackBack` / `cueStackPause` binding
@@ -73,6 +112,12 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.MissingGroup -> "missing group '${health.groupName}'"
     is AssignmentHealth.MissingProperty ->
         "missing property '${health.propertyName}' on '${health.targetKey}'"
+    is AssignmentHealth.MissingPalette -> "missing palette ${health.paletteUuid}"
+    is AssignmentHealth.MissingPaletteEntry ->
+        "palette ${health.paletteUuid} has no entry for '${health.propertyName}' on '${health.targetKey}'"
+    is AssignmentHealth.PaletteTypeMismatch ->
+        "palette ${health.paletteUuid} is a ${health.paletteType} palette, but the property is " +
+            "${health.propertyGroup}"
     is AssignmentHealth.MissingStack -> "missing cue stack id=${health.stackId}"
     is AssignmentHealth.MissingCue -> "missing cue id=${health.cueId}"
     is AssignmentHealth.UnknownBank ->

@@ -48,6 +48,39 @@ class Show(
         }
     }
     val programmerStore = ProgrammerStore()
+
+    /**
+     * Named palettes, flattened for per-fixture lookup. See [PaletteRegistry] for the two
+     * invalidation triggers wired below — the patch/group one is easy to miss and silently
+     * resolves a palette against stale group membership when absent.
+     */
+    val paletteRegistry = PaletteRegistry(
+        fixtures = { fixtures },
+        loader = { uuid -> loadPaletteSnapshot(state.database, uuid) },
+    ).also { registry ->
+        fixtures.registerListener(object : FixturesChangeListener {
+            // A group row in a palette expands to member fixtures, so any patch or group change
+            // invalidates every expansion.
+            override fun fixturesChanged() = registry.invalidateAll()
+            override fun patchListChanged() = registry.invalidateAll()
+
+            // Covers create and delete. A *contents* change goes through
+            // `republishForPaletteEdit`, which invalidates the one palette directly.
+            override fun paletteListChanged() = registry.invalidateAll()
+
+            override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) {}
+            override fun controllersChanged() {}
+            override fun presetListChanged() {}
+            override fun cueListChanged() {}
+            override fun cueStackListChanged() {}
+            override fun cueSlotListChanged() {}
+            override fun riggingListChanged() {}
+            override fun stageRegionListChanged() {}
+            override fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {}
+            override fun promptBookChanged() {}
+        })
+    }
+
     val layer3Resolver = Layer3Resolver()
     val layerResolver = LayerResolver(layer3Resolver, programmerStore)
     val parkManager = ParkManager(
