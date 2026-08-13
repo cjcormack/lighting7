@@ -244,6 +244,70 @@ Each active cue has a fade weight in `[0, 1]` tracking its crossfade progress. D
 
 Interaction with cue-edit sessions: when a client holds an active `cueEdit` session, surface fader writes route into the cue's Layer 4 property assignments (via `cueEdit.setProperty`) rather than the programmer. See [Cue edit sessions](#cue-edit-sessions) below.
 
+## Named palettes (references)
+
+A stored value — a cue property assignment, an FX preset property assignment, or a programmer entry
+— may be a **reference** to a named palette instead of a literal:
+
+```
+ref:{paletteUuid}
+```
+
+A `Palette` is typed by attribute (`COLOUR` / `POSITION` / `BEAM` / `INTENSITY` — the same four
+buckets as the record mask, because it is literally `PropertyMaskGroup`) and holds per-target
+entries: `(fixture|group, propertyName) → literal`. Palettes hold **literals only**; an entry
+holding a `ref:` is rejected at the write boundary, so resolution never recurses.
+
+### Resolution
+
+References resolve **per fixture**, at the point the row is built rather than inside the resolver:
+
+- Group rows in a palette expand to their members, and a fixture entry beats a group entry covering
+  the same fixture — the same specificity rule Layer 4 applies, precomputed by `PaletteRegistry`.
+- A cue or preset row whose value is a ref resolves once per expanded member, taking **each
+  member's own property category**. A palette is per-fixture by construction, so a mixed-type group
+  is exactly the case it exists to serve.
+- A programmer entry holds `ProgrammerValue.Ref(paletteUuid, resolved)` — the resolved literal is
+  cached so the 50 Hz fallback path reads `.resolved` with no extra branch.
+- A reference that doesn't resolve **skips the row** and reports health. It never falls back to
+  another fixture's entry: a position palette's value for one head is meaningless on another, which
+  is the whole reason entries are per-fixture.
+
+One ordering rule is load-bearing: the `ref:` check happens **before**
+`Layer3Resolver.parseAssignmentValue`, because for `COLOUR` that routes to `parseExtendedColour`,
+which answers **white** for anything it doesn't recognise. An unintercepted ref would silently light
+the fixture rather than report a dead reference.
+
+### Editing a palette
+
+Because resolved values are cached, editing a palette must re-resolve and republish its live
+consumers (`routes/paletteRepublish.kt`). That is the feature's whole point: one edit moves every
+look that references the palette, with no cue re-fired. The order is fixed — invalidate the
+registry, re-resolve the programmer's ref slots *without* publishing, replace the affected cues'
+rows in one pass, then publish the programmer keys. Publishing the cue layer first would transmit
+stale programmer values over it for a frame.
+
+A ref whose palette stops covering it keeps its last resolved value rather than vanishing; a
+disappearing programmer entry mid-show is worse than a stale one the sheet marks broken.
+
+### Hardening
+
+**Make Hard** replaces references with the literals they currently resolve to — the explicit opt-out
+from reference-preserving Update, available on the programmer and on a stored cue. A group row can
+only harden to a group row when every member agrees; otherwise it expands to one fixture row per
+member, since no single literal can say what the group row said.
+
+Update is reference-*preserving* by default: it writes back only what changed since Include,
+comparing reference identity and value independently, so an untouched ref stays a ref and an
+explicit hardening still persists.
+
+### Relationship to the positional palette
+
+The older ordered-colour-list palette — referenced positionally as `P1` / `P2` / `P*`, scoped
+global → stack → cue by `PaletteCascade` — is unchanged and still supported. The two grammars cannot
+collide (`^P(\d+)$` never matches `ref:…`), and a value is either a `ref:` or a literal that may
+itself be a positional ref.
+
 ## Layer 5 — Baseline / defaults
 
 Per-fixture baseline values: typically 0 (blackout) for intensity-like channels, 127 (centred) for pan/tilt where the fixture profile specifies. The "rest state" seen when no other layer contributes.

@@ -343,11 +343,20 @@ internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
  * dead-reference diagnostics are surfaced (Phase 6). Apply-path and snapshot callers keep
  * using [toDto] — they don't need health and shouldn't pay the lookup cost.
  */
-private fun DaoCuePropertyAssignment.toDtoWithHealth(fixtures: uk.me.cormack.lighting7.show.Fixtures): CuePropertyAssignmentDto {
+private fun DaoCuePropertyAssignment.toDtoWithHealth(
+    fixtures: uk.me.cormack.lighting7.show.Fixtures,
+    paletteRegistry: PaletteRegistry?,
+): CuePropertyAssignmentDto {
     val base = toDto()
+    val targetHealth = PersistedFixtureReferenceValidator.validateTargetedReference(
+        fixtures, base.target, base.propertyName,
+    )
+    // A dead target subsumes a dead reference — reporting "palette has no entry for hex-9" when
+    // hex-9 itself is gone from the patch names the wrong problem.
+    if (targetHealth != AssignmentHealth.Ok) return base.copy(health = targetHealth)
     return base.copy(
-        health = PersistedFixtureReferenceValidator.validateTargetedReference(
-            fixtures, base.target, base.propertyName,
+        health = validatePaletteReference(
+            fixtures, paletteRegistry, base.target, base.propertyName, base.value,
         ),
     )
 }
@@ -377,11 +386,14 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
  * Convert a DaoCue entity to CueDetails API response. Property-assignment rows are tagged
  * with [AssignmentHealth] by resolving each `(targetType, targetKey, propertyName)` against
  * [fixtures] — dead references surface in the UI with markers (Phase 6) rather than
- * silently dropping at apply time.
+ * silently dropping at apply time. A row holding a `ref:` is additionally checked against
+ * [paletteRegistry], so a dead or non-covering palette reference is marked the same way.
  */
 internal fun DaoCue.toCueDetails(
     isCurrentProject: Boolean,
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
+    /** Null skips named-palette health; rows still get target/property health. */
+    paletteRegistry: PaletteRegistry? = null,
 ): CueDetails {
     val presetDetails = presetApplications.sortedBy { it.sortOrder }.map { app ->
         CuePresetApplicationDetail(
@@ -406,7 +418,7 @@ internal fun DaoCue.toCueDetails(
         )
     }
     val assignmentDetails = this.propertyAssignments.sortedBy { it.sortOrder }
-        .map { it.toDtoWithHealth(fixtures) }
+        .map { it.toDtoWithHealth(fixtures, paletteRegistry) }
     return CueDetails(
         id = this.id.value,
         name = this.name,

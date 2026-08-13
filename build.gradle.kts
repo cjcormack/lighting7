@@ -790,6 +790,14 @@ registerJpackageTask(
 )
 
 tasks.test {
+    // Gradle defaults a Test task to 512m, which this suite outgrew: ~1300 tests in one JVM, and
+    // every integration test constructs a `State` — which builds a Kotlin scripting host and walks
+    // the build tree to fingerprint the script cache. Past the limit the failure is an
+    // OutOfMemoryError thrown from whichever `State.<init>` happens to run next, so it surfaces as
+    // a handful of *unrelated* tests failing differently on each run rather than as anything that
+    // points at memory. Raise it explicitly so that stays diagnosable.
+    maxHeapSize = "2g"
+
     // Forward opt-in test flags to the forked test JVM. `fx.benchmark` gates the
     // FxEngineBenchmark harness; `dmx.benchmark` gates the DMX setValues benchmark;
     // `cueedit.profile` gates the cueEdit setProperty profile harness. All three are

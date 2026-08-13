@@ -40,13 +40,17 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                         DaoCuePresetApplication::preset,
                         DaoCueTrigger::script,
                     )
-                    .map { it.toCueDetails(isCurrentProject, state.show.fixtures) }
+                    .map { it.toCueDetails(isCurrentProject, state.show.fixtures, state.show.paletteRegistry) }
             }
             call.respond(cues)
         }
     }
 
     // POST /{projectId}/cues - Create new cue (current project only)
+    post<MakeCueHardResource> { resource ->
+        handleMakeCueHard(state, resource.cueId, resource.force)
+    }
+
     post<ProjectCuesResource> { resource ->
         withCurrentProject(
             state,
@@ -100,7 +104,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 )
                 // A cue created without a number gets one derived from where it landed.
                 renumberAutoCues(stack)
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures) to null
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.paletteRegistry) to null
             }
             val (cueDetails, error) = result
             if (error != null || cueDetails == null) {
@@ -120,7 +124,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val cue = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
-                cue.toCueDetails(isCurrentProject, state.show.fixtures)
+                cue.toCueDetails(isCurrentProject, state.show.fixtures, state.show.paletteRegistry)
             }
 
             if (cue != null) {
@@ -177,7 +181,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 )
 
                 if (numberChanged) renumberAutoCues(cue.cueStack)
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.paletteRegistry)
             }
 
             if (cueDetails != null) {
@@ -260,7 +264,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 }
 
                 if (numberChanged) renumberAutoCues(cue.cueStack)
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.paletteRegistry)
             }
 
             if (cueDetails != null) {

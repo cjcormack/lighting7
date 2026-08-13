@@ -66,6 +66,7 @@ riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v
 stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
 fixtureGroups/{uuid}.json      # members embedded inline
 fxPresets/{uuid}.json          # propertyAssignments embedded inline
+palettes/{uuid}.json           # entries embedded inline
 fxDefinitions/{uuid}.json
 cueSlots/{uuid}.json
 parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's parked output

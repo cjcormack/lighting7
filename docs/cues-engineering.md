@@ -112,7 +112,10 @@ Writing the *programmer* into a cue lives outside this namespace, under
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/programmer/record` | Write the programmer into a cue (`CREATE`/`MERGE`/`REMOVE`/`UPDATE_EXISTING`, optional I/P/C/B mask) |
-| POST | `/programmer/include` | Load a cue's assignments + FX into the programmer for editing |
+| POST | `/programmer/include` | Load a cue's assignments + FX (or a palette's entries) into the programmer for editing |
+| POST | `/programmer/record-palette` | Record the programmer into a named palette, masked by its type |
+| POST | `/programmer/make-hard` | Replace the programmer's palette references with literals |
+| POST | `/project/{id}/cues/{cueId}/make-hard` | Replace a stored cue's palette references with literals |
 | POST | `/programmer/update` | Write programmer edits back — to the include target, or to cues named from the Mode B checklist |
 
 `POST /{projectId}/cues/{cueId}/snapshot-from-live` was removed in the programmer redesign's
@@ -290,3 +293,22 @@ The system prompt describes:
 - The `updateGlobalPalette` flag behaviour
 - Active effects display includes `cueId` for each effect
 - The distinction between global palette (ad-hoc effects) and per-cue palettes
+
+## Assignment values: the third form
+
+A `cue_property_assignments.value` (and its FX-preset twin) holds one of:
+
+1. a **literal** in the canonical `Layer3Resolver.PropertyValue.serialize()` grammar — `"200"`,
+   `"#rrggbb[;wN;aN;uvN]"`, `"pan,tilt"`;
+2. a **positional palette ref** — `"P1"`, `"P2"`, `"P*"` — indexing the ordered colour list scoped
+   global → stack → cue (`PaletteCascade`), colour-only;
+3. a **named-palette reference** — `"ref:{paletteUuid}"` — resolved per fixture against the
+   `Palette` entity.
+
+Form 3 is the one that survives an edit: changing the palette moves every live look that references
+it. See `docs/lighting-composition-model.md` §"Named palettes (references)" for resolution,
+republish and hardening semantics, and why the `ref:` check must precede the literal parser.
+
+The reference stores the palette's **uuid** rather than its int id because int primary keys never
+appear in the sync export and are re-minted on import, while `ExportUuidRemapper` rewrites uuids
+across the whole export — including ones embedded in an opaque `value` string.

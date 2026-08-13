@@ -1,6 +1,25 @@
 # Programmer Redesign — Proposal
 
-**Status**: In progress — **Session 3 (Record / Include / Update) landed 2026-08-12**:
+**Status**: In progress — **Session 4 (palettes as references) backend landed 2026-08-13**:
+`Palette` entity (COLOUR/POSITION/BEAM/INTENSITY, an alias of `PropertyMaskGroup` so the record
+mask machinery is reused) + CRUD with a 409 `PALETTE_IN_USE` delete guard; **the stored ref is
+`ref:{paletteUuid}`, not an int id** — int PKs never appear in the sync export and are re-minted on
+import, whereas `ExportUuidRemapper` rewrites uuids across the whole JSON text including inside
+opaque value columns, so a uuid survives clone and import alike (`ProjectCloneTest` asserts it);
+`PaletteRegistry` (group expansion, fixture-beats-group, version-counter cache with a
+re-check that stops an invalidation racing an in-flight load from caching stale forever);
+`resolveAssignmentValueForFixture` as the single door, with the ref check **before**
+`parseAssignmentValue` because that answers *white* for unrecognised colour input;
+per-member resolution in the cue and preset builders; `ProgrammerValue.Ref` with the resolved
+literal cached so the 50 Hz path is untouched; `Assignment.paletteUuid` so Include and the
+FX-preset toggle keep the reference instead of hardening it; `replaceCueAssignments` preserving
+`cueFadeWeights` (`setCueAssignments` clears them and would snap an in-flight crossfade);
+republish-on-palette-edit; `record-palette`; Include/Update on palette targets with
+`changedSinceInclude` comparing ref identity *and* value; cue-level and programmer-level Make Hard;
+`AssignmentHealth` gains `missingPalette` / `missingPaletteEntry` / `paletteTypeMismatch`.
+**Mode B stays cue-only** — its premise is "which cue am I on top of", and a palette isn't in the
+output cascade. Frontend still to come.
+**Session 3 (Record / Include / Update) landed 2026-08-12**:
 `POST /api/rest/programmer/{record,include,update}` (REST, not WS ops — each needs a structured
 reply the fire-and-forget programmer channel can't carry); I/P/C/B attribute mask
 (`fx/PropertyMask.kt`); `RecordSource` TOUCHED/ALL/STAGE_SNAPSHOT with sideband lifting and skip
@@ -193,7 +212,7 @@ class ProgrammerStore {
     // programmer tests.)
     data class Slot(
         val owner: Owner,                   // WEB | SURFACE | FLASH | LOCATE | PRESET_PREVIEW | INCLUDE | UNPARK
-        val value: ProgrammerValue,         // Hard(PropertyValue) | Ref(paletteId, resolved)
+        val value: ProgrammerValue,         // Hard(PropertyValue) | Ref(paletteUuid, resolved)
         val touched: Boolean,               // sticky — never value-diffed; drives Record/Update
     )
     data class Entry(
@@ -289,8 +308,8 @@ positionally (`P1`, `P2`) at cue-apply time, colour-only. Proposal:
   name, entries: (fixtureKey → PropertyValue) }` with CRUD + "record from
   programmer" (masked by type, selected fixtures merge — MagicQ re-record
   semantics).
-- `ProgrammerValue.Ref(paletteId)` and a `PropertyValue`-level ref in stored
-  cue assignments: `value` column grows a `ref:{paletteId}` form beside the
+- `ProgrammerValue.Ref(paletteUuid, resolved)` and a ref form in stored
+  cue assignments: `value` column grows a `ref:{paletteUuid}` form beside the
   canonical literal. Refs resolve per-fixture at compose time; **editing a
   palette republishes every active cue that references it** — the touring
   feature, and the highest-leverage single item in the console research.
@@ -469,9 +488,11 @@ follow-up session rather than letting it drag the editing loop.
 programmer, cue assignments, and resolver; republish-on-palette-edit; palette
 pages, cell ref badges, Make Hard; migration/coexistence with positional
 `P1`/`P2` refs per §3.5.
-*New table + migration — restart required. Remember the migration gate: most
-migrations are Postgres-gated and silently no-op on the SQLite dev DB, so
-verify against Postgres.*
+*New tables — restart required, but **no migration**:
+`SchemaUtils.createMissingTablesAndColumns` creates them at boot. (An earlier
+draft of this line warned about a Postgres migration gate; there is no Postgres
+any more — `state/StateMigrations.kt` records that those gated migrations were
+deleted and no driver is on the classpath.)*
 
 ### Session 5 — Speed masters (both repos)
 
@@ -479,8 +500,7 @@ verify against Postgres.*
 `speedMasterId` through FX definitions/presets/cues/busking; wall-clock
 `rateMasterId`; masters strip UI with tap/BPM; compatibility mapping of the
 existing global BPM to master 1.
-*New table + migration — same restart and Postgres-gate caveats as
-Session 4.*
+*New tables — same restart-but-no-migration position as Session 4.*
 
 **Deliberately deferred** (revisit after the five land): per-user programmers,
 MA staged clear, highlight/lowlight personality values, linked palettes,

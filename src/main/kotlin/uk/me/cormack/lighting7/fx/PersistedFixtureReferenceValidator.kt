@@ -100,3 +100,54 @@ fun canonicalPropertyName(propertyName: String): String =
         "colour", "color", "rgbcolour" -> "rgbColour"
         else -> propertyName
     }
+
+/**
+ * Health of a stored value's *named-palette reference*, or [AssignmentHealth.Ok] when the value is a
+ * literal (or not a reference at all).
+ *
+ * Read-path only: cue apply reports the same conditions through
+ * [resolveAssignmentValueForFixture]'s health and a warn. This exists so the UI can mark a row
+ * before it is ever fired, and it adds [AssignmentHealth.PaletteTypeMismatch] — a diagnosis the
+ * resolve path deliberately collapses into "no entry", because at resolve time the two are the same
+ * outcome.
+ *
+ * [target] may be a group; coverage is then checked against its first member, matching how
+ * [validateTargetedReference] resolves a reference fixture for property checks.
+ */
+fun validatePaletteReference(
+    fixtures: Fixtures,
+    registry: PaletteRegistry?,
+    target: TargetRef,
+    propertyName: String,
+    value: String,
+): AssignmentHealth {
+    val paletteUuid = parsePaletteRef(value) ?: return AssignmentHealth.Ok
+    val expanded = registry?.expanded(paletteUuid)
+        ?: return AssignmentHealth.MissingPalette(paletteUuid.toString())
+
+    val canonical = canonicalPropertyName(propertyName)
+    val referenceFixture: Fixture = when (target) {
+        is TargetRef.Group -> runCatching { fixtures.untypedGroup(target.key) }.getOrNull()
+            ?.fixtures?.filterIsInstance<Fixture>()?.firstOrNull()
+            ?: return AssignmentHealth.MissingGroup(target.key)
+        is TargetRef.Fixture -> runCatching { fixtures.untypedFixture(target.key) }.getOrNull()
+            ?: return AssignmentHealth.MissingFixture(target.key)
+    }
+
+    // A wrong-type reference can never have a matching entry, so name the cause rather than
+    // reporting the symptom.
+    val propertyGroup = maskGroupForProperty(referenceFixture, canonical)
+    val paletteType = expanded.snapshot.type
+    if (paletteType != null && propertyGroup != null && paletteType != propertyGroup) {
+        return AssignmentHealth.PaletteTypeMismatch(
+            paletteUuid.toString(), paletteType.name, propertyGroup.name,
+        )
+    }
+
+    if (expanded.literalFor(referenceFixture.key, canonical) == null) {
+        return AssignmentHealth.MissingPaletteEntry(
+            paletteUuid.toString(), target.key, canonical,
+        )
+    }
+    return AssignmentHealth.Ok
+}

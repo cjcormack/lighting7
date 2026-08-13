@@ -533,4 +533,195 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             assertEquals(HttpStatusCode.BadRequest, resp.status, "for body $body: ${resp.bodyAsText()}")
         }
     }
+
+    // ─── Make Hard + health ────────────────────────────────────────────────
+
+    private fun cueWithRefRow(targetType: String, targetKey: String, paletteUuid: UUID): Int {
+        val cueId = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project
+                name = "stack-${System.nanoTime()}"; this.palette = emptyList(); loop = false
+                type = CueStackType.STACK.name; sortOrder = 0
+            }
+            val cue = DaoCue.new {
+                this.project = project
+                name = "look"; cueStack = stack; sortOrder = 0
+                this.palette = emptyList(); cueType = CueType.STANDARD.name
+            }
+            DaoCuePropertyAssignment.new {
+                this.cue = cue
+                this.targetType = targetType; this.targetKey = targetKey
+                propertyName = "colour"; value = paletteRefValue(paletteUuid); sortOrder = 0
+            }
+            cue.id.value
+        }
+        return cueId
+    }
+
+    @Test
+    fun `make-hard converts a fixture ref row to its literal`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+
+        val palette = client.post("/api/rest/project/$projectId/palettes") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePaletteRequest(
+                    name = "Warm", type = PaletteType.COLOUR.name,
+                    entries = listOf(colourEntry("hex-1", "#ff8800")),
+                )
+            )
+        }.body<PaletteDetails>()
+        val cueId = cueWithRefRow("fixture", "hex-1", UUID.fromString(palette.uuid))
+
+        val resp = client.post("/api/rest/project/$projectId/cues/$cueId/make-hard") {
+            contentType(ContentType.Application.Json)
+            setBody(CueMakeHardRequest())
+        }
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        val body = resp.body<CueMakeHardResponse>()
+        assertEquals(1, body.converted)
+        assertEquals(0, body.groupRowsExpanded)
+        assertEquals("#ff8800", body.cue.propertyAssignments.single().value)
+
+        // And it has stopped tracking: editing the palette no longer moves it.
+        assertEquals(
+            0, client.get("/api/rest/project/$projectId/palettes/${palette.id}")
+                .body<PaletteDetails>().referenceCount,
+        )
+    }
+
+    @Test
+    fun `make-hard expands a group row whose members disagree`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 20)
+        LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
+
+        // Per-fixture entries with different values — no single literal can say what the group row
+        // said, so the row must become two.
+        val palette = client.post("/api/rest/project/$projectId/palettes") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePaletteRequest(
+                    name = "Split", type = PaletteType.COLOUR.name,
+                    entries = listOf(
+                        colourEntry("hex-1", "#ff8800", 0),
+                        colourEntry("hex-2", "#00ff00", 1),
+                    ),
+                )
+            )
+        }.body<PaletteDetails>()
+        val cueId = cueWithRefRow("group", "front-wash", UUID.fromString(palette.uuid))
+
+        val body = client.post("/api/rest/project/$projectId/cues/$cueId/make-hard") {
+            contentType(ContentType.Application.Json)
+            setBody(CueMakeHardRequest())
+        }.body<CueMakeHardResponse>()
+
+        assertEquals(1, body.groupRowsExpanded)
+        assertEquals(
+            mapOf("hex-1" to "#ff8800", "hex-2" to "#00ff00"),
+            body.cue.propertyAssignments.associate { it.targetKey to it.value },
+        )
+        assertTrue(body.cue.propertyAssignments.all { it.targetType == "fixture" })
+    }
+
+    @Test
+    fun `make-hard keeps a group row when every member agrees`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 20)
+        LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
+
+        val palette = client.post("/api/rest/project/$projectId/palettes") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePaletteRequest(
+                    name = "Even", type = PaletteType.COLOUR.name,
+                    entries = listOf(
+                        PaletteEntryDto("group", "front-wash", "colour", "#ff8800"),
+                    ),
+                )
+            )
+        }.body<PaletteDetails>()
+        val cueId = cueWithRefRow("group", "front-wash", UUID.fromString(palette.uuid))
+
+        val body = client.post("/api/rest/project/$projectId/cues/$cueId/make-hard") {
+            contentType(ContentType.Application.Json)
+            setBody(CueMakeHardRequest())
+        }.body<CueMakeHardResponse>()
+
+        assertEquals(0, body.groupRowsExpanded, "one literal covers every member, so the shape survives")
+        val row = body.cue.propertyAssignments.single()
+        assertEquals("group", row.targetType)
+        assertEquals("#ff8800", row.value)
+    }
+
+    @Test
+    fun `a cue row pointing at a deleted palette reads as missingPalette`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+
+        val cueId = cueWithRefRow("fixture", "hex-1", UUID.randomUUID())
+        val details = client.get("/api/rest/project/$projectId/cues/$cueId").body<CueDetails>()
+        val health = details.propertyAssignments.single().health
+        assertTrue(
+            health is uk.me.cormack.lighting7.fx.AssignmentHealth.MissingPalette,
+            "expected missingPalette, got $health",
+        )
+    }
+
+    @Test
+    fun `a wrong-type reference names the type mismatch rather than the symptom`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+
+        // A COLOUR palette referenced from a dimmer row: it can never have a matching entry, and
+        // saying "no entry" would hide why.
+        val palette = client.post("/api/rest/project/$projectId/palettes") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePaletteRequest(
+                    name = "Warm", type = PaletteType.COLOUR.name,
+                    entries = listOf(colourEntry("hex-1", "#ff8800")),
+                )
+            )
+        }.body<PaletteDetails>()
+
+        val cueId = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project
+                name = "s"; this.palette = emptyList(); loop = false
+                type = CueStackType.STACK.name; sortOrder = 0
+            }
+            val cue = DaoCue.new {
+                this.project = project
+                name = "look"; cueStack = stack; sortOrder = 0
+                this.palette = emptyList(); cueType = CueType.STANDARD.name
+            }
+            DaoCuePropertyAssignment.new {
+                this.cue = cue
+                targetType = "fixture"; targetKey = "hex-1"
+                propertyName = "dimmer"
+                value = paletteRefValue(UUID.fromString(palette.uuid))
+                sortOrder = 0
+            }
+            cue.id.value
+        }
+
+        val details = client.get("/api/rest/project/$projectId/cues/$cueId").body<CueDetails>()
+        val health = details.propertyAssignments.single().health
+        assertTrue(
+            health is uk.me.cormack.lighting7.fx.AssignmentHealth.PaletteTypeMismatch,
+            "expected paletteTypeMismatch, got $health",
+        )
+    }
 }

@@ -57,7 +57,7 @@ internal data class ProgrammerConflictResponse(
     val cueId: Int? = null,
 )
 
-private const val CODE_CUE_EDIT_SESSION_OPEN = "CUE_EDIT_SESSION_OPEN"
+internal const val CODE_CUE_EDIT_SESSION_OPEN = "CUE_EDIT_SESSION_OPEN"
 internal const val CODE_INCLUDE_TARGET_GONE = "INCLUDE_TARGET_GONE"
 
 // ── Record ──────────────────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                     cueType = cueType,
                 )
                 val cue = DaoCue.findById(outcome.cueId)!!
-                Result(outcome, cue.toCueDetails(true, state.show.fixtures), stack.id.value) to null
+                Result(outcome, cue.toCueDetails(true, state.show.fixtures, state.show.paletteRegistry), stack.id.value) to null
             } else {
                 val cue = DaoCue.findById(request.cueId!!)
                     ?: return@transaction null to "Cue not found"
@@ -184,7 +184,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                     return@transaction null to "Cue belongs to a different project"
                 }
                 val outcome = writeRecordingIntoCue(state, cue, recording, mode, mask)
-                Result(outcome, cue.toCueDetails(true, state.show.fixtures), cue.cueStack.id.value) to null
+                Result(outcome, cue.toCueDetails(true, state.show.fixtures, state.show.paletteRegistry), cue.cueStack.id.value) to null
             }
         }
 
