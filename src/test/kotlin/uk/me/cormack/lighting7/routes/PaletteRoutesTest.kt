@@ -30,6 +30,7 @@ import uk.me.cormack.lighting7.testsupport.mountTestApp
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 
 class PaletteRoutesTest : RouteIntegrationTest() {
 
@@ -236,5 +237,147 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         assertTrue(
             client.get("/api/rest/project/$projectId/palettes").body<List<PaletteDto>>().isEmpty(),
         )
+    }
+
+    // ─── record-palette ────────────────────────────────────────────────────
+
+    private suspend fun io.ktor.client.HttpClient.recordPalette(body: String) =
+        post("/api/rest/programmer/record-palette") {
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+
+    private fun writeProgrammerColour(fixtureKey: String, hex: String) {
+        val fixture = state.show.fixtures.untypedGroupableFixture(fixtureKey)
+        state.show.fxEngine.writeProgrammerProperty(
+            uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB, fixture, "rgbColour",
+            uk.me.cormack.lighting7.fx.Layer3Resolver.parseAssignmentValue(
+                uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR, "rgbColour", hex,
+            )!!,
+        )
+    }
+
+    @Test
+    fun `record-palette creates a palette from the programmer, scoped to the selection`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 20)
+
+        writeProgrammerColour("hex-1", "#ff8800")
+        writeProgrammerColour("hex-2", "#00ff00")
+
+        // Only hex-1 is selected: a palette recorded from the *whole* programmer would silently
+        // capture hex-2 as well, which is the mistake the scope filter exists to prevent.
+        val resp = client.recordPalette(
+            """{"projectId":"$projectId","mode":"CREATE","type":"COLOUR","name":"Warm Amber",
+               "targets":[{"type":"fixture","key":"hex-1"}]}"""
+        )
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        val body = resp.body<ProgrammerRecordPaletteResponse>()
+        assertTrue(body.created)
+        assertEquals(1, body.entriesWritten)
+        assertEquals(
+            listOf("hex-1"), body.palette.entries.map { it.targetKey },
+            "hex-2 was out of scope",
+        )
+        assertEquals("#ff8800", body.palette.entries.single().value)
+        assertTrue(
+            body.skipped.any { it.targetKey == "hex-2" },
+            "the out-of-scope entry is reported rather than silently dropped",
+        )
+    }
+
+    @Test
+    fun `record-palette masks by the palette's own type`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+
+        writeProgrammerColour("hex-1", "#ff8800")
+        val fixture = state.show.fixtures.untypedGroupableFixture("hex-1")
+        state.show.fxEngine.writeProgrammerProperty(
+            uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB, fixture, "dimmer",
+            uk.me.cormack.lighting7.fx.Layer3Resolver.PropertyValue.Slider(200u),
+        )
+
+        val resp = client.recordPalette(
+            """{"projectId":"$projectId","mode":"CREATE","type":"COLOUR","name":"Warm"}"""
+        )
+        val body = resp.body<ProgrammerRecordPaletteResponse>()
+        assertEquals(
+            listOf("rgbColour"), body.palette.entries.map { it.propertyName },
+            "the dimmer is INTENSITY, so a COLOUR palette must not capture it",
+        )
+    }
+
+    @Test
+    fun `re-recording a referenced palette moves the cue that references it`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+
+        writeProgrammerColour("hex-1", "#ff8800")
+        val created = client.recordPalette(
+            """{"projectId":"$projectId","mode":"CREATE","type":"COLOUR","name":"Warm Amber"}"""
+        ).body<ProgrammerRecordPaletteResponse>()
+
+        // A live cue referencing it.
+        val cueId = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project
+                name = "show"; this.palette = emptyList(); loop = false
+                type = CueStackType.STACK.name; sortOrder = 0
+            }
+            val cue = DaoCue.new {
+                this.project = project
+                name = "open"; cueStack = stack; sortOrder = 0
+                this.palette = emptyList(); cueType = CueType.STANDARD.name
+            }
+            DaoCuePropertyAssignment.new {
+                this.cue = cue
+                targetType = "fixture"; targetKey = "hex-1"
+                propertyName = "colour"
+                value = paletteRefValue(UUID.fromString(created.palette.uuid))
+                sortOrder = 0
+            }
+            cue.id.value
+        }
+        val applyData = transaction(state.database) { buildCueApplyData(DaoCue.findById(cueId)!!) }
+        applyCue(state, applyData, replaceAll = false)
+
+        // Re-record the palette with a new colour busked in — the console editing gesture.
+        writeProgrammerColour("hex-1", "#0000ff")
+        val again = client.recordPalette(
+            """{"projectId":"$projectId","mode":"UPDATE_EXISTING","paletteId":${created.palette.id}}"""
+        ).body<ProgrammerRecordPaletteResponse>()
+
+        assertEquals(listOf(cueId), again.cuesRepublished, "the referencing cue republished")
+        val composed = state.show.fxEngine.layerResolver
+            .currentLayer3State[uk.me.cormack.lighting7.fx.Layer3Resolver.Key.fixture("hex-1", "rgbColour")]
+        assertEquals(
+            "#0000ff",
+            (composed as uk.me.cormack.lighting7.fx.Layer3Resolver.PropertyValue.Colour)
+                .value.toSerializedString(),
+            "re-recording a palette moves the looks that reference it, with no GO",
+        )
+    }
+
+    @Test
+    fun `record-palette rejects a type that disagrees with the existing palette`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val created = client.post("/api/rest/project/$projectId/palettes") {
+            contentType(ContentType.Application.Json)
+            setBody(CreatePaletteRequest(name = "Warm", type = PaletteType.COLOUR.name))
+        }.body<PaletteDetails>()
+
+        val resp = client.recordPalette(
+            """{"projectId":"$projectId","mode":"MERGE","paletteId":${created.id},"type":"POSITION"}"""
+        )
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+        assertTrue(resp.bodyAsText().contains("not POSITION"), resp.bodyAsText())
     }
 }

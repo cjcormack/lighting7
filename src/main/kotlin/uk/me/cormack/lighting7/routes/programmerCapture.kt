@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.Layer3Resolver
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
+import uk.me.cormack.lighting7.fx.paletteUuidOrNull
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
@@ -24,6 +25,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
+import java.util.UUID
 import java.awt.Color
 
 private val logger = LoggerFactory.getLogger("uk.me.cormack.lighting7.routes.programmerCapture")
@@ -78,6 +80,13 @@ enum class RecordSkipReason {
 
     /** Filtered out by the request's attribute mask. */
     MASKED_OUT,
+
+    /**
+     * Outside the request's fixture scope. Recording a palette from the *whole* programmer is
+     * almost always wrong — "Warm Amber" would capture every head the programmer happens to hold —
+     * so the palette routes pass the operator's selection and everything else reports this.
+     */
+    OUT_OF_SCOPE,
 }
 
 /** One entry that couldn't be recorded, named however it can be. */
@@ -101,6 +110,15 @@ data class RecordEntry(
     val value: Layer3Resolver.PropertyValue,
     val sourceGroup: String?,
     val maskGroup: PropertyMaskGroup?,
+    /**
+     * Set when the winning programmer slot was a [ProgrammerValue.Ref], so the recorded row can be
+     * written back as `ref:{uuid}` rather than as the literal it happens to resolve to right now.
+     *
+     * Without this, busking a palette and hitting Record silently detaches the new cue from the
+     * palette: it would store today's colour, and editing the palette afterwards would never move
+     * it. Always null for sideband entries, which are channel-shaped and carry no palette identity.
+     */
+    val paletteUuid: UUID? = null,
 )
 
 /** Everything one Record source produced, ready to be written into a cue. */
@@ -131,6 +149,8 @@ internal fun collectProgrammerEntries(
     state: State,
     source: RecordSource,
     mask: Set<PropertyMaskGroup>?,
+    /** Restrict to these fixture keys (groups already expanded). Null or empty = no restriction. */
+    targets: Set<String>? = null,
 ): Pair<List<RecordEntry>, List<RecordSkip>> {
     val store = state.show.programmerStore
     val fixtures = state.show.fixtures
@@ -138,17 +158,24 @@ internal fun collectProgrammerEntries(
     val seqs = HashMap<Pair<String, String>, Long>()
     val skips = ArrayList<RecordSkip>()
 
+    val scope = targets?.takeIf { it.isNotEmpty() }
+
     fun accept(
         fixtureKey: String,
         rawPropertyName: String,
         value: Layer3Resolver.PropertyValue,
         sourceGroup: String?,
         seq: Long,
+        paletteUuid: UUID? = null,
     ) {
         val propertyName = canonicalPropertyName(rawPropertyName)
         val mapKey = fixtureKey to propertyName
         // Older than what already claimed this property — the newer write is what's on stage.
         if (seqs[mapKey]?.let { it >= seq } == true) return
+        if (scope != null && fixtureKey !in scope) {
+            skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.OUT_OF_SCOPE)
+            return
+        }
         val fixture = try {
             fixtures.untypedGroupableFixture(fixtureKey)
         } catch (_: Exception) {
@@ -168,14 +195,17 @@ internal fun collectProgrammerEntries(
             skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MASKED_OUT)
             return
         }
-        entries[mapKey] = RecordEntry(fixtureKey, propertyName, value, sourceGroup, maskGroup)
+        entries[mapKey] = RecordEntry(fixtureKey, propertyName, value, sourceGroup, maskGroup, paletteUuid)
         seqs[mapKey] = seq
     }
 
     for (entry in store.entries()) {
         val top = entry.slots.firstOrNull() ?: continue
         if (source == RecordSource.TOUCHED && !top.touched) continue
-        accept(entry.fixtureKey, entry.propertyName, top.value.resolved, top.sourceGroup, top.seq)
+        accept(
+            entry.fixtureKey, entry.propertyName, top.value.resolved, top.sourceGroup, top.seq,
+            paletteUuid = top.value.paletteUuidOrNull,
+        )
     }
 
     // Sideband slots that a property covers can still be recorded — a raw pan/tilt drag from

@@ -40,7 +40,7 @@ internal data class ProgrammerSkipDto(
     val reason: String,
 )
 
-private fun RecordSkip.toDto() = ProgrammerSkipDto(
+internal fun RecordSkip.toDto() = ProgrammerSkipDto(
     targetKey = targetKey,
     propertyName = propertyName,
     universe = universe,
@@ -475,5 +475,5 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-private inline fun <reified T : Enum<T>> parseEnumOrNull(value: String): T? =
+internal inline fun <reified T : Enum<T>> parseEnumOrNull(value: String): T? =
     enumValues<T>().firstOrNull { it.name.equals(value.trim(), ignoreCase = true) }
