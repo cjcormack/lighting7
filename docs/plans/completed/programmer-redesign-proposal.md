@@ -1,7 +1,24 @@
 # Programmer Redesign — Proposal
 
-**Status**: **Complete — all five sessions landed. Session 5 (speed masters) landed 2026-08-14**
-in both repos.
+> **Document status: COMPLETE (2026-08-14).** All five sessions landed across both repos
+> (`lighting7` `c91c363`…`9d39f8a`, `lighting-react` `b096e40`…`cc11ce6`). Every §6 session
+> shipped, §7's open question is resolved, and each session's cuts are tracked as slugged
+> items in [followups.md](../followups.md) — `FU-PROG-*`, `FU-PAL-*`, `FU-SPEED-*`, plus the
+> §6 deferred list, promoted 2026-08-14 rather than left to fall off the backlog. The
+> narrative below is preserved as a session-by-session record; durable engineering reference
+> lives in [lighting-composition-model.md](../../lighting-composition-model.md) (Layer 2,
+> provenance, palette resolution), [fx-engineering.md](../../fx-engineering.md) (programmer FX
+> band, speed master bank) and [cues-engineering.md](../../cues-engineering.md)
+> (Record/Include/Update against cues).
+>
+> **Two behaviours are shipped but never seen on the rig**, and are the only outstanding work
+> from this plan: `FU-MANUAL-PALETTE-TOURING` (edit a palette while a referencing cue is live)
+> and `FU-MANUAL-SPEED-MASTERS-RIG` (two masters driving one show — **needs a backend restart
+> that hasn't happened yet**, so no part of Session 5 has run against hardware).
+>
+> **Not in production yet.** We're free to break the DB, skip rollback shims, and iterate on
+> migrations loosely.
+
 **Session 5 landed 2026-08-14**: `SpeedMaster` entity (portable in sync — the exported bpm is a
 *starting default*, written through from live changes on a 750 ms trailing debounce; refs are
 uuids per the Session-4 lesson) + CRUD with 409 `SPEED_MASTER_PROTECTED` (master 1) /
@@ -33,6 +50,7 @@ preset picker, M-chips omitted when resolving to M1, and a pad-wide busking defa
 next field silently vanishing on inline cue edits. Cuts → followups: `FU-SPEED-RATEMASTER-UI`,
 `FU-SPEED-MIDI-BINDING`, `FU-SPEED-BEATINDICATOR-PERMASTER` (the beat pulse stays master-1-only).
 **Still unproven on a rig**: two masters driving one show live — restart required (new classes).
+Tracked as `FU-MANUAL-SPEED-MASTERS-RIG`.
 **Session 4 frontend landed 2026-08-14** (lighting-react `5394be0` + `d8ae3d5`): reference
 rendering in the programmer sheet — a type-tinted edge bar, corner glyph and resolved swatch
 layered *around* the cells the way ownership colouring already is, with a destructive ring only
@@ -57,7 +75,7 @@ List"** at all five of its display sites; never mint a `P<n>` short code for a n
 matters is the whole hazard. Verified against a live rig: record, include, apply, cue-side badges
 and health, and Make Hard at both levels. **Still unproven on the rig**: the touring behaviour
 itself — edit a palette while a referencing cue is live and watch the output move without
-re-firing.
+re-firing. Tracked as `FU-MANUAL-PALETTE-TOURING`.
 **Session 4 backend landed 2026-08-13**:
 `Palette` entity (COLOUR/POSITION/BEAM/INTENSITY, an alias of `PropertyMaskGroup` so the record
 mask machinery is reused) + CRUD with a 409 `PALETTE_IN_USE` delete guard; **the stored ref is
@@ -91,7 +109,7 @@ write); `snapshot-from-live` deleted in favour of `record { source: STAGE_SNAPSH
 fixes §1's lossiness by overlaying the programmer on the capture; `sourceGroup` gap closed at group
 Locate, group preset toggles, and via a validated optional protocol field for client-side fan-outs.
 **Vis-source selector deliberately severed** — `FU-PROG-VIS-SOURCE` in
-[followups.md](followups.md), since `Next GO` needs a backend preview-compose path that doesn't
+[followups.md](../followups.md), since `Next GO` needs a backend preview-compose path that doesn't
 exist. §7's open question resolved: Record emits a group row **only** when a `sourceGroup` hint
 names a group whose every member holds a matching, equal-valued entry; otherwise fixture rows. The
 hint is a candidate, not an authority, so a stale one degrades to verbosity rather than to a wrong
@@ -112,9 +130,9 @@ provenance + `provenanceState` broadcast, all six writers migrated, `ChannelSock
 deleted, `programmer.*` WS + REST clear-all, docs renumbered.
 **Scope**: lighting7 (backend) + lighting-react (frontend).
 **Supersedes-in-part**: the "no programmer buffer" decision in
-[composition-model-prior-art.md](../research/composition-model-prior-art.md)
+[composition-model-prior-art.md](../../research/composition-model-prior-art.md)
 §"Should we adopt a programmer-style buffer?", and — in
-[lighting-composition-model.md](../lighting-composition-model.md) — the Layer 4
+[lighting-composition-model.md](../../lighting-composition-model.md) — the Layer 4
 placement, the "Divergences" claims that depend on it ("no programmer layer
 above playbacks", "no Update command"), the worked examples built on
 direct-writes-below-cues ordering, and the layer *numbering* itself: §3.1
@@ -560,7 +578,7 @@ draft of this line warned about a Postgres migration gate; there is no Postgres
 any more — `state/StateMigrations.kt` records that those gated migrations were
 deleted and no driver is on the classpath.)*
 
-What the session cut is in [followups.md](followups.md) rather than carried
+What the session cut is in [followups.md](../followups.md) rather than carried
 silently here — `FU-PAL-PRESET-MAKE-HARD` (preset assignments are target-less,
 so hardening one means inventing a target set), `FU-PAL-POSITIONAL-CONVERSION`
 (the `P1`/`P2` → named-palette tool §3.5 already allowed to slip), and
@@ -587,8 +605,21 @@ MA staged clear, highlight/lowlight personality values, linked palettes,
 MIDI binding for speed masters, per-attribute masters inside one FX instance,
 rate (percentage) masters as distinct from speed masters. As each session
 lands, promote any still-wanted deferred item into
-[followups.md](followups.md) with a trigger condition — items parked only in
+[followups.md](../followups.md) with a trigger condition — items parked only in
 this proposal fall off the backlog, since nothing re-reads a shipped proposal.
+
+**All seven were promoted** — six as trigger-gated follow-ups on 2026-08-14, one
+shipped:
+
+| Deferred item | Now |
+|---|---|
+| Per-user programmers | `FU-PROG-PER-USER` — trigger: a second operator |
+| MA staged clear | `FU-PROG-STAGED-CLEAR` — trigger: §5.6's "the simple version bites" |
+| Highlight/lowlight personality values | `FU-PROG-HIGHLIGHT-PERSONALITY` — Highlight itself shipped as dimmer-to-full; the personality set and lowlight are the follow-up |
+| Linked palettes | `FU-PAL-LINKED` — needs cycle detection and graph-walking republish, not just a `ref:` in a palette entry |
+| MIDI binding for speed masters | `FU-SPEED-MIDI-BINDING` — needs a new binding *target type*; there is no tempo entry in `controlSurfaceTypes.kt` at all |
+| Per-attribute masters inside one FX instance | `FU-SPEED-PER-ATTRIBUTE` — trigger: a composite that needs split tempos |
+| Rate masters distinct from speed masters | **Shipped backend-only in Session 5**; the picker is `FU-SPEED-RATEMASTER-UI`, gated on the first shipped WALL_CLOCK effect |
 
 ## 7. Open questions
 

@@ -4,7 +4,7 @@ This document specifies how lighting7 composes the DMX channel output sent each 
 
 Related:
 - Strategic plan for adopting this model: [cue-authoring-unification-plan.md](plans/completed/cue-authoring-unification-plan.md).
-- The programmer redesign that introduced Layer 2 and renumbered the stack: [programmer-redesign-proposal.md](plans/programmer-redesign-proposal.md).
+- The programmer redesign that introduced Layer 2 and renumbered the stack: [programmer-redesign-proposal.md](plans/completed/programmer-redesign-proposal.md).
 - Effect engine details: [fx-engineering.md](fx-engineering.md).
 - DMX transport and parking: [dmx-engineering.md](dmx-engineering.md).
 - Prior-art survey that drove these decisions: [research/composition-model-prior-art.md](research/composition-model-prior-art.md).

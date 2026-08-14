@@ -126,7 +126,7 @@ Our Phase 0 design diverges: we auto-persist direct writes into the cue being ed
 ### Should we adopt a programmer-style buffer?
 
 > **Superseded (2026-08).** The "no programmer" decision below was reversed by
-> [programmer-redesign-proposal.md](../plans/programmer-redesign-proposal.md): the
+> [programmer-redesign-proposal.md](../plans/completed/programmer-redesign-proposal.md): the
 > PROGRAMMER now exists as Layer 2, above cues and effects, with owner-slot semantics,
 > a sticky touched flag, and a blind gate (Session 1 shipped the backend core).
 > `cueEdit` auto-persist survives as the direct-edit path alongside it. The arguments

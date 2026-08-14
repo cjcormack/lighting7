@@ -1,13 +1,23 @@
 # Lighting7 Follow-ups
 
-Consolidated follow-up items from the completed cue-authoring-unification and
-control-surface plans (Phases 0–9 landed through 2026-04-23). Each entry is
+Consolidated follow-up items from the completed plans in
+[`completed/`](completed/) — cue-authoring-unification and control-surface
+(Phases 0–9, through 2026-04-23), windows-distribution, cloud-sync, and the
+programmer redesign (Sessions 1–5, through 2026-08-14). Each entry is
 self-contained so a Claude Code session can pick up one item cold.
 
-> **Status (2026-04-25)**: Active backlog drained. Every open item is
-> **Trigger-gated**, **Blocked**, or **Manual** — nothing is in **Ready**. Do
-> not poll this doc; consult it only when your current work might fire a
-> listed trigger (CLAUDE.md → "Follow-ups" explains when to look).
+> **Status (2026-08-14)**: The programmer redesign's five sessions landed and
+> deposited their cuts here, so the backlog is **no longer drained** — six items
+> are **Ready**: `FU-PROG-L3RESOLVER-RENAME`, `FU-PROG-VIS-SOURCE`,
+> `FU-PROG-RECORD-SELECTION-SCOPE`, `FU-PAL-PRESET-MAKE-HARD`,
+> `FU-PAL-POSITIONAL-CONVERSION`, and `FU-DIST-ICONS` (which has been Ready since
+> 2026-04-28 — the previous "nothing is in Ready" note predated it). Two
+> **Manual** items are the last unverified behaviour of the programmer work:
+> `FU-MANUAL-PALETTE-TOURING` and `FU-MANUAL-SPEED-MASTERS-RIG`, the second of
+> which needs a backend restart before it can even be attempted. Everything else
+> remains **Trigger-gated**, **Blocked**, or **Manual**. Still don't poll this
+> doc; consult it when your work might fire a listed trigger (CLAUDE.md →
+> "Follow-ups" explains when to look), or when you want a Ready item to pick up.
 
 ## How to use
 
@@ -172,6 +182,26 @@ master.
 **Trigger to revisit**: an operator asks why the pulse doesn't follow their
 effect's master, or the masters strip grows a per-tile beat dot.
 
+### `FU-SPEED-PER-ATTRIBUTE` — per-attribute masters inside one FX instance
+
+**Status**: Trigger (a composite needs split tempos)
+**Origin**: Programmer redesign §3.6, promoted on Session 5 landing (2026-08-14)
+
+`FxInstance.speedMasterUuid` is per *instance*, which already gives "different
+speeds for different properties" for everything except composites: a position
+wave on master 2 and a dimmer chase on master 1 are simply two instances. MA3
+assigns masters per-attribute *inside* one phaser; here that would mean a
+composite (`Effect.calculateComposite`, e.g. `LightningStrike`) whose outputs
+advance on different clocks.
+
+Cut deliberately, not missed — a composite computes every output from a single
+phase, and that coupling is the whole reason it is a composite rather than N
+instances. Splitting it means `calculateComposite` taking a per-output phase map
+instead of one phase, and a picker that can address a constituent.
+
+**Trigger to revisit**: an operator wants one shipped composite's constituents on
+different tempos and cannot express it as separate instances.
+
 ### `FU-PROG-L3RESOLVER-RENAME` — rename `Layer3Resolver` to `CueAssignmentResolver`
 
 **Status**: Ready (standalone mechanical commit)
@@ -187,16 +217,6 @@ its own commit with no behavioural changes: `Layer3Resolver` →
 `CueAssignmentResolver`, `currentLayer3State` → `currentCueLayerState`, and the
 `*Layer3*` engine internals to match. Grep docs afterwards — the composition
 model doc points at this item.
-
-### ~~`FU-PROG-EFFECTSREMOVED-FIELD` — drop `ToggleLocateResponse.effectsRemoved`~~
-
-**Status**: Done (Programmer redesign Session 2, 2026-08)
-**Origin**: Programmer redesign Session 1 (2026-08), §3.2 locate simplification
-
-Locate stopped removing effects when programmer suppression replaced destruction,
-leaving `effectsRemoved` a constant 0 kept only because the lighting-react frontend
-read it. Session 2 removed the field from `ToggleLocateResponse` and from
-`lighting-react`'s `ToggleLocateResponse` type in the same change.
 
 ### `FU-PROG-VIS-SOURCE` — Stage3D vis-source selector
 
@@ -227,6 +247,64 @@ Note when picking this up: `FixtureModel`'s value reads all funnel through
 value provider instead of importing `lightingApi.channels`". Also note the preview
 pane is Chromium while the rig is driven from Safari, so a clean preview is not
 proof for WebGL-adjacent changes.
+
+### `FU-PROG-PER-USER` — per-user programmers
+
+**Status**: Trigger (a second operator)
+**Origin**: Programmer redesign §5 decision 2, promoted on Session 5 landing (2026-08-14)
+
+`ProgrammerStore` is a **single shared programmer** — a locked decision for a
+solo-operator system, and the reason two browser tabs see each other's edits (the
+`provenanceState` broadcast is what tells the second tab to re-read
+`programmer.state`). MA3 gives each user their own.
+
+The store is keyed so the change is mechanical rather than structural: `Slot`
+already carries a `ProgrammerOwner`, and a user dimension is another key
+component beside `(target, propertyName)`. The expensive half is everywhere the
+programmer is *read* as a singleton — the blind gate, Clear, Record/Include/Update,
+the sheets' provenance colouring, and the `programmer.*` broadcast fan-out would
+all need a user scope, and the merge would need a rule for two users holding the
+same property.
+
+**Trigger to revisit**: two people programming one show at once — a second
+operator on a tablet whose edits must not appear on the first's stage.
+
+### `FU-PROG-STAGED-CLEAR` — MA-style staged three-press Clear
+
+**Status**: Trigger (the simple Clear bites)
+**Origin**: Programmer redesign §5 decision 6, promoted on Session 5 landing (2026-08-14)
+
+Clear ships as one action with a fade time, plus clear-selected and the
+FX-vs-values split (`ProgrammerToolbar` disables it only when both are empty).
+MA stages it: first press clears the selection, second clears values, third
+clears the whole programmer — muscle memory built for a hardware key, which is
+why it was cut for a web UI where the three are separate controls anyway.
+
+Decision §5.6 named its own trigger: **revisit if the simple version bites.**
+Concretely that means an operator reporting they cleared more than they meant to,
+or reaching for Clear repeatedly to get a partial release.
+
+### `FU-PROG-HIGHLIGHT-PERSONALITY` — highlight/lowlight personality values
+
+**Status**: Trigger (a rig big enough to lose a head in)
+**Origin**: Programmer redesign §6 deferred list, promoted on Session 5 landing (2026-08-14)
+
+`useHighlight` (`lighting-react/src/components/fixtures-list/useHighlight.ts`)
+takes every selected target's **dimmer to full** while held and restores the
+previous programmer state on release. Consoles do more: a per-fixture-type
+*highlight personality* — open the shutter, drop the gobo, go to open white,
+sometimes centre the head — so a highlighted moving head is actually findable,
+plus **lowlight**, which dims everything *not* selected instead.
+
+Scope, if picked up: a highlight-value set on the fixture type (natural home is
+the trait/`FixtureTypeRegistry` layer that already knows a fixture has a shutter
+or a colour wheel), with `useHighlight` writing the whole set rather than one
+dimmer property. Its capture/restore machinery is already per-property and
+per-target, so it widens rather than changes shape. Lowlight is the cheaper half
+and needs no personality data — invert the target set and scale.
+
+**Trigger to revisit**: an operator can't pick their highlighted head out of a
+wash, or asks for lowlight by name.
 
 ---
 
@@ -319,6 +397,32 @@ rule.
 Revisit only if an operator asks, and if they do, scope it to COLOUR and make it
 an explicit gesture ("apply, filling gaps") rather than a mode on the existing
 one.
+
+---
+
+### `FU-PAL-LINKED` — linked palettes (a palette entry that references another palette)
+
+**Status**: Trigger (a palette maintained as a copy of another)
+**Origin**: Programmer redesign §2 ("phase-later at most"), promoted on Session 5 landing (2026-08-14)
+
+A `Palette` entry holds a resolved `PropertyValue` per fixture. Consoles also let
+one palette *reference* another, so "Warm Wash" can be defined as "House Amber"
+and follow it when that changes — the same touring leverage the cue→palette
+reference gives, one level up.
+
+Session 4 shipped only the cue/preset/programmer → palette direction, and the
+machinery is closer than it looks: `resolveAssignmentValueForFixture` is the
+single door for `ref:{uuid}` and already runs before `parseAssignmentValue`, so a
+palette entry whose stored value is a `ref:` would resolve through the same path.
+What is genuinely new is **cycle detection** (A → B → A must be refused at write
+time, not discovered at 50 Hz), depth-bounded resolution inside `PaletteRegistry`'s
+version-counter cache, and extending republish-on-palette-edit to walk the
+reference graph rather than one hop — plus a `PALETTE_IN_USE` delete guard that
+counts palette-to-palette references too.
+
+**Trigger to revisit**: a show is found keeping one palette hand-synced to
+another, which is the same signal `FU-PAL-POSITIONAL-CONVERSION` waits on. If both
+fire together, do the conversion first — it decides how many palettes exist.
 
 ---
 
@@ -766,8 +870,63 @@ add the test.
 
 ## Manual hardware validation
 
-These are operational validations pending an operator session on the X-Touch
-Compact. No engineering scope; each is 10–15 minutes end-to-end.
+These are operational validations pending an operator session on the rig (most
+on the X-Touch Compact). No engineering scope; each is 10–15 minutes end-to-end.
+
+### `FU-MANUAL-PALETTE-TOURING` — palette edit moves a live look (Session 4)
+
+**Status**: Manual
+**Origin**: Programmer redesign Session 4, 2026-08-14
+
+Session 4 was verified on a live rig for record, include, apply, cue-side badges
+and health, and Make Hard at both levels. The one behaviour **not** verified on
+stage is the point of the whole feature: **edit a palette while a cue that
+references it is live, and watch the output move without re-firing the cue.**
+
+Republish-on-palette-edit is unit-covered, but the path it exercises is long —
+`PaletteRegistry` cache invalidation → the version counter's re-check →
+`replaceCueAssignments` (which preserves `cueFadeWeights`, unlike
+`setCueAssignments`) → the controller write. A stale cache or a dropped republish
+would look exactly like "nothing happened", which is indistinguishable from
+operator error unless someone is watching lamps.
+
+**Manual test**: record a COLOUR palette from two heads → author a cue that
+references it → GO the cue → edit the palette (change one head's colour) → the
+live heads move, the other cue content does not, and no cue re-fire was needed.
+Repeat with a POSITION palette on a moving head, which is where per-fixture
+resolution matters (the same `ref:` string must resolve to a different pan/tilt
+per head). Then mid-crossfade: edit a palette referenced by the *incoming* cue
+while the fade is running, and confirm the fade continues rather than snapping —
+that is the `cueFadeWeights` preservation.
+
+### `FU-MANUAL-SPEED-MASTERS-RIG` — two masters driving one show (Session 5)
+
+**Status**: Manual — **backend restart required first** (new classes)
+**Origin**: Programmer redesign Session 5, 2026-08-14
+
+Session 5 shipped with a restart still outstanding, so **no part of the speed
+master bank has run against the rig**. `SpeedMasterBankTest` pins the tick-interval
+arithmetic (the old `toLong()` truncation ran 120 BPM at ~125, which with two
+masters is *relative* drift at 120:60 ⇒ 2.05:1) and `SocketMessageWireFormatTest`
+pins the master-1 wire compatibility, but the single-engine-pass composition — one
+`ControllerTransaction` per frame however many masters ticked — has only ever been
+exercised by tests.
+
+Coordinate the restart with the user before doing this; it may be driving a live
+rig.
+
+**Manual test**: restart the backend → confirm the default bank seeds and the
+existing BPM tile still reads and taps master 1 (the wire-compat promise, from a
+client that never learned about masters). Then: put a position wave on master 2 at
+half master 1's BPM, a dimmer chase on master 1, both on the same fixtures →
+confirm the two run at a visibly 2:1 ratio and hold it over a few minutes (drift
+is what the deadline timer fixes, and it only shows up over time). Tap master 2 →
+only its effect changes rate. Finally check the legacy surfaces still land on
+master 1: script `setBpm`, REST `/fx/clock/*`, and `setFxBpm` over WS.
+
+Note `FU-SPEED-BEATINDICATOR-PERMASTER` while you're there — `BeatIndicator`
+pulses from master 1 regardless, so expect the pulse next to the master-2 effect
+to be *wrong*. That's known, not a new fault.
 
 ### `FU-MANUAL-SCALER-PROJECT-SWITCH` — Scaler state across project switches (Phase 9)
 
@@ -866,6 +1025,20 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
 
+- `FU-PROG-PROVENANCE-STACKID` — commit 714d742 (2026-08-12) — CUE-sourced
+  provenance entries carry `cueStackId` alongside `cueId`. Raised in Session 1,
+  where provenance shipped with `cueId` only; Session 3 needed the stack id so
+  Update's Mode B checklist can group overridden cues by stack, which is how the
+  operator recognises what they are sitting on top of. (Filed here retroactively
+  on 2026-08-14 — Session 3 deleted the open item outright instead of moving it,
+  which left no audit trail.)
+- `FU-PROG-EFFECTSREMOVED-FIELD` — Programmer redesign Session 2 (2026-08-12) —
+  dropped `ToggleLocateResponse.effectsRemoved`. Locate stopped removing effects
+  once programmer suppression replaced destruction (Session 1), leaving the field
+  a constant 0 kept only because the lighting-react frontend read it. Session 2
+  removed it from `ToggleLocateResponse` and from lighting-react's mirror type in
+  one change. (Was struck through in place above until 2026-08-14; moved here to
+  match the convention.)
 - `FU-BE-MOVE-IN-DARK` — commit 0593d81 (2026-04-25) — Layer3 position
   snap during outgoing fade. Hardware blocker cleared by
   `Fusion100SpotMkIIFixture` modes 8CH/15CH (both `WithDimmer` +
