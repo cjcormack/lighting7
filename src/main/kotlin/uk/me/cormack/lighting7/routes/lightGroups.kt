@@ -121,6 +121,7 @@ internal fun Route.routeApiRestGroups(state: State) {
                         programmerOwned = FxEngine.isProgrammerFxPriority(instance.priority),
                         intensityMultiplier = instance.intensityMultiplier,
                         speedMasterUuid = instance.speedMasterUuid?.toString(),
+                        rateSpeedMasterUuid = instance.rateSpeedMasterUuid?.toString(),
                     )
                 }
                 call.respond(dtos)
@@ -205,6 +206,8 @@ data class AddGroupFxRequest(
     val stepTiming: Boolean? = null,
     /** Speed master to subscribe to, as the master's uuid (null → master 1). */
     val speedMasterUuid: String? = null,
+    /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
+    val rateSpeedMasterUuid: String? = null,
     /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]). See [AddEffectRequest.programmerOwned].
@@ -240,6 +243,8 @@ data class GroupEffectDto(
     val intensityMultiplier: Double = 1.0,
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid: String? = null,
+    /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
+    val rateSpeedMasterUuid: String? = null,
 )
 
 @Serializable
@@ -432,6 +437,7 @@ private fun applyGroupEffect(
         this.elementFilter = elFilter
         request.stepTiming?.let { this.stepTiming = it }
         speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
+        rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
     }
 
     markProgrammerOwned(instance, request.programmerOwned)

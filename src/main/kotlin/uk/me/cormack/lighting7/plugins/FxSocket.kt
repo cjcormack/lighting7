@@ -75,6 +75,10 @@ data class FxEffectState(
     val speedMasterUuid: String? = null,
     /** 1-based display index of that master — what the FX-sheet chip renders. */
     val speedMasterIndex: Int = 1,
+    /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
+    val rateSpeedMasterUuid: String? = null,
+    /** 1-based display index of that rate master. */
+    val rateSpeedMasterIndex: Int = 1,
 )
 
 @Serializable
@@ -174,6 +178,8 @@ fun setupFxSubscriptions(scope: SocketScope) {
                 timingSource = effectState.timingSource,
                 speedMasterUuid = effectState.speedMasterUuid,
                 speedMasterIndex = effectState.speedMasterIndex,
+                rateSpeedMasterUuid = effectState.rateSpeedMasterUuid,
+                rateSpeedMasterIndex = effectState.rateSpeedMasterIndex,
             )
         }
         scope.send(FxStateOutMessage(
@@ -186,7 +192,16 @@ fun setupFxSubscriptions(scope: SocketScope) {
     // Periodic beat sync for UI drift correction (every 16 beats ≈ 8s at 120 BPM), plus an
     // immediate sync on the next beat when [SocketScope.sendNextBeat] is set by a
     // requestBeatSync message.
-    scope.subscribe(clock.beatFlow.filter { beat -> beat.beatNumber % 16 == 0L || scope.sendNextBeat.get() }) { beat ->
+    //
+    // `getAndSet(false)` rather than `get()`: the flag starts life `true` and nothing ever
+    // cleared it, so this filter was permanently short-circuited and every connection got a
+    // frame on EVERY beat — 16x the intended traffic, and the documented "every 16 beats"
+    // cadence was never what actually shipped. Consuming the flag makes the request the
+    // one-shot it was always described as. Note this makes the client's local interpolation
+    // load-bearing for the first time; BeatIndicator has always had it.
+    scope.subscribe(
+        clock.beatFlow.filter { beat -> beat.beatNumber % 16 == 0L || scope.sendNextBeat.getAndSet(false) }
+    ) { beat ->
         scope.send(BeatSyncOutMessage(
             beatNumber = beat.beatNumber,
             bpm = clock.bpm.value,
@@ -225,6 +240,8 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
             timingSource = effect.timingSource.name,
             speedMasterUuid = effect.speedMasterUuid?.toString(),
             speedMasterIndex = masterStates.getOrNull(effect.speedMasterSlot)?.index ?: 1,
+            rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
+            rateSpeedMasterIndex = masterStates.getOrNull(effect.rateMasterSlot)?.index ?: 1,
         )
     }
     return FxStateOutMessage(

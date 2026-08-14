@@ -35,6 +35,8 @@ data class CuePresetApplicationDto(
      * effect's own [FxPresetEffectDto.speedMasterUuid] → master 1).
      */
     val speedMasterUuid: String? = null,
+    /** Per-application wall-clock rate-master override (null → the effect's own). */
+    val rateSpeedMasterUuid: String? = null,
 )
 
 /**
@@ -91,6 +93,8 @@ data class CueAdHocEffectDto(
     val sortOrder: Int = 0,
     /** Speed master uuid (null → master 1). Uuid, not int id — see [FxPresetEffectDto.speedMasterUuid]. */
     val speedMasterUuid: String? = null,
+    /** Wall-clock rate master (null → unscaled). See [FxPresetEffectDto.rateSpeedMasterUuid]. */
+    val rateSpeedMasterUuid: String? = null,
 ) {
     val target: TargetRef get() = TargetRef.of(targetType, targetKey)
 }
@@ -178,6 +182,7 @@ object DaoCuePresetApplications : IntIdTable("cue_preset_applications") {
      * [FxPresetEffectDto.speedMasterUuid] → master 1).
      */
     val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
+    val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 }
 
@@ -192,6 +197,7 @@ class DaoCuePresetApplication(id: EntityID<Int>) : IntEntity(id) {
     var randomWindowMs by DaoCuePresetApplications.randomWindowMs
     var sortOrder by DaoCuePresetApplications.sortOrder
     var speedMasterUuid by DaoCuePresetApplications.speedMasterUuid
+    var rateSpeedMasterUuid by DaoCuePresetApplications.rateSpeedMasterUuid
     var uuid by DaoCuePresetApplications.uuid
 }
 
@@ -218,6 +224,7 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
     val sortOrder = integer("sort_order").default(0)
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
+    val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 }
 
@@ -251,6 +258,7 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var randomWindowMs by DaoCueAdHocEffects.randomWindowMs
     var sortOrder by DaoCueAdHocEffects.sortOrder
     var speedMasterUuid by DaoCueAdHocEffects.speedMasterUuid
+    var rateSpeedMasterUuid by DaoCueAdHocEffects.rateSpeedMasterUuid
     var uuid by DaoCueAdHocEffects.uuid
 }
 

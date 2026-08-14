@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.plugins
 
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -42,6 +43,17 @@ data class SpeedMastersTapInMessage(
     val masterUuid: String? = null,
 ) : SpeedMasterInMessage()
 
+/**
+ * Ask for one immediate beat frame for [masterUuid] (null/omitted → master 1), so a
+ * freshly-mounted indicator doesn't wait out the throttle before it can lock phase. The
+ * keyed twin of `requestBeatSync`.
+ */
+@Serializable
+@SerialName("speedMasters.requestBeat")
+data class SpeedMastersRequestBeatInMessage(
+    val masterUuid: String? = null,
+) : SpeedMasterInMessage()
+
 // ─── Outbound ───────────────────────────────────────────────────────────
 
 @Serializable
@@ -77,6 +89,29 @@ data class SpeedMasterChangedOutMessage(
     val timestampMs: Long,
 ) : SpeedMasterOutMessage()
 
+/**
+ * One master crossed a beat boundary — the keyed analogue of `beatSync`, which is wired to
+ * master 1's clock object and so can never speak for any other master.
+ *
+ * Throttled to one frame per [BEAT_FRAME_INTERVAL] beats (plus `speedMasters.requestBeat`),
+ * on the same reasoning as `beatSync`: the client runs a local timer off [bpm] between
+ * frames and only needs the server to correct its drift. Emitted for master 1 too, so the
+ * stream is uniform for a client that would rather key everything the same way — the legacy
+ * `beatSync` stays exactly as it was for clients that don't.
+ */
+@Serializable
+@SerialName("speedMasters.beat")
+data class SpeedMasterBeatOutMessage(
+    val masterUuid: String?,
+    val index: Int,
+    val beatNumber: Long,
+    val bpm: Double,
+    val timestampMs: Long,
+) : SpeedMasterOutMessage()
+
+/** Beats between unsolicited beat frames. Matches `beatSync`'s interval — ~8s at 120 BPM. */
+private const val BEAT_FRAME_INTERVAL = 16L
+
 // ─── Handler ────────────────────────────────────────────────────────────
 
 suspend fun handleSpeedMasters(scope: SocketScope, message: SpeedMasterInMessage) {
@@ -90,6 +125,16 @@ suspend fun handleSpeedMasters(scope: SocketScope, message: SpeedMasterInMessage
         is SpeedMastersTapInMessage -> {
             withWriteTarget(message.masterUuid) { bank.tap(it) }
             scope.send(buildSpeedMastersState(bank))
+        }
+        is SpeedMastersRequestBeatInMessage -> {
+            // Unlike a tempo write, a garbled uuid here is harmless — it just parks a
+            // request nothing will ever match — but drop it anyway rather than letting it
+            // resolve to master 1 and pulse the wrong indicator.
+            if (message.masterUuid == null) {
+                scope.pendingBeatRequests.add(null)
+            } else {
+                speedMasterUuidOrNull(message.masterUuid)?.let { scope.pendingBeatRequests.add(it) }
+            }
         }
     }
 }
@@ -126,6 +171,26 @@ fun setupSpeedMasterSubscriptions(scope: SocketScope) {
                 bpm = change.bpm,
                 source = change.source.name,
                 timestampMs = change.timestampMs,
+            )
+        )
+    }
+
+    // One subscription for the whole bank, not one per master: `bank.beats` is already
+    // tagged at emit time, so a master added or removed by a reload needs no re-binding
+    // here. `remove` is the consume half of the one-shot request — it returns whether the
+    // request was pending AND clears it, so the throttle resumes on the next beat.
+    scope.subscribe(
+        bank.beats.filter { beat ->
+            beat.beatNumber % BEAT_FRAME_INTERVAL == 0L || scope.pendingBeatRequests.remove(beat.uuid)
+        }
+    ) { beat ->
+        scope.send(
+            SpeedMasterBeatOutMessage(
+                masterUuid = beat.uuid?.toString(),
+                index = beat.index,
+                beatNumber = beat.beatNumber,
+                bpm = beat.bpm,
+                timestampMs = beat.timestampMs,
             )
         )
     }

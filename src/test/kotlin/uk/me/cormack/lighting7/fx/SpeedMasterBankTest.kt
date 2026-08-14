@@ -154,6 +154,75 @@ class SpeedMasterBankTest {
         assertEquals(SpeedMasterSource.MANUAL, change.source)
     }
 
+    // ─── Beat fan-out ────────────────────────────────────────────────────
+
+    /**
+     * Collect from [SpeedMasterBank.beats] while the bank runs for [forMs], then stop.
+     * Clocks run at 300 BPM in these tests (5 beats/s) so a short window still sees several.
+     */
+    private fun collectBeats(
+        bank: SpeedMasterBank,
+        forMs: Long = 700,
+    ): List<SpeedMasterBank.Beat> = runBlocking {
+        val beats = ConcurrentLinkedQueue<SpeedMasterBank.Beat>()
+        val collector = launch(Dispatchers.Default) { bank.beats.collect { beats.add(it) } }
+        delay(50)
+        bank.start(this)
+        delay(forMs)
+        bank.stop()
+        collector.cancel()
+        beats.toList()
+    }
+
+    @Test
+    fun `every master's beats are tagged with its own identity`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, name = "Chorus", bpm = 300.0)))
+
+        val beats = collectBeats(bank)
+
+        // The whole point of the keyed stream: master 2's beats are distinguishable from
+        // master 1's, which `beatSync` can never be — it is wired to one clock object.
+        val fromM1 = beats.filter { it.uuid == u1 }
+        val fromM2 = beats.filter { it.uuid == u2 }
+        assertTrue(fromM1.isNotEmpty(), "master 1 must appear on the keyed stream too")
+        assertTrue(fromM2.isNotEmpty(), "master 2 must emit its own beats")
+        assertTrue(fromM1.all { it.index == 1 })
+        assertTrue(fromM2.all { it.index == 2 })
+        assertTrue(fromM2.all { it.bpm == 300.0 }, "each beat carries its own master's tempo")
+    }
+
+    @Test
+    fun `a master added by a reload starts emitting without re-wiring`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0)))
+        // The reload mints a brand-new clock for master 2. Nothing re-subscribes — the hook
+        // is wired at clock creation and the tagging happens at emit time.
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, bpm = 300.0)))
+
+        val beats = collectBeats(bank)
+
+        assertTrue(beats.any { it.uuid == u2 }, "a master added after the first load must still emit")
+    }
+
+    @Test
+    fun `a deleted master stops appearing on the stream`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, bpm = 300.0)))
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0)))
+
+        val beats = collectBeats(bank)
+
+        assertTrue(beats.any { it.uuid == u1 }, "the surviving master keeps beating")
+        assertTrue(beats.none { it.uuid == u2 }, "a dropped master's clock is stopped, not left emitting")
+    }
+
     // ─── Timer accuracy ──────────────────────────────────────────────────
 
     /**

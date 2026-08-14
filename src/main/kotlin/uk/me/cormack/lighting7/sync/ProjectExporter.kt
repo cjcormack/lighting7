@@ -482,6 +482,7 @@ class ProjectExporter(private val state: State) {
                         randomWindowMs = a.randomWindowMs,
                         sortOrder = a.sortOrder,
                         speedMasterUuid = a.speedMasterUuid?.toString(),
+                        rateSpeedMasterUuid = a.rateSpeedMasterUuid?.toString(),
                     ),
                 )
                 liveKeys.add(RecordKey("cuePresetApplications", a.uuid))
@@ -514,6 +515,7 @@ class ProjectExporter(private val state: State) {
                         randomWindowMs = e.randomWindowMs,
                         sortOrder = e.sortOrder,
                         speedMasterUuid = e.speedMasterUuid?.toString(),
+                        rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
                     ),
                 )
                 liveKeys.add(RecordKey("cueAdHocEffects", e.uuid))

@@ -122,6 +122,7 @@ data class CueEditAddPresetApplicationInMessage(
     val randomWindowMs: Long? = null,
     /** Per-application speed-master override (null → each preset effect's own → master 1). */
     val speedMasterUuid: String? = null,
+    val rateSpeedMasterUuid: String? = null,
 ) : CueEditInMessage()
 
 @Serializable
@@ -258,6 +259,7 @@ suspend fun handleCueEdit(scope: SocketScope, message: CueEditInMessage) {
                 message.presetId, message.targets,
                 message.delayMs, message.intervalMs, message.randomWindowMs,
                 speedMasterUuid = speedMasterUuidOrNull(message.speedMasterUuid),
+                rateSpeedMasterUuid = speedMasterUuidOrNull(message.rateSpeedMasterUuid),
             )
         is CueEditAddAdHocEffectInMessage ->
             CueEditSessionHandler.addAdHocEffect(state, ref, message.cueId, message.effect)
@@ -645,6 +647,7 @@ object CueEditSessionHandler {
         intervalMs: Long?,
         randomWindowMs: Long?,
         speedMasterUuid: java.util.UUID? = null,
+        rateSpeedMasterUuid: java.util.UUID? = null,
     ): OutMessage {
         val session = sessionRef.get()
         if (session == null || session.cueId != cueId) {
@@ -665,6 +668,7 @@ object CueEditSessionHandler {
                     this.randomWindowMs = randomWindowMs
                     this.sortOrder = cue.presetApplications.count().toInt()
                     this.speedMasterUuid = speedMasterUuid
+                    this.rateSpeedMasterUuid = rateSpeedMasterUuid
                 }
                 val applyData = if (session.mode == CueEditMode.LIVE) buildCueApplyData(cue) else null
                 val effects = if (shouldSpawn) preset.effects else null
@@ -690,6 +694,7 @@ object CueEditSessionHandler {
                         val instance = createInstanceFromPresetForCue(
                             presetEffect, fxTarget, presetId, state, cueId,
                             overrideSpeedMasterUuid = speedMasterUuid,
+                            overrideRateSpeedMasterUuid = rateSpeedMasterUuid,
                         )
                         instance.cueId = cueId
                         instance.priority = cueDerivedPriority(applyData)
@@ -742,6 +747,7 @@ object CueEditSessionHandler {
                     randomWindowMs = effect.randomWindowMs
                     sortOrder = effect.sortOrder.takeIf { it > 0 } ?: nextSort
                     speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
+                    rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
                 }
                 if (session.mode == CueEditMode.LIVE) buildCueApplyData(cue) else null
             }
@@ -764,6 +770,7 @@ object CueEditSessionHandler {
                 stepTiming = effect.stepTiming,
                 parameters = effect.parameters,
                 speedMasterUuid = effect.speedMasterUuid,
+                rateSpeedMasterUuid = effect.rateSpeedMasterUuid,
             )
             val fxTarget = runCatching {
                 resolveTargetForCue(state, target, presetEffectDto)

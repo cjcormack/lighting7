@@ -99,6 +99,16 @@ sealed class AssignmentHealth {
     @Serializable
     @SerialName("unknownBank")
     data class UnknownBank(val deviceTypeKey: String, val bankId: String) : AssignmentHealth()
+
+    /**
+     * A `speedMasterBpm` / `speedMasterTap` binding names a master that no longer exists in
+     * the bank. Control-surface-only: an *effect* whose master vanished degrades to master 1
+     * and keeps running, but a binding that silently retuned the global tempo instead of the
+     * master the operator chose would be worse than one that reports itself dead.
+     */
+    @Serializable
+    @SerialName("missingSpeedMaster")
+    data class MissingSpeedMaster(val masterUuid: String) : AssignmentHealth()
 }
 
 /**
@@ -122,4 +132,5 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.MissingCue -> "missing cue id=${health.cueId}"
     is AssignmentHealth.UnknownBank ->
         "unknown bank '${health.bankId}' for device '${health.deviceTypeKey}'"
+    is AssignmentHealth.MissingSpeedMaster -> "missing speed master ${health.masterUuid}"
 }

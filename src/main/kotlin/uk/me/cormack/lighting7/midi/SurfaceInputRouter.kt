@@ -224,6 +224,8 @@ class SurfaceInputRouter(
                 actions.writeFixtureProperty(target.fixtureKey, target.propertyName, value7Bit)
             is BindingTarget.GroupProperty ->
                 actions.writeGroupProperty(target.groupName, target.propertyName, value7Bit)
+            is BindingTarget.SpeedMasterBpm ->
+                actions.writeSpeedMasterBpm(target.masterUuid, target.minBpm, target.maxBpm, value7Bit)
             else -> logger.debug(
                 "Ignoring continuous input on binding {} → {} (discrete target)",
                 binding.id, target::class.simpleName,
@@ -243,6 +245,11 @@ class SurfaceInputRouter(
             is BindingTarget.Blackout -> actions.toggleBlackout()
             is BindingTarget.GrandMasterToggle -> actions.toggleGrandMaster()
             is BindingTarget.SetBank -> bankState.setBank(target.deviceTypeKey, target.bank)
+            is BindingTarget.SpeedMasterTap -> actions.tapSpeedMaster(target.masterUuid)
+            is BindingTarget.SpeedMasterBpm -> logger.debug(
+                "Ignoring button press on binding {} → speed-master BPM (continuous target)",
+                binding.id,
+            )
             is BindingTarget.Flash -> {
                 val newlyPressed = flashTracker.pressed(binding.id)
                 if (!newlyPressed) return  // retrigger while held

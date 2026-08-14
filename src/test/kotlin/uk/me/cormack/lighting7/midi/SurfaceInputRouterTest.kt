@@ -219,6 +219,50 @@ class SurfaceInputRouterTest {
     }
 
     @Test
+    fun `SpeedMasterTap target taps the named master on press only`() {
+        val actions = RecordingActions()
+        val master = "7d444840-9dc0-11d1-b245-5ffdce74fad2"
+        val router = buildRouter(actions, listOf(binding(1, "btn-3", BindingTarget.SpeedMasterTap(master))))
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
+        // Release must be a no-op — a tap marks one beat, it does not bracket a duration.
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 18, velocity = 0u))
+
+        assertEquals(listOf<RecordedCall>(RecordedCall.TapSpeedMaster(master)), actions.calls.toList())
+    }
+
+    @Test
+    fun `SpeedMasterBpm target passes the configured window through on encoder moves`() {
+        val actions = RecordingActions()
+        // enc-1 = CC 10 on X-Touch Compact Layer A.
+        val router = buildRouter(
+            actions,
+            listOf(binding(1, "enc-1", BindingTarget.SpeedMasterBpm(masterUuid = null, minBpm = 90.0, maxBpm = 150.0))),
+        )
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 0u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 127u))
+
+        // The router hands the raw 7-bit value and the window to the action layer; the
+        // scaling itself lives in DefaultSurfaceActions, which owns the clock's clamp.
+        assertEquals(
+            listOf<RecordedCall>(
+                RecordedCall.WriteSpeedMasterBpm(null, 90.0, 150.0, 0u),
+                RecordedCall.WriteSpeedMasterBpm(null, 90.0, 150.0, 127u),
+            ),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
+    fun `a button press on a BPM target is ignored rather than jumping the tempo`() {
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(binding(1, "btn-3", BindingTarget.SpeedMasterBpm())))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
+        assertTrue(actions.calls.isEmpty(), "a press carries no position, so there is no tempo to set")
+    }
+
+    @Test
     fun `touch event is forwarded to feedback hooks`() {
         val actions = RecordingActions()
         val feedback = RecordingFeedbackHooks()
@@ -381,6 +425,12 @@ private class RecordingActions : SurfaceActions {
     override fun fireCue(cueId: Int) { calls += RecordedCall.FireCue(cueId) }
     override fun toggleBlackout(): Boolean { calls += RecordedCall.ToggleBlackout; return true }
     override fun toggleGrandMaster(): Boolean { calls += RecordedCall.ToggleGrandMaster; return true }
+    override fun writeSpeedMasterBpm(masterUuid: String?, minBpm: Double, maxBpm: Double, midiValue7Bit: UByte) {
+        calls += RecordedCall.WriteSpeedMasterBpm(masterUuid, minBpm, maxBpm, midiValue7Bit)
+    }
+    override fun tapSpeedMaster(masterUuid: String?) {
+        calls += RecordedCall.TapSpeedMaster(masterUuid)
+    }
 }
 
 /** Recording fake of [SurfaceFeedbackHooks] for tests. */
@@ -420,4 +470,11 @@ private sealed class RecordedCall {
     data class FireCue(val cueId: Int) : RecordedCall()
     data object ToggleBlackout : RecordedCall()
     data object ToggleGrandMaster : RecordedCall()
+    data class WriteSpeedMasterBpm(
+        val masterUuid: String?,
+        val minBpm: Double,
+        val maxBpm: Double,
+        val value: UByte,
+    ) : RecordedCall()
+    data class TapSpeedMaster(val masterUuid: String?) : RecordedCall()
 }

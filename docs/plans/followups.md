@@ -133,54 +133,45 @@ risks breaking visual regressions until the next consumer pays for itself.
 
 ## Backend / composition model
 
-### `FU-SPEED-RATEMASTER-UI` — rate-master picker for WALL_CLOCK effects
+### `FU-SPEED-SURFACE-TAP-LED` — LED feedback for tempo tap buttons
 
-**Status**: Trigger (first shipped WALL_CLOCK effect)
-**Origin**: Programmer redesign Session 5 (2026-08), §3.6 / locked decision 3
+**Status**: Trigger (an operator wants confirmation on the surface)
+**Origin**: Speed-master follow-ups session (2026-08-14), deliberate v1 cut
 
-The backend supports scaling a WALL_CLOCK effect's cycle by a rate master
-(`FxInstance.rateSpeedMasterUuid`; effective cycle = `beatDivision / (bpm / 120)`,
-see `calculateWallClockPhase`), but Session 5 deliberately shipped **no picker
-UI**: no shipped built-in effect declares `timingSource: WALL_CLOCK` — the path
-is only reachable from user `.fx.kts` files — so the picker would have zero
-in-tree consumers, and building it means first threading `timingSource` into the
-frontend's `EffectLibraryEntry` (`src/store/fixtureFx.ts`) so `EffectParameterForm`
-can discriminate BEAT (speed-master picker) from WALL_CLOCK (rate-master picker).
-Also note the accepted phase-jump-on-rate-change behaviour pinned in
-`WallClockTimingTest` — decide whether to fix it (accumulated scaled-elapsed
-field) before exposing a knob that makes it easy to hit.
+`BindingTarget.SpeedMasterTap` deliberately gets no LED. Every entry
+`SurfaceFeedbackPublisher` currently indexes for LEDs (`Flash`, `Blackout`,
+`GrandMasterToggle`) reflects a **steady boolean it can read back**; a tap is a
+momentary trigger with no "on" state to hold, so a blink-on-tap would need
+timer/debounce machinery that exists nowhere else in that class. The nearest
+existing shape is `FlashStateTracker`'s press/release pair, which a tap has no
+release half for. `SurfaceFeedbackPublisherTest` pins the cut with a test
+asserting tap bindings never enter the LED index — update that test rather than
+deleting it.
 
-**Trigger to revisit**: the first shipped effect that declares `WALL_CLOCK`, or
-a `.fx.kts` user asking how to point their wall-clock effect at a master.
+**Trigger to revisit**: an operator taps tempo from hardware and asks why the
+button doesn't acknowledge, or a second momentary-with-no-steady-state target
+type appears and the two can share the machinery.
 
-### `FU-SPEED-MIDI-BINDING` — MIDI binding for speed masters
+### `FU-SPEED-RATEMASTER-STATEFUL` — rate masters are inert for STATEFUL wall-clock effects
 
-**Status**: Trigger (next control-surface session)
-**Origin**: Programmer redesign proposal §3.6 (deferred list), promoted on Session 5 landing (2026-08)
+**Status**: Trigger (a stateful effect wants to follow a rate master)
+**Origin**: Speed-master follow-ups session (2026-08-14)
 
-The masters strip has per-master tap and BPM entry; the natural next step is
-binding surface controls (encoder → BPM, button → tap) through the existing
-`controlSurfaceBindings` machinery. There is currently **no** BPM/tap binding
-target at all — `routes/controlSurfaceTypes.kt` has no tempo entry — so this
-adds a binding target type, not just a master id on an existing one.
+The rate master scales `accumulatedScaledMs`, which reaches an effect as its
+*phase*. STATEFUL effects are driven by `deltaMs` instead and mostly ignore
+phase — both shipped wall-clock effects (`CandleFlicker`, `FluorescentFlicker`)
+do — so assigning them a rate master is legal, persisted, and has no audible
+effect. The UI deliberately does **not** gate the picker on `effectMode`:
+`calculateWallClockPhase` is called for every wall-clock effect regardless, and
+a user `.fx.kts` that is STATEFUL *and* reads `phase` would be scaled correctly,
+so gating would hide a working control.
 
-**Trigger to revisit**: the next control-surface work, or an operator asking to
-tap tempo from hardware.
+Making it apply to `deltaMs` too would mean handing each effect a scaled delta,
+which changes what `deltaMs` means for every stateful effect — a bigger decision
+than it looks.
 
-### `FU-SPEED-BEATINDICATOR-PERMASTER` — per-master beat pulse in the frontend
-
-**Status**: Trigger (operator confusion)
-**Origin**: Programmer redesign Session 5 (2026-08), frontend scope cut
-
-`BeatIndicator` (lighting-react) pulses from the unkeyed `beatSync` stream, which
-is deliberately bound to master 1 for wire compatibility. An effect running on
-master 2 pulses at the wrong rate next to its chip. Fix means either a keyed
-`beatSync` variant (per-master beat events over `speedMasters.*`) or deriving
-pulses client-side from `speedMasters.changed` bpm + local timers keyed by
-master.
-
-**Trigger to revisit**: an operator asks why the pulse doesn't follow their
-effect's master, or the masters strip grows a per-tile beat dot.
+**Trigger to revisit**: someone writes a stateful wall-clock effect and expects
+a rate master to speed it up.
 
 ### `FU-SPEED-PER-ATTRIBUTE` — per-attribute masters inside one FX instance
 
@@ -924,9 +915,13 @@ is what the deadline timer fixes, and it only shows up over time). Tap master 2 
 only its effect changes rate. Finally check the legacy surfaces still land on
 master 1: script `setBpm`, REST `/fx/clock/*`, and `setFxBpm` over WS.
 
-Note `FU-SPEED-BEATINDICATOR-PERMASTER` while you're there — `BeatIndicator`
-pulses from master 1 regardless, so expect the pulse next to the master-2 effect
-to be *wrong*. That's known, not a new fault.
+While you're there, check the per-master beat dots: `BeatIndicator` now takes a
+master and pulses from the keyed `speedMasters.beat` stream, so the dot beside a
+master-2 effect should track master 2 — it used to be master-1-only and visibly
+wrong, which is what `FU-SPEED-BEATINDICATOR-PERMASTER` was filed for. Watch the
+**master 1** dot in particular: `beatSync` used to (accidentally) arrive every
+beat, and now genuinely arrives every 16, so the client's local interpolation is
+load-bearing for the first time.
 
 ### `FU-MANUAL-SCALER-PROJECT-SWITCH` — Scaler state across project switches (Phase 9)
 

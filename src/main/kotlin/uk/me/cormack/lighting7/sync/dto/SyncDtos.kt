@@ -279,6 +279,8 @@ data class CuePresetApplicationJson(
     val sortOrder: Int = 0,
     /** Per-application speed-master override, remapped by ExportUuidRemapper like any uuid. */
     val speedMasterUuid: String? = null,
+    /** Per-application wall-clock rate-master override; same remapping. */
+    val rateSpeedMasterUuid: String? = null,
 )
 
 @Serializable
@@ -304,6 +306,8 @@ data class CueAdHocEffectJson(
     val sortOrder: Int = 0,
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid: String? = null,
+    /** Wall-clock rate master (null → unscaled). */
+    val rateSpeedMasterUuid: String? = null,
 )
 
 @Serializable

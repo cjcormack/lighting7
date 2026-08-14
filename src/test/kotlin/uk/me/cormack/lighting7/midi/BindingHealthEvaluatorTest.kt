@@ -4,6 +4,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fx.AssignmentHealth
 import uk.me.cormack.lighting7.show.Fixtures
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -30,15 +31,19 @@ class BindingHealthEvaluatorTest {
         return fixtures
     }
 
+    private val liveMaster: UUID = UUID.fromString("7d444840-9dc0-11d1-b245-5ffdce74fad2")
+
     private fun context(
         fixtures: Fixtures = fixturesWithHex(),
         validStackIds: Set<Int> = setOf(1, 2),
         validCueIds: Set<Int> = setOf(10, 20),
+        validSpeedMasterUuids: Set<UUID> = setOf(liveMaster),
     ): BindingHealthEvaluator.Context = BindingHealthEvaluator.Context(
         fixtures = fixtures,
         validStackIds = validStackIds,
         validCueIds = validCueIds,
         deviceTypes = ControlSurfaceRegistry.allTypes,
+        validSpeedMasterUuids = validSpeedMasterUuids,
     )
 
     @Test
@@ -155,5 +160,46 @@ class BindingHealthEvaluatorTest {
         val flashDead = BindingTarget.Flash(BindingTarget.FixtureProperty("hex-gone", "dimmer"))
         val health = BindingHealthEvaluator.evaluate(flashDead, context())
         assertIs<AssignmentHealth.MissingFixture>(health)
+    }
+
+    @Test
+    fun `an unkeyed speed-master binding means master 1 and is always Ok`() {
+        val ctx = context(validSpeedMasterUuids = emptySet())
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterBpm(), ctx))
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterTap(), ctx))
+    }
+
+    @Test
+    fun `a speed-master binding naming a live master is Ok`() {
+        val ctx = context()
+        assertEquals(
+            AssignmentHealth.Ok,
+            BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterBpm(liveMaster.toString()), ctx),
+        )
+        assertEquals(
+            AssignmentHealth.Ok,
+            BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterTap(liveMaster.toString()), ctx),
+        )
+    }
+
+    /**
+     * Unlike an *effect*, which degrades to master 1 when its master vanishes, a binding
+     * reports itself dead: silently retuning the global tempo instead of the master the
+     * operator picked would be worse than doing nothing visible.
+     */
+    @Test
+    fun `a speed-master binding naming a deleted master is MissingSpeedMaster`() {
+        val gone = UUID.randomUUID().toString()
+        val health = BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterBpm(gone), context())
+        assertEquals(AssignmentHealth.MissingSpeedMaster(gone), health)
+
+        val tapHealth = BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterTap(gone), context())
+        assertEquals(AssignmentHealth.MissingSpeedMaster(gone), tapHealth)
+    }
+
+    @Test
+    fun `a malformed speed-master uuid is reported dead rather than parsed leniently`() {
+        val health = BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterTap("not-a-uuid"), context())
+        assertEquals(AssignmentHealth.MissingSpeedMaster("not-a-uuid"), health)
     }
 }

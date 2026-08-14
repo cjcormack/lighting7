@@ -2,8 +2,10 @@ package uk.me.cormack.lighting7.midi
 
 import uk.me.cormack.lighting7.fx.AssignmentHealth
 import uk.me.cormack.lighting7.fx.PersistedFixtureReferenceValidator
+import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
+import java.util.UUID
 
 /**
  * Pure evaluator that maps a [BindingTarget] onto an [AssignmentHealth] given a snapshot
@@ -30,12 +32,15 @@ object BindingHealthEvaluator {
      * @param validStackIds IDs of cue stacks that currently exist in the project
      * @param validCueIds IDs of cues that currently exist in the project
      * @param deviceTypes device profiles — used for [BindingTarget.SetBank] bank validation
+     * @param validSpeedMasterUuids uuids currently in the bank; master 1 is addressed by a
+     *   null uuid and so never needs to appear here
      */
     data class Context(
         val fixtures: Fixtures,
         val validStackIds: Set<Int>,
         val validCueIds: Set<Int>,
         val deviceTypes: List<ControlSurfaceRegistry.DeviceTypeInfo>,
+        val validSpeedMasterUuids: Set<UUID> = emptySet(),
     )
 
     fun evaluate(target: BindingTarget, context: Context): AssignmentHealth = when (target) {
@@ -64,6 +69,8 @@ object BindingHealthEvaluator {
             }
         }
         is BindingTarget.Flash -> evaluate(target.target, context)
+        is BindingTarget.SpeedMasterBpm -> checkSpeedMaster(target.masterUuid, context)
+        is BindingTarget.SpeedMasterTap -> checkSpeedMaster(target.masterUuid, context)
         BindingTarget.Blackout -> AssignmentHealth.Ok
         BindingTarget.GrandMasterToggle -> AssignmentHealth.Ok
     }
@@ -71,4 +78,16 @@ object BindingHealthEvaluator {
     private fun checkStack(stackId: Int, context: Context): AssignmentHealth =
         if (stackId in context.validStackIds) AssignmentHealth.Ok
         else AssignmentHealth.MissingStack(stackId)
+
+    /**
+     * Null means master 1, which always exists — so an unkeyed binding is always healthy.
+     * A malformed uuid is reported dead rather than parsed leniently: it can never resolve
+     * to anything, and saying so is more useful than a binding that quietly does nothing.
+     */
+    private fun checkSpeedMaster(masterUuid: String?, context: Context): AssignmentHealth {
+        if (masterUuid == null) return AssignmentHealth.Ok
+        val parsed = speedMasterUuidOrNull(masterUuid)
+        return if (parsed != null && parsed in context.validSpeedMasterUuids) AssignmentHealth.Ok
+        else AssignmentHealth.MissingSpeedMaster(masterUuid)
+    }
 }

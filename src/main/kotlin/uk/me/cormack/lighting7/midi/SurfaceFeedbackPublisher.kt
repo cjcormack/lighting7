@@ -14,6 +14,8 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.SpeedMasterBank
+import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.perf.MidiLatencyStage
 import uk.me.cormack.lighting7.perf.MidiLatencyTracker
@@ -22,7 +24,9 @@ import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
 import uk.me.cormack.lighting7.plugins.CueEditSessionState
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.roundToInt
 
 /**
  * Contract the [SurfaceInputRouter] consults on every inbound event with feedback relevance.
@@ -87,6 +91,12 @@ class SurfaceFeedbackPublisher(
     private val projectIdProvider: () -> Int,
     private val fixturesProvider: () -> Fixtures,
     private val globalScalerStateProvider: () -> GlobalScalerState,
+    /**
+     * Speed-master bank for tempo-bound encoders. Like [globalScalerStateProvider] this is
+     * a provider rather than a value because a project switch swaps the whole show, and the
+     * subscription has to follow the live bank.
+     */
+    private val speedMasterBankProvider: (() -> SpeedMasterBank)? = null,
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
     val touchState: TouchStateTracker = TouchStateTracker(),
     val takeover: SoftTakeoverStateMachine = SoftTakeoverStateMachine(),
@@ -133,6 +143,25 @@ class SurfaceFeedbackPublisher(
         val binding: ControlSurfaceBindingService.ResolvedBinding,
     )
 
+    /**
+     * Continuous entry for a tempo-bound control. Deliberately *not* a [ContinuousEntry]:
+     * that type is built around a DMX [PropertyChannelResolver.PropertyChannel], and a speed
+     * master has no channel behind it — its value lives in the bank.
+     *
+     * This exists mainly so soft takeover works. PICKUP only engages once something calls
+     * [SoftTakeoverStateMachine.setLogical] for the control, and nothing does that for a
+     * target the index doesn't know about — so without this entry a tempo encoder would be
+     * permanently ENGAGED and would jump the show's tempo the instant it was touched.
+     */
+    private data class SpeedMasterEntry(
+        val displayKey: String,
+        val control: ControlDescriptor,
+        val masterUuid: UUID?,
+        val minBpm: Double,
+        val maxBpm: Double,
+        val policy: BindingTakeoverPolicy,
+    )
+
     /** Snapshot of every derived index produced by a single [rebuildIndex] pass. */
     private data class Index(
         val byChannel: Map<Long, List<ContinuousEntry>>,
@@ -148,9 +177,18 @@ class SurfaceFeedbackPublisher(
         val flashByBindingId: Map<Int, LedEntry>,
         val blackoutLeds: List<LedEntry>,
         val grandMasterLeds: List<LedEntry>,
+        /**
+         * Tempo-bound continuous controls. A flat list rather than a map: there is at most
+         * one per physical encoder on an attached surface, so a scan per tempo change is
+         * cheaper than maintaining an index — and tempo changes are operator-rate, not
+         * DMX-tick-rate.
+         */
+        val speedMasterEntries: List<SpeedMasterEntry>,
     ) {
         companion object {
-            val EMPTY = Index(emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyList(), emptyList())
+            val EMPTY = Index(
+                emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyList(), emptyList(), emptyList(),
+            )
         }
     }
 
@@ -174,7 +212,9 @@ class SurfaceFeedbackPublisher(
         override fun fixturesChanged() { rebuildIndex() }
         override fun presetListChanged() {}
         override fun paletteListChanged() {}
-        override fun speedMasterListChanged() {}
+        // A rename is cosmetic, but a create/delete changes which master uuids resolve — and
+        // a tempo-bound encoder pointing at a deleted master must stop being fed.
+        override fun speedMasterListChanged() { rebuildIndex() }
         override fun cueListChanged() {}
         override fun cueStackListChanged() {}
         override fun cueSlotListChanged() {}
@@ -187,6 +227,7 @@ class SurfaceFeedbackPublisher(
 
     private val jobs = mutableListOf<Job>()
     private var scalerJob: Job? = null
+    private var speedMasterJob: Job? = null
     private var publisherScope: CoroutineScope? = null
     private var running = false
 
@@ -209,6 +250,7 @@ class SurfaceFeedbackPublisher(
             flashTracker.changes.collect { onFlashChanged(it) }
         }
         subscribeScaler(scope)
+        subscribeSpeedMasters(scope)
         cueEditEvents?.let { events ->
             jobs += scope.launch(CoroutineName("FeedbackPublisher-cueEdit")) {
                 events.collect { onCueEditEvent(it) }
@@ -234,12 +276,37 @@ class SurfaceFeedbackPublisher(
             .launchIn(scope)
     }
 
+    /**
+     * (Re)subscribe to the current show's speed-master bank, for the same project-switch
+     * reason as [subscribeScaler]. Only the changed master's controls are re-fed: a tap
+     * arrives at operator rate but there is no reason to rewrite every tempo encoder.
+     */
+    private fun subscribeSpeedMasters(scope: CoroutineScope) {
+        speedMasterJob?.cancel()
+        val bank = try {
+            speedMasterBankProvider?.invoke()
+        } catch (_: Exception) {
+            null
+        } ?: return
+        speedMasterJob = bank.changes
+            .onEach { change ->
+                resyncSpeedMasterEntries(
+                    index.get().speedMasterEntries,
+                    changedUuid = change.uuid,
+                    onlyChanged = true,
+                )
+            }
+            .launchIn(scope)
+    }
+
     fun stop() {
         running = false
         jobs.forEach { it.cancel() }
         jobs.clear()
         scalerJob?.cancel()
         scalerJob = null
+        speedMasterJob?.cancel()
+        speedMasterJob = null
         publisherScope = null
         sessionAssignments.set(emptyMap())
         detachFromFixtures()
@@ -257,7 +324,10 @@ class SurfaceFeedbackPublisher(
         // Re-subscribe to the new show's scaler facade — the previous subscription
         // observes the stale facade (its holder is preserved, but the facade itself is
         // re-created on project switch).
-        publisherScope?.let { subscribeScaler(it) }
+        publisherScope?.let {
+            subscribeScaler(it)
+            subscribeSpeedMasters(it)
+        }
         // Push a full resync for every currently-attached device so the new show's logical
         // values land on the hardware.
         for (displayKey in deviceMatcher.attached.value.keys) {
@@ -515,6 +585,7 @@ class SurfaceFeedbackPublisher(
         val flashByBindingId = HashMap<Int, LedEntry>()
         val blackoutLeds = mutableListOf<LedEntry>()
         val grandMasterLeds = mutableListOf<LedEntry>()
+        val speedMasterEntries = mutableListOf<SpeedMasterEntry>()
 
         for ((displayKey, a) in attached) {
             val profile = profilesByKey[a.typeKey] ?: continue
@@ -522,13 +593,23 @@ class SurfaceFeedbackPublisher(
             for (control in profile.controls) {
                 val binding = bindingService.resolve(projectId, a.typeKey, control.controlId, bank) ?: continue
                 if (control is FaderDescriptor || control is EncoderDescriptor) {
+                    val classDefault = if (control is FaderDescriptor && !control.hasMotor) {
+                        BindingTakeoverPolicy.PICKUP
+                    } else {
+                        BindingTakeoverPolicy.IMMEDIATE
+                    }
+                    (binding.target as? BindingTarget.SpeedMasterBpm)?.let { tempo ->
+                        speedMasterEntries += SpeedMasterEntry(
+                            displayKey = displayKey,
+                            control = control,
+                            masterUuid = tempo.masterUuid?.let { speedMasterUuidOrNull(it) },
+                            minBpm = tempo.minBpm,
+                            maxBpm = tempo.maxBpm,
+                            policy = binding.takeoverPolicy ?: classDefault,
+                        )
+                    }
                     val primary = fixtures?.let { findPrimaryChannel(it, binding.target) }
                     if (primary != null) {
-                        val classDefault = if (control is FaderDescriptor && !control.hasMotor) {
-                            BindingTakeoverPolicy.PICKUP
-                        } else {
-                            BindingTakeoverPolicy.IMMEDIATE
-                        }
                         val entry = ContinuousEntry(
                             displayKey = displayKey,
                             deviceTypeKey = a.typeKey,
@@ -571,8 +652,12 @@ class SurfaceFeedbackPublisher(
                 flashByBindingId = flashByBindingId,
                 blackoutLeds = blackoutLeds,
                 grandMasterLeds = grandMasterLeds,
+                speedMasterEntries = speedMasterEntries,
             )
         )
+        // Seed takeover state so a PICKUP encoder knows where the tempo already sits before
+        // the operator's first touch, rather than only after the first tempo change.
+        resyncSpeedMasterEntries(speedMasterEntries)
     }
 
     private fun findPrimaryChannel(
@@ -666,29 +751,74 @@ class SurfaceFeedbackPublisher(
         else -> null
     }
 
-    private fun sendContinuousFeedback(entry: ContinuousEntry, value7Bit: UByte) {
-        val controller = controllerLookup(entry.displayKey) ?: return
-        val (channel, cc) = when (val control = entry.control) {
+    /**
+     * Resolve a control's feedback CC and write [value7Bit] to it. Shared by the DMX-backed
+     * and tempo-backed paths, which differ only in where the value comes from.
+     */
+    private fun sendControlFeedback(displayKey: String, control: ControlDescriptor, value7Bit: UByte) {
+        val controller = controllerLookup(displayKey) ?: return
+        val (channel, cc) = when (control) {
             is FaderDescriptor -> {
                 if (!control.hasMotor) return  // Non-motor: no feedback, just takeover tracking.
-                if (touchState.isTouched(entry.displayKey, control.controlId)) return
+                if (touchState.isTouched(displayKey, control.controlId)) return
                 control.channel to (control.motorCc ?: control.cc)
             }
             is EncoderDescriptor -> control.channel to (control.ringCc ?: return)
             else -> return
         }
+        latencyTracker.measure(MidiLatencyStage.EGRESS_MOTOR) {
+            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(channel, cc, value7Bit))
+        }
+    }
+
+    /**
+     * Push the current tempo of each entry's master onto its control, and record it as the
+     * logical value so PICKUP can arm. Called on every bank change and after each rebuild.
+     */
+    private fun resyncSpeedMasterEntries(entries: List<SpeedMasterEntry>, changedUuid: UUID? = null, onlyChanged: Boolean = false) {
+        if (entries.isEmpty()) return
+        val bank = try {
+            speedMasterBankProvider?.invoke()
+        } catch (_: Exception) {
+            null
+        } ?: return
+        val states = bank.masterStates()
+        // A null uuid means master 1, and must be resolved by *index* rather than by
+        // matching uuids: `load()` replaces the synthetic slot-0 entry with the persisted
+        // row, so `masterStates()[0].uuid` is a real uuid from then on and `uuid == null`
+        // matches nothing. Comparing uuids directly here meant the default (unkeyed,
+        // master-1) binding — the common case — got no feedback and never armed PICKUP.
+        fun stateFor(masterUuid: UUID?) =
+            if (masterUuid == null) states.firstOrNull { it.index == 1 }
+            else states.firstOrNull { it.uuid == masterUuid }
+
+        val changedState = if (onlyChanged) stateFor(changedUuid) else null
+        for (entry in entries) {
+            val state = stateFor(entry.masterUuid) ?: continue
+            // Compare resolved masters, not raw uuids, so a null-uuid entry still matches a
+            // change event that carries master 1's real uuid.
+            if (onlyChanged && state.index != changedState?.index) continue
+            val bpm = state.bpm
+            val span = entry.maxBpm - entry.minBpm
+            val value7Bit = if (span <= 0.0) 0u else {
+                (((bpm - entry.minBpm) / span) * 127.0).roundToInt().coerceIn(0, 127).toUByte()
+            }
+            sendControlFeedback(entry.displayKey, entry.control, value7Bit)
+            takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
+        }
+    }
+
+    private fun sendContinuousFeedback(entry: ContinuousEntry, value7Bit: UByte) {
         if (logger.isDebugEnabled) {
             val pc = entry.primaryChannel
             val dmx = runCatching { currentFixtures?.controller(pc.universe)?.getValue(pc.channel) }.getOrNull()
             logger.debug(
-                "surface-out: control={} dmxCh={} dmx={} min={} max={} -> value7Bit={} cc={}",
+                "surface-out: control={} dmxCh={} dmx={} min={} max={} -> value7Bit={}",
                 entry.control.controlId, pc.channel, dmx?.toInt(), pc.min.toInt(), pc.max.toInt(),
-                value7Bit.toInt(), cc,
+                value7Bit.toInt(),
             )
         }
-        latencyTracker.measure(MidiLatencyStage.EGRESS_MOTOR) {
-            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(channel, cc, value7Bit))
-        }
+        sendControlFeedback(entry.displayKey, entry.control, value7Bit)
     }
 
     private fun sendLed(entry: LedEntry, on: Boolean) {

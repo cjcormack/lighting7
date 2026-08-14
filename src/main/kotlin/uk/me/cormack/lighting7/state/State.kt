@@ -349,18 +349,24 @@ class State(val config: ApplicationConfig) {
         } catch (_: Exception) {
             return null
         }
-        val (stackIds, cueIds) = transaction(database) {
+        // Speed masters are read from the DB for [projectId] rather than from the live
+        // bank, for the same reason the stack / cue ids are: this context is built for an
+        // arbitrary project, which may not be the one currently loaded.
+        val (stackIds, cueIds, speedMasterUuids) = transaction(database) {
             val stacks = DaoCueStack.find { DaoCueStacks.project eq projectId }
                 .map { it.id.value }.toSet()
             val cues = DaoCue.find { DaoCues.project eq projectId }
                 .map { it.id.value }.toSet()
-            stacks to cues
+            val masters = DaoSpeedMaster.find { DaoSpeedMasters.project eq projectId }
+                .map { it.uuid }.toSet()
+            Triple(stacks, cues, masters)
         }
         return BindingHealthEvaluator.Context(
             fixtures = fixtures,
             validStackIds = stackIds,
             validCueIds = cueIds,
             deviceTypes = ControlSurfaceRegistry.allTypes,
+            validSpeedMasterUuids = speedMasterUuids,
         )
     }
 
@@ -480,6 +486,7 @@ class State(val config: ApplicationConfig) {
             projectIdProvider = { projectManager.currentProject.id.value },
             fixturesProvider = { show.fixtures },
             globalScalerStateProvider = { show.globalScalerState },
+            speedMasterBankProvider = { show.speedMasterBank },
             cueEditSessionProvider = { projectId ->
                 cueEditSessionRegistry.activeSession(projectId)?.session
             },

@@ -9,6 +9,9 @@ import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerStore
+import uk.me.cormack.lighting7.fx.SpeedMasterBank
+import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
+import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.CueEditSessionHandler
 import uk.me.cormack.lighting7.plugins.CueEditSessionState
@@ -50,6 +53,15 @@ interface SurfaceActions {
 
     fun toggleBlackout(): Boolean
     fun toggleGrandMaster(): Boolean
+
+    /**
+     * Set a speed master's tempo from a continuous control, scaling 0..127 across
+     * [minBpm]..[maxBpm]. [masterUuid] null → master 1.
+     */
+    fun writeSpeedMasterBpm(masterUuid: String?, minBpm: Double, maxBpm: Double, midiValue7Bit: UByte)
+
+    /** Tap a speed master's tempo ([masterUuid] null → master 1). */
+    fun tapSpeedMaster(masterUuid: String?)
 }
 
 /**
@@ -73,6 +85,7 @@ class DefaultSurfaceActions(
     private val fxEngine get() = state.show.fxEngine
     private val cueStackManager: CueStackManager get() = state.show.cueStackManager
     private val globalScalerState: GlobalScalerState get() = state.show.globalScalerState
+    private val speedMasters: SpeedMasterBank get() = state.show.speedMasterBank
 
     override fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte) {
         val fixture = try {
@@ -238,6 +251,36 @@ class DefaultSurfaceActions(
 
     override fun toggleBlackout(): Boolean = globalScalerState.toggleBlackout()
     override fun toggleGrandMaster(): Boolean = globalScalerState.toggleGrandMaster()
+
+    override fun writeSpeedMasterBpm(
+        masterUuid: String?,
+        minBpm: Double,
+        maxBpm: Double,
+        midiValue7Bit: UByte,
+    ) = withSpeedMasterTarget(masterUuid) { uuid ->
+        val bpm = minBpm + (maxBpm - minBpm) * (midiValue7Bit.toInt() / 127.0)
+        // MasterClock.setBpm coerces into 20..300 itself; the binding's window is a
+        // sub-range on top of that, not a replacement for it.
+        speedMasters.setBpm(uuid, bpm, SpeedMasterSource.MANUAL)
+    }
+
+    override fun tapSpeedMaster(masterUuid: String?) =
+        withSpeedMasterTarget(masterUuid) { speedMasters.tap(it) }
+
+    /**
+     * Resolve a tempo-write target, mirroring `SpeedMasterSocket.withWriteTarget`: null or
+     * absent means master 1, while a present-but-malformed uuid DROPS the write rather than
+     * degrading to master 1 — a corrupt binding payload must not be able to retune the
+     * global tempo. (An unknown-but-well-formed uuid is dropped one layer down, by the
+     * bank's own write resolution.)
+     */
+    private inline fun withSpeedMasterTarget(raw: String?, write: (java.util.UUID?) -> Unit) {
+        if (raw == null) {
+            write(null)
+            return
+        }
+        speedMasterUuidOrNull(raw)?.let(write)
+    }
 }
 
 // --- Small helpers that turn the existing throwing lookups into nullable returns.

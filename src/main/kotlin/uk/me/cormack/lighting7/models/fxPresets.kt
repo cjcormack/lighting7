@@ -31,6 +31,12 @@ data class FxPresetEffectDto(
      * clone and import where an int PK would dangle.
      */
     val speedMasterUuid: String? = null,
+    /**
+     * Wall-clock rate master (null → unscaled). Only WALL_CLOCK effects read it; it sits
+     * alongside [speedMasterUuid] rather than replacing it, so an effect that changes
+     * timing source keeps both assignments. Uuid, not int id — same import rule.
+     */
+    val rateSpeedMasterUuid: String? = null,
 )
 
 /**

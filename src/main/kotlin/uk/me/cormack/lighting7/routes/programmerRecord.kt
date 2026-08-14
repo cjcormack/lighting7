@@ -330,7 +330,8 @@ private fun DaoCueAdHocEffect.matches(dto: CueAdHocEffectDto): Boolean =
         elementFilter == dto.elementFilter &&
         stepTiming == dto.stepTiming &&
         parameters == dto.parameters &&
-        speedMasterUuid == speedMasterUuidOrNull(dto.speedMasterUuid)
+        speedMasterUuid == speedMasterUuidOrNull(dto.speedMasterUuid) &&
+        rateSpeedMasterUuid == speedMasterUuidOrNull(dto.rateSpeedMasterUuid)
 
 /** Copy [dto]'s tunable fields over the stored child, leaving identity and timing alone. */
 private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
@@ -344,6 +345,7 @@ private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
     stepTiming = dto.stepTiming
     parameters = dto.parameters
     speedMasterUuid = speedMasterUuidOrNull(dto.speedMasterUuid)
+    rateSpeedMasterUuid = speedMasterUuidOrNull(dto.rateSpeedMasterUuid)
 }
 
 /** Delete the immediate FX children the recording names — [RecordMode.REMOVE]'s FX half. */
@@ -449,6 +451,7 @@ private fun newAdHocChild(cue: DaoCue, effect: CueAdHocEffectDto) {
         parameters = effect.parameters
         sortOrder = effect.sortOrder
         speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
+        rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
     }
 }
 

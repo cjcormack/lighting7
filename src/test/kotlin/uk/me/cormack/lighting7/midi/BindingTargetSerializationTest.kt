@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class BindingTargetSerializationTest {
@@ -96,5 +97,50 @@ class BindingTargetSerializationTest {
         val target: BindingTarget = BindingTarget.SetBank(deviceTypeKey = "x-touch-compact-standard", bank = "layer-b")
         val encoded = BindingTargetJson.encodeToString(target)
         assertEquals(target, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
+    }
+
+    @Test
+    fun `speed-master targets round trip, keyed and unkeyed`() {
+        val keyed: BindingTarget = BindingTarget.SpeedMasterBpm(
+            masterUuid = "7d444840-9dc0-11d1-b245-5ffdce74fad2", minBpm = 90.0, maxBpm = 150.0,
+        )
+        val encoded = BindingTargetJson.encodeToString(keyed)
+        assertTrue(encoded.contains("\"type\":\"speedMasterBpm\""))
+        assertEquals(keyed, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
+
+        val tap: BindingTarget = BindingTarget.SpeedMasterTap("7d444840-9dc0-11d1-b245-5ffdce74fad2")
+        val encodedTap = BindingTargetJson.encodeToString(tap)
+        assertTrue(encodedTap.contains("\"type\":\"speedMasterTap\""))
+        assertEquals(tap, BindingTargetJson.decodeFromString<BindingTarget>(encodedTap))
+    }
+
+    /**
+     * An omitted uuid means master 1, matching the `speedMasters.*` WS family — and an
+     * omitted range means the default window, so a payload written before the range existed
+     * still decodes.
+     */
+    @Test
+    fun `speed-master BPM defaults to master 1 and the default range`() {
+        val decoded = BindingTargetJson.decodeFromString<BindingTarget>("""{"type":"speedMasterBpm"}""")
+        val bpm = assertIs<BindingTarget.SpeedMasterBpm>(decoded)
+        assertNull(bpm.masterUuid)
+        assertEquals(BindingTarget.SpeedMasterBpm.DEFAULT_MIN_BPM, bpm.minBpm)
+        assertEquals(BindingTarget.SpeedMasterBpm.DEFAULT_MAX_BPM, bpm.maxBpm)
+
+        val tap = assertIs<BindingTarget.SpeedMasterTap>(
+            BindingTargetJson.decodeFromString<BindingTarget>("""{"type":"speedMasterTap"}""")
+        )
+        assertNull(tap.masterUuid)
+    }
+
+    @Test
+    fun `speed-master BPM rejects an inverted or out-of-clock-range window`() {
+        assertFailsWith<IllegalArgumentException> {
+            BindingTarget.SpeedMasterBpm(minBpm = 150.0, maxBpm = 90.0)
+        }
+        // The clock itself only accepts 20..300; a window outside that could never be reached.
+        assertFailsWith<IllegalArgumentException> {
+            BindingTarget.SpeedMasterBpm(minBpm = 10.0, maxBpm = 400.0)
+        }
     }
 }

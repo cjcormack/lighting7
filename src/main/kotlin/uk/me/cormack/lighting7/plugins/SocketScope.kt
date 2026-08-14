@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import uk.me.cormack.lighting7.state.State
 import java.util.Collections
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
@@ -27,6 +28,14 @@ class SocketScope(
 
     /** Set on `requestBeatSync`; consumed by the beat-sync subscription on the next beat. */
     val sendNextBeat = AtomicBoolean(true)
+
+    /**
+     * Masters this connection has asked for an immediate beat frame on (`null` = master 1),
+     * the keyed equivalent of [sendNextBeat]. A set rather than a flag because each master's
+     * indicator mounts independently, and consumed by `remove()` so a request really is
+     * one-shot — the throttle takes over again afterwards.
+     */
+    val pendingBeatRequests: MutableSet<UUID?> = Collections.synchronizedSet(HashSet())
 
     /**
      * Surface-learn sessions originated by this connection. Bounds incoming Learn-event

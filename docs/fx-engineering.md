@@ -913,12 +913,15 @@ GET  /api/rest/fx/library          → [EffectTypeInfo...]
   },
   "distributionStrategy": "LINEAR",
   "stepTiming": true,
-  "speedMasterUuid": "7d444840-9dc0-11d1-b245-5ffdce74fad2"
+  "speedMasterUuid": "7d444840-9dc0-11d1-b245-5ffdce74fad2",
+  "rateSpeedMasterUuid": null
 }
 ```
 
 The `speedMasterUuid` field is optional (null → master 1). It is a *uuid*, not the int id,
-so a stored reference survives project clone and import.
+so a stored reference survives project clone and import. `rateSpeedMasterUuid` is its
+wall-clock counterpart (null → unscaled); both are accepted on every effect and simply go
+unread by the timing source that does not apply.
 
 The `distributionStrategy` field is optional. When provided, it sets the distribution strategy for multi-element fixture expansion (see [Multi-Element Fixture Expansion](#multi-element-fixture-expansion)). For non-multi-element fixtures, it is ignored.
 
@@ -935,11 +938,12 @@ The `stepTiming` field is optional. When provided, it overrides the effect's def
   "phaseOffset": 0.25,
   "distributionStrategy": "CENTER_OUT",
   "elementMode": "FLAT",
-  "stepTiming": false
+  "stepTiming": false,
+  "rateSpeedMasterUuid": "7d444840-9dc0-11d1-b245-5ffdce74fad2"
 }
 ```
 
-All fields are optional. Immutable fields (`effectType`, `parameters`, `beatDivision`, `blendMode`, `stepTiming`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and running state. Mutable fields (`phaseOffset`, `distributionStrategy`, `elementMode`, `speedMasterUuid`) are updated in place. `speedMasterUuid` follows the same null-means-no-change convention; to return an effect to the default, send master 1's uuid (master 1 always exists and behaves identically to the null default).
+All fields are optional. Immutable fields (`effectType`, `parameters`, `beatDivision`, `blendMode`, `stepTiming`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and running state. Mutable fields (`phaseOffset`, `distributionStrategy`, `elementMode`, `speedMasterUuid`, `rateSpeedMasterUuid`) are updated in place. Both master fields follow the same null-means-no-change convention; to return an effect to the default, send master 1's uuid (master 1 always exists and behaves identically to the null default).
 
 ## WebSocket Messages
 
@@ -958,16 +962,18 @@ All fields are optional. Immutable fields (`effectType`, `parameters`, `beatDivi
 | `resumeFx` | Resume effect `{ effectId }` |
 | `clearFx` | Clear all effects |
 | `requestBeatSync` | Request a `beatSync` message on the next beat (e.g. after tab visibility change) |
+| `speedMasters.requestBeat` | Keyed twin of `requestBeatSync` — `{ masterUuid? }`, omitted uuid = master 1 |
 
 ### Server → Client
 
 | Message | Description |
 |---------|-------------|
-| `fxState` | Full FX state `{ bpm, isClockRunning, activeEffects }` — `bpm` is master 1; each effect carries `speedMasterUuid`/`speedMasterIndex` |
+| `fxState` | Full FX state `{ bpm, isClockRunning, activeEffects }` — `bpm` is master 1; each effect carries `speedMasterUuid`/`speedMasterIndex` and `rateSpeedMasterUuid`/`rateSpeedMasterIndex` |
 | `fxChanged` | Effect change notification `{ changeType, effectId }` |
 | `beatSync` | Beat sync for frontend clock `{ beatNumber, bpm, timestampMs }` — master 1 only |
 | `speedMasters.state` | Full bank `{ masters: [{ uuid, index, name, bpm, isRunning, source }] }` — sent on connect, on request, and as the reply to every `speedMasters.*` write |
 | `speedMasters.changed` | One master's tempo moved `{ masterUuid, index, bpm, source, timestampMs }` — the live-BPM stream; CRUD invalidation goes via `speedMasterListChanged` instead |
+| `speedMasters.beat` | One master crossed a beat boundary `{ masterUuid, index, beatNumber, bpm, timestampMs }` — the keyed analogue of `beatSync`, emitted for every master including master 1 |
 | `speedMasterListChanged` | A master was created/renamed/deleted (cache-invalidation signal, never fired per tempo change) |
 
 ### Beat Sync
@@ -977,6 +983,19 @@ The `beatSync` message enables the frontend to synchronize a local beat visualiz
 - Every 16 beats (~8 seconds at 120 BPM) for periodic drift correction
 - Immediately when BPM changes (with `beatNumber: -1` to distinguish from beat boundaries)
 - On-demand when the client sends `requestBeatSync`
+
+Between frames the client free-runs a local timer off the last `bpm` it was told. That
+interpolation is load-bearing: `SocketScope.sendNextBeat` used to be set at construction and
+never cleared, so the throttle was permanently bypassed and a frame went out on *every*
+beat. It is consumed with `getAndSet(false)` now, making the request the one-shot it was
+always documented to be.
+
+`beatSync` is structurally master-1-only — it is wired to one `MasterClock` object, not
+addressed by uuid — so **`speedMasters.beat`** is the keyed superset. Same cadence rules,
+plus a `masterUuid`/`index` tag, fanned from `SpeedMasterBank.beats`: one flow for the whole
+bank, fed by a per-clock `onBeat` hook wired where `onTick` already is. A subscriber binds
+once and keeps working across a `load()`, because the tagging happens at emit time rather
+than being captured into a per-master collector.
 
 ## File Reference
 
@@ -989,7 +1008,7 @@ The `beatSync` message enables the frontend to synchronize a local beat visualiz
 | `fx/SpeedMasterBank.kt` | Per-show bank of master clocks, wake channel, per-pass `Frame` |
 | `models/speedMasters.kt` | Exposed DAO for speed_masters table + default-bank seeding |
 | `routes/projectSpeedMasters.kt` | Speed-master CRUD API endpoints + delete guards |
-| `plugins/SpeedMasterSocket.kt` | `speedMasters.*` WS family (live tempo control/streaming) |
+| `plugins/SpeedMasterSocket.kt` | `speedMasters.*` WS family (live tempo control/streaming, keyed beat frames) |
 | `fx/BeatDivision.kt` | Timing constants |
 | `fx/Effect.kt` | Effect, StatefulEffect, CompositeEffect interfaces, FxOutput types |
 | `fx/FxRegistry.kt` | Unified effect registry, EffectRegistration, ParameterInfo, EffectTypeInfo |
@@ -1085,7 +1104,7 @@ Effects can run on one of two timing sources:
 | Source | Description | Tick Rate | Phase Calculation |
 |--------|-------------|-----------|-------------------|
 | `BEAT` | Synchronized to the effect's speed master's ticks | 24 ticks/beat (variable) | From the master's tick counter via `MasterClock.phaseForDivision()` |
-| `WALL_CLOCK` | Fixed-interval timer independent of BPM | 50Hz (20ms) | Elapsed wall-clock time since effect start, optionally scaled by a rate master |
+| `WALL_CLOCK` | Fixed-interval timer independent of BPM | 50Hz (20ms) | Accumulated wall-clock time since effect start, scaled per pass by an optional rate master |
 
 ### When to Use WALL_CLOCK
 
@@ -1137,17 +1156,40 @@ but not recommended — use one timing source per property to keep the result pr
 
 ### Wall-Clock Phase Calculation
 
-For STANDARD wall-clock effects, `beatDivision` is reinterpreted as cycle duration in seconds, optionally divided by a **rate master's** scale (`master.bpm / 120`; 1.0 when `FxInstance.rateSpeedMasterUuid` is unassigned — current behaviour preserved):
+For wall-clock effects, `beatDivision` is reinterpreted as cycle duration in seconds. A
+**rate master** (`FxInstance.rateSpeedMasterUuid`, null → unscaled) sets how fast that cycle
+is consumed, at `master.bpm / 120`:
 
 ```kotlin
-val cycleDurationMs = (beatDivision * 1000.0 / rateScale).toLong()
-val elapsed = System.currentTimeMillis() - startedAtMs
-val phase = (elapsed % cycleDurationMs).toDouble() / cycleDurationMs
+// once per 50 Hz pass, per effect, before any phase is read
+accumulatedScaledMs += deltaMs * rateScale
+// then, wherever a phase is needed
+val cycleDurationMs = beatDivision * 1000.0
+val phase = (accumulatedScaledMs % cycleDurationMs) / cycleDurationMs
 ```
 
-**Changing a rate master's BPM mid-cycle jumps the phase** — elapsed time is fixed while the cycle length moves under it. This is accepted and pinned by `WallClockTimingTest`; a continuous version needs an accumulated scaled-elapsed field. Note the rate master scales the effect's *internal cycle* only — cue-trigger scheduling (`delayMs`/`intervalMs`/`randomWindowMs`) is deliberately never scaled by any master. There is currently no picker UI for rate masters (no shipped effect declares `WALL_CLOCK`) — see `FU-SPEED-RATEMASTER-UI` in `docs/plans/followups.md`.
+The cycle length is **fixed** and only the accumulation rate moves. That is what makes a
+mid-cycle rate change continuous: the earlier form divided a fixed `now - startedAtMs` by a
+cycle length that moved under it, so retuning a rate master snapped the phase (3 s into a
+4 s cycle read 0.75, and became 0.5 the instant the cycle halved). `WallClockTimingTest`
+pins the continuity, and — since elapsed time is now an explicit parameter rather than a
+clock reading — pins it exactly, with no jitter tolerance.
 
-For STATEFUL effects, `deltaMs` is computed from the wall-clock interval directly. These effects already use `deltaMs` rather than phase, so they work naturally.
+The rate master scales the effect's *internal cycle* only: cue-trigger scheduling
+(`delayMs`/`intervalMs`/`randomWindowMs`) is deliberately never scaled by any master.
+
+`rateSpeedMasterUuid` is settable everywhere `speedMasterUuid` is — REST add/update, preset
+effects, cue ad-hoc effects, per-application overrides, cue-edit, and sync. The two coexist
+rather than excluding each other, so an effect whose `timingSource` changes keeps both
+assignments; BEAT effects simply never read the rate scale. **Scripts and the AI tool are
+the deliberate exception** — neither has ever addressed a per-effect master at all, so there
+was nothing to mirror.
+
+For STATEFUL effects, `deltaMs` is computed from the wall-clock interval directly. These
+effects already use `deltaMs` rather than phase, so they work naturally — and by the same
+token a rate master has no effect on one that never reads its phase. Both shipped wall-clock
+effects (`CandleFlicker`, `FluorescentFlicker`) are STATEFUL, so nothing in-tree currently
+exercises rate scaling end to end; author a STANDARD + WALL_CLOCK definition to try it.
 
 ### Configuration
 
@@ -1163,10 +1205,33 @@ timingSource: WALL_CLOCK
 
 The timing source is stored on `EffectRegistration` in the `FxRegistry` and propagated to `FxInstance.timingSource` when effects are created via presets, cues, or the REST API.
 
+### Control-surface bindings
+
+Two `BindingTarget` variants drive the bank from hardware
+(`midi/BindingTarget.kt`, dispatched by `midi/SurfaceInputRouter.kt`):
+
+| Target | Control | Behaviour |
+|--------|---------|-----------|
+| `speedMasterBpm` | fader / encoder | `{ masterUuid?, minBpm, maxBpm }` — 0..127 maps across the window, clamped into the clock's 20..300. Defaults to 60..180, because spreading 128 steps over the full range gives ~2.2 BPM a step |
+| `speedMasterTap` | button | `{ masterUuid? }` — taps on press, no-op on release |
+
+Both address the master by **uuid** (null → master 1), so they survive clone and
+cross-install import — unlike the older int-id cue/stack variants (`FU-SYNC-BINDING-PAYLOAD-UUIDS`).
+A binding naming a deleted master reports `AssignmentHealth.MissingSpeedMaster` rather than
+falling back to master 1: an *effect* degrading to the global tempo is reasonable, a control
+silently retuning the whole show is not.
+
+`SurfaceFeedbackPublisher` indexes tempo bindings separately from DMX-backed ones (a speed
+master has no channel behind it) and feeds them from `SpeedMasterBank.changes`. That is not
+just for encoder rings — soft takeover arms from `setLogical`, so without an index entry a
+PICKUP encoder would stay ENGAGED and jump the tempo on first touch. Tap buttons get **no**
+LED feedback: every other LED entry reflects a steady boolean the publisher can read back,
+and a tap has no "on" state to hold.
+
 ## Future Considerations
 
-1. **MIDI Clock Sync / binding**: Accept external MIDI clock as tempo source; binding
-   surface controls to speed masters is `FU-SPEED-MIDI-BINDING` in `docs/plans/followups.md`
+1. **MIDI Clock Sync**: Accept external MIDI clock as a tempo source. (Binding *surface
+   controls* to speed masters has landed — see "Control-surface bindings" below.)
 2. **Beat Detection**: Auto-detect BPM from audio input
 3. **Effect Modulation**: Effects that modulate other effects' parameters
 4. **Custom Distribution Functions**: User-defined distribution curves via scripts

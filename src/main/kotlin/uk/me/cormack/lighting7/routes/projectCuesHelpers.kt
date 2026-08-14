@@ -128,6 +128,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 stepTiming = if (effect.stepTiming != effect.effect.defaultStepTiming) effect.stepTiming else null,
                 parameters = effect.effect.parameters,
                 speedMasterUuid = effect.speedMasterUuid?.toString(),
+                rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
             ))
         }
     }
@@ -310,6 +311,7 @@ internal fun buildCueApplyData(cue: DaoCue): CueApplyData = CueApplyData(
             randomWindowMs = app.randomWindowMs,
             sortOrder = app.sortOrder,
             speedMasterUuid = app.speedMasterUuid?.toString(),
+            rateSpeedMasterUuid = app.rateSpeedMasterUuid?.toString(),
         )
     },
     adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
@@ -383,6 +385,7 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     randomWindowMs = randomWindowMs,
     sortOrder = sortOrder,
     speedMasterUuid = speedMasterUuid?.toString(),
+    rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
 )
 
 /**
@@ -408,6 +411,7 @@ internal fun DaoCue.toCueDetails(
             randomWindowMs = app.randomWindowMs,
             sortOrder = app.sortOrder,
             speedMasterUuid = app.speedMasterUuid?.toString(),
+            rateSpeedMasterUuid = app.rateSpeedMasterUuid?.toString(),
         )
     }
     val triggerDetails = this.triggers.sortedBy { it.sortOrder }.map { trigger ->
@@ -468,6 +472,7 @@ internal fun createCueChildren(
             this.randomWindowMs = app.randomWindowMs
             this.sortOrder = app.sortOrder
             this.speedMasterUuid = speedMasterUuidOrNull(app.speedMasterUuid)
+            this.rateSpeedMasterUuid = speedMasterUuidOrNull(app.rateSpeedMasterUuid)
         }
     }
     for (effect in adHocEffects) {
@@ -491,6 +496,7 @@ internal fun createCueChildren(
             randomWindowMs = effect.randomWindowMs
             sortOrder = effect.sortOrder
             speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
+            rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
         }
     }
     for (assignment in propertyAssignments) {
@@ -610,6 +616,8 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         val palette: List<ExtendedColour>,
         /** Per-application speed-master override (null → each effect's own master). */
         val speedMasterUuid: java.util.UUID? = null,
+        /** Per-application rate-master override (null → each effect's own rate master). */
+        val rateSpeedMasterUuid: java.util.UUID? = null,
     )
     val immediatePresets = transaction(state.database) {
         cueData.presetApplications
@@ -623,6 +631,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
                     assignments = preset.toPropertyAssignmentDtos(),
                     palette = preset.palette.toPaletteColours(),
                     speedMasterUuid = speedMasterUuidOrNull(app.speedMasterUuid),
+                    rateSpeedMasterUuid = speedMasterUuidOrNull(app.rateSpeedMasterUuid),
                 )
             }
     }
@@ -683,6 +692,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
                 val instance = createInstanceFromPresetForCue(
                     presetEffect, fxTarget, ip.presetId, state, cueData.cueId,
                     overrideSpeedMasterUuid = ip.speedMasterUuid,
+                    overrideRateSpeedMasterUuid = ip.rateSpeedMasterUuid,
                 )
                 instance.cueId = cueData.cueId
                 instance.priority = priority
@@ -709,6 +719,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             stepTiming = adHoc.stepTiming,
             parameters = adHoc.parameters,
             speedMasterUuid = adHoc.speedMasterUuid,
+            rateSpeedMasterUuid = adHoc.rateSpeedMasterUuid,
         )
         val fxTarget = try {
             resolveTargetForCue(state, target, presetEffectDto)
@@ -1375,6 +1386,8 @@ internal fun createInstanceFromPresetForCue(
     cueId: Int,
     /** Per-cue-application override; null falls through to the preset effect's own master. */
     overrideSpeedMasterUuid: java.util.UUID? = null,
+    /** Per-cue-application rate-master override; same fall-through rule. */
+    overrideRateSpeedMasterUuid: java.util.UUID? = null,
 ): FxInstance {
     val engine = state.show.fxEngine
     return createInstanceFromPreset(
@@ -1382,6 +1395,7 @@ internal fun createInstanceFromPresetForCue(
         paletteSupplier = { engine.getCuePalette(cueId) ?: engine.getPalette() },
         paletteVersionSupplier = { engine.getCuePaletteVersion(cueId) + engine.paletteVersion },
         overrideSpeedMasterUuid = overrideSpeedMasterUuid,
+        overrideRateSpeedMasterUuid = overrideRateSpeedMasterUuid,
     )
 }
 
@@ -1403,6 +1417,7 @@ internal fun createInstanceFromPreset(
     paletteVersionSupplier: () -> Long,
     /** Per-cue-application override; null falls through to the preset effect's own master. */
     overrideSpeedMasterUuid: java.util.UUID? = null,
+    overrideRateSpeedMasterUuid: java.util.UUID? = null,
 ): FxInstance {
     val effect = state.show.fxRegistry.createEffect(
         presetEffect.effectType,
@@ -1446,5 +1461,7 @@ internal fun createInstanceFromPreset(
         presetEffect.stepTiming?.let { this.stepTiming = it }
         speedMasterUuid = overrideSpeedMasterUuid
             ?: speedMasterUuidOrNull(presetEffect.speedMasterUuid)
+        rateSpeedMasterUuid = overrideRateSpeedMasterUuid
+            ?: speedMasterUuidOrNull(presetEffect.rateSpeedMasterUuid)
     }
 }

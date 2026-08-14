@@ -72,6 +72,19 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         val timestampMs: Long,
     )
 
+    /**
+     * One master crossed a beat boundary — the keyed analogue of the master-1-only
+     * `beatSync`, so a client can pulse an indicator against the master its effect
+     * actually runs on.
+     */
+    data class Beat(
+        val uuid: UUID?,
+        val index: Int,
+        val beatNumber: Long,
+        val bpm: Double,
+        val timestampMs: Long,
+    )
+
     private class Entry(
         val uuid: UUID?,
         val index: Int,
@@ -139,11 +152,42 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
     /** Per-master tempo pushes — the live-BPM stream for WS clients and the write-through persister. */
     val changes: SharedFlow<Change> = _changes.asSharedFlow()
 
+    private val _beats = MutableSharedFlow<Beat>(extraBufferCapacity = 64)
+
+    /**
+     * Every master's beat boundaries, tagged with which master they came from. One flow for
+     * the whole bank rather than one subscription per clock: a WS connection subscribes
+     * once and keeps working across a [load], because the tagging happens here at emit time
+     * rather than being captured into a per-connection collector.
+     */
+    val beats: SharedFlow<Beat> = _beats.asSharedFlow()
+
     @Volatile
     private var startedScope: CoroutineScope? = null
 
     init {
         master1Clock.onTick = { wake.trySend(Unit) }
+        master1Clock.onBeat = { beat -> emitBeat(master1Clock, beat) }
+    }
+
+    /**
+     * Tag a clock's beat with its master's current identity. The lookup is by clock
+     * *instance* and happens per beat, so a rename or reorder between beats is reflected
+     * immediately without re-wiring the callback. A retired clock resolves to no entry and
+     * is dropped — defensive only, since [load] stops any clock it drops and a stopped
+     * clock cannot fire again.
+     */
+    private fun emitBeat(clock: MasterClock, beat: MasterClock.BeatEvent) {
+        val entry = bindings.slots.firstOrNull { it.clock === clock } ?: return
+        _beats.tryEmit(
+            Beat(
+                uuid = entry.uuid,
+                index = entry.index,
+                beatNumber = beat.beatNumber,
+                bpm = clock.bpm.value,
+                timestampMs = beat.timestampMs,
+            )
+        )
     }
 
     /** Master 1's clock — the compatibility surface for everything that predates the bank. */
@@ -231,6 +275,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                     val clock = MasterClock()
                     clock.setBpm(row.bpm)
                     clock.onTick = { wake.trySend(Unit) }
+                    clock.onBeat = { beat -> emitBeat(clock, beat) }
                     startedScope?.let { clock.start(it) }
                     newSlots.add(Entry(row.uuid, row.index, row.name, clock, row.source))
                 }

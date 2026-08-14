@@ -227,6 +227,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
                 // Inside the JSON blob column — the reference the ExportUuidRemapper must
                 // rewrite across opaque text for a clone to point at its own master.
                 speedMasterUuid = slowMaster.uuid.toString(),
+                // Same blob, the rate role — parity means this must be remapped too.
+                rateSpeedMasterUuid = slowMaster.uuid.toString(),
             )
         )
         palette = listOf("#ff8800")
@@ -327,6 +329,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         randomWindowMs = 50L
         sortOrder = 3
         speedMasterUuid = slowMaster.uuid
+        rateSpeedMasterUuid = slowMaster.uuid
     }
     DaoCuePresetApplication.new {
         cue = cue1; this.preset = preset; targets = emptyList()
@@ -335,6 +338,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         randomWindowMs = 125L
         sortOrder = 2
         speedMasterUuid = slowMaster.uuid
+        rateSpeedMasterUuid = slowMaster.uuid
     }
     DaoCueTrigger.new {
         cue = cue1; this.script = script1

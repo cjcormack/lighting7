@@ -9,6 +9,8 @@ import kotlinx.coroutines.yield
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fx.SpeedMasterBank
+import uk.me.cormack.lighting7.fx.SpeedMasterSnapshot
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -63,6 +65,7 @@ class SurfaceFeedbackPublisherTest {
         val bankState = ActiveBankState()
         val flashTracker = FlashStateTracker()
         val scaler: GlobalScalerState
+        val speedMasters = SpeedMasterBank()
         val matcher: DeviceMatcher
         val recordingController = RecordingController(
             MidiDeviceHandle(
@@ -96,6 +99,7 @@ class SurfaceFeedbackPublisherTest {
                 projectIdProvider = { projectId },
                 fixturesProvider = { fixtures },
                 globalScalerStateProvider = { scaler },
+                speedMasterBankProvider = { speedMasters },
             )
         }
 
@@ -187,6 +191,91 @@ class SurfaceFeedbackPublisherTest {
         }
     }
 
+    /**
+     * The reason [SurfaceFeedbackPublisher] indexes tempo bindings at all: PICKUP arms from
+     * `setLogical`, so without an index entry a tempo encoder stays ENGAGED and jumps the
+     * show's tempo on first touch.
+     */
+    @Test
+    fun `a tempo-bound encoder gets ring feedback and arms soft takeover`() = runBlocking {
+        val h = Harness(listOf(
+            // enc-1: turn CC and ring CC are both 10 on this profile.
+            binding(
+                1, "enc-1",
+                BindingTarget.SpeedMasterBpm(masterUuid = null, minBpm = 60.0, maxBpm = 180.0),
+                policy = BindingTakeoverPolicy.PICKUP,
+            ),
+        ))
+        // Load the bank the way a real show does. This matters: `load()` replaces the
+        // synthetic slot-0 entry, so master 1 stops reporting a null uuid — and a binding
+        // that stores null for master 1 then has to be resolved by index, not by uuid.
+        // Without this line the test passes even when that resolution is broken.
+        h.speedMasters.load(
+            listOf(
+                SpeedMasterSnapshot(
+                    java.util.UUID.randomUUID(), 1, "Master 1", 120.0,
+                    uk.me.cormack.lighting7.models.SpeedMasterSource.MANUAL,
+                ),
+            )
+        )
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            h.recordingController.feedback.clear()
+
+            // Master 1 moves to 150 BPM — three-quarters of the way through the 60..180
+            // window, so the ring should sit at ~95 of 127.
+            h.speedMasters.setBpm(null, 150.0, uk.me.cormack.lighting7.models.SpeedMasterSource.MANUAL)
+            yield()
+
+            val cc = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()
+            assertTrue(cc.isNotEmpty(), "expected ring feedback on tempo change, got ${h.recordingController.feedback}")
+            assertEquals(10, cc.last().cc)
+            assertEquals(95u.toUByte(), cc.last().value)
+
+            // And the logical value is recorded, which is what makes PICKUP suppress an
+            // inbound value that hasn't crossed it yet.
+            assertFalse(
+                h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "enc-1", 5u),
+                "a PICKUP encoder far from the logical tempo must not be allowed to jump it",
+            )
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    /**
+     * Pins the deliberate v1 cut: every other LED entry reflects a steady boolean the
+     * publisher can read back, and a tap has no "on" state to hold. If tap LEDs are added
+     * later this test is the thing that should be updated, not silently deleted.
+     */
+    @Test
+    fun `a tap binding never drives LED feedback`() = runBlocking {
+        val h = Harness(listOf(
+            binding(10, "btn-1", BindingTarget.SpeedMasterTap(masterUuid = null)),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+
+            // A Blackout binding on the same button would have emitted an LED state here.
+            assertTrue(
+                h.recordingController.feedback.none {
+                    it is MidiFeedbackMessage.NoteOnFeedback || it is MidiFeedbackMessage.NoteOffFeedback
+                },
+                "tap bindings must stay out of the LED index, got ${h.recordingController.feedback}",
+            )
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
     @Test
     fun `LED feedback fires on blackout toggle`() = runBlocking {
         val h = Harness(listOf(
@@ -245,6 +334,13 @@ class SurfaceFeedbackPublisherTest {
                 override fun fireCue(cueId: Int) {}
                 override fun toggleBlackout(): Boolean = h.scaler.toggleBlackout()
                 override fun toggleGrandMaster(): Boolean = h.scaler.toggleGrandMaster()
+                override fun writeSpeedMasterBpm(
+                    masterUuid: String?,
+                    minBpm: Double,
+                    maxBpm: Double,
+                    midiValue7Bit: UByte,
+                ) {}
+                override fun tapSpeedMaster(masterUuid: String?) {}
             }
             val router = SurfaceInputRouter(
                 deviceMatcher = h.matcher,

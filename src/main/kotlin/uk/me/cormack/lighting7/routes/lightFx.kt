@@ -87,6 +87,7 @@ internal fun Route.routeApiRestFx(state: State) {
                 registration?.timingSource?.let { instance.timingSource = it }
 
                 instance.speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
+                instance.rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
 
                 markProgrammerOwned(instance, request.programmerOwned)
 
@@ -155,6 +156,7 @@ internal fun Route.routeApiRestFx(state: State) {
                     newElementFilter = newElementFilter,
                     newStepTiming = request.stepTiming,
                     newSpeedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid),
+                    newRateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid),
                 )
 
                 if (updated != null) {
@@ -257,6 +259,11 @@ data class AddEffectRequest(
     /** Speed master to subscribe to, as the master's uuid (null → master 1). */
     val speedMasterUuid: String? = null,
     /**
+     * Wall-clock rate master, as the master's uuid (null → unscaled). Read only by
+     * WALL_CLOCK effects; it coexists with [speedMasterUuid] rather than replacing it.
+     */
+    val rateSpeedMasterUuid: String? = null,
+    /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]) rather than as a plain manual effect. Band
      * effects compose *on top of* programmer values instead of being suppressed by them,
@@ -305,6 +312,8 @@ data class IndirectEffectDto(
     val intensityMultiplier: Double = 1.0,
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid: String? = null,
+    /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
+    val rateSpeedMasterUuid: String? = null,
 )
 
 @Serializable
@@ -324,6 +333,8 @@ data class UpdateEffectRequest(
      * exists and explicit-master-1 behaves identically to the null default.
      */
     val speedMasterUuid: String? = null,
+    /** Reassign the wall-clock rate master; null = no change, as above. */
+    val rateSpeedMasterUuid: String? = null,
 )
 
 @Serializable
@@ -352,6 +363,8 @@ data class EffectDto(
     val intensityMultiplier: Double = 1.0,
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid: String? = null,
+    /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
+    val rateSpeedMasterUuid: String? = null,
 )
 
 
@@ -405,6 +418,7 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
     programmerOwned = FxEngine.isProgrammerFxPriority(priority),
     intensityMultiplier = intensityMultiplier,
     speedMasterUuid = speedMasterUuid?.toString(),
+    rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
 )
 
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(
@@ -423,6 +437,7 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     programmerOwned = FxEngine.isProgrammerFxPriority(priority),
     intensityMultiplier = intensityMultiplier,
     speedMasterUuid = speedMasterUuid?.toString(),
+    rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
 )
 
 private fun createTargetFromRequest(request: AddEffectRequest, state: State): FxTarget {

@@ -753,4 +753,94 @@ class FxEnginePipelineTest {
         assertEquals(u2, updated?.speedMasterUuid, "the swap must carry speedMasterUuid")
         assertEquals(1, updated?.speedMasterSlot, "and the bound runtime slot")
     }
+
+    @Test
+    fun `updateEffect's atomic swap preserves the rate-master assignment`() {
+        val rig = newRig(firstChannel = 1)
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        rig.speedMasters.load(
+            listOf(
+                SpeedMasterSnapshot(u1, 1, "Master 1", 120.0, SpeedMasterSource.MANUAL),
+                SpeedMasterSnapshot(u2, 2, "Master 2", 60.0, SpeedMasterSource.MANUAL),
+            )
+        )
+
+        val effect = FxInstance(
+            effect = SineWave(),
+            target = SliderTarget("hex-a", "dimmer"),
+            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+        ).also { it.rateSpeedMasterUuid = u2 }
+        val id = rig.engine.addEffect(effect)
+
+        val updated = rig.engine.updateEffect(id, newTiming = FxTiming(beatDivision = BeatDivision.HALF))
+
+        assertEquals(u2, updated?.rateSpeedMasterUuid, "the swap must carry rateSpeedMasterUuid too")
+        assertEquals(1, updated?.rateMasterSlot, "and its bound runtime slot")
+    }
+
+    /**
+     * The swap hand-copies every field that must survive, and wall-clock phase now lives
+     * entirely in `accumulatedScaledMs` — so forgetting it there snaps an edited wall-clock
+     * effect back to the start of its cycle, which is the discontinuity the accumulator
+     * exists to prevent.
+     */
+    @Test
+    fun `updateEffect's atomic swap preserves accumulated wall-clock time`() {
+        val rig = newRig(firstChannel = 1)
+        val effect = FxInstance(
+            effect = SineWave(),
+            target = SliderTarget("hex-a", "dimmer"),
+            timing = FxTiming(beatDivision = 4.0),
+        ).also { it.timingSource = TimingSource.WALL_CLOCK }
+        val id = rig.engine.addEffect(effect)
+
+        // Three seconds into a four second cycle.
+        effect.advanceWallClock(3_000, 1.0)
+        assertEquals(0.75, effect.calculateWallClockPhase(), 1e-9)
+
+        val updated = rig.engine.updateEffect(id, newTiming = FxTiming(beatDivision = 4.0))
+
+        assertEquals(3_000.0, updated?.accumulatedScaledMs ?: -1.0, 1e-9, "the swap must carry the accumulator")
+        assertEquals(0.75, updated?.calculateWallClockPhase() ?: -1.0, 1e-9, "so the phase does not snap to 0")
+    }
+
+    /**
+     * Until this landed the rate master could be *preserved* but never *changed* —
+     * `updateEffect` had no parameter for it, so an effect's rate assignment was fixed at
+     * creation.
+     */
+    @Test
+    fun `updateEffect can reassign the rate master, on both branches`() {
+        val rig = newRig(firstChannel = 1)
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        rig.speedMasters.load(
+            listOf(
+                SpeedMasterSnapshot(u1, 1, "Master 1", 120.0, SpeedMasterSource.MANUAL),
+                SpeedMasterSnapshot(u2, 2, "Master 2", 60.0, SpeedMasterSource.MANUAL),
+            )
+        )
+
+        val effect = FxInstance(
+            effect = SineWave(),
+            target = SliderTarget("hex-a", "dimmer"),
+            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+        )
+        val id = rig.engine.addEffect(effect)
+
+        // In-place branch: nothing immutable changed.
+        val inPlace = rig.engine.updateEffect(id, newRateSpeedMasterUuid = u2)
+        assertEquals(u2, inPlace?.rateSpeedMasterUuid)
+        assertEquals(1, inPlace?.rateMasterSlot)
+
+        // Swap branch: a timing edit alongside the reassignment.
+        val swapped = rig.engine.updateEffect(
+            id,
+            newTiming = FxTiming(beatDivision = BeatDivision.HALF),
+            newRateSpeedMasterUuid = u1,
+        )
+        assertEquals(u1, swapped?.rateSpeedMasterUuid)
+        assertEquals(0, swapped?.rateMasterSlot)
+    }
 }

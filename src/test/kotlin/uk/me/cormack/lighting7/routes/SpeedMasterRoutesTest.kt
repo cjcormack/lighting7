@@ -154,6 +154,89 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.NoContent, forced.status, "force leaves the reference dangling on purpose")
     }
 
+    /**
+     * A master used *only* as a wall-clock rate master is still in use. Before the rate
+     * field was counted, the usage scan looked at `speedMasterUuid` alone and this delete
+     * went through silently, leaving the look it scaled running unscaled.
+     */
+    @Test
+    fun `a master referenced only as a rate master still refuses deletion`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val master2 = client.get("/api/rest/project/$projectId/speed-masters")
+            .body<List<SpeedMasterDto>>()
+            .single { it.masterIndex == 2 }
+
+        val cueId = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project; name = "s"; palette = emptyList(); loop = false
+                type = CueStackType.STACK.name; sortOrder = 0
+            }
+            val cue = DaoCue.new {
+                this.project = project; name = "c"; cueStack = stack; sortOrder = 0
+                palette = emptyList()
+            }
+            DaoCueAdHocEffect.new {
+                this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
+                effectType = "CandleFlicker"; category = "dimmer"; beatDivision = 4.0
+                blendMode = "OVERRIDE"; distribution = "LINEAR"
+                parameters = emptyMap()
+                // Deliberately no speedMasterUuid — the rate role alone must count.
+                rateSpeedMasterUuid = UUID.fromString(master2.uuid)
+            }
+            cue.id.value
+        }
+
+        val listed = client.get("/api/rest/project/$projectId/speed-masters")
+            .body<List<SpeedMasterDto>>()
+            .single { it.masterIndex == 2 }
+        assertEquals(1, listed.referenceCount)
+
+        val del = client.delete("/api/rest/project/$projectId/speed-masters/${master2.id}")
+        assertEquals(HttpStatusCode.Conflict, del.status)
+        val inUse = del.body<SpeedMasterInUseResponse>()
+        assertEquals(CODE_SPEED_MASTER_IN_USE, inUse.code)
+        assertEquals(listOf(cueId), inUse.cueIds)
+    }
+
+    /** One row naming the same master in both roles is one place to go and fix, not two. */
+    @Test
+    fun `a row referencing a master in both roles counts once`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val master2 = client.get("/api/rest/project/$projectId/speed-masters")
+            .body<List<SpeedMasterDto>>()
+            .single { it.masterIndex == 2 }
+
+        transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project; name = "s"; palette = emptyList(); loop = false
+                type = CueStackType.STACK.name; sortOrder = 0
+            }
+            val cue = DaoCue.new {
+                this.project = project; name = "c"; cueStack = stack; sortOrder = 0
+                palette = emptyList()
+            }
+            DaoCueAdHocEffect.new {
+                this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
+                effectType = "Pulse"; category = "dimmer"; beatDivision = 1.0
+                blendMode = "OVERRIDE"; distribution = "LINEAR"
+                parameters = emptyMap()
+                speedMasterUuid = UUID.fromString(master2.uuid)
+                rateSpeedMasterUuid = UUID.fromString(master2.uuid)
+            }
+        }
+
+        val listed = client.get("/api/rest/project/$projectId/speed-masters")
+            .body<List<SpeedMasterDto>>()
+            .single { it.masterIndex == 2 }
+        assertEquals(1, listed.referenceCount, "one row, one reference — not one per role")
+    }
+
     @Test
     fun `bpm outside the clock's range is rejected`() = testApplication {
         mountTestApp(state)

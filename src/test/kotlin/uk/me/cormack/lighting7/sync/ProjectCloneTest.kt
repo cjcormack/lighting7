@@ -193,6 +193,22 @@ class ProjectCloneTest {
                 cloneMaster.uuid, presetApp.speedMasterUuid,
                 "the preset application's override must point at the clone's master",
             )
+
+            // The rate role is a second, independent reference to the same master — it has
+            // to be rewritten in all three places too, or a cloned wall-clock look would
+            // scale against the source project's tempo.
+            assertEquals(
+                cloneMaster.uuid.toString(), presetEffect.rateSpeedMasterUuid,
+                "the preset effect's rate reference must be remapped inside the JSON blob",
+            )
+            assertEquals(
+                cloneMaster.uuid, adHoc.rateSpeedMasterUuid,
+                "the ad-hoc effect's rate column must point at the clone's master",
+            )
+            assertEquals(
+                cloneMaster.uuid, presetApp.rateSpeedMasterUuid,
+                "the preset application's rate override must point at the clone's master",
+            )
         }
     }
 

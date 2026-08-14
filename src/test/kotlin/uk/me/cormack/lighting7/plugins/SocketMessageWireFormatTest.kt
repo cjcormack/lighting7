@@ -165,6 +165,41 @@ class SocketMessageWireFormatTest {
         assertEquals(out, assertIs<SpeedMasterChangedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
     }
 
+    @Test
+    fun `speedMasters domain — beat out message round-trips with discriminator`() {
+        val out = SpeedMasterBeatOutMessage(
+            masterUuid = "7d444840-9dc0-11d1-b245-5ffdce74fad2",
+            index = 2, beatNumber = 32L, bpm = 64.0, timestampMs = 1_000_000L,
+        )
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"speedMasters.beat""""))
+        assertEquals(out, assertIs<SpeedMasterBeatOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+
+        // Master 1 rides the keyed stream too, as a null uuid — the same convention the
+        // write messages use. `beatSync` above is untouched and still means master 1.
+        val m1 = SpeedMasterBeatOutMessage(
+            masterUuid = null, index = 1, beatNumber = 0L, bpm = 120.0, timestampMs = 1L,
+        )
+        assertEquals(m1, assertIs<SpeedMasterBeatOutMessage>(
+            json.decodeFromString<OutMessage>(json.encodeToString<OutMessage>(m1))
+        ))
+    }
+
+    @Test
+    fun `speedMasters domain — requestBeat decodes with and without a uuid`() {
+        val keyed = json.decodeFromString<InMessage>(
+            """{"type":"speedMasters.requestBeat","masterUuid":"7d444840-9dc0-11d1-b245-5ffdce74fad2"}"""
+        )
+        assertIs<SpeedMasterInMessage>(keyed)
+        assertEquals(
+            "7d444840-9dc0-11d1-b245-5ffdce74fad2",
+            assertIs<SpeedMastersRequestBeatInMessage>(keyed).masterUuid,
+        )
+        assertEquals(null, assertIs<SpeedMastersRequestBeatInMessage>(
+            json.decodeFromString<InMessage>("""{"type":"speedMasters.requestBeat"}""")
+        ).masterUuid)
+    }
+
     // ─── FxChangeType enum (formerly stringly-typed) ────────────────────────
 
     @Test

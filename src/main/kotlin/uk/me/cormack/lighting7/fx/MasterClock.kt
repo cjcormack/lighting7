@@ -102,6 +102,16 @@ class MasterClock {
     @Volatile
     var onTick: (() -> Unit)? = null
 
+    /**
+     * Invoked on every beat boundary, off the flow machinery — the twin of [onTick], and
+     * for the same reason. The bank fans every clock's beats into one keyed stream from
+     * here rather than collecting [beatFlow] per master, which would need a coroutine per
+     * clock and explicit cancel-on-reload bookkeeping. This callback is wired once per
+     * clock *instance*, so a rename or reorder that keeps the instance keeps the wiring.
+     */
+    @Volatile
+    var onBeat: ((BeatEvent) -> Unit)? = null
+
     private var clockJob: Job? = null
 
     // Tap tempo tracking. Guarded by its own monitor: taps arrive from WS handlers, REST
@@ -192,7 +202,9 @@ class MasterClock {
                 _tickFlow.tryEmit(tick)
 
                 if (tickInBeat == 0) {
-                    _beatFlow.tryEmit(BeatEvent(beatNumber, tick.timestampMs))
+                    val beat = BeatEvent(beatNumber, tick.timestampMs)
+                    _beatFlow.tryEmit(beat)
+                    onBeat?.invoke(beat)
                 }
 
                 onTick?.invoke()

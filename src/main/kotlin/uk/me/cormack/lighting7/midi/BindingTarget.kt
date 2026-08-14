@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.midi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import uk.me.cormack.lighting7.fx.MasterClock
 
 /**
  * What a bound [ControlDescriptor] drives when the user moves / presses it.
@@ -12,10 +13,10 @@ import kotlinx.serialization.json.Json
  * lives in a `type` field set by [SerialName] on each subtype.
  *
  * Targets fall into three rough families:
- *   - **Continuous** ([FixtureProperty], [GroupProperty]) — fader / encoder movements map
- *     to a Layer 4 property write (Phase 3).
- *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [FireCue]) — button press
- *     invokes a cue-stack / cue-apply service call.
+ *   - **Continuous** ([FixtureProperty], [GroupProperty], [SpeedMasterBpm]) — fader /
+ *     encoder movements map to a Layer 4 property write (Phase 3) or a tempo write.
+ *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [FireCue],
+ *     [SpeedMasterTap]) — button press invokes a service call.
  *   - **Momentary / global / meta** ([Flash], [Blackout], [GrandMasterToggle], [SetBank]) —
  *     press / release change transport-level state.
  */
@@ -103,6 +104,42 @@ sealed class BindingTarget {
         val deviceTypeKey: String,
         val bank: String,
     ) : BindingTarget()
+
+    /**
+     * Drive a speed master's tempo from a fader / encoder. [masterUuid] null means master 1,
+     * matching the `speedMasters.*` WS family — and a **uuid** rather than an int id, so the
+     * binding survives the clone and cross-install import that the int-id cue/stack variants
+     * above do not (`FU-SYNC-BINDING-PAYLOAD-UUIDS`).
+     *
+     * The control's 0..127 maps onto [minBpm]..[maxBpm] rather than the clock's full
+     * 20..300: absolute encoders here have 128 steps, and spreading those over the whole
+     * range gives ~2.2 BPM a step, too coarse to trim a tempo with. The default window is
+     * the musically useful middle; widen it per binding when you need to.
+     */
+    @Serializable
+    @SerialName("speedMasterBpm")
+    data class SpeedMasterBpm(
+        val masterUuid: String? = null,
+        val minBpm: Double = DEFAULT_MIN_BPM,
+        val maxBpm: Double = DEFAULT_MAX_BPM,
+    ) : BindingTarget() {
+        init {
+            require(minBpm < maxBpm) { "SpeedMasterBpm minBpm must be below maxBpm" }
+            require(minBpm >= MasterClock.MIN_BPM && maxBpm <= MasterClock.MAX_BPM) {
+                "SpeedMasterBpm range must sit within ${MasterClock.MIN_BPM}..${MasterClock.MAX_BPM}"
+            }
+        }
+
+        companion object {
+            const val DEFAULT_MIN_BPM = 60.0
+            const val DEFAULT_MAX_BPM = 180.0
+        }
+    }
+
+    /** Tap a speed master's tempo on button press ([masterUuid] null → master 1). */
+    @Serializable
+    @SerialName("speedMasterTap")
+    data class SpeedMasterTap(val masterUuid: String? = null) : BindingTarget()
 }
 
 /** JSON codec for [BindingTarget] payloads. Stable discriminator = `type`. */

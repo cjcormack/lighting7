@@ -16,6 +16,7 @@ import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.MasterClock
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
@@ -344,20 +345,48 @@ internal fun speedMasterUsageFor(
     val uuidSet = masterUuids.toSet()
     val uuidStrings = uuidSet.associateBy { it.toString() }
 
+    // Both roles count. A master referenced only as a wall-clock *rate* master is just as
+    // much in use as one an effect runs on, and counting only the latter would let the
+    // delete guard wave through a master that a look still depends on.
     val presetEffectCounts = mutableMapOf<UUID, Int>()
     project.fxPresets.forEach { preset ->
         preset.effects.forEach { effect ->
-            val uuid = effect.speedMasterUuid?.let { uuidStrings[it] } ?: return@forEach
-            presetEffectCounts.merge(uuid, 1, Int::plus)
+            val referenced = listOfNotNull(
+                effect.speedMasterUuid?.let { uuidStrings[it] },
+                effect.rateSpeedMasterUuid?.let { uuidStrings[it] },
+            ).distinct()
+            referenced.forEach { presetEffectCounts.merge(it, 1, Int::plus) }
         }
     }
 
+    // A row referencing the same master in both roles counts once — `total` gates the 409,
+    // and "2 references" from one row would read as two separate places to go and fix.
+    fun <T> Iterable<T>.byMaster(
+        speed: (T) -> UUID?,
+        rate: (T) -> UUID?,
+        cueId: (T) -> Int,
+    ): Map<UUID, List<Int>> {
+        val out = HashMap<UUID, MutableList<Int>>()
+        forEach { row ->
+            listOfNotNull(speed(row), rate(row)).distinct()
+                .filter { it in uuidSet }
+                .forEach { out.getOrPut(it) { mutableListOf() }.add(cueId(row)) }
+        }
+        return out
+    }
+
     val adHocRows = DaoCueAdHocEffect
-        .find { DaoCueAdHocEffects.speedMasterUuid inList uuidSet }
-        .groupBy({ it.speedMasterUuid!! }, { it.cue.id.value })
+        .find {
+            (DaoCueAdHocEffects.speedMasterUuid inList uuidSet) or
+                (DaoCueAdHocEffects.rateSpeedMasterUuid inList uuidSet)
+        }
+        .byMaster({ it.speedMasterUuid }, { it.rateSpeedMasterUuid }, { it.cue.id.value })
     val presetAppRows = DaoCuePresetApplication
-        .find { DaoCuePresetApplications.speedMasterUuid inList uuidSet }
-        .groupBy({ it.speedMasterUuid!! }, { it.cue.id.value })
+        .find {
+            (DaoCuePresetApplications.speedMasterUuid inList uuidSet) or
+                (DaoCuePresetApplications.rateSpeedMasterUuid inList uuidSet)
+        }
+        .byMaster({ it.speedMasterUuid }, { it.rateSpeedMasterUuid }, { it.cue.id.value })
 
     return uuidSet.associateWith { uuid ->
         val adHocCues = adHocRows[uuid] ?: emptyList()

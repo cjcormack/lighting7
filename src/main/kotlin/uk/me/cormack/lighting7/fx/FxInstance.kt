@@ -365,25 +365,41 @@ class FxInstance(
     }
 
     /**
-     * Calculate the current phase for this effect using wall-clock elapsed time.
+     * Scaled elapsed time, in milliseconds, since this effect started — the wall-clock
+     * analogue of a beat effect's tick counter.
+     *
+     * Phase derives from *this* rather than from `now - startedAtMs` so that changing a rate
+     * master mid-cycle is continuous: the cycle length stays fixed and only the rate of
+     * accumulation moves, where dividing a fixed elapsed time by a changing cycle length
+     * made the phase jump. Advanced once per wall-clock pass by [advanceWallClock].
+     */
+    @Volatile
+    var accumulatedScaledMs: Double = 0.0
+
+    /**
+     * Advance [accumulatedScaledMs] by one pass of [deltaMs] at [rateScale]
+     * (`master.bpm / 120`, 1.0 when no rate master is assigned).
+     *
+     * Called once per effect per wall-clock pass, before any phase is read, so every phase
+     * call within a pass sees one coherent value.
+     */
+    fun advanceWallClock(deltaMs: Long, rateScale: Double = 1.0) {
+        val scale = if (rateScale > 0.0) rateScale else 1.0
+        accumulatedScaledMs += deltaMs * scale
+    }
+
+    /**
+     * Calculate the current phase for this effect using accumulated wall-clock time.
      *
      * For wall-clock effects, [FxTiming.beatDivision] is reinterpreted as cycle
      * duration in seconds (e.g., 4.0 = 4 second cycle).
      *
-     * [rateScale] is the optional rate-master scale (`master.bpm / 120`, 1.0 when
-     * unassigned): the effective cycle is divided by it, so a faster master shortens the
-     * cycle. **Changing the rate mid-cycle jumps the phase** — elapsed time is fixed while
-     * the cycle length moves under it. Accepted for Session 5; a continuous version needs
-     * an accumulated scaled-elapsed field rather than `startedAtMs` arithmetic.
-     *
      * @return Phase from 0.0 to 1.0 within the effect cycle
      */
-    fun calculateWallClockPhase(rateScale: Double = 1.0): Double {
-        val scale = if (rateScale > 0.0) rateScale else 1.0
-        val cycleDurationMs = (timing.beatDivision * 1000.0 / scale).toLong()
-        if (cycleDurationMs <= 0) return 0.0
-        val elapsed = System.currentTimeMillis() - startedAtMs
-        val phase = ((elapsed % cycleDurationMs).toDouble() / cycleDurationMs + phaseOffset) % 1.0
+    fun calculateWallClockPhase(): Double {
+        val cycleDurationMs = timing.beatDivision * 1000.0
+        if (cycleDurationMs <= 0.0) return 0.0
+        val phase = ((accumulatedScaledMs % cycleDurationMs) / cycleDurationMs + phaseOffset) % 1.0
         lastPhase = phase
         return phase
     }
@@ -393,25 +409,21 @@ class FxInstance(
      *
      * @param memberInfo The member's distribution info
      * @param groupSize Total number of members in the group
-     * @param rateScale Optional rate-master scale — see [calculateWallClockPhase]
      * @return Phase from 0.0 to 1.0 within the effect cycle
      */
     fun calculateWallClockPhaseForMember(
         memberInfo: DistributionMemberInfo,
         groupSize: Int,
-        rateScale: Double = 1.0,
     ): Double {
         val effectiveDivision = if (stepTiming && groupSize > 1) {
             timing.beatDivision * distributionStrategy.distinctSlots(groupSize)
         } else {
             timing.beatDivision
         }
-        val scale = if (rateScale > 0.0) rateScale else 1.0
-        val cycleDurationMs = (effectiveDivision * 1000.0 / scale).toLong()
-        if (cycleDurationMs <= 0) return 0.0
-        val elapsed = System.currentTimeMillis() - startedAtMs
+        val cycleDurationMs = effectiveDivision * 1000.0
+        if (cycleDurationMs <= 0.0) return 0.0
 
-        var basePhase = (elapsed % cycleDurationMs).toDouble() / cycleDurationMs
+        var basePhase = (accumulatedScaledMs % cycleDurationMs) / cycleDurationMs
 
         if (distributionStrategy.usesTrianglePhase && groupSize > 1) {
             val slots = distributionStrategy.distinctSlots(groupSize)

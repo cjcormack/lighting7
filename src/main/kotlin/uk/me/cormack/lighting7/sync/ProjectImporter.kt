@@ -680,6 +680,7 @@ class ProjectImporter(private val state: State) {
                 randomWindowMs = a.randomWindowMs
                 sortOrder = a.sortOrder
                 speedMasterUuid = a.speedMasterUuid?.let { UUID.fromString(it) }
+                rateSpeedMasterUuid = a.rateSpeedMasterUuid?.let { UUID.fromString(it) }
                 this.uuid = uuid
             }
             uuid to Unit
@@ -713,6 +714,7 @@ class ProjectImporter(private val state: State) {
                 randomWindowMs = e.randomWindowMs
                 sortOrder = e.sortOrder
                 speedMasterUuid = e.speedMasterUuid?.let { UUID.fromString(it) }
+                rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { UUID.fromString(it) }
                 this.uuid = uuid
             }
             uuid to Unit
