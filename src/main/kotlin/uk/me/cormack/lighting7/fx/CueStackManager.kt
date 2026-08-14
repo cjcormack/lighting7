@@ -108,6 +108,7 @@ class CueStackManager(
                         intervalMs = app.intervalMs,
                         randomWindowMs = app.randomWindowMs,
                         sortOrder = app.sortOrder,
+                        speedMasterUuid = app.speedMasterUuid?.toString(),
                     )
                 },
                 adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
@@ -203,7 +204,8 @@ class CueStackManager(
                     } catch (_: Exception) { null } ?: continue
 
                     val instance = createInstanceForStack(
-                        presetEffect, fxTarget, presetApp.presetId, state, stackId
+                        presetEffect, fxTarget, presetApp.presetId, state, stackId,
+                        overrideSpeedMasterUuid = speedMasterUuidOrNull(presetApp.speedMasterUuid),
                     )
                     instance.cueId = cueData.cueId
                     instance.cueStackId = stackId
@@ -229,6 +231,7 @@ class CueStackManager(
                 elementFilter = adHoc.elementFilter,
                 stepTiming = adHoc.stepTiming,
                 parameters = adHoc.parameters,
+                speedMasterUuid = adHoc.speedMasterUuid,
             )
             val fxTarget = try {
                 resolveTargetForCue(state, target, presetEffectDto)
@@ -620,6 +623,8 @@ class CueStackManager(
         presetId: Int?,
         state: State,
         stackId: Int,
+        /** Per-cue-application override; null falls through to the preset effect's own master. */
+        overrideSpeedMasterUuid: java.util.UUID? = null,
     ): FxInstance {
         val engine = state.show.fxEngine
         val effect = state.show.fxRegistry.createEffect(
@@ -662,6 +667,8 @@ class CueStackManager(
             this.elementFilter = elementFilter
             this.timingSource = timingSource
             presetEffect.stepTiming?.let { this.stepTiming = it }
+            speedMasterUuid = overrideSpeedMasterUuid
+                ?: speedMasterUuidOrNull(presetEffect.speedMasterUuid)
         }
     }
 }

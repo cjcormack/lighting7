@@ -32,6 +32,8 @@ import uk.me.cormack.lighting7.models.DaoPromptBookAnchor
 import uk.me.cormack.lighting7.models.DaoPromptBookAnnotation
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
+import uk.me.cormack.lighting7.models.DaoSpeedMaster
+import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.FxPresetEffectDto
@@ -196,6 +198,22 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         )
     }
 
+    // 2 speed masters with every optional column set to a non-default value — master 1 is
+    // the protected global master and would normally sit at its defaults, so the fixture
+    // seeds masters 1 and 2 both off-default to keep the canonical-JSON round-trip honest.
+    DaoSpeedMaster.new {
+        this.project = project
+        masterIndex = 1; name = "House Tempo"
+        bpm = 128.0; source = SpeedMasterSource.TAP.name
+        notes = "tapped at soundcheck"
+    }
+    val slowMaster = DaoSpeedMaster.new {
+        this.project = project
+        masterIndex = 2; name = "Slow Wash"
+        bpm = 64.0; source = SpeedMasterSource.MANUAL.name
+        notes = "half-time position waves"
+    }
+
     // 1 fx preset with property assignments
     val preset = DaoFxPreset.new {
         this.project = project
@@ -206,6 +224,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
                 effectType = "Pulse", category = "dimmer",
                 propertyName = "dimmer", beatDivision = 0.5,
                 blendMode = "OVERRIDE", distribution = "LINEAR",
+                // Inside the JSON blob column — the reference the ExportUuidRemapper must
+                // rewrite across opaque text for a clone to point at its own master.
+                speedMasterUuid = slowMaster.uuid.toString(),
             )
         )
         palette = listOf("#ff8800")
@@ -305,6 +326,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         intervalMs = 200L
         randomWindowMs = 50L
         sortOrder = 3
+        speedMasterUuid = slowMaster.uuid
     }
     DaoCuePresetApplication.new {
         cue = cue1; this.preset = preset; targets = emptyList()
@@ -312,6 +334,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         intervalMs = 500L
         randomWindowMs = 125L
         sortOrder = 2
+        speedMasterUuid = slowMaster.uuid
     }
     DaoCueTrigger.new {
         cue = cue1; this.script = script1

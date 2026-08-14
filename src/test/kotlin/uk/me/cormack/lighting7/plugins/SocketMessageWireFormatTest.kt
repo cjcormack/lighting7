@@ -97,6 +97,74 @@ class SocketMessageWireFormatTest {
         assertEquals(out, assertIs<BeatSyncOutMessage>(json.decodeFromString<OutMessage>(encoded)))
     }
 
+    // ─── Speed-master domain ────────────────────────────────────────────────
+    // The legacy fx-domain messages above are the compatibility promise: `setFxBpm`,
+    // `tapTempo` and `beatSync` mean master 1, unchanged on the wire. The keyed
+    // `speedMasters.*` family is the superset, not a replacement — if editing those
+    // fx-domain assertions ever seems necessary, the promise is being broken.
+
+    @Test
+    fun `speedMasters domain — setBpm routes via SpeedMasterInMessage with an optional uuid`() {
+        val keyed = json.decodeFromString<InMessage>(
+            """{"type":"speedMasters.setBpm","bpm":90.0,"masterUuid":"7d444840-9dc0-11d1-b245-5ffdce74fad2"}"""
+        )
+        assertIs<SpeedMasterInMessage>(keyed)
+        val leaf = assertIs<SpeedMastersSetBpmInMessage>(keyed)
+        assertEquals(90.0, leaf.bpm)
+        assertEquals("7d444840-9dc0-11d1-b245-5ffdce74fad2", leaf.masterUuid)
+
+        // Omitted uuid → master 1, so the strip can address the global master uniformly.
+        val unkeyed = assertIs<SpeedMastersSetBpmInMessage>(
+            json.decodeFromString<InMessage>("""{"type":"speedMasters.setBpm","bpm":90.0}""")
+        )
+        assertEquals(null, unkeyed.masterUuid)
+    }
+
+    @Test
+    fun `speedMasters domain — tap decodes with and without a uuid`() {
+        val keyed = json.decodeFromString<InMessage>(
+            """{"type":"speedMasters.tap","masterUuid":"7d444840-9dc0-11d1-b245-5ffdce74fad2"}"""
+        )
+        assertIs<SpeedMasterInMessage>(keyed)
+        assertEquals("7d444840-9dc0-11d1-b245-5ffdce74fad2", assertIs<SpeedMastersTapInMessage>(keyed).masterUuid)
+        assertEquals(null, assertIs<SpeedMastersTapInMessage>(
+            json.decodeFromString<InMessage>("""{"type":"speedMasters.tap"}""")
+        ).masterUuid)
+    }
+
+    @Test
+    fun `speedMasters domain — state request object decodes`() {
+        val decoded = json.decodeFromString<InMessage>("""{"type":"speedMasters.state"}""")
+        assertIs<SpeedMasterInMessage>(decoded)
+        assertIs<SpeedMastersStateInMessage>(decoded)
+    }
+
+    @Test
+    fun `speedMasters domain — state out message round-trips with discriminator`() {
+        val out = SpeedMastersStateOutMessage(
+            masters = listOf(
+                SpeedMasterStateJson(
+                    uuid = "7d444840-9dc0-11d1-b245-5ffdce74fad2",
+                    index = 1, name = "Master 1", bpm = 128.0, isRunning = true, source = "TAP",
+                ),
+            ),
+        )
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"speedMasters.state""""))
+        assertEquals(out, assertIs<SpeedMastersStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
+    @Test
+    fun `speedMasters domain — changed out message round-trips with discriminator`() {
+        val out = SpeedMasterChangedOutMessage(
+            masterUuid = "7d444840-9dc0-11d1-b245-5ffdce74fad2",
+            index = 2, bpm = 64.0, source = "MANUAL", timestampMs = 1_000_000L,
+        )
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"speedMasters.changed""""))
+        assertEquals(out, assertIs<SpeedMasterChangedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
     // ─── FxChangeType enum (formerly stringly-typed) ────────────────────────
 
     @Test

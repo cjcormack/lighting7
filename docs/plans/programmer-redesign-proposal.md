@@ -1,7 +1,38 @@
 # Programmer Redesign — Proposal
 
-**Status**: In progress — **Session 4 (palettes as references) complete 2026-08-14; only Session 5
-remains.**
+**Status**: **Complete — all five sessions landed. Session 5 (speed masters) landed 2026-08-14**
+in both repos.
+**Session 5 landed 2026-08-14**: `SpeedMaster` entity (portable in sync — the exported bpm is a
+*starting default*, written through from live changes on a 750 ms trailing debounce; refs are
+uuids per the Session-4 lesson) + CRUD with 409 `SPEED_MASTER_PROTECTED` (master 1) /
+`SPEED_MASTER_IN_USE` delete guards and lazy default-bank seeding; **a single engine pass over N
+timebases**, not the proposal's literal "one tick flow per master" — exploration showed BPM never
+enters the phase math (phase is a pure function of the tick counter, now the companion
+`MasterClock.phaseForDivision(tickNumber, division)`), so each master's clock advances its own
+counter and nudges a CONFLATED wake channel while ONE pass composes everything: one
+`ControllerTransaction` per frame however many masters tick, and no N-way last-writer-wins fight
+on shared properties. Fixing the tick-interval truncation became load-bearing here — the old
+`toLong()` ran 120 BPM at ~125 invisibly, which with two masters would have been *relative* drift
+(120:60 ⇒ 2.05:1); the deadline timer holds ratios exact and `SpeedMasterBankTest` pins it.
+`FxInstance.speedMasterUuid` (null → master 1) threads through preset effects (JSON blob — no
+DDL), cue ad-hoc effects and per-application overrides (real columns), all 20 creation sites, the
+three ad-hoc→pseudo-preset re-packs, and `updateEffect`'s hand-enumerated atomic swap (each
+guarded by a preserves-master test — that swap is exactly where a missed field silently resets an
+edited effect to master 1). Every legacy tempo surface (`setFxBpm`/`tapTempo` WS, REST
+`/fx/clock/*`, script `setBpm`, AI `set_bpm`, `fxState.bpm`, `beatSync`) forwards to master 1,
+byte-identical on the wire (`SocketMessageWireFormatTest` pins the promise); the keyed
+`speedMasters.*` WS family is the superset. Wall-clock **rate masters** shipped backend-only
+(`rateScale = bpm/120` dividing the cycle in the two phase functions; phase jumps on rate change,
+accepted and pinned) — no picker UI because no shipped effect declares WALL_CLOCK
+(`FU-SPEED-RATEMASTER-UI`). Frontend: `SpeedMastersStrip` in ShowBar/RunMobile
+(ProgrammerIndicator-style self-contained, masters 2..N; the existing BPM tile *is* M1, relabelled),
+`SpeedMasterSelect` in `EffectParameterForm` reaching all six authoring surfaces (dealing only in
+concrete uuids so update's null-means-no-change survives), per-application override in the cue
+preset picker, M-chips omitted when resolving to M1, and a pad-wide busking default.
+`buildCueInput`'s field-by-field rebuild gained the field plus the regression test that stops the
+next field silently vanishing on inline cue edits. Cuts → followups: `FU-SPEED-RATEMASTER-UI`,
+`FU-SPEED-MIDI-BINDING`, `FU-SPEED-BEATINDICATOR-PERMASTER` (the beat pulse stays master-1-only).
+**Still unproven on a rig**: two masters driving one show live — restart required (new classes).
 **Session 4 frontend landed 2026-08-14** (lighting-react `5394be0` + `d8ae3d5`): reference
 rendering in the programmer sheet — a type-tinted edge bar, corner glyph and resolved swatch
 layered *around* the cells the way ownership colouring already is, with a destructive ring only

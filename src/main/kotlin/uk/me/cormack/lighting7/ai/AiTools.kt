@@ -206,7 +206,11 @@ class AiTools(private val state: State) {
 
     private fun executeSetBpm(input: JsonObject): ToolExecutionResult {
         val bpm = input["bpm"]?.jsonPrimitive?.double ?: return errorResult("Missing 'bpm'")
-        state.show.fxEngine.masterClock.setBpm(bpm)
+        // The AI tool means the global tempo — master 1; routed through the bank so the
+        // change is tracked, pushed, and written through like any other tempo write.
+        state.show.fxEngine.speedMasters.setBpm(
+            null, bpm, uk.me.cormack.lighting7.models.SpeedMasterSource.MANUAL
+        )
         return ToolExecutionResult(
             success = true,
             description = "Set BPM to $bpm",

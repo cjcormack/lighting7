@@ -136,5 +136,69 @@ class WallClockTimingTest {
         val (metadata, _) = FxFileLoader.parseFxFile(content)
         assertEquals("BEAT", metadata.timingSource)
     }
+
+    // ─── Rate-master scaling of the wall-clock cycle ─────────────────────
+    // The old "requires the fixture system" note above predates SliderTarget taking a plain
+    // key (see FxInstanceTest.stubTarget) — direct phase tests are possible after all.
+
+    private fun wallClockInstance(cycleSeconds: Double, startedAgoMs: Long): FxInstance =
+        FxInstance(
+            effect = SineWave(),
+            target = SliderTarget(FxTargetRef.FixtureRef("test"), "dimmer"),
+            timing = FxTiming(beatDivision = cycleSeconds),
+        ).apply {
+            timingSource = TimingSource.WALL_CLOCK
+            startedAtMs = System.currentTimeMillis() - startedAgoMs
+        }
+
+    @Test
+    fun `rateScale divides the wall-clock cycle`() {
+        // 4 s cycle, 1 s in → phase 0.25 unscaled.
+        val instance = wallClockInstance(cycleSeconds = 4.0, startedAgoMs = 1_000)
+
+        assertEquals(0.25, instance.calculateWallClockPhase(), 0.02)
+        // Master at 240 BPM → scale 2.0 → effective 2 s cycle → 1 s in is phase 0.5.
+        assertEquals(0.5, instance.calculateWallClockPhase(2.0), 0.02)
+        // Master at 60 BPM → scale 0.5 → effective 8 s cycle → 1 s in is phase 0.125.
+        assertEquals(0.125, instance.calculateWallClockPhase(0.5), 0.02)
+    }
+
+    @Test
+    fun `unassigned and degenerate rate scales leave the cycle unchanged`() {
+        val instance = wallClockInstance(cycleSeconds = 4.0, startedAgoMs = 1_000)
+        val unscaled = instance.calculateWallClockPhase()
+
+        assertEquals(unscaled, instance.calculateWallClockPhase(1.0), 0.02, "scale 1.0 is identity")
+        assertEquals(unscaled, instance.calculateWallClockPhase(0.0), 0.02, "zero degrades to unscaled")
+        assertEquals(unscaled, instance.calculateWallClockPhase(-2.0), 0.02, "negative degrades to unscaled")
+    }
+
+    @Test
+    fun `rateScale applies to the member form too`() {
+        val instance = wallClockInstance(cycleSeconds = 4.0, startedAgoMs = 1_000)
+        val member = object : uk.me.cormack.lighting7.fx.group.DistributionMemberInfo {
+            override val index = 0
+            override val normalizedPosition = 0.0
+        }
+
+        assertEquals(0.25, instance.calculateWallClockPhaseForMember(member, 1), 0.02)
+        assertEquals(0.5, instance.calculateWallClockPhaseForMember(member, 1, 2.0), 0.02)
+    }
+
+    /**
+     * The documented (and deliberate) discontinuity: phase derives from `elapsed % cycle`,
+     * so changing the rate mid-cycle jumps the phase rather than continuing smoothly. This
+     * test pins the behaviour as *intended* — if it starts failing because someone made the
+     * wall-clock path accumulate scaled elapsed time, delete it and celebrate.
+     */
+    @Test
+    fun `changing the rate mid-cycle jumps the phase — accepted, not a bug`() {
+        val instance = wallClockInstance(cycleSeconds = 4.0, startedAgoMs = 3_000)
+
+        val before = instance.calculateWallClockPhase(1.0)   // 3s into 4s → 0.75
+        val after = instance.calculateWallClockPhase(2.0)    // 3s into 2s → 0.5, a jump
+        assertEquals(0.75, before, 0.02)
+        assertEquals(0.5, after, 0.02)
+    }
 }
 

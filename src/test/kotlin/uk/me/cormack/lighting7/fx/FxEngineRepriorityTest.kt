@@ -16,7 +16,7 @@ import kotlin.test.assertIs
  */
 class FxEngineRepriorityTest {
 
-    private fun newEngine(): FxEngine = FxEngine(Fixtures(), MasterClock())
+    private fun newEngine(): FxEngine = FxEngine(Fixtures(), SpeedMasterBank())
 
     /** LTP, so the highest priority wins outright rather than the values being merged. */
     private fun ltpSlider(cueId: Int, priority: Int, value: UByte) = Layer3Resolver.Assignment(

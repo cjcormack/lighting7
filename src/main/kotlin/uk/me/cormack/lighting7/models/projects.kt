@@ -44,6 +44,7 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     val scripts by DaoScript referrersOn DaoScripts.project
     val fxPresets by DaoFxPreset referrersOn DaoFxPresets.project
     val palettes by DaoPalette referrersOn DaoPalettes.project
+    val speedMasters by DaoSpeedMaster referrersOn DaoSpeedMasters.project
     val cues by DaoCue referrersOn DaoCues.project
     val cueStacks by DaoCueStack referrersOn DaoCueStacks.project
     val cueSlots by DaoCueSlot referrersOn DaoCueSlots.project

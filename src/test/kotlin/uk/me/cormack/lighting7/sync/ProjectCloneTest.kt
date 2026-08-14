@@ -152,6 +152,50 @@ class ProjectCloneTest {
         }
     }
 
+    /**
+     * The speed-master analogue of the palette-ref test above. The preset-effect reference
+     * lives inside the `fx_presets.effects` JSON blob (remapped only because
+     * [ExportUuidRemapper] substitutes uuids across the whole export text); the ad-hoc and
+     * preset-application references are real columns. All three must point at the *clone's*
+     * master — an un-rewritten reference would silently run the clone's effects at the
+     * original project's tempo, or (after the original is deleted) fall back to master 1.
+     */
+    @Test
+    fun `clone rewires speed-master references to the clone's own master`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-masters", description = null)
+
+        transaction(state.database) {
+            val clone = DaoProject.findById(result.projectId)!!
+            val source = DaoProject.findById(sourceId)!!
+
+            val cloneMaster = clone.speedMasters.single { it.name == "Slow Wash" }
+            val sourceMaster = source.speedMasters.single { it.name == "Slow Wash" }
+            assertNotEquals(
+                sourceMaster.uuid, cloneMaster.uuid,
+                "clone must mint a fresh master identity",
+            )
+
+            val presetEffect = clone.fxPresets.single().effects.single()
+            assertEquals(
+                cloneMaster.uuid.toString(), presetEffect.speedMasterUuid,
+                "the preset effect's reference (inside the JSON blob) must point at the clone's master",
+            )
+
+            val adHoc = clone.cues.flatMap { it.adHocEffects }.single()
+            assertEquals(
+                cloneMaster.uuid, adHoc.speedMasterUuid,
+                "the ad-hoc effect's column must point at the clone's master",
+            )
+
+            val presetApp = clone.cues.flatMap { it.presetApplications }.single()
+            assertEquals(
+                cloneMaster.uuid, presetApp.speedMasterUuid,
+                "the preset application's override must point at the clone's master",
+            )
+        }
+    }
+
     @Test
     fun `clone carries machine-local controller addresses`() {
         // Addresses are excluded from the export by design (per-rig), but a clone lands on the

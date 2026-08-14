@@ -38,7 +38,7 @@ class ProgrammerLayerTest {
         val programmerStore = ProgrammerStore()
         val engine = FxEngine(
             fixtures = fixtures,
-            masterClock = MasterClock(),
+            speedMasters = SpeedMasterBank(),
             programmerStore = programmerStore,
             layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
         )

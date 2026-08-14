@@ -24,6 +24,13 @@ import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromTemplate
 import kotlin.time.measureTime
 
+/**
+ * Trailing debounce for writing live tempo changes back to their rows. Long enough that a
+ * tap burst (4 taps ≈ 2 s) coalesces into one write, short enough that a crash loses at
+ * most a moment's tapping.
+ */
+private const val SPEED_MASTER_WRITE_DEBOUNCE_MS = 750L
+
 @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
 class Show(
     val state: State,
@@ -67,6 +74,8 @@ class Show(
             // Covers create and delete. A *contents* change goes through
             // `republishForPaletteEdit`, which invalidates the one palette directly.
             override fun paletteListChanged() = registry.invalidateAll()
+
+            override fun speedMasterListChanged() {}
 
             override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) {}
             override fun controllersChanged() {}
@@ -119,11 +128,14 @@ class Show(
     )
     val fxEngine = FxEngine(
         fixtures = fixtures,
-        masterClock = MasterClock(),
+        speedMasters = SpeedMasterBank(),
         programmerStore = programmerStore,
         layerResolver = layerResolver,
         parkManager = parkManager,
     )
+
+    /** The show's speed-master clocks; slot 0 is master 1 (the global tempo). */
+    val speedMasterBank: SpeedMasterBank get() = fxEngine.speedMasters
     val locateManager = LocateManager()
     val cueStackManager = CueStackManager(fxEngine)
 
@@ -168,8 +180,32 @@ class Show(
         // from a control surface propagate at transmit time.
         globalScalerState.attach()
 
+        // Load (or lazily seed) this project's speed masters before the engine starts, so
+        // every clock begins at its stored tempo rather than the 120 default.
+        reloadSpeedMasters()
+
         // Start the FX engine after fixtures are loaded
         fxEngine.start(GlobalScope)
+
+        // Write live tempo changes back to their rows, so the stored bpm is "wherever the
+        // tempo was last set" and the next boot/import starts there. Trailing-debounced:
+        // taps arrive ~2/s and recompute BPM each time, so per-tap writes would be churn.
+        // The capture is the bank's SYNCHRONOUS hook, not a changes-flow collector — a
+        // collector can be cancelled at close() with an emission still buffered, losing the
+        // very last tap; the hook lands in the pending map before setBpm/tap even returns,
+        // so the final flush in [close] can't miss it.
+        speedMasterBank.onChangeSync = { change ->
+            change.uuid?.let { uuid ->
+                pendingSpeedMasterWrites[uuid] = change
+                speedMasterFlushSignal.trySend(Unit)
+            }
+        }
+        speedMasterFlushJob = GlobalScope.launch {
+            for (signal in speedMasterFlushSignal) {
+                delay(SPEED_MASTER_WRITE_DEBOUNCE_MS)
+                flushSpeedMasterWrites()
+            }
+        }
 
         // Load user-created FX definitions from the database into the registry
         loadUserFxDefinitions()
@@ -187,7 +223,69 @@ class Show(
 
     fun close() {
         globalScalerState.detach()
+        // Detach the sync hook first so nothing new lands mid-teardown, then flush what's
+        // pending — a tempo tapped in the last debounce window must not be lost to a
+        // project switch, and the hook (unlike a flow collector) guarantees every change
+        // is already in the pending map by the time this runs.
+        speedMasterBank.onChangeSync = null
+        speedMasterFlushJob?.cancel()
+        speedMasterFlushJob = null
+        flushSpeedMasterWrites()
         fxEngine.stop()
+    }
+
+    private val pendingSpeedMasterWrites = java.util.concurrent.ConcurrentHashMap<java.util.UUID, SpeedMasterBank.Change>()
+    private val speedMasterFlushSignal = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+    private var speedMasterFlushJob: Job? = null
+
+    private fun flushSpeedMasterWrites() {
+        if (pendingSpeedMasterWrites.isEmpty()) return
+        val writes = pendingSpeedMasterWrites.keys.toList()
+            .mapNotNull { uuid -> pendingSpeedMasterWrites.remove(uuid) }
+        if (writes.isEmpty()) return
+        try {
+            transaction(state.database) {
+                for (change in writes) {
+                    val uuid = change.uuid ?: continue
+                    val master = DaoSpeedMaster
+                        .find { (DaoSpeedMasters.project eq project.id) and (DaoSpeedMasters.uuid eq uuid) }
+                        .firstOrNull() ?: continue
+                    master.bpm = change.bpm
+                    master.source = change.source.name
+                }
+            }
+        } catch (e: Exception) {
+            System.err.println("Failed to persist speed-master tempo change: ${e.message}")
+        }
+    }
+
+    /**
+     * (Re-)read this show's speed masters from the DB — at start, and after any CRUD write.
+     * Surviving clocks keep their live tempo and tick counter (see [SpeedMasterBank.load]);
+     * a typed-BPM retune is applied separately via [setSpeedMasterBpmIfCurrent].
+     */
+    fun reloadSpeedMasters() {
+        val snapshots = transaction(state.database) {
+            ensureDefaultSpeedMasters(project).map {
+                SpeedMasterSnapshot(
+                    uuid = it.uuid,
+                    index = it.masterIndex,
+                    name = it.name,
+                    bpm = it.bpm,
+                    source = it.sourceEnum,
+                )
+            }
+        }
+        speedMasterBank.load(snapshots)
+    }
+
+    /**
+     * Retune a live clock after a REST bpm write, but only when the write was for *this*
+     * show's project — a bpm typed into a non-current project must land in its row only.
+     */
+    fun setSpeedMasterBpmIfCurrent(projectId: Int, masterUuid: java.util.UUID, bpm: Double) {
+        if (projectId != project.id.value) return
+        speedMasterBank.setBpm(masterUuid, bpm, SpeedMasterSource.MANUAL)
     }
 
     /**

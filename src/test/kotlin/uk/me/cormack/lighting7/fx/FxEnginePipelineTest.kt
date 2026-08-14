@@ -10,8 +10,11 @@ import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fx.effects.SineWave
 import uk.me.cormack.lighting7.fx.effects.StaticColour
 import uk.me.cormack.lighting7.fx.effects.StaticValue
+import kotlinx.coroutines.runBlocking
+import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -42,7 +45,7 @@ class FxEnginePipelineTest {
         val fixtures: Fixtures,
         val engine: FxEngine,
         val programmerStore: ProgrammerStore,
-        val masterClock: MasterClock,
+        val speedMasters: SpeedMasterBank,
         val parkSource: MutableParkSource,
     )
 
@@ -70,14 +73,14 @@ class FxEnginePipelineTest {
             addFixture(HexFixture(universe, "hex-a", "Hex A", firstChannel))
         }
         val programmerStore = ProgrammerStore()
-        val masterClock = MasterClock()
+        val speedMasters = SpeedMasterBank()
         val engine = FxEngine(
             fixtures = fixtures,
-            masterClock = masterClock,
+            speedMasters = speedMasters,
             programmerStore = programmerStore,
             layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
         )
-        return Rig(controller, fixtures, engine, programmerStore, masterClock, parkSource)
+        return Rig(controller, fixtures, engine, programmerStore, speedMasters, parkSource)
     }
 
     /**
@@ -649,5 +652,105 @@ class FxEnginePipelineTest {
             rig.controller.writeLog.all { it.first == 1 },
             "only channel 1 should have been written; saw ${rig.controller.writeLog.map { it.first }.toSet()}",
         )
+    }
+
+    // ─── Speed masters: one pass, N timebases ────────────────────────────────
+
+    /** Frame whose slot 0 sees [tick0] and slot 1 sees [tick1]; rate scales neutral. */
+    private fun frameOf(tick0: MasterClock.ClockTick, tick1: MasterClock.ClockTick) =
+        SpeedMasterBank.Frame(arrayOf(tick0, tick1), doubleArrayOf(1.0, 1.0), maxOf(tick0.timestampMs, tick1.timestampMs))
+
+    @Test
+    fun `two effects on two masters get their own masters' phases in one pass`() {
+        val rig = newRig(firstChannel = 1)
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        rig.speedMasters.load(
+            listOf(
+                SpeedMasterSnapshot(u1, 1, "Master 1", 120.0, SpeedMasterSource.MANUAL),
+                SpeedMasterSnapshot(u2, 2, "Master 2", 60.0, SpeedMasterSource.MANUAL),
+            )
+        )
+
+        // Same beat division, different masters. Master 2's clock has advanced half a beat
+        // while master 1 sits at the beat boundary.
+        val onMaster1 = FxInstance(
+            effect = SineWave(),
+            target = SliderTarget("hex-a", "dimmer"),
+            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+        )
+        val onMaster2 = FxInstance(
+            effect = SineWave(),
+            target = SliderTarget("hex-a", "uv"),
+            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+        ).also { it.speedMasterUuid = u2 }
+
+        rig.engine.addEffect(onMaster1)
+        rig.engine.addEffect(onMaster2)
+        assertEquals(0, onMaster1.speedMasterSlot)
+        assertEquals(1, onMaster2.speedMasterSlot, "addEffect binds the uuid to its runtime slot")
+
+        runBlocking { rig.engine.processBeatTickSuspend(frameOf(tick(0), tick(12))) }
+
+        assertEquals(0.0, onMaster1.lastPhase, 0.001, "master 1's effect sees master 1's tick")
+        assertEquals(0.5, onMaster2.lastPhase, 0.001, "master 2's effect sees master 2's tick — half a beat on")
+    }
+
+    @Test
+    fun `deleting a master rebinds its effects to master 1 on the next pass`() {
+        val rig = newRig(firstChannel = 1)
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        rig.speedMasters.load(
+            listOf(
+                SpeedMasterSnapshot(u1, 1, "Master 1", 120.0, SpeedMasterSource.MANUAL),
+                SpeedMasterSnapshot(u2, 2, "Master 2", 60.0, SpeedMasterSource.MANUAL),
+            )
+        )
+
+        val effect = FxInstance(
+            effect = SineWave(),
+            target = SliderTarget("hex-a", "dimmer"),
+            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+        ).also { it.speedMasterUuid = u2 }
+        rig.engine.addEffect(effect)
+        assertEquals(1, effect.speedMasterSlot)
+
+        // Master 2's row is deleted; the bank reloads without it.
+        rig.speedMasters.load(listOf(SpeedMasterSnapshot(u1, 1, "Master 1", 120.0, SpeedMasterSource.MANUAL)))
+
+        // The next pass re-binds before processing: the effect degrades to master 1's
+        // timebase rather than freezing or crashing.
+        rig.engine.processBeatTick(tick(12))
+        assertEquals(0, effect.speedMasterSlot, "a deleted master's effects rebind to master 1")
+        assertEquals(0.5, effect.lastPhase, 0.001, "and take master 1's tick from the uniform frame")
+    }
+
+    @Test
+    fun `updateEffect's atomic swap preserves the master assignment`() {
+        val rig = newRig(firstChannel = 1)
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        rig.speedMasters.load(
+            listOf(
+                SpeedMasterSnapshot(u1, 1, "Master 1", 120.0, SpeedMasterSource.MANUAL),
+                SpeedMasterSnapshot(u2, 2, "Master 2", 60.0, SpeedMasterSource.MANUAL),
+            )
+        )
+
+        val effect = FxInstance(
+            effect = SineWave(),
+            target = SliderTarget("hex-a", "dimmer"),
+            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+        ).also { it.speedMasterUuid = u2 }
+        val id = rig.engine.addEffect(effect)
+
+        // A beat-division edit takes the atomic-swap branch (newTiming != null) — the
+        // hand-enumerated field copy must carry the master or the edit silently resets
+        // the effect to master 1.
+        val updated = rig.engine.updateEffect(id, newTiming = FxTiming(beatDivision = BeatDivision.HALF))
+
+        assertEquals(u2, updated?.speedMasterUuid, "the swap must carry speedMasterUuid")
+        assertEquals(1, updated?.speedMasterSlot, "and the bound runtime slot")
     }
 }

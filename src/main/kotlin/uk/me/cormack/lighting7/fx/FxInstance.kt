@@ -266,6 +266,33 @@ class FxInstance(
     var timingSource: TimingSource = TimingSource.BEAT
 
     /**
+     * Speed master this BEAT effect subscribes to, as the persisted master **uuid**
+     * (null → master 1). Uuid rather than int id so a stored reference survives clone and
+     * import — see `FxPresetEffectDto.speedMasterUuid`. The engine resolves it to
+     * [speedMasterSlot] at add/update time and re-resolves when the bank's membership
+     * changes; a uuid the bank no longer knows resolves to master 1.
+     */
+    var speedMasterUuid: java.util.UUID? = null
+
+    /**
+     * Optional rate master for WALL_CLOCK effects: the effective cycle is scaled by the
+     * master's `bpm / 120`. Null → unscaled (current behaviour preserved).
+     */
+    var rateSpeedMasterUuid: java.util.UUID? = null
+
+    /**
+     * Runtime slot of [speedMasterUuid] in the show's [SpeedMasterBank]; 0 is master 1.
+     * Bound by the engine, never persisted — the hot path indexes an array with this
+     * rather than looking up a UUID per tick.
+     */
+    @Volatile
+    var speedMasterSlot: Int = 0
+
+    /** Runtime slot of [rateSpeedMasterUuid]; see [speedMasterSlot]. */
+    @Volatile
+    var rateMasterSlot: Int = 0
+
+    /**
      * Whether this effect targets a group (vs individual fixture).
      */
     val isGroupEffect: Boolean get() = target.isGroupTarget
@@ -278,12 +305,17 @@ class FxInstance(
     /**
      * Calculate the current phase for this effect based on clock timing.
      *
-     * @param tick The current clock tick
-     * @param clock The master clock for timing calculations
+     * Takes only the tick — deliberately no clock parameter. Phase is a pure function of
+     * the tick counter ([MasterClock.phaseForDivision]), and with one clock per speed
+     * master an ignored clock argument would make "this master's tick, that master's
+     * clock" silently plausible. The caller passes the tick of *this effect's* master
+     * (`frame.tick(speedMasterSlot)`).
+     *
+     * @param tick The current clock tick of this effect's speed master
      * @return Phase from 0.0 to 1.0 within the effect cycle
      */
-    fun calculatePhase(tick: MasterClock.ClockTick, clock: MasterClock): Double {
-        val basePhase = clock.phaseForDivision(tick, timing.beatDivision)
+    fun calculatePhase(tick: MasterClock.ClockTick): Double {
+        val basePhase = MasterClock.phaseForDivision(tick.tickNumber, timing.beatDivision)
         val phase = (basePhase + phaseOffset) % 1.0
         lastPhase = phase
         return phase
@@ -292,15 +324,13 @@ class FxInstance(
     /**
      * Calculate the phase for a specific group member (includes distribution offset).
      *
-     * @param tick The current clock tick
-     * @param clock The master clock for timing calculations
+     * @param tick The current clock tick of this effect's speed master
      * @param memberInfo The member's distribution info (index and normalized position)
      * @param groupSize Total number of members in the group
      * @return Phase from 0.0 to 1.0 within the effect cycle
      */
     fun calculatePhaseForMember(
         tick: MasterClock.ClockTick,
-        clock: MasterClock,
         memberInfo: DistributionMemberInfo,
         groupSize: Int
     ): Double {
@@ -312,7 +342,7 @@ class FxInstance(
         } else {
             timing.beatDivision
         }
-        var basePhase = clock.phaseForDivision(tick, effectiveDivision)
+        var basePhase = MasterClock.phaseForDivision(tick.tickNumber, effectiveDivision)
 
         // PING_PONG: apply triangle wave remap to the base clock phase so that
         // ALL effects (not just static ones) sweep forward then backward.
@@ -340,10 +370,17 @@ class FxInstance(
      * For wall-clock effects, [FxTiming.beatDivision] is reinterpreted as cycle
      * duration in seconds (e.g., 4.0 = 4 second cycle).
      *
+     * [rateScale] is the optional rate-master scale (`master.bpm / 120`, 1.0 when
+     * unassigned): the effective cycle is divided by it, so a faster master shortens the
+     * cycle. **Changing the rate mid-cycle jumps the phase** — elapsed time is fixed while
+     * the cycle length moves under it. Accepted for Session 5; a continuous version needs
+     * an accumulated scaled-elapsed field rather than `startedAtMs` arithmetic.
+     *
      * @return Phase from 0.0 to 1.0 within the effect cycle
      */
-    fun calculateWallClockPhase(): Double {
-        val cycleDurationMs = (timing.beatDivision * 1000.0).toLong()
+    fun calculateWallClockPhase(rateScale: Double = 1.0): Double {
+        val scale = if (rateScale > 0.0) rateScale else 1.0
+        val cycleDurationMs = (timing.beatDivision * 1000.0 / scale).toLong()
         if (cycleDurationMs <= 0) return 0.0
         val elapsed = System.currentTimeMillis() - startedAtMs
         val phase = ((elapsed % cycleDurationMs).toDouble() / cycleDurationMs + phaseOffset) % 1.0
@@ -356,18 +393,21 @@ class FxInstance(
      *
      * @param memberInfo The member's distribution info
      * @param groupSize Total number of members in the group
+     * @param rateScale Optional rate-master scale — see [calculateWallClockPhase]
      * @return Phase from 0.0 to 1.0 within the effect cycle
      */
     fun calculateWallClockPhaseForMember(
         memberInfo: DistributionMemberInfo,
-        groupSize: Int
+        groupSize: Int,
+        rateScale: Double = 1.0,
     ): Double {
         val effectiveDivision = if (stepTiming && groupSize > 1) {
             timing.beatDivision * distributionStrategy.distinctSlots(groupSize)
         } else {
             timing.beatDivision
         }
-        val cycleDurationMs = (effectiveDivision * 1000.0).toLong()
+        val scale = if (rateScale > 0.0) rateScale else 1.0
+        val cycleDurationMs = (effectiveDivision * 1000.0 / scale).toLong()
         if (cycleDurationMs <= 0) return 0.0
         val elapsed = System.currentTimeMillis() - startedAtMs
 

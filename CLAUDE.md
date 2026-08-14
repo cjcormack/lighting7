@@ -117,7 +117,8 @@ Lighting scripts use embedded Kotlin via `LightingScript` base class:
 
 ### FX System
 Tempo-synchronized effects for continuous animations without complex scripts:
-- **MasterClock** - Global BPM reference (20-300 BPM), emits 24 ticks/beat
+- **SpeedMasterBank** - Per-show bank of named tempo buses (persisted, portable in sync); slot 0 = master 1, the global tempo all legacy surfaces map to. Effects subscribe via `speedMasterUuid` (null → master 1). One engine pass per (conflated) tick wake-up, however many masters tick.
+- **MasterClock** - One master's tempo clock (20-300 BPM), emits 24 ticks/beat; phase is a pure function of the tick counter (`MasterClock.phaseForDivision`)
 - **FxEngine** - Processes active effects, applies to fixtures via transactions
 - **FxRegistry** - Unified registry for all effect types (built-in and script-defined)
 - **FxTargetable** - Common interface for Fixture and FixtureGroup (enables unified FX targeting)
@@ -239,9 +240,10 @@ group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrateg
 - **Swagger UI**: `http://localhost:8413/openapi`
 
 ### FX REST Endpoints
-- `GET /api/rest/fx/clock/status` - Get BPM and clock state
-- `POST /api/rest/fx/clock/bpm` - Set BPM
-- `POST /api/rest/fx/clock/tap` - Tap tempo
+- `GET /api/rest/fx/clock/status` - Get BPM and clock state (master 1)
+- `POST /api/rest/fx/clock/bpm` - Set BPM (master 1)
+- `POST /api/rest/fx/clock/tap` - Tap tempo (master 1)
+- `GET/POST /api/rest/project/{id}/speed-masters` + `GET/PUT/DELETE .../{mid}` - Speed-master CRUD (delete guards: `SPEED_MASTER_PROTECTED` for master 1, `SPEED_MASTER_IN_USE` when referenced)
 - `GET /api/rest/fx/active` - List active effects
 - `POST /api/rest/fx/add` - Add effect to fixture
 - `DELETE /api/rest/fx/{id}` - Remove effect
@@ -262,9 +264,10 @@ group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrateg
 - `channelMappingState` - Channel-to-fixture mapping (sent on connect and fixtures change)
 - `universesState` - Available DMX universes
 - `updateChannel` - Direct channel control
-- `fxState` - Request/receive FX state (BPM, active effects)
-- `setFxBpm` - Set tempo
-- `tapTempo` - Tap for tempo
+- `fxState` - Request/receive FX state (master 1 BPM, active effects incl. per-effect speed master)
+- `setFxBpm` - Set tempo (master 1)
+- `tapTempo` - Tap for tempo (master 1)
+- `speedMasters.state` / `speedMasters.setBpm` / `speedMasters.tap` - Keyed per-master tempo control; `speedMasters.changed` streams live BPM moves, `speedMasterListChanged` signals CRUD
 - `removeFx` / `pauseFx` / `resumeFx` / `clearFx` - Effect control
 - `fxChanged` - Broadcast on effect add/remove/update
 - `groupsState` - Request/receive fixture groups state

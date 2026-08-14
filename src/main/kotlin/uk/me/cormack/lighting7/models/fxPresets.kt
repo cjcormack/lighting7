@@ -23,6 +23,14 @@ data class FxPresetEffectDto(
     val elementFilter: String? = null,
     val stepTiming: Boolean? = null,
     val parameters: Map<String, String> = emptyMap(),
+    /**
+     * Speed master this effect subscribes to, as the master's **uuid** (null → master 1).
+     * A uuid rather than an int id for the same reason palette refs are:
+     * [uk.me.cormack.lighting7.sync.ExportUuidRemapper] rewrites uuid occurrences across the
+     * whole export text — including inside this JSON blob column — so the reference survives
+     * clone and import where an int PK would dangle.
+     */
+    val speedMasterUuid: String? = null,
 )
 
 /**

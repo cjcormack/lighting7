@@ -30,6 +30,11 @@ data class CuePresetApplicationDto(
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
     val sortOrder: Int = 0,
+    /**
+     * Per-application speed-master override, as the master's uuid (null → each preset
+     * effect's own [FxPresetEffectDto.speedMasterUuid] → master 1).
+     */
+    val speedMasterUuid: String? = null,
 )
 
 /**
@@ -84,6 +89,8 @@ data class CueAdHocEffectDto(
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
     val sortOrder: Int = 0,
+    /** Speed master uuid (null → master 1). Uuid, not int id — see [FxPresetEffectDto.speedMasterUuid]. */
+    val speedMasterUuid: String? = null,
 ) {
     val target: TargetRef get() = TargetRef.of(targetType, targetKey)
 }
@@ -166,6 +173,11 @@ object DaoCuePresetApplications : IntIdTable("cue_preset_applications") {
     val intervalMs = long("interval_ms").nullable()
     val randomWindowMs = long("random_window_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
+    /**
+     * Per-application speed-master override (null → the preset effect's own
+     * [FxPresetEffectDto.speedMasterUuid] → master 1).
+     */
+    val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 }
 
@@ -179,6 +191,7 @@ class DaoCuePresetApplication(id: EntityID<Int>) : IntEntity(id) {
     var intervalMs by DaoCuePresetApplications.intervalMs
     var randomWindowMs by DaoCuePresetApplications.randomWindowMs
     var sortOrder by DaoCuePresetApplications.sortOrder
+    var speedMasterUuid by DaoCuePresetApplications.speedMasterUuid
     var uuid by DaoCuePresetApplications.uuid
 }
 
@@ -203,6 +216,8 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
     val intervalMs = long("interval_ms").nullable()
     val randomWindowMs = long("random_window_ms").nullable()
     val sortOrder = integer("sort_order").default(0)
+    /** Speed master this effect subscribes to (null → master 1). */
+    val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 }
 
@@ -235,6 +250,7 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var intervalMs by DaoCueAdHocEffects.intervalMs
     var randomWindowMs by DaoCueAdHocEffects.randomWindowMs
     var sortOrder by DaoCueAdHocEffects.sortOrder
+    var speedMasterUuid by DaoCueAdHocEffects.speedMasterUuid
     var uuid by DaoCueAdHocEffects.uuid
 }
 

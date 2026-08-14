@@ -57,8 +57,8 @@ showEntries/{uuid}.json
 cueStacks/{uuid}.json
 cues/{uuid}.json               # carries cueStackUuid (nullable)
 cuePropertyAssignments/{uuid}.json   # carries cueUuid
-cuePresetApplications/{uuid}.json    # carries cueUuid + presetUuid
-cueAdHocEffects/{uuid}.json    # carries cueUuid
+cuePresetApplications/{uuid}.json    # carries cueUuid + presetUuid + optional speedMasterUuid
+cueAdHocEffects/{uuid}.json    # carries cueUuid + optional speedMasterUuid
 cueTriggers/{uuid}.json        # carries cueUuid + scriptUuid
 fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUuid
 universeConfigs/{uuid}.json    # `address` deliberately omitted (machine-local)
@@ -67,6 +67,7 @@ stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
 fixtureGroups/{uuid}.json      # members embedded inline
 fxPresets/{uuid}.json          # propertyAssignments embedded inline
 palettes/{uuid}.json           # entries embedded inline
+speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default
 fxDefinitions/{uuid}.json
 cueSlots/{uuid}.json
 parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's parked output

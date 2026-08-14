@@ -10,6 +10,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fx.PaletteCascade
+import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.toPaletteColours
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
@@ -119,6 +120,8 @@ data class CueEditAddPresetApplicationInMessage(
     val delayMs: Long? = null,
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
+    /** Per-application speed-master override (null → each preset effect's own → master 1). */
+    val speedMasterUuid: String? = null,
 ) : CueEditInMessage()
 
 @Serializable
@@ -254,6 +257,7 @@ suspend fun handleCueEdit(scope: SocketScope, message: CueEditInMessage) {
                 state, ref, message.cueId,
                 message.presetId, message.targets,
                 message.delayMs, message.intervalMs, message.randomWindowMs,
+                speedMasterUuid = speedMasterUuidOrNull(message.speedMasterUuid),
             )
         is CueEditAddAdHocEffectInMessage ->
             CueEditSessionHandler.addAdHocEffect(state, ref, message.cueId, message.effect)
@@ -640,6 +644,7 @@ object CueEditSessionHandler {
         delayMs: Long?,
         intervalMs: Long?,
         randomWindowMs: Long?,
+        speedMasterUuid: java.util.UUID? = null,
     ): OutMessage {
         val session = sessionRef.get()
         if (session == null || session.cueId != cueId) {
@@ -659,6 +664,7 @@ object CueEditSessionHandler {
                     this.intervalMs = intervalMs
                     this.randomWindowMs = randomWindowMs
                     this.sortOrder = cue.presetApplications.count().toInt()
+                    this.speedMasterUuid = speedMasterUuid
                 }
                 val applyData = if (session.mode == CueEditMode.LIVE) buildCueApplyData(cue) else null
                 val effects = if (shouldSpawn) preset.effects else null
@@ -682,7 +688,8 @@ object CueEditSessionHandler {
                             resolveTargetForCue(state, toggleTarget, presetEffect)
                         } catch (_: Exception) { null } ?: continue
                         val instance = createInstanceFromPresetForCue(
-                            presetEffect, fxTarget, presetId, state, cueId
+                            presetEffect, fxTarget, presetId, state, cueId,
+                            overrideSpeedMasterUuid = speedMasterUuid,
                         )
                         instance.cueId = cueId
                         instance.priority = cueDerivedPriority(applyData)
@@ -734,6 +741,7 @@ object CueEditSessionHandler {
                     intervalMs = effect.intervalMs
                     randomWindowMs = effect.randomWindowMs
                     sortOrder = effect.sortOrder.takeIf { it > 0 } ?: nextSort
+                    speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
                 }
                 if (session.mode == CueEditMode.LIVE) buildCueApplyData(cue) else null
             }
@@ -755,6 +763,7 @@ object CueEditSessionHandler {
                 elementFilter = effect.elementFilter,
                 stepTiming = effect.stepTiming,
                 parameters = effect.parameters,
+                speedMasterUuid = effect.speedMasterUuid,
             )
             val fxTarget = runCatching {
                 resolveTargetForCue(state, target, presetEffectDto)

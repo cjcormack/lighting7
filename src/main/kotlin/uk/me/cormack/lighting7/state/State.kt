@@ -590,6 +590,7 @@ class State(val config: ApplicationConfig) {
         override fun fixturesChanged() = refreshActiveProjectBindingHealth()
         override fun presetListChanged() {}
         override fun paletteListChanged() {}
+        override fun speedMasterListChanged() {}
         override fun cueListChanged() = refreshActiveProjectBindingHealth()
         override fun cueStackListChanged() = refreshActiveProjectBindingHealth()
         override fun cueSlotListChanged() {}

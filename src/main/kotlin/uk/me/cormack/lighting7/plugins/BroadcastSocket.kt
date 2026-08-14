@@ -51,6 +51,15 @@ data object StageRegionListChangedOutMessage : BroadcastOutMessage()
 @SerialName("paletteListChanged")
 data object PaletteListChangedOutMessage : BroadcastOutMessage()
 
+/**
+ * Speed-master CRUD only — created, renamed, deleted. Live BPM changes stream over the
+ * `speedMasters.*` family instead, for the same storm rationale as [PaletteListChangedOutMessage]:
+ * this message is a cache-invalidation signal, and a tapped tempo would fire it twice a second.
+ */
+@Serializable
+@SerialName("speedMasterListChanged")
+data object SpeedMasterListChangedOutMessage : BroadcastOutMessage()
+
 @Serializable
 @SerialName("showChanged")
 data class ShowChangedOutMessage(
@@ -108,6 +117,7 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         override fun riggingListChanged() = fire(RiggingListChangedOutMessage)
         override fun stageRegionListChanged() = fire(StageRegionListChangedOutMessage)
         override fun paletteListChanged() = fire(PaletteListChangedOutMessage)
+        override fun speedMasterListChanged() = fire(SpeedMasterListChangedOutMessage)
 
         override fun showChanged(
             projectId: Int,

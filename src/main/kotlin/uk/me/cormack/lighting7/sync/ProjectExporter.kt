@@ -30,6 +30,7 @@ import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookAnchorJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookAnnotationJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookJson
+import uk.me.cormack.lighting7.sync.dto.SpeedMasterJson
 import uk.me.cormack.lighting7.sync.dto.RiggingJson
 import uk.me.cormack.lighting7.sync.dto.ScriptMetaJson
 import uk.me.cormack.lighting7.sync.dto.StageRegionJson
@@ -62,6 +63,7 @@ import java.util.UUID
  * /fixtureGroups/{uuid}.json       -- members embedded inline
  * /fxPresets/{uuid}.json           -- propertyAssignments embedded inline
  * /palettes/{uuid}.json            -- entries embedded inline
+ * /speedMasters/{uuid}.json
  * /fxDefinitions/{uuid}.json
  * /cueSlots/{uuid}.json
  * /parkedChannels/{uuid}.json
@@ -322,6 +324,17 @@ class ProjectExporter(private val state: State) {
                 )
             }
 
+            count += writeAll(targetDir, "speedMasters", project.speedMasters.toList(), SpeedMasterJson.serializer(), { it.uuid }, liveKeys) { m ->
+                SpeedMasterJson(
+                    uuid = m.uuid.toString(),
+                    masterIndex = m.masterIndex,
+                    name = m.name,
+                    bpm = m.bpm,
+                    source = m.source,
+                    notes = m.notes,
+                )
+            }
+
             count += writeAll(targetDir, "fxDefinitions", project.fxDefinitions.toList(), FxDefinitionJson.serializer(), { it.uuid }, liveKeys) { d ->
                 // Encode ParameterInfo through the canonical JSON instance so nested defaults/nulls
                 // follow the same omission rules as the parent document.
@@ -468,6 +481,7 @@ class ProjectExporter(private val state: State) {
                         intervalMs = a.intervalMs,
                         randomWindowMs = a.randomWindowMs,
                         sortOrder = a.sortOrder,
+                        speedMasterUuid = a.speedMasterUuid?.toString(),
                     ),
                 )
                 liveKeys.add(RecordKey("cuePresetApplications", a.uuid))
@@ -499,6 +513,7 @@ class ProjectExporter(private val state: State) {
                         intervalMs = e.intervalMs,
                         randomWindowMs = e.randomWindowMs,
                         sortOrder = e.sortOrder,
+                        speedMasterUuid = e.speedMasterUuid?.toString(),
                     ),
                 )
                 liveKeys.add(RecordKey("cueAdHocEffects", e.uuid))

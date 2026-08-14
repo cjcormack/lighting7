@@ -33,6 +33,7 @@ import uk.me.cormack.lighting7.models.DaoPromptBookAnnotations
 import uk.me.cormack.lighting7.models.DaoPromptBooks
 import uk.me.cormack.lighting7.models.DaoRiggings
 import uk.me.cormack.lighting7.models.DaoScripts
+import uk.me.cormack.lighting7.models.DaoSpeedMasters
 import uk.me.cormack.lighting7.models.DaoStageRegions
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.models.DaoSyncLinkedRepos
@@ -104,6 +105,10 @@ class SyncCoverageTest {
         DaoFxPresetPropertyAssignments to Disposition.Portable("fxPresets", "propertyAssignments"),
         DaoPalettes to Disposition.Portable("palettes"),
         DaoPaletteEntries to Disposition.Portable("palettes", "entries"),
+        // Portable rather than excluded-live-state: preset/cue effects reference a master by
+        // speedMasterUuid, and that reference only survives clone/import if the masters
+        // travel with the show. The exported bpm is a starting default, not a live knob.
+        DaoSpeedMasters to Disposition.Portable("speedMasters"),
         DaoUniverseConfigs to Disposition.Portable("universeConfigs"),
         DaoRiggings to Disposition.Portable("riggings"),
         DaoStageRegions to Disposition.Portable("stageRegions"),

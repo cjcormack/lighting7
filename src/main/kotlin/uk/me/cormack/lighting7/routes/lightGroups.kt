@@ -120,6 +120,7 @@ internal fun Route.routeApiRestGroups(state: State) {
                         cueId = instance.cueId,
                         programmerOwned = FxEngine.isProgrammerFxPriority(instance.priority),
                         intensityMultiplier = instance.intensityMultiplier,
+                        speedMasterUuid = instance.speedMasterUuid?.toString(),
                     )
                 }
                 call.respond(dtos)
@@ -202,6 +203,8 @@ data class AddGroupFxRequest(
     val elementMode: String = "PER_FIXTURE",  // PER_FIXTURE or FLAT
     val elementFilter: String = "ALL",
     val stepTiming: Boolean? = null,
+    /** Speed master to subscribe to, as the master's uuid (null → master 1). */
+    val speedMasterUuid: String? = null,
     /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]). See [AddEffectRequest.programmerOwned].
@@ -235,6 +238,8 @@ data class GroupEffectDto(
     val programmerOwned: Boolean = false,
     /** Fade envelope in `[0, 1]`; the effect's output is scaled by this before blending. */
     val intensityMultiplier: Double = 1.0,
+    /** Speed master this effect subscribes to (null → master 1). */
+    val speedMasterUuid: String? = null,
 )
 
 @Serializable
@@ -426,6 +431,7 @@ private fun applyGroupEffect(
         this.elementMode = elementMode
         this.elementFilter = elFilter
         request.stepTiming?.let { this.stepTiming = it }
+        speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
     }
 
     markProgrammerOwned(instance, request.programmerOwned)

@@ -22,6 +22,7 @@ import uk.me.cormack.lighting7.models.DaoFxPreset
 import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
 import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.models.DaoPaletteEntry
+import uk.me.cormack.lighting7.models.DaoSpeedMaster
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
@@ -49,6 +50,7 @@ import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.sync.dto.CueTriggerJson
 import uk.me.cormack.lighting7.sync.dto.PaletteJson
+import uk.me.cormack.lighting7.sync.dto.SpeedMasterJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookAnchorJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookAnnotationJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookJson
@@ -216,6 +218,7 @@ class ProjectImporter(private val state: State) {
                 palette.entries.forEach { it.delete() }
                 palette.delete()
             }
+            project.speedMasters.forEach { it.delete() }
             project.fixtureGroups.forEach { group ->
                 group.members.forEach { it.delete() }
                 group.delete()
@@ -289,6 +292,7 @@ class ProjectImporter(private val state: State) {
         importFxDefinitions(sourceDir, project)
         val fxPresetMap = importFxPresets(sourceDir, project)
         importPalettes(sourceDir, project)
+        importSpeedMasters(sourceDir, project)
         val universeMap = importUniverseConfigs(sourceDir, project)
         val riggingMap = importRiggings(sourceDir, project)
         importStageRegions(sourceDir, project)
@@ -409,6 +413,28 @@ class ProjectImporter(private val state: State) {
                     sortOrder = e.sortOrder
                     this.uuid = UUID.fromString(e.uuid)
                 }
+            }
+            uuid to dao
+        }
+    }
+
+    /**
+     * Speed masters. Returns nothing for the same reason [importPalettes] does: preset and
+     * cue effect rows reference a master by `speedMasterUuid` string, not through a FK, so
+     * no uuid → DAO map is needed downstream.
+     */
+    private fun importSpeedMasters(dir: Path, project: DaoProject) {
+        readDir(dir.resolve("speedMasters")) { json ->
+            val m = canonicalDecode(SpeedMasterJson.serializer(), json)
+            val uuid = UUID.fromString(m.uuid)
+            val dao = DaoSpeedMaster.new {
+                this.project = project
+                masterIndex = m.masterIndex
+                name = m.name
+                bpm = m.bpm
+                source = m.source
+                notes = m.notes
+                this.uuid = uuid
             }
             uuid to dao
         }
@@ -653,6 +679,7 @@ class ProjectImporter(private val state: State) {
                 intervalMs = a.intervalMs
                 randomWindowMs = a.randomWindowMs
                 sortOrder = a.sortOrder
+                speedMasterUuid = a.speedMasterUuid?.let { UUID.fromString(it) }
                 this.uuid = uuid
             }
             uuid to Unit
@@ -685,6 +712,7 @@ class ProjectImporter(private val state: State) {
                 intervalMs = e.intervalMs
                 randomWindowMs = e.randomWindowMs
                 sortOrder = e.sortOrder
+                speedMasterUuid = e.speedMasterUuid?.let { UUID.fromString(it) }
                 this.uuid = uuid
             }
             uuid to Unit

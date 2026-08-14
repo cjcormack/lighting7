@@ -123,6 +123,55 @@ risks breaking visual regressions until the next consumer pays for itself.
 
 ## Backend / composition model
 
+### `FU-SPEED-RATEMASTER-UI` — rate-master picker for WALL_CLOCK effects
+
+**Status**: Trigger (first shipped WALL_CLOCK effect)
+**Origin**: Programmer redesign Session 5 (2026-08), §3.6 / locked decision 3
+
+The backend supports scaling a WALL_CLOCK effect's cycle by a rate master
+(`FxInstance.rateSpeedMasterUuid`; effective cycle = `beatDivision / (bpm / 120)`,
+see `calculateWallClockPhase`), but Session 5 deliberately shipped **no picker
+UI**: no shipped built-in effect declares `timingSource: WALL_CLOCK` — the path
+is only reachable from user `.fx.kts` files — so the picker would have zero
+in-tree consumers, and building it means first threading `timingSource` into the
+frontend's `EffectLibraryEntry` (`src/store/fixtureFx.ts`) so `EffectParameterForm`
+can discriminate BEAT (speed-master picker) from WALL_CLOCK (rate-master picker).
+Also note the accepted phase-jump-on-rate-change behaviour pinned in
+`WallClockTimingTest` — decide whether to fix it (accumulated scaled-elapsed
+field) before exposing a knob that makes it easy to hit.
+
+**Trigger to revisit**: the first shipped effect that declares `WALL_CLOCK`, or
+a `.fx.kts` user asking how to point their wall-clock effect at a master.
+
+### `FU-SPEED-MIDI-BINDING` — MIDI binding for speed masters
+
+**Status**: Trigger (next control-surface session)
+**Origin**: Programmer redesign proposal §3.6 (deferred list), promoted on Session 5 landing (2026-08)
+
+The masters strip has per-master tap and BPM entry; the natural next step is
+binding surface controls (encoder → BPM, button → tap) through the existing
+`controlSurfaceBindings` machinery. There is currently **no** BPM/tap binding
+target at all — `routes/controlSurfaceTypes.kt` has no tempo entry — so this
+adds a binding target type, not just a master id on an existing one.
+
+**Trigger to revisit**: the next control-surface work, or an operator asking to
+tap tempo from hardware.
+
+### `FU-SPEED-BEATINDICATOR-PERMASTER` — per-master beat pulse in the frontend
+
+**Status**: Trigger (operator confusion)
+**Origin**: Programmer redesign Session 5 (2026-08), frontend scope cut
+
+`BeatIndicator` (lighting-react) pulses from the unkeyed `beatSync` stream, which
+is deliberately bound to master 1 for wire compatibility. An effect running on
+master 2 pulses at the wrong rate next to its chip. Fix means either a keyed
+`beatSync` variant (per-master beat events over `speedMasters.*`) or deriving
+pulses client-side from `speedMasters.changed` bpm + local timers keyed by
+master.
+
+**Trigger to revisit**: an operator asks why the pulse doesn't follow their
+effect's master, or the masters strip grows a per-tile beat dot.
+
 ### `FU-PROG-L3RESOLVER-RENAME` — rename `Layer3Resolver` to `CueAssignmentResolver`
 
 **Status**: Ready (standalone mechanical commit)

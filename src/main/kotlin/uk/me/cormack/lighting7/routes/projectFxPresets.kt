@@ -880,6 +880,7 @@ private fun createInstanceFromPreset(
         this.elementFilter = elementFilter
         this.timingSource = timingSource
         presetEffect.stepTiming?.let { this.stepTiming = it }
+        speedMasterUuid = speedMasterUuidOrNull(presetEffect.speedMasterUuid)
     }
 }
 

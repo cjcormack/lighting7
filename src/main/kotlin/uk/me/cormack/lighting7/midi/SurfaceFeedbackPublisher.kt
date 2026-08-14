@@ -174,6 +174,7 @@ class SurfaceFeedbackPublisher(
         override fun fixturesChanged() { rebuildIndex() }
         override fun presetListChanged() {}
         override fun paletteListChanged() {}
+        override fun speedMasterListChanged() {}
         override fun cueListChanged() {}
         override fun cueStackListChanged() {}
         override fun cueSlotListChanged() {}

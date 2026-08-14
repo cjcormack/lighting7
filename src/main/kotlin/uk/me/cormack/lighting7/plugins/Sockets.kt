@@ -79,6 +79,7 @@ fun Application.configureSockets(state: State) {
             setupSurfaceSubscriptions(scope)
             setupCloudSyncSubscriptions(scope)
             setupProgrammerSubscriptions(scope)
+            setupSpeedMasterSubscriptions(scope)
 
             try {
                 for (frame in incoming) {
@@ -95,6 +96,7 @@ fun Application.configureSockets(state: State) {
                             is SurfaceInMessage -> handleSurface(scope, message)
                             is CueEditInMessage -> handleCueEdit(scope, message)
                             is ProgrammerInMessage -> handleProgrammer(scope, message)
+                            is SpeedMasterInMessage -> handleSpeedMasters(scope, message)
                             null -> System.err.println("WS /api: undeserializable frame ignored")
                         }
                     } catch (e: kotlinx.coroutines.CancellationException) {

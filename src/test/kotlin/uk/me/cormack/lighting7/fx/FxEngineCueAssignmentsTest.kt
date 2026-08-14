@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
  */
 class FxEngineCueAssignmentsTest {
 
-    private fun newEngine(): FxEngine = FxEngine(Fixtures(), MasterClock())
+    private fun newEngine(): FxEngine = FxEngine(Fixtures(), SpeedMasterBank())
 
     private fun slider(
         cueId: Int,

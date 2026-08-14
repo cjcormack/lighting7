@@ -148,6 +148,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                     stageDepthM = request.stageDepthM
                     stageHeightM = request.stageHeightM
                 }
+                ensureDefaultSpeedMasters(newProject)
 
                 newProject.toDetailDto()
             }
@@ -311,6 +312,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectScripts(state)
         routeApiRestProjectFxPresets(state)
         routeApiRestProjectPalettes(state)
+        routeApiRestProjectSpeedMasters(state)
         routeApiRestProjectCues(state)
         routeApiRestProjectCueStacks(state)
         routeApiRestProjectCueSlots(state)

@@ -56,9 +56,15 @@ abstract class FxApplicationScript(
     // --- Tempo Control ---
 
     val masterClock: MasterClock get() = fxEngine.masterClock
+    val speedMasters: SpeedMasterBank get() = fxEngine.speedMasters
     val bpm: Double get() = masterClock.bpm.value
-    fun setBpm(bpm: Double) = masterClock.setBpm(bpm)
-    fun tapTempo() = masterClock.tap()
+    fun setBpm(bpm: Double) =
+        speedMasters.setBpm(null, bpm, uk.me.cormack.lighting7.models.SpeedMasterSource.MANUAL)
+    fun tapTempo() = speedMasters.tap(null)
+
+    /** A specific speed master's clock by 1-based index, or master 1 when unknown. */
+    fun speedMaster(index: Int): MasterClock =
+        speedMasters.clockFor(speedMasters.masterStates().indexOfFirst { it.index == index })
 
     // --- Palette ---
 

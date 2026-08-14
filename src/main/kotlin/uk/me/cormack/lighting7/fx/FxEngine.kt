@@ -47,7 +47,12 @@ import java.awt.Color
  */
 class FxEngine(
     private val fixtures: Fixtures,
-    val masterClock: MasterClock,
+    /**
+     * The show's speed-master clocks. Slot 0 is master 1 — the global tempo. Effects
+     * resolve their [FxInstance.speedMasterSlot] against this bank; the engine's beat
+     * pass is driven by the bank's conflated wake channel rather than any one clock.
+     */
+    val speedMasters: SpeedMasterBank = SpeedMasterBank(),
     /**
      * PROGRAMMER-layer store: sticky manual property entries + the raw-channel sideband.
      * Read during effect reset so that manual writes remain visible under running effects.
@@ -67,8 +72,21 @@ class FxEngine(
      */
     private val parkManager: ParkManager? = null,
 ) {
+    /**
+     * Master 1's clock — the pre-bank compatibility surface (`setFxBpm`, scripts, the REST
+     * clock endpoints, and `beatSync` all mean this clock).
+     */
+    val masterClock: MasterClock get() = speedMasters.master1()
+
     private val nextEffectId = AtomicLong(0)
     private val activeEffects = ConcurrentHashMap<Long, FxInstance>()
+
+    /**
+     * Bank membership version the effects' runtime slots were last bound against; when the
+     * bank's [SpeedMasterBank.version] moves past this, the next beat pass re-binds every
+     * active instance ([rebindSpeedMasters]).
+     */
+    @Volatile private var boundBankVersion: Long = -1L
 
     // Read lock-free by the hot tick loops; rebuilt under [effectSnapshotLock] on mutation.
     private val effectSnapshotLock = Any()
@@ -1475,6 +1493,10 @@ class FxEngine(
         val cueId: Int? = null,
         val cueStackId: Int? = null,
         val timingSource: String = "BEAT",
+        /** Speed master this effect subscribes to (null → master 1). */
+        val speedMasterUuid: String? = null,
+        /** 1-based display index of that master, resolved at emit time for the FX-sheet chips. */
+        val speedMasterIndex: Int = 1,
     )
 
     /**
@@ -1483,7 +1505,7 @@ class FxEngine(
      * @param scope The coroutine scope to run the engine in
      */
     fun start(scope: CoroutineScope) {
-        masterClock.start(scope)
+        speedMasters.start(scope)
         provenanceScope = scope
 
         // Emit initial palette so new WebSocket subscribers get it immediately
@@ -1492,10 +1514,14 @@ class FxEngine(
         // a (usually empty) snapshot instead of nothing.
         emitProvenanceUpdate()
 
-        // BPM-synced processing loop (24 ticks per beat)
+        // Beat processing loop: one pass per wake-up, over one coherent frame of every
+        // master's current tick. The wake channel is CONFLATED, so ticks from N masters
+        // landing while a pass is in flight collapse into a single follow-up pass — the
+        // pass rate is bounded by the fastest master, and one pass means one
+        // ControllerTransaction however many masters are ticking.
         processingJob = scope.launch(Dispatchers.Default) {
-            masterClock.tickFlow.collect { tick ->
-                processBeatTickSuspend(tick)
+            for (wake in speedMasters.wake) {
+                processBeatTickSuspend(speedMasters.snapshotFrame())
             }
         }
 
@@ -1517,7 +1543,7 @@ class FxEngine(
         processingJob = null
         wallClockJob?.cancel()
         wallClockJob = null
-        masterClock.stop()
+        speedMasters.stop()
         val allEffects = activeEffects.values.toList()
         activeEffects.clear()
         rebuildSortedSnapshots()
@@ -1551,6 +1577,11 @@ class FxEngine(
         if (effect.effect is StatefulEffect) {
             (effect.effect as StatefulEffect).initialize()
         }
+
+        // Bind the persisted master uuids to runtime bank slots; unknown/null → master 1.
+        effect.speedMasterSlot = speedMasters.slotFor(effect.speedMasterUuid)
+        effect.rateMasterSlot = speedMasters.slotFor(effect.rateSpeedMasterUuid)
+
         activeEffects[id] = effect
         rebuildSortedSnapshots()
         emitStateUpdate()
@@ -1663,7 +1694,13 @@ class FxEngine(
         newDistributionStrategy: DistributionStrategy? = null,
         newElementMode: ElementMode? = null,
         newElementFilter: ElementFilter? = null,
-        newStepTiming: Boolean? = null
+        newStepTiming: Boolean? = null,
+        /**
+         * Reassign to another speed master (null = keep, like every other param).
+         * Returning to the default means passing master 1's uuid — master 1 always
+         * exists and behaves identically to the null default.
+         */
+        newSpeedMasterUuid: java.util.UUID? = null,
     ): FxInstance? {
         val existing = activeEffects[effectId] ?: return null
 
@@ -1692,6 +1729,17 @@ class FxEngine(
                 elementFilter = newElementFilter ?: existing.elementFilter
                 stepTiming = newStepTiming ?: existing.stepTiming
                 timingSource = existing.timingSource
+                // Master assignment must survive the swap: this block hand-enumerates every
+                // carried field, and missing one silently yanks an edited effect back to
+                // master 1 the moment its beat division or blend mode is tweaked.
+                speedMasterUuid = newSpeedMasterUuid ?: existing.speedMasterUuid
+                rateSpeedMasterUuid = existing.rateSpeedMasterUuid
+                speedMasterSlot = if (newSpeedMasterUuid != null) {
+                    speedMasters.slotFor(newSpeedMasterUuid)
+                } else {
+                    existing.speedMasterSlot
+                }
+                rateMasterSlot = existing.rateMasterSlot
             }
         } else {
             // Only mutable fields changed - update in place
@@ -1700,6 +1748,10 @@ class FxEngine(
             newElementMode?.let { existing.elementMode = it }
             newElementFilter?.let { existing.elementFilter = it }
             newStepTiming?.let { existing.stepTiming = it }
+            newSpeedMasterUuid?.let {
+                existing.speedMasterUuid = it
+                existing.speedMasterSlot = speedMasters.slotFor(it)
+            }
             existing
         }
 
@@ -1866,14 +1918,34 @@ class FxEngine(
         processBeatTickSuspend(tick)
     }
 
-    internal suspend fun processBeatTickSuspend(tick: MasterClock.ClockTick) {
+    /**
+     * Single-master shim: every effect sees [tick] as its master's tick. Kept so the
+     * synthetic-tick drivers in `FxEnginePipelineTest` / `FxEngineBenchmark` stay valid —
+     * a uniform frame *is* the single-clock world.
+     */
+    internal suspend fun processBeatTickSuspend(tick: MasterClock.ClockTick) =
+        processBeatTickSuspend(SpeedMasterBank.Frame.uniform(tick))
+
+    internal suspend fun processBeatTickSuspend(frame: SpeedMasterBank.Frame) {
+        // Membership changes re-bind lazily, at pass start: slots only matter during a
+        // pass, and Frame clamps an out-of-range slot to master 1 in the window between
+        // a deletion and this re-bind.
+        val bankVersion = speedMasters.version
+        if (bankVersion != boundBankVersion) {
+            rebindSpeedMasters()
+            boundBankVersion = bankVersion
+        }
+
         // Snapshot read is lock-free (volatile). If empty, nothing to do.
         val beatEffects = sortedBeatEffects
         if (beatEffects.isEmpty()) return
         if (beatEffects.none { it.isRunning }) return
 
-        val deltaMs = if (lastTickMs > 0) tick.timestampMs - lastTickMs else 0L
-        lastTickMs = tick.timestampMs
+        // deltaMs comes from the pass timestamp, not any one master's tick timestamp — a
+        // slow master's tick time only moves when *it* ticks, which would hand stateful
+        // effects a garbage delta on passes woken by a faster master.
+        val deltaMs = if (lastTickMs > 0) frame.timestampMs - lastTickMs else 0L
+        lastTickMs = frame.timestampMs
 
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
@@ -1889,10 +1961,13 @@ class FxEngine(
         val suppression = programmerSuppression()
 
         // Iterate in priority-ascending order. Under non-OVERRIDE blend modes, higher-priority
-        // effects compose on top and dominate.
+        // effects compose on top and dominate. Each effect computes phase from *its own*
+        // master's tick; effects on the same master stay locked, effects on different
+        // masters drift apart, which is the point.
         for (effect in beatEffects) {
             if (!effect.isRunning) continue
 
+            val tick = frame.tick(effect.speedMasterSlot)
             try {
                 if (effect.isGroupEffect) {
                     processGroupEffect(tick, effect, fixturesWithTx, deltaMs, suppression)
@@ -1905,6 +1980,18 @@ class FxEngine(
         }
 
         transaction.applySuspend()
+    }
+
+    /**
+     * Re-resolve every active instance's runtime master slots against the bank. A uuid the
+     * bank no longer knows resolves to slot 0 — a deleted master's effects fall back to the
+     * global tempo rather than stopping.
+     */
+    private fun rebindSpeedMasters() {
+        for (effect in activeEffects.values) {
+            effect.speedMasterSlot = speedMasters.slotFor(effect.speedMasterUuid)
+            effect.rateMasterSlot = speedMasters.slotFor(effect.rateSpeedMasterUuid)
+        }
     }
 
     /**
@@ -1926,9 +2013,22 @@ class FxEngine(
     }
 
     internal suspend fun processWallClockTickSuspend() {
+        // Same lazy rebind as the beat pass — rate-master slots must follow membership
+        // changes even when no beat effect is running.
+        val bankVersion = speedMasters.version
+        if (bankVersion != boundBankVersion) {
+            rebindSpeedMasters()
+            boundBankVersion = bankVersion
+        }
+
         val wallClockEffects = sortedWallClockEffects
         if (wallClockEffects.isEmpty()) return
         if (wallClockEffects.none { it.isRunning }) return
+
+        // One coherent rate sample per pass. Deliberately NOT snapshotFrame(): this path
+        // never reads ticks, and a full frame would allocate a per-master tick array 50
+        // times a second purely to discard it.
+        val rateScales = speedMasters.rateScales()
 
         val now = System.currentTimeMillis()
         val deltaMs = if (lastWallClockTickMs > 0) now - lastWallClockTickMs else 0L
@@ -1956,10 +2056,11 @@ class FxEngine(
             if (!effect.isRunning) continue
 
             try {
+                val rateScale = rateScales.getOrElse(effect.rateMasterSlot) { 1.0 }
                 if (effect.isGroupEffect) {
-                    processWallClockGroupEffect(syntheticTick, effect, fixturesWithTx, deltaMs, suppression)
+                    processWallClockGroupEffect(syntheticTick, effect, fixturesWithTx, deltaMs, suppression, rateScale)
                 } else {
-                    processWallClockFixtureEffect(syntheticTick, effect, fixturesWithTx, deltaMs, suppression)
+                    processWallClockFixtureEffect(syntheticTick, effect, fixturesWithTx, deltaMs, suppression, rateScale)
                 }
             } catch (e: Exception) {
                 System.err.println("FX Engine error processing wall-clock effect ${effect.id}: ${e.message}")
@@ -1978,6 +2079,7 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long,
         suppression: Map<String, Set<String>> = emptyMap(),
+        rateScale: Double = 1.0,
     ) {
         val fixtureKey = effect.target.targetKey
         val fixture = try {
@@ -1987,7 +2089,7 @@ class FxEngine(
         }
 
         if (effect.target.fixtureHasProperty(fixture)) {
-            val effectPhase = effect.calculateWallClockPhase()
+            val effectPhase = effect.calculateWallClockPhase(rateScale)
             val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE, fixturesWithTx, fixtureKey, suppression)
             if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
@@ -1995,7 +2097,7 @@ class FxEngine(
         } else if (fixture is MultiElementFixture<*>) {
             val elements = fixture.elements
             if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
-                processWallClockMultiElementEffect(tick, effect, fixturesWithTx, elements, deltaMs, suppression)
+                processWallClockMultiElementEffect(tick, effect, fixturesWithTx, elements, deltaMs, suppression, rateScale)
             }
         }
     }
@@ -2010,6 +2112,7 @@ class FxEngine(
         elements: List<uk.me.cormack.lighting7.fixture.group.FixtureElement<*>>,
         deltaMs: Long,
         suppression: Map<String, Set<String>> = emptyMap(),
+        rateScale: Double = 1.0,
     ) {
         val filter = effect.elementFilter
         val elementCount = elements.size
@@ -2031,7 +2134,7 @@ class FxEngine(
                     if (filteredCount > 1) distributionIdx.toDouble() / (filteredCount - 1) else 0.5
             }
 
-            val memberPhase = effect.calculateWallClockPhaseForMember(memberInfo, filteredCount)
+            val memberPhase = effect.calculateWallClockPhaseForMember(memberInfo, filteredCount, rateScale)
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
@@ -2051,6 +2154,7 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long,
         suppression: Map<String, Set<String>> = emptyMap(),
+        rateScale: Double = 1.0,
     ) {
         val groupName = effect.target.targetKey
         val group = try {
@@ -2069,7 +2173,7 @@ class FxEngine(
         if (effect.target.fixtureHasProperty(firstMemberFixture)) {
             val groupSize = allMembers.size
             for (member in allMembers) {
-                val memberPhase = effect.calculateWallClockPhaseForMember(member, groupSize)
+                val memberPhase = effect.calculateWallClockPhaseForMember(member, groupSize, rateScale)
                 val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
                 val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
                 val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, member.key, suppression)
@@ -2093,12 +2197,12 @@ class FxEngine(
                     } catch (_: Exception) { continue }
 
                     if (parentFixture is MultiElementFixture<*>) {
-                        processWallClockMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements, deltaMs, suppression)
+                        processWallClockMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements, deltaMs, suppression, rateScale)
                     }
                 }
             }
             ElementMode.FLAT -> {
-                processWallClockGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers, deltaMs, suppression)
+                processWallClockGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers, deltaMs, suppression, rateScale)
             }
         }
     }
@@ -2113,6 +2217,7 @@ class FxEngine(
         allMembers: List<uk.me.cormack.lighting7.fixture.group.GroupMember<*>>,
         deltaMs: Long,
         suppression: Map<String, Set<String>> = emptyMap(),
+        rateScale: Double = 1.0,
     ) {
         val filter = effect.elementFilter
 
@@ -2149,7 +2254,7 @@ class FxEngine(
                     if (filteredCount > 1) distributionIdx.toDouble() / (filteredCount - 1) else 0.5
             }
 
-            val memberPhase = effect.calculateWallClockPhaseForMember(memberInfo, filteredCount)
+            val memberPhase = effect.calculateWallClockPhaseForMember(memberInfo, filteredCount, rateScale)
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
@@ -2349,7 +2454,7 @@ class FxEngine(
         // Check if the parent fixture has the target property
         if (effect.target.fixtureHasProperty(fixture)) {
             // Direct application to the parent fixture
-            val effectPhase = effect.calculatePhase(tick, masterClock)
+            val effectPhase = effect.calculatePhase(tick)
             val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE, fixturesWithTx, fixtureKey, suppression)
             if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
@@ -2402,7 +2507,7 @@ class FxEngine(
             }
 
             val memberPhase = effect.calculatePhaseForMember(
-                tick, masterClock, memberInfo, filteredCount
+                tick, memberInfo, filteredCount
             )
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
@@ -2455,7 +2560,7 @@ class FxEngine(
             val groupSize = allMembers.size
             for (member in allMembers) {
                 val memberPhase = effect.calculatePhaseForMember(
-                    tick, masterClock, member, groupSize
+                    tick, member, groupSize
                 )
                 val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
                 val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
@@ -2548,7 +2653,7 @@ class FxEngine(
             }
 
             val memberPhase = effect.calculatePhaseForMember(
-                tick, masterClock, memberInfo, filteredCount
+                tick, memberInfo, filteredCount
             )
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
@@ -2770,6 +2875,9 @@ class FxEngine(
     }
 
     private fun emitStateUpdate() {
+        // One bank snapshot for the whole emit — masterStates() maps every slot into a
+        // fresh list, and calling it per effect made this O(effects x masters) allocation.
+        val masterStates = speedMasters.masterStates()
         val states = activeEffects.mapValues { (_, instance) ->
             val expanded = isMultiElementExpanded(instance)
             val showDistribution = instance.isGroupEffect || expanded
@@ -2789,6 +2897,8 @@ class FxEngine(
                 cueId = instance.cueId,
                 cueStackId = instance.cueStackId,
                 timingSource = instance.timingSource.name,
+                speedMasterUuid = instance.speedMasterUuid?.toString(),
+                speedMasterIndex = masterStates.getOrNull(instance.speedMasterSlot)?.index ?: 1,
             )
         }
 

@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.state.State
 
 // ─── Inbound ────────────────────────────────────────────────────────────
@@ -70,6 +71,10 @@ data class FxEffectState(
     val cueId: Int? = null,
     val cueStackId: Int? = null,
     val timingSource: String = "BEAT",
+    /** Speed master this effect subscribes to (null → master 1). */
+    val speedMasterUuid: String? = null,
+    /** 1-based display index of that master — what the FX-sheet chip renders. */
+    val speedMasterIndex: Int = 1,
 )
 
 @Serializable
@@ -111,12 +116,15 @@ suspend fun handleFx(scope: SocketScope, message: FxInMessage) {
     val engine = scope.state.show.fxEngine
     when (message) {
         is FxStateInMessage -> scope.send(buildFxStateMessage(scope.state))
+        // The legacy unkeyed tempo messages mean master 1. Routed through the bank rather
+        // than the clock so source tracking, the speedMasters.changed push, and the
+        // write-through persister all see the change.
         is SetFxBpmInMessage -> {
-            engine.masterClock.setBpm(message.bpm)
+            engine.speedMasters.setBpm(null, message.bpm, SpeedMasterSource.MANUAL)
             scope.send(buildFxStateMessage(scope.state))
         }
         is TapTempoInMessage -> {
-            engine.masterClock.tap()
+            engine.speedMasters.tap(null)
             scope.send(buildFxStateMessage(scope.state))
         }
         is RemoveFxInMessage -> {
@@ -160,6 +168,12 @@ fun setupFxSubscriptions(scope: SocketScope) {
                 blendMode = effectState.blendMode.name,
                 cueId = effectState.cueId,
                 cueStackId = effectState.cueStackId,
+                // timingSource was silently dropped by this remap while buildFxStateMessage
+                // set it — carry both it and the master fields so the two FxEffectState
+                // producers can't disagree.
+                timingSource = effectState.timingSource,
+                speedMasterUuid = effectState.speedMasterUuid,
+                speedMasterIndex = effectState.speedMasterIndex,
             )
         }
         scope.send(FxStateOutMessage(
@@ -195,6 +209,9 @@ fun setupFxSubscriptions(scope: SocketScope) {
 
 private fun buildFxStateMessage(state: State): FxStateOutMessage {
     val engine = state.show.fxEngine
+    // Hoisted for the same reason as FxEngine.emitStateUpdate: masterStates() allocates a
+    // list per call, and this map runs once per active effect.
+    val masterStates = engine.speedMasters.masterStates()
     val effectStates = engine.getActiveEffects().map { effect ->
         FxEffectState(
             id = effect.id,
@@ -206,6 +223,8 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
             cueId = effect.cueId,
             cueStackId = effect.cueStackId,
             timingSource = effect.timingSource.name,
+            speedMasterUuid = effect.speedMasterUuid?.toString(),
+            speedMasterIndex = masterStates.getOrNull(effect.speedMasterSlot)?.index ?: 1,
         )
     }
     return FxStateOutMessage(

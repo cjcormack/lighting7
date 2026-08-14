@@ -108,7 +108,10 @@ class CueTriggerManager(
                 if (loaded == null) return@launchTimedActionWithState priorLayer3Rows
                 val (presetEffects, presetAssignments, presetPalette) = loaded
 
-                applyPresetToTargets(presetApp.presetId, presetApp.targets, cueId, cueStackId, presetEffects, effectIds)
+                applyPresetToTargets(
+                    presetApp.presetId, presetApp.targets, cueId, cueStackId, presetEffects, effectIds,
+                    overrideSpeedMasterUuid = speedMasterUuidOrNull(presetApp.speedMasterUuid),
+                )
 
                 val newRows = if (presetAssignments.isEmpty()) emptyList() else buildLayer3AssignmentsForPreset(
                     state.show.fixtures, cueId, priority,
@@ -313,6 +316,7 @@ class CueTriggerManager(
         cueStackId: Int?,
         presetEffects: List<FxPresetEffectDto>,
         effectIds: MutableList<Long>,
+        overrideSpeedMasterUuid: java.util.UUID? = null,
     ) {
         if (presetEffects.isEmpty()) return
         for (target in targets) {
@@ -323,7 +327,8 @@ class CueTriggerManager(
                 } catch (_: Exception) { null } ?: continue
 
                 val instance = createInstanceFromPresetForCue(
-                    presetEffect, fxTarget, presetId, state, cueId
+                    presetEffect, fxTarget, presetId, state, cueId,
+                    overrideSpeedMasterUuid = overrideSpeedMasterUuid,
                 )
                 instance.cueId = cueId
                 instance.cueStackId = cueStackId
@@ -356,6 +361,7 @@ class CueTriggerManager(
             elementFilter = effect.elementFilter,
             stepTiming = effect.stepTiming,
             parameters = effect.parameters,
+            speedMasterUuid = effect.speedMasterUuid,
         )
 
         val fxTarget = try {

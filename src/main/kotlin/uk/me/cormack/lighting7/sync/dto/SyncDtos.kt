@@ -136,6 +136,23 @@ data class PaletteJson(
 )
 
 /**
+ * Speed master — portable show content. The exported [bpm] is the master's starting tempo
+ * (the live value is written through on change, so this is "wherever the tempo was last
+ * set"). Preset and cue effects reference a master by uuid inside their own records;
+ * [uk.me.cormack.lighting7.sync.ExportUuidRemapper] rewrites those occurrences along with
+ * this record's `uuid`, which is why the reference is a uuid rather than an int id.
+ */
+@Serializable
+data class SpeedMasterJson(
+    val uuid: String,
+    val masterIndex: Int,
+    val name: String,
+    val bpm: Double = 120.0,
+    val source: String = "MANUAL",
+    val notes: String? = null,
+)
+
+/**
  * Universe config — portable subset only. The `address` column (machine-local controller IP)
  * is intentionally omitted; Phase 2 introduces machine_override for per-install IPs.
  */
@@ -260,6 +277,8 @@ data class CuePresetApplicationJson(
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
     val sortOrder: Int = 0,
+    /** Per-application speed-master override, remapped by ExportUuidRemapper like any uuid. */
+    val speedMasterUuid: String? = null,
 )
 
 @Serializable
@@ -283,6 +302,8 @@ data class CueAdHocEffectJson(
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
     val sortOrder: Int = 0,
+    /** Speed master this effect subscribes to (null → master 1). */
+    val speedMasterUuid: String? = null,
 )
 
 @Serializable

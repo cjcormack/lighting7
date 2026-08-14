@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.maskAllows
+import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CuePresetApplicationDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
@@ -328,7 +329,8 @@ private fun DaoCueAdHocEffect.matches(dto: CueAdHocEffectDto): Boolean =
         elementMode == dto.elementMode &&
         elementFilter == dto.elementFilter &&
         stepTiming == dto.stepTiming &&
-        parameters == dto.parameters
+        parameters == dto.parameters &&
+        speedMasterUuid == speedMasterUuidOrNull(dto.speedMasterUuid)
 
 /** Copy [dto]'s tunable fields over the stored child, leaving identity and timing alone. */
 private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
@@ -341,6 +343,7 @@ private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
     elementFilter = dto.elementFilter
     stepTiming = dto.stepTiming
     parameters = dto.parameters
+    speedMasterUuid = speedMasterUuidOrNull(dto.speedMasterUuid)
 }
 
 /** Delete the immediate FX children the recording names — [RecordMode.REMOVE]'s FX half. */
@@ -445,6 +448,7 @@ private fun newAdHocChild(cue: DaoCue, effect: CueAdHocEffectDto) {
         stepTiming = effect.stepTiming
         parameters = effect.parameters
         sortOrder = effect.sortOrder
+        speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
     }
 }
 

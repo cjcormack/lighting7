@@ -14,6 +14,7 @@ import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fx.*
+import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -31,9 +32,11 @@ internal fun Route.routeApiRestFx(state: State) {
                 ))
             }
 
+            // The legacy clock endpoints mean master 1; routing through the bank keeps
+            // source tracking, the speedMasters.changed push, and write-through working.
             post<ClockBpm> {
                 val request = call.receive<SetBpmRequest>()
-                state.show.fxEngine.masterClock.setBpm(request.bpm)
+                state.show.fxEngine.speedMasters.setBpm(null, request.bpm, SpeedMasterSource.MANUAL)
                 call.respond(ClockStatusResponse(
                     bpm = state.show.fxEngine.masterClock.bpm.value,
                     isRunning = state.show.fxEngine.masterClock.isRunning.value
@@ -41,7 +44,7 @@ internal fun Route.routeApiRestFx(state: State) {
             }
 
             post<ClockTap> {
-                state.show.fxEngine.masterClock.tap()
+                state.show.fxEngine.speedMasters.tap(null)
                 call.respond(ClockStatusResponse(
                     bpm = state.show.fxEngine.masterClock.bpm.value,
                     isRunning = state.show.fxEngine.masterClock.isRunning.value
@@ -82,6 +85,8 @@ internal fun Route.routeApiRestFx(state: State) {
                 // Propagate timing source from the effect's registration
                 val registration = state.show.fxRegistry.getRegistration(request.effectType)
                 registration?.timingSource?.let { instance.timingSource = it }
+
+                instance.speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
 
                 markProgrammerOwned(instance, request.programmerOwned)
 
@@ -148,7 +153,8 @@ internal fun Route.routeApiRestFx(state: State) {
                     newDistributionStrategy = newDistribution,
                     newElementMode = newElementMode,
                     newElementFilter = newElementFilter,
-                    newStepTiming = request.stepTiming
+                    newStepTiming = request.stepTiming,
+                    newSpeedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid),
                 )
 
                 if (updated != null) {
@@ -248,6 +254,8 @@ data class AddEffectRequest(
     val distributionStrategy: String? = null,
     val elementFilter: String? = null,
     val stepTiming: Boolean? = null,
+    /** Speed master to subscribe to, as the master's uuid (null → master 1). */
+    val speedMasterUuid: String? = null,
     /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]) rather than as a plain manual effect. Band
@@ -265,7 +273,11 @@ data class AddEffectResponse(val effectId: Long)
 data class ClearEffectsResponse(val removedCount: Int)
 
 @Serializable
-data class ErrorResponse(val error: String)
+data class ErrorResponse(
+    val error: String,
+    /** Machine-readable error code for responses a client branches on (e.g. delete guards). */
+    val code: String? = null,
+)
 
 @Serializable
 data class FixtureEffectsResponse(
@@ -291,6 +303,8 @@ data class IndirectEffectDto(
     val programmerOwned: Boolean = false,
     /** Fade envelope in `[0, 1]`; the effect's output is scaled by this before blending. */
     val intensityMultiplier: Double = 1.0,
+    /** Speed master this effect subscribes to (null → master 1). */
+    val speedMasterUuid: String? = null,
 )
 
 @Serializable
@@ -303,7 +317,13 @@ data class UpdateEffectRequest(
     val distributionStrategy: String? = null,
     val elementMode: String? = null,
     val elementFilter: String? = null,
-    val stepTiming: Boolean? = null
+    val stepTiming: Boolean? = null,
+    /**
+     * Reassign the effect's speed master (null = no change, consistent with every other
+     * field). To return an effect to the default, send master 1's uuid — master 1 always
+     * exists and explicit-master-1 behaves identically to the null default.
+     */
+    val speedMasterUuid: String? = null,
 )
 
 @Serializable
@@ -330,6 +350,8 @@ data class EffectDto(
     val programmerOwned: Boolean = false,
     /** Fade envelope in `[0, 1]`; the effect's output is scaled by this before blending. */
     val intensityMultiplier: Double = 1.0,
+    /** Speed master this effect subscribes to (null → master 1). */
+    val speedMasterUuid: String? = null,
 )
 
 
@@ -343,6 +365,19 @@ data class EffectDto(
  */
 internal fun markProgrammerOwned(instance: FxInstance, programmerOwned: Boolean) {
     if (programmerOwned) instance.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE
+}
+
+/**
+ * Parse a request's speed-master reference, treating a PRESENT-but-malformed uuid as a
+ * client error rather than silently degrading. The lenient [speedMasterUuidOrNull] is for
+ * *stored* data, where degrading a corrupted reference to master 1 beats failing the show;
+ * on the REST boundary the same leniency would make a garbled uuid indistinguishable from
+ * an omitted field — a 200 no-op masking a client bug. Callers' catch blocks turn the
+ * throw into a 400.
+ */
+internal fun requireSpeedMasterUuid(raw: String?): java.util.UUID? = raw?.let {
+    speedMasterUuidOrNull(it)
+        ?: throw IllegalArgumentException("Invalid speedMasterUuid: '$it' is not a uuid")
 }
 
 private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDto(
@@ -369,6 +404,7 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
     timingSource = timingSource.name,
     programmerOwned = FxEngine.isProgrammerFxPriority(priority),
     intensityMultiplier = intensityMultiplier,
+    speedMasterUuid = speedMasterUuid?.toString(),
 )
 
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(
@@ -386,6 +422,7 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     stepTiming = stepTiming,
     programmerOwned = FxEngine.isProgrammerFxPriority(priority),
     intensityMultiplier = intensityMultiplier,
+    speedMasterUuid = speedMasterUuid?.toString(),
 )
 
 private fun createTargetFromRequest(request: AddEffectRequest, state: State): FxTarget {

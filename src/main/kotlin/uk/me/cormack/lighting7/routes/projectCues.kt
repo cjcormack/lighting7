@@ -363,6 +363,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     intervalMs = app.intervalMs
                     randomWindowMs = app.randomWindowMs
                     sortOrder = app.sortOrder
+                    speedMasterUuid = app.speedMasterUuid
                 }
             }
             for (assignment in sourceCue.propertyAssignments) {
@@ -397,6 +398,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     intervalMs = effect.intervalMs
                     randomWindowMs = effect.randomWindowMs
                     sortOrder = effect.sortOrder
+                    speedMasterUuid = effect.speedMasterUuid
                 }
             }
 
@@ -604,6 +606,8 @@ data class CuePresetApplicationDetail(
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
     val sortOrder: Int = 0,
+    /** Per-application speed-master override (null → each preset effect's own → master 1). */
+    val speedMasterUuid: String? = null,
 )
 
 @Serializable

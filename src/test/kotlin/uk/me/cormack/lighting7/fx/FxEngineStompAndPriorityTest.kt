@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
  */
 class FxEngineStompAndPriorityTest {
 
-    private fun newEngine(): FxEngine = FxEngine(Fixtures(), MasterClock())
+    private fun newEngine(): FxEngine = FxEngine(Fixtures(), SpeedMasterBank())
 
     private fun makeEffect(
         propertyName: String = "dimmer",
