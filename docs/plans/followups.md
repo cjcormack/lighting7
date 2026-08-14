@@ -181,18 +181,95 @@ proof for WebGL-adjacent changes.
 
 ---
 
-### `FU-PROG-RECORD-SELECTION-SCOPE` — scope Record to the current selection
+### `FU-PROG-RECORD-SELECTION-SCOPE` — scope cue Record to the current selection
 
-**Status**: Ready (small)
-**Origin**: Programmer redesign Session 3 (2026-08)
+**Status**: Ready (small) — **backend half landed in Session 4**
+**Origin**: Programmer redesign Session 3 (2026-08); narrowed 2026-08-14
 
 `programmer.record` takes an attribute mask but no *fixture* scope, so it always
 records the whole programmer. MagicQ's `Rec All Chans` / selection-scoped record is
-the missing half: "record just these heads into this cue". The shape is a
-`targetKeys: List<String>` filter on `collectProgrammerEntries`, plus a "selected
-fixtures only" checkbox in `RecordSheet.tsx` fed from the sheet's selection — which
-means the selection has to become readable outside `FixturesListContainer` (today
-only the *write* direction exists, via `store/includeSelection.ts`).
+the missing half: "record just these heads into this cue".
+
+Session 4 built the machinery for the palette routes: `collectProgrammerEntries`
+takes a `targets: List<CueTargetDto>?` (groups expanded server-side) and reports
+everything outside it as `RecordSkipReason.OUT_OF_SCOPE`, and
+`RecordPaletteSheet.tsx` passes the sheet's selection through
+`SelectionToolbar`. What remains is the *cue* half: add the same `targets` field
+to `ProgrammerRecordRequest`, and a "selected fixtures only" control in
+`RecordSheet.tsx`.
+
+Note the entry point matters more than the field. The palette version got its
+selection for free by living in `SelectionToolbar`, which already holds the
+expanded selection; `RecordSheet` is opened from the programmer toolbar and the
+cue card, neither of which can see it. Either lift the selection into Redux
+(`store/includeSelection.ts` records why it wasn't) or add a second entry point
+from the selection toolbar.
+
+---
+
+### `FU-PAL-PRESET-MAKE-HARD` — Make Hard for FX preset assignments
+
+**Status**: Ready
+**Origin**: Programmer redesign Session 4 (2026-08), deliberately cut
+
+Make Hard ships at programmer level (`POST /programmer/make-hard`) and cue level
+(`POST /project/{id}/cues/{cueId}/make-hard`). Preset assignments can hold
+`ref:` values too — `buildLayer3AssignmentsForPreset` resolves them per member —
+but have no equivalent, so a palette referenced only from a preset can't be
+detached from it.
+
+Cut rather than missed: preset property assignments are **target-less**. A cue
+row names the fixture or group it applies to, and hardening it means resolving
+that reference for that target; a preset row says "whatever this preset is
+applied to", which at hardening time is a set the preset doesn't know. Hardening
+one therefore means inventing a target set — either the union of every current
+`CuePresetApplication`'s targets (wrong the moment the preset is applied
+somewhere new) or a set the operator supplies (a different, larger UI). Decide
+which before picking this up; the route is the easy part.
+
+---
+
+### `FU-PAL-POSITIONAL-CONVERSION` — convert `P1`/`P2` colour lists to named palettes
+
+**Status**: Ready
+**Origin**: Programmer redesign §3.5 / Session 4 (2026-08), explicitly deferred
+
+Two unrelated things are called "palette": the positional ordered colour list
+that FX parameters index as `P1`/`P2`/`P*` (global / stack / cue scopes,
+`PaletteCascade.effective`), and the Session-4 named `Palette` entity. Session 4
+left the old one functionally untouched and relabelled it **"Colour List"**
+throughout the UI, which removes the confusion without removing the duplication.
+
+A conversion tool would take a cue's or stack's colour list and mint a named
+COLOUR palette per entry, rewriting the FX params that index it. The hard part
+is not the minting: a positional entry is a bare colour with no fixture
+attached, while a named palette entry is per-fixture, so the conversion has to
+choose which fixtures the new palette covers — the cue's targets is the obvious
+answer and is not always the right one.
+
+Trigger: pick this up when a show is found maintaining the same colours in both
+forms, not before. Until then the two coexist happily and the relabel carries
+the distinction.
+
+---
+
+### `FU-PAL-APPLY-NEAREST-COVERAGE` — fan a palette onto fixtures it doesn't cover
+
+**Status**: Trigger — an operator asks for it
+**Origin**: Programmer redesign Session 4 (2026-08), cut as fuzzy
+
+Applying a palette to a selection skips targets the palette holds no entry for,
+and names them in a warning (`paletteCoverageWarnings` in
+`lighting-react/src/components/palettes/applyPalette.ts`). Skip-and-report is
+the only behaviour, deliberately: the alternative — resolve an uncovered fixture
+to its "nearest" covered neighbour — is guesswork. For COLOUR it is *plausible*
+guesswork (one colour usually suits a whole wash), but for POSITION it is
+actively wrong, and a rule that behaves differently per type is worse than no
+rule.
+
+Revisit only if an operator asks, and if they do, scope it to COLOUR and make it
+an explicit gesture ("apply, filling gaps") rather than a mode on the existing
+one.
 
 ---
 

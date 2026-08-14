@@ -1,6 +1,33 @@
 # Programmer Redesign — Proposal
 
-**Status**: In progress — **Session 4 (palettes as references) backend landed 2026-08-13**:
+**Status**: In progress — **Session 4 (palettes as references) complete 2026-08-14; only Session 5
+remains.**
+**Session 4 frontend landed 2026-08-14** (lighting-react `5394be0` + `d8ae3d5`): reference
+rendering in the programmer sheet — a type-tinted edge bar, corner glyph and resolved swatch
+layered *around* the cells the way ownership colouring already is, with a destructive ring only
+when the reference is broken, because the four ownership colours are already a learned
+vocabulary; **two independent uniformity flags** in `useRowOwnership`, and the staged one compares
+`resolvedValue`, not `value` — a group row on a POSITION palette holds the identical `ref:` string
+on every head and resolves to a different pan/tilt for each, so comparing `value` reports the cell
+uniform and paints one head's crosshair for twelve; a line in every cell editor saying that editing
+replaces the reference with a fixed value, since dragging a slider on a referencing cell silently
+breaks it; cue rows rendering the palette's name and preview, with the server's `health` leading
+the broken verdict and the local list lookup only adding "deleted since this cue was read", and
+only once that list has loaded; a four-type palette bank behind one sidebar entry (no type owns the
+bare `/palettes` path — it redirects to the sticky one, which is what keeps the redirect acyclic);
+Record from the selection, Apply to the selection, and Make Hard at both levels. **Apply is a
+client-side `programmer.set` loop over `ref:{uuid}`** rather than a new route — the backend already
+accepts a reference per property and resolves it per fixture — with the coverage reporting
+extracted into a pure module so it is unit-tested rather than trapped in a popover; it separates
+"this fixture has no colour properties" from "this palette doesn't cover it", and reports group-row
+coverage as *unknown* rather than guessing. The old positional colour list is relabelled **"Colour
+List"** at all five of its display sites; never mint a `P<n>` short code for a named palette, since
+`P1` is the old form and two numeric grammars that look alike in the one place the difference
+matters is the whole hazard. Verified against a live rig: record, include, apply, cue-side badges
+and health, and Make Hard at both levels. **Still unproven on the rig**: the touring behaviour
+itself — edit a palette while a referencing cue is live and watch the output move without
+re-firing.
+**Session 4 backend landed 2026-08-13**:
 `Palette` entity (COLOUR/POSITION/BEAM/INTENSITY, an alias of `PropertyMaskGroup` so the record
 mask machinery is reused) + CRUD with a 409 `PALETTE_IN_USE` delete guard; **the stored ref is
 `ref:{paletteUuid}`, not an int id** — int PKs never appear in the sync export and are re-minted on
@@ -18,7 +45,7 @@ republish-on-palette-edit; `record-palette`; Include/Update on palette targets w
 `changedSinceInclude` comparing ref identity *and* value; cue-level and programmer-level Make Hard;
 `AssignmentHealth` gains `missingPalette` / `missingPaletteEntry` / `paletteTypeMismatch`.
 **Mode B stays cue-only** — its premise is "which cue am I on top of", and a palette isn't in the
-output cascade. Frontend still to come.
+output cascade.
 **Session 3 (Record / Include / Update) landed 2026-08-12**:
 `POST /api/rest/programmer/{record,include,update}` (REST, not WS ops — each needs a structured
 reply the fire-and-forget programmer channel can't carry); I/P/C/B attribute mask
@@ -248,15 +275,23 @@ every write goes through the engine's publish path.
 ### 3.3 Provenance
 
 The engine maintains, per `(targetKey, propertyName)`, the identity of the
-winning contributor: `{ layer, cueId?, cueStackId?, effectId?, paletteId? }`.
+winning contributor: `{ layer, cueId?, cueStackId?, effectId? }`.
 Broadcast as a diffed WS message alongside channel state (throttled; it only
 changes on layer events, not per-frame). This powers:
 
 - ownership colouring in the sheets (programmer / cue / FX / parked),
-- **Update-without-Include** (the checklist is "distinct cues/palettes under
-  my touched entries"),
+- **Update-without-Include** (the checklist is "distinct cues under my touched
+  entries"),
 - a "who owns this value" inspector — the single best debugging view we can
   add, per every console surveyed.
+
+> The `paletteId?` this section originally listed on the provenance entry was
+> **cut in Session 4**, along with the palette section of Mode B's checklist. A
+> palette is not in the output cascade — nothing composes *from* one — so no
+> winning contributor can ever be attributed to it, and a field that could only
+> ever be null is worse than no field. Which palette a *programmer entry*
+> references is carried on the entry itself (`ProgrammerEntryDto.paletteUuid`),
+> which is where the sheet reads it from.
 
 ### 3.4 Record / Include / Update
 
@@ -482,7 +517,7 @@ it). The vis-source work is severable: if the Stage3D second-frame plumbing
 fights back, ship record/include/update alone and carry vis-source into a
 follow-up session rather than letting it drag the editing loop.
 
-### Session 4 — Palettes as references (both repos)
+### Session 4 — Palettes as references (both repos) — **landed 2026-08-14**
 
 `Palette` entity + CRUD + record-from-programmer; `Ref` value form through
 programmer, cue assignments, and resolver; republish-on-palette-edit; palette
@@ -493,6 +528,20 @@ pages, cell ref badges, Make Hard; migration/coexistence with positional
 draft of this line warned about a Postgres migration gate; there is no Postgres
 any more — `state/StateMigrations.kt` records that those gated migrations were
 deleted and no driver is on the classpath.)*
+
+What the session cut is in [followups.md](followups.md) rather than carried
+silently here — `FU-PAL-PRESET-MAKE-HARD` (preset assignments are target-less,
+so hardening one means inventing a target set), `FU-PAL-POSITIONAL-CONVERSION`
+(the `P1`/`P2` → named-palette tool §3.5 already allowed to slip), and
+`FU-PAL-APPLY-NEAREST-COVERAGE` (fanning a palette onto fixtures it doesn't
+cover: plausible for colour, actively wrong for position, so Apply
+skips-and-reports instead). `FU-PROG-RECORD-SELECTION-SCOPE` is narrowed to its
+cue half — the palette routes took the backend scope filter with them.
+
+Coexistence with the positional list is by *relabelling*: it is called a
+**Colour List** everywhere in the UI now, because "palette" meaning two
+unrelated things three inches apart in a cue card is the failure this session
+would otherwise have shipped.
 
 ### Session 5 — Speed masters (both repos)
 
