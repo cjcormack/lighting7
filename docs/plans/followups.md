@@ -6,12 +6,12 @@ Consolidated follow-up items from the completed plans in
 programmer redesign (Sessions 1–5, through 2026-08-14). Each entry is
 self-contained so a Claude Code session can pick up one item cold.
 
-> **Status (2026-08-14)**: The programmer redesign's five sessions landed and
-> deposited their cuts here, so the backlog is **no longer drained** — six items
+> **Status (2026-08-16)**: The programmer redesign's five sessions landed and
+> deposited their cuts here, so the backlog is **no longer drained** — five items
 > are **Ready**: `FU-PROG-L3RESOLVER-RENAME`, `FU-PROG-VIS-SOURCE`,
-> `FU-PROG-RECORD-SELECTION-SCOPE`, `FU-PAL-PRESET-MAKE-HARD`,
-> `FU-PAL-POSITIONAL-CONVERSION`, and `FU-DIST-ICONS` (which has been Ready since
-> 2026-04-28 — the previous "nothing is in Ready" note predated it). Two
+> `FU-PAL-PRESET-MAKE-HARD`, `FU-PAL-POSITIONAL-CONVERSION`, and `FU-DIST-ICONS`
+> (which has been Ready since 2026-04-28 — the previous "nothing is in Ready"
+> note predated it). `FU-PROG-RECORD-SELECTION-SCOPE` landed on 2026-08-16. Two
 > **Manual** items are the last unverified behaviour of the programmer work:
 > `FU-MANUAL-PALETTE-TOURING` and `FU-MANUAL-SPEED-MASTERS-RIG`, the second of
 > which needs a backend restart before it can even be attempted. Everything else
@@ -296,32 +296,6 @@ and needs no personality data — invert the target set and scale.
 
 **Trigger to revisit**: an operator can't pick their highlighted head out of a
 wash, or asks for lowlight by name.
-
----
-
-### `FU-PROG-RECORD-SELECTION-SCOPE` — scope cue Record to the current selection
-
-**Status**: Ready (small) — **backend half landed in Session 4**
-**Origin**: Programmer redesign Session 3 (2026-08); narrowed 2026-08-14
-
-`programmer.record` takes an attribute mask but no *fixture* scope, so it always
-records the whole programmer. MagicQ's `Rec All Chans` / selection-scoped record is
-the missing half: "record just these heads into this cue".
-
-Session 4 built the machinery for the palette routes: `collectProgrammerEntries`
-takes a `targets: List<CueTargetDto>?` (groups expanded server-side) and reports
-everything outside it as `RecordSkipReason.OUT_OF_SCOPE`, and
-`RecordPaletteSheet.tsx` passes the sheet's selection through
-`SelectionToolbar`. What remains is the *cue* half: add the same `targets` field
-to `ProgrammerRecordRequest`, and a "selected fixtures only" control in
-`RecordSheet.tsx`.
-
-Note the entry point matters more than the field. The palette version got its
-selection for free by living in `SelectionToolbar`, which already holds the
-expanded selection; `RecordSheet` is opened from the programmer toolbar and the
-cue card, neither of which can see it. Either lift the selection into Redux
-(`store/includeSelection.ts` records why it wasn't) or add a second entry point
-from the selection toolbar.
 
 ---
 
@@ -1020,6 +994,32 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
 
+- `FU-PROG-RECORD-SELECTION-SCOPE` — commits 6b40950 (lighting7) + f2c2a47
+  (lighting-react) (2026-08-16) — "record just these heads into this cue".
+  `ProgrammerRecordRequest` gained `targets`, expanded through the existing
+  `expandTargetsToFixtureKeys`; `targetInScope` is the single predicate read
+  both as "may I capture this" and "may I overwrite this", with a group target
+  in scope only when *every* member is.
+  Two paths needed more than passing the set through, and both would have been
+  silent: **STAGE_SNAPSHOT** never reaches `collectProgrammerEntries` so it
+  needs its own filter, and **UPDATE_EXISTING** deletes rows the recording
+  doesn't name, so without a guard "re-record these two heads" clears the other
+  ten (preserved rows are counted as `preserved.outOfScopeAssignments`).
+  FX are captured only when every head they drive is in scope, and a scoped
+  re-record refuses to add an FX child that a surviving partly-covered group row
+  already covers — `CueStackManager.activateCueInStack` instantiates per row per
+  target with no de-duplication, so the effect would genuinely run twice on the
+  overlap. Warned rather than guessed, matching REMOVE's group-shadow warning.
+  Found in review after the first pass shipped the stacking bug.
+  Frontend: the blocker was never the field but the entry point — `RecordSheet`
+  opens from `ProgrammerToolbar` (a `toolbarExtra` prop) and from a cue card,
+  neither of which can see the list's selection. Selection therefore moved into
+  `store/selectionSlice`, keyed by list, with the pure reducer split out to
+  `listSelectionModel.ts` to avoid an import cycle. The warning in
+  `includeSelection.ts` about rewriting the keyboard/range machinery did **not**
+  bite: `useListSelection` had one consumer and an already-pure reducer, so
+  `ListSelection` kept its shape and that machinery was untouched — the comment
+  there has been updated to say so rather than left describing a live decision.
 - `FU-PROG-PROVENANCE-STACKID` — commit 714d742 (2026-08-12) — CUE-sourced
   provenance entries carry `cueStackId` alongside `cueId`. Raised in Session 1,
   where provenance shipped with `cueId` only; Session 3 needed the stack id so
