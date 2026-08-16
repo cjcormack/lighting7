@@ -30,4 +30,5 @@ val ALL_TABLES: List<Table> = listOf(
     DaoSyncStates, DaoSyncSessions, DaoSyncSessionConflicts,
     DaoSyncLogEntries,
     DaoOAuthIdentities,
+    DaoUsers, DaoUserSessions,
 )

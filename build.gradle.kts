@@ -138,6 +138,11 @@ dependencies {
     // Cross-platform OS-keychain access for storing GitHub PATs (cloud-sync phase 4).
     // Wraps macOS Security framework, libsecret, and Windows Credential Manager via JNA.
     implementation("com.github.javakeyring:java-keyring:1.0.4")
+
+    // Password hashing for desk-local user accounts (auth/Passwords.kt, multi-user-auth
+    // plan session 1). Cost 12 (~250 ms/verify) is a deliberate login throttle; tests pin
+    // `auth.bcryptCost=4`. One transitive: at.favre.lib:bytes.
+    implementation("at.favre.lib:bcrypt:0.10.2")
 }
 
 // ─── Frontend bundling ─────────────────────────────────────────────────

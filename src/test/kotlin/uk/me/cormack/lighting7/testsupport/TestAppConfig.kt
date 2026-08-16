@@ -13,6 +13,9 @@ const val DEFAULT_TEST_PROJECT_NAME = "TestProject"
  */
 fun testAppConfig(vararg extra: Pair<String, String>): MapApplicationConfig {
     val pairs = mutableListOf("database.path" to IntegrationTestDb.path)
+    // bcrypt cost 4 (~2 ms) instead of the production 12 (~250 ms): every seeded user and
+    // login in the suite pays a hash/verify, and at cost 12 that adds tens of seconds.
+    pairs.add("auth.bcryptCost" to "4")
     pairs.addAll(extra)
     return MapApplicationConfig(*pairs.toTypedArray())
 }

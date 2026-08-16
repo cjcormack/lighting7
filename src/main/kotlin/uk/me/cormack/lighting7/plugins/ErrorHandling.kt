@@ -9,6 +9,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.auth.AuthenticationException
+import uk.me.cormack.lighting7.auth.AuthorizationException
+import uk.me.cormack.lighting7.auth.PasswordPolicyException
 import uk.me.cormack.lighting7.routes.ErrorResponse
 
 private val logger = LoggerFactory.getLogger("error-handling")
@@ -55,6 +58,20 @@ fun Application.configureErrorHandling() {
                 HttpStatusCode.BadRequest,
                 ErrorResponse(cause.message ?: "Malformed request body"),
             )
+        }
+
+        // Auth failures thrown by AuthService / the auth gate helpers. Expected outcomes,
+        // not faults — logged at WARN so a wrong password doesn't page anyone.
+        exception<AuthenticationException> { call, cause ->
+            logger.warn("Unauthenticated request on {}: {}", call.request.local.uri, cause.message)
+            call.respond(HttpStatusCode.Unauthorized, ErrorResponse(cause.message ?: "Not signed in", "unauthenticated"))
+        }
+        exception<AuthorizationException> { call, cause ->
+            logger.warn("Forbidden request on {}: {}", call.request.local.uri, cause.message)
+            call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Not permitted", "forbidden"))
+        }
+        exception<PasswordPolicyException> { call, cause ->
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "Password rejected"))
         }
 
         exception<Throwable> { call, cause ->

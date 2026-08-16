@@ -12,6 +12,7 @@ import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import uk.me.cormack.lighting7.auth.installAuthGate
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.state.optionalString
 
@@ -31,12 +32,20 @@ internal fun Route.routeKotlinCompilerServer(state: State) {
         }
     }
 
-    route("/kotlin-compiler-server/api/{version}/compiler/{action}") {
-        handleKotlinCompilerServerRequest(client)
-    }
+    // One parent block so the auth gate covers the whole subtree (it proxies arbitrary
+    // Kotlin compilation on a LAN-reachable port — leaving it open would make the
+    // /api/rest gate decorative). Installed here, NOT on the root routing node, so the
+    // static SPA (login page included) stays reachable without credentials.
+    route("/kotlin-compiler-server") {
+        installAuthGate(state)
 
-    route("/kotlin-compiler-server/versions") {
-        handleKotlinCompilerServerRequest(client)
+        route("/api/{version}/compiler/{action}") {
+            handleKotlinCompilerServerRequest(client)
+        }
+
+        route("/versions") {
+            handleKotlinCompilerServerRequest(client)
+        }
     }
 }
 

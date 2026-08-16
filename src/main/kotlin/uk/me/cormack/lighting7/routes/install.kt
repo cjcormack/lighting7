@@ -10,6 +10,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.auth.requireAdmin
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.state.State
 
@@ -31,6 +32,8 @@ internal fun Route.routeApiRestInstall(state: State) {
     }
 
     put<InstallResource> {
+        // Renaming the machine is install administration; reading it (GET above) is not.
+        call.requireAdmin()
         val request = call.receive<UpdateInstallRequest>()
         val trimmed = request.friendlyName.trim()
         if (trimmed.isEmpty()) {

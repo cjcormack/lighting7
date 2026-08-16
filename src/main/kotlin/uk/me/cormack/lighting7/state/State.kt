@@ -16,6 +16,8 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.ai.AiService
+import uk.me.cormack.lighting7.auth.AuthService
+import uk.me.cormack.lighting7.auth.DEFAULT_BCRYPT_COST
 import uk.me.cormack.lighting7.fx.CueTriggerManager
 import uk.me.cormack.lighting7.midi.ActiveBankState
 import uk.me.cormack.lighting7.midi.BindingHealthEvaluator
@@ -64,6 +66,17 @@ class State(val config: ApplicationConfig) {
     private var dataSource: HikariDataSource? = null
     val database = initDatabase()
     val projectManager = ProjectManager(database) { this }
+
+    /**
+     * Desk-local accounts and sessions. Must construct after [database] (property order
+     * does that) so `createMissingTablesAndColumns` has created its tables before the
+     * in-memory caches load. `auth.bcryptCost` exists so tests can run at cost 4;
+     * production configs should never set it.
+     */
+    val authService = AuthService(
+        database,
+        bcryptCost = config.optionalString("auth.bcryptCost")?.toIntOrNull() ?: DEFAULT_BCRYPT_COST,
+    )
 
     /**
      * Kotlin scripting host configuration shared by every scripting host in the app. Installs

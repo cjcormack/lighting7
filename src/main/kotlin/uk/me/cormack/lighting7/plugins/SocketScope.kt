@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.plugins
 
 import io.ktor.server.websocket.*
 import kotlinx.coroutines.Job
+import uk.me.cormack.lighting7.auth.AuthenticatedUser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -23,7 +24,12 @@ import java.util.concurrent.atomic.AtomicReference
 class SocketScope(
     val session: DefaultWebSocketServerSession,
     val state: State,
+    /** The authenticated caller, or null in bootstrap-open mode (zero users configured). */
+    val user: AuthenticatedUser? = null,
 ) {
+    /** The caller's session-token hash — what a live-revocation stream (Session 3) matches on. */
+    val sessionTokenHash: String? get() = user?.sessionTokenHash
+
     private val jobs = mutableListOf<Job>()
 
     /** Set on `requestBeatSync`; consumed by the beat-sync subscription on the next beat. */
@@ -47,7 +53,23 @@ class SocketScope(
     val cueEditSessionRef: AtomicReference<CueEditSessionState?> = AtomicReference(null)
 
     suspend fun send(message: OutMessage) {
-        session.sendSerialized<OutMessage>(message)
+        try {
+            session.sendSerialized<OutMessage>(message)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // A push racing connection teardown (client hung up mid-burst, server or test
+            // app stopping) becomes a quiet cancellation: the sending job still unwinds —
+            // so subscription collectors, and the boot-progress loop in Sockets.kt, stop
+            // instead of pumping frames into a dead socket — but nothing reaches the
+            // uncaught-exception handler with nobody left to hear it. Anything else (a
+            // serialization bug in an OutMessage) stays loud and fails the session scope,
+            // exactly as before, so a broken message type can't silently stale the UI.
+            if (e.isConnectionTeardown()) {
+                throw kotlinx.coroutines.CancellationException("WS send raced connection teardown", e)
+            }
+            throw e
+        }
     }
 
     fun <T> subscribe(flow: Flow<T>, onEach: suspend (T) -> Unit) {
@@ -59,3 +81,13 @@ class SocketScope(
         jobs.clear()
     }
 }
+
+/**
+ * The failures a WS push can hit only because the connection or application is going
+ * away — a closed frame channel, a broken pipe, or (in tests) the plugin registry of
+ * an already-stopped test application.
+ */
+private fun Throwable.isConnectionTeardown(): Boolean =
+    this is kotlinx.coroutines.channels.ClosedSendChannelException ||
+        this is java.io.IOException ||
+        this is io.ktor.server.application.MissingApplicationPluginException

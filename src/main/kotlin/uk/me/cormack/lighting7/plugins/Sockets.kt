@@ -7,7 +7,10 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.takeWhile
+import io.ktor.websocket.CloseReason
+import io.ktor.websocket.close
 import kotlinx.serialization.json.Json
+import uk.me.cormack.lighting7.auth.resolveSessionUser
 import uk.me.cormack.lighting7.state.BootPhase
 import uk.me.cormack.lighting7.state.State
 import java.util.Collections
@@ -49,7 +52,16 @@ fun Application.configureSockets(state: State) {
         val connections = Collections.synchronizedSet<SocketConnection?>(LinkedHashSet())
 
         webSocket("/api") {
-            val scope = SocketScope(this, state)
+            // Auth check first: a browser cannot read a 401 on the upgrade response, but it
+            // can read a close code — so accept the upgrade, then close 4401 immediately.
+            // Bootstrap-open (zero users) admits everyone, mirroring the REST gate.
+            val wsUser = call.resolveSessionUser(state)
+            if (state.authService.hasAnyUser && wsUser == null) {
+                close(CloseReason(4401, "unauthenticated"))
+                return@webSocket
+            }
+
+            val scope = SocketScope(this, state, wsUser)
 
             // Server-first warm-up: the subscription setup below touches `state.show` and its
             // fixtures/FX engine, which aren't usable until `show.start()` completes. Stream boot

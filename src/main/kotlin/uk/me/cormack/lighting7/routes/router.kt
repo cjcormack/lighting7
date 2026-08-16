@@ -9,6 +9,7 @@ import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import uk.me.cormack.lighting7.auth.installAuthGate
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.state.optionalString
 import java.io.File
@@ -39,6 +40,11 @@ fun Application.configureRouting(state: State) {
                 }
             }
 
+            // After the warm-up gate, deliberately: a mid-boot 503 wins for exempt paths,
+            // and an unauthenticated caller can't probe the readiness of gated routes.
+            installAuthGate(state)
+
+            routeApiRestAuth(state)
             routeApiRestStatus(state)
             routeApiRestProjects(state)
             routeApiRestLightsFixtures(state)
@@ -75,10 +81,13 @@ fun Application.configureRouting(state: State) {
 /**
  * Routes exempt from the server-first readiness gate: the boot-status endpoint (clients poll it
  * to drive the loading bar) and routes that don't touch the show but are time-sensitive — the
- * GitHub OAuth callback (an external redirect that can't wait), install, and cloud-sync.
+ * GitHub OAuth callback (an external redirect that can't wait), install, cloud-sync, and the
+ * auth routes (logging in must work while the show is still booting; the user lands on the
+ * boot overlay afterwards, which is the right sequence).
  */
 private fun isWarmupExempt(path: String): Boolean =
     path == "/api/rest/status" ||
         path == "/api/rest/install" ||
+        path.startsWith("/api/rest/auth/") ||
         path.startsWith("/api/rest/oauth/") ||
         path.startsWith("/api/rest/cloud-sync/")

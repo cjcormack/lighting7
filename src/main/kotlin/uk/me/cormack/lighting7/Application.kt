@@ -7,6 +7,7 @@ import java.nio.file.Path
 import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import uk.me.cormack.lighting7.auth.runBreakGlassIfRequested
 import uk.me.cormack.lighting7.plugins.configureErrorHandling
 import uk.me.cormack.lighting7.plugins.configureHTTP
 import uk.me.cormack.lighting7.plugins.configureSockets
@@ -59,6 +60,14 @@ fun main(argv: Array<String>) {
 
 fun Application.module() {
     val state = State(environment.config)
+
+    // Break-glass admin recovery and the zero-users warning live here, not in State's
+    // constructor: tests build State dozens of times and must never scan the real data
+    // directory or spam the warning. `module()` is the production-only entry point.
+    runBreakGlassIfRequested(state.authService, appDataDir())
+    if (!state.authService.hasAnyUser) {
+        log.warn("no users configured — the API is unauthenticated until an admin is created")
+    }
 
     val backgroundInit = state.config.optionalBoolean("show.backgroundInit", default = true)
 
