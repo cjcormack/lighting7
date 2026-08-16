@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueStack
@@ -82,6 +83,15 @@ internal data class ProgrammerRecordRequest(
     val cueType: String = "STANDARD",
     /** Record anyway when a cue-edit session is open on the target cue. */
     val force: Boolean = false,
+    /**
+     * Restrict the record to these fixtures — MagicQ's selection-scoped record, "put just these
+     * heads into this cue". Groups are expanded server-side.
+     *
+     * Null (the default) records the whole programmer, which is the historical behaviour and
+     * still the common case: unlike a palette, a cue capturing everything the operator busked is
+     * usually exactly what was meant.
+     */
+    val targets: List<CueTargetDto>? = null,
 )
 
 @Serializable
@@ -149,9 +159,18 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
         }
     }
 
+    // Expand the selection outside the transaction too — it reads the patch, not the DB.
+    val scope = request.targets?.let { expandTargetsToFixtureKeys(state, it) }
+    if (request.targets != null && scope!!.isEmpty()) {
+        return call.respond(
+            HttpStatusCode.BadRequest,
+            ErrorResponse("None of the requested targets resolve to a fixture"),
+        )
+    }
+
     // Read the programmer outside the transaction: it touches the engine and the fixture patch,
     // neither of which should be held under a DB lock.
-    val recording = collectProgrammerRecording(state, source, mask, request.includeFx)
+    val recording = collectProgrammerRecording(state, source, mask, request.includeFx, scope)
 
     withCurrentProject(state, request.projectId, { p ->
         "Cannot record into project '${p.name}' — only the current project can be modified"
@@ -183,7 +202,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                 if (cue.project.id != project.id) {
                     return@transaction null to "Cue belongs to a different project"
                 }
-                val outcome = writeRecordingIntoCue(state, cue, recording, mode, mask)
+                val outcome = writeRecordingIntoCue(state, cue, recording, mode, mask, scope)
                 Result(outcome, cue.toCueDetails(true, state.show.fixtures, state.show.paletteRegistry), cue.cueStack.id.value) to null
             }
         }

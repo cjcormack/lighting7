@@ -9,8 +9,16 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
+import uk.me.cormack.lighting7.fx.BeatDivision
+import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.fx.FxInstance
+import uk.me.cormack.lighting7.fx.FxTargetRef
+import uk.me.cormack.lighting7.fx.FxTiming
 import uk.me.cormack.lighting7.fx.Layer3Resolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.effects.SineWave
+import uk.me.cormack.lighting7.fx.SliderTarget
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
 import uk.me.cormack.lighting7.plugins.UpdateChannelInMessage
@@ -477,6 +485,239 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `targets scope what is recorded`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val stackId = createStack(client, "stack-a")
+
+        setProgrammer("hex-1", "dimmer", "200")
+        setProgrammer("hex-2", "dimmer", "50")
+
+        // "Record just these heads into this cue" — hex-2 is in the programmer but not selected.
+        val response: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
+                targets = listOf(CueTargetDto(type = "fixture", key = "hex-1")),
+            )
+        ).body()
+
+        assertEquals(
+            listOf("hex-1"),
+            response.cue.propertyAssignments.map { it.targetKey },
+        )
+        assertTrue(
+            response.skipped.any { it.targetKey == "hex-2" && it.reason == "OUT_OF_SCOPE" },
+            "the out-of-scope entry is reported rather than silently dropped",
+        )
+    }
+
+    @Test
+    fun `a group target expands to its members`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        seedHex("hex-3", 25)
+        LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
+        val stackId = createStack(client, "stack-a")
+
+        setProgrammer("hex-1", "dimmer", "200")
+        setProgrammer("hex-2", "dimmer", "200")
+        setProgrammer("hex-3", "dimmer", "10")
+
+        val response: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
+                targets = listOf(CueTargetDto(type = "group", key = "front-wash")),
+            )
+        ).body()
+
+        // Both members are in scope, so the group collapse still applies — scoping narrows what
+        // is captured, it doesn't force the rows to be per-fixture.
+        val targets = response.cue.propertyAssignments.map { it.targetKey }.toSet()
+        assertTrue("hex-3" !in targets, "hex-3 is outside the group; got $targets")
+        assertTrue(response.skipped.any { it.targetKey == "hex-3" && it.reason == "OUT_OF_SCOPE" })
+    }
+
+    @Test
+    fun `UPDATE_EXISTING preserves rows outside the scope`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val stackId = createStack(client, "stack-a")
+
+        setProgrammer("hex-1", "dimmer", "200")
+        setProgrammer("hex-2", "dimmer", "50")
+        val created: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
+            )
+        ).body()
+        val cueId = created.cue.id
+
+        // Re-record only hex-1. Without the scope guard UPDATE_EXISTING deletes every row it
+        // wasn't handed, which would silently drop hex-2 out of the cue.
+        clearProgrammer()
+        setProgrammer("hex-1", "dimmer", "255")
+        val updated: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = cueId,
+                targets = listOf(CueTargetDto(type = "fixture", key = "hex-1")),
+            )
+        ).body()
+
+        val rows = updated.cue.propertyAssignments.associate { it.targetKey to it.value }
+        assertEquals("255", rows["hex-1"])
+        assertEquals("50", rows["hex-2"], "an out-of-scope row must not be deleted")
+        assertEquals(1, updated.preserved.outOfScopeAssignments)
+    }
+
+    @Test
+    fun `a group row survives a re-record that only covers some of its members`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
+        val stackId = createStack(client, "stack-a")
+
+        ProgrammerHandler.set(state, TargetRef.Group("front-wash"), "dimmer", "150", 0)
+        val created: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
+            )
+        ).body()
+        assertEquals("group", created.cue.propertyAssignments.single().targetType)
+
+        // Only hex-1 is selected. Replacing the group row would rewrite hex-2's value too, so
+        // the row is preserved and the new fixture row lands beside it.
+        clearProgrammer()
+        setProgrammer("hex-1", "dimmer", "255")
+        val updated: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = created.cue.id,
+                targets = listOf(CueTargetDto(type = "fixture", key = "hex-1")),
+            )
+        ).body()
+
+        assertEquals(1, updated.preserved.outOfScopeAssignments)
+        val byTarget = updated.cue.propertyAssignments.associate { it.targetKey to it.value }
+        assertEquals("150", byTarget["front-wash"], "the partly-covered group row survives")
+        assertEquals("255", byTarget["hex-1"])
+    }
+
+    @Test
+    fun `scope applies to a STAGE_SNAPSHOT record`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val stackId = createStack(client, "stack-a")
+
+        // This source bypasses collectProgrammerEntries entirely, so it needs its own scope
+        // filter — the easiest place for a scoped record to silently capture the whole rig.
+        state.show.fxEngine.setCueAssignments(
+            993,
+            listOf(
+                Layer3Resolver.Assignment(
+                    cueId = 993, priority = 10, fadeWeight = 1.0,
+                    targetKey = "hex-2", targetIsGroup = false, propertyName = "dimmer",
+                    category = uk.me.cormack.lighting7.fixture.PropertyCategory.DIMMER,
+                    value = Layer3Resolver.PropertyValue.Slider(90u),
+                )
+            ),
+            cueStackId = stackId,
+        )
+        setProgrammer("hex-1", "dimmer", "200")
+
+        val response: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
+                source = "STAGE_SNAPSHOT",
+                targets = listOf(CueTargetDto(type = "fixture", key = "hex-1")),
+            )
+        ).body()
+
+        assertEquals(
+            listOf("hex-1"),
+            response.cue.propertyAssignments.map { it.targetKey }.distinct(),
+        )
+        assertTrue(response.skipped.any { it.targetKey == "hex-2" && it.reason == "OUT_OF_SCOPE" })
+    }
+
+    @Test
+    fun `a scoped re-record does not stack an effect a surviving group row already covers`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            seedHex("hex-1", 1)
+            seedHex("hex-2", 13)
+            LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
+            val stackId = createStack(client, "stack-a")
+
+            // A cue whose effect is asserted on the whole group.
+            ProgrammerHandler.set(state, TargetRef.Group("front-wash"), "dimmer", "150", 0)
+            state.show.fxEngine.addEffect(programmerBandSine(FxTargetRef.group("front-wash")))
+            val created: ProgrammerRecordResponse = client.record(
+                ProgrammerRecordRequest(
+                    projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
+                )
+            ).body()
+            val cueId = created.cue.id
+
+            // Re-record only hex-1, with the same effect now running on hex-1 alone.
+            clearProgrammer()
+            state.show.fxEngine.getActiveEffects().forEach { state.show.fxEngine.removeEffect(it.id) }
+            setProgrammer("hex-1", "dimmer", "255")
+            state.show.fxEngine.addEffect(programmerBandSine(FxTargetRef.fixture("hex-1")))
+            val updated: ProgrammerRecordResponse = client.record(
+                ProgrammerRecordRequest(
+                    projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = cueId,
+                    targets = listOf(CueTargetDto(type = "fixture", key = "hex-1")),
+                )
+            ).body()
+
+            // The group row survives (hex-2 is outside the selection), so a second row naming
+            // hex-1 would run the same effect twice on it — cue activation instantiates per row
+            // per target with no de-duplication.
+            val dimmerEffects = updated.cue.adHocEffects.filter { it.propertyName == "dimmer" }
+            val coverage = dimmerEffects.flatMap { effect ->
+                if (effect.targetType == TargetRef.Group.TYPE) listOf("hex-1", "hex-2")
+                else listOf(effect.targetKey)
+            }
+            assertEquals(
+                coverage.distinct().size, coverage.size,
+                "an effect must not be asserted twice for the same fixture; got $dimmerEffects",
+            )
+        }
+
+    @Test
+    fun `targets that resolve to nothing are rejected`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val stackId = createStack(client, "stack-a")
+        setProgrammer("hex-1", "dimmer", "200")
+
+        // A group is the case that can expand to nothing — `expandTargetsToFixtureKeys` looks up
+        // group membership but passes fixture keys through unchecked, leaving a bad one to be
+        // reported per-entry as MISSING_FIXTURE rather than rejected up front.
+        //
+        // Recording the whole programmer because the selection turned out to be empty would be
+        // the wrong recovery: the operator asked for a narrower record, not a wider one.
+        val response = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
+                targets = listOf(CueTargetDto(type = "group", key = "no-such-group")),
+            )
+        )
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
     fun `record points the include target at the cue it wrote`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
@@ -514,6 +755,13 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
     }
 
     private fun clearProgrammer() = clearProgrammerCompletely(state)
+
+    /** A programmer-band sine on [target]'s dimmer — what busking an effect leaves running. */
+    private fun programmerBandSine(target: FxTargetRef) = FxInstance(
+        effect = SineWave(),
+        target = SliderTarget(target, "dimmer"),
+        timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+    ).apply { priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
 
     private fun seedHex(key: String, startChannel: Int) =
         LocateTestSupport.seedHex(state, projectId, key, startChannel)

@@ -55,6 +55,8 @@ data class ProgrammerPreservedCounts(
     val timedPresetApplications: Int = 0,
     val timedAdHocEffects: Int = 0,
     val outOfMaskAssignments: Int = 0,
+    /** Rows left alone because they name a fixture outside the request's `targets` selection. */
+    val outOfScopeAssignments: Int = 0,
 )
 
 /** The outcome of writing a recording into one cue. */
@@ -132,6 +134,13 @@ internal fun writeRecordingIntoCue(
     recording: ProgrammerRecording,
     mode: RecordMode,
     mask: Set<PropertyMaskGroup>?,
+    /**
+     * Fixture scope, as [targetInScope] reads it. Only [RecordMode.UPDATE_EXISTING] needs it
+     * explicitly: it is the one mode that deletes rows the recording does *not* name, so without
+     * a scope guard "re-record these two heads" would clear the other ten. MERGE and REMOVE act
+     * only on `recording.rows`, which the capture already filtered.
+     */
+    scope: Set<String>? = null,
 ): CueWriteOutcome {
     require(mode != RecordMode.CREATE) { "CREATE is handled by createCueFromRecording" }
 
@@ -143,6 +152,7 @@ internal fun writeRecordingIntoCue(
     var written = 0
     var removed = 0
     var outOfMask = 0
+    var outOfScope = 0
 
     when (mode) {
         RecordMode.CREATE -> error("unreachable")
@@ -208,6 +218,13 @@ internal fun writeRecordingIntoCue(
 
         RecordMode.UPDATE_EXISTING -> {
             for (row in cue.propertyAssignments.toList()) {
+                // Scope first, and checked before the mask so the count the operator sees names
+                // the narrowing they chose. A group row survives unless *every* member is in the
+                // selection — replacing one would rewrite the value for heads outside it.
+                if (!targetInScope(state.show.fixtures, row.toDto().target, scope)) {
+                    outOfScope++
+                    continue
+                }
                 val group = maskGroupForRow(state.show.fixtures, row.toDto())
                 // A row whose fixture or property no longer resolves has no derivable mask
                 // group. Under a mask that means "leave it alone": a patch change must never
@@ -232,7 +249,7 @@ internal fun writeRecordingIntoCue(
                 }
                 written++
             }
-            replaceImmediateFxChildren(cue, recording, mask, state)
+            replaceImmediateFxChildren(cue, recording, mask, state, scope, warnings)
             if (recording.palette != null) cue.palette = recording.palette
         }
     }
@@ -255,6 +272,7 @@ internal fun writeRecordingIntoCue(
             timedPresetApplications = timedPresets,
             timedAdHocEffects = timedAdHoc,
             outOfMaskAssignments = outOfMask,
+            outOfScopeAssignments = outOfScope,
         ),
         warnings = warnings,
     )
@@ -391,9 +409,12 @@ private fun replaceImmediateFxChildren(
     recording: ProgrammerRecording,
     mask: Set<PropertyMaskGroup>?,
     state: State,
+    scope: Set<String>? = null,
+    warnings: MutableList<String> = ArrayList(),
 ) {
     for (effect in cue.adHocEffects.toList()) {
         if (effect.isTimed) continue
+        if (!targetInScope(state.show.fixtures, effect.target, scope)) continue
         if (mask != null && !maskAllows(mask, maskGroupForAdHocChild(state, effect))) continue
         effect.delete()
     }
@@ -401,7 +422,20 @@ private fun replaceImmediateFxChildren(
     // across several attributes — so it is only replaced when the record is unmasked. A masked
     // re-record leaves presets alone rather than deleting more than was asked for.
     if (mask == null) {
-        cue.presetApplications.toList().filterNot { it.isTimed }.forEach { it.delete() }
+        for (app in cue.presetApplications.toList()) {
+            if (app.isTimed) continue
+            if (scope == null) {
+                app.delete()
+                continue
+            }
+            // Scoped: only the selected targets are being re-recorded, so strip those and keep
+            // the rest. A preset the operator applied to the whole rig survives a re-record of
+            // two of its heads instead of vanishing from the other ten.
+            val remaining = app.targets.filterNot {
+                targetInScope(state.show.fixtures, it.target, scope)
+            }
+            if (remaining.isEmpty()) app.delete() else app.targets = remaining
+        }
     }
 
     for (app in recording.presetApplications) {
@@ -410,6 +444,23 @@ private fun replaceImmediateFxChildren(
                 !it.isTimed && it.preset.id.value == app.presetId
             }
         ) continue
+        // A group-targeted row survives a scoped record whenever part of its group sits outside
+        // the selection — and it still covers the heads that *are* inside it. Adding this row on
+        // top would leave the cue asserting the same preset twice for the overlap, and cue
+        // activation instantiates per row per target with no de-duplication, so the effect would
+        // genuinely run twice on those heads. Say so instead of stacking it, matching the
+        // group-shadow warning REMOVE already emits for property rows.
+        val shadowed = shadowingCoverage(
+            state, scope, expandTargetsToFixtureKeys(state, app.targets),
+            cue.presetApplications.filter { !it.isTimed && it.preset.id.value == app.presetId }
+                .map { it.targets },
+        )
+        if (shadowed.isNotEmpty()) {
+            warnings += "preset ${preset.name} already covers ${shadowed.joinToString()} via a " +
+                "group row the selection only partly covers — narrow the selection to the whole " +
+                "group, or remove that row"
+            continue
+        }
         DaoCuePresetApplication.new {
             this.cue = cue
             this.preset = preset
@@ -417,7 +468,44 @@ private fun replaceImmediateFxChildren(
             this.sortOrder = app.sortOrder
         }
     }
-    for (effect in recording.adHocEffects) newAdHocChild(cue, effect)
+    for (effect in recording.adHocEffects) {
+        // Same hazard, same rule — an ad-hoc child is identified by (effectType, property).
+        val shadowed = shadowingCoverage(
+            state, scope,
+            expandTargetsToFixtureKeys(state, listOf(CueTargetDto(effect.targetType, effect.targetKey))),
+            cue.adHocEffects
+                .filter {
+                    !it.isTimed && it.effectType == effect.effectType &&
+                        it.propertyName == effect.propertyName
+                }
+                .map { listOf(CueTargetDto(it.targetType, it.targetKey)) },
+        )
+        if (shadowed.isNotEmpty()) {
+            warnings += "${effect.effectType} already covers ${shadowed.joinToString()} via a " +
+                "group row the selection only partly covers — narrow the selection to the whole " +
+                "group, or remove that row"
+            continue
+        }
+        newAdHocChild(cue, effect)
+    }
+}
+
+/**
+ * Which of [wanted] are already covered by one of [existing]'s target sets.
+ *
+ * Only meaningful for a scoped record: an unscoped one deletes every immediate child before
+ * re-inserting, so nothing can survive to overlap. Returns empty when [scope] is null so the
+ * unscoped path keeps its existing behaviour exactly.
+ */
+private fun shadowingCoverage(
+    state: State,
+    scope: Set<String>?,
+    wanted: Set<String>,
+    existing: List<List<CueTargetDto>>,
+): Set<String> {
+    if (scope == null || existing.isEmpty()) return emptySet()
+    val covered = existing.flatMapTo(HashSet()) { expandTargetsToFixtureKeys(state, it) }
+    return wanted intersect covered
 }
 
 private fun maskGroupForAdHocChild(state: State, effect: DaoCueAdHocEffect): PropertyMaskGroup? {

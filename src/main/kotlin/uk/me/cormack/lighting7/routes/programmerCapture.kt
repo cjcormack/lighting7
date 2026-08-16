@@ -249,32 +249,94 @@ internal fun collectProgrammerEntries(
 }
 
 /**
+ * Is [target] wholly inside [scope]? A null scope means "no restriction" and accepts everything.
+ *
+ * **Wholly** is the load-bearing word, and it is what makes one rule serve both directions. A
+ * group target writes to every member, so one whose membership only partly overlaps the
+ * selection would put values on heads the operator didn't select. Recording therefore drops
+ * such a target, and the destructive `UPDATE_EXISTING` / `REMOVE` passes preserve it — the same
+ * predicate, read once as "may I capture this" and once as "may I overwrite this".
+ *
+ * The TOUCHED/ALL path gets this for free rather than through this function:
+ * [collapseRecordingToAssignments] only emits a group row when every member has an entry, and a
+ * partly-scoped group has already lost some.
+ */
+internal fun targetInScope(fixtures: Fixtures, target: TargetRef, scope: Set<String>?): Boolean {
+    if (scope == null) return true
+    return when (target) {
+        is TargetRef.Fixture -> target.key in scope
+        is TargetRef.Group -> {
+            val members = try {
+                fixtures.untypedGroup(target.key).fixtures.filterIsInstance<Fixture>()
+            } catch (_: Exception) {
+                return false
+            }
+            members.isNotEmpty() && members.all { it.key in scope }
+        }
+    }
+}
+
+/**
  * Collect a full recording for [source], with the group-shape collapse already applied.
  *
  * [includeFx] controls whether programmer-band effects become cue FX children — an operator
  * recording "just the look" over a busked chase wants the values without the chase.
+ *
+ * [targets] restricts the capture to a set of fixture keys (groups already expanded by
+ * [expandTargetsToFixtureKeys]); null means the whole programmer, which is the historical
+ * behaviour and still the default.
  */
 internal fun collectProgrammerRecording(
     state: State,
     source: RecordSource,
     mask: Set<PropertyMaskGroup>?,
     includeFx: Boolean,
+    targets: Set<String>? = null,
 ): ProgrammerRecording {
     val fixtures = state.show.fixtures
+    val scope = targets?.takeIf { it.isNotEmpty() }
 
     if (source == RecordSource.STAGE_SNAPSHOT) {
+        // This branch never reaches `collectProgrammerEntries`, so it does not inherit that
+        // function's scope filter and has to apply its own — without this, a scoped Record from
+        // "Whole stage" would silently capture the entire rig.
         val captured = captureCurrentState(state)
-        val rows = captured.propertyAssignments.filter { row ->
-            maskAllows(mask, maskGroupForRow(fixtures, row))
+        val rows = ArrayList<CuePropertyAssignmentDto>(captured.propertyAssignments.size)
+        val skipped = ArrayList<RecordSkip>()
+        for (row in captured.propertyAssignments) {
+            // Scope before mask: an operator who narrowed by fixture should see the reason they
+            // chose, not an attribute reason that happens to also apply.
+            if (!targetInScope(fixtures, row.target, scope)) {
+                skipped += RecordSkip(
+                    row.targetKey, row.propertyName, reason = RecordSkipReason.OUT_OF_SCOPE,
+                )
+                continue
+            }
+            if (!maskAllows(mask, maskGroupForRow(fixtures, row))) {
+                skipped += RecordSkip(
+                    row.targetKey, row.propertyName, reason = RecordSkipReason.MASKED_OUT,
+                )
+                continue
+            }
+            rows += row
         }
-        val skipped = captured.propertyAssignments
-            .filterNot { row -> maskAllows(mask, maskGroupForRow(fixtures, row)) }
-            .map { RecordSkip(it.targetKey, it.propertyName, reason = RecordSkipReason.MASKED_OUT) }
         return ProgrammerRecording(
             rows = renumber(rows),
-            presetApplications = if (includeFx) captured.presetApplications else emptyList(),
+            presetApplications = if (includeFx) {
+                captured.presetApplications.mapNotNull { app ->
+                    val kept = app.targets.filter { targetInScope(fixtures, it.target, scope) }
+                    when {
+                        kept.size == app.targets.size -> app
+                        kept.isEmpty() -> null
+                        else -> app.copy(targets = kept)
+                    }
+                }
+            } else emptyList(),
             adHocEffects = if (includeFx) {
-                captured.adHocEffects.filter { maskAllows(mask, maskGroupForAdHoc(fixtures, it)) }
+                captured.adHocEffects.filter {
+                    maskAllows(mask, maskGroupForAdHoc(fixtures, it)) &&
+                        targetInScope(fixtures, it.target, scope)
+                }
             } else emptyList(),
             palette = captured.palette,
             groupRowsEmitted = rows.count { it.targetType == TargetRef.Group.TYPE },
@@ -282,14 +344,14 @@ internal fun collectProgrammerRecording(
         )
     }
 
-    val (entries, entrySkips) = collectProgrammerEntries(state, source, mask)
+    val (entries, entrySkips) = collectProgrammerEntries(state, source, mask, scope)
     val collapsed = collapseRecordingToAssignments(entries, fixtures)
 
     val bandEffects = if (includeFx) {
         state.show.fxEngine.getActiveEffects()
             .filter { FxEngine.isProgrammerFxPriority(it.priority) }
     } else emptyList()
-    val (presetApps, adHoc) = fxInstancesToCueChildren(bandEffects, mask, fixtures)
+    val (presetApps, adHoc) = fxInstancesToCueChildren(bandEffects, mask, fixtures, scope)
 
     return ProgrammerRecording(
         rows = collapsed.rows,
@@ -344,6 +406,12 @@ internal fun fxInstancesToCueChildren(
     instances: List<FxInstance>,
     mask: Set<PropertyMaskGroup>?,
     fixtures: Fixtures,
+    /**
+     * Fixture scope, as [targetInScope] reads it. An effect is captured only when every head it
+     * drives is in the selection: "record just these two heads" that quietly wrote a whole-rig
+     * chase into the cue would be a worse surprise than dropping the chase and saying so.
+     */
+    scope: Set<String>? = null,
 ): Pair<List<CuePresetApplicationDto>, List<CueAdHocEffectDto>> {
     if (instances.isEmpty()) return emptyList<CuePresetApplicationDto>() to emptyList()
     val presetApplications = LinkedHashMap<Int, MutableList<CueTargetDto>>()
@@ -353,6 +421,8 @@ internal fun fxInstancesToCueChildren(
         val targetType = if (effect.isGroupEffect) TargetRef.Group.TYPE else TargetRef.Fixture.TYPE
         val targetKey = effect.target.targetKey
         val target = TargetRef.of(targetType, targetKey)
+
+        if (!targetInScope(fixtures, target, scope)) continue
 
         // An FX is masked by the property it drives, so "record only the colours" doesn't drag
         // a position wave along with them.
