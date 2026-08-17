@@ -96,20 +96,30 @@ internal fun routingNormalisedPath(rawPath: String): String =
         }
 
 /**
- * Paths that must answer without a cookie even once users exist: the boot-status poll,
- * the status probe the frontend gate runs on, the two ways to acquire a session, and the
- * QR password-reset redemption — whoever opens that link is by definition locked out, so
- * requiring a session would make the recovery path impossible to walk.
+ * Paths that must answer without a cookie even once users exist: the boot-status poll, the
+ * status probe the frontend gate runs on, and the ways to acquire a session.
  *
- * Only the redemption endpoint is exempt. The admin-side minting and polling endpoints
- * live under the `/api/rest/users` subtree, which is admin-only.
+ * Two of those are QR flows, exempt for different reasons. **Reset** redemption
+ * (`/auth/reset/`) is exempt because whoever opens that link is by definition locked out, so
+ * requiring a session would make the recovery path impossible to walk. **Device login**
+ * (`/auth/device/`) is exempt because acquiring a session is the entire point — the phone has
+ * none yet, exactly as it has none when it POSTs to `/auth/login`.
+ *
+ * In both cases only the *redemption* half is exempt. Minting and polling stay behind the
+ * gate: reset under the admin-only `/api/rest/users` subtree, device login under
+ * `/api/rest/auth/device-logins`, which is authenticated but open to any role.
+ *
+ * **The trailing slash on `/auth/device/` is load-bearing.** Without it the prefix also
+ * matches `/api/rest/auth/device-logins`, which would hand the mint endpoint to anyone on the
+ * network. `AuthGateTest` pins this.
  */
 private fun isAuthExempt(path: String): Boolean =
     path == "/api/rest/status" ||
         path == "/api/rest/auth/status" ||
         path == "/api/rest/auth/login" ||
         path == "/api/rest/auth/setup" ||
-        path.startsWith("/api/rest/auth/reset/")
+        path.startsWith("/api/rest/auth/reset/") ||
+        path.startsWith("/api/rest/auth/device/")
 
 /**
  * Admin territory: user management (Session 3), the install-level cloud-sync batch

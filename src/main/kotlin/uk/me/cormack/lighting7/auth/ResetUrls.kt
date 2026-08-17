@@ -7,14 +7,20 @@ import io.ktor.server.request.header
 import uk.me.cormack.lighting7.state.MdnsService
 
 /**
- * Where a QR reset token can be redeemed: the address to encode in the QR, plus every
- * other address the same page answers on (shown as selectable text under the code, for
- * when the phone can't reach the first one).
+ * Where a QR page can be reached: the address to encode in the QR, plus every other address
+ * the same page answers on (shown as selectable text under the code, for when the phone
+ * can't reach the first one).
  */
-data class ResetUrls(val primary: String, val alternates: List<String>)
+data class LanUrls(val primary: String, val alternates: List<String>)
+
+/** Where a QR **password reset** token can be redeemed. */
+fun ApplicationCall.buildResetUrls(rawToken: String): LanUrls = buildLanUrls("/reset/$rawToken")
+
+/** Where a **device-login** token can be exchanged for a session. */
+fun ApplicationCall.buildDeviceLoginUrls(rawToken: String): LanUrls = buildLanUrls("/device/$rawToken")
 
 /**
- * Build the reset URLs for [rawToken] (multi-user-auth plan, Decision 12).
+ * Build the LAN-reachable URLs for [path] (multi-user-auth plan, Decision 12).
  *
  * Priority order:
  * 1. the request's own scheme + `Host` header, verbatim — an address the admin's browser
@@ -22,7 +28,7 @@ data class ResetUrls(val primary: String, val alternates: List<String>)
  * 2. if that host is loopback (the admin is browsing `localhost`, or the Vite dev proxy),
  *    the mDNS name, then any site-local IPv4 — a QR pointing at `127.0.0.1` would resolve
  *    to the *phone*, which is the one failure mode this ordering exists to prevent;
- * 3. [ResetUrls.alternates] always carries the mDNS name and every site-local IPv4 that
+ * 3. [LanUrls.alternates] always carries the mDNS name and every site-local IPv4 that
  *    isn't already the primary.
  *
  * Ports differ by branch, deliberately. The `Host` URL keeps the header's own port,
@@ -30,9 +36,8 @@ data class ResetUrls(val primary: String, val alternates: List<String>)
  * dev proxy that's the proxy, which serves the reset page and forwards the API. The
  * fallbacks have no such evidence, so they use the port the request actually arrived on.
  */
-fun ApplicationCall.buildResetUrls(rawToken: String): ResetUrls {
+private fun ApplicationCall.buildLanUrls(path: String): LanUrls {
     val scheme = request.origin.scheme
-    val path = "/reset/$rawToken"
     val port = request.origin.localPort
 
     val hostHeader = request.header(HttpHeaders.Host)?.trim()?.takeIf { it.isNotEmpty() }
@@ -56,7 +61,7 @@ fun ApplicationCall.buildResetUrls(rawToken: String): ResetUrls {
         .distinct()
         .filter { it != primary }
 
-    return ResetUrls(primary, alternates)
+    return LanUrls(primary, alternates)
 }
 
 /**

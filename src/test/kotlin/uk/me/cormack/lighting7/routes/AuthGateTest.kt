@@ -211,15 +211,41 @@ class AuthGateTest : RouteIntegrationTest() {
             "/api/rest/auth/reset/..%2fusers",
             "/api/rest/auth/reset/%2e%2e/users",
             "/api/rest/auth/reset//../users",
+            // Same for the device-login exemption, which additionally has an authenticated
+            // sibling one path segment away — see the test below for why that matters.
+            "/api/rest/auth/device/../users",
+            "/api/rest/auth/device/..%2fdevice-logins",
+            "/api/rest/auth/device/%2e%2e/device-logins",
+            "/api/rest/auth/device//../users",
         )
         for (spelling in spellings) {
             val response = client.get(spelling)
             assertNotEquals(
                 HttpStatusCode.OK,
                 response.status,
-                "spelling $spelling answered 200 without a cookie — the reset exemption leaked",
+                "spelling $spelling answered 200 without a cookie — an exemption leaked",
             )
         }
+    }
+
+    /**
+     * The trailing slash in `isAuthExempt`'s `"/api/rest/auth/device/"` is load-bearing:
+     * without it the prefix would also match `/api/rest/auth/device-logins`, and minting a
+     * sign-in QR for an arbitrary account would need no cookie at all. One character between
+     * "sign my own phone in" and "anyone on the network can mint a session".
+     */
+    @Test
+    fun `the device exemption covers redemption but never the mint endpoint`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "alice")
+        val client = jsonClient()
+
+        // Exempt: answers on its own terms (404 for a token that doesn't exist), not 401.
+        assertEquals(HttpStatusCode.NotFound, client.get("/api/rest/auth/device/nope").status)
+
+        // Gated, both spellings: the collection and a specific id.
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/api/rest/auth/device-logins").status)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/rest/auth/device-logins/some-id").status)
     }
 
     // ─── WebSocket ─────────────────────────────────────────────────────

@@ -142,8 +142,11 @@ class UsersRoutesTest : RouteIntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody(UpdateUserRequest(role = UserRole.OPERATOR))
         }
+        // Self-role is caught first, so the code says SELF rather than LAST_ADMIN. The
+        // outcome that matters is the same either way — and it is the assertion below, not
+        // the code, that guarantees the desk still has an admin who can sign in.
         assertEquals(HttpStatusCode.Conflict, demote.status)
-        assertEquals(CODE_LAST_ADMIN, demote.body<ErrorResponse>().code)
+        assertEquals(CODE_SELF_TARGET, demote.body<ErrorResponse>().code)
         assertEquals(UserRole.ADMIN, state.authService.findUser(boss.userId)?.role, "the demotion must not have landed")
 
         val disable = client.put("/api/rest/users/${boss.userId}") {
@@ -151,8 +154,7 @@ class UsersRoutesTest : RouteIntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody(UpdateUserRequest(disabled = true))
         }
-        // Self-disable is caught first, so the code says SELF rather than LAST_ADMIN —
-        // either way the desk keeps an admin who can sign in.
+        // Self-disable is caught first, for the same reason.
         assertEquals(HttpStatusCode.Conflict, disable.status)
         assertEquals(CODE_SELF_TARGET, disable.body<ErrorResponse>().code)
 
@@ -163,12 +165,14 @@ class UsersRoutesTest : RouteIntegrationTest() {
     }
 
     /**
-     * The guard has to live inside the mutating transaction, because over HTTP the disable
-     * arm is unreachable: any caller is themselves an enabled admin, so a *different* user
-     * can never be the last one, and self-disable is answered by the self guard first.
-     * Driving the service directly is what actually exercises it — and what would catch a
-     * regression that moved the check back into the route, where two concurrent requests
-     * could both pass it.
+     * The guard has to live inside the mutating transaction, because over HTTP **every** arm
+     * is unreachable: any caller is themselves an enabled admin, so a *different* user can
+     * never be the last one, and self-disable, self-demotion and self-delete are all answered
+     * by the self guards first.
+     *
+     * That makes this test the only coverage the last-admin guard has. Driving the service
+     * directly is what actually exercises it — and what would catch a regression that moved
+     * the check back into the route, where two concurrent requests could both pass it.
      */
     @Test
     fun `the service refuses to disable or demote the last admin`() = testApplication {
@@ -192,6 +196,71 @@ class UsersRoutesTest : RouteIntegrationTest() {
             state.authService.updateUser(boss.userId, "Renamed", UserRole.OPERATOR, null),
         )
         assertEquals("Test boss", assertNotNull(state.authService.findUser(boss.userId)).displayName)
+    }
+
+    /**
+     * The self-role guard, which before `FU-AUTH-SELF-ROLE-GUARD` only bit when the caller
+     * happened to be the *last* admin. With a second admin present a self-demotion used to
+     * succeed, costing the caller their own administration surfaces mid-session and needing
+     * the other admin to undo — a footgun with no legitimate use.
+     */
+    @Test
+    fun `you cannot change your own role even with another admin present`() = testApplication {
+        mountTestApp(state)
+        val boss = seedUser(state, "boss", role = UserRole.ADMIN)
+        seedUser(state, "deputy", role = UserRole.ADMIN)
+        val client = jsonClient()
+        val admin = client.loginCookieHeader("boss")
+
+        val demote = client.put("/api/rest/users/${boss.userId}") {
+            header(HttpHeaders.Cookie, admin)
+            contentType(ContentType.Application.Json)
+            setBody(UpdateUserRequest(role = UserRole.OPERATOR))
+        }
+        assertEquals(HttpStatusCode.Conflict, demote.status, demote.bodyAsText())
+        assertEquals(CODE_SELF_TARGET, demote.body<ErrorResponse>().code)
+        assertEquals(UserRole.ADMIN, assertNotNull(state.authService.findUser(boss.userId)).role)
+
+        // Keyed on a *change*: re-sending the role you already have is a no-op, not a
+        // conflict — the same shape as the disable guard, which ignores `disabled = false`.
+        val noop = client.put("/api/rest/users/${boss.userId}") {
+            header(HttpHeaders.Cookie, admin)
+            contentType(ContentType.Application.Json)
+            setBody(UpdateUserRequest(displayName = "Renamed", role = UserRole.ADMIN))
+        }
+        assertEquals(HttpStatusCode.OK, noop.status, noop.bodyAsText())
+        assertEquals("Renamed", assertNotNull(state.authService.findUser(boss.userId)).displayName)
+    }
+
+    /**
+     * `FU-AUTH-SELF-RESET-GUARD`. The UI hides the button, but a UI-only guard is decoration:
+     * the desk's own screen would be showing a link that re-passwords an admin account, and
+     * anyone who photographs it in passing can take that account over.
+     */
+    @Test
+    fun `you cannot mint a reset QR for your own account`() = testApplication {
+        mountTestApp(state)
+        val boss = seedUser(state, "boss", role = UserRole.ADMIN)
+        val operator = seedUser(state, "op", role = UserRole.OPERATOR)
+        val client = jsonClient()
+        val admin = client.loginCookieHeader("boss")
+
+        val own = client.post("/api/rest/users/${boss.userId}/reset-tokens") {
+            header(HttpHeaders.Cookie, admin)
+        }
+        assertEquals(HttpStatusCode.Conflict, own.status, own.bodyAsText())
+        assertEquals(CODE_SELF_TARGET, own.body<ErrorResponse>().code)
+        assertEquals(
+            emptyList(),
+            state.authService.resetTokenHistory(boss.userId),
+            "the refusal must not have minted anything",
+        )
+
+        // Somebody else's is still fine — that is the whole feature.
+        val theirs = client.post("/api/rest/users/${operator.userId}/reset-tokens") {
+            header(HttpHeaders.Cookie, admin)
+        }
+        assertEquals(HttpStatusCode.Created, theirs.status, theirs.bodyAsText())
     }
 
     @Test

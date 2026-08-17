@@ -13,8 +13,11 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
+import uk.me.cormack.lighting7.auth.AuthService
+import uk.me.cormack.lighting7.auth.ResetTokenHistoryEntry
 import uk.me.cormack.lighting7.auth.ResetTokenStatus
 import uk.me.cormack.lighting7.models.DaoPasswordResetToken
 import uk.me.cormack.lighting7.models.UserRole
@@ -333,6 +336,118 @@ class PasswordResetRoutesTest : RouteIntegrationTest() {
                 "no offered URL may be loopback: $everyUrl",
             )
         }
+    }
+
+    /**
+     * `FU-AUTH-RESET-TOKEN-HISTORY`. Closing the sheet no longer cancels the link it was
+     * showing, so the history list is what keeps a live one visible and revocable. Every
+     * status has to be distinguishable, or "there is a live link right now" — the question the
+     * list exists to answer — can't be read off it.
+     */
+    @Test
+    fun `reset history lists every status and never leaks a token`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "boss", role = UserRole.ADMIN)
+        val operator = seedUser(state, "op", role = UserRole.OPERATOR)
+        val client = jsonClient()
+        val admin = client.loginCookieHeader("boss")
+
+        fun mint(): ResetTokenResponse = runBlocking {
+            client.post("/api/rest/users/${operator.userId}/reset-tokens") {
+                header(HttpHeaders.Cookie, admin)
+            }.body()
+        }
+        suspend fun history(): List<ResetTokenHistoryEntry> =
+            client.get("/api/rest/users/${operator.userId}/reset-tokens") {
+                header(HttpHeaders.Cookie, admin)
+            }.body()
+
+        assertEquals(emptyList(), history(), "a user who never had a link has no history")
+
+        // Minting cancels the outstanding token: one live link per account is the standing
+        // rule, so a superseded row is the ordinary way a CANCELLED one appears.
+        val superseded = mint()
+        val used = mint()
+        client.post("/api/rest/auth/reset/${used.rawToken()}") {
+            contentType(ContentType.Application.Json)
+            setBody(RedeemResetRequest("a-new-password"))
+        }
+        val live = mint()
+
+        val rows = history()
+        assertEquals(listOf(live.id, used.id, superseded.id), rows.map { it.id }, "newest first")
+        assertEquals(
+            mapOf(
+                live.id to ResetTokenStatus.PENDING,
+                used.id to ResetTokenStatus.USED,
+                superseded.id to ResetTokenStatus.CANCELLED,
+            ),
+            rows.associate { it.id to it.status },
+        )
+        assertEquals(
+            listOf("Test boss"),
+            rows.map { it.createdByDisplayName }.distinct(),
+            "the minting admin is named, so a history row says who to ask about it",
+        )
+
+        // The list revokes links; it must never be a way to reissue one. Assert on the raw
+        // body, because a token leaking through an unexpected field would still deserialise.
+        val raw = client.get("/api/rest/users/${operator.userId}/reset-tokens") {
+            header(HttpHeaders.Cookie, admin)
+        }.bodyAsText()
+        assertFalse(raw.contains(live.rawToken()), "no raw token may appear in the history")
+        assertFalse(raw.contains("tokenHash"), "no hash either: $raw")
+        // EXPIRED has to be reached by ageing the *newest* token, not an earlier one: minting
+        // over a token cancels it, and `statusAt` reports CANCELLED ahead of EXPIRED. That
+        // ordering is deliberate — "an admin revoked this" outranks "it timed out" — so a
+        // superseded-then-expired row can never read as expired.
+        expireResetToken(live.id)
+        assertEquals(
+            ResetTokenStatus.EXPIRED,
+            assertNotNull(history().firstOrNull { it.id == live.id }).status,
+        )
+
+        val unknown = client.get("/api/rest/users/9999/reset-tokens") { header(HttpHeaders.Cookie, admin) }
+        assertEquals(HttpStatusCode.NotFound, unknown.status)
+    }
+
+    /**
+     * The prune that makes the history durable. It used to delete every non-PENDING row at
+     * startup, so history could only ever describe the current uptime; it now ages rows out
+     * of a 30-day window instead. Driven through a second [AuthService] over the same
+     * database, which is what a restart looks like from the table's point of view.
+     */
+    @Test
+    fun `spent reset tokens survive a restart and age out after the retention window`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "boss", role = UserRole.ADMIN)
+        val operator = seedUser(state, "op", role = UserRole.OPERATOR)
+        val client = jsonClient()
+        val admin = client.loginCookieHeader("boss")
+
+        val first = client.post("/api/rest/users/${operator.userId}/reset-tokens") {
+            header(HttpHeaders.Cookie, admin)
+        }.body<ResetTokenResponse>()
+        // Cancelled — under the old prune this row would not have survived the next boot.
+        client.delete("/api/rest/users/${operator.userId}/reset-tokens/${first.id}") {
+            header(HttpHeaders.Cookie, admin)
+        }
+
+        val rebooted = AuthService(state.database, bcryptCost = 4)
+        assertEquals(
+            listOf(first.id),
+            rebooted.resetTokenHistory(operator.userId).map { it.id },
+            "a spent row must outlive the process that made it",
+        )
+
+        // ...but not forever. A clock 31 days ahead is a boot 31 days later.
+        val muchLater = System.currentTimeMillis() + 31L * 24 * 60 * 60 * 1000
+        val aged = AuthService(state.database, bcryptCost = 4, clock = { muchLater })
+        assertEquals(
+            emptyList(),
+            aged.resetTokenHistory(operator.userId),
+            "past the retention window the row is gone",
+        )
     }
 
     /** Push a token's expiry into the past so the expired-token paths can be exercised. */

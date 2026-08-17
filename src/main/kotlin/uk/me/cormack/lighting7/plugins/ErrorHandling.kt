@@ -59,6 +59,27 @@ fun Application.configureErrorHandling() {
                 ErrorResponse(cause.message ?: "Malformed request body"),
             )
         }
+        // A body whose *content type* no converter handles — a form encoding posted at a
+        // JSON-only endpoint, most often. ContentNegotiation throws this, which descends from
+        // `ContentTransformationException` (an IOException) rather than from BadRequestException,
+        // so without this clause it reached the catch-all and answered 500: a server fault for
+        // what is squarely a caller mistake. It matters on the two public endpoints
+        // (`/auth/reset/{token}` and `/auth/device/{token}`) in particular, where refusing a
+        // cross-origin form post is the desk's whole CSRF answer — those must read as "no", not
+        // as "we fell over".
+        //
+        // Deliberately the leaf type, not `ContentTransformationException`: its other subtypes
+        // are `UnsupportedMediaTypeException` and `PayloadTooLargeException`, which Ktor answers
+        // 415 and 413. StatusPages resolves to the nearest registered ancestor, so catching the
+        // parent would quietly fold both of those into a generic 400 the day a body-size limit
+        // is installed.
+        exception<CannotTransformContentToTypeException> { call, cause ->
+            logger.warn("Unsupported request body on {}: {}", call.request.local.uri, cause.message)
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ErrorResponse(cause.message ?: "Unsupported request body"),
+            )
+        }
 
         // Auth failures thrown by AuthService / the auth gate helpers. Expected outcomes,
         // not faults — logged at WARN so a wrong password doesn't page anyone.

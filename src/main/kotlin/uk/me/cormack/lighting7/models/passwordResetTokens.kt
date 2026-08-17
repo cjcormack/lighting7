@@ -17,8 +17,11 @@ import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
  *
  * `used_at_ms` / `cancelled_at_ms` are kept rather than deleting the row: the admin's
  * sheet polls the token's status and must be able to distinguish "the user set their
- * password" from "this token expired" from "unknown token". `AuthService` prunes dead
- * rows at startup.
+ * password" from "this token expired" from "unknown token". Spent rows then stay as the
+ * account's reset **history** — which is what makes a live link visible and revocable rather
+ * than something that silently outlives the sheet that showed it. `AuthService` ages rows out
+ * after 30 days (`pruneOldResetTokenRows`) instead of sweeping spent ones at startup, so that
+ * history survives a restart.
  *
  * The CASCADE on `user_id` documents intent but is not enforced — SQLite runs with
  * `PRAGMA foreign_keys` OFF here, so `AuthService` deletes a user's tokens explicitly.

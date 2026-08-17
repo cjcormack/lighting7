@@ -41,9 +41,15 @@ private const val USER_NOT_FOUND = "User not found"
  *   (409 + [CODE_LAST_ADMIN]). A desk with no usable admin can only be repaired by
  *   dropping `RESET-ADMIN` in the data dir and restarting — which means interrupting a
  *   show.
- * - **Self.** You cannot disable or delete the account you are signed in as (409 +
- *   [CODE_SELF_TARGET]). Changing your own display name or password is fine; those are
- *   what the user menu is for.
+ * - **Self.** You cannot disable, delete, change the role of, or mint a password-reset QR for
+ *   the account you are signed in as (409 + [CODE_SELF_TARGET]). Changing your own display
+ *   name or password is fine; those are what the user menu is for.
+ *
+ *   The role and reset-token halves of that are not about recoverability — they are about
+ *   footguns with no legitimate use. A self-demotion costs you your own administration
+ *   surfaces mid-session and needs the *other* admin to undo; a QR for your own account puts
+ *   a link that re-passwords an admin on the desk's screen, where anyone passing can
+ *   photograph it.
  */
 internal fun Route.routeApiRestUsers(state: State) {
     get<UsersResource> {
@@ -90,6 +96,21 @@ internal fun Route.routeApiRestUsers(state: State) {
             call.respond(
                 HttpStatusCode.Conflict,
                 ErrorResponse("You cannot disable your own account", CODE_SELF_TARGET),
+            )
+            return@put
+        }
+        // Keyed on an actual *change*, the way the disable guard above is keyed on `== true`
+        // rather than `!= null`: re-sending the role you already have is a no-op, not a
+        // conflict. The comparison reads the role the gate just resolved to admit this
+        // request, so it needs neither a query nor the atomicity the last-admin guard does —
+        // this is an identity check, not a count that a concurrent write can move.
+        if (request.role != null &&
+            call.isSelf(resource.userId) &&
+            request.role != call.authenticatedUserOrNull?.role
+        ) {
+            call.respond(
+                HttpStatusCode.Conflict,
+                ErrorResponse("You cannot change your own role", CODE_SELF_TARGET),
             )
             return@put
         }
@@ -144,6 +165,16 @@ internal fun Route.routeApiRestUsers(state: State) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse(USER_NOT_FOUND))
             return@post
         }
+        if (call.isSelf(userId)) {
+            call.respond(
+                HttpStatusCode.Conflict,
+                ErrorResponse(
+                    "Use \"Change password…\" in the user menu for your own account",
+                    CODE_SELF_TARGET,
+                ),
+            )
+            return@post
+        }
         val minted = state.authService.createResetToken(userId, call.authenticatedUserOrNull?.userId)
         if (minted == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse(USER_NOT_FOUND))
@@ -162,6 +193,21 @@ internal fun Route.routeApiRestUsers(state: State) {
                 displayName = user.displayName,
             ),
         )
+    }
+
+    /**
+     * Every reset link this account has had, newest first. Closing the QR sheet no longer
+     * cancels the link it was showing, so this is where a live one stays visible — and
+     * cancellable — instead of quietly outliving the sheet. Never carries a raw token: the
+     * list exists to revoke links, not to reissue them.
+     */
+    get<UserResetTokensResource> { resource ->
+        val userId = resource.parent.userId
+        if (state.authService.findUser(userId) == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse(USER_NOT_FOUND))
+            return@get
+        }
+        call.respond(state.authService.resetTokenHistory(userId))
     }
 
     /** The admin sheet's poll: has the phone at the other end of the QR used it yet? */

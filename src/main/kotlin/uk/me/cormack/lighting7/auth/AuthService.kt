@@ -11,6 +11,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.lessEq
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.core.or
@@ -24,6 +25,7 @@ import uk.me.cormack.lighting7.models.DaoUser
 import uk.me.cormack.lighting7.models.DaoUserSession
 import uk.me.cormack.lighting7.models.DaoUserSessions
 import uk.me.cormack.lighting7.models.DaoUsers
+import uk.me.cormack.lighting7.models.SessionOrigin
 import uk.me.cormack.lighting7.models.UserRole
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -64,9 +66,26 @@ enum class ResetTokenStatus {
     USED,
     EXPIRED,
 
-    /** Superseded by a newer token for the same user, or the admin closed the sheet. */
+    /** Superseded by a newer token for the same user, or an admin revoked it deliberately. */
     CANCELLED,
 }
+
+/**
+ * One reset token in a user's history, for the admin's list. Never carries the token itself
+ * or its hash — the whole point of the list is to show that a link *exists* and let it be
+ * revoked, not to reissue it.
+ */
+@Serializable
+data class ResetTokenHistoryEntry(
+    val id: Int,
+    val status: ResetTokenStatus,
+    val createdAtMs: Long,
+    val expiresAtMs: Long,
+    val usedAtMs: Long? = null,
+    val cancelledAtMs: Long? = null,
+    /** The admin who minted it. Null once that admin is deleted, or for a break-glass mint. */
+    val createdByDisplayName: String? = null,
+)
 
 /**
  * Outcome of an admin mutation that the last-admin guard can refuse.
@@ -111,6 +130,73 @@ sealed interface ResetRedemption {
     data object Unknown : ResetRedemption
 }
 
+/**
+ * Where a device-login token is in its very short life.
+ *
+ * Deliberately **not** a reuse of [ResetTokenStatus]. The two tokens grant different things —
+ * a reset token can only ever set a password, this one is exchanged for a session — and a
+ * shared type is the first step towards a shared lookup that could redeem one as the other.
+ */
+@Serializable
+enum class DeviceLoginStatus {
+    /** Live and exchangeable. */
+    PENDING,
+
+    /** A phone exchanged it for a session — the desk sheet's success state. */
+    USED,
+    EXPIRED,
+
+    /** Superseded by a newer token, the sheet closed, or the account's credentials moved. */
+    CANCELLED,
+}
+
+/** What the public `GET /auth/device/{token}` page learns before anyone commits to signing in. */
+sealed interface DeviceLoginLookup {
+    data class Live(
+        val userId: Int,
+        val username: String,
+        val displayName: String,
+        val expiresAtMs: Long,
+    ) : DeviceLoginLookup
+
+    /** Known token, no longer exchangeable — the phone gets 410 plus status-specific copy. */
+    data class Dead(val status: DeviceLoginStatus) : DeviceLoginLookup
+
+    /** No such token: a typo, or one already swept. 404. */
+    data object Unknown : DeviceLoginLookup
+}
+
+/** Outcome of the public device-login exchange. */
+sealed interface DeviceLoginRedemption {
+    /** Signed in. [rawToken] is the session cookie value; [user] is who the phone now is. */
+    data class Applied(val user: AuthenticatedUser, val rawToken: String) : DeviceLoginRedemption
+
+    data class Dead(val status: DeviceLoginStatus) : DeviceLoginRedemption
+
+    data object Unknown : DeviceLoginRedemption
+}
+
+/**
+ * A freshly minted device-login token, minus its raw value. [id] is an opaque uuid rather
+ * than a sequential number, so the poll URL of one desk's sheet says nothing about anyone
+ * else's.
+ */
+data class DeviceLoginRecord(val id: String, val expiresAtMs: Long)
+
+/** The desk sheet's poll answer: has a phone taken this QR yet, and if so, which phone? */
+@Serializable
+data class DeviceLoginStatusDto(
+    val status: DeviceLoginStatus,
+    val expiresAtMs: Long,
+    /**
+     * The redeeming device, once there is one. With no confirmation step in the flow, this is
+     * the only way the desk can tell that the phone which took the QR was the intended one —
+     * paired with [sessionId] so the sheet can offer to sign a wrong device straight back out.
+     */
+    val redeemedByUserAgent: String? = null,
+    val sessionId: Int? = null,
+)
+
 /** One live session as reported by `GET /auth/sessions`. */
 @Serializable
 data class SessionInfo(
@@ -119,6 +205,11 @@ data class SessionInfo(
     val lastSeenAtMs: Long,
     val userAgent: String?,
     val current: Boolean,
+    /**
+     * Defaulted so a browser still running a bundle from before this field existed keeps
+     * deserialising the list rather than blanking the devices panel.
+     */
+    val createdVia: SessionOrigin = SessionOrigin.PASSWORD,
 )
 
 /**
@@ -154,6 +245,18 @@ class AuthService(
     private val refreshIntervalMs: Long = 60L * 60 * 1000,
     /** QR reset tokens are handed over in person and redeemed immediately; 15 minutes is plenty. */
     private val resetTokenTtlMs: Long = 15L * 60 * 1000,
+    /**
+     * How long a *spent* reset token stays visible in the admin's history list. Far longer
+     * than [resetTokenTtlMs], because this is about answering "was a link ever minted for
+     * this account, and what became of it" — a question that outlives the link.
+     */
+    private val resetTokenHistoryTtlMs: Long = 30L * 24 * 60 * 60 * 1000,
+    /**
+     * Device-login tokens are scanned off the desk's own screen by someone standing at it.
+     * Two minutes covers a phone cold-starting a browser and pulling the SPA bundle over
+     * venue Wi-Fi; the control that actually matters is cancellation when the sheet closes.
+     */
+    private val deviceLoginTtlMs: Long = 2L * 60 * 1000,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val passwords = Passwords(bcryptCost)
@@ -164,6 +267,7 @@ class AuthService(
         val userId: Int,
         val createdAtMs: Long,
         val userAgent: String?,
+        val createdVia: SessionOrigin,
         @Volatile var lastSeenAtMs: Long,
         @Volatile var expiresAtMs: Long,
         /** When the sliding refresh last reached the DB — the write throttle's CAS anchor. */
@@ -194,11 +298,22 @@ class AuthService(
         private set
 
     init {
+        // `pruneOldResetTokenRows` deletes rows purely by age, which is only safe because a row
+        // cannot still be PENDING once it is older than the retention window. That holds for the
+        // defaults (15 minutes vs 30 days) but the two are independent constructor parameters, so
+        // assert the relationship rather than trusting a comment: invert them and startup would
+        // silently delete live, redeemable reset links, and the holder would get "unknown link"
+        // with nothing to explain why.
+        require(resetTokenHistoryTtlMs >= resetTokenTtlMs) {
+            "resetTokenHistoryTtlMs ($resetTokenHistoryTtlMs) must be at least resetTokenTtlMs " +
+                "($resetTokenTtlMs), or the startup prune would delete tokens that are still live"
+        }
+
         // One transaction for prune + both cache loads: with maximumPoolSize=1, each
         // transaction is a full connection acquire + BEGIN/COMMIT on the startup path.
         transaction(database) {
             pruneExpiredSessionRows()
-            pruneDeadResetTokenRows()
+            pruneOldResetTokenRows()
             DaoUser.all().forEach { users[it.id.value] = it.toRecord() }
             DaoUserSession.all().forEach { sessions[it.tokenHash] = it.toRecord() }
         }
@@ -375,6 +490,11 @@ class AuthService(
         }
         if (outcome !is UserMutation.Done) return outcome
         users.remove(userId)
+        // This path revokes inline rather than calling revokeAllSessionsFor (the row is
+        // already gone, so there is nothing to mark revoked), which means it does not inherit
+        // that function's device-login cleanup — do it here, or a QR minted seconds before
+        // the account was deleted would still resolve.
+        cancelOutstandingDeviceLogins(userId, clock())
         sessions.values.filter { it.userId == userId }.forEach {
             sessions.remove(it.tokenHash)
             _revocations.tryEmit(it.tokenHash)
@@ -443,15 +563,28 @@ class AuthService(
     }
 
     /**
-     * Mint a session for an already-authenticated user — the tail of [login], also
-     * used by the setup route so it doesn't re-verify the password it just hashed.
+     * Mint a session for an already-authenticated user — the tail of [login], also used by
+     * the setup route so it doesn't re-verify the password it just hashed, and by the
+     * device-login QR exchange.
+     *
+     * The `disabled` check lives **here** rather than only in [login], because not every
+     * caller arrives via a password. A disabled account must not get a session row at all:
+     * [lookupSession] would refuse the cookie, so it isn't an immediate breach, but the row
+     * would spring to life the moment the account was re-enabled and `lastLoginAtMs` would
+     * record a sign-in that never happened.
      */
-    fun mintSession(user: UserRecord, userAgent: String?, clientIp: String?): Pair<AuthenticatedUser, String> {
+    fun mintSession(
+        user: UserRecord,
+        userAgent: String?,
+        clientIp: String?,
+        createdVia: SessionOrigin = SessionOrigin.PASSWORD,
+    ): Pair<AuthenticatedUser, String> {
         val rawToken = SessionTokens.newToken()
         val tokenHash = SessionTokens.sha256Hex(rawToken)
         val now = clock()
         val record = transaction(database) {
             val daoUser = DaoUser.findById(user.userId) ?: throw AuthenticationException("Account no longer exists")
+            if (daoUser.disabled) throw AuthorizationException("This account is disabled")
             daoUser.lastLoginAtMs = now
             DaoUserSession.new {
                 this.tokenHash = tokenHash
@@ -461,6 +594,7 @@ class AuthService(
                 this.expiresAtMs = now + sessionTtlMs
                 this.userAgent = userAgent?.take(200)
                 this.clientIp = clientIp?.take(45)
+                this.createdVia = createdVia
             }.toRecord()
         }
         sessions[tokenHash] = record
@@ -506,11 +640,23 @@ class AuthService(
         transaction(database) {
             DaoUserSession.findById(session.id)?.revokedAtMs = now
         }
+        // Signing out retires any device-login QR this account has live. Logging out is a
+        // weaker signal than revoke-all — it means "I'm done at this desk", not "I've been
+        // compromised" — but a QR still on the screen you just walked away from is a fresh
+        // 30-day session for whoever photographs it, so the same rule applies. Reset links
+        // are deliberately *not* cancelled here: one can only ever set a password, and the
+        // person holding it is by definition already locked out.
+        cancelOutstandingDeviceLogins(session.userId, now)
         _revocations.tryEmit(tokenHash)
     }
 
     /** Revoke every session for [userId], optionally sparing [exceptTokenHash] (the caller's own). */
     fun revokeAllSessionsFor(userId: Int, exceptTokenHash: String? = null) {
+        // Before the early return below: a live device-login QR has to die here even when the
+        // user has no sessions to revoke. "Sign out everywhere else" that left an
+        // exchangeable QR on a screen would defeat the one button someone presses when they
+        // think they have been compromised.
+        cancelOutstandingDeviceLogins(userId, clock())
         val doomed = sessions.values.filter { it.userId == userId && it.tokenHash != exceptTokenHash }
         if (doomed.isEmpty()) return
         val now = clock()
@@ -589,6 +735,7 @@ class AuthService(
                     lastSeenAtMs = it.lastSeenAtMs,
                     userAgent = it.userAgent,
                     current = it.tokenHash == currentTokenHash,
+                    createdVia = it.createdVia,
                 )
             }
     }
@@ -665,9 +812,36 @@ class AuthService(
     }
 
     /**
-     * Cancel a live token — fired when the admin closes the QR sheet, so a link that was
-     * on screen for ten seconds doesn't stay redeemable for fifteen minutes. Idempotent:
-     * an already-used or already-cancelled token is left exactly as it is.
+     * Every reset token this account has had, newest first, for the admin's history list.
+     * Closing the QR sheet no longer cancels the link, so this list is how a live one stays
+     * visible — and revocable — instead of silently outliving the sheet that showed it.
+     *
+     * The minting admin's name comes off the reference directly. Exposed's per-transaction
+     * entity cache dedupes the lookup, a desk has a handful of admins, and this list is only
+     * ever built because someone opened a sheet by hand — so there is no N+1 worth avoiding.
+     */
+    fun resetTokenHistory(userId: Int): List<ResetTokenHistoryEntry> = transaction(database) {
+        val now = clock()
+        DaoPasswordResetToken
+            .find { DaoPasswordResetTokens.user eq userId }
+            .sortedByDescending { it.createdAtMs }
+            .map { row ->
+                ResetTokenHistoryEntry(
+                    id = row.id.value,
+                    status = row.statusAt(now),
+                    createdAtMs = row.createdAtMs,
+                    expiresAtMs = row.expiresAtMs,
+                    usedAtMs = row.usedAtMs,
+                    cancelledAtMs = row.cancelledAtMs,
+                    createdByDisplayName = row.createdByUser?.displayName,
+                )
+            }
+    }
+
+    /**
+     * Cancel a live token — the admin revoking a link deliberately from the history list.
+     * Idempotent: an already-used or already-cancelled token is left exactly as it is, so a
+     * double-tap and a race both answer the same way.
      */
     fun cancelResetToken(userId: Int, tokenId: Int): Boolean = transaction(database) {
         val row = DaoPasswordResetToken.findById(tokenId) ?: return@transaction false
@@ -724,17 +898,19 @@ class AuthService(
     }
 
     /**
-     * Dead reset tokens are pruned at startup alongside dead sessions. Live ones are kept:
-     * a 15-minute token minted seconds before a restart should survive it, since the
-     * person holding the QR has no way to know the desk bounced.
+     * Reset tokens are aged out at startup, not swept clean: the admin's history list needs
+     * spent rows to survive a restart, or "has anyone minted a link for this account?" could
+     * only ever be answered about the current uptime.
+     *
+     * [DaoPasswordResetTokens.createdAtMs] is the right column to age on — and one predicate
+     * is enough where there used to be three — because a row is never PENDING for longer
+     * than [resetTokenTtlMs]. Anything older than the retention window is therefore terminal
+     * by construction, and a live token stays live across a restart for free: the person
+     * holding the QR has no way to know the desk bounced.
      */
-    private fun pruneDeadResetTokenRows() {
-        val now = clock()
-        DaoPasswordResetTokens.deleteWhere {
-            (DaoPasswordResetTokens.expiresAtMs lessEq now) or
-                DaoPasswordResetTokens.usedAtMs.isNotNull() or
-                DaoPasswordResetTokens.cancelledAtMs.isNotNull()
-        }
+    private fun pruneOldResetTokenRows() {
+        val cutoff = clock() - resetTokenHistoryTtlMs
+        DaoPasswordResetTokens.deleteWhere { DaoPasswordResetTokens.createdAtMs less cutoff }
     }
 
     /** Must be called inside a transaction. Status is derived from timestamps, never stored. */
@@ -743,6 +919,177 @@ class AuthService(
         cancelledAtMs != null -> ResetTokenStatus.CANCELLED
         expiresAtMs <= now -> ResetTokenStatus.EXPIRED
         else -> ResetTokenStatus.PENDING
+    }
+
+    // ─── Device-login tokens (QR sign-in on a phone) ───────────────────
+    //
+    // The third storage pattern in this file, and the reason is the lifetime: sessions are
+    // cached *and* persisted because they outlive everything; reset tokens are persisted and
+    // deliberately *not* cached, because they are looked up on a public endpoint and a cache
+    // would buy nothing. A device-login token lives two minutes — shorter than any restart —
+    // so a row would be pure cost: a write on the single shared connection from an
+    // unauthenticated path, plus a hand-rolled delete in `deleteUser`, because
+    // `PRAGMA foreign_keys` is OFF and an orphan row's user dereference would 500 a public
+    // endpoint. In memory only, therefore. Losing them on restart is correct behaviour, not
+    // a compromise.
+
+    private class DeviceLoginEntry(
+        val id: String,
+        val userId: Int,
+        val expiresAtMs: Long,
+        @Volatile var usedAtMs: Long? = null,
+        @Volatile var cancelledAtMs: Long? = null,
+        /** Which phone took it, for the desk sheet. Set at the same moment as [usedAtMs]. */
+        @Volatile var redeemedByUserAgent: String? = null,
+        @Volatile var redeemedSessionId: Int? = null,
+    )
+
+    /** Token hash → entry. Only authenticated callers can add to it; see [createDeviceLogin]. */
+    private val deviceLogins = ConcurrentHashMap<String, DeviceLoginEntry>()
+
+    /**
+     * One lock for every read-modify-write over [deviceLogins], rather than a lock per entry.
+     *
+     * Per-entry locking is not enough: "cancel this user's outstanding codes, then insert a new
+     * one" spans two entries, so two concurrent mints could interleave scan and insert and leave
+     * *two* PENDING codes for one account — breaking the one-live-code-per-account invariant the
+     * whole flow leans on, and reviving a QR the desk believes it superseded. The same applies
+     * to a mint racing an interlock.
+     *
+     * Coarse is fine here: these are in-memory operations on a map that holds one entry per
+     * signed-in user who is mid-QR, and nothing inside the lock touches the database. The one
+     * thing deliberately left *outside* it is [mintSession] in [redeemDeviceLogin] — that writes
+     * a session row on the single shared connection, and holding this lock across it would stall
+     * every other device-login operation behind a DB round-trip.
+     */
+    private val deviceLoginLock = Any()
+
+    private fun DeviceLoginEntry.statusAt(now: Long): DeviceLoginStatus = when {
+        usedAtMs != null -> DeviceLoginStatus.USED
+        cancelledAtMs != null -> DeviceLoginStatus.CANCELLED
+        expiresAtMs <= now -> DeviceLoginStatus.EXPIRED
+        else -> DeviceLoginStatus.PENDING
+    }
+
+    /**
+     * Mint a device-login token for [userId] — always the caller's own account — returning the
+     * record and the **raw** token, which exists nowhere else but the QR URL.
+     *
+     * Minting cancels this user's outstanding tokens, so at most one QR per account is ever
+     * live: the same "newest action wins" rule the reset flow uses, and the thing that stops
+     * an authenticated client growing the map by looping. Stale entries are swept here too,
+     * which is enough — nothing else writes to the map.
+     *
+     * The sweep waits a full TTL past expiry rather than dropping everything non-PENDING.
+     * Spent entries still have to answer the desk's poll, or the sheet that just showed a
+     * success would lose the row underneath it and fall back to rendering a stale QR — and
+     * because this map is shared, *anyone's* mint would have done that to *anyone's* open
+     * sheet.
+     */
+    fun createDeviceLogin(userId: Int): Pair<DeviceLoginRecord, String> {
+        val now = clock()
+        val rawToken = SessionTokens.newDeviceLoginToken()
+        // Sweep, supersede and insert as one step: see [deviceLoginLock] for why splitting them
+        // would let two concurrent mints both leave a live code.
+        val entry = synchronized(deviceLoginLock) {
+            deviceLogins.entries.removeIf { it.value.expiresAtMs <= now - deviceLoginTtlMs }
+            cancelOutstandingDeviceLogins(userId, now)
+            DeviceLoginEntry(
+                id = UUID.randomUUID().toString(),
+                userId = userId,
+                expiresAtMs = now + deviceLoginTtlMs,
+            ).also { deviceLogins[SessionTokens.sha256Hex(rawToken)] = it }
+        }
+        return DeviceLoginRecord(entry.id, entry.expiresAtMs) to rawToken
+    }
+
+    /** Resolve a raw token from the QR URL. Does **not** consume it — the phone confirms first. */
+    fun lookupDeviceLogin(rawToken: String): DeviceLoginLookup {
+        val entry = deviceLogins[SessionTokens.sha256Hex(rawToken)] ?: return DeviceLoginLookup.Unknown
+        val status = entry.statusAt(clock())
+        if (status != DeviceLoginStatus.PENDING) return DeviceLoginLookup.Dead(status)
+        val user = users[entry.userId] ?: return DeviceLoginLookup.Unknown
+        return DeviceLoginLookup.Live(
+            userId = user.userId,
+            username = user.username,
+            displayName = user.displayName,
+            expiresAtMs = entry.expiresAtMs,
+        )
+    }
+
+    /**
+     * Exchange a raw token for a real session. Single-use: the entry is marked spent before
+     * the session is minted, so two phones racing the same QR cannot both win.
+     *
+     * A disabled account is refused by [mintSession] rather than re-enabled — the opposite of
+     * a reset redemption, and deliberately so: resetting a password means handing the account
+     * back, whereas signing in must never be a way around being disabled.
+     */
+    fun redeemDeviceLogin(rawToken: String, userAgent: String?, clientIp: String?): DeviceLoginRedemption {
+        val tokenHash = SessionTokens.sha256Hex(rawToken)
+        val entry = deviceLogins[tokenHash] ?: return DeviceLoginRedemption.Unknown
+        val now = clock()
+        // Claim it inside the lock, mint outside: two phones racing the same QR both reach here,
+        // and exactly one sees PENDING.
+        val status = synchronized(deviceLoginLock) {
+            val current = entry.statusAt(now)
+            if (current == DeviceLoginStatus.PENDING) entry.usedAtMs = now
+            current
+        }
+        if (status != DeviceLoginStatus.PENDING) return DeviceLoginRedemption.Dead(status)
+        val user = users[entry.userId] ?: return DeviceLoginRedemption.Unknown
+        val (authenticated, sessionToken) = mintSession(
+            user,
+            userAgent,
+            clientIp,
+            createdVia = SessionOrigin.QR,
+        )
+        entry.redeemedByUserAgent = userAgent?.take(200)
+        entry.redeemedSessionId = sessions[authenticated.sessionTokenHash]?.id
+        return DeviceLoginRedemption.Applied(authenticated, sessionToken)
+    }
+
+    /**
+     * Status of one token by id, for the desk sheet's poll. Scoped to [userId] so an id from
+     * another desk's sheet can't be read through the wrong URL. Null when it isn't theirs.
+     */
+    fun deviceLoginStatus(userId: Int, id: String): DeviceLoginStatusDto? {
+        val entry = deviceLogins.values.firstOrNull { it.id == id && it.userId == userId } ?: return null
+        return DeviceLoginStatusDto(
+            status = entry.statusAt(clock()),
+            expiresAtMs = entry.expiresAtMs,
+            redeemedByUserAgent = entry.redeemedByUserAgent,
+            sessionId = entry.redeemedSessionId,
+        )
+    }
+
+    /** Cancel a live token — fired when the sheet closes. Idempotent, and scoped to [userId]. */
+    fun cancelDeviceLogin(userId: Int, id: String): Boolean = synchronized(deviceLoginLock) {
+        val entry = deviceLogins.values.firstOrNull { it.id == id && it.userId == userId }
+            ?: return@synchronized false
+        if (entry.usedAtMs == null && entry.cancelledAtMs == null) entry.cancelledAtMs = clock()
+        true
+    }
+
+    /**
+     * Retire every live QR for [userId]. Called from each event that says "this account's
+     * credentials just moved" — disable, delete, password change, and revoke-all — for the
+     * reason [cancelOutstandingResetTokens] spells out, only more sharply: a reset token can
+     * merely set a password, whereas one of these *is* a way in. "Sign out everywhere else"
+     * that left a live QR exchangeable would be the worst of the set, since that is exactly
+     * the button someone reaches for when they think they have been compromised.
+     *
+     * Unlike its reset-token counterpart this needs no transaction — the map is the store — but
+     * it does need [deviceLoginLock], which it takes itself so that every caller (including the
+     * interlocks, which have no other reason to know about it) is covered. Re-entrant from
+     * [createDeviceLogin], which already holds it; `synchronized` on the JVM is re-entrant.
+     */
+    private fun cancelOutstandingDeviceLogins(userId: Int, nowMs: Long) = synchronized(deviceLoginLock) {
+        deviceLogins.values
+            .filter { it.userId == userId }
+            .forEach { entry ->
+                if (entry.usedAtMs == null && entry.cancelledAtMs == null) entry.cancelledAtMs = nowMs
+            }
     }
 
     // ─── Login throttle ────────────────────────────────────────────────
@@ -839,6 +1186,7 @@ class AuthService(
         userId = user.id.value,
         createdAtMs = createdAtMs,
         userAgent = userAgent,
+        createdVia = createdVia,
         lastSeenAtMs = lastSeenAtMs,
         expiresAtMs = expiresAtMs,
         lastPersistedMs = AtomicLong(lastSeenAtMs),

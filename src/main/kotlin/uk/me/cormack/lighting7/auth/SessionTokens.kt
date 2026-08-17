@@ -22,6 +22,16 @@ object SessionTokens {
      */
     fun newResetToken(): String = randomUrlToken(16)
 
+    /**
+     * 32 random bytes as unpadded base64url — the value in a device-login QR URL.
+     *
+     * A session token's entropy, not a reset token's, because this is exchanged **for** a
+     * session: a reset token can only ever set a password and burns itself doing so, whereas
+     * whoever redeems this one is signed in. Nobody types it off a screen either — it is
+     * scanned — so the extra 16 bytes cost only QR density.
+     */
+    fun newDeviceLoginToken(): String = randomUrlToken(32)
+
     private fun randomUrlToken(byteCount: Int): String {
         val bytes = ByteArray(byteCount)
         secureRandom.nextBytes(bytes)

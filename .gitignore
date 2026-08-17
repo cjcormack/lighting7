@@ -34,8 +34,9 @@ out/
 
 # Frontend bundle staged into the classpath by Gradle's copyFrontend task.
 src/main/resources/static/
-/.kotlin/errors/errors-1785343642012.log
-/.kotlin/errors/errors-1785343699944.log
+# Kotlin compiler scratch dir. Was two named error logs; it emits a fresh timestamped one on
+# every daemon hiccup, so match the directory rather than chasing filenames.
+/.kotlin/
 /.claude/worktrees/charming-stonebraker-fea630/
 /.claude/worktrees/jovial-shtern-bc737f/
 /.claude/worktrees/quizzical-satoshi-7db80b/
