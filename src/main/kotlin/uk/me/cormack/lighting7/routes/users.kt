@@ -232,7 +232,8 @@ internal fun Route.routeApiRestUsers(state: State) {
     }
 }
 
-private const val LAST_ADMIN_MESSAGE =
+/** `internal` so `PUT /auth/profile` can map the arm it cannot actually reach. */
+internal const val LAST_ADMIN_MESSAGE =
     "This is the only enabled administrator — promote another account first"
 
 /**
@@ -242,7 +243,7 @@ private const val LAST_ADMIN_MESSAGE =
  * checks in `routes/install.kt`.
  */
 private const val MAX_USERNAME_LENGTH = 64
-private const val MAX_DISPLAY_NAME_LENGTH = 100
+internal const val MAX_DISPLAY_NAME_LENGTH = 100
 
 private fun validateUsername(username: String): String? = when {
     username.isEmpty() -> "Username must not be blank"
@@ -250,7 +251,12 @@ private fun validateUsername(username: String): String? = when {
     else -> null
 }
 
-private fun validateDisplayName(displayName: String): String? = when {
+/**
+ * `internal` rather than private because `PUT /auth/profile` in `routes/auth.kt` writes the
+ * same column and must answer identically: a self-service rename that accepted a name the
+ * admin route rejects would be a length limit that depends on who is asking.
+ */
+internal fun validateDisplayName(displayName: String): String? = when {
     displayName.isEmpty() -> "Display name must not be blank"
     displayName.length > MAX_DISPLAY_NAME_LENGTH ->
         "Display name must be $MAX_DISPLAY_NAME_LENGTH characters or fewer"

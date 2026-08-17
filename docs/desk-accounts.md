@@ -59,8 +59,8 @@ sessions), an admin sets their password or disables or deletes them (all session
 QR reset is redeemed (all sessions).
 
 Each session records **how it was created** — `user_sessions.created_via`, `PASSWORD` or `QR`
-— and `GET /auth/sessions` reports it, so the devices list in the user menu can name a
-QR sign-in. A QR sign-in is the one entry there that nobody typed a password for, which makes
+— and `GET /auth/sessions` reports it, so the devices list in the user menu's Profile sheet
+can name a QR sign-in. A QR sign-in is the one entry there that nobody typed a password for, which makes
 it the one worth recognising if you don't recognise the device.
 
 ## QR password reset
@@ -105,9 +105,11 @@ live under `/api/rest/users`, which is admin-only.
 
 For signing **your own** phone or tablet in without typing a password on a touch keyboard.
 Any role: this is not an administrative act, which is why its endpoints live under
-`/api/rest/auth/` rather than the admin-only `/api/rest/users`. **User menu → Sign in on a
-phone…** shows a QR; the phone opens a LAN URL, sees whose account it is, taps *Sign in as
-X*, and gets a normal 30-day session. The desk's sheet flips to a success state within ~2 s.
+`/api/rest/auth/` rather than the admin-only `/api/rest/users`. **User menu → Profile… →
+Sign-in tab** shows a QR — arriving on that tab is what mints the code, and leaving cancels it,
+so there is no button either way. The phone opens a LAN URL, sees whose account it is, taps
+*Sign in as X*, and gets a normal 30-day session. The desk's tab flips to a success state
+within ~2 s and offers to jump to Devices, where the phone is now a row.
 
 Reuses the reset flow's delivery mechanism wholesale — `auth/ResetUrls.kt` picks the address,
 `buildDeviceLoginUrls` only swaps the path — and the decisions **not** to re-litigate:
@@ -115,11 +117,15 @@ Reuses the reset flow's delivery mechanism wholesale — `auth/ResetUrls.kt` pic
 - **The QR never carries a session token.** A photographed QR would then be a photographed
   30-day cookie. It carries a single-use device-login code that the phone exchanges for a real
   session, and the exchange burns it.
-- **Two-minute TTL, and cancelled the moment the sheet closes** — the opposite of the reset
-  link's behaviour, deliberately, because the risk is opposite: a reset token can only ever set
-  a password, whereas this one *is* a way in. Cancel-on-close is the control that matters; the
-  TTL is the backstop. Two minutes rather than one because the phone has to cold-start a
-  browser and pull the SPA bundle over venue Wi-Fi before it can even ask whose code this is.
+- **Two-minute TTL, and cancelled the moment the code leaves the screen** — leaving the Sign-in
+  tab, closing the Profile sheet, or the desk being signed out, which are one mechanism
+  front-end side. The opposite of the reset link's behaviour, deliberately, because the risk is
+  opposite: a reset token can only ever set a password, whereas this one *is* a way in.
+  Cancel-on-leave is the control that matters; the TTL is the backstop. It follows that nothing
+  is minted merely by opening Profile — that lands on the Profile tab, and the code exists only
+  once somebody has navigated to the tab that is *for* it. Two minutes rather than one because
+  the phone has to cold-start a browser and pull the SPA bundle over venue Wi-Fi before it can
+  even ask whose code this is.
 - **The codes are in memory, not in a table.** Their lifetime is shorter than any restart, so a
   row would buy nothing and cost a write on the single shared connection from a public path —
   plus a hand-rolled delete in `deleteUser`, since `PRAGMA foreign_keys` is OFF and an orphan
@@ -134,7 +140,7 @@ Reuses the reset flow's delivery mechanism wholesale — `auth/ResetUrls.kt` pic
   *hostname* and resolving one would mean a DNS lookup on a public endpoint — and a phone
   refused because that lookup failed. **Installing Ktor's `ForwardedHeaders` would silently
   defeat both that check and the IP throttle beside it**, since a client would then choose its
-  own apparent address. What replaces confirmation is *detect and undo*: the desk's sheet names the device
+  own apparent address. What replaces confirmation is *detect and undo*: the desk names the device
   that took the code and offers "that wasn't me — sign out every other device".
 - **Redemption needs a tap, and the lookup `GET` does not consume the code.** A QR scanner that
   prefetches, a link preview, or a StrictMode double-render would otherwise burn a single-use
@@ -167,7 +173,7 @@ file. Two equivalent triggers:
 On the next boot the server creates — or re-enables and re-passwords — the user `admin`
 with a fresh 16-character random password, logs it at WARN, and writes it to
 **`RESET-ADMIN-PASSWORD.txt`** next to the trigger, which it then deletes. Sign in as
-`admin`, fix the account situation, and change that password from the user menu.
+`admin`, fix the account situation, and change that password from the user menu's Profile sheet.
 
 Notes:
 
@@ -195,8 +201,18 @@ with no legitimate use. All answer 409 `SELF_TARGET`. On **your own** account yo
 - **mint a password-reset QR for it** — that would put a link which re-passwords an admin
   account on the desk's own screen, for anyone passing to photograph.
 
-Changing your own display name or password is fine — that's what the user menu is for, and its
-password route keeps this session alive where an admin-side reset would not.
+Changing your own display name or password is fine — that's what the user menu's Profile sheet
+is for. Both routes it uses, `PUT /api/rest/auth/profile` and `PUT /api/rest/auth/password`, are
+authenticated but **any role**: they match neither `ADMIN_ONLY_PREFIXES` nor the exempt list, so
+an operator can maintain their own account without an admin. The rename deliberately lives here
+rather than as a self-exception inside admin-only `PUT /users/{id}` — `isAdminOnly` is a plain
+prefix list, and a carve-out inside one of its prefixes would mean the list no longer describes
+its own subtree.
+
+The two differ in consequence, which is why they are separate controls in the sheet: a rename
+revokes nothing, while a password change revokes every *other* session and retires any live
+device-login code. A rename also needs no current password, so the sheet must never gate one
+behind the other.
 
 Note the self guards are checked **before** the last-admin one, so a last admin demoting
 themselves sees `SELF_TARGET` rather than `LAST_ADMIN`. Over HTTP that makes every arm of the

@@ -159,6 +159,23 @@ class AuthGateTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `an operator may edit their own profile`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "op", role = UserRole.OPERATOR)
+        val client = jsonClient()
+        val cookie = client.loginCookieHeader("op")
+
+        // Maintaining your own account is not an administrative act. This is the assertion that
+        // stops the route being moved under `/users` or added to ADMIN_ONLY_PREFIXES later.
+        val allowed = client.put("/api/rest/auth/profile") {
+            header(HttpHeaders.Cookie, cookie)
+            contentType(ContentType.Application.Json)
+            setBody(UpdateProfileRequest("Ops Person"))
+        }
+        assertEquals(HttpStatusCode.OK, allowed.status, allowed.bodyAsText())
+    }
+
+    @Test
     fun `per-project cloud-sync routes are admin-only`() = testApplication {
         mountTestApp(state)
         seedUser(state, "boss", role = UserRole.ADMIN)

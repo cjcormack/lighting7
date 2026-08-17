@@ -11,7 +11,11 @@ session can pick up one item cold.
 > lighting7 `631a94f` + lighting-react `81b3fd9` — `FU-AUTH-SELF-ROLE-GUARD`,
 > `FU-AUTH-SELF-RESET-GUARD`, `FU-AUTH-RESET-TOKEN-HISTORY` and `FU-AUTH-LOGIN-QR`, all in
 > [Completed](#completed) with the review findings that shaped them.
-> **`FU-AUTH-PROFILE-SHEET` is the only Ready item left** in [Desk accounts](#desk-accounts).
+> **`FU-AUTH-PROFILE-SHEET` is now built too** — uncommitted in both trees as of
+> 2026-08-17, so it moves to [Completed](#completed) with its two SHAs rather than being
+> picked up. Building it raised one new **Ready** item, `FU-WS-USER-INVALIDATION`: desk-account
+> edits reach only the client that made them, because users are the one list in the app with no
+> WebSocket change event.
 > Two things that commit changed for anyone working nearby: the self guards now run *before*
 > the last-admin one, so `LAST_ADMIN` is unreachable over HTTP and only the service-level
 > test covers it; and the desk grew a second phone-facing public page (`/device/<token>`
@@ -421,37 +425,119 @@ fire together, do the conversion first — it decides how many palettes exist.
 Origin for everything here is the multi-user-auth plan, closed out 2026-08-17
 ([`completed/multi-user-auth-plan.md`](completed/multi-user-auth-plan.md)). Five **Ready**
 items were raised reviewing the shipped Users tab and QR reset flow; four of them landed
-2026-08-17 (see Completed) and **`FU-AUTH-PROFILE-SHEET` is the one left**. The five
-**Trigger** items below it are that plan's §"Deliberately out of scope" list, promoted on
-close-out. Reference doc: [`docs/desk-accounts.md`](../desk-accounts.md) — now also the
-record for the device-login QR. The one unverified behaviour is `FU-MANUAL-AUTH-QR-SCAN`
+2026-08-17 (see Completed) and the fifth, `FU-AUTH-PROFILE-SHEET`, is **built but
+uncommitted**. `FU-WS-USER-INVALIDATION` came out of building it and is the one **Ready** item
+here. The five **Trigger** items below it are that plan's §"Deliberately out of scope" list,
+promoted on close-out. Reference doc: [`docs/desk-accounts.md`](../desk-accounts.md) — now
+also the record for the device-login QR. The one unverified behaviour is `FU-MANUAL-AUTH-QR-SCAN`
 under "Manual hardware validation".
 
 ### `FU-AUTH-PROFILE-SHEET` — "Change password…" becomes a Profile sheet
 
-**Status**: Ready
+**Status**: Built, uncommitted (2026-08-17) — moves to Completed with the two SHAs
 **Origin**: Session 3 review feedback, 2026-08-17
 
-`ChangePasswordSheet` already holds two things that aren't a password (the
-signed-in-devices list, and "sign out everywhere else"), so the honest name is
-**Profile**. Add display-name editing to it: the one field a user should be able to
-change about themselves without an admin.
+`ChangePasswordSheet` already held two things that aren't a password (the
+signed-in-devices list, and "sign out everywhere else"), so the honest name was
+**Profile**. Display-name editing was added to it: the one field a user should be able to
+change about themselves without an admin. The case had got stronger the same day — the user
+menu had accumulated a *third* self-service item ("Sign in on a phone…",
+`FU-AUTH-LOGIN-QR`) while the sheet was still named after one of them.
 
-The case got stronger on 2026-08-17: the user menu now carries a *third* self-service item
-("Sign in on a phone…", `FU-AUTH-LOGIN-QR`), so the menu is accumulating profile actions
-while the sheet is still named after one of them. `UserDetailSheet`'s own-row branch also
-now points people at "Change password…" by name, so a rename has to carry that copy with it.
+Backend: `PUT /api/rest/auth/profile` (`{displayName}` → `AuthUserDto`), beside
+`PUT /auth/password`, rather than a self-exception in the admin-only users route —
+`isAdminOnly` is a plain prefix match, so a carve-out inside one of its prefixes would mean
+the list no longer describes its own subtree. Authenticated-any-role therefore falls out
+with no gate change, and `AuthGateTest` pins that an operator gets through.
+`MAX_DISPLAY_NAME_LENGTH` / `validateDisplayName` went `internal` so both routes answer
+identically: a rename accepting what the admin route rejects would be a length limit that
+depends on who is asking.
 
-Backend gap: there is no self-service route for it. `PUT /users/{id}` is admin-only
-(`ADMIN_ONLY_PREFIXES`), so this needs either `PUT /api/rest/auth/profile`
-(`{displayName}`, any authenticated caller, no role field — the natural home,
-beside `PUT /auth/password`) or a self-exception in the users route, which would
-mean punching a hole in a prefix-based gate. Prefer the former.
+Frontend: `ProfileSheet` (renamed), `lib/userPolicy.ts` mirroring the cap, and
+`updateProfile` invalidating `Auth` (header avatar, menu label) plus `UserList`/`User` for
+an admin renaming themselves. `UserDetailSheet`'s own-row copy pointed at "Change
+password…" by name and moved with it, and its test pinned that string — the failure was the
+guard that caught the copy.
 
-Frontend: rename the sheet and its menu item, add the field, and invalidate `Auth`
-on success so the header avatar and the user menu pick the new name up. Note the sheet is
-also where the QR sign-in's devices list lives, and a session's `created_via` is rendered
-there — so "Profile" is already carrying the attribution surface for the device-login flow.
+**Two extensions beyond the original scope**, both requested at implementation time:
+
+- **The sheet became four tabs** — Profile / Password / Devices / Sign-in — each owning its
+  own action button, with the footer reduced to Close and one error state per tab. A footer
+  Save would have had to mean "save the display name" while you were looking at the devices
+  list.
+- **The sign-in QR was merged in** as the Sign-in tab rather than its own menu item:
+  `DeviceLoginSheet` → `DeviceLoginSection`, keyed on `active` instead of `open`. **Arriving
+  on the tab mints the code and leaving cancels it — no button either way**, because
+  navigating to a tab named for the thing is as deliberate as pressing a button labelled the
+  same, and the tab bar above the code is a better way out than a Hide button inside it. The
+  half that carries the security property is that opening the sheet lands on Profile, so
+  nothing is minted by opening it, and closing resets the tab.
+- **"Manage users" was dropped from the user menu.** The `users` nav entry is already
+  `adminOnly`, so the sidebar and Cmd+K carry that page; the menu item only meant
+  role-filtering one destination in two places.
+
+Four bugs surfaced while building it, and the third is the one worth reading before touching
+that component. A ref that keeps its last value through unmount leaked a code minted while the
+section was going away. The "is the QR showing" flag, reset from the close *handler*, was
+skipped by the save-and-close path, so the next Profile open minted a live code with nobody
+asking — the reset now hangs off an effect on `open`, and the tab reset that replaced that flag
+does too, for the same reason. And under **React StrictMode** the section minted twice — which
+matters because `createDeviceLogin` retires the caller's previous code, so the two promises race
+and resolving them backwards displays a QR the server has already cancelled. The first attempt
+at that one (cancel the displaced code) made it worse by killing the live code instead: the
+client cannot know which mint the server saw last, so the only fix is not to make the second
+call. Plain `render` passes while all of this is broken; the tests that catch it render under
+`StrictMode`. The fourth came out of review: a *failed* mint left the one-mint guard latched
+shut with no retry control on screen, since the expired/cancelled retry branch needs a `code`
+that a failed mint never produced.
+
+### `FU-WS-USER-INVALIDATION` — desk-account changes don't reach other clients
+
+**Status**: Ready (small, but decide the channel first)
+**Origin**: Noticed while building `FU-AUTH-PROFILE-SHEET`, 2026-08-17
+
+Every other list in the app self-heals across clients. A cue, patch, palette, rigging,
+stage-region or speed-master change fires a `FixturesChangeListener` method, `BroadcastSocket`
+turns it into an `OutMessage` (`CueListChangedOutMessage` and its dozen siblings), and the
+frontend store bridges it straight to `restApi.util.invalidateTags` — see
+`store/cues.ts:18`, `store/patches.ts:49`, `store/palettes.ts:17`, a dozen files in that
+shape.
+
+**Desk accounts have no such event.** `routes/users.kt` and `routes/auth.kt` broadcast
+nothing, and the only auth-related socket signal is a *close* code — `subscribeUnauthenticated`
+firing on 4401, which invalidates `Auth` because the session is gone, not because anything
+changed. So a user edit propagates only within the client that made it, by RTK Query tags:
+
+- Rename yourself in Profile and your own avatar, menu label and Users row all update — the
+  `updateProfile` mutation invalidates `Auth` / `UserList` / `User`. Verified.
+- Do it with the Users tab open **in a second browser** — a phone signed in by QR, another
+  desk, a tablet — and that tab keeps the old name until it refetches. Same for an admin
+  renaming, disabling, re-roling or deleting somebody: the target's own client learns nothing
+  until its next request. Disabling and deleting *are* felt immediately, but only because they
+  revoke sessions and close sockets, which is a different mechanism with a different reach.
+
+Why it wasn't just done: **the existing bridge is show-shaped and users are not show data.**
+`FixturesChangeListener` hangs off `show/Fixtures.kt` and is per-project; desk accounts belong
+to the machine and outlive every project, so widening that interface would put a
+machine-scoped concern on a show-scoped object — the same category error `store/users.ts` is
+kept clear of on the frontend. Pick one deliberately:
+
+- a small sibling listener/emitter for machine-scoped state (users now, the desk's own
+  `Install` settings later — `store/installs.ts` has the same gap and nobody has hit it), or
+- a `userListChanged` on the existing interface, accepting the scope smear for one line.
+
+Frontend side is then four lines in `store/users.ts` matching `store/cues.ts`.
+
+Two things to get right rather than copy blindly. The message must carry **no user data** — a
+bare "something changed, refetch" like every existing broadcast, because these sockets are
+open to operators and `/api/rest/users` is admin-only, so a payload would leak exactly what
+the gate exists to withhold. And `Auth` should be invalidated only for the affected user's own
+sockets, or not at all: a broadcast `Auth` invalidation would have every connected client
+re-fetch `auth/status` on any admin edit, which is a thundering herd for no gain.
+
+Not urgent. One desk with one operator never sees it, which is why it went unnoticed through
+three sessions of auth work; it gets real as soon as a phone or tablet is signed in alongside
+the desk, which `FU-AUTH-LOGIN-QR` now makes easy.
 
 ### `FU-AUTH-ATTRIBUTION` — per-user attribution of edits
 

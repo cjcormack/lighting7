@@ -181,6 +181,80 @@ class AuthRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `renaming yourself answers the new identity and keeps every session`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "alice")
+        val client = jsonClient()
+        val cookie = client.loginCookieHeader("alice")
+        val other = client.loginCookieHeader("alice")
+
+        val renamed = client.put("/api/rest/auth/profile") {
+            header(HttpHeaders.Cookie, cookie)
+            contentType(ContentType.Application.Json)
+            setBody(UpdateProfileRequest("Alice Adams"))
+        }
+        assertEquals(HttpStatusCode.OK, renamed.status, renamed.bodyAsText())
+        assertEquals("Alice Adams", renamed.body<AuthUserDto>().displayName)
+
+        // The in-memory user cache is what `AuthenticatedUser` is rebuilt from per request,
+        // so the very next call has to see the new name without a restart.
+        val status = client.get("/api/rest/auth/status") { header(HttpHeaders.Cookie, cookie) }
+            .body<AuthStatusDto>()
+        assertEquals("Alice Adams", status.user?.displayName)
+
+        // The deliberate contrast with `PUT /auth/password`: a rename revokes nothing, so the
+        // session on another device survives it.
+        assertEquals(HttpStatusCode.OK, client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, other) }.status)
+    }
+
+    @Test
+    fun `a display name is stored trimmed`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "alice")
+        val client = jsonClient()
+        val cookie = client.loginCookieHeader("alice")
+
+        val renamed = client.put("/api/rest/auth/profile") {
+            header(HttpHeaders.Cookie, cookie)
+            contentType(ContentType.Application.Json)
+            setBody(UpdateProfileRequest("  Alice Adams  "))
+        }
+        assertEquals("Alice Adams", renamed.body<AuthUserDto>().displayName)
+    }
+
+    @Test
+    fun `blank and over-long display names answer 400 and write nothing`() = testApplication {
+        mountTestApp(state)
+        val alice = seedUser(state, "alice")
+        val client = jsonClient()
+        val cookie = client.loginCookieHeader("alice")
+
+        for (bad in listOf("   ", "x".repeat(101))) {
+            val response = client.put("/api/rest/auth/profile") {
+                header(HttpHeaders.Cookie, cookie)
+                contentType(ContentType.Application.Json)
+                setBody(UpdateProfileRequest(bad))
+            }
+            assertEquals(HttpStatusCode.BadRequest, response.status, response.bodyAsText())
+        }
+        assertEquals(alice.displayName, state.authService.findUser(alice.userId)?.displayName)
+    }
+
+    @Test
+    fun `the profile route needs a session`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "alice")
+        val client = jsonClient()
+
+        // Pins that it did not land in the gate's exempt list beside `/auth/reset/`.
+        val anonymous = client.put("/api/rest/auth/profile") {
+            contentType(ContentType.Application.Json)
+            setBody(UpdateProfileRequest("Whoever"))
+        }
+        assertEquals(HttpStatusCode.Unauthorized, anonymous.status)
+    }
+
+    @Test
     fun `sessions list marks exactly the calling session current, delete spares it`() = testApplication {
         mountTestApp(state)
         seedUser(state, "alice")

@@ -23,6 +23,8 @@ import uk.me.cormack.lighting7.auth.DeviceLoginRedemption
 import uk.me.cormack.lighting7.auth.ResetRedemption
 import uk.me.cormack.lighting7.auth.ResetTokenLookup
 import uk.me.cormack.lighting7.auth.SESSION_COOKIE
+import uk.me.cormack.lighting7.auth.UserMutation
+import uk.me.cormack.lighting7.auth.UserRecord
 import uk.me.cormack.lighting7.auth.authenticatedUser
 import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
 import uk.me.cormack.lighting7.auth.buildDeviceLoginUrls
@@ -98,6 +100,34 @@ internal fun Route.routeApiRestAuth(state: State) {
             currentTokenHash = user.sessionTokenHash,
         )
         call.respond(HttpStatusCode.NoContent)
+    }
+
+    // The one thing you may change about yourself without an admin. It lives here, beside
+    // the password route, rather than as a self-exception in `PUT /users/{id}`: the gate's
+    // `ADMIN_ONLY_PREFIXES` is a plain prefix list, and a carve-out inside an admin-only
+    // subtree would mean that list no longer tells the truth about what it covers.
+    // Authenticated-any-role falls out of matching neither that list nor `isAuthExempt`.
+    put<AuthProfileResource> {
+        val user = call.authenticatedUser
+        val displayName = call.receive<UpdateProfileRequest>().displayName.trim()
+        validateDisplayName(displayName)?.let { error ->
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
+            return@put
+        }
+        when (val outcome = state.authService.updateUser(user.userId, displayName, role = null, disabled = null)) {
+            // The stored record, not `user` — that copy predates the write, and the body's job
+            // is to report the trimmed value that actually landed.
+            is UserMutation.Done -> call.respond(outcome.value.toAuthDto())
+            // Only reachable if the account was deleted between the gate resolving it and this
+            // write.
+            UserMutation.NotFound ->
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Your account no longer exists"))
+            // Structurally unreachable: the last-admin guard keys on `role`/`disabled`, both
+            // null here. Mapped rather than thrown — a 500 from a route that cannot reach this
+            // is worse than a 409 nobody sees.
+            UserMutation.LastAdmin ->
+                call.respond(HttpStatusCode.Conflict, ErrorResponse(LAST_ADMIN_MESSAGE, CODE_LAST_ADMIN))
+        }
     }
 
     get<AuthSessionsResource> {
@@ -349,6 +379,9 @@ data object AuthLogoutResource
 @Resource("/auth/password")
 data object AuthPasswordResource
 
+@Resource("/auth/profile")
+data object AuthProfileResource
+
 @Resource("/auth/sessions")
 data object AuthSessionsResource
 
@@ -405,6 +438,16 @@ data class LoginRequest(
 data class ChangePasswordRequest(
     val currentPassword: String,
     val newPassword: String,
+)
+
+/**
+ * Deliberately a single non-nullable field, unlike `UpdateUserRequest`'s nullable
+ * "absent means leave alone" shape: there is exactly one self-editable field, so absence
+ * would have no meaning to express.
+ */
+@Serializable
+data class UpdateProfileRequest(
+    val displayName: String,
 )
 
 /** What the phone shows before asking for a new password: whose account this link is for. */
@@ -478,6 +521,19 @@ private fun ApplicationCall.clearSessionCookie() {
 }
 
 private fun AuthenticatedUser.toDto() = AuthUserDto(
+    uuid = uuid.toString(),
+    username = username,
+    displayName = displayName,
+    role = role,
+)
+
+/**
+ * The same four fields, sourced from the stored row instead of the request's resolved caller —
+ * what `PUT /auth/profile` needs, since its whole point is to report a value the caller's copy
+ * predates. Not `routes/users.kt`'s `UserRecord.toDto()`: that is the admin shape (`id`,
+ * `disabled`, `lastLoginAtMs`), and this route answers any role.
+ */
+private fun UserRecord.toAuthDto() = AuthUserDto(
     uuid = uuid.toString(),
     username = username,
     displayName = displayName,
