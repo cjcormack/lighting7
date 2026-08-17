@@ -11,11 +11,11 @@ session can pick up one item cold.
 > lighting7 `631a94f` + lighting-react `81b3fd9` — `FU-AUTH-SELF-ROLE-GUARD`,
 > `FU-AUTH-SELF-RESET-GUARD`, `FU-AUTH-RESET-TOKEN-HISTORY` and `FU-AUTH-LOGIN-QR`, all in
 > [Completed](#completed) with the review findings that shaped them.
-> **`FU-AUTH-PROFILE-SHEET` is now built too** — uncommitted in both trees as of
-> 2026-08-17, so it moves to [Completed](#completed) with its two SHAs rather than being
-> picked up. Building it raised one new **Ready** item, `FU-WS-USER-INVALIDATION`: desk-account
-> edits reach only the client that made them, because users are the one list in the app with no
-> WebSocket change event.
+> **`FU-AUTH-PROFILE-SHEET` landed too**, in lighting7 `bbb1a87` + lighting-react `3dfee11`,
+> so all five of that batch are now in [Completed](#completed) and the multi-user-auth review
+> cuts are drained. Building it raised one new **Ready** item,
+> `FU-WS-USER-INVALIDATION`: desk-account edits reach only the client that made them, because
+> users are the one list in the app with no WebSocket change event.
 > Two things that commit changed for anyone working nearby: the self guards now run *before*
 > the last-admin one, so `LAST_ADMIN` is unreachable over HTTP and only the service-level
 > test covers it; and the desk grew a second phone-facing public page (`/device/<token>`
@@ -424,72 +424,12 @@ fire together, do the conversion first — it decides how many palettes exist.
 
 Origin for everything here is the multi-user-auth plan, closed out 2026-08-17
 ([`completed/multi-user-auth-plan.md`](completed/multi-user-auth-plan.md)). Five **Ready**
-items were raised reviewing the shipped Users tab and QR reset flow; four of them landed
-2026-08-17 (see Completed) and the fifth, `FU-AUTH-PROFILE-SHEET`, is **built but
-uncommitted**. `FU-WS-USER-INVALIDATION` came out of building it and is the one **Ready** item
-here. The five **Trigger** items below it are that plan's §"Deliberately out of scope" list,
-promoted on close-out. Reference doc: [`docs/desk-accounts.md`](../desk-accounts.md) — now
-also the record for the device-login QR. The one unverified behaviour is `FU-MANUAL-AUTH-QR-SCAN`
-under "Manual hardware validation".
-
-### `FU-AUTH-PROFILE-SHEET` — "Change password…" becomes a Profile sheet
-
-**Status**: Built, uncommitted (2026-08-17) — moves to Completed with the two SHAs
-**Origin**: Session 3 review feedback, 2026-08-17
-
-`ChangePasswordSheet` already held two things that aren't a password (the
-signed-in-devices list, and "sign out everywhere else"), so the honest name was
-**Profile**. Display-name editing was added to it: the one field a user should be able to
-change about themselves without an admin. The case had got stronger the same day — the user
-menu had accumulated a *third* self-service item ("Sign in on a phone…",
-`FU-AUTH-LOGIN-QR`) while the sheet was still named after one of them.
-
-Backend: `PUT /api/rest/auth/profile` (`{displayName}` → `AuthUserDto`), beside
-`PUT /auth/password`, rather than a self-exception in the admin-only users route —
-`isAdminOnly` is a plain prefix match, so a carve-out inside one of its prefixes would mean
-the list no longer describes its own subtree. Authenticated-any-role therefore falls out
-with no gate change, and `AuthGateTest` pins that an operator gets through.
-`MAX_DISPLAY_NAME_LENGTH` / `validateDisplayName` went `internal` so both routes answer
-identically: a rename accepting what the admin route rejects would be a length limit that
-depends on who is asking.
-
-Frontend: `ProfileSheet` (renamed), `lib/userPolicy.ts` mirroring the cap, and
-`updateProfile` invalidating `Auth` (header avatar, menu label) plus `UserList`/`User` for
-an admin renaming themselves. `UserDetailSheet`'s own-row copy pointed at "Change
-password…" by name and moved with it, and its test pinned that string — the failure was the
-guard that caught the copy.
-
-**Two extensions beyond the original scope**, both requested at implementation time:
-
-- **The sheet became four tabs** — Profile / Password / Devices / Sign-in — each owning its
-  own action button, with the footer reduced to Close and one error state per tab. A footer
-  Save would have had to mean "save the display name" while you were looking at the devices
-  list.
-- **The sign-in QR was merged in** as the Sign-in tab rather than its own menu item:
-  `DeviceLoginSheet` → `DeviceLoginSection`, keyed on `active` instead of `open`. **Arriving
-  on the tab mints the code and leaving cancels it — no button either way**, because
-  navigating to a tab named for the thing is as deliberate as pressing a button labelled the
-  same, and the tab bar above the code is a better way out than a Hide button inside it. The
-  half that carries the security property is that opening the sheet lands on Profile, so
-  nothing is minted by opening it, and closing resets the tab.
-- **"Manage users" was dropped from the user menu.** The `users` nav entry is already
-  `adminOnly`, so the sidebar and Cmd+K carry that page; the menu item only meant
-  role-filtering one destination in two places.
-
-Four bugs surfaced while building it, and the third is the one worth reading before touching
-that component. A ref that keeps its last value through unmount leaked a code minted while the
-section was going away. The "is the QR showing" flag, reset from the close *handler*, was
-skipped by the save-and-close path, so the next Profile open minted a live code with nobody
-asking — the reset now hangs off an effect on `open`, and the tab reset that replaced that flag
-does too, for the same reason. And under **React StrictMode** the section minted twice — which
-matters because `createDeviceLogin` retires the caller's previous code, so the two promises race
-and resolving them backwards displays a QR the server has already cancelled. The first attempt
-at that one (cancel the displaced code) made it worse by killing the live code instead: the
-client cannot know which mint the server saw last, so the only fix is not to make the second
-call. Plain `render` passes while all of this is broken; the tests that catch it render under
-`StrictMode`. The fourth came out of review: a *failed* mint left the one-mint guard latched
-shut with no retry control on screen, since the expired/cancelled retry branch needs a `code`
-that a failed mint never produced.
+items were raised reviewing the shipped Users tab and QR reset flow; **all five landed
+2026-08-17** (see Completed). `FU-WS-USER-INVALIDATION` came out of building the last of them
+and is the one **Ready** item here. The five **Trigger** items below it are that plan's
+§"Deliberately out of scope" list, promoted on close-out. Reference doc:
+[`docs/desk-accounts.md`](../desk-accounts.md) — now also the record for the device-login QR.
+The one unverified behaviour is `FU-MANUAL-AUTH-QR-SCAN` under "Manual hardware validation".
 
 ### `FU-WS-USER-INVALIDATION` — desk-account changes don't reach other clients
 
@@ -1335,6 +1275,48 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
+
+- `FU-AUTH-PROFILE-SHEET` — commits bbb1a87 (lighting7) + 3dfee11 (lighting-react)
+  (2026-08-17) — `ChangePasswordSheet` became `ProfileSheet`, and grew the one field a user
+  should be able to change without an admin. Backend is `PUT /api/rest/auth/profile`
+  (`{displayName}` → `AuthUserDto`), beside `PUT /auth/password` rather than a self-exception
+  in the admin-only users route: `isAdminOnly` is a plain prefix match, so a carve-out inside
+  one of its prefixes would mean that list no longer describes its own subtree. Matching
+  neither `ADMIN_ONLY_PREFIXES` nor `isAuthExempt` makes it authenticated-any-role for free,
+  and `AuthGateTest` pins that an operator gets through. `MAX_DISPLAY_NAME_LENGTH` /
+  `validateDisplayName` went `internal` so both routes answer identically — a rename
+  accepting what the admin route rejects would be a length limit that depends on who is
+  asking. No `AuthService` change: `updateUser` already writes through to the cache
+  `AuthenticatedUser` is rebuilt from.
+
+  Two extensions beyond the original scope, both asked for during the work. The sheet became
+  **four tabs** — Profile / Password / Devices / Sign-in — each owning its own action button,
+  footer reduced to Close, one error state per tab; a footer Save would have had to mean
+  "save the display name" while you were looking at the devices list. And **"Manage users"
+  left the user menu**, because the `users` nav entry is already `adminOnly`, so a second
+  entry point only meant role-filtering one destination twice.
+
+  The sign-in QR moved in as the Sign-in tab (`DeviceLoginSheet` → `DeviceLoginSection`, keyed
+  on `active` instead of `open`): **arriving on the tab mints the code, leaving cancels it, no
+  button either way.** Navigating to a tab named for the thing is as deliberate as pressing a
+  button labelled the same, and the tab bar above the code is a better exit than a Hide button
+  inside it. The half carrying the security property is that opening the sheet lands on
+  Profile, so nothing mints unasked — which is why closing resets the tab from an effect on
+  `open` rather than from a close handler, since Esc, the overlay, the X and Close all call
+  `onOpenChange` straight through.
+
+  **Four lifecycle bugs, and they are why that component has the test file it has.** A ref
+  keeping its last value through unmount leaked a code minted while the section was going
+  away. The reveal flag reset from a close *handler* was skipped by a close that bypassed it,
+  so the next open minted a credential nobody asked for. Under **StrictMode** the section
+  minted twice — which matters because `createDeviceLogin` retires the caller's previous code,
+  so the two promises race and resolving them backwards displays a QR the server has already
+  cancelled; the first fix attempt (cancel the displaced code) made it worse by killing the
+  live one, because the client cannot know which mint the server saw last. The only fix is not
+  making the second call. Plain `render` passes while all of that is broken, so two tests
+  render under `StrictMode`. Review found the fourth: a *failed* mint latched the one-mint
+  guard shut while the expired/cancelled retry branch needs a `code` a failed mint never
+  produces — an error with nothing to press.
 
 - `FU-AUTH-SELF-ROLE-GUARD` — commits 631a94f (lighting7) + 81b3fd9 (lighting-react)
   (2026-08-17) — a self-role change answers 409 `SELF_TARGET`, keyed on an actual change so
