@@ -41,6 +41,7 @@ import uk.me.cormack.lighting7.models.DaoSyncLogEntries
 import uk.me.cormack.lighting7.models.DaoSyncSessionConflicts
 import uk.me.cormack.lighting7.models.DaoSyncSessions
 import uk.me.cormack.lighting7.models.DaoSyncStates
+import uk.me.cormack.lighting7.models.DaoPasswordResetTokens
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
 import uk.me.cormack.lighting7.models.DaoUserSessions
 import uk.me.cormack.lighting7.models.DaoUsers
@@ -143,6 +144,7 @@ class SyncCoverageTest {
         DaoSyncLogEntries to Disposition.MachineLocal("local sync activity log"),
         DaoUsers to Disposition.MachineLocal("desk-local user accounts; never leave this machine"),
         DaoUserSessions to Disposition.MachineLocal("live login sessions for this desk"),
+        DaoPasswordResetTokens to Disposition.MachineLocal("short-lived local password reset tokens"),
 
         DaoProjectScalerStates to Disposition.Excluded("live blackout / grand-master state"),
         DaoAiConversations to Disposition.Excluded("AI chat scratch history, not show content"),

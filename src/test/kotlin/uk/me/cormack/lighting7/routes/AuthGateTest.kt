@@ -196,6 +196,32 @@ class AuthGateTest : RouteIntegrationTest() {
         }
     }
 
+    @Test
+    fun `the reset exemption cannot be walked out of into a gated route`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "alice")
+        val client = jsonClient()
+
+        // `isAuthExempt` matches a *prefix*, so anything that both satisfies the prefix and
+        // resolves elsewhere would be an unauthenticated hole. Routing decodes each segment
+        // the same way the gate does, so these can only ever reach the reset handler (404 —
+        // no such token) or match nothing; what must never appear is a 200 from /users.
+        val spellings = listOf(
+            "/api/rest/auth/reset/../users",
+            "/api/rest/auth/reset/..%2fusers",
+            "/api/rest/auth/reset/%2e%2e/users",
+            "/api/rest/auth/reset//../users",
+        )
+        for (spelling in spellings) {
+            val response = client.get(spelling)
+            assertNotEquals(
+                HttpStatusCode.OK,
+                response.status,
+                "spelling $spelling answered 200 without a cookie — the reset exemption leaked",
+            )
+        }
+    }
+
     // ─── WebSocket ─────────────────────────────────────────────────────
 
     @Test

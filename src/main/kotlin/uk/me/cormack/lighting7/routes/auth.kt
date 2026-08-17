@@ -17,6 +17,8 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.auth.AuthenticatedUser
+import uk.me.cormack.lighting7.auth.ResetRedemption
+import uk.me.cormack.lighting7.auth.ResetTokenLookup
 import uk.me.cormack.lighting7.auth.SESSION_COOKIE
 import uk.me.cormack.lighting7.auth.authenticatedUser
 import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
@@ -103,6 +105,60 @@ internal fun Route.routeApiRestAuth(state: State) {
         state.authService.revokeAllSessionsFor(user.userId, exceptTokenHash = user.sessionTokenHash)
         call.respond(HttpStatusCode.NoContent)
     }
+
+    // ─── QR password reset, redeemed on the locked-out user's phone ─────
+    //
+    // Auth-exempt by definition: whoever opens this has no session and cannot get one.
+    // The admin-side minting endpoints under `/users/**` are *not* exempt.
+
+    get<AuthResetResource> { resource ->
+        when (val lookup = state.authService.lookupResetToken(resource.token)) {
+            is ResetTokenLookup.Live -> call.respond(
+                ResetTokenInfoDto(
+                    username = lookup.username,
+                    displayName = lookup.displayName,
+                    expiresAtMs = lookup.expiresAtMs,
+                ),
+            )
+            // 410 rather than 404 so the phone can say *why* — "already used" and
+            // "expired" need different copy from "that link isn't a link".
+            is ResetTokenLookup.Dead -> call.respond(
+                HttpStatusCode.Gone,
+                ErrorResponse("This reset link is no longer valid", lookup.status.name),
+            )
+            ResetTokenLookup.Unknown -> call.respond(
+                HttpStatusCode.NotFound,
+                ErrorResponse("Unknown reset link"),
+            )
+        }
+    }
+
+    post<AuthResetResource> { resource ->
+        // Rate limit on client IP, not username: this endpoint is open to the LAN and the
+        // caller has no identity to throttle on yet (plan 3.4). Cheap insurance — the
+        // token itself is 16 random bytes, so this is about noise, not about guessability.
+        val throttleKey = "reset-ip:${call.request.origin.remoteHost}"
+        state.authService.awaitThrottle(throttleKey)
+
+        val request = call.receive<RedeemResetRequest>()
+        when (val outcome = state.authService.redeemResetToken(resource.token, request.newPassword)) {
+            is ResetRedemption.Applied -> {
+                state.authService.clearThrottleFailures(throttleKey)
+                call.respond(HttpStatusCode.NoContent)
+            }
+            is ResetRedemption.Dead -> {
+                state.authService.recordThrottleFailure(throttleKey)
+                call.respond(
+                    HttpStatusCode.Gone,
+                    ErrorResponse("This reset link is no longer valid", outcome.status.name),
+                )
+            }
+            ResetRedemption.Unknown -> {
+                state.authService.recordThrottleFailure(throttleKey)
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Unknown reset link"))
+            }
+        }
+    }
 }
 
 @Resource("/auth/status")
@@ -122,6 +178,9 @@ data object AuthPasswordResource
 
 @Resource("/auth/sessions")
 data object AuthSessionsResource
+
+@Resource("/auth/reset/{token}")
+data class AuthResetResource(val token: String)
 
 @Serializable
 data class AuthUserDto(
@@ -154,6 +213,19 @@ data class LoginRequest(
 @Serializable
 data class ChangePasswordRequest(
     val currentPassword: String,
+    val newPassword: String,
+)
+
+/** What the phone shows before asking for a new password: whose account this link is for. */
+@Serializable
+data class ResetTokenInfoDto(
+    val username: String,
+    val displayName: String,
+    val expiresAtMs: Long,
+)
+
+@Serializable
+data class RedeemResetRequest(
     val newPassword: String,
 )
 

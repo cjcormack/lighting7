@@ -6,6 +6,13 @@ Consolidated follow-up items from the completed plans in
 programmer redesign (Sessions 1–5, through 2026-08-14). Each entry is
 self-contained so a Claude Code session can pick up one item cold.
 
+> **Status (2026-08-17)**: multi-user-auth Session 3 landed and deposited five
+> **Ready** items in the new [Desk accounts](#desk-accounts) section —
+> `FU-AUTH-RESET-TOKEN-HISTORY`, `FU-AUTH-SELF-RESET-GUARD`,
+> `FU-AUTH-SELF-ROLE-GUARD`, `FU-AUTH-PROFILE-SHEET` and `FU-AUTH-LOGIN-QR`. Two
+> of them (`SELF-RESET-GUARD`, `SELF-ROLE-GUARD`) close guard gaps that are only
+> enforced in the UI today, so pick those two first if you touch that area at all.
+>
 > **Status (2026-08-16)**: The programmer redesign's five sessions landed and
 > deposited their cuts here, so the backlog is **no longer drained** — five items
 > are **Ready**: `FU-PROG-L3RESOLVER-RENAME`, `FU-PROG-VIS-SOURCE`,
@@ -388,6 +395,132 @@ counts palette-to-palette references too.
 **Trigger to revisit**: a show is found keeping one palette hand-synced to
 another, which is the same signal `FU-PAL-POSITIONAL-CONVERSION` waits on. If both
 fire together, do the conversion first — it decides how many palettes exist.
+
+---
+
+## Desk accounts
+
+All five items were raised on the landing of multi-user-auth Session 3
+(2026-08-17), reviewing the shipped Users tab and QR reset flow. Reference doc:
+[`docs/desk-accounts.md`](../desk-accounts.md).
+
+### `FU-AUTH-RESET-TOKEN-HISTORY` — stop cancelling on sheet close; show token history instead
+
+**Status**: Ready
+**Origin**: Session 3 review feedback, 2026-08-17
+
+Closing `ResetQrSheet` currently fires `DELETE /users/{id}/reset-tokens/{tokenId}`,
+so the link dies with the sheet. The reasoning was that a QR on screen for ten
+seconds shouldn't stay redeemable for fifteen minutes — but it makes the flow
+brittle in practice: the admin can't close the sheet to go and do something else,
+and an operator who is slow to reach their phone loses the link for no reason.
+
+Replace auto-cancellation with **visibility**: keep the token alive for its TTL and
+give the admin a list of that user's tokens — minted at, expires at, status
+(PENDING/USED/EXPIRED/CANCELLED), and a Cancel action per row. That turns
+"cancel silently on close" into "you can see there's a live link and revoke it
+deliberately".
+
+Shape: the rows already exist and already carry every timestamp this needs
+(`models/passwordResetTokens.kt`); what's missing is a `GET
+/users/{id}/reset-tokens` list endpoint (admin-only, no raw tokens ever) and the
+frontend list. `AuthService.pruneDeadResetTokenRows()` deletes dead rows at
+startup, so history is per-boot unless that prune is narrowed — decide whether
+history should survive a restart before building the UI around it.
+
+Also unwind, when this lands: the close-cleanup effect and the in-flight-mint
+cancellation in `ResetQrSheet.tsx`, and the "closing the sheet cancels the token"
+line in `docs/desk-accounts.md`.
+
+### `FU-AUTH-SELF-RESET-GUARD` — no QR reset for your own account, enforced server-side
+
+**Status**: Ready
+**Origin**: Session 3 review feedback, 2026-08-17
+
+Session 3 disabled *Set a password directly* for your own row (it revokes every
+session of the target, which on yourself signs you out mid-edit) but left **Reset
+with a QR code…** available. It shouldn't be: the desk's own screen would be
+showing a link that sets an admin's password, and anyone who photographs it in
+passing can take that account over. The user menu's *Change password…* is the
+correct path for your own credentials — it keeps this session alive.
+
+Two halves, and the second is the one that matters:
+
+- Frontend: hide (not just disable) the QR button when `isSelf` in
+  `components/users/UserDetailSheet.tsx`, alongside the existing password-field
+  guard.
+- Backend: refuse `POST /users/{id}/reset-tokens` when `id` is the caller's own —
+  409 with the existing `SELF_TARGET` code, mirroring the disable/delete guards in
+  `routes/users.kt`. A UI-only guard is decoration; the endpoint is reachable with
+  curl and any admin session.
+
+### `FU-AUTH-SELF-ROLE-GUARD` — you can't change your own role
+
+**Status**: Ready
+**Origin**: Session 3 review feedback, 2026-08-17
+
+Today a self-demotion succeeds whenever another enabled admin exists (only the
+last-admin guard refuses it). It's a footgun with no legitimate use: the admin
+loses their own administration surfaces mid-session and needs the *other* admin to
+put them back. Session 3 papered over the visible half by invalidating the `Auth`
+tag so the UI stops offering admin pages — the real fix is to refuse the change.
+
+Backend: reject a `role` change in `PUT /users/{id}` when `id` is the caller,
+409 `SELF_TARGET`, next to the existing self-disable check. Frontend: disable the
+Role select for your own row with the same explanatory line the password field
+uses. Note this makes the `Auth` invalidation on `updateUser` (in
+`store/users.ts`) redundant for the self case — leave it, since a disable of
+*another* admin still changes what that person may do, but the comment should stop
+claiming self-demotion is the reason.
+
+### `FU-AUTH-PROFILE-SHEET` — "Change password…" becomes a Profile sheet
+
+**Status**: Ready
+**Origin**: Session 3 review feedback, 2026-08-17
+
+`ChangePasswordSheet` already holds two things that aren't a password (the
+signed-in-devices list, and "sign out everywhere else"), so the honest name is
+**Profile**. Add display-name editing to it: the one field a user should be able to
+change about themselves without an admin.
+
+Backend gap: there is no self-service route for it. `PUT /users/{id}` is admin-only
+(`ADMIN_ONLY_PREFIXES`), so this needs either `PUT /api/rest/auth/profile`
+(`{displayName}`, any authenticated caller, no role field — the natural home,
+beside `PUT /auth/password`) or a self-exception in the users route, which would
+mean punching a hole in a prefix-based gate. Prefer the former.
+
+Frontend: rename the sheet and its menu item, add the field, and invalidate `Auth`
+on success so the header avatar and the user menu pick the new name up.
+
+### `FU-AUTH-LOGIN-QR` — login QR for signing in on a tablet or phone
+
+**Status**: Ready (design first)
+**Origin**: Session 3 review feedback, 2026-08-17
+
+From the desk, show a QR that logs the same user in on a phone or tablet — so a
+device gets a session without typing a password on a touch keyboard. The reset
+flow proves the whole delivery mechanism already works (mint → QR → the phone
+opens a LAN URL → the desk polls for the outcome), and `auth/ResetUrls.kt` already
+solves the "which address can the phone actually reach" problem.
+
+**Design decisions to settle before building** — this hands out a *credential*,
+which the reset flow deliberately does not (a reset token can only ever set a
+password, and burns itself doing so):
+
+- The QR must not carry a session token. A photographed QR would then be a
+  photographed session cookie, valid for 30 days. Mint a separate single-use
+  **device-login** token (same table shape as `password_reset_tokens`, its own
+  table or a `kind` column) that the phone exchanges for a real session at a
+  public endpoint, and have that exchange invalidate the token.
+- TTL in the tens of seconds, not minutes, and cancelled the moment the sheet
+  closes — the opposite call from `FU-AUTH-RESET-TOKEN-HISTORY`, because the risk
+  profile is the opposite too.
+- Decide whether the desk should require a confirmation (the phone shows a code
+  the desk operator confirms) or whether same-LAN plus a short TTL is enough for a
+  physically-present crew. Document the answer in `docs/desk-accounts.md`
+  alongside the existing decisions.
+- The new session should be attributable in `GET /auth/sessions` ("signed in via
+  QR from the desk"), so the devices list stays readable.
 
 ---
 

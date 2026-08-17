@@ -13,8 +13,17 @@ private val secureRandom = SecureRandom()
  */
 object SessionTokens {
     /** 32 random bytes as unpadded base64url — the value written into the session cookie. */
-    fun newToken(): String {
-        val bytes = ByteArray(32)
+    fun newToken(): String = randomUrlToken(32)
+
+    /**
+     * 16 random bytes as unpadded base64url (~22 chars) — the value in a QR reset URL.
+     * Shorter than a session token on purpose: it lives for 15 minutes, is single-use, and
+     * has to survive being rendered as a QR code and occasionally typed off a screen.
+     */
+    fun newResetToken(): String = randomUrlToken(16)
+
+    private fun randomUrlToken(byteCount: Int): String {
+        val bytes = ByteArray(byteCount)
         secureRandom.nextBytes(bytes)
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }

@@ -63,6 +63,19 @@ fun Application.configureSockets(state: State) {
 
             val scope = SocketScope(this, state, wsUser)
 
+            // Live revocation (plan 3.5): the check above only runs at upgrade time, so
+            // without this, "disable that operator" or a QR password reset would leave
+            // their already-open socket streaming until they happened to make a REST
+            // call. Registered before the warm-up wait so a session revoked mid-boot
+            // closes too.
+            wsUser?.let { identity ->
+                scope.subscribe(state.authService.revocations) { revokedTokenHash ->
+                    if (revokedTokenHash == identity.sessionTokenHash) {
+                        close(CloseReason(4401, "session revoked"))
+                    }
+                }
+            }
+
             // Server-first warm-up: the subscription setup below touches `state.show` and its
             // fixtures/FX engine, which aren't usable until `show.start()` completes. Stream boot
             // progress and hold setup until the show is ready (gating on `isShowReady`, mirroring

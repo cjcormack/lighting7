@@ -97,14 +97,19 @@ internal fun routingNormalisedPath(rawPath: String): String =
 
 /**
  * Paths that must answer without a cookie even once users exist: the boot-status poll,
- * the status probe the frontend gate runs on, and the two ways to acquire a session.
- * Session 3 adds `/api/rest/auth/reset/` for the QR redemption page.
+ * the status probe the frontend gate runs on, the two ways to acquire a session, and the
+ * QR password-reset redemption — whoever opens that link is by definition locked out, so
+ * requiring a session would make the recovery path impossible to walk.
+ *
+ * Only the redemption endpoint is exempt. The admin-side minting and polling endpoints
+ * live under the `/api/rest/users` subtree, which is admin-only.
  */
 private fun isAuthExempt(path: String): Boolean =
     path == "/api/rest/status" ||
         path == "/api/rest/auth/status" ||
         path == "/api/rest/auth/login" ||
-        path == "/api/rest/auth/setup"
+        path == "/api/rest/auth/setup" ||
+        path.startsWith("/api/rest/auth/reset/")
 
 /**
  * Admin territory: user management (Session 3), the install-level cloud-sync batch

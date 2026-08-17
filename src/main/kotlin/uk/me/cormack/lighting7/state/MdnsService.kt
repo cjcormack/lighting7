@@ -133,8 +133,12 @@ class MdnsService private constructor(
          * Every site-local IPv4 address on a real (non-virtual, multicast-capable) NIC.
          * Returning all of them lets the service advertise on every LAN the machine is
          * connected to — useful when wired + Wi-Fi are on different subnets.
+         *
+         * `internal` rather than private because `auth/ResetUrls.kt` needs the same
+         * "addresses a phone on this LAN can actually reach" list for QR reset URLs;
+         * duplicating the virtual-interface filter there would let the two drift.
          */
-        private fun pickLanAddresses(): List<InetAddress> {
+        internal fun pickLanAddresses(): List<InetAddress> {
             return NetworkInterface.getNetworkInterfaces()
                 .toList()
                 .filter { iface ->
