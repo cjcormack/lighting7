@@ -436,12 +436,14 @@ For deeper technical details, see the docs in `docs/`:
 
 ## Follow-ups
 
-[`docs/plans/followups.md`](docs/plans/followups.md) tracks dormant work — all
-open items are Trigger-gated, Blocked, or Manual. Don't poll it routinely.
+[`docs/plans/followups.md`](docs/plans/followups.md) tracks dormant work — mostly
+Trigger-gated, Blocked or Manual, plus a handful of **Ready** items left behind by
+the programmer-redesign and multi-user-auth close-outs. Don't poll it routinely.
 **Open it only when your current change might fire a listed trigger** (e.g.,
 touching FX tick loops, ArtNet output paths, shared `AssignmentHealth` UI,
-cueEdit session routing, or anything that adds a 6th consumer of fixture/group
-property lookup). Grep the file's `### `FU-…`` headers + `**Trigger to
-revisit**` lines first; only read full bodies for matches. If a trigger fires,
-flag it inline (or promote the item to Ready) rather than silently working
-around it.
+cueEdit session routing, the auth gate's role prefixes, anything that adds a WS
+command an operator shouldn't have, or anything that adds a 6th consumer of
+fixture/group property lookup) — or when you want a Ready item to pick up. Grep
+the file's `### `FU-…`` headers + `**Trigger to revisit**` lines first; only read
+full bodies for matches. If a trigger fires, flag it inline (or promote the item
+to Ready) rather than silently working around it.

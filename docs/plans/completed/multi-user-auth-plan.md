@@ -1,5 +1,46 @@
 # Multi-User Authentication — Implementation Plan
 
+> **Document status: COMPLETE (2026-08-17).** All three sessions landed across both
+> repos — Session 1 `lighting7` `662a600`, Session 2 `lighting-react` `5bf2845`,
+> Session 3 `lighting7` `7c7fb3c` + `lighting-react` `680b484`. Every surface in the
+> tables below shipped, including the Session 3 items Session 1 deferred (live WS
+> revocation via `AuthService.revocations`). The desk is no longer bootstrap-open: an
+> admin account exists, and `RESET-ADMIN` is the way back in.
+>
+> **Durable engineering reference is [`docs/desk-accounts.md`](../../desk-accounts.md)**
+> (roles and where they're enforced, sessions and revocation, the reset flow,
+> break-glass, the guards). The narrative below is preserved as a session-by-session
+> record and as the rationale for the decisions in §Decisions — read it for *why*,
+> read `desk-accounts.md` for *what the code does now*. The frontend shape is
+> summarised in `lighting-react/CLAUDE.md` → "Desk accounts".
+>
+> **Deviations from the plan as written**, all deliberate and all live:
+> - **`AuthGate` wraps `BootGate`**, not the reverse §2.2 specifies. `auth/status` is
+>   warm-up-exempt, so identity resolves while the show is still compiling FX; a
+>   signed-out operator gets the login form immediately instead of a progress bar they
+>   can't act on, and lands on the boot overlay after signing in.
+> - **Nav role filtering** was added rather than reused: `adminOnly` on `NavItem` plus
+>   `filterNavItems(items, isViewingActiveProject, isAdmin)` — §3.6 assumed an existing
+>   filter to extend, and there wasn't one.
+> - **`MIN_PASSWORD_LENGTH`** was consolidated into `lighting-react/src/lib/passwordPolicy.ts`
+>   because five surfaces ask for a password and a form disagreeing with the server
+>   would read as a bug in that form.
+> - **`/install/users` is a tab** inside `InstallSettings`' `:tab` route, not a route of
+>   its own (same as `sync` and `diagnostics`).
+> - **Session 1's login throttle** grew an IP-keyed use for reset redemption (§3.4) and a
+>   bounded map; the last-admin guard moved *inside* the mutating transaction and counts
+>   against the DB, because as a route-level check-then-act two admins demoting each
+>   other from two tabs could both pass it.
+>
+> **One behaviour is shipped but never seen on real hardware**, and it is the only
+> outstanding work from this plan: the two-device QR scan — tracked as
+> `FU-MANUAL-AUTH-QR-SCAN` in [followups.md](../followups.md). Everything else has
+> automated coverage (`AuthServiceTest`, `AuthRoutesTest`, `AuthGateTest`,
+> `UsersRoutesTest`, `PasswordResetRoutesTest`, `ResetPasswordPage.test.tsx`).
+> Ten further follow-ups — five **Ready** review cuts and five trigger-gated
+> deferrals from §"Deliberately out of scope" — live in
+> [followups.md](../followups.md) → "Desk accounts".
+
 Desk-local user accounts, password login, roles, and an admin-driven QR password
 reset. No cloud identity, no email, no GitHub involvement: users belong to the
 **machine**, not to the project, and never leave it.
@@ -531,18 +572,25 @@ unauthenticated.
 
 ## Deliberately out of scope / follow-ups
 
-- **Per-user attribution of edits** (`created_by` on cues/presets/patches). The
-  `users.uuid` exists so it can be referenced later, but attribution touches
-  portable show content, so it is a sync-format question (`formatVersion`), not
-  an auth question.
-- **Audit log** (logins, resets, user changes) — a `user_audit` machine-local
-  table is a natural follow-up.
-- **Per-message WS authorisation** (Decision 10).
+Each of the first five was promoted to a slugged, trigger-gated item in
+[followups.md](../followups.md) → "Desk accounts" when this plan closed out
+(2026-08-17), rather than left here to fall off the backlog. The last two are
+standing decisions, not backlog: they are recorded in
+[`docs/desk-accounts.md`](../../desk-accounts.md) → "Not in v1".
+
+- **Per-user attribution of edits** (`created_by` on cues/presets/patches) —
+  `FU-AUTH-ATTRIBUTION`. The `users.uuid` exists so it can be referenced later,
+  but attribution touches portable show content, so it is a sync-format question
+  (`formatVersion`), not an auth question.
+- **Audit log** (logins, resets, user changes) — `FU-AUTH-AUDIT-LOG`. A
+  `user_audit` machine-local table is the natural shape.
+- **Per-message WS authorisation** (Decision 10) — `FU-AUTH-WS-PER-MESSAGE`.
 - **Operator lockdown of specific controls** (patch editing, project delete,
-  script editing). If needed, `ADMIN_ONLY_PREFIXES` in `auth/AuthGate.kt` is
-  where it changes.
-- **HTTPS / secure cookies.** Desks run plain HTTP on the LAN; `secure = false`
-  is deliberate. A TLS story would revisit the cookie flag and the QR URL scheme.
+  script editing) — `FU-AUTH-OPERATOR-LOCKDOWN`. If needed,
+  `ADMIN_ONLY_PREFIXES` in `auth/AuthGate.kt` is where it changes.
+- **HTTPS / secure cookies** — `FU-AUTH-TLS-COOKIES`. Desks run plain HTTP on the
+  LAN; `secure = false` is deliberate. A TLS story would revisit the cookie flag,
+  the QR URL scheme, and the CSRF answer that `SameSite=Lax` currently carries.
 - **CSRF tokens**, **account lockout** beyond the login throttle, **password
   complexity** beyond a length floor, **2FA** — wrong-shaped for a familiar,
   physically-present crew.

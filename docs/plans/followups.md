@@ -2,16 +2,26 @@
 
 Consolidated follow-up items from the completed plans in
 [`completed/`](completed/) — cue-authoring-unification and control-surface
-(Phases 0–9, through 2026-04-23), windows-distribution, cloud-sync, and the
-programmer redesign (Sessions 1–5, through 2026-08-14). Each entry is
-self-contained so a Claude Code session can pick up one item cold.
+(Phases 0–9, through 2026-04-23), windows-distribution, cloud-sync, the
+programmer redesign (Sessions 1–5, through 2026-08-14), and multi-user-auth
+(Sessions 1–3, through 2026-08-17). Each entry is self-contained so a Claude Code
+session can pick up one item cold.
 
-> **Status (2026-08-17)**: multi-user-auth Session 3 landed and deposited five
-> **Ready** items in the new [Desk accounts](#desk-accounts) section —
-> `FU-AUTH-RESET-TOKEN-HISTORY`, `FU-AUTH-SELF-RESET-GUARD`,
-> `FU-AUTH-SELF-ROLE-GUARD`, `FU-AUTH-PROFILE-SHEET` and `FU-AUTH-LOGIN-QR`. Two
-> of them (`SELF-RESET-GUARD`, `SELF-ROLE-GUARD`) close guard gaps that are only
-> enforced in the UI today, so pick those two first if you touch that area at all.
+> **Status (2026-08-17)**: the **multi-user-auth plan is closed out** and moved to
+> [`completed/multi-user-auth-plan.md`](completed/multi-user-auth-plan.md); durable
+> reference is [`docs/desk-accounts.md`](../desk-accounts.md). It leaves eleven items
+> in the new [Desk accounts](#desk-accounts) section plus
+> [Manual hardware validation](#manual-hardware-validation):
+> five **Ready** review cuts — `FU-AUTH-RESET-TOKEN-HISTORY`,
+> `FU-AUTH-SELF-RESET-GUARD`, `FU-AUTH-SELF-ROLE-GUARD`, `FU-AUTH-PROFILE-SHEET`,
+> `FU-AUTH-LOGIN-QR` — of which two (`SELF-RESET-GUARD`, `SELF-ROLE-GUARD`) close
+> guard gaps that are only enforced in the UI today, so pick those two first if you
+> touch that area at all; five **Trigger** deferrals promoted from the plan's
+> out-of-scope list (`FU-AUTH-ATTRIBUTION`, `FU-AUTH-AUDIT-LOG`,
+> `FU-AUTH-WS-PER-MESSAGE`, `FU-AUTH-OPERATOR-LOCKDOWN`, `FU-AUTH-TLS-COOKIES`); and
+> one **Manual** item, `FU-MANUAL-AUTH-QR-SCAN`, the only behaviour of that plan
+> never run against real hardware. Note the desk is now **locked** — it is not
+> bootstrap-open, so `RESET-ADMIN` is the way back in if you lose the admin password.
 >
 > **Status (2026-08-16)**: The programmer redesign's five sessions landed and
 > deposited their cuts here, so the backlog is **no longer drained** — five items
@@ -400,9 +410,13 @@ fire together, do the conversion first — it decides how many palettes exist.
 
 ## Desk accounts
 
-All five items were raised on the landing of multi-user-auth Session 3
-(2026-08-17), reviewing the shipped Users tab and QR reset flow. Reference doc:
-[`docs/desk-accounts.md`](../desk-accounts.md).
+Origin for everything here is the multi-user-auth plan, closed out 2026-08-17
+([`completed/multi-user-auth-plan.md`](completed/multi-user-auth-plan.md)).
+The five **Ready** items were raised reviewing the shipped Users tab and QR reset
+flow; the five **Trigger** items below them are that plan's §"Deliberately out of
+scope" list, promoted on close-out. Reference doc:
+[`docs/desk-accounts.md`](../desk-accounts.md). The one unverified behaviour is
+`FU-MANUAL-AUTH-QR-SCAN` under "Manual hardware validation".
 
 ### `FU-AUTH-RESET-TOKEN-HISTORY` — stop cancelling on sheet close; show token history instead
 
@@ -521,6 +535,119 @@ password, and burns itself doing so):
   alongside the existing decisions.
 - The new session should be attributable in `GET /auth/sessions` ("signed in via
   QR from the desk"), so the devices list stays readable.
+
+### `FU-AUTH-ATTRIBUTION` — per-user attribution of edits
+
+**Status**: Trigger (a second person authoring the same show)
+**Origin**: Multi-user-auth plan §"Deliberately out of scope", promoted on close-out 2026-08-17
+
+Nothing records *who* made a change. `users.uuid` exists partly so it can be
+referenced later — a `created_by` / `modified_by` on cues, presets and patches is
+the obvious shape, and the auth half of it is already there (every gated request
+has an `AuthenticatedUser` in `call.attributes`).
+
+The reason it isn't an auth ticket: those tables are **portable show content**, so
+adding a user reference to them means deciding what an attribution means on an
+install where that user doesn't exist. Users are machine-local by requirement, so
+either the column carries a uuid that dangles after import (and the UI must render
+"unknown user" gracefully), or the exporter denormalises a display name at write
+time. That's a `formatVersion` question for `docs/sync-engineering.md`, not a
+question about the auth gate — see `FU-SYNC-FORMAT-MIGRATIONS` for the migration
+framework it would want.
+
+**Trigger to revisit**: two accounts routinely edit one show and someone asks who
+changed a cue — or any `formatVersion` bump is already being planned, in which case
+fold the column in rather than paying for a second migration.
+
+### `FU-AUTH-AUDIT-LOG` — a `user_audit` table for logins, resets and user changes
+
+**Status**: Trigger (a security question nobody can answer)
+**Origin**: Multi-user-auth plan §"Deliberately out of scope", promoted on close-out 2026-08-17
+
+Logins, failed logins, reset-token mints and redemptions, and user create/update/
+delete all happen with no durable trace — they log at INFO and that's it. A
+machine-local `user_audit` table (same disposition as the other three, so it never
+leaves the desk) would make "did someone else sign in as me?" answerable.
+
+The write sites already exist and are all inside `AuthService`, which is the only
+class touching the auth tables — so this is a table, a `record(...)` call per
+mutation, and a read surface. Two decisions to settle first: **retention** (an
+append-only table on a desk that runs for years wants a cap or an age prune,
+alongside the existing `pruneExpiredSessions` / `pruneDeadResetTokenRows`), and
+**where it surfaces** — a tab beside Users is the cheap answer, the activity-log
+feed the cloud-sync work already has is the better-integrated one.
+
+**Trigger to revisit**: someone wants to know who did something and the answer is
+"we can't tell" — or `FU-SYNC-FETCHING-STATE`'s activity-log extension lands and
+auth events can ride the same feed.
+
+### `FU-AUTH-WS-PER-MESSAGE` — per-message WebSocket authorisation
+
+**Status**: Trigger (an operator can do over WS what they can't do over REST)
+**Origin**: Multi-user-auth plan Decision 10, promoted on close-out 2026-08-17
+
+The socket is authenticated at handshake and revoked live (`AuthService.revocations`
+closes it with 4401), but **every message is available to any signed-in user**. That
+was an explicit decision, not an oversight: the REST gate's admin-only surfaces
+(users, install `PUT`, cloud sync, OAuth) have no socket equivalent, so today the
+socket carries nothing an operator shouldn't have.
+
+It stops being true the moment an admin-only capability grows a WS command. The
+hook is already in place — `SocketScope` carries the resolved `AuthenticatedUser`
+(nullable, for a bootstrap-open desk) — so the work is a per-message role check at
+the dispatch site plus a decision about what an unauthorised message *answers*
+(an error frame, not a close, since the socket is shared by every subscription).
+
+**Trigger to revisit**: an admin-only operation gains a socket command, or
+`FU-AUTH-OPERATOR-LOCKDOWN` lands and any locked-down control is also reachable
+over WS — the two would be the same change made twice otherwise.
+
+### `FU-AUTH-OPERATOR-LOCKDOWN` — admin-only lockdown of specific controls
+
+**Status**: Trigger (an operator changes something they shouldn't have)
+**Origin**: Multi-user-auth plan §"Deliberately out of scope", promoted on close-out 2026-08-17
+
+`OPERATOR` can do everything to show content: patch fixtures, delete projects, edit
+scripts. The role split is deliberately coarse — two roles, no per-project or
+per-fixture permissions — because the crew is familiar and physically present.
+
+If that changes, `ADMIN_ONLY_PREFIXES` in `auth/AuthGate.kt` is the whole
+mechanism, and the shape of the change matters more than the list: the gate matches
+**routing-normalised path prefixes**, so anything method-sensitive (as `PUT
+/api/rest/install` already is) needs a per-route `call.requireAdmin()` instead —
+patch editing and script editing are both read-for-everyone, write-for-admin, so
+they'd be the second and third instances of that pattern. Mirror any addition in
+`lighting-react/src/navigation.ts` (`adminOnly` on the `NavItem`) so Cmd+K stops
+offering a page that can only answer 403, and remember that is presentation, never
+permission.
+
+**Trigger to revisit**: an operator changes a patch or deletes a project and the
+desk owner asks for it to be locked. Do it then, driven by the actual case — a
+speculative split risks locking out the person who needs the control mid-show.
+
+### `FU-AUTH-TLS-COOKIES` — HTTPS, `Secure` cookies, and the CSRF answer
+
+**Status**: Trigger (the desk leaves the LAN)
+**Origin**: Multi-user-auth plan §"Deliberately out of scope", promoted on close-out 2026-08-17
+
+Sessions ride a cookie with `secure = false` over plain HTTP, deliberately: desks
+serve a LAN on `:8413`, and a `Secure` cookie would simply never be sent. Three
+things are load-bearing on that choice and would all move together:
+
+- The cookie flag itself (`routes/auth.kt`), and whether `SameSite=Lax` stays the
+  CSRF answer — it plus JSON-only endpoints is what stands in for a CSRF token
+  today, which holds because everything is same-origin.
+- The **QR URL scheme** (`auth/ResetUrls.kt`), which hardcodes the request's own
+  scheme and falls back to `http://` for the mDNS/site-local alternates. A phone
+  hitting a self-signed cert gets a warning interstitial — on the one flow whose
+  whole point is that the user is already locked out.
+- Certificate provisioning for a name a phone will accept, which is the actual
+  hard part on a machine with an mDNS name and a rotating DHCP address.
+
+**Trigger to revisit**: the desk is reachable from outside a trusted LAN (a venue
+network with guests on it counts), or a browser starts refusing cookies on plain
+HTTP for this kind of origin. Not before — a self-signed cert would degrade the
+reset flow while adding no real confidentiality against anyone already on the LAN.
 
 ---
 
@@ -1029,6 +1156,45 @@ wrong, which is what `FU-SPEED-BEATINDICATOR-PERMASTER` was filed for. Watch the
 **master 1** dot in particular: `beatSync` used to (accidentally) arrive every
 beat, and now genuinely arrives every 16, so the client's local interpolation is
 load-bearing for the first time.
+
+### `FU-MANUAL-AUTH-QR-SCAN` — the QR reset on an actual phone (multi-user-auth Session 3)
+
+**Status**: Manual
+**Origin**: Multi-user-auth Session 3, 2026-08-17
+
+Session 3's flow is covered end to end by `UsersRoutesTest`,
+`PasswordResetRoutesTest` and `ResetPasswordPage.test.tsx`, and the desk is locked
+with a real admin account. The one thing no test can prove is the **two-device
+path**: that the URL behind the QR is an address a phone on the same Wi-Fi can
+actually reach. `auth/ResetUrls.kt` builds it from the request's own `Host` header —
+correct by construction when the admin browsed by mDNS name or LAN IP, and falling
+back to the mDNS name plus site-local IPv4s when that host is loopback — but a QR
+that resolves to the phone itself is the one failure this flow cannot recover from,
+because the person scanning it is by definition already locked out.
+
+**Manual test** (needs a backend on Session 3's code — `7c7fb3c` or later; confirm
+`GET /api/rest/users` answers rather than 404):
+
+1. As admin, create a throwaway operator. Sign in as them in a private window and
+   confirm the Users tab and sync nav entries are absent while lighting control works.
+2. Open the operator's detail sheet → **Reset with a QR code…** → scan it with a
+   phone on the same Wi-Fi. The phone should show *that operator's* display name,
+   not a login form and not a connection error.
+3. Set a new password on the phone → the admin's sheet flips to "used" within ~2 s
+   (2 s poll), and the operator's private window drops to the login screen on its
+   next click with the socket closing 4401.
+4. Sign in on the desk with the phone-set password.
+5. With the operator's socket open, disable them from the detail sheet → the socket
+   closes immediately (that's `AuthService.revocations`, the half that only exists
+   because a REST-only check would wait for their next request).
+6. Repeat step 2 while browsing the desk as `localhost` — this is the loopback
+   fallback, and the QR must carry the mDNS/LAN address instead. Check the
+   alternates disclosure lists something the phone can reach.
+7. Delete the throwaway operator.
+
+Note step 2 is the only irreplaceable one; if the phone can't reach the URL, capture
+what it *was* (the sheet shows it as selectable text) before changing anything —
+that string is the whole diagnosis.
 
 ### `FU-MANUAL-SCALER-PROJECT-SWITCH` — Scaler state across project switches (Phase 9)
 

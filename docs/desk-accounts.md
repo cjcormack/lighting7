@@ -8,7 +8,7 @@ Implementation lives in `auth/` (`AuthService`, `AuthGate`, `Passwords`, `Sessio
 `ResetUrls`, `BreakGlass`), `routes/auth.kt`, `routes/users.kt`, and the three
 machine-local tables `users`, `user_sessions`, `password_reset_tokens`. The design
 rationale — and the decisions not to re-litigate — is in
-[`docs/plans/multi-user-auth-plan.md`](plans/multi-user-auth-plan.md).
+[`docs/plans/completed/multi-user-auth-plan.md`](plans/completed/multi-user-auth-plan.md).
 
 ## Roles
 
