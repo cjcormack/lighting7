@@ -38,6 +38,13 @@ class SocketConnection(val session: WebSocketServerSession) {
  * `setupXxxSubscriptions(scope)` in that file, then add one arm to the dispatch `when`
  * below + one call to setup. The Kotlin sealed-class exhaustiveness check enforces that
  * every leaf gets a handler arm.
+ *
+ * That recipe describes the **show-scoped** band of subscriptions, which is registered after
+ * the warm-up gate because it touches `state.show`. There is a second, **machine-scoped** band
+ * — session revocation and `setupMachineSubscriptions` — registered *before* that gate, because
+ * it needs nothing from the show and a change during warm-up would otherwise be lost rather
+ * than delayed. A new domain belongs in the second band only if it reads nothing off
+ * `state.show`; the comments at each site spell out why.
  */
 fun Application.configureSockets(state: State) {
     install(WebSockets) {
@@ -75,6 +82,21 @@ fun Application.configureSockets(state: State) {
                     }
                 }
             }
+
+            // Machine-scoped change broadcasts (accounts, install row). Registered here, in the
+            // same pre-warm-up band as the revocation stream above and for the same reason: none
+            // of it touches `state.show` — `state.authService` is constructed before any show
+            // exists and is never replaced on project switch. Registering it with the
+            // show-dependent subscriptions below would lose events instead of delaying them,
+            // because the client's `open` catch-up has already fired by the time this handler
+            // parks in the boot-progress collect, and a FAILED boot returns before that cluster
+            // is ever reached — leaving a desk whose show didn't start with no live account
+            // administration, which is when you want it most.
+            //
+            // A client can therefore receive these frames while it is still showing the boot
+            // overlay. Harmless: the invalidations are idempotent and the tags have no
+            // subscribers yet.
+            setupMachineSubscriptions(scope)
 
             // Server-first warm-up: the subscription setup below touches `state.show` and its
             // fixtures/FX engine, which aren't usable until `show.start()` completes. Stream boot

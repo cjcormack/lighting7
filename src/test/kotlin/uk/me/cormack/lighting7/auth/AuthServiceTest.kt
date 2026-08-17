@@ -1,6 +1,9 @@
 package uk.me.cormack.lighting7.auth
 
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -233,5 +236,113 @@ class AuthServiceTest {
         assertTrue(auth.hasAnyUser)
 
         assertNull(runBlocking { auth.createFirstAdmin("boss2", "Another", "a-password") })
+    }
+
+    // ─── userChanges emissions ─────────────────────────────────────────
+    //
+    // `plugins/MachineSocket.kt` turns these into the socket frames that keep every other client's
+    // user list and own identity fresh. The route-level tests cover the per-socket fan-out; what
+    // only this level can cover is *completeness* — that every funnel writing a users row emits —
+    // and the negative half, that nothing else does. The negative half is the half that rots: a
+    // future emit added to `mintSession` or a guard arm would wire a broadcast to a path that has
+    // no business fanning out, and nothing else would notice.
+
+    /** Collect emissions for the duration of [body]. `tryEmit` needs a live collector to land. */
+    private fun collectingUserChanges(body: () -> Unit): List<Int> = runBlocking {
+        val seen = mutableListOf<Int>()
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            auth.userChanges.collect { seen += it }
+        }
+        try {
+            body()
+            // The collector runs on this dispatcher; yield so queued emissions are delivered
+            // before the assertions read the list.
+            yield()
+        } finally {
+            job.cancel()
+        }
+        seen
+    }
+
+    @Test
+    fun `every funnel that writes a users row emits userChanges`() {
+        val alice = seed()
+
+        assertEquals(
+            listOf(alice.userId),
+            collectingUserChanges { auth.updateUser(alice.userId, "Alice Renamed", null, null) },
+            "updateUser",
+        )
+        assertEquals(
+            listOf(alice.userId),
+            collectingUserChanges { auth.setUserDisabled(alice.userId, true) },
+            "setUserDisabled",
+        )
+        assertEquals(
+            listOf(alice.userId),
+            collectingUserChanges { runBlocking { auth.setPasswordAsAdmin(alice.userId, "another-password") } },
+            "setPasswordAsAdmin (via rotatePassword)",
+        )
+        assertEquals(
+            listOf(alice.userId),
+            collectingUserChanges { runBlocking { auth.resetAndEnable(alice.userId, "break-glass-pw") } },
+            "resetAndEnable — the break-glass path, which no route can reach",
+        )
+
+        val created = collectingUserChanges {
+            runBlocking { auth.createUser("bob", "Bob", UserRole.OPERATOR, "bobs-password") }
+        }
+        assertEquals(1, created.size, "createUser (via insertUser)")
+
+        val bob = assertNotNull(auth.findUserByUsername("bob"))
+        assertEquals(
+            listOf(bob.userId),
+            collectingUserChanges { auth.deleteUser(bob.userId) },
+            "deleteUser",
+        )
+    }
+
+    @Test
+    fun `redeeming a reset token emits — it writes the row inline, not via rotatePassword`() {
+        val alice = seed()
+        auth.setUserDisabled(alice.userId, true)
+        val minted = assertNotNull(auth.createResetToken(alice.userId, createdByUserId = null))
+
+        val seen = collectingUserChanges {
+            runBlocking { auth.redeemResetToken(minted.second, "redeemed-password") }
+        }
+
+        // A redemption re-enables the account, which the users list shows — so a missing emit
+        // here would leave every other admin's list showing a user as disabled who isn't.
+        assertEquals(listOf(alice.userId), seen)
+        assertTrue(!assertNotNull(auth.findUser(alice.userId)).disabled)
+    }
+
+    @Test
+    fun `sessions and refused mutations do not emit`() {
+        val alice = seed()
+        val other = runBlocking { auth.createUser("solo", "Solo", UserRole.OPERATOR, "solos-password") }
+
+        val seen = collectingUserChanges {
+            // Sessions are not account rows. `login` in particular is an unauthenticated,
+            // throttled path — wiring it to a fan-out across every connected client would make a
+            // public endpoint an amplification surface, which is why `lastLoginAtMs` is allowed to
+            // be stale until the next real edit.
+            val (_, rawToken) = runBlocking { auth.login("alice", "hunter2hunter2", null, null) }
+            auth.revokeAllSessionsFor(alice.userId)
+            auth.logout(rawToken)
+
+            // Refused mutations changed nothing, so there is nothing to tell anyone.
+            assertEquals(UserMutation.NotFound, auth.updateUser(9999, "Nobody", null, null))
+            assertEquals(UserMutation.NotFound, auth.deleteUser(9999))
+            assertEquals(
+                UserMutation.LastAdmin,
+                auth.updateUser(alice.userId, null, UserRole.OPERATOR, null),
+                "alice is the only enabled admin, so the demotion is refused",
+            )
+        }
+
+        assertEquals(emptyList(), seen)
+        assertEquals(UserRole.OPERATOR, other.role)
     }
 }

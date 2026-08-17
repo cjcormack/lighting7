@@ -146,6 +146,26 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
+     * Machine-scoped change broadcasts — state that belongs to the desk rather than to a
+     * project, so it cannot ride `FixturesChangeListener` (per-project, replaced on project
+     * switch). Currently the install row; `plugins/MachineSocket.kt` collects it per connection.
+     *
+     * Carries ready-made messages, unlike `AuthService.userChanges`, which carries a userId
+     * because the user case has to be filtered per recipient. Anything whose frame is identical
+     * for every client belongs here.
+     */
+    private val _machineEventsFlow = MutableSharedFlow<uk.me.cormack.lighting7.plugins.OutMessage>(
+        replay = 0,
+        extraBufferCapacity = 32,
+    )
+    val machineEventsFlow: SharedFlow<uk.me.cormack.lighting7.plugins.OutMessage> =
+        _machineEventsFlow.asSharedFlow()
+
+    fun emitMachineEvent(message: uk.me.cormack.lighting7.plugins.OutMessage) {
+        _machineEventsFlow.tryEmit(message)
+    }
+
+    /**
      * GitHub credential store for cloud sync. Holds Personal Access Tokens (per repo
      * URL) and the install-wide OAuth identity blob (under
      * [CredentialStore.OAUTH_GITHUB_DEFAULT_KEY]). Backend selected by

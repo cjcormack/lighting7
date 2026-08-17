@@ -216,6 +216,50 @@ Notification that the cue list has changed (cue added/updated/deleted).
 
 Client should refresh cue list via REST API.
 
+#### userListChanged
+
+Notification that a desk account was created, renamed, re-roled, enabled, disabled, deleted
+or re-passworded. Sent to **every** socket.
+
+```json
+{ "type": "userListChanged" }
+```
+
+Client should refresh the user list via REST API. Payload-free deliberately, not just by
+convention: sockets are open to operators while `/api/rest/users` is admin-only, so a body here
+would leak what that gate withholds.
+
+#### ownAccountChanged
+
+Same trigger, but sent **only** to sockets belonging to the account that changed. Client should
+re-read `GET /auth/status` — its display name or role moved, and the role decides which pages
+its sidebar offers.
+
+```json
+{ "type": "ownAccountChanged" }
+```
+
+Never broadcast. If it were, one admin edit would make every connected client re-read its own
+session.
+
+#### installChanged
+
+Notification that the install row changed (currently only its friendly name). Sent to every
+socket; client should refresh `GET /install`.
+
+```json
+{ "type": "installChanged" }
+```
+
+**These three do not come from `FixturesChangeListener`.** Accounts and the install row belong to
+the machine, and the diagram above is a *fixtures* diagram: its listener hangs off the per-project
+`Fixtures` instance, which is torn down and re-registered on project switch. Machine-scoped state
+reaches sockets through `SharedFlow`s collected per connection instead —
+`AuthService.userChanges` (carrying a userId, so the collector can filter per recipient) and
+`State.machineEventsFlow` (carrying ready-made messages) — both wired in
+`plugins/MachineSocket.kt`. They are registered *before* the boot warm-up gate, unlike every
+show-scoped subscription, because they read nothing off `state.show`.
+
 ## Connection Lifecycle
 
 ### On Connect

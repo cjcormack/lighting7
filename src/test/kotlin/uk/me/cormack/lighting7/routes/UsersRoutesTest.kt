@@ -18,9 +18,13 @@ import org.junit.Test
 import uk.me.cormack.lighting7.auth.UserMutation
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.plugins.BootProgressStateOutMessage
+import uk.me.cormack.lighting7.plugins.MachineOutMessage
+import uk.me.cormack.lighting7.plugins.OwnAccountChangedOutMessage
+import uk.me.cormack.lighting7.plugins.UserListChangedOutMessage
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.TEST_PASSWORD
 import uk.me.cormack.lighting7.testsupport.awaitOfType
+import uk.me.cormack.lighting7.testsupport.collectUntilOfType
 import uk.me.cormack.lighting7.testsupport.createWsClient
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.loginCookieHeader
@@ -411,6 +415,78 @@ class UsersRoutesTest : RouteIntegrationTest() {
             val reason = closeReason.await()
             assertNotNull(reason)
             assertEquals(4401, reason.code.toInt())
+        }
+    }
+
+    /**
+     * A rename revokes nothing, so unlike a disable it cannot be felt through the 4401 path — the
+     * target's own devices only learn about it from the machine-scoped broadcast. This is the half
+     * that no unit test can check, because the per-socket filtering lives in the collector.
+     *
+     * Also pins the send order: own-account before list. A demoted admin that learns about the
+     * list first refetches `/users` with the role it no longer has.
+     */
+    @Test
+    fun `renaming a user reaches that user's own socket, own-account frame first`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "boss", role = UserRole.ADMIN)
+        val operator = seedUser(state, "op", role = UserRole.OPERATOR)
+        val client = createWsClient()
+        val admin = client.loginCookieHeader("boss")
+        val target = client.loginCookieHeader("op")
+
+        client.webSocket("/api", request = { header(HttpHeaders.Cookie, target) }) {
+            // Same liveness handshake as the 4401 test: without it the rename can land before
+            // this connection's collector is registered.
+            awaitOfType<BootProgressStateOutMessage>()
+
+            val rename = client.put("/api/rest/users/${operator.userId}") {
+                header(HttpHeaders.Cookie, admin)
+                contentType(ContentType.Application.Json)
+                setBody(UpdateUserRequest(displayName = "Renamed By Admin"))
+            }
+            assertEquals(HttpStatusCode.OK, rename.status, rename.bodyAsText())
+
+            val frames = collectUntilOfType<UserListChangedOutMessage>()
+            assertEquals(
+                listOf(OwnAccountChangedOutMessage, UserListChangedOutMessage),
+                frames.filterIsInstance<MachineOutMessage>(),
+            )
+        }
+    }
+
+    /**
+     * The other half, and the one with teeth: a *bystander* must get the list poke and nothing
+     * else. If `ownAccountChanged` were broadcast rather than targeted, every connected client
+     * would re-read `auth/status` on every admin edit.
+     */
+    @Test
+    fun `renaming a user does not send the own-account frame to anyone else`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "boss", role = UserRole.ADMIN)
+        seedUser(state, "other", role = UserRole.ADMIN)
+        val operator = seedUser(state, "op", role = UserRole.OPERATOR)
+        val client = createWsClient()
+        val admin = client.loginCookieHeader("boss")
+        val bystander = client.loginCookieHeader("other")
+
+        client.webSocket("/api", request = { header(HttpHeaders.Cookie, bystander) }) {
+            awaitOfType<BootProgressStateOutMessage>()
+
+            val rename = client.put("/api/rest/users/${operator.userId}") {
+                header(HttpHeaders.Cookie, admin)
+                contentType(ContentType.Application.Json)
+                setBody(UpdateUserRequest(displayName = "Renamed Again"))
+            }
+            assertEquals(HttpStatusCode.OK, rename.status, rename.bodyAsText())
+
+            // The list frame is sent second, so by the time it arrives a wrongly-broadcast
+            // own-account frame would already be in `frames`.
+            val frames = collectUntilOfType<UserListChangedOutMessage>()
+            assertEquals(
+                listOf(UserListChangedOutMessage),
+                frames.filterIsInstance<MachineOutMessage>(),
+            )
         }
     }
 }

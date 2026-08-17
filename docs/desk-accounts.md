@@ -27,7 +27,13 @@ hides what an operator can't use (the Users tab, the Sync nav entries), but that
 courtesy — the gate is the enforcement.
 
 WebSocket messages are **not** role-scoped in v1: any authenticated user can send any
-socket message. Deliberate, not an oversight.
+socket message. Deliberate, not an oversight — see `FU-AUTH-WS-PER-MESSAGE` in
+`docs/plans/followups.md`.
+
+That is about **inbound** messages. Outbound, one family *is* filtered per recipient: the
+`ownAccountChanged` frame goes only to sockets belonging to the account that changed (see
+"Account edits reach other clients"). That is a fan-out decision, not an authorisation one — the
+frames carry nothing an operator may not know.
 
 ## A desk with no accounts is unauthenticated
 
@@ -57,6 +63,47 @@ the login screen instead of reconnecting.
 Sessions die when: the user logs out, they change their own password (all *other*
 sessions), an admin sets their password or disables or deletes them (all sessions), or a
 QR reset is redeemed (all sessions).
+
+## Account edits reach other clients
+
+`revocations` has a sibling. **`AuthService.userChanges`** carries the userId of any account row
+that was written — created, renamed, re-roled, enabled, disabled, deleted, re-passworded — and
+`plugins/MachineSocket.kt` collects it per connection and turns it into two frames:
+
+- **`userListChanged`** to every socket, which the frontend bridges to the `UserList` / `User`
+  tags. Without it a rename reaches only the browser that made it, and a phone signed in by QR or
+  a second desk keeps the old name until it happens to refetch.
+- **`ownAccountChanged`** to the affected user's own sockets *only*, which invalidates `Auth`. This
+  is what makes an admin's rename or re-role land on the device it was about — including
+  re-filtering that user's sidebar. Disabling and deleting need no such frame: they revoke
+  sessions, so `revocations` closes those sockets 4401 instead.
+
+The install row (`PUT /api/rest/install`) rides the same band via `State.machineEventsFlow` and
+`installChanged`. Both flows are collected **before** the boot warm-up gate in `plugins/Sockets.kt`,
+alongside `revocations` and for the same reason: none of it reads `state.show`, a change during
+warm-up would be lost rather than delayed, and a desk whose show failed to start is exactly when
+you still want account administration working.
+
+Two invariants there, both load-bearing and neither enforced by the type system:
+
+- **The frames carry no user data.** They are payload-free `data object`s. Sockets are open to
+  operators while `/api/rest/users` is admin-only, so a payload would leak precisely what that
+  gate exists to withhold.
+- **`Auth` is never invalidated by a broadcast.** Only the targeted frame may do it. A broadcast
+  would have every connected client re-read `auth/status` on every admin edit.
+
+Emission is from the funnels inside `AuthService`, not from the route handlers, which is what
+covers `BreakGlass` and the startup admin reset for free. The rule is *every administrative write
+to a users row emits* — not every write to the table. `mintSession` is the one exception: it
+writes `lastLoginAtMs` and stays silent, because `login` and the device-login redemption are
+unauthenticated endpoints and wiring one to a fan-out across every connected client would make it
+an amplification surface. So `lastLoginAtMs` in the users list is allowed to be stale, and the
+Devices panel misses a *new* sign-in for the same reason (`FU-AUTH-SESSION-LIST-STALENESS`).
+
+The reset-token history is stale for an unrelated reason worth keeping straight: minting or
+cancelling a token is not a users-row write at all, so `userChanges` never fires for it. Half of
+that gap looks fixable from this flow and isn't — see `FU-AUTH-RESET-TOKEN-STALENESS` before
+touching it.
 
 Each session records **how it was created** — `user_sessions.created_via`, `PASSWORD` or `QR`
 — and `GET /auth/sessions` reports it, so the devices list in the user menu's Profile sheet

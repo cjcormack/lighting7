@@ -447,6 +447,40 @@ class SocketMessageWireFormatTest {
         assertEquals("""{"type":"presetListChanged"}""", encoded)
     }
 
+    // ─── Machine domain (out-only) ──────────────────────────────────────────
+
+    /**
+     * All three are payload-free on purpose: these sockets are open to operators while
+     * `/api/rest/users` is admin-only, so anything in the body would leak what that gate
+     * withholds. An assertion on the *exact* encoding is therefore the point here, not just the
+     * discriminator — a field added later fails this rather than shipping quietly.
+     */
+    @Test
+    fun `machine domain — change objects emit the bare discriminator and nothing else`() {
+        assertEquals(
+            """{"type":"userListChanged"}""",
+            json.encodeToString<OutMessage>(UserListChangedOutMessage),
+        )
+        assertEquals(
+            """{"type":"ownAccountChanged"}""",
+            json.encodeToString<OutMessage>(OwnAccountChangedOutMessage),
+        )
+        assertEquals(
+            """{"type":"installChanged"}""",
+            json.encodeToString<OutMessage>(InstallChangedOutMessage),
+        )
+    }
+
+    @Test
+    fun `machine domain — leaves decode back under MachineOutMessage`() {
+        // Catches the mistake this file exists for: a leaf parented directly on `OutMessage`
+        // instead of the domain's sealed subclass still serialises, but breaks the collector's
+        // ability to treat the family as one thing.
+        val decoded = json.decodeFromString<OutMessage>("""{"type":"userListChanged"}""")
+        assertIs<MachineOutMessage>(decoded)
+        assertIs<UserListChangedOutMessage>(decoded)
+    }
+
     // ─── CloudSync domain (out-only) ────────────────────────────────────────
 
     @Test

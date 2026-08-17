@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.auth.requireAdmin
 import uk.me.cormack.lighting7.models.DaoInstall
+import uk.me.cormack.lighting7.plugins.InstallChangedOutMessage
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -53,6 +54,10 @@ internal fun Route.routeApiRestInstall(state: State) {
             call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Install row missing"))
             return@put
         }
+        // The machine name is shown on every client, so the rename has to reach the ones that
+        // didn't make it. Payload-free: `GET /install` is open to any role, but the convention
+        // here is "something changed, refetch" rather than pushing the new value.
+        state.emitMachineEvent(InstallChangedOutMessage)
         call.respond(dto)
     }
 }

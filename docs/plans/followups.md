@@ -13,9 +13,12 @@ session can pick up one item cold.
 > [Completed](#completed) with the review findings that shaped them.
 > **`FU-AUTH-PROFILE-SHEET` landed too**, in lighting7 `bbb1a87` + lighting-react `3dfee11`,
 > so all five of that batch are now in [Completed](#completed) and the multi-user-auth review
-> cuts are drained. Building it raised one new **Ready** item,
-> `FU-WS-USER-INVALIDATION`: desk-account edits reach only the client that made them, because
-> users are the one list in the app with no WebSocket change event.
+> cuts are drained. Building it raised `FU-WS-USER-INVALIDATION`, **which has since landed
+> too** — desk accounts and the install row now broadcast their changes over a machine-scoped
+> `SharedFlow` collected in `plugins/MachineSocket.kt`, deliberately *not* on
+> `FixturesChangeListener`. It left three items behind: `FU-AUTH-STALE-ANON-SOCKET` (**Ready**,
+> and a security boundary rather than a cache one), plus `FU-AUTH-RESET-TOKEN-STALENESS` and
+> `FU-AUTH-SESSION-LIST-STALENESS` (both **Trigger**).
 > Two things that commit changed for anyone working nearby: the self guards now run *before*
 > the last-admin one, so `LAST_ADMIN` is unreachable over HTTP and only the service-level
 > test covers it; and the desk grew a second phone-facing public page (`/device/<token>`
@@ -425,59 +428,84 @@ fire together, do the conversion first — it decides how many palettes exist.
 Origin for everything here is the multi-user-auth plan, closed out 2026-08-17
 ([`completed/multi-user-auth-plan.md`](completed/multi-user-auth-plan.md)). Five **Ready**
 items were raised reviewing the shipped Users tab and QR reset flow; **all five landed
-2026-08-17** (see Completed). `FU-WS-USER-INVALIDATION` came out of building the last of them
-and is the one **Ready** item here. The five **Trigger** items below it are that plan's
+2026-08-17** (see Completed). `FU-WS-USER-INVALIDATION` came out of building the last of them and
+landed the same day, leaving `FU-AUTH-STALE-ANON-SOCKET` as the one **Ready** item here and two
+staleness items behind it. The five **Trigger** items further down are that plan's
 §"Deliberately out of scope" list, promoted on close-out. Reference doc:
 [`docs/desk-accounts.md`](../desk-accounts.md) — now also the record for the device-login QR.
 The one unverified behaviour is `FU-MANUAL-AUTH-QR-SCAN` under "Manual hardware validation".
 
-### `FU-WS-USER-INVALIDATION` — desk-account changes don't reach other clients
+### `FU-AUTH-STALE-ANON-SOCKET` — a bootstrap-open socket outlives the bootstrap
 
-**Status**: Ready (small, but decide the channel first)
-**Origin**: Noticed while building `FU-AUTH-PROFILE-SHEET`, 2026-08-17
+**Status**: Ready (small, but it is a security boundary — decide deliberately)
+**Origin**: Noticed implementing `FU-WS-USER-INVALIDATION`, 2026-08-17
 
-Every other list in the app self-heals across clients. A cue, patch, palette, rigging,
-stage-region or speed-master change fires a `FixturesChangeListener` method, `BroadcastSocket`
-turns it into an `OutMessage` (`CueListChangedOutMessage` and its dozen siblings), and the
-frontend store bridges it straight to `restApi.util.invalidateTags` — see
-`store/cues.ts:18`, `store/patches.ts:49`, `store/palettes.ts:17`, a dozen files in that
-shape.
+The socket auth gate runs at **upgrade time only** (`plugins/Sockets.kt`: resolve the cookie,
+close 4401 if `hasAnyUser` and there is no session). On a desk with zero accounts it admits
+everyone, which is what makes a fresh install usable. But a socket admitted that way keeps full
+access after the desk gains its first admin — nothing re-checks it, and `scope.user` stays null
+for the life of the connection.
 
-**Desk accounts have no such event.** `routes/users.kt` and `routes/auth.kt` broadcast
-nothing, and the only auth-related socket signal is a *close* code — `subscribeUnauthenticated`
-firing on 4401, which invalidates `Auth` because the session is gone, not because anything
-changed. So a user edit propagates only within the client that made it, by RTK Query tags:
+In practice the window is short and the frontend closes it by accident: completing setup calls
+`reconnect(true)`, and the new socket is gated properly. What is *not* covered is a second tab, or
+any client that was already connected and never re-handshakes. `FU-WS-USER-INVALIDATION` mitigated
+the visible half of this — an anonymous socket now receives `ownAccountChanged` when the first
+account appears, so its `auth/status` re-read moves it to the login screen — but that is
+cache coherence doing a gate's job.
 
-- Rename yourself in Profile and your own avatar, menu label and Users row all update — the
-  `updateProfile` mutation invalidates `Auth` / `UserList` / `User`. Verified.
-- Do it with the Users tab open **in a second browser** — a phone signed in by QR, another
-  desk, a tablet — and that tab keeps the old name until it refetches. Same for an admin
-  renaming, disabling, re-roling or deleting somebody: the target's own client learns nothing
-  until its next request. Disabling and deleting *are* felt immediately, but only because they
-  revoke sessions and close sockets, which is a different mechanism with a different reach.
+The real fix is two lines in the `userChanges` collector in `plugins/MachineSocket.kt`:
 
-Why it wasn't just done: **the existing bridge is show-shaped and users are not show data.**
-`FixturesChangeListener` hangs off `show/Fixtures.kt` and is per-project; desk accounts belong
-to the machine and outlive every project, so widening that interface would put a
-machine-scoped concern on a show-scoped object — the same category error `store/users.ts` is
-kept clear of on the frontend. Pick one deliberately:
+```kotlin
+if (scope.user == null && scope.state.authService.hasAnyUser) {
+    close(CloseReason(4401, "setup completed"))
+}
+```
 
-- a small sibling listener/emitter for machine-scoped state (users now, the desk's own
-  `Install` settings later — `store/installs.ts` has the same gap and nobody has hit it), or
-- a `userListChanged` on the existing interface, accepting the scope smear for one line.
+Deliberately not folded into that change, because closing a live socket is a different kind of
+decision from invalidating a cache, and it wants its own thought about the setup-race ordering
+(the tab that *performed* setup must not be closed out from under itself before its own cookie
+lands).
 
-Frontend side is then four lines in `store/users.ts` matching `store/cues.ts`.
+### `FU-AUTH-RESET-TOKEN-STALENESS` — reset-link history goes stale between admins
 
-Two things to get right rather than copy blindly. The message must carry **no user data** — a
-bare "something changed, refetch" like every existing broadcast, because these sockets are
-open to operators and `/api/rest/users` is admin-only, so a payload would leak exactly what
-the gate exists to withhold. And `Auth` should be invalidated only for the affected user's own
-sockets, or not at all: a broadcast `Auth` invalidation would have every connected client
-re-fetch `auth/status` on any admin edit, which is a thundering herd for no gain.
+**Status**: Trigger (two admins routinely administering the same desk)
+**Origin**: Scoped out of `FU-WS-USER-INVALIDATION`, 2026-08-17
 
-Not urgent. One desk with one operator never sees it, which is why it went unnoticed through
-three sessions of auth work; it gets real as soon as a phone or tablet is signed in alongside
-the desk, which `FU-AUTH-LOGIN-QR` now makes easy.
+`userChanges` fires on **account-row writes**, and minting a reset token is not one. So with
+`UserDetailSheet` open on user X, two things go unnoticed:
+
+1. **Another admin mints a link for X.** The history list misses the new PENDING row *and* the
+   row it superseded (minting retires the previous one).
+2. **Anything that calls `cancelOutstandingResetTokens`** — `rotatePassword`, or
+   `updateUser(disabled = true)` — silently turns a PENDING row CANCELLED.
+
+Display-only: `ResetToken` (the QR sheet's own poll) still self-heals, so nobody acts on a link
+that has died. **Do not "fix" this by adding `ResetTokenList` to the WS bridge in
+`store/users.ts`.** That bridge only fires on account writes, so it would cover case 2 and miss
+case 1 — worse than covering neither, because it would look solved. The honest shapes are a
+second flow keyed on token writes, or a poll on the history list while the sheet is open.
+
+### `FU-AUTH-SESSION-LIST-STALENESS` — a new sign-in doesn't appear in the Devices list
+
+**Status**: Trigger (someone asks "why isn't my phone listed?")
+**Origin**: Scoped out of `FU-WS-USER-INVALIDATION`, 2026-08-17
+
+Sign in on your phone and the desk's Profile → Devices panel doesn't notice until it refetches.
+Every *other* path that changes a session list either revokes the observer (so they get 4401 and
+the panel goes away with them) or is the observer's own mutation, which already invalidates
+`AuthSessions` locally. The one uncovered case is a **new** session appearing.
+
+This is coupled to a deliberate omission and stands or falls with it: the only place to emit from
+is `mintSession`, which is reached from `POST /auth/login` (auth-exempt, throttled) and
+`POST /auth/device/{token}` (auth-exempt, LAN-public). Emitting there wires an **unauthenticated
+request path to a fan-out across every connected client** — a new amplification surface on the two
+endpoints that already needed `awaitThrottle` and `requireLanPeer`. The same reasoning is why
+`lastLoginAtMs` in the users list is allowed to be stale.
+
+If it does become worth doing, the shape that avoids the amplification is a *targeted* frame like
+`ownAccountChanged` — only the sockets of the user who just signed in — rather than a broadcast,
+plus whatever rate limiting the login throttle doesn't already give.
+
 
 ### `FU-AUTH-ATTRIBUTION` — per-user attribution of edits
 
@@ -1275,6 +1303,28 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
+
+- `FU-WS-USER-INVALIDATION` — commits _(pending)_ (2026-08-17) — desk-account and install-row
+  edits now reach other clients. **The open question was the channel, and the sibling emitter
+  won**: `AuthService.userChanges: SharedFlow<Int>` beside the existing `revocations`, plus
+  `State.machineEventsFlow` for the install row, collected by a new `plugins/MachineSocket.kt`.
+  Widening `FixturesChangeListener` was rejected on two counts — 14 methods with no default
+  bodies means five no-op overrides in unrelated subsystems, and its `Fixtures` instance is torn
+  down on project switch while accounts outlive every project. Two frames, not one:
+  `userListChanged` broadcast, `ownAccountChanged` only to the subject's own sockets (a broadcast
+  `Auth` invalidation would have every client re-read `auth/status` on any admin edit). Both
+  payload-free, because these sockets are open to operators and `/api/rest/users` is not.
+  Three things the implementation turned up that the ticket didn't predict: the collector belongs
+  **before** the boot warm-up gate, not with the show-scoped subscriptions (after it, an edit
+  during warm-up is lost rather than delayed, and a FAILED boot never registers at all); the
+  own-account frame must be sent **first**, or a just-demoted admin refetches `/users` with the
+  role it no longer has; and `scope.user == null` needs its own arm, because a bootstrap-open tab
+  sitting on the setup screen otherwise never learns that another tab completed setup — which
+  also raised `FU-AUTH-STALE-ANON-SOCKET`. Emission is from the six funnels inside `AuthService`
+  rather than the routes, which covers break-glass for free. `store/installs.ts`, which the
+  ticket named as the next occupant of this gap, went in the same change.
+  `FU-AUTH-RESET-TOKEN-STALENESS` and `FU-AUTH-SESSION-LIST-STALENESS` were scoped out with
+  reasons written down rather than left implicit.
 
 - `FU-AUTH-PROFILE-SHEET` — commits bbb1a87 (lighting7) + 3dfee11 (lighting-react)
   (2026-08-17) — `ChangePasswordSheet` became `ProfileSheet`, and grew the one field a user

@@ -292,6 +292,49 @@ class AuthService(
      */
     val revocations: SharedFlow<String> = _revocations.asSharedFlow()
 
+    private val _userChanges = MutableSharedFlow<Int>(replay = 0, extraBufferCapacity = 64)
+
+    /**
+     * userIds whose account row has just changed — created, renamed, re-roled, enabled,
+     * disabled, deleted, or re-passworded. `plugins/MachineSocket.kt` collects this per
+     * connection and turns it into a payload-free `userListChanged` for every socket plus an
+     * `ownAccountChanged` for the subject's own sockets. Without it a user edit reaches only
+     * the client that made it: a phone signed in by QR, a second desk or a tablet keeps the
+     * old name until it happens to refetch.
+     *
+     * **Not a method on `FixturesChangeListener`**, which is how every other list broadcasts.
+     * That interface hangs off the per-project `show/Fixtures.kt` and its instance is torn down
+     * and re-registered on project switch (`plugins/BroadcastSocket.kt`), while accounts belong
+     * to the machine and outlive every project — the same category error `store/users.ts` is
+     * kept clear of on the frontend.
+     *
+     * **Emitted from the funnels in this class, not from the routes.** That is what covers
+     * `auth/BreakGlass.kt` and the startup admin reset, which no route touches, and it is the
+     * reason rather than a happy accident: a caller-side decision would have asked "does
+     * break-glass need a broadcast?", answered no, and left a rule that was true by
+     * coincidence. (Break-glass runs before the sockets are installed, so its emissions have no
+     * collectors and are dropped — correct, since there is nobody to tell.)
+     *
+     * The rule is **every *administrative* write to a users row emits** — every path a person
+     * takes to change who may sign in and how. Deliberately not "every write to the table":
+     * [mintSession] writes `lastLoginAtMs` on the row and in the cache and does *not* emit, and
+     * must not start, because it is reached from `POST /auth/login` and
+     * `POST /auth/device/{token}` — both auth-exempt, the second LAN-public — so emitting there
+     * would wire an unauthenticated request path to a fan-out across every connected client.
+     * `lastLoginAtMs` is therefore allowed to be stale in the users list until the next real
+     * edit. It is the only such write; if you add another, decide which of these two it is.
+     *
+     * Within that rule [rotatePassword] emits even though no field of the users DTO moves for a
+     * plain password set, because the test is "did an admin action write the row?", not "does a
+     * current DTO field expose it" — the conditional version breaks silently the day someone adds
+     * `passwordChangedAtMs` to that DTO.
+     *
+     * Emitted with `tryEmit` for the same reason as [revocations], with a milder failure: a
+     * dropped frame costs a stale list on that client until its next reconnect, rather than a
+     * socket that closes late. `refetchOnFocus` on the Users tab is the repair gesture.
+     */
+    val userChanges: SharedFlow<Int> = _userChanges.asSharedFlow()
+
     /** Cheap read for the bootstrap-open gate: false only while the desk has zero accounts. */
     @Volatile
     var hasAnyUser: Boolean = false
@@ -368,6 +411,9 @@ class AuthService(
         } ?: return null
         users[record.userId] = record
         hasAnyUser = true
+        // After the cache write-through, here and at every other emit site: a collector that
+        // refetches faster than this method returns must not read the pre-write row.
+        _userChanges.tryEmit(record.userId)
         return record
     }
 
@@ -386,6 +432,10 @@ class AuthService(
         }
         users.computeIfPresent(userId) { _, u -> u.copy(disabled = disabled) }
         if (disabled) revokeAllSessionsFor(userId)
+        // Unconditional because this function has no success signal to condition on: both the
+        // DAO write and `computeIfPresent` silently no-op for an id that doesn't exist. Emitting
+        // for a nonexistent user costs an id-less "refetch" frame, so that is the cheaper end.
+        _userChanges.tryEmit(userId)
     }
 
     /**
@@ -452,6 +502,9 @@ class AuthService(
             )
         }
         if (disabled == true) revokeAllSessionsFor(userId)
+        // Past the `!is Done` guard above, so success-only falls out structurally rather than
+        // needing a condition here.
+        _userChanges.tryEmit(userId)
         return outcome
     }
 
@@ -500,6 +553,7 @@ class AuthService(
             _revocations.tryEmit(it.tokenHash)
         }
         hasAnyUser = users.isNotEmpty()
+        _userChanges.tryEmit(userId)
         return outcome
     }
 
@@ -720,6 +774,9 @@ class AuthService(
             if (enableAsAdmin) rotated.copy(disabled = false, role = UserRole.ADMIN) else rotated
         }
         revokeAllSessionsFor(userId, exceptTokenHash)
+        // No field of the users DTO moves for a plain password set — only the `enableAsAdmin`
+        // arm touches `disabled`/`role`. Emitted anyway; see [userChanges].
+        _userChanges.tryEmit(userId)
     }
 
     /** Live (unexpired) sessions for [userId], newest first, flagging the caller's own. */
@@ -893,6 +950,10 @@ class AuthService(
                 u.copy(passwordHash = hash, passwordChangedAtMs = now, disabled = false)
             }
             revokeAllSessionsFor(userId)
+            // Its own emit rather than one inherited from [rotatePassword]: this path writes the
+            // row inline (including `disabled = false`, which the users list shows) instead of
+            // routing through that funnel.
+            _userChanges.tryEmit(userId)
         }
         return outcome
     }

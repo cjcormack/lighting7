@@ -37,3 +37,21 @@ suspend inline fun <reified T : OutMessage> DefaultClientWebSocketSession.awaitO
     }
     error("Never saw ${T::class.simpleName} after $maxFrames frames")
 }
+
+/**
+ * Like [awaitOfType], but returns every frame read along the way, including the [T] that ended
+ * the read. Use it to assert what a socket did *not* receive, or in what order: an absence can
+ * only be checked against a known stopping point, so pick a [T] the server is guaranteed to send
+ * after the frame under suspicion.
+ */
+suspend inline fun <reified T : OutMessage> DefaultClientWebSocketSession.collectUntilOfType(
+    maxFrames: Int = 100,
+): List<OutMessage> {
+    val seen = mutableListOf<OutMessage>()
+    repeat(maxFrames) {
+        val msg = receiveDeserialized<OutMessage>()
+        seen += msg
+        if (msg is T) return seen
+    }
+    error("Never saw ${T::class.simpleName} after $maxFrames frames")
+}
