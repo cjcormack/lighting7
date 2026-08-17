@@ -93,4 +93,17 @@ val stageCompilerServerVersion = tasks.register("stageCompilerServerVersion") {
 sourceSets.main {
     resources.srcDir(stageDefaultConfig)
     resources.srcDir(stageCompilerServerVersion)
+    // Consume the ROOT project's generateBuildInfo output rather than regenerating it here.
+    // The launcher and the backend are separate jars inside one installer and MUST agree on the
+    // version byte-for-byte — a mismatch would surface as the app reporting one version while
+    // the updater compares another, i.e. an update that reinstalls itself forever.
+    //
+    // Regenerating it locally (the stageCompilerServerVersion shape above) would make the Gradle
+    // *property* the source of truth and fork the derivation logic — the defaulting, the MSI
+    // version validation, the channel check — into two build files. One task, two consumers.
+    //
+    // This is a dependency on a task's output *file*, not on the root project's classpath.
+    // Nothing new lands on the launcher's compile or runtime classpath, so the pure-JDK
+    // invariant this module is built around is untouched.
+    resources.srcDir(rootProject.tasks.named("generateBuildInfo"))
 }

@@ -36,6 +36,29 @@ jobs:
       - name: Checkout lighting7
         uses: actions/checkout@v4
 
+      # Pre-flight, deliberately before the two large checkouts and the JDK installs: a bad tag
+      # should cost seconds, not the 40 minutes it takes to discover the same thing from
+      # Gradle's requireMsiCompatibleVersion at the end of a full build.
+      - name: Validate release tag
+        shell: pwsh
+        run: |
+          $ref = "${{ github.ref_name }}"
+          $isTag = "${{ github.ref_type }}" -eq "tag"
+          if ("${{ inputs.create_release }}" -eq "true" -and (-not $isTag -or -not $ref.StartsWith("v"))) {
+            throw "create_release=true requires dispatching against a v* tag; got ref_type='${{ github.ref_type }}' ref='$ref'."
+          }
+          if (-not $isTag) { return }
+          # Strict vMAJOR.MINOR.PATCH. Prerelease suffixes are rejected on purpose: '-rc1' is not
+          # a legal Windows Installer ProductVersion, and every scheme that squeezes release
+          # candidates into the three usable numeric fields makes the final release compare LOWER
+          # than its own candidates. Ship RCs as workflow artifacts, never as a tagged release.
+          if ($ref -notmatch '^v(\d{1,3})\.(\d{1,3})\.(\d{1,5})$') {
+            throw "Tag '$ref' is not vMAJOR.MINOR.PATCH. Windows Installer compares only three numeric fields — see requireMsiCompatibleVersion in build.gradle.kts."
+          }
+          if ([int]$Matches[1] -lt 1) { throw "Tag '$ref': major must be >= 1 (jpackage requirement)." }
+          if ($ref -eq "v1.0.0") { throw "v1.0.0 is reserved for unversioned local builds so a hand-built MSI can never be mistaken for a release. Start at v1.1.0." }
+          Write-Host "Tag '$ref' is a valid release version."
+
       - name: Checkout lighting-react
         uses: actions/checkout@v4
         with:
@@ -109,6 +132,15 @@ jobs:
           }
           "EFFECTIVE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      # Baked into both jars by :generateBuildInfo so the running app can report what it is.
+      # The COMMITTER date, not the build time: a wall-clock value would make every build dirty
+      # and defeat both Gradle's up-to-date checks and the remote build cache.
+      - name: Resolve build metadata
+        shell: bash
+        run: |
+          echo "BUILD_COMMIT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "BUILD_COMMIT_TIMESTAMP=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
+
       # GitHub OAuth credentials for the install-wide "Connect GitHub" flow.
       # Stored as repository secrets so they're never in git. Build-time
       # injection (see `generateBundledOAuthCredentials` in build.gradle.kts)
@@ -127,23 +159,76 @@ jobs:
             "-PkotlinCompilerServerPath=./kotlin-compiler-server" `
             "-PkotlinCompilerServerJavaHome=$env:JAVA_HOME_17_X64" `
             "-PjpackageAppVersion=$env:EFFECTIVE_VERSION" `
+            "-PbuildChannel=release" `
+            "-PbuildCommitSha=$env:BUILD_COMMIT_SHA" `
+            "-PbuildCommitTimestamp=$env:BUILD_COMMIT_TIMESTAMP" `
             "-PghOauthClientId=$env:GH_OAUTH_CLIENT_ID" `
             "-PghOauthClientSecret=$env:GH_OAUTH_CLIENT_SECRET" `
             --no-daemon --stacktrace
 
-      - name: Upload .msi as workflow artifact
+      # `buildChannel=release` is passed explicitly above rather than inferred from the presence
+      # of -PjpackageAppVersion. A developer must be able to build a versioned MSI locally to
+      # test packaging without minting something the in-app updater treats as a real release.
+
+      - name: Stage installer + checksum
+        shell: pwsh
+        run: |
+          $msis = @(Get-ChildItem build/installers/*.msi)
+          if ($msis.Count -ne 1) { throw "Expected exactly one .msi in build/installers/, found $($msis.Count)." }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          # The -windows-x64 suffix is worth carrying now: without it a future arm64 build would
+          # collide on the release and the app's asset lookup would become ambiguous.
+          $name = "lighting7-$env:EFFECTIVE_VERSION-windows-x64.msi"
+          $dest = Join-Path dist $name
+          Copy-Item $msis[0].FullName $dest
+          $hash = (Get-FileHash $dest -Algorithm SHA256).Hash.ToLower()
+          # WriteAllText, not Out-File/Set-Content: Windows PowerShell 5.1 defaults those to
+          # UTF-16LE *with a BOM*, which would make the app's first-token parse fail in a way
+          # nobody would guess from the symptom. Two-field sha256sum(1) format so it is also
+          # verifiable by hand.
+          [System.IO.File]::WriteAllText((Join-Path $PWD "dist/$name.sha256"), "$hash  $name`n")
+          Write-Host "$name  sha256=$hash"
+
+      - name: Upload installer as workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: lighting7-windows-msi
-          path: build/installers/*.msi
+          path: dist/*
           retention-days: 30
           if-no-files-found: error
 
+      # Published, not drafted: GET /releases/latest — which the in-app update check reads —
+      # excludes drafts AND prereleases, so a draft release is invisible to every installed desk.
+      # Prerelease tags never reach this step; "Validate release tag" rejects them outright.
       - name: Publish GitHub Release (tag dispatches only)
         if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && inputs.create_release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          files: build/installers/*.msi
-          draft: true
+          files: |
+            dist/*.msi
+            dist/*.msi.sha256
+          draft: false
+          prerelease: false
+          make_latest: "true"
           fail_on_unmatched_files: true
+          body: |
+            Windows installer (x64).
+
+            **This MSI is not code-signed.** Windows SmartScreen will show "Windows protected
+            your PC" — choose **More info → Run anyway**.
+
+            Verify the download before running it:
+
+            ```
+            certutil -hashfile lighting7-${{ env.EFFECTIVE_VERSION }}-windows-x64.msi SHA256
+            ```
+
+            and compare against the `.sha256` asset.
+
+            Installing this over an existing lighting7 performs an in-place upgrade; your
+            settings, database and logs in `%APPDATA%\lighting7\` are left untouched.
+
+            > If you installed a **hand-built** MSI from before the first tagged release,
+            > uninstall it from Add/Remove Programs first. Those builds carry random
+            > UpgradeCodes and will not be replaced automatically.

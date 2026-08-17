@@ -166,6 +166,93 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
+     * In-app updates for the Windows distribution.
+     *
+     * Its constructor reconciles the *previous* apply — reading `apply-result.properties` and
+     * deciding whether the install actually took — so something has to touch it on every boot,
+     * not just when someone opens the Updates tab. [startUpdateChecks] is that call.
+     *
+     * Lazy nonetheless, and the laziness is load-bearing in the other direction: the many tests
+     * that build a `State` never start the scheduler, and constructing an HTTP client plus
+     * walking the updates directory for each of them would be pure cost. [shutdown] therefore
+     * checks [updateServiceDelegate] rather than reading the property, or closing would create
+     * the very thing it is trying to release.
+     *
+     * The service gates itself: on a dev build, a non-packaged run, or a non-Windows host it
+     * reports why and never touches the network. See [uk.me.cormack.lighting7.update.UpdateService].
+     */
+    private val updateServiceDelegate = lazy {
+        uk.me.cormack.lighting7.update.UpdateService(
+            dataDir = appDataDir(),
+            buildInfo = uk.me.cormack.lighting7.update.BuildInfo.current,
+            installKind = uk.me.cormack.lighting7.update.InstallKind.fromEnv(),
+            repo = config.optionalString("update.repo") ?: "cjcormack/lighting7",
+            // Overridable so the whole feature is integration-testable against an embedded stub.
+            apiBase = config.optionalString("update.apiBase") ?: "https://api.github.com",
+            // The hard kill-switch for a locked-down venue install. Distinct from the per-machine
+            // `installs.update_check_enabled` preference below, which the UI can toggle.
+            enabled = config.optionalString("update.enabled")?.toBooleanStrictOrNull() ?: true,
+            autoCheckEnabledProvider = ::updateAutoCheckEnabled,
+            onStateChanged = { service ->
+                emitMachineEvent(
+                    uk.me.cormack.lighting7.plugins.UpdateStateChangedOutMessage(
+                        phase = service.currentPhase,
+                        availability = service.currentAvailability,
+                        latestVersion = service.latestVersion,
+                        downloadedBytes = service.downloadedBytes,
+                        totalBytes = service.totalBytes,
+                    )
+                )
+            },
+            liveHintProvider = ::updateLiveHint,
+        )
+    }
+
+    val updateService: uk.me.cormack.lighting7.update.UpdateService by updateServiceDelegate
+
+    /**
+     * Touch the update service once the show is up: constructing it reconciles the previous
+     * apply, and this starts the background check schedule. Called from `Application.module()`
+     * after boot rather than from `init`, so a desk still loading its patch isn't also competing
+     * for the network.
+     */
+    fun startUpdateChecks() {
+        runCatching { updateService.scheduleAutomaticChecks() }
+            .onFailure { logger.warn("Could not start update checks", it) }
+    }
+
+    /** Per-machine opt-out, stored on the install row. Defaults to on. */
+    fun updateAutoCheckEnabled(): Boolean = runCatching {
+        transaction(database) { DaoInstall.all().firstOrNull()?.updateCheckEnabled ?: true }
+    }.getOrDefault(true)
+
+    fun setUpdateAutoCheckEnabled(enabled: Boolean) {
+        transaction(database) { DaoInstall.all().firstOrNull()?.updateCheckEnabled = enabled }
+    }
+
+    /**
+     * What the rig is doing right now, so the confirm dialog can say what stopping it costs.
+     * Guarded throughout: this is read while the show may still be booting, or absent entirely.
+     */
+    private fun updateLiveHint(): uk.me.cormack.lighting7.update.LiveHintDto = runCatching {
+        val show = projectManager.showOrNull
+            ?: return@runCatching uk.me.cormack.lighting7.update.LiveHintDto(showReady = false)
+        uk.me.cormack.lighting7.update.LiveHintDto(
+            showReady = true,
+            activeStackName = activeCueStackName(),
+            activeEffectCount = show.fxEngine.getActiveEffects().size,
+        )
+    }.getOrElse { uk.me.cormack.lighting7.update.LiveHintDto(showReady = false) }
+
+    /** Name of the cue stack currently running, or null if none is active. */
+    private fun activeCueStackName(): String? = runCatching {
+        transaction(database) {
+            projectManager.currentProject.activeStackId
+                ?.let { DaoCueStack.findById(it)?.name }
+        }
+    }.getOrNull()
+
+    /**
      * GitHub credential store for cloud sync. Holds Personal Access Tokens (per repo
      * URL) and the install-wide OAuth identity blob (under
      * [CredentialStore.OAUTH_GITHUB_DEFAULT_KEY]). Backend selected by
@@ -612,6 +699,9 @@ class State(val config: ApplicationConfig) {
         mdnsRegistration = null
 
         runCatching { oauthGitHubClient?.close() }
+        // Via the delegate, not the property: reading `updateService` here would construct the
+        // service purely to close it, on every test that builds a State and shuts it down.
+        if (updateServiceDelegate.isInitialized()) runCatching { updateService.close() }
 
         runCatching { projectManager.show.close() }
 

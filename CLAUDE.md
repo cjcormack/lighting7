@@ -433,6 +433,33 @@ For deeper technical details, see the docs in `docs/`:
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, multi-element fixtures
 - [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow, three-way diff + conflict sessions, GitHub OAuth + PAT auth (Phases 1–5 of the cloud-sync plan)
 - [Desk Accounts](docs/desk-accounts.md) - Desk-local users, the two roles and where they're enforced, cookie sessions + live 4401 revocation, the QR password reset, and the `RESET-ADMIN` break-glass recovery
+- [Windows Updates](docs/windows-updates.md) - The pinned MSI UpgradeCode, MSI version rules, `BuildInfo` in both jars, the GitHub release check, and the backend→launcher marker handshake that applies an update
+
+## Windows updates — the load-bearing constants
+
+Three things in this area are silent when they break, so they get a mention here rather than only
+in `docs/windows-updates.md`:
+
+- **`windowsUpgradeUuid` (`build.gradle.kts`) must never change.** It is the MSI UpgradeCode.
+  Without it jpackage mints a *random* one per build, and Windows Installer then treats each MSI
+  as an unrelated product — installing side by side rather than upgrading, with a green build and
+  no error. That was the original bug. `verifyWindowsInstallerSources` reads the generated WiX
+  back and asserts it; don't delete that on the grounds the flag is obviously being passed.
+- **`:generateBuildInfo` is one task feeding two jars.** `lighting7.jar` and `launcher.jar` must
+  report the same version byte-for-byte; a mismatch means an update that reinstalls itself
+  forever. Don't "simplify" it into a per-module generator.
+- **`UpdateMarkerWriter.SCHEMA` (backend) and `UpdateMarker.SCHEMA` (launcher) are two constants
+  in two modules.** Nothing but `UpdateMarkerRoundTripTest` keeps them equal — it round-trips the
+  writer through the reader in one JVM, which is the only place the two halves meet before a real
+  Windows box.
+
+Update eligibility is **both** gates, always: `channel == release` *and* a packaged install *and*
+Windows. Never gate on a version-string heuristic — the packaged default is `1.0.0` while
+`project.version` is `0.0.1`, so any heuristic is wrong in both directions.
+
+`/api/rest/update` is deliberately **not** in `ADMIN_ONLY_PREFIXES`: that gate is method-blind, and
+`GET /update/status` should be readable by an operator. Actions call `requireAdmin()` per handler,
+the same split `PUT /install` uses.
 
 ## Follow-ups
 

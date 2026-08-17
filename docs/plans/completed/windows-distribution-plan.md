@@ -188,7 +188,13 @@ The launcher writes a default `local.conf` to the app data dir on first launch i
 ## Out of scope (explicit non-goals)
 
 - TLS, self-signed CA, `.mobileconfig` setup page (user confirmed plain HTTP).
-- Auto-updater. Reinstall to upgrade.
+- ~~Auto-updater. Reinstall to upgrade.~~ **Superseded 2026-08-17.** "Reinstall to upgrade"
+  turned out not to work at all: `packageWindows` passed no `--win-upgrade-uuid`, so jpackage
+  minted a random UpgradeCode per build and Windows Installer treated every MSI as an unrelated
+  product — installing side by side instead of upgrading, silently and with a green build. The
+  fix (a pinned UpgradeCode) also made an updater worth having, so the desk now checks GitHub
+  Releases and can download, verify and install an update from Install Settings → Updates.
+  See `docs/windows-updates.md`.
 - Code signing / notarization for Mac, Authenticode signing for Windows. v2 work.
 - Migrating live PostgreSQL data into SQLite. User will rebuild the project from scratch on the SQLite cutover.
 - Inlining the compiler server into the main JVM (the existing TODO at [`kotlinCompilerServer.kt:44`](../../../src/main/kotlin/uk/me/cormack/lighting7/routes/kotlinCompilerServer.kt#L44) — sibling-process is fine for v1).

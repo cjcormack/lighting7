@@ -23,6 +23,13 @@ import kotlinx.serialization.Serializable
 // existing broadcast uses anyway. And **`Auth` is never invalidated by a broadcast**: only the
 // affected user's own sockets are told, or a single admin edit would have every connected client
 // refetch `auth/status` for nothing.
+//
+// `updateStateChanged` is a deliberate exception to the *payload-free* half, and only that half.
+// For an installer download, the frame **is** the progress: a bare "something changed" at 2 Hz
+// would mean an HTTP round-trip per tick for a several-hundred-megabyte transfer, which is
+// exactly the traffic this socket exists to avoid. It carries a phase and a byte count and no
+// user data at all, so the reason the no-payload convention exists is untouched. Don't read it
+// as licence to attach payloads to the account frames.
 
 @Serializable
 sealed class MachineOutMessage : OutMessage()
@@ -55,6 +62,27 @@ data object OwnAccountChangedOutMessage : MachineOutMessage()
 @Serializable
 @SerialName("installChanged")
 data object InstallChangedOutMessage : MachineOutMessage()
+
+/**
+ * The update state machine moved, or a download made progress.
+ *
+ * Payload-carrying by design — see the exception noted in the header. The frontend patches its
+ * cached status from these frames and only refetches on a terminal phase, so a 300 MB download
+ * costs one HTTP round-trip rather than several hundred.
+ *
+ * Sent to every socket, including operators': the version and whether the desk is about to
+ * restart are things anyone standing at it should be able to see. Acting on any of it is
+ * admin-only, and enforced on the routes rather than here.
+ */
+@Serializable
+@SerialName("updateStateChanged")
+data class UpdateStateChangedOutMessage(
+    val phase: uk.me.cormack.lighting7.update.UpdatePhase,
+    val availability: uk.me.cormack.lighting7.update.UpdateAvailability,
+    val latestVersion: String? = null,
+    val downloadedBytes: Long = 0,
+    val totalBytes: Long? = null,
+) : MachineOutMessage()
 
 // ─── Subscriptions ──────────────────────────────────────────────────────
 

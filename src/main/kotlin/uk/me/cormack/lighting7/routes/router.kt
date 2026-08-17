@@ -59,6 +59,7 @@ fun Application.configureRouting(state: State) {
             routeApiRestInstall(state)
             routeApiRestUsers(state)
             routeApiRestCloudSync(state)
+            routeApiRestUpdate(state)
             routeApiOAuthGitHub(state)
         }
 
@@ -91,4 +92,7 @@ private fun isWarmupExempt(path: String): Boolean =
         path == "/api/rest/install" ||
         path.startsWith("/api/rest/auth/") ||
         path.startsWith("/api/rest/oauth/") ||
-        path.startsWith("/api/rest/cloud-sync/")
+        path.startsWith("/api/rest/cloud-sync/") ||
+        // Nothing under /update touches the show — and a desk whose show *failed* to boot is
+        // precisely when you most want to be able to install the fix.
+        path.startsWith("/api/rest/update")

@@ -1285,6 +1285,44 @@ been exercised end-to-end:
 items (jlink module gaps, mDNS edge cases, Windows path quirks); promote
 those to dedicated `FU-DIST-*` follow-ups before fixing.
 
+### `FU-MANUAL-UPDATE-APPLY` — In-app update, end to end on Windows
+
+**Status**: Manual
+**Origin**: Windows in-app updates, 2026-08-17
+**Blocked on**: `FU-MANUAL-DIST-INSTALL` — there is no point testing an upgrade path from a
+build nobody has confirmed installs.
+
+Everything from `POST /update/apply` onward is unautomatable: the marker protocol is
+round-tripped in one JVM by `UpdateMarkerRoundTripTest` and the PowerShell command line is pinned
+by `WindowsUpdateApplyTest`, but no test can observe a real launcher exiting, a UAC prompt, or
+`msiexec` replacing files in `C:\Program Files`.
+
+**Upgrade mechanics** (this is what proves the UpgradeCode fix worked):
+
+1. Install `v1.1.0` on a clean VM. Note the install directory and **whether UAC prompted** —
+   that answers per-machine vs per-user, which is a one-way door and must be settled before the
+   first release ships.
+2. Add/Remove Programs shows **one** `lighting7`.
+3. Install `v1.1.1` by double-click → still **one** entry, version bumped, one Start-menu
+   shortcut, and `%APPDATA%\lighting7\` untouched (DB, `local.conf`, logs all survive).
+4. Repeat with `msiexec /i <msi> /qb /norestart /l*v %TEMP%\l7.log` — the exact command the apply
+   flow issues. Confirm the behaviour **while the app is running**, and grep the log for
+   `RemoveExistingProducts`.
+5. Install `v1.1.0` over `v1.1.1` → expect a downgrade refusal, not a silent side-by-side.
+6. Confirm a user-chosen install directory (`--win-dir-chooser`) is honoured across the upgrade.
+
+**The in-app path**, in order: dev-build state → check with no release published (expect the
+404/"nothing yet" state, not an error) → check with a release → download and verify →
+**deliberately corrupt the staged MSI and confirm the launcher refuses it and keeps running** →
+real apply → confirm the relaunch happens and the new version is reported.
+
+**Failure paths**: cancel the UAC prompt (expect exit 1602 recorded and the desk back on the old
+version); kill the wrapper mid-install; unplug the network mid-download (expect the `.part` gone,
+nothing staged); fill the disk.
+
+Failures here likely surface as concrete engineering items — promote them to dedicated
+`FU-DIST-*` / `FU-UPDATE-*` follow-ups rather than fixing inline. See `docs/windows-updates.md`.
+
 ### `FU-MANUAL-DEAD-ASSIGNMENTS` — Dead-assignment banner live rig (Phase 6)
 
 **Status**: Manual

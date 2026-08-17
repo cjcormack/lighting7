@@ -111,6 +111,10 @@ private fun Application.runShowStartup(state: State) {
     show.start()
     registerMdns(state)
     state.bootProgress.markReady()
+    // After markReady, never before: constructing the service reconciles the previous apply, and
+    // the first network check is deliberately delayed further still — a desk mid-boot is
+    // compiling FX scripts and loading its patch, and should not also be pulling on the network.
+    state.startUpdateChecks()
     log.info("Show startup complete")
 }
 

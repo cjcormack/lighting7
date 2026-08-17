@@ -15,6 +15,11 @@ class ChildProcess(val name: String, val process: Process) {
         process.destroy()
         if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
             process.destroyForcibly()
+            // destroyForcibly() only *requests* termination — it returns immediately and the OS
+            // reaps the process asynchronously. Without this second wait, stop() could return
+            // while a stubborn child was still holding its jars open, which the update path then
+            // hands straight to msiexec as "files in use".
+            process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
         }
     }
 

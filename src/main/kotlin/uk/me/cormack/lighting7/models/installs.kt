@@ -17,6 +17,16 @@ object DaoInstalls : IntIdTable("installs") {
     val uuid = javaUUID("uuid").autoGenerate()
     val friendlyName = varchar("friendly_name", 100)
     val createdAtMs = long("created_at_ms")
+
+    /**
+     * Whether this desk polls GitHub for new releases in the background.
+     *
+     * Lives here rather than in `local.conf` because it is a per-machine preference a user can
+     * change from the UI, and this table is already the machine's row. It is a *user* opt-out;
+     * `update.enabled` in the config is the separate hard kill-switch for a locked-down venue
+     * install, which the UI cannot override.
+     */
+    val updateCheckEnabled = bool("update_check_enabled").default(true)
 }
 
 class DaoInstall(id: EntityID<Int>) : IntEntity(id) {
@@ -25,4 +35,5 @@ class DaoInstall(id: EntityID<Int>) : IntEntity(id) {
     var uuid by DaoInstalls.uuid
     var friendlyName by DaoInstalls.friendlyName
     var createdAtMs by DaoInstalls.createdAtMs
+    var updateCheckEnabled by DaoInstalls.updateCheckEnabled
 }

@@ -39,13 +39,30 @@ fun main() {
     // port 8321. The backend enforces its own lock too (covers direct `java -jar` / dev runs).
     LauncherLock.acquireOrExit(dataDir)
 
+    // Anything left in updates/ belongs to a previous run: an apply that was interrupted by a
+    // power cut, a tray Quit, or a crash. Clearing it here is what makes "quitting cancels the
+    // update" true, and stops an update nobody is present for from firing days later.
+    // Captured before the children start so a marker can only ever be acted on if it was written
+    // by *this* run of the app.
+    val launcherStartMs = System.currentTimeMillis()
+    val launcherPid = ProcessHandle.current().pid()
+    UpdateMarker.clearStale(dataDir)
+
     val backendJar = resolveJar("lighting7.jar")
     val compilerJar = resolveJar("kotlin-compiler-server.jar")
     val javaBin = resolveJavaExecutable()
 
     ensureDefaultConfig(dataDir)
 
+    // Where the app was installed from, resolved once and shared with the backend below. The
+    // backend is a plain `java -jar` child either way and cannot work this out for itself.
+    val baseDir = launcherBaseDir()
+    val installKind = detectInstallKind(baseDir)
+    val installRoot = installRoot(baseDir)
+
     println("lighting7 launcher")
+    println("  version     = ${LauncherBuildInfo.version} (${if (LauncherBuildInfo.isRelease) "release" else "dev"})")
+    println("  install     = $installKind${installRoot?.let { " at $it" } ?: ""}")
     println("  java        = $javaBin")
     println("  backend jar = $backendJar")
     println("  compiler jar= $compilerJar")
@@ -97,7 +114,15 @@ fun main() {
         // Pin the backend to the launcher's resolved data dir. The child would inherit
         // LIGHTING7_DATA_DIR through the environment, but a `-Dlighting7.dataDir` override
         // on the launcher would not propagate — forwarding the resolved value covers both.
-        env = mapOf("LIGHTING7_DATA_DIR" to dataDir.toAbsolutePath().toString()),
+        //
+        // The install kind and root ride along for the same reason: they are facts about how
+        // *this process* was started, and the backend — a plain `java -jar` child — has no way
+        // to observe them. The update path gates on both.
+        env = buildMap {
+            put("LIGHTING7_DATA_DIR", dataDir.toAbsolutePath().toString())
+            put("LIGHTING7_INSTALL_KIND", installKind)
+            installRoot?.let { put("LIGHTING7_INSTALL_ROOT", it.toAbsolutePath().toString()) }
+        },
         logFile = logsDir.resolve("lighting7.log"),
     )
 
@@ -126,7 +151,30 @@ fun main() {
 
     // Block until a child dies. If the user picks Quit from the tray menu, onQuit calls
     // exitProcess(0) which preempts this loop.
+    //
+    // The same loop watches for a staged update: the backend cannot install one itself (it is a
+    // child, and every file msiexec must replace is held open while it lives), so it drops a
+    // marker and this is what acts on it. `Files.exists` first — the parse and the SHA-256 only
+    // happen on the rare tick where a marker is actually present.
     while (children.all { it.isAlive }) {
+        if (Files.exists(UpdateMarker.markerPath(dataDir))) {
+            val request = UpdateMarker.readIfPresent(dataDir, launcherStartMs)
+            // Consume before acting, and whether or not it validated. Before, so a crash between
+            // here and msiexec cannot re-trigger the same apply on the next boot; regardless of
+            // validity, so a marker we refused doesn't get re-read and re-hashed twice a second
+            // for the rest of the show.
+            UpdateMarker.consume(dataDir)
+            if (request != null) {
+                applyUpdateAndExit(
+                    request = request,
+                    dataDir = dataDir,
+                    children = children,
+                    launcherPid = launcherPid,
+                    installRoot = installRoot,
+                )
+                // Only reached if the apply refused to start — carry on with the old version.
+            }
+        }
         Thread.sleep(500)
     }
 
@@ -134,6 +182,86 @@ fun main() {
     println("${dead.name} exited (code=${dead.exitValue}) — stopping the rest.")
     children.forEach { runCatching { it.stop() } }
     exitProcess(1)
+}
+
+/**
+ * Stop everything and hand the staged MSI to `msiexec` through a detached PowerShell wrapper.
+ *
+ * Returns only if the apply could not be started, in which case the caller carries on running
+ * the version already installed — the desk staying up on an old build always beats it going
+ * dark over a failed upgrade.
+ */
+private fun applyUpdateAndExit(
+    request: UpdateMarker.Request,
+    dataDir: Path,
+    children: List<ChildProcess>,
+    launcherPid: Long,
+    installRoot: Path?,
+) {
+    println("Applying update ${request.targetVersion} from ${request.msiPath}")
+
+    val relaunchExe = if (request.relaunch) installRoot?.resolve("lighting7.exe") else null
+    if (request.relaunch && relaunchExe == null) {
+        // Not fatal: the Start-menu and desktop shortcuts jpackage installs still work, and
+        // refusing the update would leave the user with no way to apply it at all.
+        println("WARNING: could not resolve lighting7.exe to relaunch; the update will install but not restart the app.")
+    }
+
+    val command = WindowsUpdateApply.buildCommand(
+        launcherPid = launcherPid,
+        msiPath = request.msiPath,
+        resultPath = dataDir.resolve("updates").resolve(UpdateMarker.RESULT_FILENAME),
+        targetVersion = request.targetVersion,
+        relaunchExe = relaunchExe,
+    )
+
+    // Logged in full before anything is spawned. On a real Windows box, with no console and no
+    // debugger, this line is the single most useful artifact when an upgrade misbehaves.
+    println("Update command: ${command.joinToString(" ")}")
+
+    // Spawn the wrapper FIRST, while the desk is still fully alive.
+    //
+    // Ordering here is the whole safety property. Spawning is the only step that can fail, and
+    // stopping the children is irreversible — this launcher has no way to bring them back. Doing
+    // the irreversible thing first meant a failed spawn left the desk with no backend *and* no
+    // update: `applyUpdateAndExit` would return, the caller's `children.all { it.isAlive }` loop
+    // condition would already be false, and the app would die via `exitProcess(1)` reporting a
+    // misleading "child exited". A desk going dark mid-show is the exact outcome this feature is
+    // supposed to avoid.
+    //
+    // Spawning first is safe because the wrapper's first act is `Wait-Process` on *our* PID: it
+    // is armed but blocked, and cannot touch a file until this JVM exits.
+    val started = runCatching {
+        ProcessBuilder(command)
+            .directory(dataDir.toFile())
+            // Detached from this JVM's streams: the wrapper outlives us by design, and an
+            // inherited pipe with no reader would eventually block it.
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .start()
+    }.onFailure {
+        println("ERROR: could not start the update wrapper (${it.message}). Staying on ${LauncherBuildInfo.version}.")
+    }.getOrNull()
+
+    // Nothing has been stopped yet, so this really is "carry on with the old version".
+    if (started == null) return
+
+    // From here on we are committed: the wrapper is armed and will proceed once we exit (or after
+    // its Wait-Process timeout). Returning now would let msiexec run against a live app, so every
+    // path below ends in exitProcess.
+    println("Update wrapper started (pid=${started.pid()}). Stopping children…")
+    children.forEach { runCatching { it.stop() } }
+
+    val stillAlive = children.filter { it.isAlive }
+    if (stillAlive.isNotEmpty()) {
+        // `stop` escalates to destroyForcibly and waits, so surviving it is close to impossible.
+        // Log it anyway: if it ever happens, msiexec will report files in use, and this line is
+        // the only thing that will explain why.
+        println("WARNING: ${stillAlive.joinToString { it.name }} did not exit; msiexec may find files in use.")
+    }
+
+    println("Exiting so msiexec can replace our files.")
+    exitProcess(0)
 }
 
 private fun redirectLauncherIo(logFile: Path) {
@@ -176,17 +304,29 @@ private fun ensureDefaultConfig(dataDir: Path) {
 }
 
 /**
+ * The directory holding the launcher's own JAR (or its classes dir in a dev run). In the
+ * jpackage layout this is `<install root>/app/`, which is what makes it the anchor for both
+ * sibling-jar resolution and install-kind detection.
+ *
+ * Null when the location can't be resolved at all — callers decide whether that is fatal.
+ */
+internal fun launcherBaseDir(): Path? {
+    val location = runCatching {
+        Path.of(LauncherMarker::class.java.protectionDomain.codeSource.location.toURI())
+    }.getOrNull() ?: return null
+    return if (Files.isDirectory(location)) location else location.parent
+}
+
+/**
  * Resolve a JAR by filename. Prefers `-D<jarName>=...` (set by `:launcher:run`), falls
  * back to a sibling of the launcher's own JAR / classes dir (the jpackage `app/` layout).
  */
 private fun resolveJar(jarName: String): Path {
     System.getProperty(jarName)?.takeIf { it.isNotBlank() }?.let { return Path.of(it) }
 
-    val launcherLocation = runCatching {
-        Path.of(LauncherMarker::class.java.protectionDomain.codeSource.location.toURI())
-    }.getOrNull() ?: error("Cannot resolve launcher location to find $jarName — pass -D$jarName=...")
+    val baseDir = launcherBaseDir()
+        ?: error("Cannot resolve launcher location to find $jarName — pass -D$jarName=...")
 
-    val baseDir = if (Files.isDirectory(launcherLocation)) launcherLocation else launcherLocation.parent
     val candidate = baseDir.resolve(jarName)
     require(Files.exists(candidate)) {
         "Cannot find $jarName next to launcher (looked in $baseDir). Pass -D$jarName=... or stage it next to launcher.jar."
