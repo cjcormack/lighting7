@@ -1304,7 +1304,8 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
 
-- `FU-WS-USER-INVALIDATION` — commits _(pending)_ (2026-08-17) — desk-account and install-row
+- `FU-WS-USER-INVALIDATION` — commits 0730295 (lighting7) + b3c4645 (lighting-react)
+  (2026-08-17) — desk-account and install-row
   edits now reach other clients. **The open question was the channel, and the sibling emitter
   won**: `AuthService.userChanges: SharedFlow<Int>` beside the existing `revocations`, plus
   `State.machineEventsFlow` for the install row, collected by a new `plugins/MachineSocket.kt`.
