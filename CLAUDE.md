@@ -53,6 +53,16 @@ apply. `./gradlew test` is the equivalent pre-commit check. A recent green
 run earlier in the same session is sufficient; you do not need to re-run it
 just before `git commit` if nothing has changed since.
 
+`tasks.test` pins `-Dlighting7.dataDir` at `build/test-data`, because `State`
+resolves the script cache, prompt-book PDF store, sync working tree and export
+root under `appDataDir()` — without it the suite reads and writes the real
+installation (`~/Library/Application Support/lighting7`), next to a desk that may
+be running. `testAppConfig` cannot do this job: `lighting7.dataDir` is read
+before any config is parsed. **If you ever see `FileSystemException … Operation
+not permitted` there, or a `MissingFieldException` on a route DTO, suspect that
+pin has been lost** — the route 500s and returns `ErrorResponse`, so a denied
+write disguises itself as a serialization regression.
+
 ### Git workflow
 
 Solo personal repo — commit and push directly to `main`. Do **not** open pull
