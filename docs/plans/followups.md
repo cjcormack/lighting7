@@ -137,6 +137,45 @@ around the open/close edge (both loops run on `Dispatchers.Default`).
 
 Without one of those, coordination cost > savings. Leave dormant.
 
+### `FU-PERF-BLACKOUT-LATENCY` — Blackout lands up to one refresh interval late
+
+**Status**: Ready
+**Origin**: Continuous Art-Net streaming (2026-08-18, eb190ef), review finding
+shipped as-designed pending a decision
+
+`GlobalScalerState` calls `DmxController.requestTransmit()` on every controller
+when Blackout or Grand Master is toggled, which used to force an immediate frame.
+`ArtNetController.requestTransmit()` is now a **no-op**: under continuous
+streaming the change reaches the wire on the next scheduled tick anyway, and an
+out-of-band packet would push the universe above its configured frame rate.
+
+At the 25 ms default that is imperceptible. The problem is the ceiling —
+`MAX_REFRESH_INTERVAL_MS` is 1000, and it is reachable from the universe chip, so
+an operator who slowed a universe for a fussy node can hit Blackout mid-show and
+watch that universe stay lit for up to a full second. Blackout is a safety
+control; "up to 1 s" is a different promise from "immediately", and the desk
+currently makes the weaker one without saying so.
+
+Three shapes, roughly in order of preference:
+
+1. **Lower the ceiling** to ~100 ms. Keeps one rule for all output, costs the
+   slow-node case that motivated a configurable rate in the first place. Cheapest
+   and most honest if nobody actually needs 1 Hz.
+2. **Exempt modifier changes** — let `requestTransmit()` emit one out-of-band
+   frame and re-base the loop's deadline from it, so the *average* rate holds
+   even though one frame arrives early. Preserves the full range; reintroduces
+   the "is this above the configured rate?" question the no-op was meant to
+   settle, and needs care that a Blackout spam-click can't become a packet flood.
+3. **Bound the interval only while a modifier is active** — clamp to 25 ms when
+   Blackout or Grand Master is engaged. Narrowest blast radius, but a rate that
+   silently changes under you is its own surprise.
+
+Not deferred for cost — (1) is a one-constant change. It is here because picking
+between them is a product call about what the desk promises, not a code fix.
+
+**Related**: DMX output model in
+[dmx-engineering.md §Refresh interval](../dmx-engineering.md#refresh-interval).
+
 ---
 
 ## Frontend polish
