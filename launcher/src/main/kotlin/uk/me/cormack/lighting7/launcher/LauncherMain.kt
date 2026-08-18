@@ -91,6 +91,21 @@ fun main() {
             name = "kotlin-compiler-server",
             java = javaBin,
             jar = compilerJar,
+            // All six `--libraries.folder.*` flags are passed even though only two of the
+            // directories ship (see `compilerServerLibDirNames` in build.gradle.kts): the desk
+            // compiles for the JVM, so `-js`, `-wasm`, `-compose-wasm` and
+            // `-compose-wasm-compiler-plugins` are deliberately ABSENT from the install. The
+            // fork copes by design — it reads those five with `listFiles() ?: emptyList()` and
+            // only escalates a missing `jvm` — so this resolves to "no Kotlin/JS support",
+            // which is what we want.
+            //
+            // They are not dropped, for two reasons. The fork's `LibrariesFolderProperties`
+            // declares all six as `lateinit`, and omitting a flag falls back to the values
+            // compiled into the jar's application.properties — which are RELATIVE, and so
+            // resolve against this child's working directory rather than the install. That is
+            // precisely what passing absolute paths above avoids. And keeping the list a 1:1
+            // mirror of the fork's property set means a fork bump that adds a seventh target
+            // shows up as one obvious edit rather than a missing bean.
             args = listOf(
                 "--server.port=$COMPILER_PORT",
                 "--server.address=127.0.0.1",

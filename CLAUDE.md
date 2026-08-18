@@ -22,6 +22,24 @@ A professional stage/event lighting control system built in Kotlin using Ktor. C
 ./gradlew run
 ```
 
+**`lighting7.jar` is target-OS-specific.** `shadowJar` keeps native binaries
+(sqlite-jdbc, libremidi, JNA, alsa, coremidi4j) for the host OS only — that's ~18 MB
+of the installer — so a Mac-built fat jar copied to Linux dies at its first DB
+connection with `No native library found for os.name=Linux`. Two overrides:
+
+- `-PnativePayloadOs=all` — the old portable jar, for when you genuinely need one.
+- `-PnativePayloadOs=windows` — reproduces CI's jar byte-for-byte from a Mac, which is
+  how the installer's size is measured without a Windows host.
+
+A `doLast` verifier fails the build if the resulting jar has the wrong payloads, because
+a stale Ant exclude matches nothing *silently* in both directions. `packageMac` /
+`packageWindows` refuse a mismatched override. Tests and `run` are unaffected — they use
+`runtimeClasspath`, not the fat jar. See
+[`docs/plans/msi-slimming-plan.md`](docs/plans/msi-slimming-plan.md).
+
+Also note `copyFrontend` is a `Sync`: it owns `src/main/resources/static/` and deletes
+anything it didn't put there, so don't hand-place files in it.
+
 ### Configuration
 
 1. Copy `example.local.conf` to `local.conf`

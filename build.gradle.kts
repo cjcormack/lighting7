@@ -1,4 +1,5 @@
 import java.io.ByteArrayOutputStream
+import java.util.zip.ZipFile
 
 val kotlin_version: String by project
 val logback_version: String by project
@@ -185,14 +186,27 @@ val buildFrontend = tasks.register<com.github.gradle.node.npm.task.NpmTask>("bui
     onlyIf { lightingReactDir.exists() }
 }
 
-val copyFrontend = tasks.register<Copy>("copyFrontend") {
-    description = "Copy the built React bundle into src/main/resources/static/."
+// `Sync`, not `Copy`: Vite emits content-hashed filenames (`index-<hash>.js`), so every
+// frontend rebuild writes a NEW file here and a `Copy` never removes the old one. Left
+// unchecked that grows without bound — this was found at 123 MB across 44 files (~22 stale
+// `index-*.js` at ~4 MB each), which inflated the thin `jar` to 45 MB, the editor jar staged
+// into the compiler-server fork to 23 MB, and every locally built .pkg/.msi with them. CI
+// never saw it because a fresh checkout has no history to accumulate.
+//
+// `Sync` therefore OWNS this directory and deletes anything it did not put there. That is
+// acceptable only because the directory is entirely machine-generated and gitignored (and
+// `clean` already deletes it below) — do not hand-place a file here expecting it to survive
+// a build.
+val copyFrontend = tasks.register<Sync>("copyFrontend") {
+    description = "Mirror the built React bundle into src/main/resources/static/, pruning stale chunks."
     group = "build"
     dependsOn(buildFrontend)
     from(lightingReactDir.resolve("dist"))
     into(frontendStaticDir)
     // Require an actual entry point — a bare empty `dist/` (e.g. after a vite failure) means
     // the bundle is broken; serving the previous classpath copy is preferable to copying nothing.
+    // Note this skips the *pruning* as well as the copy, which is the intended pairing: a failed
+    // Vite run leaves the last good bundle in place rather than emptying the directory.
     onlyIf { lightingReactDir.resolve("dist/index.html").exists() }
 }
 
@@ -332,6 +346,96 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
 
 sourceSets["main"].resources.srcDir(generateBuildInfo)
 
+// ─── Host / target OS ──────────────────────────────────────────────────
+// Declared here rather than down with the jlink/jpackage block that also uses them:
+// `shadowJar` below keys its native-payload excludes off the target OS, and a Kotlin DSL
+// script is evaluated top to bottom, so a `val` declared 400 lines later is not in scope.
+val hostOs = org.gradle.internal.os.OperatingSystem.current()
+val runtimeOsLabel = when {
+    hostOs.isMacOsX -> "mac"
+    hostOs.isWindows -> "windows"
+    else -> "linux"
+}
+
+// Which OS's native binaries `shadowJar` keeps. Defaults to the host, because the fat jar's only
+// shipping consumer is a host-matched installer (`packageWindows` / `packageMac` are both
+// host-only). Five dependencies ship natives for every platform they support, which cost ~17 MB
+// of the installer for binaries the target can never load.
+//
+// A *target* property rather than plain host-keying, for one specific reason: it makes the Windows
+// jar reproducible from a Mac. `./gradlew shadowJar -PnativePayloadOs=windows` produces exactly
+// what CI stages, so the installer's size can be measured and diffed without a Windows host —
+// which is the only way most of this is checkable during development.
+//
+// `all` restores the old everything-everywhere jar. Use it when you need a portable
+// `lighting7.jar`, because the default no longer is one: a Mac-built jar copied to Linux fails at
+// the first DB connection with `No native library found for os.name=Linux`. Tests and `run` are
+// unaffected — both resolve against `runtimeClasspath`, not the fat jar.
+val nativePayloadOs: String = ((findProperty("nativePayloadOs") as String?) ?: runtimeOsLabel).also {
+    // Validated eagerly at configuration time, in the same spirit as requireMsiCompatibleVersion
+    // below: a typo would otherwise silently exclude EVERY native payload (nothing matches the
+    // target, so nothing is kept) and produce a jar that builds green and cannot open its own
+    // database.
+    require(it in setOf("windows", "mac", "linux", "all")) {
+        "-PnativePayloadOs=$it is not recognised. Expected one of: windows, mac, linux, all."
+    }
+}
+
+// Every per-platform native payload in the dependency set, as (Ant exclude pattern, entry-name
+// prefix, owning target OS). `null` means no target we build for owns it, so it is always dropped
+// unless `nativePayloadOs=all`.
+//
+// Listed explicitly rather than swept with `**/*.{so,dll,dylib}`. A blanket glob would silently
+// strip the host's natives out of any dependency added later — a build-green, runtime-dead
+// failure — and it cannot tell `com/sun/jna/win32-x86-64/` (a payload directory) from
+// `com/sun/jna/win32/` (a Java package of .class files). Note the trailing hyphens in the JNA
+// prefixes; they are what draws that line.
+//
+// Only binary payloads are listed: the CLASSES always ship. coremidi4j is referenced statically
+// by `midi/MidiDeviceRegistry.kt` and both jne and javacpp decide what to load from `os.name` at
+// runtime, so removing their classes would break compilation or throw where today they simply
+// report no devices. `META-INF/services/javax.sound.midi.spi.MidiDeviceProvider` stays too — it
+// is merged by `mergeServiceFiles()` below, and off-Mac the provider just enumerates nothing.
+//
+// Keyed by OS only, never by architecture: the Windows jar keeps all four sqlite arches (3.7 MB)
+// though the MSI is x64. Arch-keying is another ~2.9 MB and a second axis — see
+// FU-DIST-NATIVE-ARCH.
+//
+// `jne/windows/` is kept even though it is provably dead weight today: `midi/KtmidiAccessSource.kt`
+// routes Windows to `JvmMidiAccess`, so libremidi's DLL is never loaded there. It is 0.35 MB, and
+// dropping it would plant a trap that springs only when someone fixes the LLP64 ABI bug and flips
+// that branch back — a MIDI subsystem that works in dev and not in the installer.
+val nativePayloads: List<Triple<String, String, String?>> = listOf(
+    Triple("org/sqlite/native/Windows/**", "org/sqlite/native/Windows/", "windows"),
+    Triple("org/sqlite/native/Mac/**", "org/sqlite/native/Mac/", "mac"),
+    Triple("org/sqlite/native/Linux/**", "org/sqlite/native/Linux/", "linux"),
+    Triple("org/sqlite/native/Linux-Musl/**", "org/sqlite/native/Linux-Musl/", "linux"),
+    Triple("org/sqlite/native/FreeBSD/**", "org/sqlite/native/FreeBSD/", null),
+    Triple("jne/windows/**", "jne/windows/", "windows"),
+    Triple("jne/macos/**", "jne/macos/", "mac"),
+    Triple("jne/linux/**", "jne/linux/", "linux"),
+    // alsa-javacpp's payload sits at the archive root, not under a package, which makes this the
+    // one entry here that is not namespaced to an owning library. Only alsa ships a top-level
+    // `linux-x86_64/` across the current runtime classpath, so there is no collision today — but a
+    // second dependency shipping files at that same literal root path would be swept in or out
+    // along with alsa's, and the verifier below would NOT catch it: it asks "does anything exist
+    // under this prefix", not "does the right library own it". Re-check this line if another
+    // javacpp-style native dependency is ever added.
+    Triple("linux-x86_64/**", "linux-x86_64/", "linux"),
+    Triple(
+        "uk/co/xfactorylibrarians/coremidi4j/libCoreMidi4J.dylib",
+        "uk/co/xfactorylibrarians/coremidi4j/libCoreMidi4J.dylib",
+        "mac",
+    ),
+    Triple("com/sun/jna/win32-*/**", "com/sun/jna/win32-", "windows"),
+    Triple("com/sun/jna/darwin-*/**", "com/sun/jna/darwin-", "mac"),
+    Triple("com/sun/jna/linux-*/**", "com/sun/jna/linux-", "linux"),
+    Triple("com/sun/jna/aix-*/**", "com/sun/jna/aix-", null),
+    Triple("com/sun/jna/freebsd-*/**", "com/sun/jna/freebsd-", null),
+    Triple("com/sun/jna/openbsd-*/**", "com/sun/jna/openbsd-", null),
+    Triple("com/sun/jna/sunos-*/**", "com/sun/jna/sunos-", null),
+)
+
 // ─── Fat-jar packaging ─────────────────────────────────────────────────
 // `shadowJar` produces a single self-contained `lighting7.jar` that the launcher
 // (and Phase 3 jpackage) spawns directly. `mergeServiceFiles()` matters — without
@@ -387,6 +491,55 @@ tasks.shadowJar {
     // pattern list above stays honest.
     failOnDuplicateEntries.set(true)
     mergeServiceFiles()
+
+    // Drop every native payload the target OS cannot load. Filtering happens in the CopySpec,
+    // i.e. before the transformers and before duplicate detection, so excluded entries simply
+    // never reach either — this cannot disturb the merging above.
+    //
+    // The hazard it *could* introduce is subtler and is why the verifier below exists: an exclude
+    // broad enough to remove ALL copies of an entry handled by PreserveFirstFoundResourceTransformer
+    // would quietly retire one of those `include(...)` lines, and `failOnDuplicateEntries` would
+    // never notice the guard had gone decorative. None of the patterns above overlaps a transformer
+    // include today (they are all anchored on payload directories); re-check that if you add one.
+    if (nativePayloadOs != "all") {
+        nativePayloads.filter { (_, _, owner) -> owner != nativePayloadOs }
+            .forEach { (pattern, _, _) -> exclude(pattern) }
+    }
+
+    // An Ant exclude that matches nothing fails SILENTLY, in both directions: a renamed payload
+    // directory upstream means either 30 MB quietly returns to the installer, or the one native the
+    // target actually needs quietly leaves it. Neither shows up as a build failure and both are
+    // invisible until the app misbehaves on a user's machine, so assert the resulting jar rather
+    // than trusting the patterns.
+    //
+    // Note the limit of this check: it is presence-by-prefix, not ownership. It proves the target's
+    // payload directories survived and the others went, not that the *expected library* put them
+    // there — so it cannot detect two dependencies sharing one prefix (see `linux-x86_64/` above).
+    doLast {
+        val jarFile = archiveFile.get().asFile
+        val problems = mutableListOf<String>()
+        ZipFile(jarFile).use { zip ->
+            val names = zip.entries().asSequence().map { it.name }.toList()
+            nativePayloads.forEach { (_, prefix, owner) ->
+                val present = names.any { it.startsWith(prefix) }
+                val expected = nativePayloadOs == "all" || owner == nativePayloadOs
+                if (expected && !present) {
+                    problems += "MISSING  $prefix — expected for nativePayloadOs=$nativePayloadOs " +
+                        "(owner=${owner ?: "none"}). An upstream rename, or a too-broad exclude."
+                }
+                if (!expected && present) {
+                    problems += "UNEXPECTED  $prefix — should have been excluded for " +
+                        "nativePayloadOs=$nativePayloadOs (owner=${owner ?: "none"})."
+                }
+            }
+        }
+        require(problems.isEmpty()) {
+            "Native payload verification failed for ${jarFile.name} (nativePayloadOs=$nativePayloadOs):\n" +
+                problems.joinToString("\n") { "  - $it" } +
+                "\nUpdate the `nativePayloads` table next to `nativePayloadOs` to match the dependency set."
+        }
+        logger.lifecycle("Native payloads verified for ${jarFile.name} (nativePayloadOs=$nativePayloadOs).")
+    }
 }
 
 // ─── kotlin-compiler-server bootJar packaging ──────────────────────────
@@ -404,13 +557,35 @@ tasks.shadowJar {
 // the launcher reads the same value from a generated resource, so the six
 // `--libraries.folder.*` flags can no longer drift from it. See the plugins block for why it
 // has to stay within one minor of this project's Kotlin version.
-// `isNotBlank` matters as much as the null check: a blank version makes the `startsWith(version)`
-// scan in assembleCompilerServer match *every* top-level directory in the fork (`.git/`, `build/`,
-// …) and recursively copy gigabytes of them into build/distributions while still satisfying
-// `require(libDirs.isNotEmpty())`.
+// `isNotBlank` matters as much as the null check: a blank version makes the first allowlist entry
+// below resolve to the fork's own root directory, which `assembleCompilerServer` would then copy
+// recursively into build/distributions — gigabytes of `.git/` and `build/`.
 val compilerServerKotlinVersion: String =
     (findProperty("compilerServerKotlinVersion") as String?)?.takeIf { it.isNotBlank() }
         ?: error("compilerServerKotlinVersion is not set or is blank — declare it in gradle.properties.")
+
+// The ONLY two of the fork's six `<version>*/` library directories that ship.
+//
+// The fork emits six — `<v>`, `-js`, `-wasm`, `-compose-wasm`, `-compose-wasm-compiler-plugins`,
+// `-compiler-plugins` — because upstream's playground compiles for Kotlin/JS, Kotlin/Wasm and
+// Compose-for-Web. This desk compiles for the JVM and nothing else:
+// `lighting-react/src/components/scripts/ScriptEditor.tsx` mounts kotlin-playground with
+// `mode="kotlin"` and no target-platform prop, so only the JVM target is ever requested. The four
+// unused dirs were 37.2 MB of the installer (`-compose-wasm` alone is 28.6 MB) for compiler backends
+// nothing can reach.
+//
+// Shipping only these two is safe because the fork tolerates the others being absent, by design
+// rather than by luck: `src/main/kotlin/com/compiler/server/compiler/components/KotlinEnvironment.kt`
+// reads five of the six as `listFiles()?.toList() ?: emptyList()` and escalates only `jvm` to
+// `error("No kotlin libraries found in: …")`, after which
+// `common/src/main/kotlin/com/compiler/server/common/components/KotlinEnvironment.kt` filters each
+// list through `isJsKlib`/`isWasmKlib` — both happy with an empty list. So a missing `-js/` yields
+// an editor that cannot compile Kotlin/JS, which is exactly what we want, and a missing `<v>/`
+// still fails loudly at compiler-server startup.
+val compilerServerLibDirNames: List<String> = listOf(
+    compilerServerKotlinVersion,
+    "$compilerServerKotlinVersion-compiler-plugins",
+)
 
 val compilerServerDir = file(kotlinCompilerServerPath)
 val compilerServerOutput = layout.buildDirectory.file("distributions/kotlin-compiler-server.jar")
@@ -510,14 +685,44 @@ val checkCompilerServerClean = tasks.register<Exec>("checkCompilerServerClean") 
     }
 }
 
-val stageCompilerServerLightingJar = tasks.register<Copy>("stageCompilerServerLightingJar") {
-    description = "Copy the lighting7 thin jar into the fork's lighting-libs/ for the patched dependency."
+// The Lighting7 jar the compiler-server fork puts on the *script* classpath, so the embedded
+// editor can resolve and complete against this project's own API. It needs class files and
+// `META-INF/uk.me.cormack_Lighting7.kotlin_module` (that resource is what makes top-level
+// declarations resolvable); it has no use whatsoever for the built React bundle in `static/`,
+// which was 122 MB of the ordinary `jar`'s 143 MB uncompressed and rode into the installer as a
+// SECOND copy of the frontend already inside lighting7.jar.
+//
+// A dedicated `Jar` task rather than the two more obvious alternatives:
+//   - `exclude("static/**")` on the `Copy` below does nothing. That Copy's source is a single jar
+//     FILE, and Ant patterns filter the file tree containing the archive, not entries inside it.
+//   - excluding it from the `jar` task itself would be wrong: that task's contract is "the app's
+//     own thin jar", and a Lighting7 jar that cannot serve its own UI is a landmine for anything
+//     that later runs it directly.
+//
+// `static/**` only, deliberately — not classes-only. `routes/kotlinCompilerServer.kt` proxies
+// `{action}` as a wildcard, so `/compiler/run` is reachable and the fork can *execute* against
+// this jar rather than merely resolving symbols against it. `fx/`, `application.conf` and
+// `logback.xml` total ~30 KB, so keeping them costs nothing and avoids guessing what execution
+// needs. See FU-DIST-EDITOR-JAR-CLASSES-ONLY.
+val compilerServerLightingJar = tasks.register<Jar>("compilerServerLightingJar") {
+    description = "Build the Lighting7 jar staged onto the compiler server's script classpath (no frontend bundle)."
     group = "build"
-    dependsOn(tasks.named("jar"))
-    onlyIf { compilerServerDir.exists() }
-    from(tasks.named("jar")) {
-        rename { compilerServerLightingJarName }
+    archiveFileName.set(compilerServerLightingJarName)
+    // Its own directory: the archive name collides with the ordinary `jar` task's output in
+    // build/libs/, and two tasks writing one path is an implicit-dependency error waiting to fire.
+    destinationDirectory.set(layout.buildDirectory.dir("compiler-server-libs"))
+    from(sourceSets["main"].output) {
+        exclude("static/**")
     }
+}
+
+val stageCompilerServerLightingJar = tasks.register<Copy>("stageCompilerServerLightingJar") {
+    description = "Copy the frontend-less Lighting7 jar into the fork's lighting-libs/ for the patched dependency."
+    group = "build"
+    onlyIf { compilerServerDir.exists() }
+    // No `rename {}` — compilerServerLightingJar already emits the expected filename, which
+    // `applyCompilerServerPatches` bakes into the fork's `kotlinDependency(files(...))` line.
+    from(compilerServerLightingJar)
     into(compilerServerDir.resolve("lighting-libs"))
 }
 
@@ -589,7 +794,10 @@ tasks.register("assembleCompilerServer") {
     // recursive copy gets skipped when nothing has changed since the last run.
     inputs.files(fileTree(compilerServerDir) {
         include("build/libs/*.jar")
-        include("$compilerServerKotlinVersion*/**")
+        // Only the dirs we actually copy. A wildcard here would keep the task's up-to-date check
+        // depending on the four dirs the fork still generates but we no longer ship, so it would
+        // re-run for changes that cannot affect its output.
+        compilerServerLibDirNames.forEach { include("$it/**") }
     })
     // outputs.dir covers both the bootJar copy and the staged lib dirs.
     outputs.dir(outputFile.parentFile)
@@ -609,23 +817,40 @@ tasks.register("assembleCompilerServer") {
         jar.copyTo(outputFile, overwrite = true)
         logger.lifecycle("Copied ${jar.name} → ${outputFile.relativeTo(rootDir)}")
 
-        // application.properties pins the runtime library dirs to
-        // `$compilerServerKotlinVersion[-js|-wasm|…]`. Other
-        // top-level `2.x.y/` directories in the fork (e.g. `2.3.0/` for the compiler-server's
-        // own version) are build-time artefacts the runtime never reads — skip them.
-        val libDirs = compilerServerDir.listFiles { f ->
-            f.isDirectory && f.name.startsWith(compilerServerKotlinVersion)
-        } ?: emptyArray()
-        require(libDirs.isNotEmpty()) {
-            "Expected `$compilerServerKotlinVersion[-js|-wasm|…]` library directories in $compilerServerDir after bootJar — none found. " +
-                "Either the fork's :dependencies:copy* tasks did not run, or the fork is checked out on a different Kotlin " +
-                "version — in which case update `compilerServerKotlinVersion` in gradle.properties to match its branch."
-        }
-        libDirs.forEach { src ->
-            val dest = File(outputFile.parentFile, src.name)
+        // Copy only the allowlisted library dirs (see `compilerServerLibDirNames`). Named
+        // explicitly rather than scanned by prefix: a `startsWith` scan also matched the four
+        // targets we don't ship, and it matched the fork's *own* version dirs (e.g. `2.3.0/`)
+        // when those happened to share the prefix.
+        //
+        // Checked per name, not with the old `require(libDirs.isNotEmpty())`. That guard was
+        // satisfied by ANY matching directory, so a fork that had emitted only `2.4.10-js/`
+        // passed it and produced an installer whose editor had no JVM classpath at all — a
+        // failure that surfaced as "completion returns only stdlib", never as a build error.
+        compilerServerLibDirNames.forEach { name ->
+            val src = compilerServerDir.resolve(name)
+            require(src.isDirectory) {
+                "Expected `$name/` in $compilerServerDir after bootJar — not found. " +
+                    "Either the fork's :dependencies:copy* tasks did not run, or the fork is checked out on a different Kotlin " +
+                    "version — in which case update `compilerServerKotlinVersion` in gradle.properties to match its branch."
+            }
+            val dest = File(outputFile.parentFile, name)
             dest.deleteRecursively()
             src.copyRecursively(dest)
-            logger.lifecycle("Copied ${src.name}/ → ${dest.relativeTo(rootDir)}/")
+            logger.lifecycle("Copied $name/ → ${dest.relativeTo(rootDir)}/")
+        }
+
+        // Delete any `<version>*/` dir we staged before the allowlist existed. Nothing else does:
+        // the loop above only `deleteRecursively()`s the dirs it is about to write, so a
+        // `2.4.10-compose-wasm/` left by an earlier build would sit in build/distributions
+        // indefinitely — and, because `stageJpackageInput` reads this directory, ride into the
+        // installer as the 37.2 MB this change exists to remove.
+        outputFile.parentFile.listFiles { f: File ->
+            f.isDirectory &&
+                f.name.startsWith(compilerServerKotlinVersion) &&
+                f.name !in compilerServerLibDirNames
+        }?.forEach { stale ->
+            stale.deleteRecursively()
+            logger.lifecycle("Removed stale ${stale.name}/ from ${outputFile.parentFile.relativeTo(rootDir)}/")
         }
     }
 }
@@ -702,6 +927,8 @@ tasks.register<Exec>("runCompilerServer") {
             "-jar", jarFile.absolutePath,
             "--server.port=$port",
             "--server.address=127.0.0.1",
+            // Six flags, two shipped directories — see the matching comment in LauncherMain.kt
+            // for why the four absent ones are still named rather than omitted.
             "--libraries.folder.jvm=${libsDir.resolve(compilerServerKotlinVersion)}",
             "--libraries.folder.js=${libsDir.resolve("$compilerServerKotlinVersion-js")}",
             "--libraries.folder.wasm=${libsDir.resolve("$compilerServerKotlinVersion-wasm")}",
@@ -718,23 +945,38 @@ tasks.register<Exec>("runCompilerServer") {
 // Spring Boot / JNDI / TLS need rather than auto-discovering with jdeps. jdeps
 // doesn't walk Spring Boot's BOOT-INF/lib/ nested-jar layout in the
 // kotlin-compiler-server fat jar, so any auto-discovery would still have to be
-// merged with a generous safety baseline. Refining the module set is a follow-up
-// if the runtime is too large in practice (currently ~59 MB compressed).
+// merged with a generous safety baseline.
+//
+// This is deliberately NOT refined into an explicit module list, and the reason is a
+// measurement rather than caution. Replacing `java.se` with the exact 19-module closure the
+// app needs was measured at **1 MB** of the image (51 → 50 MB on JDK 26): everything the
+// surgery can remove is `java.se`'s small tail — java.xml.crypto 0.66, java.security.jgss
+// 0.55, java.rmi 0.22, java.sql.rowset 0.20, java.management.rmi 0.08 MB — and it is
+// all-or-nothing, because `java.se` `requires transitive` each of them so none can be
+// dropped while the aggregate stays. Against that, a module this list gets wrong surfaces as
+// a NoClassDefFoundError at the first use of one feature, potentially mid-show, and the
+// modules most easily missed are exactly the ones jdeps cannot see (Spring Boot and logback
+// reach java.naming / java.management reflectively). 1 MB is not worth that. The real runtime
+// saving came from `--include-locales` in buildRuntime below, which is 11 MB. See
+// FU-DIST-JLINK-MODULES if this ever needs revisiting.
 
 val jlinkModules = listOf(
     "java.se",
     "jdk.crypto.ec",
     "jdk.unsupported",
     "jdk.zipfs",
+    // Kept as a module, then filtered down to the locales we ship by `--include-locales` in
+    // buildRuntime. Do not "optimise" this by deleting the module instead — see the comment there.
     "jdk.localedata",
 )
 
-val hostOs = org.gradle.internal.os.OperatingSystem.current()
-val runtimeOsLabel = when {
-    hostOs.isMacOsX -> "mac"
-    hostOs.isWindows -> "windows"
-    else -> "linux"
-}
+// Locales retained from `jdk.localedata`. en-GB is the desk's own locale; en-US is kept because
+// it is the JDK's fallback and costs almost nothing.
+val jlinkLocales = "en-GB,en-US"
+
+// `hostOs` / `runtimeOsLabel` are declared up by the fat-jar packaging block instead of
+// here, because `shadowJar`'s native-payload excludes need them and a Kotlin DSL script is
+// evaluated in source order.
 val runtimeOutputDir = layout.buildDirectory.dir("runtime-$runtimeOsLabel")
 val jpackageInputDir = layout.buildDirectory.dir("jpackage-input")
 val installersDir = layout.buildDirectory.dir("installers")
@@ -828,6 +1070,7 @@ val buildRuntime = tasks.register<Exec>("buildRuntime") {
     }
 
     inputs.property("modules", jlinkModules.joinToString(","))
+    inputs.property("locales", jlinkLocales)
     inputs.property("javaHome", javaHome)
     outputs.dir(runtimeOutputDir)
 
@@ -844,6 +1087,18 @@ val buildRuntime = tasks.register<Exec>("buildRuntime") {
         "--no-header-files",
         "--no-man-pages",
         "--compress=zip-6",
+        // 11 MB of the 59 MB runtime was `jdk.localedata` — CLDR data for ~800 locales, of which
+        // this desk uses two. Measured on JDK 26 with these exact flags: 62 MB → 51 MB.
+        //
+        // A locale FILTER rather than dropping the `jdk.localedata` module, which is the obvious
+        // and wrong version of this change: `FormatData_en_GB` lives in jdk.localedata, not
+        // java.base, so removing the module would silently switch every server-side en_GB date and
+        // number to US forms. Verified byte-identical output across filtered and unfiltered images
+        // (`18/08/2026`, `Tuesday, 18 August 2026`).
+        //
+        // The failure mode if a needed locale is missing from this list is WRONG FORMATTING, not an
+        // exception — nothing will throw to tell you. Add the tag here if the desk ever needs another.
+        "--include-locales=$jlinkLocales",
     )
 }
 
@@ -852,6 +1107,11 @@ val buildRuntime = tasks.register<Exec>("buildRuntime") {
 // version's `<old>*/` library dirs would still be sitting here from an earlier run — the include
 // pattern simply stops matching them — and would ride along into the installer as tens of MB of
 // dead weight the runtime never reads, in a deliverable whose whole point is a trimmed bundle.
+//
+// That same property is why the `compilerServerLibDirNames` allowlist is applied HERE as well as
+// in `assembleCompilerServer`. Narrowing it there stops new dirs being staged; narrowing it here
+// is what guarantees the four dropped ones don't ride along for anyone whose build/distributions
+// predates the change.
 val stageJpackageInput = tasks.register<Sync>("stageJpackageInput") {
     description = "Stage launcher.jar + lighting7.jar + kotlin-compiler-server.jar (+ kotlin lib dirs) into build/jpackage-input/."
     group = "distribution"
@@ -865,7 +1125,7 @@ val stageJpackageInput = tasks.register<Sync>("stageJpackageInput") {
     // build/distributions/. Forward them so the launcher's compiler-server child can
     // resolve them relative to its workingDir at runtime.
     from(rootProject.layout.buildDirectory.dir("distributions")) {
-        include("$compilerServerKotlinVersion*/**")
+        compilerServerLibDirNames.forEach { include("$it/**") }
     }
     into(jpackageInputDir)
 }
@@ -916,6 +1176,17 @@ fun registerJpackageTask(
         val installerExtension = type
 
         doFirst {
+            // The staged lighting7.jar carries natives for ONE OS (see `nativePayloadOs`). An
+            // installer built with a mismatched override is the worst kind of broken: jpackage
+            // succeeds, the package installs, and the app dies at its first database connection
+            // with `No native library found for os.name=…`. Nothing upstream of here can catch
+            // it, because from Gradle's point of view the jar is perfectly valid.
+            require(nativePayloadOs == runtimeOsLabel) {
+                "$name would package a lighting7.jar built for nativePayloadOs=$nativePayloadOs " +
+                    "on a $runtimeOsLabel host. Drop the -PnativePayloadOs override (or set it to " +
+                    "$runtimeOsLabel) — it exists for measuring another platform's jar, not for " +
+                    "building another platform's installer."
+            }
             installersDir.get().asFile.mkdirs()
             // packageWindows and packageMac declare the SAME outputs.dir, and overlapping
             // outputs disable Gradle's stale-output cleanup. Without this, building 1.2.0 and
