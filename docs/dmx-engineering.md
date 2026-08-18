@@ -53,8 +53,8 @@ The DMX subsystem provides an abstraction layer for controlling DMX512 lighting 
 │                                   │                                 │
 │                                   ▼                                 │
 │    ┌──────────────────────────────────────────────────────────┐     │
-│    │           Transmission Thread (25ms throttle)            │     │
-│    │                transmissionNeeded Channel                │     │
+│    │      Transmission Thread (continuous, per-universe)      │     │
+│    │       one frame every refreshIntervalMs, default 25ms     │     │
 │    └──────────────────────────────┬───────────────────────────┘     │
 └───────────────────────────────────┼─────────────────────────────────┘
                                     │
@@ -121,7 +121,7 @@ sealed interface DmxController {
     fun addTransmitModifier(modifier: TransmitModifier)
     fun removeTransmitModifier(modifier: TransmitModifier)
 
-    // Wake the transmission thread immediately instead of waiting for the next 25 ms tick
+    // Legacy wake-up hook. No-op on ArtNet, which transmits every tick regardless.
     fun requestTransmit()
 }
 ```
@@ -153,9 +153,12 @@ The controller uses Kotlin coroutines with a channel-per-DMX-channel architectur
    - Non-blocking value updates
 
 2. **Transmission Thread**: A single dedicated thread (`ArtNetThread-{subnet}-{universe}`) handles network I/O:
-   - Polls `transmissionNeeded` channel
-   - Throttled to max 40 transmissions/second (25ms minimum interval)
-   - Optional 1-second refresh for devices that need periodic updates
+   - Transmits **continuously**: one frame every `refreshIntervalMs`, whether or not any
+     channel changed
+   - Interval is per-universe and machine-local (default 25ms = 40 Hz); see
+     [§Refresh interval](#refresh-interval)
+   - Runs on an absolute-deadline loop, so per-frame work doesn't accumulate into drift,
+     and a long stall re-bases rather than firing a catch-up burst
 
 ### Channel Update Flow
 
@@ -229,10 +232,12 @@ class TickerState(
 
 ### Transmission Optimization
 
-1. **Delta tracking**: Only values that changed since last transmission trigger listener notifications
-2. **Conflated channels**: Multiple rapid updates coalesce to single transmission
-3. **Throttling**: 25ms minimum between transmissions (40 Hz max)
-4. **Optional refresh**: For devices that lose state, periodic full retransmit
+1. **Delta tracking**: Only values that changed since last transmission trigger listener
+   notifications. This guard is load-bearing under continuous streaming — without it an
+   idle universe would push a WebSocket channel update 40 times a second.
+2. **Conflated channels**: Multiple rapid updates coalesce to a single transmitted frame
+3. **Frame sampling**: Writes only touch `currentValues`; the loop samples that buffer once
+   per tick, so any number of writes within one frame produce exactly one packet
 
 ### Listener Pattern
 
@@ -290,8 +295,9 @@ for each channel:
 
 - [`GlobalScalerState`](midi-control-surface-engineering.md) — Blackout and Grand Master
   are `TransmitModifier`s that zero intensity-category channels (DIMMER / UV / STROBE)
-  when enabled. Toggling calls `requestTransmit()` so the change is visible within the
-  next frame rather than up to 25 ms later.
+  when enabled. It calls `requestTransmit()`, which is a no-op on ArtNet — under
+  continuous streaming the change is on the wire within one `refreshIntervalMs` anyway,
+  and an out-of-band packet would push the universe above its configured frame rate.
 
 This pattern generalises: any feature that needs to transform DMX values at transmit
 time without being part of the composition layers (parking is the other canonical
@@ -352,9 +358,11 @@ update before the commit returns. The suspend path just doesn't pin a carrier th
 `runBlocking` while it waits.
 
 The frame-transaction unification that would share a single `ControllerTransaction` between
-the beat and wall-clock FX loops is not in scope for Phase 8 — the 25 ms ArtNet throttle
-coalesces most double-transmits and the coordination cost (shared `AtomicReference` + mutex
-around the open-close edge) isn't a clear win. Tracked as a future consideration in
+the beat and wall-clock FX loops is not in scope for Phase 8. Continuous streaming has
+since made the *packet-rate* half of that concern structurally impossible — a universe emits
+exactly one frame per tick regardless of how many transactions committed — and the
+coordination cost (shared `AtomicReference` + mutex around the open-close edge) isn't a clear
+win for what remains. Tracked as a future consideration in
 [fx-engineering.md §Future Considerations](fx-engineering.md#future-considerations).
 
 ### Benchmarking
@@ -380,9 +388,65 @@ deferred to `FU-TEST-FX-BENCH-CI-GATE` pending a variance study.
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | Fade tick interval | 10ms | Resolution of fade interpolation |
-| Transmission throttle | 25ms | Max 40 packets/second |
-| Refresh interval | 1000ms | Only if `needsRefresh=true` |
-| ArtNet protocol | UDP | Unreliable, hence optional refresh |
+| Transmit interval | 25ms default | Per-universe, machine-local; 23-1000ms |
+| Frame rate | 40 Hz default | `1000 / refreshIntervalMs`, emitted continuously |
+| ArtNet protocol | UDP | Unreliable — which is *why* frames repeat |
+
+## Refresh interval
+
+Art-Net output is a **continuous stream**: every universe transmits one frame per
+`refreshIntervalMs`, whether or not anything changed.
+
+It did not always work that way. Transmission used to be change-driven — a 25 ms throttle,
+then a block until some channel was written — so an idle universe emitted nothing at all.
+That is unusual for a lighting desk, and the reason it matters is that **Art-Net is UDP with
+no retransmission**: a single dropped datagram left the node holding a stale value until the
+next time that channel happened to change. A blackout that silently doesn't take on one
+universe, with nothing on the desk aware of it. Streaming repairs a lost frame on the next
+tick.
+
+Note this is *not* about refreshing fixtures. An Art-Net node holds the last frame it
+received and clocks DMX512 out onto the physical line continuously at its own rate, so the
+fixtures never see a gap regardless of what the desk does.
+
+### Configuring it
+
+Per universe, on the Patches page's universe chip. Stored as a **machine-local override**
+(`Overrides.FIELD_REFRESH_INTERVAL_MS` on `universeConfigs`), never synced — a rate chosen to
+suit the node and fixtures physically present at one venue must not follow the show to the
+next rig. See [sync-engineering.md §Machine-local data](sync-engineering.md).
+
+Bounds are `23..1000` ms, enforced at the route (400) and clamped again in the controller
+because the backing value is a SQLite row a user can hand-edit:
+
+- **Floor (23 ms).** A full 513-slot DMX512 frame at 250 kbit/s occupies ~22.6 ms on the
+  wire, so a node cannot emit more than ~44 frames/sec however fast we feed it — which is
+  also where the Art-Net spec caps a controller. Below this, every extra packet is one the
+  node discards, at a real network and CPU cost now that output is continuous.
+- **Ceiling (1000 ms).** Nodes commonly fail-safe after ~4 s of silence; 1 Hz keeps 4x
+  headroom while still allowing a deliberately slow universe.
+
+A rate change **hot-swaps on the running controller** — the loop re-reads the volatile
+period every frame — so it does not rebuild controllers, fixtures, or groups. Only an
+address or controller-type change triggers `DbFixtureLoader.loadFixtures`.
+
+Verify a configured rate against `GET /api/rest/perf/artnet-rates`, which reports observed
+packets/sec per universe. A universe at 44 ms should settle around 22-23.
+
+### Controller lifecycle
+
+`ArtNetController.close()` cancels the transmission job, which releases the transmit thread
+and the socket. **Closing replaced controllers is mandatory, not hygiene**: a controller
+dropped from the register but left running keeps streaming its stale buffer to the very
+universe its replacement just took over, and the node takes whichever datagram landed last.
+Two sites close them — `Fixtures.register(removeUnused = true)` (fixture reload and project
+switch) and `Fixtures.closeControllers()` from `Show.close()` (shutdown, which does not go
+through the register path). `close()` is idempotent so the overlap is harmless.
+
+To carry channel state across a rebuild, pass `initialValues` to the constructor rather than
+calling `restoreState` afterwards: the loop starts transmitting immediately, so a
+post-construction restore races the bootstrap frame and can let one all-zero frame reach the
+rig.
 
 ## Parking
 
@@ -412,7 +476,7 @@ Regression coverage: `UnparkPreservesValueTest`.
 
 The transmission thread tracks consecutive errors:
 - First error: Stack trace printed
-- Subsequent errors: Suppressed (25ms backoff)
+- Subsequent errors: Suppressed (the next frame is the next retry)
 - After 20 consecutive errors: Controller shuts down, requires restart
 
 ## Easing Curves

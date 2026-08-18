@@ -44,7 +44,12 @@ object DbFixtureLoader {
                 .orderBy(DaoUniverseConfigs.universe to SortOrder.ASC)
                 .map {
                     val address = Overrides.resolveUniverseAddress(project.id.value, it.uuid)
-                    UniverseConfigData(it.id.value, it.subnet, it.universe, it.controllerType, address)
+                    val refreshIntervalMs =
+                        Overrides.resolveUniverseRefreshIntervalMs(project.id.value, it.uuid)
+                            ?: ArtNetController.DEFAULT_REFRESH_INTERVAL_MS
+                    UniverseConfigData(
+                        it.id.value, it.subnet, it.universe, it.controllerType, address, refreshIntervalMs,
+                    )
                 }
 
             val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
@@ -95,14 +100,24 @@ object DbFixtureLoader {
                 val universe = Universe(config.subnet, config.universe)
                 universeByConfigId[config.id] = universe
 
+                // Seeded at construction rather than restored afterwards: an ArtNet
+                // controller starts streaming immediately, so a post-construction restore
+                // races the bootstrap frame and can put one all-zero frame on the rig.
+                val priorValues = priorValuesByUniverse[universe] ?: emptyMap()
+
                 val controller = when (config.controllerType.uppercase()) {
-                    "ARTNET" -> ArtNetController(universe, config.address, parkSource = parkSource)
                     "MOCK" -> MockDmxController(universe, parkSource = parkSource)
-                    else -> ArtNetController(universe, config.address, parkSource = parkSource) // default to ArtNet
+                        .also { it.restoreState(priorValues) }
+                    // ARTNET, and anything unrecognised, defaults to ArtNet.
+                    else -> ArtNetController(
+                        universe,
+                        config.address,
+                        refreshIntervalMs = config.refreshIntervalMs,
+                        initialValues = priorValues,
+                        parkSource = parkSource,
+                    )
                 }
                 addController(controller)
-
-                priorValuesByUniverse[universe]?.let { controller.restoreState(it) }
             }
 
             // 2. Create fixtures
@@ -147,6 +162,8 @@ object DbFixtureLoader {
         val universe: Int,
         val controllerType: String,
         val address: String?,
+        /** Machine-local Art-Net transmit interval, already defaulted. */
+        val refreshIntervalMs: Int,
     )
 
     private data class PatchData(

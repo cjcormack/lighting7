@@ -301,14 +301,35 @@ table — keyed by `(projectId, tableName, recordUuid, fieldName)` with a
 canonically-encoded `valueJson`. Reads and writes go through the
 `Overrides` helper in
 [`sync/Overrides.kt`](../src/main/kotlin/uk/me/cormack/lighting7/sync/Overrides.kt),
-which serialises strings via the same `canonicalEncode` /
-`canonicalDecode` pair used for synced documents.
+which serialises values via the same `canonicalEncode` / `canonicalDecode`
+pair used for synced documents. Typed accessors exist for strings
+(`getString`/`setString`) and ints (`getInt`/`setInt`) over a shared generic
+core; a malformed row decodes to `null` rather than throwing, because an
+override is advisory data in a table a user can hand-edit.
 
-The universe-configs route is the only Phase 2 consumer:
-`PUT /api/rest/project/{id}/universe-configs/{configId}` with `address` in
-the body upserts the override; `GET` reads it back via
-`Overrides.resolveUniverseAddress`. Runtime DMX output picks up the value
-in [`DbFixtureLoader`](../src/main/kotlin/uk/me/cormack/lighting7/show/DbFixtureLoader.kt).
+The universe-configs route is the consumer, with two fields:
+
+| Field | Accessors | Runtime effect |
+|-------|-----------|----------------|
+| `address` | `resolveUniverseAddress` / `setUniverseAddress` | Controller IP. Changing it rebuilds controllers via `DbFixtureLoader`. |
+| `refreshIntervalMs` | `resolveUniverseRefreshIntervalMs` / `setUniverseRefreshIntervalMs` | Art-Net transmit interval, `23..1000` ms, default 25. Hot-swaps on the running controller — no rebuild. See [dmx-engineering.md §Refresh interval](dmx-engineering.md#refresh-interval). |
+
+`PUT /api/rest/project/{id}/universe-configs/{configId}` upserts either; `GET`
+reads them back, reporting `refreshIntervalMs` as an *effective* value plus a
+`refreshIntervalOverridden` flag so the UI can distinguish "the default" from
+"pinned on this desk". Clearing the interval needs the explicit
+`resetRefreshInterval` flag rather than a `null`, because kotlinx-serialization
+cannot tell an absent property from an explicit null — `address` sidesteps that
+with an empty-string sentinel, which has no `Int` equivalent.
+
+Both are dropped when the universe row is deleted: overrides FK to the
+*project*, not the universe, so anything left behind is an orphan keyed by a
+UUID that no longer exists.
+
+The transmit interval is machine-local for the same reason the IP is — it
+exists to suit the node and fixtures physically present at one venue, and must
+not follow the show to the next rig. Runtime DMX output picks both up in
+[`DbFixtureLoader`](../src/main/kotlin/uk/me/cormack/lighting7/show/DbFixtureLoader.kt).
 
 The legacy `DaoUniverseConfigs.address` column is retained for schema
 compatibility but is no longer the source of truth — a one-shot startup

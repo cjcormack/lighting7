@@ -231,6 +231,10 @@ class Show(
         speedMasterFlushJob = null
         flushSpeedMasterWrites()
         fxEngine.stop()
+        // Stop transmitting last, after the FX engine has stopped writing. `State.shutdown()`
+        // calls this directly rather than going through `Fixtures.register(removeUnused)`,
+        // so without this the transmit threads and their sockets outlive the show.
+        fixtures.closeControllers()
     }
 
     private val pendingSpeedMasterWrites = java.util.concurrent.ConcurrentHashMap<java.util.UUID, SpeedMasterBank.Change>()

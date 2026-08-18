@@ -48,10 +48,13 @@ internal class TickerState(private val controller: ArtNetController, coroutineCo
             newValue = curve.interpolate(startValue, targetValue, progress)
         }
 
+        // Fade steps only update the buffer. They used to nudge the controller's transmit
+        // channel per interpolation step; under continuous streaming the loop samples this
+        // buffer every frame regardless, so each fade step is picked up by the next tick.
+        // At `fadeTickMs` = 10 ms the fade computes finer than the wire rate either way.
         if (newValue != lastSetValue) {
             controller.currentValues[channelNo] = newValue
             lastSetValue = newValue
-            controller.transmissionNeeded.send(Unit)
         }
         lastSetValue = newValue
 

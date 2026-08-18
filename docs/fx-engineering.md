@@ -1147,9 +1147,10 @@ on the **same** property:
    master's tick), the wall-clock loop fires on a 20 ms ticker. There is no explicit
    synchronisation. Both loops write into
    the same `ControllerTransaction` instance? **No** — each loop creates its own
-   transaction and applies independently. This means two independent frames per ~20 ms,
-   not one combined frame. The ArtNet throttle (25 ms) will coalesce rapid sequential
-   transmits to a single network packet in most cases.
+   transaction and applies independently. They do *not* produce two network packets,
+   though: ArtNet output is a continuous stream that samples `currentValues` once per
+   `refreshIntervalMs`, so any number of transactions within a frame collapse to exactly
+   one packet. What survives is that the last writer before the tick wins.
 
 **Rule of thumb**: mixing BEAT and WALL_CLOCK effects on the same property is supported
 but not recommended — use one timing source per property to keep the result predictable.
@@ -1240,7 +1241,8 @@ and a tap has no "on" state to hold.
    duplicate transmissions when both loops target the same universe in the same ~20 ms
    window. Control-surface plan Phase 8 (2026-04-23) landed the non-blocking commit half of
    that ticket — both tick loops now call `transaction.applySuspend()` instead of blocking
-   per-channel acks — but intentionally deferred the two-loop coordination: the 25 ms
-   ArtNet throttle coalesces most back-to-back transmits and the shared-state machinery
-   (`AtomicReference<FrameTransaction?>` + short mutex around open/close) isn't a clear
-   win over the coalesced baseline.
+   per-channel acks — but intentionally deferred the two-loop coordination. Continuous
+   ArtNet streaming has since made the duplicate-*transmission* motivation moot (one packet
+   per universe per frame, always), leaving only last-writer-wins ordering; the shared-state
+   machinery (`AtomicReference<FrameTransaction?>` + short mutex around open/close) isn't a
+   clear win for that alone.

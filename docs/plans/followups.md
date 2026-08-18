@@ -107,11 +107,15 @@ session can pick up one item cold.
 The two FX tick loops (`processBeatTickSuspend` ~120 Hz,
 `processWallClockTickSuspend` 50 Hz) each construct their own
 `ControlTransaction` and call `applySuspend()` independently. Within the same
-~20 ms window on the same universe, two ArtNet packets go out. The 25 ms
-transmission throttle in `ArtNetController.runTransmissionChannel` coalesces
-most of that; the per-channel delta filter in `sendCurrentValues()`
-(`previousSentDmxData != byteValue`) suppresses redundant values at packet-
-build time — visible cost today is negligible.
+~20 ms window on the same universe. **Continuous streaming (2026-08-18) removed
+the packet-rate half of this entirely**: `ArtNetController` now emits exactly one
+frame per universe per `refreshIntervalMs` regardless of how many transactions
+committed, so two transactions in a frame can no longer produce two packets. What
+remains is purely a value-domain concern — two transactions 5 ms apart write two
+different values to the same channel, and the loop transmits whichever landed last.
+The per-channel delta filter in `sendCurrentValues()` (`previousSentDmxData !=
+byteValue`) no longer suppresses packets at all; it now only suppresses redundant
+*WebSocket* notifications.
 
 Phase 8 design sketched a `FrameTransaction` abstraction: beat + wall-clock
 share one `ControlTransaction` when their tick times fall inside a
@@ -122,11 +126,11 @@ around the open/close edge (both loops run on `Dispatchers.Default`).
 **Trigger to revisit** (any one):
 - Operator reports visible flicker / double-stepping on a fixture where beat
   and wall-clock effects share a universe.
-- Profiling shows sustained ArtNet packet rate above ~40 pkts/sec per universe
-  under effect load (indicates the 25 ms throttle is being bypassed). This is
-  now directly observable on the Diagnostics dashboard via
-  `GET /api/rest/perf/artnet-rates` (`FU-PERF-INSTRUMENT-ARTNET`, 0d19fad) —
-  no profiling pass required to detect.
+- ~~Profiling shows sustained ArtNet packet rate above ~40 pkts/sec per
+  universe~~ — **obsolete.** Under continuous streaming the rate is exactly
+  `1000 / refreshIntervalMs` by construction and cannot be pushed above it by
+  effect load. `GET /api/rest/perf/artnet-rates` now reads as a *configuration*
+  check, not a contention one.
 - A future effect category pushes wall-clock density high enough that the tick
   windows overlap frequently (current 50 Hz wall-clock + ~120 Hz beat worst-
   case doesn't).

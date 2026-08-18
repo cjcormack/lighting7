@@ -113,4 +113,62 @@ class OverridesTest {
         assertEquals(2, list.size)
         assertTrue(list.all { it.tableName == "universeConfigs" && it.fieldName == "address" })
     }
+
+    // ─── Int-typed overrides (Art-Net transmit interval) ─────────────────────
+
+    @Test
+    fun `setUniverseRefreshIntervalMs round-trips and encodes as a bare JSON number`() {
+        val universeUuid = UUID.randomUUID()
+        transaction(state.database) {
+            Overrides.setUniverseRefreshIntervalMs(projectId, universeUuid, 44)
+        }
+
+        val read = transaction(state.database) {
+            Overrides.resolveUniverseRefreshIntervalMs(projectId, universeUuid)
+        }
+        assertEquals(44, read)
+
+        // Pins the canonical encoding: a bare `44`, not `"44"` and not a trailing newline.
+        // The stored form is what a sync export or a hand-edit would show.
+        val stored = transaction(state.database) {
+            Overrides.listForProject(projectId).single { it.fieldName == "refreshIntervalMs" }.valueJson
+        }
+        assertEquals("44", stored)
+    }
+
+    @Test
+    fun `setUniverseRefreshIntervalMs with null deletes the row`() {
+        val universeUuid = UUID.randomUUID()
+        transaction(state.database) {
+            Overrides.setUniverseRefreshIntervalMs(projectId, universeUuid, 44)
+            Overrides.setUniverseRefreshIntervalMs(projectId, universeUuid, null)
+        }
+
+        transaction(state.database) {
+            assertNull(Overrides.resolveUniverseRefreshIntervalMs(projectId, universeUuid))
+            assertTrue(
+                Overrides.listForProject(projectId).none { it.fieldName == "refreshIntervalMs" },
+                "clearing an override must delete the row, not leave a JSON null behind",
+            )
+        }
+    }
+
+    @Test
+    fun `a malformed override row reads as absent rather than throwing`() {
+        val universeUuid = UUID.randomUUID()
+        transaction(state.database) {
+            Overrides.setUniverseRefreshIntervalMs(projectId, universeUuid, 44)
+            // Simulate a hand-edited row, or a field whose type changed under an old value.
+            DaoMachineOverride.find {
+                DaoMachineOverrides.fieldName eq "refreshIntervalMs"
+            }.single().valueJson = "\"forty-four\""
+        }
+
+        // An override is advisory machine-local data: a bad row must degrade to the default,
+        // not 500 every route that renders a universe.
+        val read = transaction(state.database) {
+            Overrides.resolveUniverseRefreshIntervalMs(projectId, universeUuid)
+        }
+        assertNull(read)
+    }
 }

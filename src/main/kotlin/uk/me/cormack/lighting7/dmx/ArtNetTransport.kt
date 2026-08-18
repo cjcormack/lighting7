@@ -17,7 +17,14 @@ interface ArtNetTransport {
 internal class DefaultArtNetTransport : ArtNetTransport {
     private val client = ArtNetClient()
     override fun start() { client.start() }
-    override fun stop() { client.stop() }
+    override fun stop() {
+        client.stop()
+        // `ArtNetClient.stop()` returns early unless its own bind succeeded, and only the
+        // first client in the process wins port 0x1936 — every later one runs on an
+        // implicitly-bound ephemeral socket that `client.stop()` will never close. Closing
+        // the server directly is what stops this from trading a thread leak for an fd leak.
+        runCatching { client.artNetServer.stop() }
+    }
     override fun broadcastDmx(subnet: Int, universe: Int, dmxData: ByteArray) {
         client.broadcastDmx(subnet, universe, dmxData)
     }

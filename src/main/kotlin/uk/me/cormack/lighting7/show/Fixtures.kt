@@ -143,6 +143,21 @@ class Fixtures {
     }
 
     /**
+     * Stop every registered controller's transmission loop, releasing its thread and socket.
+     *
+     * For teardown paths that do *not* go through `register(removeUnused = true)` — notably
+     * `Show.close()`, which `State.shutdown()` calls directly. Project switch already closes
+     * controllers via the register path; [ArtNetController.close] is idempotent, so the
+     * overlap is harmless. The register is left populated: this ends transmission, it does
+     * not unpatch the rig.
+     */
+    fun closeControllers() = registerLock.read {
+        controllerRegister.values.forEach { controller ->
+            if (controller is ArtNetController) runCatching { controller.close() }
+        }
+    }
+
+    /**
      * Controller for [universe], or `null` if none is registered. For callers that can
      * legitimately run against a universe the current patch no longer covers — e.g. a
      * parked-channel row left behind by a patch edit — where a missing controller is a
@@ -399,7 +414,17 @@ class Fixtures {
             if (removeUnused) {
                 controllerRegister.forEach { (controllerKey, controller) ->
                     when (controller) {
-                        is ArtNetController -> controller.unregisterListener(checkNotNull(controllerChannelChangeListeners[controllerKey]))
+                        is ArtNetController -> {
+                            controller.unregisterListener(checkNotNull(controllerChannelChangeListeners[controllerKey]))
+                            // Stop the transmission loop and release its thread and socket.
+                            // A controller dropped from the register but left running keeps
+                            // its own transport open and, once output is a continuous
+                            // stream, keeps broadcasting its stale buffer to the very
+                            // universe its replacement is about to take over — one more
+                            // fighting transmitter per rebuild, and a rebuild happens on
+                            // every patch edit.
+                            controller.close()
+                        }
                         is MockDmxController -> {} // Mock doesn't need listeners
                         is AsyncTestDmxController -> {} // Test fake doesn't need listeners
                     }

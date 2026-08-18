@@ -1,9 +1,10 @@
 package uk.me.cormack.lighting7.dmx
 
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import java.util.concurrent.ConcurrentHashMap
+import uk.me.cormack.lighting7.testsupport.Frame
+import uk.me.cormack.lighting7.testsupport.MutableParkSource
+import uk.me.cormack.lighting7.testsupport.RecordingTransport
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -20,7 +21,7 @@ import kotlin.test.assertTrue
  *  1. **Bootstrap**: the very first frame after construction overlays
  *     `parkSource.universeView(...)`. No frame without the park overlay can precede it.
  *     (Boot chain: [uk.me.cormack.lighting7.show.Show.start] loads park before
- *     constructing controllers, and [ArtNetController.runTransmissionChannel] calls
+ *     constructing controllers, and `ArtNetController.runTransmissionLoop` calls
  *     `sendCurrentValues()` first; that's the only call site of
  *     `transport.broadcast/unicastDmx`.)
  *
@@ -32,67 +33,6 @@ import kotlin.test.assertTrue
  *     literal parked value while still transforming non-parked channels.
  */
 class ArtNetParkSafetyTest {
-
-    private class MutableParkSource : ParkSource {
-        private val parkedByUniverse = ConcurrentHashMap<Int, ConcurrentHashMap<Int, UByte>>()
-
-        fun park(universe: Int, channel: Int, value: UByte) {
-            parkedByUniverse.getOrPut(universe) { ConcurrentHashMap() }[channel] = value
-        }
-
-        override fun getParkedValue(universe: Int, channel: Int): UByte? =
-            parkedByUniverse[universe]?.get(channel)
-
-        override fun isParked(universe: Int, channel: Int): Boolean =
-            parkedByUniverse[universe]?.containsKey(channel) == true
-
-        override fun universeView(universe: Int): Map<Int, UByte>? = parkedByUniverse[universe]
-    }
-
-    private sealed class Frame {
-        abstract val data: ByteArray
-        abstract val threadName: String
-
-        data class Broadcast(
-            val subnet: Int,
-            val universe: Int,
-            override val data: ByteArray,
-            override val threadName: String,
-        ) : Frame()
-
-        data class Unicast(
-            val address: String,
-            val subnet: Int,
-            val universe: Int,
-            override val data: ByteArray,
-            override val threadName: String,
-        ) : Frame()
-    }
-
-    /**
-     * Test transport that records every frame in send order. `Channel.UNLIMITED` is FIFO
-     * and never blocks senders, so the test's `frames.receive()` returns frames in the
-     * exact order the controller emitted them — that's how we assert "no earlier frame
-     * was recorded" without polling.
-     */
-    private class RecordingTransport : ArtNetTransport {
-        val frames = Channel<Frame>(Channel.UNLIMITED)
-
-        override fun start() {}
-        override fun stop() {}
-
-        override fun broadcastDmx(subnet: Int, universe: Int, dmxData: ByteArray) {
-            frames.trySend(
-                Frame.Broadcast(subnet, universe, dmxData.copyOf(), Thread.currentThread().name),
-            )
-        }
-
-        override fun unicastDmx(address: String, subnet: Int, universe: Int, dmxData: ByteArray) {
-            frames.trySend(
-                Frame.Unicast(address, subnet, universe, dmxData.copyOf(), Thread.currentThread().name),
-            )
-        }
-    }
 
     private fun assertOnlyTheseChannelsSet(
         data: ByteArray,
@@ -235,17 +175,34 @@ class ArtNetParkSafetyTest {
             // modifier actually firing on channels park doesn't cover.
             controller.restoreState(mapOf(6 to 100u))
 
-            // Drain the bootstrap frame. Park is in effect from frame 1, but the modifier
-            // hasn't been registered yet, so non-parked channels show their raw values.
-            val bootstrap = withTimeout(2_000) { transport.frames.receive() }
-            assertOnlyTheseChannelsSet(bootstrap.data, mapOf(5 to 200u, 6 to 100u))
+            // Advance to the first frame carrying that value. Output is a continuous stream
+            // that begins at construction, so the bootstrap frame can predate the
+            // restoreState above. Park is in effect from frame 1 either way, and the
+            // modifier isn't registered yet, so non-parked channels show their raw values.
+            val beforeModifier = withTimeout(5_000) {
+                var frame = transport.frames.receive()
+                while (frame.data[5] != 100.toByte()) {
+                    frame = transport.frames.receive()
+                }
+                frame
+            }
+            assertOnlyTheseChannelsSet(beforeModifier.data, mapOf(5 to 200u, 6 to 100u))
 
             // Blackout-style modifier: zero everything. Park must still win on ch5.
             val blackout = TransmitModifier { _, _, _ -> 0u }
             controller.addTransmitModifier(blackout)
-            controller.requestTransmit()
 
-            val afterModifier = withTimeout(2_000) { transport.frames.receive() }
+            // Output is a continuous stream, so frames already in flight predate the
+            // modifier. Advance to the first frame that actually shows it (ch6 zeroed)
+            // rather than assuming the very next frame is the one — the old
+            // `requestTransmit()` nudge that made that assumption safe is now a no-op.
+            val afterModifier = withTimeout(5_000) {
+                var frame = transport.frames.receive()
+                while (frame.data[5] != 0.toByte()) {
+                    frame = transport.frames.receive()
+                }
+                frame
+            }
             assertEquals(
                 200.toByte(), afterModifier.data[4],
                 "channel 5 is parked at 200 — a transmit modifier MUST NOT zero a parked channel",
