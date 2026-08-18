@@ -10,11 +10,11 @@ import java.util.Properties
  * project's `:generateBuildInfo` and staged into both jars, so the two can never disagree
  * about what version is installed.
  *
- * Mirrors [compilerServerKotlinVersion]'s resource-reading shape in [LauncherMain] with one
- * deliberate difference: this never `error()`s. That function may fail loudly because losing the
- * script editor is survivable; this one runs on the path that keeps the tray icon alive, and the
- * same "don't take the whole app down mid-show" reasoning documented in `LauncherMain.main`
- * applies. Unknown-version simply means self-update is off.
+ * This never `error()`s. It runs on the path that keeps the tray icon alive, so the same
+ * "don't take the whole app down mid-show" reasoning documented in `LauncherMain.main` applies:
+ * unknown-version simply means self-update is off. (It used to be contrasted here with
+ * `compilerServerKotlinVersion`, which *could* fail loudly because losing the script editor was
+ * survivable — that function went with the bundled compiler server.)
  */
 internal object LauncherBuildInfo {
     private val props: Properties by lazy {

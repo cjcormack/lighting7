@@ -21,7 +21,6 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.script.experimental.api.*
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
-import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromTemplate
 import kotlin.time.measureTime
 
 /**
@@ -414,54 +413,25 @@ class Show(
         val compiledResult: ResultWithDiagnostics<CompiledScript>
         val compileStatus: ScriptResult
 
-        init {
-            // GENERAL scripts get wrapped in runBlocking for coroutine support.
-            // FX scripts run as-is — they configure effects, not orchestrate coroutines.
-            val expandedScript = when (scriptType) {
-                ScriptType.GENERAL -> """
-                    |runBlocking {
-                    |${literalScript}
-                    |}
-                """.trimMargin("|")
-                ScriptType.FX_DEFINITION, ScriptType.FX_APPLICATION -> literalScript
-                // FX_CALC types: wrap in lambda (same as FxScriptCompiler)
-                ScriptType.FX_CALC -> """
-                    |val calculateFn: (Double, uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams) -> uk.me.cormack.lighting7.fx.FxOutput = { phase, context, params ->
-                    |${literalScript}
-                    |}
-                    |calculateFn
-                """.trimMargin("|")
-                ScriptType.FX_CALC_STATEFUL -> """
-                    |val calculateFn: (uk.me.cormack.lighting7.fx.MasterClock.ClockTick, Long, uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams, MutableMap<String, Any>) -> uk.me.cormack.lighting7.fx.FxOutput = { tick, deltaMs, context, params, state ->
-                    |${literalScript}
-                    |}
-                    |calculateFn
-                """.trimMargin("|")
-                ScriptType.FX_CALC_COMPOSITE -> """
-                    |val calculateFn: (Double, uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams) -> Map<uk.me.cormack.lighting7.fx.FxOutputType, uk.me.cormack.lighting7.fx.FxOutput> = { phase, context, params ->
-                    |${literalScript}
-                    |}
-                    |calculateFn
-                """.trimMargin("|")
-            }
+        /** Lines the wrapper prepended; diagnostics are shifted back by this. */
+        val lineOffset: Int
 
-            val compilationConfiguration = when (scriptType) {
-                ScriptType.GENERAL -> createJvmCompilationConfigurationFromTemplate<LightingScript>()
-                ScriptType.FX_DEFINITION -> createJvmCompilationConfigurationFromTemplate<FxDefinitionScript>()
-                ScriptType.FX_APPLICATION -> createJvmCompilationConfigurationFromTemplate<FxApplicationScript>()
-                ScriptType.FX_CALC -> createJvmCompilationConfigurationFromTemplate<FxCalcScript>()
-                ScriptType.FX_CALC_STATEFUL -> createJvmCompilationConfigurationFromTemplate<FxStatefulCalcScript>()
-                ScriptType.FX_CALC_COMPOSITE -> createJvmCompilationConfigurationFromTemplate<FxCompositeCalcScript>()
-            }
+        init {
+            // Wrapping and the template `when` both live in ScriptSourceWrapper now, so the
+            // editor's /highlight route and this compile path cannot drift apart — and the
+            // offset it reports is what finally maps diagnostics back to the user's own lines.
+            val wrapped = ScriptSourceWrapper.wrap(literalScript, scriptType)
+            val compilationConfiguration = ScriptSourceWrapper.compilationConfiguration(scriptType)
 
             val (compiledResult, compileStatus) = runBlocking {
-                val compiledResult = show.scriptingHost.compiler(expandedScript.toScriptSource(), compilationConfiguration)
-                val compileStatus = ScriptResult(compiledResult)
+                val compiledResult = show.scriptingHost.compiler(wrapped.text.toScriptSource(), compilationConfiguration)
+                val compileStatus = ScriptResult(compiledResult, lineOffset = wrapped.lineOffset)
                 Pair(compiledResult, compileStatus)
             }
 
             this.compiledResult = compiledResult
             this.compileStatus = compileStatus
+            this.lineOffset = wrapped.lineOffset
         }
     }
 
@@ -501,7 +471,7 @@ class Show(
                             actualChannelChanges
                         }
 
-                        result = ScriptResult(compiledResult, runResult, channelChanges)
+                        result = ScriptResult(compiledResult, runResult, channelChanges, script.lineOffset)
                     }
 
                     ScriptType.FX_DEFINITION -> {
@@ -511,7 +481,7 @@ class Show(
                             providedProperties(Pair("scriptId", scriptId))
                         })
 
-                        result = ScriptResult(compiledResult, runResult, null)
+                        result = ScriptResult(compiledResult, runResult, null, script.lineOffset)
                     }
 
                     ScriptType.FX_APPLICATION -> {
@@ -522,7 +492,7 @@ class Show(
                             providedProperties(Pair("step", step))
                         })
 
-                        result = ScriptResult(compiledResult, runResult, null)
+                        result = ScriptResult(compiledResult, runResult, null, script.lineOffset)
                     }
 
                     ScriptType.FX_CALC -> {
@@ -531,7 +501,7 @@ class Show(
                             providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
                             providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))
                         })
-                        result = ScriptResult(compiledResult, runResult, null)
+                        result = ScriptResult(compiledResult, runResult, null, script.lineOffset)
                     }
 
                     ScriptType.FX_CALC_STATEFUL -> {
@@ -542,7 +512,7 @@ class Show(
                             providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))
                             providedProperties(Pair("state", mutableMapOf<String, Any>()))
                         })
-                        result = ScriptResult(compiledResult, runResult, null)
+                        result = ScriptResult(compiledResult, runResult, null, script.lineOffset)
                     }
 
                     ScriptType.FX_CALC_COMPOSITE -> {
@@ -551,7 +521,7 @@ class Show(
                             providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
                             providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))
                         })
-                        result = ScriptResult(compiledResult, runResult, null)
+                        result = ScriptResult(compiledResult, runResult, null, script.lineOffset)
                     }
                 }
             }
@@ -578,4 +548,9 @@ data class ScriptResult(
     val compileResult: ResultWithDiagnostics<CompiledScript>,
     val runResult: ResultWithDiagnostics<EvaluationResult>? = null,
     val channelChanges: Map<Universe, Map<Int, UByte>>? = null,
+    /**
+     * Lines [ScriptSourceWrapper] prepended before compiling. Diagnostics arrive against the
+     * wrapped text, so anything rendering them to a user must subtract this first.
+     */
+    val lineOffset: Int = 0,
 )

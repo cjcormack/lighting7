@@ -44,7 +44,7 @@ fun ApplicationCall.requireAdmin() {
 /**
  * The authentication gate (multi-user-auth plan, session 1). Installed inside
  * `route("/api/rest")` immediately after the warm-up intercept, and on the
- * `/kotlin-compiler-server` subtree — never on the root routing node, because the
+ * `/script-editor` subtree — never on the root routing node, because the
  * static SPA (login page included) must stay reachable without credentials.
  *
  * While the desk has zero users the gate passes everything (bootstrap-open,

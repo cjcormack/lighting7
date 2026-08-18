@@ -347,7 +347,16 @@ internal fun DaoScript.toScriptDetails(isCurrentProject: Boolean): ScriptDetails
     )
 }
 
-internal fun List<ScriptDiagnostic>.toMessages(): List<ScriptRunMessage> = filter {
+/**
+ * Render diagnostics for the UI, shifting them back out of [ScriptSourceWrapper]'s coordinate
+ * space into the user's.
+ *
+ * [lineOffset] is the number of lines the wrapper prepended. Without it a GENERAL script's errors
+ * land one line below where the user actually typed them, and the FX_CALC family the same — which
+ * is how this behaved before the wrapper was centralised. A diagnostic reported *against* a
+ * wrapper line clamps to line 1 rather than reporting a nonsensical 0.
+ */
+internal fun List<ScriptDiagnostic>.toMessages(lineOffset: Int = 0): List<ScriptRunMessage> = filter {
     it.severity != ScriptDiagnostic.Severity.DEBUG
 }.map {
     ScriptRunMessage(
@@ -355,7 +364,7 @@ internal fun List<ScriptDiagnostic>.toMessages(): List<ScriptRunMessage> = filte
         it.message,
         it.sourcePath,
         it.location?.let { location ->
-            "${location.start.line}:${location.start.col}"
+            "${maxOf(1, location.start.line - lineOffset)}:${location.start.col}"
         }
     )
 }
@@ -367,7 +376,7 @@ internal fun ResultWithDiagnostics<*>.isSuccess(): Boolean {
 fun ScriptResult.toCompileResult(): CompileResult {
     return CompileResult(
         this.compileResult.isSuccess(),
-        compileResult.reports.toMessages(),
+        compileResult.reports.toMessages(lineOffset),
     )
 }
 
@@ -375,27 +384,27 @@ fun ScriptResult.toRunResult(): RunResult {
     return if (runResult == null) {
         RunResult(
             "compileError",
-            compileResult.reports.toMessages(),
+            compileResult.reports.toMessages(lineOffset),
         )
     } else {
         val evalResult = runResult.valueOrNull()
         if (evalResult == null) {
             RunResult(
                 "exception",
-                compileResult.reports.toMessages(),
+                compileResult.reports.toMessages(lineOffset),
             )
         } else {
             val returnValue = evalResult.returnValue
             if (returnValue is ResultValue.Error) {
                 RunResult(
                     "exception",
-                    compileResult.reports.toMessages(),
+                    compileResult.reports.toMessages(lineOffset),
                     "${returnValue.error}\n${returnValue.error.stackTraceToString()}"
                 )
             } else {
                 RunResult(
                     "success",
-                    compileResult.reports.toMessages(),
+                    compileResult.reports.toMessages(lineOffset),
                     returnValue.toString(),
                 )
             }

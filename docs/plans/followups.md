@@ -7,6 +7,20 @@ programmer redesign (Sessions 1–5, through 2026-08-14), and multi-user-auth
 (Sessions 1–3, through 2026-08-17). Each entry is self-contained so a Claude Code
 session can pick up one item cold.
 
+> **Status (2026-08-18, later)**: **`FU-DIST-KCS-RETIRE` landed** — the bundled
+> `kotlin-compiler-server` fork is gone and the script editor's `/versions`, `/highlight` and
+> `/complete` are served in-process at `/script-editor/*`. That is ~122 MB out of the installer on
+> top of the slimming below, projecting the Windows MSI to roughly **130 MB**. The trigger for it
+> turned out to be moot rather than met: upstream had already stubbed and then deleted its own
+> `/complete`, so the desk's autocomplete had silently been dead and the fork was earning one
+> endpoint. Three things to know before working nearby: `ScriptSourceWrapper` is now the only
+> place that knows how a script body becomes compilable Kotlin (and fixes the off-by-one it
+> inherited); a fresh `KJvmReplCompilerWithIdeServices` per request is mandatory, not tidiness;
+> and the frontend's `SCRIPT_WRAPPERS` are presentation only apart from their
+> `//@lighting7-script-type=` marker. It closed `FU-DIST-KCS-LIB-PRUNE` as moot, unblocked
+> `FU-DIST-JLINK-MODULES`, and left `FU-MANUAL-EDITOR-INPROCESS` open — editor compiles now share
+> the JVM that drives DMX, which only a rig can confirm.
+>
 > **Status (2026-08-18)**: the **MSI slimming pass landed** — see
 > [`msi-slimming-plan.md`](msi-slimming-plan.md). Staged bytes went 354.6 → 287.7 MB
 > (−67.0 MB), projecting the Windows MSI from 312 MB to **~253 MB**: the four unused
@@ -706,46 +720,12 @@ it — was done: `--include-locales` took 10.5 MB off it. What remains is 1 MB, 
 
 ---
 
-### `FU-DIST-KCS-RETIRE` — Retire kotlin-compiler-server; serve the editor from the bundled compiler
-
-**Status**: Trigger
-**Origin**: MSI slimming, 2026-08-18
-**Trigger**: the MSI must go below ~200 MB, or the fork's patch anchors break on an
-upstream bump.
-
-**~122 MB — the largest remaining item, and the reason the installer cannot get much below
-240 MB.** The desk ships **two complete Kotlin compilers**:
-
-- `kotlin-compiler-server.jar` is 100.3 MB, of which
-  `BOOT-INF/lib/kotlin-compiler-embeddable-2.4.10.jar` is ~60 MB.
-- `lighting7.jar` carries its own 57.5 MB copy of `kotlin-compiler-embeddable`, pulled
-  transitively by `kotlin-scripting-jvm-host` for in-process script compilation.
-
-Plus `2.4.10/` (16.5 MB), which exists only to give that server a script classpath.
-
-Two directions, mirror images of each other:
-
-- **Serve `/complete` and `/highlight` from the app's embedded compiler** and delete the
-  fork entirely. Also disposes of the `compilerServerKotlinVersion` one-minor-drift
-  constraint documented in the `plugins` block, `ApplyCompilerServerPatches` and its
-  patch-then-revert dance over a sibling git checkout, `assembleCompilerServer`, the whole
-  `2.4.10*/` staging path, the second JVM at runtime, port 8321, and CI's JDK 17 install.
-- **Delegate script compilation to the server** and drop `kotlin-scripting-jvm-host` from
-  the app. Smaller change to the editor, larger change to how scripts execute — the backend
-  needs to load and run compiled bytecode with the lighting API on the classpath.
-
-Both are large and risky; the first is the bigger prize and the bigger job (completion and
-highlighting via the analysis API is most of what the compiler server *is*). Neither is a
-size micro-optimisation — treat it as an architecture change with a size dividend.
-
----
-
 ### `FU-DIST-JLINK-MODULES` — Replace the `java.se` aggregate with an explicit module list
 
 **Status**: Trigger
 **Origin**: MSI slimming, 2026-08-18
-**Trigger**: only worth revisiting if the runtime needs to shrink and `FU-DIST-KCS-RETIRE`
-has already been done — 1 MB is not a reason on its own.
+**Trigger**: only worth revisiting if the runtime needs to shrink — 1 MB is not a reason on its
+own. `FU-DIST-KCS-RETIRE` has since landed, so the precondition is met.
 
 Measured at **1 MB** of image (51 → 50 MB on JDK 26), which is why it was not done.
 Everything the surgery can remove is `java.se`'s small transitive tail —
@@ -768,11 +748,10 @@ Deriving it needs a workaround, because jdeps cannot walk Spring Boot's `BOOT-IN
 nested jars: unpack `kotlin-compiler-server.jar` to a temp dir, then
 
 ```
-jdeps --multi-release 24 --ignore-missing-deps --print-module-deps       --class-path "BOOT-INF/lib/*" -R BOOT-INF/classes
+jdeps --multi-release 24 --ignore-missing-deps --print-module-deps <jar>
 ```
 
-and union that with the same over `lighting7.jar` and `launcher.jar`, then with the baseline
-above. **jdeps output is a floor, never an answer** — reflection, `Class.forName`,
+over `lighting7.jar` and `launcher.jar`, and union that with the baseline above. **jdeps output is a floor, never an answer** — reflection, `Class.forName`,
 `ServiceLoader` and JNDI are invisible to it, which is exactly how the four reflective
 modules above get reached. This is a one-off measurement, not build machinery.
 
@@ -790,21 +769,12 @@ included them and the shipped desk works. Don't add them speculatively.
 
 ### `FU-DIST-KCS-LIB-PRUNE` — Drop playground-only jars from the staged script classpath
 
-**Status**: Trigger
-**Origin**: MSI slimming, 2026-08-18
-**Trigger**: bundling with another `2.4.10/` change; not worth a commit alone.
+**Status**: Moot — closed by `FU-DIST-KCS-RETIRE` (2026-08-18)
 
-~2.9 MB. `<fork>/2.4.10/` is upstream's playground script classpath, so it carries jars this
-desk's scripts have no reason to use: `jackson-databind` 1.60, `jackson-core` 0.56,
-`junit` 0.37, `hamcrest` 0.12, `jackson-annotations` 0.08, `kotlinx-coroutines-test` 0.12 MB.
-
-**Scope**: filter at `assembleCompilerServer`'s copy — an exclude list beside
-`compilerServerLibDirNames` — rather than patching the fork's
-`dependencies/build.gradle.kts`. Every patch anchor in an upstream-tracking checkout is a
-drift risk, and this one buys nothing at build time.
-
-**Risk**: a script that uses Jackson in the editor silently loses completion for it. Check
-whether any FX or show script imports `com.fasterxml` before dropping those two.
+~2.9 MB of upstream playground jars inside `<fork>/2.4.10/`. That directory was staged into the
+installer only to give the bundled compiler server a script classpath, and neither the directory
+nor the server ships any more — the editor resolves against the running app's own classpath via
+`dependenciesFromCurrentContext(wholeClasspath = true)`. Nothing left to prune.
 
 ---
 
@@ -1290,6 +1260,33 @@ add the test.
 These are operational validations pending an operator session on the rig (most
 on the X-Touch Compact). No engineering scope; each is 10–15 minutes end-to-end.
 
+### `FU-MANUAL-EDITOR-INPROCESS` — script editor compiling while the rig is live
+
+**Status**: Manual
+**Origin**: `FU-DIST-KCS-RETIRE`, 2026-08-18
+
+The one property the retired compiler server was actually providing, beyond answering
+`/highlight`: **process isolation**. Editor highlighting (every pause in typing) and completion
+(most keystrokes) used to run in a separate JVM on port 8321. They now run in the same JVM that
+drives DMX.
+
+`ScriptEditorService` bounds this deliberately — a single below-normal-priority daemon thread, so
+no amount of typing yields more than one concurrent compiler; superseded requests dropped rather
+than queued; a 10 s cap on the response. But that caps *concurrency*, not cost: a compile is
+0.2-0.6 s of real work, and it now competes for heap and CPU with the output loop. No unit test
+can speak to that.
+
+**To validate**: with a cue stack running and effects live on real fixtures, open the script
+editor and type continuously for a minute or so in a GENERAL script — enough to trigger many
+highlight and completion round-trips. Watch for output stutter, dropped frames, or audible
+hesitation in moving-head motion. Repeat with an FX_CALC script, whose template differs.
+
+**If it does stutter**, the levers in order of bluntness: raise the debounce client-side, drop
+`autocomplete` on lower-powered desks, or gate the editor routes on the rig being idle. Reaching
+for a second process again should be the last resort — it is what this change removed.
+
+---
+
 ### `FU-MANUAL-PALETTE-TOURING` — palette edit moves a live look (Session 4)
 
 **Status**: Manual
@@ -1567,6 +1564,54 @@ dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
 
 _Move items here as they land. Format:_
 `- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
+
+- `FU-DIST-KCS-RETIRE` — (2026-08-18) — the bundled `kotlin-compiler-server` fork is gone, and
+  with it ~122 MB of installer (`kotlin-compiler-server.jar` 100.3 + `2.4.10*/` ~16.5), the
+  patch-then-revert dance over a sibling git checkout, the one-minor Kotlin drift constraint,
+  `assembleCompilerServer`/`runCompilerServer`, the second JVM on port 8321, the Ktor reverse
+  proxy, and CI's dual JDK 17 + 24 setup. `/versions`, `/highlight` and `/complete` are now served
+  from this app's own scripting host at **`/script-editor/*`**
+  (`routes/scriptEditor.kt` + `scripts/ScriptEditorService.kt`).
+
+  **The ticket's premise was out of date, and that is what made this tractable.** It assumed
+  completion had to be reimplemented — "completion and highlighting via the analysis API is most of
+  what the compiler server *is*". Upstream had already given up on it: `85c80df1` (2025-08-07,
+  "Removed indexation module and kotlin idea dependencies") stubbed `complete()` to
+  `return emptyList()`, and `a0a9af31` deleted the endpoint outright, moving completions to a
+  separate WebFlux service that shells out to kotlin-lsp. The fork tracks branch `2.4.10`, past
+  both — **so the desk's editor has had no working autocomplete at all**, and the whole 122 MB was
+  earning one endpoint that upstream implements as "compile and return the diagnostics".
+
+  Completion is therefore *new*, not restored: `kotlin-scripting-ide-services` (**200 KB**;
+  `KJvmReplCompilerWithIdeServices` implements both `ReplCompleter` and `ReplCodeAnalyzer`) gives
+  `show.` → 118 correctly-typed members, `fixtures.` → 104, and resolves `LightingScript`'s own
+  top-level DSL. The feared shaded/unshaded clash did not exist — the runtime classpath already
+  carried only the `-embeddable` variants — but `kotlin-scripting-compiler-embeddable` has to be
+  declared at *compile* scope, because `KJvmReplCompilerBase` lives there and the ide-services POM
+  declares it only at runtime.
+
+  Three things worth knowing before working nearby:
+
+  - **A fresh `KJvmReplCompilerWithIdeServices` per request is mandatory.** It keeps REPL snippet
+    history; reuse across unrelated snippets corrupts its analysis state so that the first call
+    succeeds and every later one fails with `NoDescriptorForDeclarationException`. A test pins it.
+  - **`ScriptSourceWrapper` is now the single owner of how a script body becomes compilable
+    Kotlin**, replacing the independent copies in `Show.Script.init` and
+    `FxScriptCompiler.wrapInLambda`. It reports the line offset it introduces — which fixed a
+    standing bug neither of those had: diagnostics for GENERAL and the FX_CALC family were
+    reported against the *wrapped* text, so every compile error in those editors pointed one line
+    low.
+  - **The frontend's `SCRIPT_WRAPPERS` are presentation only now.** The backend strips them and
+    compiles the body against the real `.kts` template, so they no longer have to be kept in
+    lockstep with six Kotlin base-class signatures. What *is* load-bearing is the
+    `//@lighting7-script-type=<TYPE>` marker on the first line of each prefix: it is how the
+    backend picks the template, and without it that editor silently falls back to GENERAL.
+
+  The editor widget's own Run button is hidden (`.kotlin-editor .run-button`); every surface
+  already supplied its own Run wired to `/{projectId}/scripts/run`, which runs against the live
+  show. `FU-DIST-KCS-LIB-PRUNE` is closed as moot and `FU-DIST-JLINK-MODULES` is unblocked (its
+  jdeps workaround existed only because of the fork's `BOOT-INF/lib/` layout).
+  Left open: `FU-MANUAL-EDITOR-INPROCESS`.
 
 - `FU-WS-USER-INVALIDATION` — commits 0730295 (lighting7) + b3c4645 (lighting-react)
   (2026-08-17) — desk-account and install-row

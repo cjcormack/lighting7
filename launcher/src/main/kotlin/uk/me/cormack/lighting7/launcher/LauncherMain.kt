@@ -13,7 +13,6 @@ import java.time.Duration
 import kotlin.system.exitProcess
 
 private const val BACKEND_PORT = 8413
-private const val COMPILER_PORT = 8321
 
 // Override on slow hosts (e.g. x64 JRE under Windows-on-ARM emulation) via
 // `-Dlighting7.readinessTimeoutMs=…` or the `LIGHTING7_READINESS_TIMEOUT_MS` env var.
@@ -34,9 +33,9 @@ fun main() {
     val logsDir = dataDir.resolve("logs").also { Files.createDirectories(it) }
     redirectLauncherIo(logsDir.resolve("launcher.log"))
 
-    // Refuse a second launch for the same data dir before spawning any children, so a
-    // double-launch is one clean log line rather than a second compiler-server fighting for
-    // port 8321. The backend enforces its own lock too (covers direct `java -jar` / dev runs).
+    // Refuse a second launch for the same data dir before spawning the backend, so a
+    // double-launch is one clean log line rather than two processes fighting for port 8413.
+    // The backend enforces its own lock too (covers direct `java -jar` / dev runs).
     LauncherLock.acquireOrExit(dataDir)
 
     // Anything left in updates/ belongs to a previous run: an apply that was interrupted by a
@@ -49,7 +48,6 @@ fun main() {
     UpdateMarker.clearStale(dataDir)
 
     val backendJar = resolveJar("lighting7.jar")
-    val compilerJar = resolveJar("kotlin-compiler-server.jar")
     val javaBin = resolveJavaExecutable()
 
     ensureDefaultConfig(dataDir)
@@ -65,61 +63,8 @@ fun main() {
     println("  install     = $installKind${installRoot?.let { " at $it" } ?: ""}")
     println("  java        = $javaBin")
     println("  backend jar = $backendJar")
-    println("  compiler jar= $compilerJar")
     println("  data dir    = $dataDir")
     println("  logs dir    = $logsDir")
-
-    // The compiler server's bundled logback config writes `./logs/spring-boot-logger.log`
-    // relative to its CWD, so the CWD has to be writable. Use a per-user dir under
-    // appDataDir; pass absolute paths to the kotlin library directories so they resolve
-    // regardless of CWD (the lib dirs themselves stay read-only inside the install bundle).
-    val compilerWorkDir = dataDir.resolve("compiler-server").also { Files.createDirectories(it) }
-    val compilerLibsDir = compilerJar.parent
-    // Deliberately non-fatal. This value is needed only by the script editor's completion and
-    // highlighting; the lighting rig itself does not care. Taking the whole app down — no tray
-    // icon, no backend, no DMX output, mid-show — because a generated resource went missing from a
-    // repackaged jar would be wildly out of proportion. Log loudly and carry on without the editor.
-    val kotlinVersion = runCatching { compilerServerKotlinVersion() }
-        .onFailure {
-            println("WARNING: could not determine the compiler-server Kotlin version (${it.message}).")
-            println("  Skipping kotlin-compiler-server — the in-app script editor will have no")
-            println("  completion or highlighting. Everything else starts normally.")
-        }
-        .getOrNull()
-    val compiler = kotlinVersion?.let { version ->
-        ChildProcess.spawn(
-            name = "kotlin-compiler-server",
-            java = javaBin,
-            jar = compilerJar,
-            // All six `--libraries.folder.*` flags are passed even though only two of the
-            // directories ship (see `compilerServerLibDirNames` in build.gradle.kts): the desk
-            // compiles for the JVM, so `-js`, `-wasm`, `-compose-wasm` and
-            // `-compose-wasm-compiler-plugins` are deliberately ABSENT from the install. The
-            // fork copes by design — it reads those five with `listFiles() ?: emptyList()` and
-            // only escalates a missing `jvm` — so this resolves to "no Kotlin/JS support",
-            // which is what we want.
-            //
-            // They are not dropped, for two reasons. The fork's `LibrariesFolderProperties`
-            // declares all six as `lateinit`, and omitting a flag falls back to the values
-            // compiled into the jar's application.properties — which are RELATIVE, and so
-            // resolve against this child's working directory rather than the install. That is
-            // precisely what passing absolute paths above avoids. And keeping the list a 1:1
-            // mirror of the fork's property set means a fork bump that adds a seventh target
-            // shows up as one obvious edit rather than a missing bean.
-            args = listOf(
-                "--server.port=$COMPILER_PORT",
-                "--server.address=127.0.0.1",
-                "--libraries.folder.jvm=${compilerLibsDir.resolve(version)}",
-                "--libraries.folder.js=${compilerLibsDir.resolve("$version-js")}",
-                "--libraries.folder.wasm=${compilerLibsDir.resolve("$version-wasm")}",
-                "--libraries.folder.compose-wasm=${compilerLibsDir.resolve("$version-compose-wasm")}",
-                "--libraries.folder.compose-wasm-compiler-plugins=${compilerLibsDir.resolve("$version-compose-wasm-compiler-plugins")}",
-                "--libraries.folder.compiler-plugins=${compilerLibsDir.resolve("$version-compiler-plugins")}",
-            ),
-            workingDir = compilerWorkDir,
-            logFile = logsDir.resolve("compiler-server.log"),
-        )
-    }
 
     val backend = ChildProcess.spawn(
         name = "lighting7",
@@ -141,7 +86,12 @@ fun main() {
         logFile = logsDir.resolve("lighting7.log"),
     )
 
-    val children = listOfNotNull(compiler, backend)
+    // A list of one, kept as a list because everything below — shutdown hook, tray Quit,
+    // readiness polling — was written to supervise a set, and the launcher's job is still
+    // "own the child processes" even now that there is exactly one. The script editor used to
+    // be the second: a bundled kotlin-compiler-server on 127.0.0.1:8321. It is served in-process
+    // by the backend now.
+    val children = listOf(backend)
 
     val onQuit = {
         println("Shutting down children…")
@@ -286,21 +236,6 @@ private fun redirectLauncherIo(logFile: Path) {
     )
     System.setOut(stream)
     System.setErr(stream)
-}
-
-/**
- * The Kotlin version the bundled kotlin-compiler-server was built against, naming the
- * `<version>[-js|-wasm|…]/` library directories `assembleCompilerServer` stages next to its jar.
- * Read from a resource generated by `:launcher:stageCompilerServerVersion` so it tracks the
- * `compilerServerKotlinVersion` Gradle property rather than being hardcoded here twice over.
- */
-private fun compilerServerKotlinVersion(): String {
-    val props = java.util.Properties()
-    LauncherMarker::class.java.getResourceAsStream("/compiler-server.properties")
-        ?.use { props.load(it) }
-        ?: error("Missing /compiler-server.properties resource in launcher classpath")
-    return props.getProperty("kotlinVersion")?.takeIf { it.isNotBlank() }
-        ?: error("/compiler-server.properties has no kotlinVersion")
 }
 
 /**

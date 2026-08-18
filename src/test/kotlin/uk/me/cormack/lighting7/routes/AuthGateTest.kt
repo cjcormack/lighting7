@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -32,9 +33,13 @@ import kotlin.test.assertTrue
 
 /**
  * The auth gate itself: bootstrap-open behaviour, cookie enforcement, the exempt list
- * (the plan's "highest risk" — a gated exempt path bricks the UI), the compiler-server
+ * (the plan's "highest risk" — a gated exempt path bricks the UI), the script-editor
  * subtree, per-method admin checks, and the WebSocket 4401 close.
  */
+/** Mirrors the `/script-editor/versions` element the editor widget parses. */
+@kotlinx.serialization.Serializable
+private data class CompilerVersionDto(val version: String, val latestStable: Boolean)
+
 class AuthGateTest : RouteIntegrationTest() {
 
     /** An arbitrary show route with no auth-specific behaviour of its own. */
@@ -107,18 +112,36 @@ class AuthGateTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `kotlin-compiler-server subtree is gated`() = testApplication {
+    fun `script-editor subtree is gated`() = testApplication {
         mountTestApp(state)
         seedUser(state, "alice")
         val client = jsonClient()
 
-        assertEquals(HttpStatusCode.Unauthorized, client.get("/kotlin-compiler-server/versions").status)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/script-editor/versions").status)
 
-        // With a cookie the gate passes; the proxy then fails to reach a compiler server
-        // in tests, which is fine — any non-401 means the gate admitted the call.
         val cookie = client.loginCookieHeader("alice")
-        val proxied = client.get("/kotlin-compiler-server/versions") { header(HttpHeaders.Cookie, cookie) }
-        assertNotEquals(HttpStatusCode.Unauthorized, proxied.status)
+        val allowed = client.get("/script-editor/versions") { header(HttpHeaders.Cookie, cookie) }
+        assertEquals(HttpStatusCode.OK, allowed.status)
+    }
+
+    /**
+     * The editor widget fetches `/versions` once per page and, on *any* failure, silently drops
+     * every editor on that page to read-only with highlighting off — logging only a console
+     * warning. So the shape matters as much as the status code.
+     */
+    @Test
+    fun `script-editor versions answers in the shape the editor widget requires`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "alice")
+        val client = jsonClient()
+        val cookie = client.loginCookieHeader("alice")
+
+        val body = client.get("/script-editor/versions") { header(HttpHeaders.Cookie, cookie) }
+            .body<List<CompilerVersionDto>>()
+
+        val version = body.single()
+        assertTrue(version.latestStable, "the widget picks the entry flagged latestStable")
+        assertEquals(KotlinVersion.CURRENT.toString(), version.version)
     }
 
     @Test

@@ -8,7 +8,6 @@ import kotlin.script.experimental.host.ScriptingHostConfiguration
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.defaultJvmScriptingHostConfiguration
 import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
-import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromTemplate
 
 /**
  * Compiles FX calculation scripts into directly-invocable lambdas.
@@ -17,19 +16,10 @@ import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromT
  * the lambda directly on every tick. This avoids the per-tick overhead of constructing
  * a scripting host, building evaluation configs, and unwrapping results.
  *
- * The user's script body is transparently wrapped in a lambda declaration before
- * compilation. For a STANDARD effect, the script:
- * ```
- * val min = params.ubyte("min")
- * FxOutput.Slider(min)
- * ```
- * becomes:
- * ```
- * val calculateFn: (Double, EffectContext, TypedParams) -> FxOutput = { phase, context, params ->
- *     val min = params.ubyte("min")
- *     FxOutput.Slider(min)
- * }
- * ```
+ * The user's script body is transparently wrapped in a typed lambda declaration before
+ * compilation — see [uk.me.cormack.lighting7.scripts.ScriptSourceWrapper], which owns that for
+ * every script type and reports the line offset it introduces so diagnostics can be mapped back
+ * to the user's own lines.
  *
  * After compilation + one-time evaluation, the lambda is extracted and cached.
  * Per-tick calls are direct JVM invocations — fully JIT-optimizable.
@@ -67,14 +57,14 @@ class FxScriptCompiler(
      * Compile without caching or lambda extraction (for compile-check operations).
      */
     fun compileCheck(script: String, effectMode: EffectMode): CompileCheckResult {
-        val wrapped = wrapInLambda(script, effectMode)
+        val wrapped = ScriptSourceWrapper.wrap(script, effectMode.asScriptType())
         val compilationConfiguration = compilationConfigFor(effectMode)
 
         val result = kotlinx.coroutines.runBlocking {
-            scriptingHost.compiler(wrapped.toScriptSource(), compilationConfiguration)
+            scriptingHost.compiler(wrapped.text.toScriptSource(), compilationConfiguration)
         }
 
-        val diagnostics = extractDiagnostics(result)
+        val diagnostics = extractDiagnostics(result, wrapped.lineOffset)
         return CompileCheckResult(
             success = result is ResultWithDiagnostics.Success,
             messages = diagnostics,
@@ -90,15 +80,15 @@ class FxScriptCompiler(
     }
 
     private fun doCompileAndExtract(script: String, effectMode: EffectMode): CompiledFxScript {
-        val wrapped = wrapInLambda(script, effectMode)
+        val wrapped = ScriptSourceWrapper.wrap(script, effectMode.asScriptType())
         val compilationConfiguration = compilationConfigFor(effectMode)
 
         // Step 1: Compile
         val compileResult = kotlinx.coroutines.runBlocking {
-            scriptingHost.compiler(wrapped.toScriptSource(), compilationConfiguration)
+            scriptingHost.compiler(wrapped.text.toScriptSource(), compilationConfiguration)
         }
 
-        val diagnostics = extractDiagnostics(compileResult)
+        val diagnostics = extractDiagnostics(compileResult, wrapped.lineOffset)
 
         if (compileResult !is ResultWithDiagnostics.Success) {
             return CompiledFxScript(
@@ -136,7 +126,7 @@ class FxScriptCompiler(
         }
 
         if (evalResult !is ResultWithDiagnostics.Success) {
-            val evalDiags = extractDiagnostics(evalResult)
+            val evalDiags = extractDiagnostics(evalResult, wrapped.lineOffset)
             return CompiledFxScript(
                 isSuccess = false,
                 diagnostics = diagnostics + evalDiags,
@@ -179,48 +169,34 @@ class FxScriptCompiler(
     }
 
     /**
-     * Wrap the user's script body in a lambda declaration.
-     * The lambda signature matches the effect mode.
+     * FX-calc effect modes are the same three script types the rest of the app knows, under a
+     * different name — mapping here keeps [ScriptSourceWrapper] the only place that knows how
+     * either is wrapped or configured.
      */
-    private fun wrapInLambda(script: String, effectMode: EffectMode): String {
-        return when (effectMode) {
-            EffectMode.STANDARD -> """
-                |val calculateFn: (Double, EffectContext, TypedParams) -> FxOutput = { phase, context, params ->
-                |$script
-                |}
-                |calculateFn
-            """.trimMargin()
-
-            EffectMode.STATEFUL -> """
-                |val calculateFn: (MasterClock.ClockTick, Long, EffectContext, TypedParams, MutableMap<String, Any>) -> FxOutput = { tick, deltaMs, context, params, state ->
-                |$script
-                |}
-                |calculateFn
-            """.trimMargin()
-
-            EffectMode.COMPOSITE -> """
-                |val calculateFn: (Double, EffectContext, TypedParams) -> Map<FxOutputType, FxOutput> = { phase, context, params ->
-                |$script
-                |}
-                |calculateFn
-            """.trimMargin()
-        }
+    private fun EffectMode.asScriptType() = when (this) {
+        EffectMode.STANDARD -> ScriptType.FX_CALC
+        EffectMode.STATEFUL -> ScriptType.FX_CALC_STATEFUL
+        EffectMode.COMPOSITE -> ScriptType.FX_CALC_COMPOSITE
     }
 
-    private fun compilationConfigFor(effectMode: EffectMode) = when (effectMode) {
-        EffectMode.STANDARD -> createJvmCompilationConfigurationFromTemplate<FxCalcScript>()
-        EffectMode.STATEFUL -> createJvmCompilationConfigurationFromTemplate<FxStatefulCalcScript>()
-        EffectMode.COMPOSITE -> createJvmCompilationConfigurationFromTemplate<FxCompositeCalcScript>()
-    }
+    private fun compilationConfigFor(effectMode: EffectMode) =
+        ScriptSourceWrapper.compilationConfiguration(effectMode.asScriptType())
 
-    private fun extractDiagnostics(result: ResultWithDiagnostics<*>): List<FxCompileDiagnostic> {
+    /**
+     * [lineOffset] shifts diagnostics back out of the lambda wrapper's coordinate space; every
+     * FX-calc mode prepends exactly one line, so without it every error in the FX editor pointed
+     * one line low.
+     */
+    private fun extractDiagnostics(result: ResultWithDiagnostics<*>, lineOffset: Int): List<FxCompileDiagnostic> {
         return result.reports
             .filter { it.severity != ScriptDiagnostic.Severity.DEBUG }
             .map { report ->
                 FxCompileDiagnostic(
                     severity = report.severity.name,
                     message = report.message,
-                    location = report.location?.let { loc -> "${loc.start.line}:${loc.start.col}" },
+                    location = report.location?.let { loc ->
+                        "${maxOf(1, loc.start.line - lineOffset)}:${loc.start.col}"
+                    },
                 )
             }
     }

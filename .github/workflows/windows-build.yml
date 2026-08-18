@@ -15,10 +15,6 @@ on:
         description: "Create/update a GitHub Release with the .msi attached. Only honored when dispatched against a v* tag."
         type: boolean
         default: false
-      kotlin_compiler_server_ref:
-        description: "Ref (tag/branch/commit) of JetBrains/kotlin-compiler-server to check out. Leave blank to use `compilerServerKotlinVersion` from gradle.properties, which is what the build expects — an override must name a tree emitting `<compilerServerKotlinVersion>*/` library dirs and whose Kotlin supports the project's JVM target."
-        type: string
-        default: ""
 
 concurrency:
   group: windows-build-${{ github.ref }}
@@ -65,41 +61,14 @@ jobs:
           repository: cjcormack/lighting-react
           path: lighting-react
 
-      # The fork ref has to match `compilerServerKotlinVersion` in gradle.properties: the build
-      # scans the checkout for `<that version>*/` library dirs and hard-fails when none match, and
-      # it injects `-jvm-target <project toolchain>` into the fork's compiler. Deriving the default
-      # from the property keeps a Kotlin bump from silently breaking this job.
-      - name: Resolve kotlin-compiler-server ref
-        shell: bash
-        run: |
-          ref="${{ inputs.kotlin_compiler_server_ref }}"
-          if [ -z "$ref" ]; then
-            ref=$(grep -E '^compilerServerKotlinVersion=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
-            [ -n "$ref" ] || { echo "::error::compilerServerKotlinVersion missing from gradle.properties"; exit 1; }
-            echo "Using compilerServerKotlinVersion from gradle.properties: $ref"
-          else
-            echo "Using dispatch override: $ref"
-          fi
-          echo "KCS_REF=$ref" >> "$GITHUB_ENV"
-
-      - name: Checkout kotlin-compiler-server
-        uses: actions/checkout@v4
-        with:
-          repository: JetBrains/kotlin-compiler-server
-          ref: ${{ env.KCS_REF }}
-          path: kotlin-compiler-server
-
-      # JDK 24 is the primary JDK for the lighting7 build (Liberica ships `jmods/`,
-      # which Temurin's Windows distribution does not, and `jlink` needs them).
-      # JDK 17 is required by the kotlin-compiler-server fork's daemon JVM
-      # (pinned in its gradle/gradle-daemon-jvm.properties).
-      - name: Set up JDKs (17 + 24, Liberica)
+      # Liberica ships `jmods/`, which Temurin's Windows distribution does not and `jlink`
+      # needs. This used to install JDK 17 alongside, purely for the bundled
+      # kotlin-compiler-server fork's pinned daemon JVM; that fork is gone.
+      - name: Set up JDK 24 (Liberica)
         uses: actions/setup-java@v4
         with:
           distribution: liberica
-          java-version: |
-            17
-            24
+          java-version: 24
 
       - name: Verify jmods are present (JDK 24)
         shell: pwsh
@@ -156,8 +125,6 @@ jobs:
         run: |
           .\gradlew.bat packageWindows `
             "-PlightingReactPath=./lighting-react" `
-            "-PkotlinCompilerServerPath=./kotlin-compiler-server" `
-            "-PkotlinCompilerServerJavaHome=$env:JAVA_HOME_17_X64" `
             "-PjpackageAppVersion=$env:EFFECTIVE_VERSION" `
             "-PbuildChannel=release" `
             "-PbuildCommitSha=$env:BUILD_COMMIT_SHA" `

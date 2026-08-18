@@ -63,7 +63,7 @@ fun Application.configureRouting(state: State) {
             routeApiOAuthGitHub(state)
         }
 
-        routeKotlinCompilerServer(state)
+        routeScriptEditor(state)
 
         // Frontend bundle: prefer a configured on-disk dist/ for dev, otherwise serve the
         // copy baked into the JAR by Gradle's copyFrontend task.

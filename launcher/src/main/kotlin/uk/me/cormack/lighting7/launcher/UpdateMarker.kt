@@ -18,8 +18,8 @@ import java.util.Properties
  * nothing, whereas a loopback HTTP server would need `jdk.httpserver` added to the jlink module
  * list, a port to discover, and a shared secret so no other local process could stop the desk.
  *
- * **`.properties`, not JSON.** `java.util.Properties` is in `java.base` and [LauncherMain]
- * already reads `compiler-server.properties` this way. JSON would mean hand-rolling a parser in
+ * **`.properties`, not JSON.** `java.util.Properties` is in `java.base` and [LauncherBuildInfo]
+ * already reads `lighting7-build-info.properties` this way. JSON would mean hand-rolling a parser in
  * the one module whose entire design rule is zero dependencies — and `Properties` handles Windows
  * backslash escaping correctly, which a hand-rolled parser gets wrong on roughly one path in a
  * hundred.

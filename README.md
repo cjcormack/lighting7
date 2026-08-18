@@ -17,7 +17,6 @@ A professional stage and event lighting control system built in Kotlin. Control 
 
 - JDK 21+ on `PATH` for Gradle (the project's Kotlin toolchain pins JVM 24 — Gradle's foojay resolver auto-downloads a matching JDK if your system JDK differs).
 - Network access to ArtNet devices for DMX output.
-- For the in-app script editor (optional): a checkout of the [`kotlin-compiler-server`](https://github.com/JetBrains/kotlin-compiler-server) fork at `../kotlin-compiler-server` (override path with `-PkotlinCompilerServerPath=...`), on the branch matching `compilerServerKotlinVersion` in [`gradle.properties`](gradle.properties). That branch must stay within one Kotlin minor of `kotlin_version`, or the editor rejects every Lighting7 symbol as "compiled with an incompatible version of Kotlin".
 - For frontend builds: a checkout of [`lighting-react`](../lighting-react) at `../lighting-react` (override with `-PlightingReactPath=...`). The Gradle build invokes its `npm run build` and bakes the output into the JAR.
 
 SQLite is used for persistence — there is no database server to install. The DB file is created on first launch under the platform's app data dir:
@@ -63,37 +62,31 @@ Starts the backend on:
 - Swagger UI: <http://localhost:8413/openapi>
 - mDNS: `lighting7-<hostname>.local:8413` (so iPad / LAN clients can reach the host without typing an IP)
 
-To override defaults (database path, mDNS name, compiler-server URL, frontend static path), drop a `local.conf` next to the working directory or in the app data dir. See [`example.local.conf`](example.local.conf) for the schema.
+To override defaults (database path, mDNS name, frontend static path), drop a `local.conf` next to the working directory or in the app data dir. See [`example.local.conf`](example.local.conf) for the schema.
 
 `./gradlew run` does **not** start the compiler server, so the in-app script editor has no
 completion or highlighting backend. For that, either run the whole stack through the launcher:
 
 ```bash
-./gradlew :launcher:run          # spawns compiler server + backend, opens a browser
+./gradlew :launcher:run          # spawns the backend, opens a browser
 ```
 
-or run the compiler server on its own in a second terminal alongside `./gradlew run`:
+The in-app script editor needs nothing extra: its highlighting and completion are served by the
+backend itself at `/script-editor/*`, from the same embedded Kotlin compiler that runs the
+scripts ([`routes/scriptEditor.kt`](src/main/kotlin/uk/me/cormack/lighting7/routes/scriptEditor.kt),
+[`scripts/ScriptEditorService.kt`](src/main/kotlin/uk/me/cormack/lighting7/scripts/ScriptEditorService.kt)).
+It used to require a checked-out JetBrains `kotlin-compiler-server` fork, patched in place at
+build time and spawned as a second JVM on port 8321; that is gone, along with ~122 MB of installer.
 
-```bash
-./gradlew runCompilerServer      # foreground on 127.0.0.1:8321, Ctrl-C to stop
-```
-
-Both require the `kotlin-compiler-server` fork checked out and clean (see [Requirements](#requirements)).
-`runCompilerServer` re-runs the fork's `bootJar` each time; for a tight restart loop add
-`-PreuseStagedCompilerServer` to skip the build chain and run what's already staged in
-`build/distributions/`. Override the port with `-PcompilerServerPort=9321`. Check it's up with
-`curl http://127.0.0.1:8321/health`.
-
-> Don't use `-x runCompilerServerBootJar` for that: `-x` also prunes the uncommitted-changes guard
-> while still running the patch-revert step, which would `git checkout -- .` your fork.
-
-`./gradlew test` is the standard pre-commit check.
+`./gradlew test` is the standard pre-commit check. The suite runs against an isolated data
+directory (`build/test-data`, pinned via `-Dlighting7.dataDir` in `tasks.test`), so it never
+reads or writes the real installation under `~/Library/Application Support/lighting7` — tests
+would otherwise share the compiled-script cache, prompt-book PDF store and export root with a
+desk that may be running.
 
 ## Building Installers
 
 `./gradlew packageMac` / `./gradlew packageWindows` produce double-clickable installers that bundle a trimmed JRE — target machines need **no** JDK, no Postgres, no Docker, no Node.
-
-Pre-requisite: the `kotlin-compiler-server` fork must be checked out on the `compilerServerKotlinVersion` branch and clean (the `assembleCompilerServer` task patches it in place via `git`, runs `bootJar`, then reverts).
 
 ### macOS
 
@@ -133,18 +126,16 @@ lighting7.app/Contents/                     C:\Program Files\lighting7\
 ├── MacOS/lighting7                         ├── lighting7.exe
 ├── app/                                    ├── app/
 │   ├── launcher.jar                        │   ├── launcher.jar
-│   ├── lighting7.jar                       │   ├── lighting7.jar
-│   └── kotlin-compiler-server.jar          │   └── kotlin-compiler-server.jar
+│   └── lighting7.jar                       │   └── lighting7.jar
 └── runtime/                                └── runtime/
 ```
 
 On first launch the bundled launcher:
 
 1. Writes a default `local.conf` to the app data dir if none exists.
-2. Spawns `kotlin-compiler-server.jar` on `127.0.0.1:8321` (in-app script editor backend).
-3. Spawns `lighting7.jar` listening on `:8413`, working directory set to the app data dir so logs and the SQLite DB land there.
-4. Polls until the backend is ready, then opens the browser to <http://localhost:8413/>.
-5. Parks a system-tray icon with **Open** / **Copy LAN URL** / **View Logs** / **Quit**.
+2. Spawns `lighting7.jar` listening on `:8413`, working directory set to the app data dir so logs and the SQLite DB land there.
+3. Polls until the backend is ready, then opens the browser to <http://localhost:8413/>.
+4. Parks a system-tray icon with **Open** / **Copy LAN URL** / **View Logs** / **Quit**.
 
 ## Architecture
 
