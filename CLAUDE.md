@@ -471,8 +471,11 @@ in `docs/windows-updates.md`:
 - **`windowsUpgradeUuid` (`build.gradle.kts`) must never change.** It is the MSI UpgradeCode.
   Without it jpackage mints a *random* one per build, and Windows Installer then treats each MSI
   as an unrelated product — installing side by side rather than upgrading, with a green build and
-  no error. That was the original bug. `verifyWindowsInstallerSources` reads the generated WiX
-  back and asserts it; don't delete that on the grounds the flag is obviously being passed.
+  no error. That was the original bug. `verifyWindowsInstaller` reads the UpgradeCode back out of
+  the finished `.msi` and asserts it; don't delete that on the grounds the flag is obviously being
+  passed. It reads the **installer**, not the WiX jpackage generates — the generated `main.wxs`
+  only ever says `UpgradeCode="$(var.JpProductUpgradeCode)"`, so grepping the sources for the UUID
+  can never succeed.
 - **`:generateBuildInfo` is one task feeding two jars.** `lighting7.jar` and `launcher.jar` must
   report the same version byte-for-byte; a mismatch means an update that reinstalls itself
   forever. Don't "simplify" it into a per-module generator.

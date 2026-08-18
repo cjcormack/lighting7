@@ -657,8 +657,8 @@ val jpackageAppVersion: String =
 // ~/.gradle/gradle.properties would orphan every install with a green build. This has exactly
 // one correct value for the lifetime of the product, and changing it should require a diff.
 //
-// Generated once with `uuidgen`. `verifyWindowsInstallerSources` (below) asserts that the WiX
-// jpackage actually generated carries it, because the failure mode is otherwise invisible.
+// Generated once with `uuidgen`. `verifyWindowsInstaller` (below) reads it back out of the
+// finished .msi, because the failure mode is otherwise invisible.
 val windowsUpgradeUuid = "E18F67A5-5765-4626-935C-0B39FEBF78B3"
 
 val buildRuntime = tasks.register<Exec>("buildRuntime") {
@@ -725,14 +725,7 @@ tasks.named<Delete>("clean") {
     delete(layout.buildDirectory.dir("runtime-linux"))
     delete(jpackageInputDir)
     delete(installersDir)
-    delete(layout.buildDirectory.dir("jpackage-temp"))
 }
-
-// jpackage deletes its scratch directory on the way out. --temp keeps it, which is the only
-// supported way to see the WiX sources it generated — and reading them back is how
-// `verifyWindowsInstallerSources` turns "we passed --win-upgrade-uuid" into "the installer
-// actually carries it".
-val jpackageTempDir = layout.buildDirectory.dir("jpackage-temp")
 
 fun registerJpackageTask(
     name: String,
@@ -740,8 +733,8 @@ fun registerJpackageTask(
     hostMatches: Boolean,
     iconFile: File,
     extraArgs: List<String>,
-    // Windows only: keep jpackage's scratch dir and assert against the generated WiX.
-    verifyGeneratedSources: Boolean = false,
+    // Windows only: read the pinned UpgradeCode back out of the .msi that was produced.
+    verifyInstaller: Boolean = false,
 ) {
     tasks.register<Exec>(name) {
         description = "Build a $type installer at build/installers/. Host-only — runs on the matching OS."
@@ -785,10 +778,6 @@ fun registerJpackageTask(
             installersDir.get().asFile
                 .listFiles { f -> f.isFile && f.name.endsWith(".$installerExtension") }
                 ?.forEach { it.delete() }
-            if (verifyGeneratedSources) {
-                // jpackage requires --temp to name a new or empty directory.
-                jpackageTempDir.get().asFile.deleteRecursively()
-            }
         }
 
         val args = mutableListOf(
@@ -805,45 +794,83 @@ fun registerJpackageTask(
         )
         args += extraArgs
         if (iconExists) args += listOf("--icon", iconFile.absolutePath)
-        if (verifyGeneratedSources) {
-            args += listOf("--temp", jpackageTempDir.get().asFile.absolutePath)
-        }
         commandLine(args)
 
-        if (verifyGeneratedSources) {
-            doLast { verifyWindowsInstallerSources(jpackageTempDir.get().asFile) }
+        if (verifyInstaller) {
+            doLast { verifyWindowsInstaller(installersDir.get().asFile) }
         }
     }
 }
 
 /**
- * Read back the WiX sources jpackage generated and assert they carry the pinned UpgradeCode and
- * the version we asked for.
+ * Read the UpgradeCode and ProductVersion back out of the .msi just built and assert they are the
+ * pinned UUID and the version we asked for.
  *
  * This exists because a wrong or missing UpgradeCode is *completely invisible* at build time —
  * the MSI builds, installs, and works. The damage only shows up on the second install, on
  * someone else's machine, as a duplicate entry in Add/Remove Programs. Anything that can only
  * be caught months later is worth catching in the build.
+ *
+ * It inspects the finished installer rather than the WiX sources jpackage generates. That was the
+ * first version of this check and it could never have passed on any JDK: jpackage's `main.wxs`
+ * template carries `UpgradeCode="$(var.JpProductUpgradeCode)"` and the value is supplied as a WiX
+ * preprocessor variable on the toolchain command line, so the literal UUID appears in no generated
+ * source. The MSI's own Property table is the thing that matters anyway — it is what Windows
+ * Installer reads when deciding whether an install is an upgrade or a second product.
  */
-fun verifyWindowsInstallerSources(tempDir: File) {
-    require(tempDir.isDirectory) {
-        "jpackage --temp directory $tempDir is missing; cannot verify the generated WiX sources."
+fun verifyWindowsInstaller(installerDir: File) {
+    val installers = installerDir.listFiles { f -> f.isFile && f.name.endsWith(".msi") }?.toList().orEmpty()
+    require(installers.size == 1) {
+        "Expected exactly one .msi in $installerDir after packageWindows, found ${installers.size}" +
+            (if (installers.isEmpty()) "." else installers.joinToString(prefix = ": ", postfix = ".") { it.name })
     }
-    val wixSources = tempDir.walkTopDown()
-        .filter { it.isFile && (it.extension == "wxs" || it.extension == "wxi") }
-        .toList()
-    require(wixSources.isNotEmpty()) {
-        "No .wxs/.wxi sources found under $tempDir. jpackage's scratch layout has changed — " +
-            "re-check what --temp produces before trusting the UpgradeCode is pinned."
+    val msi = installers.single()
+
+    val reader = rootProject.file("gradle/read-msi-properties.ps1")
+    require(reader.isFile) {
+        "Missing $reader — an MSI is a compound document and that script is how its Property table is read."
     }
-    val combined = wixSources.joinToString("\n") { it.readText() }
-    require(combined.contains(windowsUpgradeUuid, ignoreCase = true)) {
-        "The WiX sources jpackage generated do not contain the pinned UpgradeCode " +
+    val process = ProcessBuilder(
+        "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+        "-File", reader.absolutePath, "-MsiPath", msi.absolutePath,
+    ).redirectErrorStream(true).start()
+    val output = process.inputStream.bufferedReader().readText()
+    val exitCode = process.waitFor()
+    require(exitCode == 0) {
+        "Could not read the Property table of $msi; powershell.exe exited $exitCode:\n$output"
+    }
+    val properties = output.lineSequence()
+        .map { it.trim() }
+        .filter { it.contains('=') }
+        .associate { it.substringBefore('=') to it.substringAfter('=') }
+    // Distinguish "the installer says the wrong thing" from "we could not read the installer".
+    // Without this, a reader that exits 0 having printed nothing usable is reported below as an
+    // absent UpgradeCode, which sends whoever reads that message after jpackage — the one part of
+    // this that would still be working.
+    require(properties.isNotEmpty()) {
+        "Read no properties at all from $msi, so nothing about it has been verified. Suspect " +
+            "${reader.name} rather than the installer. Its output was:\n$output"
+    }
+
+    // Windows Installer stores GUIDs braced and upper-case; --win-upgrade-uuid takes them bare.
+    val upgradeCode = properties["UpgradeCode"]
+    require(upgradeCode?.trim('{', '}').equals(windowsUpgradeUuid, ignoreCase = true)) {
+        "$msi declares UpgradeCode ${upgradeCode ?: "(absent)"} rather than the pinned " +
             "$windowsUpgradeUuid. Without it every MSI is its own product line and installs " +
-            "side by side instead of upgrading. Inspect $tempDir and check that " +
-            "--win-upgrade-uuid is still being passed and still honoured by this JDK's jpackage."
+            "side by side instead of upgrading. Check that --win-upgrade-uuid is still being " +
+            "passed and still honoured by this JDK's jpackage."
     }
-    logger.lifecycle("Verified generated WiX carries UpgradeCode $windowsUpgradeUuid (version $jpackageAppVersion).")
+    val productVersion = properties["ProductVersion"]
+    require(productVersion == jpackageAppVersion) {
+        "$msi declares ProductVersion ${productVersion ?: "(absent)"} rather than the requested " +
+            "$jpackageAppVersion. A major upgrade needs a strictly greater ProductVersion, so a " +
+            "package that disagrees with the release it is being published as would never replace " +
+            "anything."
+    }
+
+    logger.lifecycle(
+        "Verified ${msi.name} carries UpgradeCode $windowsUpgradeUuid and ProductVersion $productVersion.",
+    )
 }
 
 registerJpackageTask(
@@ -867,7 +894,7 @@ registerJpackageTask(
         // anything, because jpackage mints a random UpgradeCode per build.
         "--win-upgrade-uuid", windowsUpgradeUuid,
     ),
-    verifyGeneratedSources = true,
+    verifyInstaller = true,
 )
 
 tasks.test {

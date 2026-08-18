@@ -18,10 +18,21 @@ up with two overlapping installs. It lives as a literal in the build script rath
 `gradle.properties` precisely so it cannot be overridden by a stray `-P` flag or a line in
 `~/.gradle/gradle.properties`.
 
-Because the failure is invisible at build time, `verifyWindowsInstallerSources` runs jpackage with
-`--temp` and asserts the generated WiX actually carries the UUID. Don't remove it on the grounds
-that the flag is obviously being passed; the whole point is that "obviously passed" and "actually
-in the installer" are different claims.
+Because the failure is invisible at build time, `verifyWindowsInstaller` opens the `.msi`
+`packageWindows` just produced, reads its `Property` table, and asserts `UpgradeCode` is the pinned
+UUID and `ProductVersion` is the version we asked for. Don't remove it on the grounds that the flag
+is obviously being passed; the whole point is that "obviously passed" and "actually in the
+installer" are different claims.
+
+It reads the **installer**, not the WiX sources. The first version of this check ran jpackage with
+`--temp` and grepped the generated `.wxs`/`.wxi` for the UUID, and failed on the first Windows CI
+run — jpackage's `main.wxs` template carries `UpgradeCode="$(var.JpProductUpgradeCode)"` and the
+value is supplied as a WiX preprocessor variable on the toolchain command line, so the literal
+never appears in any generated source on any JDK. The Property table is also the more honest thing
+to assert against: it is what Windows Installer itself reads.
+
+Reading it needs the Windows Installer COM automation interface, so the actual query lives in
+`gradle/read-msi-properties.ps1` and Gradle shells out to `powershell.exe` for it.
 
 ### Versions
 
