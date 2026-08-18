@@ -24,10 +24,13 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoOAuthIdentities
 import uk.me.cormack.lighting7.models.DaoOAuthIdentity
+import uk.me.cormack.lighting7.models.DaoSyncConfig
+import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.plugins.OAuthIdentityChangedOutMessage
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.oauth.DevicePollResult
@@ -185,6 +188,9 @@ internal fun Route.routeApiOAuthGitHub(state: State) {
                     refreshExpiresAtMs = it.refreshExpiresAtMs,
                     connectedAtMs = it.connectedAtMs,
                     oauthConfigured = state.oauthGitHubClient != null,
+                    reauthRequired = it.reauthRequiredAtMs != null,
+                    reauthReason = it.reauthReason,
+                    reauthRequiredAtMs = it.reauthRequiredAtMs,
                 )
             }
         } ?: IdentityResponse(connected = false, oauthConfigured = state.oauthGitHubClient != null)
@@ -356,6 +362,10 @@ private fun persistIdentity(state: State, token: TokenResponse, user: GithubUser
             existing.accessExpiresAtMs = identity.accessExpiresAtMs
             existing.refreshExpiresAtMs = identity.refreshExpiresAtMs
             existing.connectedAtMs = identity.connectedAtMs
+            // This *is* the recovery path — a re-connect is exactly what the re-auth
+            // marking was asking for, so clear it (the fresh blob above already has).
+            existing.reauthRequiredAtMs = null
+            existing.reauthReason = null
         } else {
             DaoOAuthIdentity.new {
                 this.provider = DaoOAuthIdentities.PROVIDER_GITHUB
@@ -377,6 +387,18 @@ private fun persistIdentity(state: State, token: TokenResponse, user: GithubUser
             refreshExpiresAtMs = identity.refreshExpiresAtMs,
         ),
     )
+
+    // Re-arm auto-sync. Its backoff self-heals without this — the point is promptness:
+    // a project that had backed off to hourly ticks would otherwise sit idle for up to an
+    // hour after the user has visibly fixed the very thing that was blocking it.
+    // Collected first, then rescheduled outside the transaction, since reschedule opens
+    // its own.
+    val autoSyncProjects = transaction(state.database) {
+        DaoSyncConfig.find { DaoSyncConfigs.autoSyncEnabled eq true }
+            .filter { !it.repoUrl.isNullOrBlank() }
+            .map { it.project.id.value }
+    }
+    autoSyncProjects.forEach { state.autoSyncScheduler.reschedule(it) }
 }
 
 private fun toDto(repo: GithubRepository, project: ProjectJson? = null) = RepoDto(
@@ -495,6 +517,16 @@ data class IdentityResponse(
     val connectedAtMs: Long? = null,
     /** False means the UI should hide the OAuth button and offer only the PAT path. */
     val oauthConfigured: Boolean,
+    /**
+     * Connected, but GitHub has rejected the stored refresh token — the identity is dead
+     * until the user re-connects. `connected` stays true because the row is still there
+     * and still names who it belongs to; this is what the UI must lead with.
+     */
+    val reauthRequired: Boolean = false,
+    /** GitHub's stated reason, when [reauthRequired]. */
+    val reauthReason: String? = null,
+    /** When the rejection was first seen, when [reauthRequired]. */
+    val reauthRequiredAtMs: Long? = null,
 )
 
 @Serializable

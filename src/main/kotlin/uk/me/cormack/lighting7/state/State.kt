@@ -320,10 +320,15 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
-     * Refresh-on-demand wrapper used by [AuthResolver]. The `onRefreshed` callback
+     * Refresh-on-demand wrapper used by [AuthResolver]. The `onIdentityUpdated` callback
      * mirrors the new expiry into the [DaoOAuthIdentities][uk.me.cormack.lighting7.models.DaoOAuthIdentities]
      * row so the UI's "expires in" badge stays accurate without polling the credential
-     * store.
+     * store — and mirrors the re-auth marking, which is the only way a client learns that
+     * a background refresh found the authorisation dead.
+     *
+     * It broadcasts too: refreshes happen off-request (an auto-sync tick, a repo listing),
+     * so without a frame here an open sync page would keep rendering a stale identity until
+     * something else invalidated the cache.
      */
     val oauthTokenProvider: OAuthTokenProvider? by lazy {
         val client = oauthGitHubClient ?: return@lazy null
@@ -331,13 +336,25 @@ class State(val config: ApplicationConfig) {
         OAuthTokenProvider(
             tokenStore = store,
             client = client,
-            onRefreshed = { identity ->
+            onIdentityUpdated = { identity ->
                 transaction(database) {
                     DaoOAuthIdentity.findGithubDefault()?.let {
                         it.accessExpiresAtMs = identity.accessExpiresAtMs
                         it.refreshExpiresAtMs = identity.refreshExpiresAtMs
+                        it.reauthRequiredAtMs = identity.reauthRequiredAtMs
+                        it.reauthReason = identity.reauthReason
                     }
                 }
+                emitCloudSyncEvent(
+                    uk.me.cormack.lighting7.plugins.OAuthIdentityChangedOutMessage(
+                        provider = DaoOAuthIdentities.PROVIDER_GITHUB,
+                        connected = true,
+                        login = identity.githubLogin,
+                        accessExpiresAtMs = identity.accessExpiresAtMs,
+                        refreshExpiresAtMs = identity.refreshExpiresAtMs,
+                        reauthRequired = identity.reauthRequiredAtMs != null,
+                    ),
+                )
             },
         )
     }

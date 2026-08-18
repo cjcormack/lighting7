@@ -72,8 +72,9 @@ class RemoteSyncEngine(
         projectUuid: UUID,
         installUuid: UUID,
         installFriendlyName: String,
+        trigger: SyncTrigger = SyncTrigger.MANUAL,
     ): SyncRunResult = withProjectLock(projectId, SyncLogEvent.RUN_FAILED) {
-        doRun(projectId, projectUuid, installUuid, installFriendlyName)
+        doRun(projectId, projectUuid, installUuid, installFriendlyName, trigger)
     }
 
     suspend fun applySession(
@@ -131,8 +132,11 @@ class RemoteSyncEngine(
         projectUuid: UUID,
         installUuid: UUID,
         installFriendlyName: String,
+        trigger: SyncTrigger,
     ): SyncRunResult {
-        syncLogger.info(projectId, SyncLogEvent.RUN_STARTED, "Starting sync run")
+        if (trigger.logsIdleRuns) {
+            syncLogger.info(projectId, SyncLogEvent.RUN_STARTED, "Starting sync run")
+        }
         val (repoUrl, branch) = transaction(state.database) {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.firstOrNull()
                 ?: throw SyncException(SyncErrorCode.REPO_URL_MISSING, "Sync config has not been initialised for this project.")
@@ -152,7 +156,11 @@ class RemoteSyncEngine(
 
         val credentials = resolveCredentials(repoUrl)
 
-        snapshotEngine.snapshot(projectId, projectUuid, installUuid, installFriendlyName, message = null)
+        snapshotEngine.snapshot(
+            projectId, projectUuid, installUuid, installFriendlyName,
+            message = null,
+            logNoop = trigger.logsIdleRuns,
+        )
 
         val workingTreePath = workingTree.pathFor(projectUuid)
         val outcome = withContext(Dispatchers.IO) {
@@ -184,7 +192,10 @@ class RemoteSyncEngine(
                 projectId, SyncLogEvent.CONFLICTS_PENDING,
                 "${outcome.conflictCount} conflict(s) need resolution (session #${outcome.sessionId}).",
             )
-        } else {
+        } else if (trigger.logsIdleRuns || outcome.outcome != SyncOutcome.NO_OP) {
+            // A NO_OP auto tick is the steady state, not news: logging it once a minute is
+            // what used to evict the project's real history. Anything that actually moved
+            // — or any manual run — still writes its row.
             syncLogger.info(
                 projectId, SyncLogEvent.RUN_DONE,
                 "${outcome.outcome.name}: ${outcome.message}",
@@ -1044,6 +1055,24 @@ private fun RecordSnapshot.canonicalJsonForDisplay(): String? {
 
 /** Outcome of a successful sync run. The UI uses this to pick which toast/badge to show. */
 enum class SyncOutcome { NO_OP, PUSHED, FAST_FORWARDED, MERGED, CONFLICTS_PENDING }
+
+/**
+ * What asked for a sync run. The only thing it changes is how chatty the run is in the
+ * *activity log* — a person who pressed "Sync now" wants to see that it started and that
+ * it found nothing; a background tick doing the same thing every minute would bury every
+ * event worth reading (the log is capped per project, see
+ * [SyncLogger.MAX_ENTRIES_PER_PROJECT]).
+ *
+ * Nothing about the sync itself differs, and failures are never suppressed either way.
+ * [MANUAL] is the default so any new call site is loud until it opts out.
+ */
+enum class SyncTrigger(
+    /** When false, rows that say only "a run happened and changed nothing" are skipped. */
+    val logsIdleRuns: Boolean,
+) {
+    MANUAL(logsIdleRuns = true),
+    AUTO(logsIdleRuns = false),
+}
 
 @Serializable
 data class SyncRunResult(

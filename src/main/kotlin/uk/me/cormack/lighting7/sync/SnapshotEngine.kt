@@ -49,6 +49,11 @@ class SnapshotEngine(private val state: State) {
      * The caller resolves the project and install identity (typically inside the
      * REST handler's `withProject` block); the engine takes plain values so its
      * `Dispatchers.IO` block doesn't have to reach back into Exposed.
+     *
+     * [logNoop] exists for the auto-sync path: "nothing to snapshot" is the expected
+     * outcome of a background tick, and writing an activity row for it every minute is
+     * what used to evict the project's real history. A snapshot that *did* commit always
+     * logs.
      */
     suspend fun snapshot(
         projectId: Int,
@@ -56,6 +61,7 @@ class SnapshotEngine(private val state: State) {
         installUuid: UUID,
         installFriendlyName: String,
         message: String?,
+        logNoop: Boolean = true,
     ): SnapshotResponse {
         val path = workingTree.pathFor(projectUuid)
         val summary = message?.takeIf { it.isNotBlank() }?.trim()
@@ -99,7 +105,9 @@ class SnapshotEngine(private val state: State) {
             }
         }
         if (response.noChanges) {
-            syncLogger.info(projectId, SyncLogEvent.SNAPSHOT_NOOP, "Snapshot taken — no changes.")
+            if (logNoop) {
+                syncLogger.info(projectId, SyncLogEvent.SNAPSHOT_NOOP, "Snapshot taken — no changes.")
+            }
         } else {
             val commit = response.commit
             syncLogger.info(

@@ -91,6 +91,32 @@ class AuthResolverTest {
     }
 
     @Test
+    fun `a PAT still wins over an identity already marked as needing re-auth`() = runBlocking {
+        // The marking is a record, not a gate: a desk that also has a PAT must keep
+        // syncing on it rather than being locked out by GitHub's verdict on the OAuth
+        // identity. This is what keeps the auto-sync loop off the backoff path entirely.
+        val cs = InMemoryCredentialStore()
+        cs.set(repoUrl, "ghp_backup_pat")
+        val store = OAuthTokenStore(cs).also {
+            it.save(
+                livingIdentity.copy(
+                    accessExpiresAtMs = 0L,
+                    reauthRequiredAtMs = 50L,
+                    reauthReason = "GitHub rejected the refresh token (bad_refresh_token)",
+                ),
+            )
+        }
+        val provider = OAuthTokenProvider(
+            tokenStore = store,
+            client = AlwaysFailRefresh,
+            nowMs = { 100L },
+        )
+        val resolver = AuthResolver(cs, store, provider)
+
+        assertEquals("ghp_backup_pat", resolver.resolveFor(repoUrl).secret)
+    }
+
+    @Test
     fun `MissingCredentialsException when neither OAuth nor PAT is present`() = runBlocking {
         val cs = InMemoryCredentialStore()
         val store = OAuthTokenStore(cs)

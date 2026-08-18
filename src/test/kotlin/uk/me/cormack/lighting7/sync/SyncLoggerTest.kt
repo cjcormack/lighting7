@@ -60,9 +60,13 @@ class SyncLoggerTest {
     }
 
     @Test
-    fun `prunes oldest entries beyond MAX_ENTRIES_PER_PROJECT`() {
+    fun `prunes oldest entries beyond the retention cap`() {
         val projectId = seedMinimalProject(state)
-        val cap = SyncLogger.MAX_ENTRIES_PER_PROJECT
+        // A small injected cap rather than the production one: every write is its own
+        // transaction, so exercising the real 2000 would cost 2005 of them to test a
+        // boundary that behaves identically at 20.
+        val cap = 20
+        val logger = SyncLogger(state, maxEntriesPerProject = cap)
         // Write cap+5 entries; oldest 5 should be pruned.
         repeat(cap + 5) { i -> logger.info(projectId, "BULK", "row $i") }
 

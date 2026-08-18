@@ -691,7 +691,7 @@ Architecture lives in
 |---|---|
 | `OAuthGitHubClient` | Ktor HTTP client for `github.com/login/...` and `api.github.com/user/...`. Methods: `exchangeCode`, `refresh`, `startDeviceFlow`, `pollDeviceFlow`, `getAuthenticatedUser`, `listInstallationRepositories`, `createUserRepo`. |
 | `OAuthTokenStore` | Persists the install-wide identity as a JSON blob in [`CredentialStore`](#credential-store) under `oauth:github:default`. Refresh always overwrites the whole blob so a partial write can't leave a fresh access token paired with a stale refresh token. |
-| `OAuthTokenProvider` | Refresh-on-demand wrapper. A `Mutex` guards the read-refresh-write so concurrent git ops don't race-burn the (single-use) refresh token. Throws `OAuthReauthRequiredException` when the refresh token is itself expired. |
+| `OAuthTokenProvider` | Refresh-on-demand wrapper. A `Mutex` guards the read-refresh-write so concurrent git ops don't race-burn the (single-use) refresh token. Throws `OAuthReauthRequiredException` when the refresh token is expired or rejected, and [records that on the identity](#re-auth-marking). |
 | `AuthResolver` | The single throat callers use to get JGit credentials. Prefers OAuth, falls back to the per-repo PAT if OAuth is missing or its refresh token has expired. |
 
 Identity metadata mirror table:
@@ -706,6 +706,8 @@ oauth_identities      (machine-local; never synced)
   access_expires_at_ms BIGINT?
   refresh_expires_at_ms BIGINT?
   connected_at_ms BIGINT
+  reauth_required_at_ms BIGINT?   -- see "Re-auth marking"
+  reauth_reason VARCHAR?
   UNIQUE(provider, scope)
 ```
 
@@ -736,9 +738,75 @@ Access tokens last 8 hours; refresh tokens last 6 months and are *single-use*
 access token has less than 60 s of remaining lifetime, and is single-flight
 under a Mutex so two concurrent git ops don't race the same refresh.
 
-The `onRefreshed` hook (wired up in `State`) writes the new expiries into the
-`oauth_identities` row so the UI's "expires in" badge stays accurate without
-polling.
+The `onIdentityUpdated` hook (wired up in `State`) writes the new expiries into
+the `oauth_identities` row so the UI's "expires in" badge stays accurate without
+polling, and broadcasts `oauthIdentityChanged`. The broadcast matters because
+refreshes happen off-request — an auto-sync tick, a repo listing — so without it
+an open sync page keeps rendering a stale identity.
+
+#### Re-auth marking
+
+A refresh token can stop working long before its nominal 6-month expiry: the
+authorisation gets revoked, the App is reinstalled, the client secret rotates, or
+the token is rotated out from under this install. GitHub answers
+`bad_refresh_token` / `invalid_grant`, and **only the user can fix it**.
+
+When that happens `OAuthTokenProvider` stamps `reauthRequiredAtMs` +
+`reauthReason` onto the stored blob (and, via the mirror hook, the DB row and a
+WS frame). `GET /oauth/github/identity` exposes them as `reauthRequired` /
+`reauthReason` / `reauthRequiredAtMs`.
+
+The frontend surfaces that in three places, because the original failure was one
+of *visibility* rather than detection — the desk knew nothing was syncing, and
+said so nowhere anyone looked:
+
+* `IdentityRow` leads with a "Reconnect GitHub" alert instead of "Connected as
+  @login", on both sync pages.
+* A destructive dot on the **Sync** nav entries (`ProjectSwitcher`).
+* An app-wide dismissible banner (`SyncReauthBanner`), dismissed against *this*
+  rejection's timestamp so a later one is never pre-dismissed.
+
+All three are admin-only, which is not a policy choice so much as a consequence:
+`/api/rest/oauth/` is in `ADMIN_ONLY_PREFIXES`, so an operator's client can only
+403 — and per the rule the update panel follows, whoever is running a show does
+not get nagged about something they cannot fix.
+
+Cleared by any success: `applyRefresh` nulls both fields explicitly (it's a
+`copy`, so a stale flag would otherwise survive the very refresh that proved the
+identity healthy), and `persistIdentity` clears the mirror row on re-connect.
+
+Three deliberate choices:
+
+* **Only `OAuthReauthRequiredException` marks.** A network error, a 5xx or a rate
+  limit leaves the identity unmarked so it keeps retrying — marking those would
+  strand a working desk over a blip.
+* **The marking is a record, not a gate.** `accessToken()` does *not* fast-fail on
+  it; a spurious rejection would then wedge the identity until someone
+  re-connected by hand, and the manual-retry path would need a `force` flag
+  threaded through `AuthResolver`. Every wasted request came from a background
+  loop, so [that loop](#auto-sync-phase-8) is where the retry storm is fixed.
+* **`AuthResolver` still prefers a PAT over nothing.** A desk with a stored PAT
+  keeps syncing while its OAuth identity is marked; that path is unchanged.
+
+Re-marking an already-marked identity is a no-op, so a backed-off retry neither
+rewrites the blob nor re-broadcasts, and `reauthRequiredAtMs` keeps meaning
+*first* seen — which is what the UI shows as "since".
+
+**`failReauth` re-reads the store before marking, and marks the copy it just
+read.** `refresh()` is a network round-trip and `persistIdentity` writes the blob
+directly — outside `refreshMutex`, which only serialises `OAuthTokenProvider`. So
+a user can finish re-connecting while GitHub is still deciding about the *old*
+token. Writing the captured snapshot back would overwrite the fresh identity with
+the dead one and broadcast `reauthRequired`, silently undoing a re-connect seconds
+after it succeeded. A changed refresh token means "re-connected under us" and the
+rejection is discarded. There is no CAS on the credential store, so a sliver of a
+window survives between that read and the write — microseconds rather than a
+round-trip, and no stale token material is ever written back.
+
+> **Why this exists.** A desk ran for 25 days with a rejected refresh token,
+> POSTing to GitHub's token endpoint once a minute per project (~70k rejected
+> requests) while the UI showed "Connected as @user" and a permanent "refreshing
+> soon" badge, because nothing persisted the rejection and nothing backed off.
 
 #### Configuration
 
@@ -1254,22 +1322,73 @@ Lifecycle:
   `autoSyncEnabled = false`, and **skips when a conflict session is pending** —
   auto-syncing under an active conflict would either bounce a 409 off the engine or
   silently re-enter the diff against stale resolutions. The skip is logged as
-  `AUTO_SYNC_SKIPPED` so the operator sees why nothing happened.
-* `SyncException` from `engine.runSync` is caught and logged (the engine has already
-  written `RUN_FAILED`); unexpected `Throwable`s log a fresh `RUN_FAILED` and keep the
-  loop alive. A single tick failure must never kill the project's auto-sync.
+  `AUTO_SYNC_SKIPPED` once, on entry, not once per tick.
+* `SyncException` from `engine.runSync` is caught (the engine has already written
+  `RUN_FAILED`); unexpected `Throwable`s write a fresh `RUN_FAILED` and keep the loop
+  alive. A single tick failure must never kill the project's auto-sync.
+* Runs go through the engine with `SyncTrigger.AUTO`, which keeps a tick that changed
+  nothing [out of the activity log entirely](#activity-log-phase-8).
 
 The scheduler shares the engine's per-project mutex with manual `Sync now` clicks, so a
 human-driven sync and an auto-sync tick can never run concurrently against the same
 project.
+
+### Backoff
+
+Any failing tick — a rejected OAuth token, a missing credential, an offline network, a
+pending conflict session — puts the project's loop into
+[`nextDelayMs`](../src/main/kotlin/uk/me/cormack/lighting7/sync/AutoSyncScheduler.kt)
+backoff: the base interval doubled per consecutive failure, capped at
+`BACKOFF_CEILING_MS` = 1 h. From the 60s floor the waits run 2m, 4m, 8m, 16m, 32m, then
+hourly. The cap is never allowed below the configured interval, so a 6-hourly sync is
+never *shortened* into an hourly retry.
+
+Two properties worth preserving:
+
+* **Transition-only logging.** Entering the failing state logs one WARN naming the reason
+  and the new interval; subsequent attempts log at DEBUG. Recovery logs one INFO plus an
+  `AUTO_SYNC_RECOVERED` row — needed because the recovering tick is usually a quiet
+  `NO_OP` that writes nothing, which would otherwise leave the activity feed ending on an
+  ERROR with no way to tell "fixed" from "still broken".
+* **Failure rows are *not* suppressed.** The engine's per-attempt `RUN_FAILED` is the
+  "still broken as of an hour ago" signal whose absence caused the incident below; the
+  backoff is what makes its volume reasonable (~24/day rather than ~1,440).
+
+Counted per loop, in coroutine-local state, so `reschedule(projectId)` resets it for free.
+That is why re-connecting GitHub (`persistIdentity`) and storing a PAT
+(`PUT /sync/credentials`) both call `reschedule` — the backoff self-heals regardless, but
+without them the reward for fixing credentials could be up to an hour of apparent silence.
+A successful manual `Sync now` deliberately does *not* reset it: cancelling and relaunching
+the loop on every manual sync would shift its phase for no real gain, and the next backed-off
+tick recovers on its own.
+
+> **Why this exists.** With a dead credential and the 60s floor, two projects generated
+> ~2,880 failed runs and ~8,600 log rows a day, indefinitely — which also meant the 500-row
+> activity log held nothing but that one failure. Note the flood was never OAuth-specific: a
+> network failure reaches the scheduler as a bare `RuntimeException` (only 401/403 become
+> `GitAuthException` in `JGitClient`), so an offline desk produced the same storm by a
+> different route. That is why backoff covers *every* failure rather than the auth codes.
 
 ## Activity log (Phase 8)
 
 `sync_log_entry` (machine-local) carries the operator-visible activity feed: one row per
 noteworthy event, written by [`SyncLogger`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SyncLogger.kt).
 Capped per project at [`MAX_ENTRIES_PER_PROJECT`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SyncLogger.kt)
-= 500; older rows are pruned on every write so the table never accumulates without
-bound.
+= 2000; older rows are pruned on every write so the table never accumulates without
+bound. (Injectable via the `SyncLogger` constructor, so a test can exercise the prune
+boundary without writing 2000 rows in that many transactions.)
+
+**A tick that changed nothing writes no rows at all.** `SyncTrigger.AUTO` suppresses the
+three rows that only say "a run happened and found nothing" — `RUN_STARTED`,
+`SNAPSHOT_NOOP`, and `RUN_DONE` when the outcome is `NO_OP`. Everything else still lands:
+`SNAPSHOT_TAKEN`, a non-`NO_OP` `RUN_DONE`, `CONFLICTS_PENDING`, `RUN_FAILED`. `MANUAL` (the
+default, so a new call site is loud until it opts out) logs exactly as it always has.
+
+Without this the feature didn't work: at the 60s auto-sync floor a *healthy* project wrote
+four rows a minute, so the cap held ~2 hours and every manual run or failure worth reading
+had already scrolled out. The corollary is that a healthy desk's feed now sits still — "is
+auto-sync alive?" is answered by `sync_configs.lastSyncedAtMs`, which is updated on every
+non-conflict outcome including `NO_OP`, not by the presence of recent rows.
 
 ```
 sync_log_entry
@@ -1285,17 +1404,21 @@ Stable event codes (see [`SyncLogEvent`](../src/main/kotlin/uk/me/cormack/lighti
 
 | Event | Emitted by | Notes |
 |---|---|---|
-| `RUN_STARTED` | `RemoteSyncEngine.runSync` (start) | One per manual or auto-sync run. |
-| `RUN_DONE` | `RemoteSyncEngine.runSync` (success) | Outcome + summary in the message. |
+| `RUN_STARTED` | `RemoteSyncEngine.runSync` (start) | Manual runs only — suppressed for `AUTO`. |
+| `RUN_DONE` | `RemoteSyncEngine.runSync` (success) | Outcome + summary in the message. Suppressed for an `AUTO` run whose outcome is `NO_OP`. |
 | `RUN_FAILED` | `RemoteSyncEngine.runSync` (catch) | `{code}: {message}` shape. |
 | `CONFLICTS_PENDING` | `RemoteSyncEngine.runSync` | Conflict count + session id. |
 | `APPLY_DONE` | `RemoteSyncEngine.applySession` (success) | Post-resolve commit pushed. |
 | `APPLY_FAILED` | `RemoteSyncEngine.applySession` (catch) | Same shape as `RUN_FAILED`. |
 | `SESSION_ABORTED` | `RemoteSyncEngine.abortSession` | Working tree reset. |
 | `SNAPSHOT_TAKEN` | `SnapshotEngine.snapshot` | Carries short SHA + summary. |
-| `SNAPSHOT_NOOP` | `SnapshotEngine.snapshot` | Nothing to commit. |
-| `AUTO_SYNC_TICK` | `AutoSyncScheduler` | Pre-runSync trace marker. |
-| `AUTO_SYNC_SKIPPED` | `AutoSyncScheduler` | Conflict session pending. |
+| `SNAPSHOT_NOOP` | `SnapshotEngine.snapshot` | Nothing to commit. Suppressed for an `AUTO` run. |
+| `AUTO_SYNC_SKIPPED` | `AutoSyncScheduler` | Conflict session pending. Written once on entry, not per tick. |
+| `AUTO_SYNC_RECOVERED` | `AutoSyncScheduler` | Ticks succeeding again after one or more failures. |
+
+`AUTO_SYNC_TICK` was retired — it was written immediately before `RUN_STARTED` and carried
+nothing extra. The frontend renders `event` as an opaque string, so rows written before the
+retirement still display.
 
 Each write fans out a `cloudSyncLogAppended` WebSocket message
 (see [`Sockets.kt`](../src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt))

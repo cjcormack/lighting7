@@ -65,4 +65,19 @@ data class StoredOAuthIdentity(
     val scopes: List<String> = emptyList(),
     /** When this identity was first stored, so the UI can show "connected since X". */
     val connectedAtMs: Long,
+    /**
+     * Set when GitHub rejected the refresh token outright (`bad_refresh_token` /
+     * `invalid_grant`), or when we know we can't refresh at all. This is the
+     * authoritative copy — [uk.me.cormack.lighting7.models.DaoOAuthIdentities] mirrors it
+     * for the UI. Null means "no known problem"; a successful refresh or a re-connect
+     * clears it.
+     *
+     * Deliberately *not* consulted by [OAuthTokenProvider.accessToken] as a fast-fail: a
+     * spurious rejection would then wedge the identity until a manual re-connect. It
+     * records what happened; [uk.me.cormack.lighting7.sync.AutoSyncScheduler] is what
+     * stops the retry storm.
+     */
+    val reauthRequiredAtMs: Long? = null,
+    /** GitHub's reason for the rejection, surfaced verbatim. Null iff [reauthRequiredAtMs] is. */
+    val reauthReason: String? = null,
 )

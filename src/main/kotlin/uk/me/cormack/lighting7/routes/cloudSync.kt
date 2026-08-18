@@ -234,6 +234,10 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                 return@withProject
             }
             withContext(Dispatchers.IO) { state.credentialStore.set(repoUrl, request.pat) }
+            // Storing a PAT is a credential fix, so re-arm auto-sync rather than leaving a
+            // backed-off loop waiting out its interval after the user has visibly resolved
+            // the thing that was failing.
+            state.autoSyncScheduler.reschedule(project.id.value)
             call.respond(HttpStatusCode.NoContent)
         }
     }

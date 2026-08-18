@@ -27,6 +27,20 @@ object DaoOAuthIdentities : IntIdTable("oauth_identities") {
     val refreshExpiresAtMs = long("refresh_expires_at_ms").nullable()
     val connectedAtMs = long("connected_at_ms")
 
+    /**
+     * When GitHub last rejected our refresh token outright, i.e. the moment this identity
+     * became unusable and only a re-connect can fix it. Null means "no known problem" —
+     * cleared on a successful refresh or re-connect.
+     *
+     * Mirrored from the authoritative copy in the credential blob
+     * ([uk.me.cormack.lighting7.sync.auth.oauth.StoredOAuthIdentity]) so the UI can say
+     * "reconnect required" without touching secret material.
+     */
+    val reauthRequiredAtMs = long("reauth_required_at_ms").nullable()
+
+    /** GitHub's reason for the rejection, shown verbatim to the user. Null iff [reauthRequiredAtMs] is. */
+    val reauthReason = varchar("reauth_reason", 300).nullable()
+
     init {
         uniqueIndex(provider, scope)
     }
@@ -51,4 +65,6 @@ class DaoOAuthIdentity(id: EntityID<Int>) : IntEntity(id) {
     var accessExpiresAtMs by DaoOAuthIdentities.accessExpiresAtMs
     var refreshExpiresAtMs by DaoOAuthIdentities.refreshExpiresAtMs
     var connectedAtMs by DaoOAuthIdentities.connectedAtMs
+    var reauthRequiredAtMs by DaoOAuthIdentities.reauthRequiredAtMs
+    var reauthReason by DaoOAuthIdentities.reauthReason
 }

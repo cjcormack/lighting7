@@ -24,7 +24,14 @@ import uk.me.cormack.lighting7.state.State
  * use `withContext(Dispatchers.IO)`, the engine runs inside its own IO block, the
  * auto-sync scheduler dispatches on `Dispatchers.IO`).
  */
-class SyncLogger(private val state: State) {
+class SyncLogger(
+    private val state: State,
+    /**
+     * Per-project retention cap. Injectable so a test can exercise the prune boundary
+     * without writing [MAX_ENTRIES_PER_PROJECT] rows in that many separate transactions.
+     */
+    private val maxEntriesPerProject: Int = MAX_ENTRIES_PER_PROJECT,
+) {
 
     fun info(projectId: Int, event: String, message: String) =
         write(projectId, SyncLogLevel.INFO, event, message)
@@ -67,13 +74,13 @@ class SyncLogger(private val state: State) {
                 this.event = event
                 this.message = message
             }
-            // Prune to MAX_ENTRIES_PER_PROJECT: peek at the row exactly one past the cap
+            // Prune to maxEntriesPerProject: peek at the row exactly one past the cap
             // (newest-first), and if it exists everything older than its id is dropped in
             // a single DELETE. No-op when the project's row count is at or below the cap.
             val cutoff = DaoSyncLogEntry.find { DaoSyncLogEntries.project eq projectId }
                 .orderBy(DaoSyncLogEntries.id to SortOrder.DESC)
                 .limit(1)
-                .offset(MAX_ENTRIES_PER_PROJECT.toLong())
+                .offset(maxEntriesPerProject.toLong())
                 .firstOrNull()
             if (cutoff != null) {
                 val cutoffId: Int = cutoff.id.value
@@ -106,8 +113,17 @@ class SyncLogger(private val state: State) {
     )
 
     companion object {
-        const val MAX_ENTRIES_PER_PROJECT = 500
+        /**
+         * Per-project retention. Sized so the feed spans *days* of real activity rather
+         * than hours of auto-sync bookkeeping: at the 60s auto-sync floor the old 500 was
+         * ~2 hours, which meant every manual run and every failure had scrolled out of
+         * existence by the time anyone came looking. Quiet auto ticks now write nothing at
+         * all (see [SyncTrigger]), so this mostly bounds genuine events.
+         */
+        const val MAX_ENTRIES_PER_PROJECT = 2000
         const val DEFAULT_LIST_LIMIT = 100
+
+        /** Page size ceiling. Stays at 500 — the feed pages with `limit` + `beforeId`. */
         const val MAX_LIST_LIMIT = 500
 
         private val logger = LoggerFactory.getLogger(SyncLogger::class.java)
@@ -131,8 +147,14 @@ object SyncLogEvent {
     const val APPLY_DONE = "APPLY_DONE"
     const val APPLY_FAILED = "APPLY_FAILED"
     const val SESSION_ABORTED = "SESSION_ABORTED"
-    const val AUTO_SYNC_TICK = "AUTO_SYNC_TICK"
     const val AUTO_SYNC_SKIPPED = "AUTO_SYNC_SKIPPED"
+
+    /**
+     * An auto-sync loop started succeeding again after one or more failed attempts. Needed
+     * because a healthy auto tick is silent (see [SyncTrigger]): without this the feed
+     * would end on the last failure with no way to tell "fixed" from "still broken".
+     */
+    const val AUTO_SYNC_RECOVERED = "AUTO_SYNC_RECOVERED"
 }
 
 /** Wire shape for a single [DaoSyncLogEntry] row. */
