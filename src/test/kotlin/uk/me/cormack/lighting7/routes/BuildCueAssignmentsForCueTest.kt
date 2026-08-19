@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.routes
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fx.ExtendedColour
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.PaletteCascade
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.show.Fixtures
@@ -14,10 +14,10 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * Tests for [buildLayer3AssignmentsForCue] — the group-expansion + category-lookup helper that
+ * Tests for [buildCueAssignmentsForCue] — the group-expansion + category-lookup helper that
  * sits between the persisted DTO and the resolver's typed input.
  */
-class BuildLayer3AssignmentsForCueTest {
+class BuildCueAssignmentsForCueTest {
 
     private val universe = Universe(0, 0)
 
@@ -49,7 +49,7 @@ class BuildLayer3AssignmentsForCueTest {
     @Test
     fun `fixture target emits one Assignment with the correct category`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForCue(fixtures, cueData(
+        val out = buildCueAssignmentsForCue(fixtures, cueData(
             CuePropertyAssignmentDto(
                 targetType = "fixture",
                 targetKey = "hex-1",
@@ -63,7 +63,7 @@ class BuildLayer3AssignmentsForCueTest {
         assertEquals("dimmer", a.propertyName)
         assertEquals(7, a.cueId)
         assertEquals(false, a.targetIsGroup)
-        val v = assertIs<Layer3Resolver.PropertyValue.Slider>(a.value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Slider>(a.value)
         assertEquals(180u.toUByte(), v.value)
         // Priority = cueStackId*1M + sortOrder*1K + 1 = 3_002_001
         assertEquals(3_002_001, a.priority)
@@ -72,7 +72,7 @@ class BuildLayer3AssignmentsForCueTest {
     @Test
     fun `group target expands to per-member rows flagged as group-derived`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForCue(fixtures, cueData(
+        val out = buildCueAssignmentsForCue(fixtures, cueData(
             CuePropertyAssignmentDto(
                 targetType = "group",
                 targetKey = "front-wash",
@@ -84,7 +84,7 @@ class BuildLayer3AssignmentsForCueTest {
         assertTrue(out.all { it.targetIsGroup }, "member rows carry the group-derived flag")
         assertEquals(setOf("hex-1", "hex-2"), out.map { it.targetKey }.toSet())
         out.forEach {
-            val v = assertIs<Layer3Resolver.PropertyValue.Slider>(it.value)
+            val v = assertIs<CueAssignmentResolver.PropertyValue.Slider>(it.value)
             assertEquals(150u.toUByte(), v.value)
         }
     }
@@ -94,21 +94,21 @@ class BuildLayer3AssignmentsForCueTest {
         // Cue asserts group dimmer=150 AND fixture hex-1 dimmer=50. Specificity rule: the
         // direct fixture row wins on hex-1 (50); hex-2 keeps the group value (150).
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val rows = buildLayer3AssignmentsForCue(fixtures, cueData(
+        val rows = buildCueAssignmentsForCue(fixtures, cueData(
             CuePropertyAssignmentDto(targetType = "group", targetKey = "front-wash",
                 propertyName = "dimmer", value = "150"),
             CuePropertyAssignmentDto(targetType = "fixture", targetKey = "hex-1",
                 propertyName = "dimmer", value = "50"),
         ))
-        val resolved = Layer3Resolver().resolve(rows)
+        val resolved = CueAssignmentResolver().resolve(rows)
         assertEquals(
-            Layer3Resolver.PropertyValue.Slider(50u),
-            resolved[Layer3Resolver.Key.fixture("hex-1", "dimmer")],
+            CueAssignmentResolver.PropertyValue.Slider(50u),
+            resolved[CueAssignmentResolver.Key.fixture("hex-1", "dimmer")],
             "fixture-level override wins",
         )
         assertEquals(
-            Layer3Resolver.PropertyValue.Slider(150u),
-            resolved[Layer3Resolver.Key.fixture("hex-2", "dimmer")],
+            CueAssignmentResolver.PropertyValue.Slider(150u),
+            resolved[CueAssignmentResolver.Key.fixture("hex-2", "dimmer")],
             "unaffected member keeps group value",
         )
     }
@@ -116,7 +116,7 @@ class BuildLayer3AssignmentsForCueTest {
     @Test
     fun `colour assignment produces a Colour PropertyValue`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForCue(fixtures, cueData(
+        val out = buildCueAssignmentsForCue(fixtures, cueData(
             CuePropertyAssignmentDto(
                 targetType = "fixture",
                 targetKey = "hex-1",
@@ -126,13 +126,13 @@ class BuildLayer3AssignmentsForCueTest {
         ))
         val a = out.single()
         assertEquals("rgbColour", a.propertyName, "canonicalised to the property name ColourTarget uses")
-        assertIs<Layer3Resolver.PropertyValue.Colour>(a.value)
+        assertIs<CueAssignmentResolver.PropertyValue.Colour>(a.value)
     }
 
     @Test
     fun `missing fixture is logged and skipped, not thrown`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForCue(fixtures, cueData(
+        val out = buildCueAssignmentsForCue(fixtures, cueData(
             CuePropertyAssignmentDto(
                 targetType = "fixture",
                 targetKey = "does-not-exist",
@@ -153,7 +153,7 @@ class BuildLayer3AssignmentsForCueTest {
     @Test
     fun `unknown property name is skipped`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForCue(fixtures, cueData(
+        val out = buildCueAssignmentsForCue(fixtures, cueData(
             CuePropertyAssignmentDto(
                 targetType = "fixture",
                 targetKey = "hex-1",
@@ -168,7 +168,7 @@ class BuildLayer3AssignmentsForCueTest {
     fun `palette cascade - palette ref resolved against supplied cue palette`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val cascade = PaletteCascade(cue = listOf(ExtendedColour(Color(10, 20, 30))))
-        val out = buildLayer3AssignmentsForCue(fixtures, cueData(
+        val out = buildCueAssignmentsForCue(fixtures, cueData(
             CuePropertyAssignmentDto(
                 targetType = "fixture",
                 targetKey = "hex-1",
@@ -176,14 +176,14 @@ class BuildLayer3AssignmentsForCueTest {
                 value = "P1",
             ),
         ), cascade)
-        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
         assertEquals(Color(10, 20, 30), v.value.color)
     }
 
     @Test
     fun `palette cascade - no palette falls through to white`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForCue(fixtures, cueData(
+        val out = buildCueAssignmentsForCue(fixtures, cueData(
             CuePropertyAssignmentDto(
                 targetType = "fixture",
                 targetKey = "hex-1",
@@ -191,14 +191,14 @@ class BuildLayer3AssignmentsForCueTest {
                 value = "P1",
             ),
         ))
-        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
         assertEquals(Color.WHITE, v.value.color)
     }
 
     @Test
     fun `empty propertyAssignments produces empty output`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        assertTrue(buildLayer3AssignmentsForCue(fixtures, cueData()).isEmpty())
+        assertTrue(buildCueAssignmentsForCue(fixtures, cueData()).isEmpty())
     }
 
     @Test
@@ -254,7 +254,7 @@ class BuildLayer3AssignmentsForCueTest {
     @Test
     fun `a fixture ref resolves to the palette's literal for that fixture`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForCue(
+        val out = buildCueAssignmentsForCue(
             fixtures,
             cueData(refAssignment("fixture", "hex-1")),
             paletteRegistry = registryFor(
@@ -264,7 +264,7 @@ class BuildLayer3AssignmentsForCueTest {
                 ),
             ),
         )
-        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
         assertEquals(ExtendedColour(Color(0xff, 0x88, 0x00)), v.value)
     }
 
@@ -272,7 +272,7 @@ class BuildLayer3AssignmentsForCueTest {
     fun `a group ref fans out to per-member literals, not one shared value`() {
         // The whole point of per-fixture palettes: each member can hold a different value.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForCue(
+        val out = buildCueAssignmentsForCue(
             fixtures,
             cueData(refAssignment("group", "front-wash")),
             paletteRegistry = registryFor(
@@ -290,18 +290,18 @@ class BuildLayer3AssignmentsForCueTest {
         val byKey = out.associateBy { it.targetKey }
         assertEquals(
             ExtendedColour(Color(0xff, 0x88, 0x00)),
-            assertIs<Layer3Resolver.PropertyValue.Colour>(byKey.getValue("hex-1").value).value,
+            assertIs<CueAssignmentResolver.PropertyValue.Colour>(byKey.getValue("hex-1").value).value,
         )
         assertEquals(
             ExtendedColour(Color(0x00, 0xff, 0x00)),
-            assertIs<Layer3Resolver.PropertyValue.Colour>(byKey.getValue("hex-2").value).value,
+            assertIs<CueAssignmentResolver.PropertyValue.Colour>(byKey.getValue("hex-2").value).value,
         )
     }
 
     @Test
     fun `a member the palette does not cover is skipped, the others still resolve`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForCue(
+        val out = buildCueAssignmentsForCue(
             fixtures,
             cueData(refAssignment("group", "front-wash")),
             paletteRegistry = registryFor(
@@ -319,7 +319,7 @@ class BuildLayer3AssignmentsForCueTest {
         // Guards the ordering hazard: the literal colour parser answers white for junk, so an
         // unintercepted ref would produce a confident wrong colour instead of nothing.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForCue(
+        val out = buildCueAssignmentsForCue(
             fixtures,
             cueData(refAssignment("fixture", "hex-1")),
             paletteRegistry = null,
@@ -331,7 +331,7 @@ class BuildLayer3AssignmentsForCueTest {
     fun `a positional palette ref is unaffected by the named-ref path`() {
         // Both palette systems coexist; `P1` still indexes the ordered colour list.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForCue(
+        val out = buildCueAssignmentsForCue(
             fixtures,
             cueData(CuePropertyAssignmentDto(
                 targetType = "fixture", targetKey = "hex-1", propertyName = "colour", value = "P1",
@@ -339,7 +339,7 @@ class BuildLayer3AssignmentsForCueTest {
             cascade = PaletteCascade(cue = listOf(ExtendedColour(Color(0x11, 0x22, 0x33)))),
             paletteRegistry = registryFor(fixtures),
         )
-        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
         assertEquals(ExtendedColour(Color(0x11, 0x22, 0x33)), v.value)
     }
 }

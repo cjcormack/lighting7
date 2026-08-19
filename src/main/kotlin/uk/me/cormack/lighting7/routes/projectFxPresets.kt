@@ -491,7 +491,7 @@ private fun isPresetActiveOnTarget(
 }
 
 /**
- * Record of one Layer 4 channel assertion made by a preset toggle. Group-scoped preset
+ * Record of one Layer 2 channel assertion made by a preset toggle. Group-scoped preset
  * assignments expand to one entry per member fixture. `propertyName` is canonical form.
  */
 internal data class PresetToggleWrite(
@@ -500,7 +500,7 @@ internal data class PresetToggleWrite(
 )
 
 /**
- * In-memory tracking of which presets currently have property writes on Layer 4. Mutations
+ * In-memory tracking of which presets currently have property writes on Layer 2. Mutations
  * go through [java.util.concurrent.ConcurrentHashMap.compute] so decide + act + record is
  * atomic per preset — two concurrent toggle requests for the same preset won't interleave.
  *
@@ -721,8 +721,8 @@ internal fun togglePresetOnTargets(
 
 /**
  * Apply each of [presetPropertyAssignments] to [targets] as Layer-4 writes. Reuses
- * [buildLayer3AssignmentsForPreset] for property canonicalisation, category lookup, value
- * parsing, and group expansion — the returned rows never actually hit Layer 3, the synthetic
+ * [buildCueAssignmentsForPreset] for property canonicalisation, category lookup, value
+ * parsing, and group expansion — the returned rows never actually hit Layer 4, the synthetic
  * `cueId = -presetId` only shows up in the builder's log lines if parsing fails.
  */
 private fun applyPresetProgrammerWrites(
@@ -736,8 +736,8 @@ private fun applyPresetProgrammerWrites(
     val engine = state.show.fxEngine
     val owner = ProgrammerOwner.preset(presetId)
 
-    // Layer 4 writes don't belong to a cue — preset palette cascades straight to the global.
-    val rows = buildLayer3AssignmentsForPreset(
+    // Layer 2 writes don't belong to a cue — preset palette cascades straight to the global.
+    val rows = buildCueAssignmentsForPreset(
         state.show.fixtures,
         cueId = -presetId,
         priority = 0,

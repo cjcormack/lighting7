@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 /**
  * Unit tests for [PropertyChannelWriter]. The writer is stateless and reads only the static
  * DMX patch off each fixture, so no controller transaction is required — the tests
- * instantiate bare fixtures. A single round-trip test drives a `Layer3Resolver.Assignment`
+ * instantiate bare fixtures. A single round-trip test drives a `CueAssignmentResolver.Assignment`
  * through both the cue-apply pipeline and the writer, asserting both paths produce identical
  * DMX bytes on the same fixture.
  */
@@ -34,7 +34,7 @@ class PropertyChannelWriterTest {
         val writes = PropertyChannelWriter.resolve(
             hex(),
             "dimmer",
-            Layer3Resolver.PropertyValue.Slider(180u),
+            CueAssignmentResolver.PropertyValue.Slider(180u),
         )
         assertEquals(1, writes.size)
         val w = writes.single()
@@ -46,8 +46,8 @@ class PropertyChannelWriterTest {
 
     @Test
     fun `slider endpoints pass through unchanged`() {
-        val zero = PropertyChannelWriter.resolve(hex(), "dimmer", Layer3Resolver.PropertyValue.Slider(0u)).single()
-        val full = PropertyChannelWriter.resolve(hex(), "dimmer", Layer3Resolver.PropertyValue.Slider(255u)).single()
+        val zero = PropertyChannelWriter.resolve(hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(0u)).single()
+        val full = PropertyChannelWriter.resolve(hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(255u)).single()
         assertEquals(0u.toUByte(), zero.value, "no min/max scaling — 0 maps to 0")
         assertEquals(255u.toUByte(), full.value, "no min/max scaling — 255 maps to 255")
     }
@@ -57,7 +57,7 @@ class PropertyChannelWriterTest {
         val write = PropertyChannelWriter.resolve(
             hex(firstChannel = 100),
             "uv",
-            Layer3Resolver.PropertyValue.Slider(200u),
+            CueAssignmentResolver.PropertyValue.Slider(200u),
         ).single()
         // uv = firstChannel + 6 = 106.
         assertEquals(106, write.channel)
@@ -73,7 +73,7 @@ class PropertyChannelWriterTest {
         val write = PropertyChannelWriter.resolve(
             hex(),
             "mode",
-            Layer3Resolver.PropertyValue.Setting(201u),
+            CueAssignmentResolver.PropertyValue.Setting(201u),
         ).single()
         assertEquals(10, write.channel)
         assertEquals(201u.toUByte(), write.value)
@@ -85,7 +85,7 @@ class PropertyChannelWriterTest {
     @Test
     fun `colour on RGBWA+UV fixture emits all six channels`() {
         val ext = ExtendedColour(Color(200, 100, 50), white = 128u, amber = 64u, uv = 180u)
-        val writes = PropertyChannelWriter.resolve(hex(), "rgbColour", Layer3Resolver.PropertyValue.Colour(ext))
+        val writes = PropertyChannelWriter.resolve(hex(), "rgbColour", CueAssignmentResolver.PropertyValue.Colour(ext))
         // HexFixture: R/G/B at firstChannel+1..+3 (2, 3, 4), amber at +4 (5), white at +5 (6), UV at +6 (7).
         val byChannel = writes.associate { it.channel to it.value }
         assertEquals(200u.toUByte(), byChannel[2])
@@ -104,9 +104,9 @@ class PropertyChannelWriterTest {
     fun `colour without extended values still writes W A UV channels as zero on trait-bearing fixtures`() {
         // HexFixture implements WithWhite/WithAmber/WithUv. An ExtendedColour with the
         // extended channels defaulted to 0 should still emit writes for each — otherwise
-        // a previous sticky value on those channels would linger at Layer 4.
+        // a previous sticky value on those channels would linger at Layer 2.
         val ext = ExtendedColour(Color(255, 0, 0))
-        val writes = PropertyChannelWriter.resolve(hex(), "rgbColour", Layer3Resolver.PropertyValue.Colour(ext))
+        val writes = PropertyChannelWriter.resolve(hex(), "rgbColour", CueAssignmentResolver.PropertyValue.Colour(ext))
         assertEquals(6, writes.size)
         assertEquals(0u.toUByte(), writes.single { it.channel == 5 }.value, "amber zero-write")
         assertEquals(0u.toUByte(), writes.single { it.channel == 6 }.value, "white zero-write")
@@ -119,7 +119,7 @@ class PropertyChannelWriterTest {
         // Asymmetric-trait case: white lands, amber/uv drop without error.
         val lightstrip = LightstripFixture(universe, key = "strip-1", fixtureName = "Strip 1", firstChannel = 1)
         val ext = ExtendedColour(Color(200, 100, 50), white = 128u, amber = 64u, uv = 180u)
-        val writes = PropertyChannelWriter.resolve(lightstrip, "rgbColour", Layer3Resolver.PropertyValue.Colour(ext))
+        val writes = PropertyChannelWriter.resolve(lightstrip, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(ext))
         // LightstripFixture: RGB at 1/2/3, white at 4. No amber / no UV.
         val byChannel = writes.associate { it.channel to it.value }
         assertEquals(200u.toUByte(), byChannel[1])
@@ -142,7 +142,7 @@ class PropertyChannelWriterTest {
         val writes = PropertyChannelWriter.resolve(
             fx,
             "position",
-            Layer3Resolver.PropertyValue.Position(pan = 100u, tilt = 200u),
+            CueAssignmentResolver.PropertyValue.Position(pan = 100u, tilt = 200u),
         )
         assertEquals(2, writes.size)
         val byChannel = writes.associate { it.channel to it.value }
@@ -158,7 +158,7 @@ class PropertyChannelWriterTest {
         val writes = PropertyChannelWriter.resolve(
             hex(),
             "position",
-            Layer3Resolver.PropertyValue.Position(pan = 100u, tilt = 200u),
+            CueAssignmentResolver.PropertyValue.Position(pan = 100u, tilt = 200u),
         )
         assertTrue(writes.isEmpty(), "HexFixture does not implement WithPosition")
     }
@@ -170,7 +170,7 @@ class PropertyChannelWriterTest {
         val writes = PropertyChannelWriter.resolve(
             hex(),
             "nonesuch",
-            Layer3Resolver.PropertyValue.Slider(100u),
+            CueAssignmentResolver.PropertyValue.Slider(100u),
         )
         assertTrue(writes.isEmpty())
     }
@@ -185,7 +185,7 @@ class PropertyChannelWriterTest {
         val writes = PropertyChannelWriter.resolve(
             hex(),
             "mode",
-            Layer3Resolver.PropertyValue.Slider(100u),
+            CueAssignmentResolver.PropertyValue.Slider(100u),
         )
         assertEquals(1, writes.size)
         assertEquals(100u.toUByte(), writes.single().value)
@@ -197,7 +197,7 @@ class PropertyChannelWriterTest {
         val writes = PropertyChannelWriter.resolve(
             hex(),
             "dimmer",
-            Layer3Resolver.PropertyValue.Setting(200u),
+            CueAssignmentResolver.PropertyValue.Setting(200u),
         )
         assertEquals(1, writes.size)
         assertEquals(200u.toUByte(), writes.single().value)
@@ -210,7 +210,7 @@ class PropertyChannelWriterTest {
         val writes = PropertyChannelWriter.resolve(
             hex(),
             "rgbColour",
-            Layer3Resolver.PropertyValue.Slider(100u),
+            CueAssignmentResolver.PropertyValue.Slider(100u),
         )
         assertTrue(writes.isEmpty())
     }
@@ -254,7 +254,7 @@ class PropertyChannelWriterTest {
         val writes = PropertyChannelWriter.resolve(
             head1,
             "pan",
-            Layer3Resolver.PropertyValue.Slider(128u),
+            CueAssignmentResolver.PropertyValue.Slider(128u),
         )
         assertEquals(1, writes.size)
         val w = writes.single()
@@ -270,7 +270,7 @@ class PropertyChannelWriterTest {
         val writes = PropertyChannelWriter.resolve(
             head2,
             "position",
-            Layer3Resolver.PropertyValue.Position(pan = 100u, tilt = 200u),
+            CueAssignmentResolver.PropertyValue.Position(pan = 100u, tilt = 200u),
         )
         // Head 2 pan = firstChannel + 2 + (2 * 3) = 9; tilt = 10.
         val byChannel = writes.associate { it.channel to it.value }
@@ -291,7 +291,7 @@ class PropertyChannelWriterTest {
     // ─── Round-trip vs cue-apply pipeline ───────────────────────────────────
 
     @Test
-    fun `colour write produces same DMX bytes as Layer 3 cue apply for the same value`() {
+    fun `colour write produces same DMX bytes as Layer 4 cue apply for the same value`() {
         // Rig with FxEngine → MockDmxController so we can observe bytes that the cue-apply
         // path writes when it lands the same PropertyValue.
         val controller = MockDmxController(universe)
@@ -305,17 +305,17 @@ class PropertyChannelWriterTest {
             fixtures = fixtures,
             speedMasters = SpeedMasterBank(),
             programmerStore = programmerStore,
-            layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
+            layerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
         )
 
-        // Cue-apply path: assignment → setCueAssignments → publishLayer3ToControllers → controller bytes.
+        // Cue-apply path: assignment → setCueAssignments → publishCueLayerToControllers → controller bytes.
         val ext = ExtendedColour(Color(200, 100, 50), white = 128u, amber = 64u, uv = 180u)
-        val assignment = Layer3Resolver.Assignment(
+        val assignment = CueAssignmentResolver.Assignment(
             cueId = 1, priority = 1, fadeWeight = 1.0,
             targetKey = "hex-1", targetIsGroup = false,
             propertyName = "rgbColour",
             category = PropertyCategory.COLOUR,
-            value = Layer3Resolver.PropertyValue.Colour(ext),
+            value = CueAssignmentResolver.PropertyValue.Colour(ext),
         )
         engine.setCueAssignments(1, listOf(assignment))
         val cueBytes = mapOf(
@@ -331,7 +331,7 @@ class PropertyChannelWriterTest {
         val writerBytes = PropertyChannelWriter.resolve(
             HexFixture(universe, "hex-1", "Hex 1", 1),
             "rgbColour",
-            Layer3Resolver.PropertyValue.Colour(ext),
+            CueAssignmentResolver.PropertyValue.Colour(ext),
         ).associate { it.channel to it.value }
 
         assertEquals(cueBytes[2], writerBytes[2], "red channel matches cue-apply")
@@ -343,7 +343,7 @@ class PropertyChannelWriterTest {
     }
 
     @Test
-    fun `slider write produces same DMX byte as Layer 3 cue apply for the same value`() {
+    fun `slider write produces same DMX byte as Layer 4 cue apply for the same value`() {
         val controller = MockDmxController(universe)
         val fixtures = Fixtures()
         fixtures.register {
@@ -355,22 +355,22 @@ class PropertyChannelWriterTest {
             fixtures = fixtures,
             speedMasters = SpeedMasterBank(),
             programmerStore = programmerStore,
-            layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
+            layerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
         )
 
-        val assignment = Layer3Resolver.Assignment(
+        val assignment = CueAssignmentResolver.Assignment(
             cueId = 1, priority = 1, fadeWeight = 1.0,
             targetKey = "hex-1", targetIsGroup = false,
             propertyName = "dimmer",
             category = PropertyCategory.DIMMER,
-            value = Layer3Resolver.PropertyValue.Slider(180u),
+            value = CueAssignmentResolver.PropertyValue.Slider(180u),
         )
         engine.setCueAssignments(1, listOf(assignment))
 
         val writerWrite = PropertyChannelWriter.resolve(
             HexFixture(universe, "hex-1", "Hex 1", 1),
             "dimmer",
-            Layer3Resolver.PropertyValue.Slider(180u),
+            CueAssignmentResolver.PropertyValue.Slider(180u),
         ).single()
 
         assertEquals(controller.currentValues[1], writerWrite.value, "dimmer channel matches cue-apply")

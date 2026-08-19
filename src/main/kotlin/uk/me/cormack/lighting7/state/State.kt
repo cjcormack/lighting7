@@ -588,7 +588,7 @@ class State(val config: ApplicationConfig) {
      * Phase 6 cue-edit session registry. Each WebSocket connection that runs `cueEdit.*`
      * messages registers its [uk.me.cormack.lighting7.plugins.CueEditSessionState] here so
      * the [SurfaceInputRouter] can route fader writes into the open cue and the
-     * [SurfaceFeedbackPublisher] can drive motors from the cue's Layer 3 value.
+     * [SurfaceFeedbackPublisher] can drive motors from the cue's Layer 4 value.
      */
     val cueEditSessionRegistry: CueEditSessionRegistry by lazy { CueEditSessionRegistry() }
 

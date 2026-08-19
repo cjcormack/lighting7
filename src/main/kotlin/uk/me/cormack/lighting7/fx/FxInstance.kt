@@ -191,7 +191,7 @@ class FxInstance(
      *
      * Used by manual / scripted effect fades. Cue transitions do NOT touch this field —
      * effects snap on cue transition (outgoing removed, incoming start at full intensity);
-     * only Layer 3 property assignments crossfade. See [CueStackManager] for rationale.
+     * only Layer 4 property assignments crossfade. See [CueStackManager] for rationale.
      */
     @Volatile
     var intensityMultiplier: Double = 1.0

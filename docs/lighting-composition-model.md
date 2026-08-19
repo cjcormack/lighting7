@@ -25,8 +25,8 @@ Intuition: parking (Layer 1) sits on top for safety. The programmer (Layer 2) is
 
 > **Historical note.** Before the programmer redesign the manual layer ("Direct Live
 > Writes") sat *below* playbacks at the old Layer 4, and Effects/Assignments were Layers
-> 2/3. Code symbols that predate the renumber (`Layer3Resolver`, `Layer3Resolver.Key`)
-> still name the cue-assignment layer by its old number; their KDoc says so.
+> 2/3. Only the archived plans in [plans/completed/](plans/completed/) still use those
+> numbers; code and docs are on the numbering above.
 
 ## Layer 1 — Parking
 
@@ -107,7 +107,7 @@ It reaches the client two ways: on `programmer.state` as `lastIncluded`, and as 
 
 ### Provenance
 
-The engine maintains, per (target, property), the identity of the winning contributor — `PARKED`, `PROGRAMMER`, `EFFECT` (with `effectId`/`cueId`), or `CUE` (with the winning `cueId` **and** `cueStackId`); baseline keys are omitted. Recomputed on layer events only (programmer mutation, cue republish, effect lifecycle, park change) — never per frame — and broadcast as a full-state `provenanceState` WS message. This powers ownership colouring in the programmer sheet. Note that Update's Mode B checklist does *not* read provenance: provenance correctly names the programmer as the winner, which is precisely the answer "what am I sitting on top of?" cannot use. `FxEngine.underlyingSources` answers that from the programmer-independent Layer 3 winner map instead. Because programmer mutations reply only to the connection that made them, `provenanceState` is also the frontend's signal to re-read `programmer.state` — it is the one broadcast that fires for a write made by a MIDI surface, a locate, or another browser tab.
+The engine maintains, per (target, property), the identity of the winning contributor — `PARKED`, `PROGRAMMER`, `EFFECT` (with `effectId`/`cueId`), or `CUE` (with the winning `cueId` **and** `cueStackId`); baseline keys are omitted. Recomputed on layer events only (programmer mutation, cue republish, effect lifecycle, park change) — never per frame — and broadcast as a full-state `provenanceState` WS message. This powers ownership colouring in the programmer sheet. Note that Update's Mode B checklist does *not* read provenance: provenance correctly names the programmer as the winner, which is precisely the answer "what am I sitting on top of?" cannot use. `FxEngine.underlyingSources` answers that from the programmer-independent Layer 4 winner map instead. Because programmer mutations reply only to the connection that made them, `provenanceState` is also the frontend's signal to re-read `programmer.state` — it is the one broadcast that fires for a write made by a MIDI surface, a locate, or another browser tab.
 
 ### Record / Include / Update
 
@@ -138,7 +138,7 @@ silently miss heads. Omitting the mask, or naming all four groups, means "everyt
 - **Mode** — `CREATE` makes a cue in a stack; `MERGE` upserts; `REMOVE` deletes the rows the
   recording names; `UPDATE_EXISTING` replaces the cue's in-mask content. **Triggers and timed
   children are never touched by any mode** — they are not programmer state, and `CueTriggerManager`
-  owns the timed ones. Recording into the live cue of a stack republishes its Layer 3, or the DB
+  owns the timed ones. Recording into the live cue of a stack republishes its Layer 4, or the DB
   and the published layer would disagree and the next Clear would snap the rig back.
 
 **`include { cueId, mask? }`** loads a cue's assignments and immediate FX into the programmer as
@@ -209,10 +209,8 @@ Cue transitions do **not** drive `intensityMultiplier`. On a cue change, outgoin
 
 Deterministic per-cue state — the "this cue asserts property X = value" layer. Contributed by active cues via the `CuePropertyAssignment` collection.
 
-> Code note: this layer is composed by `Layer3Resolver` / consumed via
-> `LayerResolver.currentLayer3State` — the class names carry the pre-renumber "Layer 3"
-> and are kept to avoid churning ~25 files; a rename to `CueAssignmentResolver` is queued
-> in [followups.md](plans/followups.md).
+> Code note: this layer is composed by `CueAssignmentResolver` / consumed via
+> `LayerResolver.currentCueLayerState`.
 
 ### Composition rules by `PropertyCategory`
 
@@ -274,7 +272,7 @@ References resolve **per fixture**, at the point the row is built rather than in
   is the whole reason entries are per-fixture.
 
 One ordering rule is load-bearing: the `ref:` check happens **before**
-`Layer3Resolver.parseAssignmentValue`, because for `COLOUR` that routes to `parseExtendedColour`,
+`CueAssignmentResolver.parseAssignmentValue`, because for `COLOUR` that routes to `parseExtendedColour`,
 which answers **white** for anything it doesn't recognise. An unintercepted ref would silently light
 the fixture rather than report a dead reference.
 

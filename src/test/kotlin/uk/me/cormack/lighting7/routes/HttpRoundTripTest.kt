@@ -66,7 +66,7 @@ class HttpRoundTripTest : RouteIntegrationTest() {
         // (channelMapping, fxState, palette, etc. — see plugins/Sockets.kt). Filter
         // via [awaitOfType] rather than reading the first frame blindly.
         //
-        // Snapshot happens inside the open Live session: after setProperty, Layer 3
+        // Snapshot happens inside the open Live session: after setProperty, Layer 4
         // reflects the edit, but endEdit would tear it down (removeEffectsForCue →
         // removeCueAssignments), so the snapshot has to come before endEdit.
         client.webSocket("/api") {

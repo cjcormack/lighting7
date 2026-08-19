@@ -89,8 +89,8 @@ class Show(
         })
     }
 
-    val layer3Resolver = Layer3Resolver()
-    val layerResolver = LayerResolver(layer3Resolver, programmerStore)
+    val cueAssignmentResolver = CueAssignmentResolver()
+    val layerResolver = LayerResolver(cueAssignmentResolver, programmerStore)
     val parkManager = ParkManager(
         state.database,
         project.id.value,

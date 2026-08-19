@@ -26,11 +26,11 @@ import uk.me.cormack.lighting7.routes.CueApplyData
 import uk.me.cormack.lighting7.routes.TogglePresetTarget
 import uk.me.cormack.lighting7.routes.applyCue
 import uk.me.cormack.lighting7.routes.buildCueApplyData
-import uk.me.cormack.lighting7.routes.buildLayer3AssignmentsForCue
-import uk.me.cormack.lighting7.routes.buildLayer3AssignmentsForPreset
+import uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue
+import uk.me.cormack.lighting7.routes.buildCueAssignmentsForPreset
 import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
 import uk.me.cormack.lighting7.routes.cueDerivedPriority
-import uk.me.cormack.lighting7.routes.republishCueLayer3
+import uk.me.cormack.lighting7.routes.republishCueLayer
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
 import uk.me.cormack.lighting7.routes.toPropertyAssignmentDtos
 import uk.me.cormack.lighting7.state.State
@@ -362,7 +362,7 @@ object CueEditSessionHandler {
         val newCueStackId: Int?
         when (newMode) {
             CueEditMode.BLIND -> {
-                // Stack cues tear down the whole stack (drops effects, Layer 3, triggers, and
+                // Stack cues tear down the whole stack (drops effects, Layer 4, triggers, and
                 // the paused auto-advance job in one call); standalone cues just drop their
                 // own effects + triggers.
                 if (session.cueStackId != null) {
@@ -396,7 +396,7 @@ object CueEditSessionHandler {
     /**
      * Delete one property assignment from the open cue. Matches by
      * `(target, propertyName)`; silently succeeds if no row matches (idempotent).
-     * In `LIVE` mode, republishes Layer 3 so the channel releases to the layer below.
+     * In `LIVE` mode, republishes Layer 4 so the channel releases to the layer below.
      */
     fun clearAssignment(
         state: State,
@@ -425,7 +425,7 @@ object CueEditSessionHandler {
             return CueEditErrorOutMessage(cueId, "Clear failed: ${e.message}")
         }
 
-        if (applyData != null) republishLayer3(state, cueId, applyData)
+        if (applyData != null) republishCueLayer(state, cueId, applyData)
 
         state.cueEditSessionRegistry.notifyAssignmentCleared(
             state.projectManager.currentProject.id.value, cueId, target, propertyName,
@@ -459,7 +459,7 @@ object CueEditSessionHandler {
 
     /**
      * Upsert a property assignment for (target, propertyName) = value. In `LIVE` mode,
-     * republish the cue's Layer 3 state so the change is visible immediately.
+     * republish the cue's Layer 4 state so the change is visible immediately.
      */
     fun setProperty(
         state: State,
@@ -506,7 +506,7 @@ object CueEditSessionHandler {
             return@measure CueEditErrorOutMessage(cueId, "Persist failed: ${e.message}")
         }
 
-        if (applyData != null) republishLayer3(state, cueId, applyData)
+        if (applyData != null) republishCueLayer(state, cueId, applyData)
 
         state.cueEditSessionRegistry.notifyAssignmentChanged(
             state.projectManager.currentProject.id.value, cueId, target, propertyName, value,
@@ -556,7 +556,7 @@ object CueEditSessionHandler {
 
     /**
      * Restore the cue's `propertyAssignments` to the session snapshot. Deletes all current
-     * assignments and re-creates them from the snapshot, then republishes Layer 3 if Live.
+     * assignments and re-creates them from the snapshot, then republishes Layer 4 if Live.
      */
     fun discardChanges(
         state: State,
@@ -589,7 +589,7 @@ object CueEditSessionHandler {
             return CueEditErrorOutMessage(cueId, "Discard failed: ${e.message}")
         }
 
-        if (applyData != null) republishLayer3(state, cueId, applyData)
+        if (applyData != null) republishCueLayer(state, cueId, applyData)
         state.cueEditSessionRegistry.notifyAssignmentsReloaded(
             state.projectManager.currentProject.id.value, cueId, session.snapshot,
         )
@@ -680,9 +680,9 @@ object CueEditSessionHandler {
 
         val (applyData, presetEffects) = result
         if (applyData != null) {
-            // Republish Layer 3 so the new preset's property assignments land on stage before
+            // Republish Layer 4 so the new preset's property assignments land on stage before
             // effects spawn — effects reset-to-layer-below sees the preset-contributed baseline.
-            republishLayer3(state, cueId, applyData)
+            republishCueLayer(state, cueId, applyData)
 
             if (presetEffects != null) {
                 for (target in targets) {
@@ -879,16 +879,6 @@ object CueEditSessionHandler {
             state.show.fxEngine.removeEffectsForCue(session.cueId)
         }
     }
-
-    /**
-     * Republish Layer 3 for [cueId] from pre-built [applyData]. Callers build the apply data
-     * inside the persist transaction so we don't round-trip to the DB twice per edit.
-     *
-     * Combines the cue's own property assignments with property assignments from each
-     * immediate preset application (timed presets don't contribute — matches [applyCue]).
-     */
-    private fun republishLayer3(state: State, cueId: Int, applyData: CueApplyData) =
-        republishCueLayer3(state, cueId, applyData)
 
     /**
      * Walk the fixture that owns [channel] in [universe] and identify the property it backs.

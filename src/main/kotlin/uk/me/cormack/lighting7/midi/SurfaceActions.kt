@@ -30,7 +30,7 @@ import uk.me.cormack.lighting7.show.Fixtures
 interface SurfaceActions {
     /**
      * Write a continuous value (0..127 MIDI 7-bit) to a fixture property. The production
-     * implementation transparently routes into the active cue's Layer 3 when a cue-edit
+     * implementation transparently routes into the active cue's Layer 4 when a cue-edit
      * session is open on the current project, otherwise writes a programmer entry.
      */
     fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte)

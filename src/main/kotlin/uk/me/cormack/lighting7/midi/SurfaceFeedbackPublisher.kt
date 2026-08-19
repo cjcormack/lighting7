@@ -13,7 +13,7 @@ import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
@@ -102,7 +102,7 @@ class SurfaceFeedbackPublisher(
     val takeover: SoftTakeoverStateMachine = SoftTakeoverStateMachine(),
     /**
      * Phase 6: when non-null, feedback for bound continuous targets reflects the cue-edit
-     * session's current Layer 3 assignment for the target (if any) instead of the composed
+     * session's current Layer 4 assignment for the target (if any) instead of the composed
      * live DMX value. Lookup is cached internally so the hot [onChannelsChanged] path stays
      * allocation-free when no session is open.
      */
@@ -169,10 +169,10 @@ class SurfaceFeedbackPublisher(
         /**
          * Secondary index of fixture / group continuous entries keyed by assignment identity —
          * lets [resyncEntriesMatching] skip the per-entry walk on the cue-edit hot path.
-         * Populated only for bindings whose target produces a [Layer3Resolver.Key]
+         * Populated only for bindings whose target produces a [CueAssignmentResolver.Key]
          * (FixtureProperty / GroupProperty); Flash / cueStack / blackout targets are absent.
          */
-        val continuousByAssignmentKey: Map<Layer3Resolver.Key, List<ContinuousEntry>>,
+        val continuousByAssignmentKey: Map<CueAssignmentResolver.Key, List<ContinuousEntry>>,
         val ledsByDisplay: Map<String, List<LedEntry>>,
         val flashByBindingId: Map<Int, LedEntry>,
         val blackoutLeds: List<LedEntry>,
@@ -199,11 +199,11 @@ class SurfaceFeedbackPublisher(
 
     /**
      * Per-target cached cue assignments for the active cue-edit session. Keyed by
-     * [Layer3Resolver.Key] — matches [CuePropertyAssignmentDto] row identity. Empty when
+     * [CueAssignmentResolver.Key] — matches [CuePropertyAssignmentDto] row identity. Empty when
      * no session is active. Rebuilt on session start / mode change / discard; patched
      * incrementally on single-assignment events.
      */
-    private val sessionAssignments = AtomicReference<Map<Layer3Resolver.Key, String>>(emptyMap())
+    private val sessionAssignments = AtomicReference<Map<CueAssignmentResolver.Key, String>>(emptyMap())
 
     private val fixtureListener = object : FixturesChangeListener {
         override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) =
@@ -493,13 +493,13 @@ class SurfaceFeedbackPublisher(
                 resyncAllDevices()
             }
             is CueEditSessionRegistry.Event.AssignmentChanged -> {
-                val key = Layer3Resolver.Key(event.target, event.propertyName)
+                val key = CueAssignmentResolver.Key(event.target, event.propertyName)
                 val current = sessionAssignments.get()
                 sessionAssignments.set(current + (key to event.value))
                 resyncEntriesMatching(key)
             }
             is CueEditSessionRegistry.Event.AssignmentCleared -> {
-                val key = Layer3Resolver.Key(event.target, event.propertyName)
+                val key = CueAssignmentResolver.Key(event.target, event.propertyName)
                 val current = sessionAssignments.get()
                 if (key in current) {
                     sessionAssignments.set(current - key)
@@ -513,8 +513,8 @@ class SurfaceFeedbackPublisher(
         }
     }
 
-    private fun buildAssignmentMap(rows: List<CuePropertyAssignmentDto>): Map<Layer3Resolver.Key, String> =
-        rows.associate { Layer3Resolver.Key(it.target, it.propertyName) to it.value }
+    private fun buildAssignmentMap(rows: List<CuePropertyAssignmentDto>): Map<CueAssignmentResolver.Key, String> =
+        rows.associate { CueAssignmentResolver.Key(it.target, it.propertyName) to it.value }
 
     private fun resyncAllDevices() {
         for (displayKey in deviceMatcher.attached.value.keys) {
@@ -522,7 +522,7 @@ class SurfaceFeedbackPublisher(
         }
     }
 
-    private fun resyncEntriesMatching(key: Layer3Resolver.Key) {
+    private fun resyncEntriesMatching(key: CueAssignmentResolver.Key) {
         val entries = index.get().continuousByAssignmentKey[key] ?: return
         for (entry in entries) {
             sendContinuousFeedback(entry, computeValue7Bit(entry))
@@ -542,19 +542,19 @@ class SurfaceFeedbackPublisher(
             is BindingTarget.GroupProperty -> t.propertyName
             else -> return null
         }
-        val parsed = Layer3Resolver.parseAssignmentValue(pc.category, propertyName, valueStr) ?: return null
+        val parsed = CueAssignmentResolver.parseAssignmentValue(pc.category, propertyName, valueStr) ?: return null
         return when (parsed) {
-            is Layer3Resolver.PropertyValue.Slider ->
+            is CueAssignmentResolver.PropertyValue.Slider ->
                 PropertyChannelResolver.scaleWithinRangeTo7Bit(parsed.value, pc.min, pc.max)
-            is Layer3Resolver.PropertyValue.Setting ->
+            is CueAssignmentResolver.PropertyValue.Setting ->
                 PropertyChannelResolver.scaleWithinRangeTo7Bit(parsed.channelValue, pc.min, pc.max)
-            is Layer3Resolver.PropertyValue.Colour -> {
+            is CueAssignmentResolver.PropertyValue.Colour -> {
                 // Primary channel for a colour binding is the red axis (0..255 range). Pick
                 // the red component to drive the motor — a uniform grey set by
                 // [serializeToAssignmentValue] round-trips to the same 7-bit position.
                 PropertyChannelResolver.scaleDmxTo7Bit(parsed.value.color.red.toUByte())
             }
-            is Layer3Resolver.PropertyValue.Position -> {
+            is CueAssignmentResolver.PropertyValue.Position -> {
                 // Primary channel for a position binding is the pan axis.
                 PropertyChannelResolver.scaleDmxTo7Bit(parsed.pan)
             }
@@ -580,7 +580,7 @@ class SurfaceFeedbackPublisher(
         val profilesByKey = types().associateBy { it.typeKey }
         val byChannel = HashMap<Long, MutableList<ContinuousEntry>>()
         val continuousByDisplay = HashMap<String, MutableList<ContinuousEntry>>()
-        val continuousByAssignmentKey = HashMap<Layer3Resolver.Key, MutableList<ContinuousEntry>>()
+        val continuousByAssignmentKey = HashMap<CueAssignmentResolver.Key, MutableList<ContinuousEntry>>()
         val ledsByDisplay = HashMap<String, MutableList<LedEntry>>()
         val flashByBindingId = HashMap<Int, LedEntry>()
         val blackoutLeds = mutableListOf<LedEntry>()
@@ -647,7 +647,7 @@ class SurfaceFeedbackPublisher(
             Index(
                 byChannel = byChannel as Map<Long, List<ContinuousEntry>>,
                 continuousByDisplay = continuousByDisplay as Map<String, List<ContinuousEntry>>,
-                continuousByAssignmentKey = continuousByAssignmentKey as Map<Layer3Resolver.Key, List<ContinuousEntry>>,
+                continuousByAssignmentKey = continuousByAssignmentKey as Map<CueAssignmentResolver.Key, List<ContinuousEntry>>,
                 ledsByDisplay = ledsByDisplay as Map<String, List<LedEntry>>,
                 flashByBindingId = flashByBindingId,
                 blackoutLeds = blackoutLeds,
@@ -720,7 +720,7 @@ class SurfaceFeedbackPublisher(
     }
 
     private fun computeValue7Bit(entry: ContinuousEntry): UByte {
-        // Phase 6: during an active cue-edit session, prefer the cue's own Layer 3 assignment
+        // Phase 6: during an active cue-edit session, prefer the cue's own Layer 4 assignment
         // for the bound target. Falls through to the DMX-derived value when the cue hasn't
         // asserted this property (or the provider reports no session), so an un-edited fader
         // still shows the live composed value.
@@ -745,9 +745,9 @@ class SurfaceFeedbackPublisher(
         return PropertyChannelResolver.scaleWithinRangeTo7Bit(dmx, pc.min, pc.max)
     }
 
-    private fun assignmentKeyFor(entry: ContinuousEntry): Layer3Resolver.Key? = when (val t = entry.binding.target) {
-        is BindingTarget.FixtureProperty -> Layer3Resolver.Key.fixture(t.fixtureKey, t.propertyName)
-        is BindingTarget.GroupProperty -> Layer3Resolver.Key.group(t.groupName, t.propertyName)
+    private fun assignmentKeyFor(entry: ContinuousEntry): CueAssignmentResolver.Key? = when (val t = entry.binding.target) {
+        is BindingTarget.FixtureProperty -> CueAssignmentResolver.Key.fixture(t.fixtureKey, t.propertyName)
+        is BindingTarget.GroupProperty -> CueAssignmentResolver.Key.group(t.groupName, t.propertyName)
         else -> null
     }
 

@@ -14,7 +14,7 @@ import uk.me.cormack.lighting7.fx.MasterClock
  *
  * Targets fall into three rough families:
  *   - **Continuous** ([FixtureProperty], [GroupProperty], [SpeedMasterBpm]) — fader /
- *     encoder movements map to a Layer 4 property write (Phase 3) or a tempo write.
+ *     encoder movements map to a Layer 2 property write (Phase 3) or a tempo write.
  *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [FireCue],
  *     [SpeedMasterTap]) — button press invokes a service call.
  *   - **Momentary / global / meta** ([Flash], [Blackout], [GrandMasterToggle], [SetBank]) —
@@ -65,7 +65,7 @@ sealed class BindingTarget {
     data class FireCue(val cueId: Int) : BindingTarget()
 
     /**
-     * Momentary "flash" write: on press, write [max] to the nested property via Layer 4;
+     * Momentary "flash" write: on press, write [max] to the nested property via Layer 2;
      * on release, restore whatever was underneath. The nested target must be a
      * [FixtureProperty] or [GroupProperty] (constrained at bind time).
      */

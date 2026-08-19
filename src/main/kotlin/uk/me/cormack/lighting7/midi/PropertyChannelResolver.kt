@@ -8,7 +8,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fx.ExtendedColour
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import java.awt.Color
 
 /**
@@ -146,13 +146,13 @@ object PropertyChannelResolver {
 
     /**
      * Convert a MIDI 7-bit value for [propertyName] on [fixture] into a typed
-     * [Layer3Resolver.PropertyValue] — the form the programmer store and cue assignments
+     * [CueAssignmentResolver.PropertyValue] — the form the programmer store and cue assignments
      * both consume.
      *
-     * - [DmxSlider] → [Layer3Resolver.PropertyValue.Slider], scaled through the slider's own
+     * - [DmxSlider] → [CueAssignmentResolver.PropertyValue.Slider], scaled through the slider's own
      *   `min..max` sub-range so a fader at 100% produces the slider's own max rather than
      *   raw DMX 255.
-     * - [DmxColour] → [Layer3Resolver.PropertyValue.Colour] grey, each axis set to the full
+     * - [DmxColour] → [CueAssignmentResolver.PropertyValue.Colour] grey, each axis set to the full
      *   7→8-bit scaled value. Matches [resolveFixtureProperty]'s fan-out semantics (all
      *   three channels carry the same value).
      * - [DmxFixtureSetting] and unknown types → `null`. Settings are bindable only to buttons.
@@ -161,7 +161,7 @@ object PropertyChannelResolver {
         fixture: Fixture,
         propertyName: String,
         midiValue7Bit: UByte,
-    ): Layer3Resolver.PropertyValue? {
+    ): CueAssignmentResolver.PropertyValue? {
         val property = fixture.fixtureProperty(propertyName) ?: return null
         val raw = try {
             property.classProperty.call(fixture)
@@ -169,12 +169,12 @@ object PropertyChannelResolver {
             return null
         } ?: return null
         return when (raw) {
-            is DmxSlider -> Layer3Resolver.PropertyValue.Slider(
+            is DmxSlider -> CueAssignmentResolver.PropertyValue.Slider(
                 scaleWithinRange(midiValue7Bit, raw.min, raw.max),
             )
             is DmxColour -> {
                 val dmx = scale7BitToDmx(midiValue7Bit).toInt()
-                Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(dmx, dmx, dmx)))
+                CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(dmx, dmx, dmx)))
             }
             else -> null
         }
@@ -182,10 +182,10 @@ object PropertyChannelResolver {
 
     /**
      * Serialize a MIDI 7-bit value for [propertyName] on [fixture] into the string form
-     * consumed by [uk.me.cormack.lighting7.fx.Layer3Resolver.parseAssignmentValue] — i.e.
+     * consumed by [uk.me.cormack.lighting7.fx.CueAssignmentResolver.parseAssignmentValue] — i.e.
      * the value that sits in `CuePropertyAssignment.value`. See [toPropertyValue] for the
      * per-type semantics; output is produced via
-     * [uk.me.cormack.lighting7.fx.Layer3Resolver.PropertyValue.serialize] so this path
+     * [uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.serialize] so this path
      * round-trips through `parseAssignmentValue` by construction.
      */
     fun serializeToAssignmentValue(
@@ -198,7 +198,7 @@ object PropertyChannelResolver {
      * The typed value a flash press should assert for [propertyName] on [fixture] at the
      * binding's 0..255 [max] level.
      *
-     * - [DmxSlider] → [Layer3Resolver.PropertyValue.Slider] clamped to the slider's own
+     * - [DmxSlider] → [CueAssignmentResolver.PropertyValue.Slider] clamped to the slider's own
      *   `max` so a flash never writes past a dimmer's configured cap.
      * - [DmxColour] → grey at [max] — the "brightness on a colour" fallback, matching the
      *   fader semantics above. The extended W/A/UV components are 0: a flash asserts the
@@ -212,7 +212,7 @@ object PropertyChannelResolver {
         fixture: Fixture,
         propertyName: String,
         max: UByte,
-    ): Layer3Resolver.PropertyValue? {
+    ): CueAssignmentResolver.PropertyValue? {
         val property = fixture.fixtureProperty(propertyName) ?: return null
         val raw = try {
             property.classProperty.call(fixture)
@@ -220,10 +220,10 @@ object PropertyChannelResolver {
             return null
         } ?: return null
         return when (raw) {
-            is DmxSlider -> Layer3Resolver.PropertyValue.Slider(minOf(max, raw.max))
+            is DmxSlider -> CueAssignmentResolver.PropertyValue.Slider(minOf(max, raw.max))
             is DmxColour -> {
                 val v = max.toInt()
-                Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(v, v, v)))
+                CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(v, v, v)))
             }
             else -> null
         }

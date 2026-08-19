@@ -31,7 +31,7 @@ import java.awt.Color
  * engine to fan out from — white/amber-only blinders and UV cannons must still light.
  * Speed, macro, rotation and bare SETTING channels are left alone.
  *
- * Values are expressed as [Layer3Resolver.PropertyValue]s for the FX engine's Layer-4 write
+ * Values are expressed as [CueAssignmentResolver.PropertyValue]s for the FX engine's Layer-4 write
  * path, so locate participates in the normal layer cascade (park still wins, clearing falls
  * back to cue/baseline). Pan/tilt use the synthetic `"position"` property — the same name cue
  * assignments use — so a cue's position correctly reasserts itself when locate is released.
@@ -50,7 +50,7 @@ object LocateValueResolver {
     data class LocateAssignment(
         val target: GroupableFixture,
         val propertyName: String,
-        val value: Layer3Resolver.PropertyValue,
+        val value: CueAssignmentResolver.PropertyValue,
     )
 
     /** Locate white: full RGB *and* full white — covers RGB-only and white-engine fixtures. */
@@ -82,13 +82,13 @@ object LocateValueResolver {
         }
 
         // Candidates carry their backing so channel collisions can be resolved below.
-        val candidates = mutableListOf<Pair<PropertyChannelWriter.NamedProperty, Layer3Resolver.PropertyValue>>()
+        val candidates = mutableListOf<Pair<PropertyChannelWriter.NamedProperty, CueAssignmentResolver.PropertyValue>>()
 
         if (onlyCategories == null && target is WithPosition) {
             val pan = (target.pan as? DmxSlider)?.let(::midValue) ?: 128u.toUByte()
             val tilt = (target.tilt as? DmxSlider)?.let(::midValue) ?: 128u.toUByte()
             candidates += PropertyChannelWriter.NamedProperty("position", PropertyCategory.OTHER, Unit) to
-                Layer3Resolver.PropertyValue.Position(pan, tilt)
+                CueAssignmentResolver.PropertyValue.Position(pan, tilt)
         }
 
         for (property in properties) {
@@ -112,62 +112,62 @@ object LocateValueResolver {
         category: PropertyCategory,
         backing: Any,
         hasRgbEngine: Boolean,
-    ): Layer3Resolver.PropertyValue? =
+    ): CueAssignmentResolver.PropertyValue? =
         when (category) {
             PropertyCategory.DIMMER ->
-                (backing as? DmxSlider)?.let { Layer3Resolver.PropertyValue.Slider(it.max) }
+                (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(it.max) }
 
             // Only reached on fixtures without WithPosition (e.g. a lone axis channel).
             PropertyCategory.PAN, PropertyCategory.TILT ->
-                (backing as? DmxSlider)?.let { Layer3Resolver.PropertyValue.Slider(midValue(it)) }
+                (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(midValue(it)) }
 
             PropertyCategory.PAN_FINE, PropertyCategory.TILT_FINE ->
-                (backing as? DmxSlider)?.let { Layer3Resolver.PropertyValue.Slider(0u) }
+                (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(0u) }
 
             // Any Strobe channel knows its shutter-open level; coerce because the raw value
             // bypasses the slider's own clamp, and a fullOnValue above a fenced-off max must
             // not drive into lamp/reset bands the setter would have refused.
             PropertyCategory.STROBE -> if (backing is DmxSlider && backing is Strobe) {
-                Layer3Resolver.PropertyValue.Slider(backing.fullOnValue.coerceIn(backing.min, backing.max))
+                CueAssignmentResolver.PropertyValue.Slider(backing.fullOnValue.coerceIn(backing.min, backing.max))
             } else null
 
             PropertyCategory.COLOUR -> when (backing) {
-                is DmxColour -> Layer3Resolver.PropertyValue.Colour(LOCATE_WHITE)
+                is DmxColour -> CueAssignmentResolver.PropertyValue.Colour(LOCATE_WHITE)
                 is DmxFixtureSetting<*> -> {
                     // With an RGB engine on the same target the wheel must be *disengaged*,
                     // not set to a white preset — its macro slots override the RGB channels.
                     val slot = if (hasRgbEngine) disengagedSetting(backing) else whiteSetting(backing)
-                    slot?.let { Layer3Resolver.PropertyValue.Setting(it.level) }
+                    slot?.let { CueAssignmentResolver.PropertyValue.Setting(it.level) }
                 }
                 else -> null
             }
 
             PropertyCategory.GOBO -> when (backing) {
                 is DmxFixtureSetting<*> ->
-                    openGoboSetting(backing)?.let { Layer3Resolver.PropertyValue.Setting(it.level) }
-                is DmxSlider -> Layer3Resolver.PropertyValue.Slider(backing.min)
+                    openGoboSetting(backing)?.let { CueAssignmentResolver.PropertyValue.Setting(it.level) }
+                is DmxSlider -> CueAssignmentResolver.PropertyValue.Slider(backing.min)
                 else -> null
             }
 
             PropertyCategory.PRISM -> when (backing) {
                 is DmxFixtureSetting<*> ->
-                    prismOutSetting(backing)?.let { Layer3Resolver.PropertyValue.Setting(it.level) }
-                is DmxSlider -> Layer3Resolver.PropertyValue.Slider(backing.min)
+                    prismOutSetting(backing)?.let { CueAssignmentResolver.PropertyValue.Setting(it.level) }
+                is DmxSlider -> CueAssignmentResolver.PropertyValue.Slider(backing.min)
                 else -> null
             }
 
             PropertyCategory.IRIS, PropertyCategory.FROST ->
-                (backing as? DmxSlider)?.let { Layer3Resolver.PropertyValue.Slider(it.min) }
+                (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(it.min) }
 
             PropertyCategory.ZOOM, PropertyCategory.FOCUS ->
-                (backing as? DmxSlider)?.let { Layer3Resolver.PropertyValue.Slider(midValue(it)) }
+                (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(midValue(it)) }
 
             // Standalone white/amber/UV engines with no RGB property to fan out from — the
             // whole light output of white/amber blinders and UV cannons. With an RGB engine
             // present these are written (or zeroed) by the Colour fan-out instead.
             PropertyCategory.WHITE, PropertyCategory.AMBER, PropertyCategory.UV ->
                 if (!hasRgbEngine) {
-                    (backing as? DmxSlider)?.let { Layer3Resolver.PropertyValue.Slider(it.max) }
+                    (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(it.max) }
                 } else null
 
             else -> null
@@ -179,8 +179,8 @@ object LocateValueResolver {
      * the shutter-open level is the authoritative "steady full output" value.
      */
     private fun dedupeByChannel(
-        candidates: List<Pair<PropertyChannelWriter.NamedProperty, Layer3Resolver.PropertyValue>>,
-    ): List<Pair<PropertyChannelWriter.NamedProperty, Layer3Resolver.PropertyValue>> {
+        candidates: List<Pair<PropertyChannelWriter.NamedProperty, CueAssignmentResolver.PropertyValue>>,
+    ): List<Pair<PropertyChannelWriter.NamedProperty, CueAssignmentResolver.PropertyValue>> {
         fun channelOf(property: PropertyChannelWriter.NamedProperty): Pair<Universe, Int>? =
             when (val backing = property.value) {
                 is DmxSlider -> backing.universe to backing.channelNo

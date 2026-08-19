@@ -18,10 +18,10 @@ class ProgrammerStoreTest {
     private val web = ProgrammerOwner.WEB
     private val locate = ProgrammerOwner.LOCATE
 
-    private fun slider(v: Int) = Layer3Resolver.PropertyValue.Slider(v.toUByte())
+    private fun slider(v: Int) = CueAssignmentResolver.PropertyValue.Slider(v.toUByte())
 
     private fun ProgrammerStore.topSlider(fixtureKey: String, propertyName: String): UByte? =
-        (get(fixtureKey, propertyName)?.value?.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+        (get(fixtureKey, propertyName)?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
 
     @Test
     fun `put then get returns the stored value`() {
@@ -66,7 +66,7 @@ class ProgrammerStoreTest {
     fun `clearAll removes everything including the sideband`() {
         val store = ProgrammerStore()
         store.put(web, "hex-1", "dimmer", slider(10))
-        store.put(locate, "hex-2", "rgbColour", Layer3Resolver.PropertyValue.Colour(ExtendedColour.BLACK))
+        store.put(locate, "hex-2", "rgbColour", CueAssignmentResolver.PropertyValue.Colour(ExtendedColour.BLACK))
         store.putChannel(ProgrammerOwner.UNPARK, 0, 7, 55u, touched = false)
         store.clearAll()
         assertEquals(0, store.size)
@@ -255,7 +255,7 @@ class ProgrammerStoreTest {
         val store = ProgrammerStore()
         store.put(web, "hex-1", "dimmer", slider(10))
         store.put(locate, "hex-1", "dimmer", slider(20))
-        store.put(web, "hex-2", "rgbColour", Layer3Resolver.PropertyValue.Colour(ExtendedColour.BLACK), sourceGroup = "all-hex")
+        store.put(web, "hex-2", "rgbColour", CueAssignmentResolver.PropertyValue.Colour(ExtendedColour.BLACK), sourceGroup = "all-hex")
 
         val entries = store.entries().sortedBy { it.fixtureKey }
         assertEquals(2, entries.size)
@@ -264,8 +264,8 @@ class ProgrammerStoreTest {
 
         assertEquals(
             setOf(
-                Layer3Resolver.Key.fixture("hex-1", "dimmer"),
-                Layer3Resolver.Key.fixture("hex-2", "rgbColour"),
+                CueAssignmentResolver.Key.fixture("hex-1", "dimmer"),
+                CueAssignmentResolver.Key.fixture("hex-2", "rgbColour"),
             ),
             store.activeKeys(),
         )
@@ -289,7 +289,7 @@ class ProgrammerStoreTest {
         assertTrue(store.activePropertiesByFixture().isEmpty())
 
         // And a fresh put on the same fixture lands normally.
-        store.put(web, "hex-1", "rgbColour", Layer3Resolver.PropertyValue.Colour(ExtendedColour.BLACK))
+        store.put(web, "hex-1", "rgbColour", CueAssignmentResolver.PropertyValue.Colour(ExtendedColour.BLACK))
         assertTrue(store.coversFixture("hex-1"))
         assertEquals(1, store.size)
     }
@@ -369,7 +369,7 @@ class ProgrammerStoreTest {
             if (ref.paletteUuid != paletteA) null else ProgrammerValue.Ref(paletteA, slider(200))
         }
 
-        assertEquals(setOf(Layer3Resolver.Key.fixture("hex-1", "dimmer")), changed)
+        assertEquals(setOf(CueAssignmentResolver.Key.fixture("hex-1", "dimmer")), changed)
         assertEquals(200u.toUByte(), store.topSlider("hex-1", "dimmer"))
         assertEquals(100u.toUByte(), store.topSlider("hex-2", "dimmer"), "another palette is untouched")
         assertEquals(100u.toUByte(), store.topSlider("hex-3", "dimmer"), "a literal is untouched")

@@ -9,7 +9,7 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
 import uk.me.cormack.lighting7.fx.FxEngine
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
@@ -47,7 +47,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         val slot = state.show.programmerStore.get("hex-1", "dimmer")!!
         assertEquals(ProgrammerOwner.INCLUDE, slot.owner)
         assertTrue(slot.touched, "included content must be recordable")
-        assertEquals(Layer3Resolver.PropertyValue.Slider(200u), slot.value.resolved)
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(200u), slot.value.resolved)
 
         val target = state.show.programmerStore.lastIncludedTarget
         assertNotNull(target)
@@ -111,11 +111,11 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         client.include(cueId)
 
         assertEquals(
-            Layer3Resolver.PropertyValue.Slider(150u),
+            CueAssignmentResolver.PropertyValue.Slider(150u),
             programmerValue(state, "hex-1", "dimmer"),
         )
         assertEquals(
-            Layer3Resolver.PropertyValue.Slider(40u),
+            CueAssignmentResolver.PropertyValue.Slider(40u),
             programmerValue(state, "hex-2", "dimmer"),
             "the direct fixture row is the more specific statement",
         )

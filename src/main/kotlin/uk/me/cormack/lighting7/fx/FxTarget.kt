@@ -247,8 +247,8 @@ data class SliderTarget(
 
         store.get(fixture.targetKey, propertyName)?.let { slot ->
             when (val v = slot.value.resolved) {
-                is Layer3Resolver.PropertyValue.Slider -> { best = v.value; bestSeq = slot.seq }
-                is Layer3Resolver.PropertyValue.Setting -> { best = v.channelValue; bestSeq = slot.seq }
+                is CueAssignmentResolver.PropertyValue.Slider -> { best = v.value; bestSeq = slot.seq }
+                is CueAssignmentResolver.PropertyValue.Setting -> { best = v.channelValue; bestSeq = slot.seq }
                 else -> {}
             }
         }
@@ -258,7 +258,7 @@ data class SliderTarget(
         // Sideband lookup is only meaningful for DMX sliders (Hue-backed etc. have no channel).
         (getSlider(fixture) as? DmxSlider)?.let { dmx ->
             store.getChannelSlot(dmx.universe.universe, dmx.channelNo)?.let { slot ->
-                val v = (slot.value.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+                val v = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
                 if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
             }
         }
@@ -283,7 +283,7 @@ data class SliderTarget(
         val colourProp = fixture.fixtureProperties.find { it.category == PropertyCategory.COLOUR }
             ?: return null
         val slot = store.get(fixture.targetKey, colourProp.name) ?: return null
-        val colour = (slot.value.resolved as? Layer3Resolver.PropertyValue.Colour)?.value ?: return null
+        val colour = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Colour)?.value ?: return null
         val component = when (prop.category) {
             PropertyCategory.WHITE -> colour.white
             PropertyCategory.AMBER -> colour.amber
@@ -394,7 +394,7 @@ data class ColourTarget(
         // old channel-level store composed; components the programmer does not cover come
         // from [below] (e.g. a raw write on just the red channel overlays a cue's colour).
         val colourSlot = store.get(fixture.targetKey, propertyName)
-        val colourValue = (colourSlot?.value?.resolved as? Layer3Resolver.PropertyValue.Colour)?.value
+        val colourValue = (colourSlot?.value?.resolved as? CueAssignmentResolver.PropertyValue.Colour)?.value
         val colourSeq = if (colourValue != null) colourSlot!!.seq else Long.MIN_VALUE
 
         val dmxColour = (fixture as? WithColour)?.rgbColour as? DmxColour
@@ -404,7 +404,7 @@ data class ColourTarget(
             val side = if (dmxColour != null && channelNo != null) {
                 store.getChannelSlot(dmxColour.universe.universe, channelNo)
             } else null
-            val sideValue = (side?.value?.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+            val sideValue = (side?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
             return when {
                 sideValue != null && side!!.seq > colourSeq -> sideValue
                 entryComponent != null -> entryComponent
@@ -468,12 +468,12 @@ data class ColourTarget(
         var best = entryComponent
 
         store.get(fixture.key, prop.name)?.let { slot ->
-            val v = (slot.value.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+            val v = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
             if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
         }
         ((prop.classProperty.call(fixture) as? Slider) as? DmxSlider)?.let { dmx ->
             store.getChannelSlot(dmx.universe.universe, dmx.channelNo)?.let { slot ->
-                val v = (slot.value.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+                val v = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
                 if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
             }
         }
@@ -623,7 +623,7 @@ data class PositionTarget(
         // Per-axis recency arbitration between a Position property entry and the axis's
         // sideband channel slot (raw pan/tilt writes stay channel-shaped in the sideband).
         val posSlot = store.get(fixture.targetKey, propertyName)
-        val posValue = posSlot?.value?.resolved as? Layer3Resolver.PropertyValue.Position
+        val posValue = posSlot?.value?.resolved as? CueAssignmentResolver.PropertyValue.Position
         val posSeq = if (posValue != null) posSlot!!.seq else Long.MIN_VALUE
 
         val positionFixture = fixture as? WithPosition
@@ -632,7 +632,7 @@ data class PositionTarget(
         fun axis(entryValue: UByte?, slider: Slider?): UByte? {
             val dmx = slider as? DmxSlider
             val side = dmx?.let { store.getChannelSlot(it.universe.universe, it.channelNo) }
-            val sideValue = (side?.value?.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+            val sideValue = (side?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
             return when {
                 sideValue != null && side!!.seq > posSeq -> sideValue
                 entryValue != null -> entryValue
@@ -735,14 +735,14 @@ data class SettingTarget(
         var best: UByte? = null
         store.get(fixture.targetKey, propertyName)?.let { slot ->
             when (val v = slot.value.resolved) {
-                is Layer3Resolver.PropertyValue.Setting -> { best = v.channelValue; bestSeq = slot.seq }
-                is Layer3Resolver.PropertyValue.Slider -> { best = v.value; bestSeq = slot.seq }
+                is CueAssignmentResolver.PropertyValue.Setting -> { best = v.channelValue; bestSeq = slot.seq }
+                is CueAssignmentResolver.PropertyValue.Slider -> { best = v.value; bestSeq = slot.seq }
                 else -> {}
             }
         }
         getSetting(fixture)?.let { setting ->
             store.getChannelSlot(setting.universe.universe, setting.channelNo)?.let { slot ->
-                val v = (slot.value.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+                val v = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
                 if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
             }
         }

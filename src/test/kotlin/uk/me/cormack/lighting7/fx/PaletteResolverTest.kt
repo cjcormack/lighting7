@@ -48,7 +48,7 @@ class PaletteResolverTest {
             registry(), "hex-1", "rgbColour", PropertyCategory.COLOUR, raw,
         )
         assertEquals(
-            Layer3Resolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", raw), res.value,
+            CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", raw), res.value,
             "the literal path must delegate, not reimplement",
         )
         assertNull(res.paletteUuid, "a literal carries no palette identity")
@@ -63,7 +63,7 @@ class PaletteResolverTest {
         val res = resolveAssignmentValueForFixture(
             registry(), "hex-1", "rgbColour", PropertyCategory.COLOUR, "P1", palette,
         )
-        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(res.value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(res.value)
         assertEquals(parseExtendedColour("#123456"), v.value)
         assertNull(res.paletteUuid)
     }
@@ -73,7 +73,7 @@ class PaletteResolverTest {
         val res = resolveAssignmentValueForFixture(
             registry(), "hex-1", "rgbColour", PropertyCategory.COLOUR, paletteRefValue(uuid),
         )
-        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(res.value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(res.value)
         assertEquals(parseExtendedColour("#ff8800"), v.value)
         assertEquals(uuid, res.paletteUuid)
         assertEquals(AssignmentHealth.Ok, res.health)

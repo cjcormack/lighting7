@@ -457,7 +457,7 @@ internal fun includePaletteIntoProgrammer(
             val category = uk.me.cormack.lighting7.fx.PropertyChannelWriter
                 .resolveProperty(fixture, propertyName)?.category
                 ?: uk.me.cormack.lighting7.fixture.PropertyCategory.OTHER
-            val value = uk.me.cormack.lighting7.fx.Layer3Resolver
+            val value = uk.me.cormack.lighting7.fx.CueAssignmentResolver
                 .parseAssignmentValue(category, propertyName, literal)
             if (value == null) {
                 skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MISSING_PROPERTY)

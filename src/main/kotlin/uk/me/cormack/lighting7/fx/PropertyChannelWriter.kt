@@ -19,19 +19,19 @@ import kotlin.reflect.KProperty1
 import kotlin.reflect.full.memberProperties
 
 /**
- * Resolves a typed [Layer3Resolver.PropertyValue] on a [GroupableFixture] to the concrete DMX
+ * Resolves a typed [CueAssignmentResolver.PropertyValue] on a [GroupableFixture] to the concrete DMX
  * channels that back it. Unlike [PropertyChannelResolver] (which scales 7-bit MIDI input and
  * only supports sliders/RGB), this writer accepts full-range `UByte` values plus the composite
- * [Layer3Resolver.PropertyValue.Colour] / [Layer3Resolver.PropertyValue.Position] variants.
+ * [CueAssignmentResolver.PropertyValue.Colour] / [CueAssignmentResolver.PropertyValue.Position] variants.
  *
  * Handles:
- * - [Layer3Resolver.PropertyValue.Slider] — single channel write at full 0..255 range.
- * - [Layer3Resolver.PropertyValue.Setting] — single channel write at the raw DMX level.
- * - [Layer3Resolver.PropertyValue.Colour] — R/G/B writes always; white / amber / UV
+ * - [CueAssignmentResolver.PropertyValue.Slider] — single channel write at full 0..255 range.
+ * - [CueAssignmentResolver.PropertyValue.Setting] — single channel write at the raw DMX level.
+ * - [CueAssignmentResolver.PropertyValue.Colour] — R/G/B writes always; white / amber / UV
  *   writes emitted when the fixture implements the respective [WithWhite] / [WithAmber]
  *   / [WithUv] trait. Trait-less fixtures silently drop the extended channel (same
  *   contract for all three).
- * - [Layer3Resolver.PropertyValue.Position] — pan + tilt writes when the fixture implements
+ * - [CueAssignmentResolver.PropertyValue.Position] — pan + tilt writes when the fixture implements
  *   [WithPosition].
  *
  * Unknown / unsupported property names and reflection failures return an empty list (logged
@@ -47,19 +47,19 @@ object PropertyChannelWriter {
     /**
      * Resolve a `(fixture, propertyName, value)` triple to the channel writes that represent
      * it on the DMX patch. Returns an empty list when the property is absent or the
-     * [PropertyValue][Layer3Resolver.PropertyValue] kind doesn't match the property's backing
+     * [PropertyValue][CueAssignmentResolver.PropertyValue] kind doesn't match the property's backing
      * type.
      */
     fun resolve(
         fixture: GroupableFixture,
         propertyName: String,
-        value: Layer3Resolver.PropertyValue,
+        value: CueAssignmentResolver.PropertyValue,
     ): List<PropertyChannelResolver.ChannelWrite> = when (value) {
-        is Layer3Resolver.PropertyValue.Slider -> resolveByteChannel(fixture, propertyName, value.value)
-        is Layer3Resolver.PropertyValue.Setting ->
+        is CueAssignmentResolver.PropertyValue.Slider -> resolveByteChannel(fixture, propertyName, value.value)
+        is CueAssignmentResolver.PropertyValue.Setting ->
             resolveByteChannel(fixture, propertyName, value.channelValue)
-        is Layer3Resolver.PropertyValue.Colour -> resolveColour(fixture, propertyName, value.value)
-        is Layer3Resolver.PropertyValue.Position -> resolvePosition(fixture, value.pan, value.tilt)
+        is CueAssignmentResolver.PropertyValue.Colour -> resolveColour(fixture, propertyName, value.value)
+        is CueAssignmentResolver.PropertyValue.Position -> resolvePosition(fixture, value.pan, value.tilt)
     }
 
     /**
@@ -101,7 +101,7 @@ object PropertyChannelWriter {
     /**
      * A single-channel property carrying one [UByte], whichever descriptor shape backs it.
      *
-     * [Layer3Resolver.PropertyValue.Slider] and [Layer3Resolver.PropertyValue.Setting] are
+     * [CueAssignmentResolver.PropertyValue.Slider] and [CueAssignmentResolver.PropertyValue.Setting] are
      * chosen from the property's *category*, but the category does not determine the
      * backing shape: `goboRotation` is a [DmxFixtureSetting] on the Equinox Fusion 100 and a
      * plain [DmxSlider] on the Martin MAC 250, Robe ColorSpot 575 and Varytec Easymove. Both

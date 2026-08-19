@@ -8,7 +8,7 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
 import uk.me.cormack.lighting7.fx.FxEngine
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.models.FxPresetPropertyAssignmentDto
 import uk.me.cormack.lighting7.plugins.UpdateChannelInMessage
@@ -44,7 +44,7 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         val slot = state.show.programmerStore.get("hex-shim", "dimmer")!!
         assertEquals(ProgrammerOwner.WEB, slot.owner)
         assertTrue(slot.touched)
-        assertEquals(Layer3Resolver.PropertyValue.Slider(200u), slot.value.resolved)
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(200u), slot.value.resolved)
     }
 
     @Test
@@ -54,14 +54,14 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
 
         // Red to 200: siblings (green/blue, currently 0) freeze into the entry.
         busk(0, 2, 200u)
-        val first = programmerValue(state, "hex-col", "rgbColour") as Layer3Resolver.PropertyValue.Colour
+        val first = programmerValue(state, "hex-col", "rgbColour") as CueAssignmentResolver.PropertyValue.Colour
         assertEquals(200, first.value.color.red)
         assertEquals(0, first.value.color.green)
         assertEquals(0, first.value.color.blue)
 
         // Green to 100: composes with the existing entry rather than resetting red.
         busk(0, 3, 100u)
-        val second = programmerValue(state, "hex-col", "rgbColour") as Layer3Resolver.PropertyValue.Colour
+        val second = programmerValue(state, "hex-col", "rgbColour") as CueAssignmentResolver.PropertyValue.Colour
         assertEquals(200, second.value.color.red, "earlier red drag survives")
         assertEquals(100, second.value.color.green)
     }

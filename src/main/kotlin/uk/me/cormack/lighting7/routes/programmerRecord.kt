@@ -125,8 +125,8 @@ internal fun createCueFromRecording(
 /**
  * Apply [recording] to an existing [cue] under [mode].
  *
- * Must run inside a transaction. The caller republishes Layer 3 afterwards if the cue is live
- * — see [republishCueLayer3].
+ * Must run inside a transaction. The caller republishes Layer 4 afterwards if the cue is live
+ * — see [republishCueLayer].
  */
 internal fun writeRecordingIntoCue(
     state: State,
@@ -544,7 +544,7 @@ private fun newAdHocChild(cue: DaoCue, effect: CueAdHocEffectDto) {
 }
 
 /**
- * Republish [cueId]'s Layer 3 if it is the live cue of its stack.
+ * Republish [cueId]'s Layer 4 if it is the live cue of its stack.
  *
  * Without this the cue's DB rows and its published contribution disagree after a Record, and
  * the next Clear would drop the rig back to the pre-record values — the look would appear to
@@ -558,7 +558,7 @@ internal fun republishCueIfLive(state: State, cueId: Int, cueStackId: Int?): Boo
     if (cueStackId == null) return false
     if (state.show.cueStackManager.getActiveCueId(cueStackId) != cueId) return false
     val applyData = loadCueApplyDataForRepublish(state, cueId) ?: return false
-    republishCueLayer3(state, cueId, applyData)
+    republishCueLayer(state, cueId, applyData)
     return true
 }
 

@@ -7,7 +7,7 @@ import java.awt.Color
 import java.util.UUID
 
 /**
- * Scoped palette cascade for resolving colour palette refs (`"P1"`, `"P2"`, …) in Layer 3
+ * Scoped palette cascade for resolving colour palette refs (`"P1"`, `"P2"`, …) in Layer 4
  * assignment values. [effective] picks the most specific scope with a non-empty palette:
  * [preset] > [cue] > [global]. All empty → palette refs fall through to the static colour
  * parser (invalid hex → white).
@@ -35,17 +35,12 @@ data class PaletteCascade(
  * Cue-layer composition resolver — merges [CuePropertyAssignment] rows from active cues
  * into a per-(target, property) value stream that [LayerResolver] consumes.
  *
- * Naming note: cue property assignments are **Layer 4** since the programmer redesign
- * renumbered the stack; this class (and `Layer3*` engine internals) keep the old number to
- * avoid a ~25-file mechanical churn — see `FU-PROG-L3RESOLVER-RENAME` in
- * `docs/plans/followups.md`.
- *
  * See `docs/lighting-composition-model.md` §"Layer 4 — Cue Property Assignments".
  */
-class Layer3Resolver {
+class CueAssignmentResolver {
 
     /**
-     * A single contributor to Layer 3 from an active cue.
+     * A single contributor to Layer 4 from an active cue.
      *
      * @property cueId id of the contributing cue — used for logging / stomp overlap.
      * @property priority cue-stack position or activation-order tie-break. Higher priority wins
@@ -105,7 +100,7 @@ class Layer3Resolver {
 
         /**
          * Inverse of [parseAssignmentValue] — emits the canonical string form that round-trips
-         * back through the parser. Used by `snapshot-from-live` to serialise live Layer 3
+         * back through the parser. Used by `snapshot-from-live` to serialise live Layer 4
          * state into [uk.me.cormack.lighting7.models.CuePropertyAssignmentDto] rows.
          *
          * Format:
@@ -115,7 +110,7 @@ class Layer3Resolver {
          *
          * Round-trip invariant: `parseAssignmentValue(category, name, v.serialize()) == v` for
          * every [PropertyValue] instance, provided (category, name) matches what produced it.
-         * See `Layer3ResolverTest`.
+         * See `CueAssignmentResolverTest`.
          */
         fun serialize(): String = when (this) {
             is Slider -> value.toInt().toString()

@@ -252,7 +252,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         val fixture = state.show.fixtures.untypedGroupableFixture(fixtureKey)
         state.show.fxEngine.writeProgrammerProperty(
             uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB, fixture, "rgbColour",
-            uk.me.cormack.lighting7.fx.Layer3Resolver.parseAssignmentValue(
+            uk.me.cormack.lighting7.fx.CueAssignmentResolver.parseAssignmentValue(
                 uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR, "rgbColour", hex,
             )!!,
         )
@@ -299,7 +299,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         val fixture = state.show.fixtures.untypedGroupableFixture("hex-1")
         state.show.fxEngine.writeProgrammerProperty(
             uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB, fixture, "dimmer",
-            uk.me.cormack.lighting7.fx.Layer3Resolver.PropertyValue.Slider(200u),
+            uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Slider(200u),
         )
 
         val resp = client.recordPalette(
@@ -356,10 +356,10 @@ class PaletteRoutesTest : RouteIntegrationTest() {
 
         assertEquals(listOf(cueId), again.cuesRepublished, "the referencing cue republished")
         val composed = state.show.fxEngine.layerResolver
-            .currentLayer3State[uk.me.cormack.lighting7.fx.Layer3Resolver.Key.fixture("hex-1", "rgbColour")]
+            .currentCueLayerState[uk.me.cormack.lighting7.fx.CueAssignmentResolver.Key.fixture("hex-1", "rgbColour")]
         assertEquals(
             "#0000ff",
-            (composed as uk.me.cormack.lighting7.fx.Layer3Resolver.PropertyValue.Colour)
+            (composed as uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Colour)
                 .value.toSerializedString(),
             "re-recording a palette moves the looks that reference it, with no GO",
         )

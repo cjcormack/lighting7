@@ -21,7 +21,7 @@ enum class CompositionRule {
 /**
  * Categories for fixture properties, used for UI grouping, display, and composition.
  *
- * Each category carries a [defaultComposition] rule used by Layer 3 when merging property
+ * Each category carries a [defaultComposition] rule used by Layer 4 when merging property
  * assignments from active cues. Individual properties can override this via
  * [FixtureProperty.composition].
  */

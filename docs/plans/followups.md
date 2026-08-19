@@ -289,7 +289,7 @@ cheaper half and needs no personality data — invert the target set and scale.
 
 Make Hard ships at programmer level (`POST /programmer/make-hard`) and cue level
 (`POST /project/{id}/cues/{cueId}/make-hard`). Preset assignments can hold `ref:` values too —
-`buildLayer3AssignmentsForPreset` resolves them per member — but have no equivalent, so a palette
+`buildCueAssignmentsForPreset` resolves them per member — but have no equivalent, so a palette
 referenced only from a preset can't be detached.
 
 Cut rather than missed: preset property assignments are **target-less**. A cue row names the
@@ -1023,7 +1023,7 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
   `e97a664`
 - `FU-BE-PRESET-PER-ELEMENT` — nullable `element_key` on preset assignments, resolved per element —
   `0106ab4`
-- `FU-QUAL-KEY-CONVERGENCE` — `Layer3Resolver.Key` carries a `TargetRef`; `AssignmentKey` deleted —
+- `FU-QUAL-KEY-CONVERGENCE` — `CueAssignmentResolver.Key` carries a `TargetRef`; `AssignmentKey` deleted —
   `30dd0fc`
 - `FU-BE-SCALER-PERSISTENCE` — `project_scaler_states` persists Blackout / Grand Master per project
   — `7bcd109`

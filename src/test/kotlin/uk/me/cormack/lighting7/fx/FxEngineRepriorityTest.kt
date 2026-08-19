@@ -19,7 +19,7 @@ class FxEngineRepriorityTest {
     private fun newEngine(): FxEngine = FxEngine(Fixtures(), SpeedMasterBank())
 
     /** LTP, so the highest priority wins outright rather than the values being merged. */
-    private fun ltpSlider(cueId: Int, priority: Int, value: UByte) = Layer3Resolver.Assignment(
+    private fun ltpSlider(cueId: Int, priority: Int, value: UByte) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
         fadeWeight = 1.0,
@@ -28,17 +28,17 @@ class FxEngineRepriorityTest {
         propertyName = "dimmer",
         category = PropertyCategory.DIMMER,
         compositionOverride = CompositionRule.LTP,
-        value = Layer3Resolver.PropertyValue.Slider(value),
+        value = CueAssignmentResolver.PropertyValue.Slider(value),
     )
 
     private fun FxEngine.dimmer(): UByte {
-        val value = layerResolver.currentLayer3State[Layer3Resolver.Key.fixture("fx-1", "dimmer")]
-        assertIs<Layer3Resolver.PropertyValue.Slider>(value)
+        val value = layerResolver.currentCueLayerState[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")]
+        assertIs<CueAssignmentResolver.PropertyValue.Slider>(value)
         return value.value
     }
 
     @Test
-    fun `swapping two live cues' priorities flips the Layer 3 winner`() {
+    fun `swapping two live cues' priorities flips the Layer 4 winner`() {
         val engine = newEngine()
         // Cue 20 sits later in the stack, so it wins.
         engine.setCueAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1_000, value = 100u)))
@@ -81,7 +81,7 @@ class FxEngineRepriorityTest {
     }
 
     @Test
-    fun `repriority restamps Layer 2 effect instances and skips manual ones`() {
+    fun `repriority restamps Layer 3 effect instances and skips manual ones`() {
         val engine = newEngine()
         val cueEffect = makeEffect(cueId = 10, priority = 1_000)
         val manualEffect = makeEffect(cueId = null, priority = 0)

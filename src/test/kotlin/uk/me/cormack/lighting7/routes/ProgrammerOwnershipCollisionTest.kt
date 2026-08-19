@@ -9,7 +9,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatches
@@ -160,7 +160,7 @@ class ProgrammerOwnershipCollisionTest : RouteIntegrationTest() {
         val owner = ProgrammerOwner.preset(9001)
 
         busk(0, 1, 40u)
-        engine.writeProgrammerGroupProperty(owner, group, "dimmer", Layer3Resolver.PropertyValue.Slider(90u))
+        engine.writeProgrammerGroupProperty(owner, group, "dimmer", CueAssignmentResolver.PropertyValue.Slider(90u))
         assertEquals(90u.toUByte(), programmerChannel(state, 0, 1), "group write covers member 1")
         assertEquals(90u.toUByte(), programmerChannel(state, 0, 20), "group write covers member 2")
         assertEquals(

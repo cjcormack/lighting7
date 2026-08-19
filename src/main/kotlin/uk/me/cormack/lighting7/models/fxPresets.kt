@@ -42,8 +42,8 @@ data class FxPresetEffectDto(
 /**
  * Preset-local property assignment — operator-authored "this preset asserts property X = value"
  * record. Assignments are fanned out over each target at apply time; see
- * [uk.me.cormack.lighting7.routes.buildLayer3AssignmentsForPreset]. Value strings share the cue
- * parser ([uk.me.cormack.lighting7.fx.Layer3Resolver.parseAssignmentValue]).
+ * [uk.me.cormack.lighting7.routes.buildCueAssignmentsForPreset]. Value strings share the cue
+ * parser ([uk.me.cormack.lighting7.fx.CueAssignmentResolver.parseAssignmentValue]).
  */
 @Serializable
 data class FxPresetPropertyAssignmentDto(

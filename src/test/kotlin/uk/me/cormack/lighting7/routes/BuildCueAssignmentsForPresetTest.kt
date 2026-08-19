@@ -4,7 +4,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.SlenderBeamBarQuadFixture
 import uk.me.cormack.lighting7.fx.ExtendedColour
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.PaletteCascade
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.FxPresetPropertyAssignmentDto
@@ -16,10 +16,10 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * Tests for [buildLayer3AssignmentsForPreset] — fans preset-local (propertyName, value) pairs
+ * Tests for [buildCueAssignmentsForPreset] — fans preset-local (propertyName, value) pairs
  * across the cue-preset-application's targets, mirrors the cue-side specificity tagging.
  */
-class BuildLayer3AssignmentsForPresetTest {
+class BuildCueAssignmentsForPresetTest {
 
     private val universe = Universe(0, 0)
     private val cueId = 42
@@ -41,7 +41,7 @@ class BuildLayer3AssignmentsForPresetTest {
     @Test
     fun `fixture target fans each assignment into one row`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "180"),
@@ -55,14 +55,14 @@ class BuildLayer3AssignmentsForPresetTest {
         assertEquals(cueId, a.cueId)
         assertEquals(priority, a.priority)
         assertEquals(false, a.targetIsGroup)
-        val v = assertIs<Layer3Resolver.PropertyValue.Slider>(a.value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Slider>(a.value)
         assertEquals(180u.toUByte(), v.value)
     }
 
     @Test
     fun `group target expands preset rows to per-member, marked targetIsGroup`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "150"),
@@ -77,7 +77,7 @@ class BuildLayer3AssignmentsForPresetTest {
     @Test
     fun `multiple assignments x multiple targets produces product rows`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "128"),
@@ -97,7 +97,7 @@ class BuildLayer3AssignmentsForPresetTest {
     @Test
     fun `missing target is logged and skipped, other targets still emit`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "100"),
@@ -114,7 +114,7 @@ class BuildLayer3AssignmentsForPresetTest {
     @Test
     fun `unknown property on fixture is skipped but doesn't break other assignments`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "nonsense", value = "1"),
@@ -133,7 +133,7 @@ class BuildLayer3AssignmentsForPresetTest {
 
     @Test
     fun `palette cascade - preset palette wins over cue and global`() {
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixturesWithTwoHexesInAGroup(), cueId, priority, presetId,
             paletteRefPreset(), hex1Target,
             cascade = PaletteCascade(
@@ -142,13 +142,13 @@ class BuildLayer3AssignmentsForPresetTest {
                 global = listOf(ExtendedColour(Color(70, 80, 90))),
             ),
         )
-        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
         assertEquals(Color(10, 20, 30), v.value.color)
     }
 
     @Test
     fun `palette cascade - falls through to cue palette when preset empty`() {
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixturesWithTwoHexesInAGroup(), cueId, priority, presetId,
             paletteRefPreset(), hex1Target,
             cascade = PaletteCascade(
@@ -156,39 +156,39 @@ class BuildLayer3AssignmentsForPresetTest {
                 global = listOf(ExtendedColour(Color(70, 80, 90))),
             ),
         )
-        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
         assertEquals(Color(40, 50, 60), v.value.color)
     }
 
     @Test
     fun `palette cascade - falls through to global when preset and cue empty`() {
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixturesWithTwoHexesInAGroup(), cueId, priority, presetId,
             paletteRefPreset(), hex1Target,
             cascade = PaletteCascade(global = listOf(ExtendedColour(Color(70, 80, 90)))),
         )
-        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
         assertEquals(Color(70, 80, 90), v.value.color)
     }
 
     @Test
     fun `palette cascade - no palettes falls through to static parser returning white`() {
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixturesWithTwoHexesInAGroup(), cueId, priority, presetId,
             paletteRefPreset(), hex1Target,
         )
-        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
         assertEquals(Color.WHITE, v.value.color)
     }
 
     @Test
     fun `palette cascade - hex colour values ignore palette`() {
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixturesWithTwoHexesInAGroup(), cueId, priority, presetId,
             paletteRefPreset(value = "#00FF00"), hex1Target,
             cascade = PaletteCascade(preset = listOf(ExtendedColour(Color(10, 20, 30)))),
         )
-        val v = assertIs<Layer3Resolver.PropertyValue.Colour>(out.single().value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
         assertEquals(Color(0, 255, 0), v.value.color)
     }
 
@@ -196,14 +196,14 @@ class BuildLayer3AssignmentsForPresetTest {
     fun `empty inputs produce empty output`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         assertTrue(
-            buildLayer3AssignmentsForPreset(
+            buildCueAssignmentsForPreset(
                 fixtures, cueId, priority, presetId,
                 presetAssignments = emptyList(),
                 applyTargets = listOf(CueTargetDto(type = "fixture", key = "hex-1")),
             ).isEmpty()
         )
         assertTrue(
-            buildLayer3AssignmentsForPreset(
+            buildCueAssignmentsForPreset(
                 fixtures, cueId, priority, presetId,
                 presetAssignments = listOf(
                     FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "1"),
@@ -230,7 +230,7 @@ class BuildLayer3AssignmentsForPresetTest {
     @Test
     fun `element-scoped fixture target emits row keyed on element`() {
         val fixtures = fixturesWithTwoQuadBarsInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "pan", value = "200", elementKey = "head-1"),
@@ -242,14 +242,14 @@ class BuildLayer3AssignmentsForPresetTest {
         assertEquals("bar-1.head-1", row.targetKey)
         assertEquals("pan", row.propertyName)
         assertEquals(false, row.targetIsGroup)
-        val v = assertIs<Layer3Resolver.PropertyValue.Slider>(row.value)
+        val v = assertIs<CueAssignmentResolver.PropertyValue.Slider>(row.value)
         assertEquals(200u.toUByte(), v.value)
     }
 
     @Test
     fun `element-scoped group target expands to one row per member element`() {
         val fixtures = fixturesWithTwoQuadBarsInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "pan", value = "100", elementKey = "head-0"),
@@ -264,7 +264,7 @@ class BuildLayer3AssignmentsForPresetTest {
     @Test
     fun `element-scoped assignment accepts full element-key path too`() {
         val fixtures = fixturesWithTwoQuadBarsInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "tilt", value = "50", elementKey = "bar-1.head-2"),
@@ -278,7 +278,7 @@ class BuildLayer3AssignmentsForPresetTest {
     @Test
     fun `element-scoped on non-multi-element fixture is skipped`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "100", elementKey = "head-0"),
@@ -301,7 +301,7 @@ class BuildLayer3AssignmentsForPresetTest {
                 add(hex)
             }
         }
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "pan", value = "80", elementKey = "head-0"),
@@ -317,7 +317,7 @@ class BuildLayer3AssignmentsForPresetTest {
         // Sanity: elementKey=null on an element-capable fixture goes straight to the parent,
         // not any head. (Preserves backwards compatibility for existing presets.)
         val fixtures = fixturesWithTwoQuadBarsInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "128", elementKey = null),
@@ -360,7 +360,7 @@ class BuildLayer3AssignmentsForPresetTest {
     fun `a preset ref fans out to per-member literals`() {
         // Preset assignments share the cue value grammar, so refs work here too.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "colour", value = refValue),
@@ -374,11 +374,11 @@ class BuildLayer3AssignmentsForPresetTest {
         val byKey = out.associateBy { it.targetKey }
         assertEquals(
             ExtendedColour(Color(0xff, 0x88, 0x00)),
-            assertIs<Layer3Resolver.PropertyValue.Colour>(byKey.getValue("hex-1").value).value,
+            assertIs<CueAssignmentResolver.PropertyValue.Colour>(byKey.getValue("hex-1").value).value,
         )
         assertEquals(
             ExtendedColour(Color(0x00, 0xff, 0x00)),
-            assertIs<Layer3Resolver.PropertyValue.Colour>(byKey.getValue("hex-2").value).value,
+            assertIs<CueAssignmentResolver.PropertyValue.Colour>(byKey.getValue("hex-2").value).value,
         )
     }
 
@@ -387,7 +387,7 @@ class BuildLayer3AssignmentsForPresetTest {
         // Record rejects element targets outright (RecordSkipReason.ELEMENT_TARGET), so a palette
         // can never hold an entry for an element key — there is nothing to resolve against.
         val fixtures = fixturesWithTwoQuadBarsInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "colour", value = refValue, elementKey = "head-1"),
@@ -401,7 +401,7 @@ class BuildLayer3AssignmentsForPresetTest {
     @Test
     fun `a preset ref with no registry skips rather than resolving to white`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val out = buildLayer3AssignmentsForPreset(
+        val out = buildCueAssignmentsForPreset(
             fixtures, cueId, priority, presetId,
             presetAssignments = listOf(
                 FxPresetPropertyAssignmentDto(propertyName = "colour", value = refValue),

@@ -9,7 +9,7 @@ import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.ExtendedColour
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
@@ -31,8 +31,8 @@ sealed class ProgrammerInMessage : InMessage()
 
 /**
  * Set a programmer value on a fixture or group property. [value] uses the same canonical
- * string form as cue assignments ([Layer3Resolver.parseAssignmentValue] /
- * [Layer3Resolver.PropertyValue.serialize]): `"0".."255"` for sliders and settings,
+ * string form as cue assignments ([CueAssignmentResolver.parseAssignmentValue] /
+ * [CueAssignmentResolver.PropertyValue.serialize]): `"0".."255"` for sliders and settings,
  * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) or a positional palette ref (`"P1"`) for colours,
  * `"pan,tilt"` for `position`.
  *
@@ -351,14 +351,14 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
             )
             ProgrammerHandler.setTyped(
                 state, target, message.propertyName,
-                Layer3Resolver.PropertyValue.Colour(colour), message.fadeMs ?: 0,
+                CueAssignmentResolver.PropertyValue.Colour(colour), message.fadeMs ?: 0,
                 message.sourceGroup,
             )
         }
         is ProgrammerSetPositionInMessage -> withTarget(message.targetType, message.targetKey) { target ->
             ProgrammerHandler.setTyped(
                 state, target, "position",
-                Layer3Resolver.PropertyValue.Position(message.pan, message.tilt), message.fadeMs ?: 0,
+                CueAssignmentResolver.PropertyValue.Position(message.pan, message.tilt), message.fadeMs ?: 0,
                 message.sourceGroup,
             )
         }
@@ -494,7 +494,7 @@ object ProgrammerHandler {
         state: State,
         target: TargetRef,
         propertyName: String,
-        value: Layer3Resolver.PropertyValue,
+        value: CueAssignmentResolver.PropertyValue,
         fadeMs: Long,
         sourceGroup: String? = null,
     ): OutMessage {
@@ -625,7 +625,7 @@ object ProgrammerHandler {
             ProgrammerChannelDto(
                 universe = entry.universe,
                 channel = entry.channel,
-                value = (top.value.resolved as? Layer3Resolver.PropertyValue.Slider)?.value ?: 0u,
+                value = (top.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value ?: 0u,
                 owner = top.owner.id,
                 touched = top.touched,
             )
@@ -673,9 +673,9 @@ object ProgrammerHandler {
         target: TargetRef,
         propertyName: String,
         value: String,
-    ): Layer3Resolver.PropertyValue? {
+    ): CueAssignmentResolver.PropertyValue? {
         if (propertyName.equals("position", ignoreCase = true)) {
-            return Layer3Resolver.parseAssignmentValue(
+            return CueAssignmentResolver.parseAssignmentValue(
                 uk.me.cormack.lighting7.fixture.PropertyCategory.OTHER, propertyName, value,
             )
         }
@@ -693,7 +693,7 @@ object ProgrammerHandler {
         }
         val category = PropertyChannelWriter.resolveProperty(fixture, propertyName)?.category
             ?: return null
-        return Layer3Resolver.parseAssignmentValue(
+        return CueAssignmentResolver.parseAssignmentValue(
             category, propertyName, value, palette = state.show.fxEngine.getPalette(),
         )
     }

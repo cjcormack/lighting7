@@ -34,7 +34,7 @@ data class ParkedChannel(
  * park → unpark → park is a no-op on the wire.
  *
  * Implementations must make the handed-off value the resolved output of the layers
- * below park — in production that means both the direct-write store (Layer 4) and the
+ * below park — in production that means both the direct-write store (Layer 2) and the
  * controller's channel buffer, i.e. exactly what a manual `updateChannel` would do.
  */
 fun interface UnparkValueSink {

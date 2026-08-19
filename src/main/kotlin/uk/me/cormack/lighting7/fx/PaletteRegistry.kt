@@ -37,7 +37,7 @@ data class PaletteSnapshot(
  *
  * Group rows are expanded to their members, then fixture rows overwrite — the same
  * fixture-beats-group specificity the cue resolver applies
- * ([Layer3Resolver.applySpecificity]), resolved once here instead of per read.
+ * ([CueAssignmentResolver.applySpecificity]), resolved once here instead of per read.
  */
 class ExpandedPalette(
     val snapshot: PaletteSnapshot,

@@ -6,7 +6,7 @@ import java.util.UUID
  * The named-palette reference grammar for stored assignment values.
  *
  * A cue property assignment, an FX preset property assignment or a programmer entry normally
- * holds a literal in the canonical [Layer3Resolver.PropertyValue.serialize] grammar. It may
+ * holds a literal in the canonical [CueAssignmentResolver.PropertyValue.serialize] grammar. It may
  * instead hold `ref:{paletteUuid}`, which resolves per fixture against the named palette — see
  * [uk.me.cormack.lighting7.models.DaoPalettes].
  *

@@ -452,7 +452,7 @@ composes:
    held in `ProgrammerStore`, unless the blind gate is engaged. A programmer entry wins
    over everything below, and additionally **suppresses** the effect's own apply on that
    (fixture, property) — see below.
-2. **Layer 4** — `Layer3Resolver`'s composed cue property assignment for this target, if
+2. **Layer 4** — `CueAssignmentResolver`'s composed cue property assignment for this target, if
    any. (The class name predates the renumber.)
 3. **Layer 5** — fixture baseline (0 for sliders, black for colour, 128 for pan/tilt).
 

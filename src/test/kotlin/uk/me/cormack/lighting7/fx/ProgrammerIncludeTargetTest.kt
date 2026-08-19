@@ -58,7 +58,7 @@ class ProgrammerIncludeTargetTest {
     fun `clearing entries does not clear the target`() {
         // A partial release is not "done editing" — Update is still meaningful.
         val store = ProgrammerStore()
-        store.put(ProgrammerOwner.INCLUDE, "hex-1", "dimmer", Layer3Resolver.PropertyValue.Slider(10u))
+        store.put(ProgrammerOwner.INCLUDE, "hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(10u))
         store.lastIncludedTarget = IncludedTarget.cue(12, 3)
 
         store.clear(ProgrammerOwner.INCLUDE, "hex-1", "dimmer")
@@ -72,15 +72,15 @@ class ProgrammerIncludeTargetTest {
         // The whole basis of Update's "did the operator change this?" test: the include
         // baseline is still readable after a WEB write stacks on top.
         val store = ProgrammerStore()
-        store.put(ProgrammerOwner.INCLUDE, "hex-1", "dimmer", Layer3Resolver.PropertyValue.Slider(100u))
-        store.put(ProgrammerOwner.WEB, "hex-1", "dimmer", Layer3Resolver.PropertyValue.Slider(255u))
+        store.put(ProgrammerOwner.INCLUDE, "hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(100u))
+        store.put(ProgrammerOwner.WEB, "hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(255u))
 
         assertEquals(
-            Layer3Resolver.PropertyValue.Slider(255u),
+            CueAssignmentResolver.PropertyValue.Slider(255u),
             store.get("hex-1", "dimmer")?.value?.resolved,
         )
         assertEquals(
-            Layer3Resolver.PropertyValue.Slider(100u),
+            CueAssignmentResolver.PropertyValue.Slider(100u),
             store.valueFor(ProgrammerOwner.INCLUDE, "hex-1", "dimmer")?.resolved,
         )
     }

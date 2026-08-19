@@ -5,7 +5,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerValue
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.paletteRefValue
@@ -43,7 +43,7 @@ internal data class PaletteRepublishOutcome(
  * 3. Rebuild and replace the affected cues' rows in one [uk.me.cormack.lighting7.fx.FxEngine.replaceCueAssignments].
  * 4. Publish the programmer keys, then emit provenance.
  *
- * Step 2 has to precede step 3 because [uk.me.cormack.lighting7.fx.FxEngine.publishLayer3ToControllers]
+ * Step 2 has to precede step 3 because [uk.me.cormack.lighting7.fx.FxEngine.publishCueLayerToControllers]
  * composes the programmer *over* the cue layer via `LayerResolver.fallbackFor`. With stale
  * `Ref.resolved` values still in the store, every key covered by both layers would transmit the old
  * value and be corrected a frame later — a visible flicker on exactly the fixtures the operator is
@@ -92,9 +92,9 @@ internal fun republishForPaletteEdit(state: State, paletteUuid: UUID): PaletteRe
     } else {
         activeCuesReferencingPalette(state, paletteUuid, activeCueIds)
     }
-    val rebuilt = LinkedHashMap<Int, List<Layer3Resolver.Assignment>>()
+    val rebuilt = LinkedHashMap<Int, List<CueAssignmentResolver.Assignment>>()
     for (cueId in referencing) {
-        val rows = rebuildCueLayer3Rows(state, cueId) ?: continue
+        val rows = rebuildCueLayerRows(state, cueId) ?: continue
         rebuilt[cueId] = rows
     }
     val republished = if (rebuilt.isEmpty()) 0 else engine.replaceCueAssignments(rebuilt)
@@ -126,7 +126,7 @@ internal fun republishForPaletteEdit(state: State, paletteUuid: UUID): PaletteRe
  * is exactly `ref:{paletteUuid}`.
  *
  * A DB scan rather than state tracked at build time. Tracking would mean threading a referenced-set
- * through both assignment builders, `applyCue`, `republishCueLayer3` and `setCueAssignments`, and it
+ * through both assignment builders, `applyCue`, `republishCueLayer` and `setCueAssignments`, and it
  * would still be *incomplete*: timed-preset rows arrive via `appendCueAssignments`, which carries no
  * palette information at all. The scan is two indexed queries against a handful of live cues.
  *
@@ -166,36 +166,36 @@ internal fun activeCuesReferencingPalette(
 }
 
 /**
- * Rebuild one live cue's Layer 3 rows from its persisted state, or null when the cue has gone.
+ * Rebuild one live cue's Layer 4 rows from its persisted state, or null when the cue has gone.
  *
- * Mirrors [republishCueLayer3]'s composition (cue rows plus immediate-preset rows) but *returns*
+ * Mirrors [republishCueLayer]'s composition (cue rows plus immediate-preset rows) but *returns*
  * the rows instead of publishing, so a palette edit spanning several cues can publish once.
  */
-private fun rebuildCueLayer3Rows(state: State, cueId: Int): List<Layer3Resolver.Assignment>? {
+private fun rebuildCueLayerRows(state: State, cueId: Int): List<CueAssignmentResolver.Assignment>? {
     val applyData = transaction(state.database) {
         uk.me.cormack.lighting7.models.DaoCue.findById(cueId)?.let { buildCueApplyData(it) }
     } ?: return null
-    return buildCombinedCueLayer3Rows(state, cueId, applyData)
+    return buildCombinedCueLayerRows(state, cueId, applyData)
 }
 
 /**
- * Reparse [literal] into the same [Layer3Resolver.PropertyValue] shape as [like].
+ * Reparse [literal] into the same [CueAssignmentResolver.PropertyValue] shape as [like].
  *
  * A programmer slot doesn't remember the property's `PropertyCategory`, but it does hold a value of
  * the right shape — which is all the parser dispatch actually needs, and it avoids a patch lookup
  * per slot. `position` is the one case the property name decides.
  */
 private fun reparseLike(
-    like: Layer3Resolver.PropertyValue,
+    like: CueAssignmentResolver.PropertyValue,
     propertyName: String,
     literal: String,
-): Layer3Resolver.PropertyValue? {
+): CueAssignmentResolver.PropertyValue? {
     val category = when (like) {
-        is Layer3Resolver.PropertyValue.Colour -> uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR
-        is Layer3Resolver.PropertyValue.Setting -> uk.me.cormack.lighting7.fixture.PropertyCategory.SETTING
-        is Layer3Resolver.PropertyValue.Position,
-        is Layer3Resolver.PropertyValue.Slider,
+        is CueAssignmentResolver.PropertyValue.Colour -> uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR
+        is CueAssignmentResolver.PropertyValue.Setting -> uk.me.cormack.lighting7.fixture.PropertyCategory.SETTING
+        is CueAssignmentResolver.PropertyValue.Position,
+        is CueAssignmentResolver.PropertyValue.Slider,
         -> uk.me.cormack.lighting7.fixture.PropertyCategory.DIMMER
     }
-    return Layer3Resolver.parseAssignmentValue(category, canonicalPropertyName(propertyName), literal)
+    return CueAssignmentResolver.parseAssignmentValue(category, canonicalPropertyName(propertyName), literal)
 }

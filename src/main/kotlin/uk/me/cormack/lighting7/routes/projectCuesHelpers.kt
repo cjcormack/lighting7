@@ -91,9 +91,9 @@ internal data class CapturedState(
 )
 
 /**
- * Capture live palette, active effects, and Layer 3 property assignments from the FX engine.
+ * Capture live palette, active effects, and Layer 4 property assignments from the FX engine.
  * Group-scoped assignments round-trip with `targetType="group"` intact when members share a
- * single composed value — see [captureLayer3Assignments] for the shape-preservation rules.
+ * single composed value — see [captureCueAssignments] for the shape-preservation rules.
  */
 internal fun captureCurrentState(state: State): CapturedState {
     val currentPalette = state.show.fxEngine.getPalette().map { it.toSerializedString() }
@@ -137,7 +137,7 @@ internal fun captureCurrentState(state: State): CapturedState {
         CuePresetApplicationDto(presetId = presetId, targets = targets)
     }
 
-    val propertyAssignments = captureLayer3Assignments(state)
+    val propertyAssignments = captureCueAssignments(state)
 
     return CapturedState(
         palette = currentPalette,
@@ -148,26 +148,26 @@ internal fun captureCurrentState(state: State): CapturedState {
 }
 
 /**
- * Layer 3 snapshot for `snapshot-from-live` / `/current-state`. Values come from the resolver
- * ([uk.me.cormack.lighting7.fx.LayerResolver.currentLayer3State]) so HTP / LTP / crossfade
+ * Layer 4 snapshot for `snapshot-from-live` / `/current-state`. Values come from the resolver
+ * ([uk.me.cormack.lighting7.fx.LayerResolver.currentCueLayerState]) so HTP / LTP / crossfade
  * composition is authoritative. Each active cue's DB rows contribute `(groupKey, propertyName)`
  * hints: a hint collapses to a single group row iff every member's composed value matches;
  * otherwise members fall through to per-fixture emission. Preserves operator-authored group
  * shape after surface edits (Phase 6 group-scoped `DefaultSurfaceActions.writeGroupProperty`).
  */
-private fun captureLayer3Assignments(state: State): List<CuePropertyAssignmentDto> {
+private fun captureCueAssignments(state: State): List<CuePropertyAssignmentDto> {
     val engine = state.show.fxEngine
     val programmerOverlay = programmerOverlayForSnapshot(state)
-    val layer3Snapshot = if (programmerOverlay.values.isEmpty()) {
-        engine.layerResolver.currentLayer3State
+    val cueLayerSnapshot = if (programmerOverlay.values.isEmpty()) {
+        engine.layerResolver.currentCueLayerState
     } else {
         // The programmer sits above the cue layer, so what's on stage is the cue snapshot with
-        // the programmer's entries laid over it. Reading Layer 3 alone is precisely the
+        // the programmer's entries laid over it. Reading Layer 4 alone is precisely the
         // "Record is lossy" bug: everything busked through a fader, Locate, or the programmer
         // sheet was invisible to the capture.
-        HashMap(engine.layerResolver.currentLayer3State).apply { putAll(programmerOverlay.values) }
+        HashMap(engine.layerResolver.currentCueLayerState).apply { putAll(programmerOverlay.values) }
     }
-    if (layer3Snapshot.isEmpty()) return emptyList()
+    if (cueLayerSnapshot.isEmpty()) return emptyList()
 
     val activeCueIds = engine.activeCueAssignmentIds()
 
@@ -196,17 +196,17 @@ private fun captureLayer3Assignments(state: State): List<CuePropertyAssignmentDt
         LinkedHashSet(cueGroupHints).apply { addAll(programmerOverlay.groupHints) }
     }
 
-    return captureLayer3AssignmentsFromSnapshot(layer3Snapshot, groupHints, state.show.fixtures)
+    return captureCueAssignmentsFromSnapshot(cueLayerSnapshot, groupHints, state.show.fixtures)
 }
 
 /** The programmer's contribution to a stage snapshot: winning values plus their group hints. */
 private data class ProgrammerOverlay(
-    val values: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue>,
+    val values: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
     val groupHints: Set<Pair<String, String>>,
 )
 
 /**
- * The programmer's winning property entries, keyed for overlay onto a Layer 3 snapshot.
+ * The programmer's winning property entries, keyed for overlay onto a Layer 4 snapshot.
  *
  * Empty while blind: a *stage* snapshot must describe the stage, and blind means the
  * programmer is deliberately not reaching it.
@@ -226,22 +226,22 @@ private fun programmerOverlayForSnapshot(state: State): ProgrammerOverlay {
         return ProgrammerOverlay(emptyMap(), emptySet())
     }
     val (entries, _) = collectProgrammerEntries(state, RecordSource.ALL, mask = null)
-    val values = HashMap<Layer3Resolver.Key, Layer3Resolver.PropertyValue>(entries.size)
+    val values = HashMap<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>(entries.size)
     val hints = LinkedHashSet<Pair<String, String>>()
     for (entry in entries) {
-        values[Layer3Resolver.Key.fixture(entry.fixtureKey, entry.propertyName)] = entry.value
+        values[CueAssignmentResolver.Key.fixture(entry.fixtureKey, entry.propertyName)] = entry.value
         entry.sourceGroup?.let { hints.add(it to entry.propertyName) }
     }
     return ProgrammerOverlay(values, hints)
 }
 
-/** Pure snapshot-collapse pass — extracted from [captureLayer3Assignments] for DB-less testing. */
-internal fun captureLayer3AssignmentsFromSnapshot(
-    layer3Snapshot: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue>,
+/** Pure snapshot-collapse pass — extracted from [captureCueAssignments] for DB-less testing. */
+internal fun captureCueAssignmentsFromSnapshot(
+    cueLayerSnapshot: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
     groupHints: Set<Pair<String, String>>,
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
 ): List<CuePropertyAssignmentDto> {
-    if (layer3Snapshot.isEmpty()) return emptyList()
+    if (cueLayerSnapshot.isEmpty()) return emptyList()
 
     val emitted = mutableListOf<CuePropertyAssignmentDto>()
     val covered = HashSet<Pair<String, String>>() // (fixtureKey, propertyName)
@@ -253,11 +253,11 @@ internal fun captureLayer3AssignmentsFromSnapshot(
         if (members.isEmpty()) continue
 
         val firstMember = members.first()
-        val firstMemberValue = layer3Snapshot[Layer3Resolver.Key.fixture(firstMember.key, propertyName)]
+        val firstMemberValue = cueLayerSnapshot[CueAssignmentResolver.Key.fixture(firstMember.key, propertyName)]
             ?: continue
         val uniform = members.all { member ->
             member === firstMember ||
-                layer3Snapshot[Layer3Resolver.Key.fixture(member.key, propertyName)] == firstMemberValue
+                cueLayerSnapshot[CueAssignmentResolver.Key.fixture(member.key, propertyName)] == firstMemberValue
         }
         if (!uniform) continue
 
@@ -273,7 +273,7 @@ internal fun captureLayer3AssignmentsFromSnapshot(
         for (member in members) covered.add(member.key to propertyName)
     }
 
-    val fixtureRows = layer3Snapshot.entries
+    val fixtureRows = cueLayerSnapshot.entries
         .filter { (key, _) -> (key.targetKey to key.propertyName) !in covered }
         .sortedWith(compareBy({ it.key.targetKey }, { it.key.propertyName }))
     for ((key, value) in fixtureRows) {
@@ -604,7 +604,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
 
     // Load each immediate preset once — effects + property assignments in a single DB hit.
     // Timed preset applications (delayMs/intervalMs) are handled entirely by CueTriggerManager;
-    // at fire time they append their property assignments to this cue's Layer 3 via
+    // at fire time they append their property assignments to this cue's Layer 4 via
     // [FxEngine.appendCueAssignments] so they compose like the cue's apply-time rows. The
     // contribution goes live at fire time, not cue-apply time — see the timed preset wiring
     // in [CueTriggerManager.activateTimedEffectsForCue].
@@ -641,12 +641,12 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         global = engine.getPalette(),
     )
 
-    // Publish Layer 3 before applying effects so the effect reset pass sees the cue's baseline
+    // Publish Layer 4 before applying effects so the effect reset pass sees the cue's baseline
     // instead of Layer 5 zero. Combines the cue's own assignments with each immediate preset's
     // property assignments.
-    val cueOwnAssignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData, cascade, state.show.paletteRegistry)
+    val cueOwnAssignments = buildCueAssignmentsForCue(state.show.fixtures, cueData, cascade, state.show.paletteRegistry)
     val presetRows = immediatePresets.flatMap { ip ->
-        buildLayer3AssignmentsForPreset(
+        buildCueAssignmentsForPreset(
             state.show.fixtures, cueData.cueId, priority,
             ip.presetId, ip.assignments, ip.targets,
             cascade = cascade.copy(preset = ip.palette),
@@ -654,13 +654,13 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         )
     }
 
-    val layer3Assignments = when {
+    val cueLayerRows = when {
         presetRows.isEmpty() -> cueOwnAssignments
         cueOwnAssignments.isEmpty() -> presetRows
         else -> cueOwnAssignments + presetRows
     }
-    if (layer3Assignments.isNotEmpty()) {
-        engine.setCueAssignments(cueData.cueId, layer3Assignments, cueStackId = cueData.cueStackId)
+    if (cueLayerRows.isNotEmpty()) {
+        engine.setCueAssignments(cueData.cueId, cueLayerRows, cueStackId = cueData.cueStackId)
     } else {
         // Re-applying a cue that lost its assignments must clear any stale state.
         engine.removeCueAssignments(cueData.cueId)
@@ -796,7 +796,7 @@ internal fun buildStompOverlapFromAssignments(
 // don't drift apart on the aliasing rule.
 
 /**
- * Fixture property lookup used when building Layer 3 assignments. Returns the resolved
+ * Fixture property lookup used when building Layer 4 assignments. Returns the resolved
  * category / composition override for [propertyName] on [fixture], or null if the name is
  * not a known annotated property.
  *
@@ -820,7 +820,7 @@ private fun fixtureCategoryFor(
 }
 
 /**
- * Build the flat [Layer3Resolver.Assignment] list for a single cue's [propertyAssignments],
+ * Build the flat [CueAssignmentResolver.Assignment] list for a single cue's [propertyAssignments],
  * expanding group targets to per-member rows. Member rows produced by a group expansion carry
  * `targetIsGroup = true` so the resolver's specificity rule can drop them when the same cue
  * also asserts a direct fixture-level row on the same (fixtureKey, property).
@@ -834,16 +834,16 @@ private fun fixtureCategoryFor(
  * it exists to serve. Literal rows keep the single parse before the fanout, so the common path
  * pays nothing for this. A ref that doesn't resolve skips only the members it can't resolve.
  */
-internal fun buildLayer3AssignmentsForCue(
+internal fun buildCueAssignmentsForCue(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
     cueData: CueApplyData,
     cascade: PaletteCascade = PaletteCascade.EMPTY,
     paletteRegistry: PaletteRegistry? = null,
-): List<Layer3Resolver.Assignment> {
+): List<CueAssignmentResolver.Assignment> {
     if (cueData.propertyAssignments.isEmpty()) return emptyList()
     val priority = cueDerivedPriority(cueData)
     val effectivePalette = cascade.effective
-    val out = ArrayList<Layer3Resolver.Assignment>(cueData.propertyAssignments.size * 2)
+    val out = ArrayList<CueAssignmentResolver.Assignment>(cueData.propertyAssignments.size * 2)
 
     for (assignment in cueData.propertyAssignments) {
         val canonical = canonicalPropertyName(assignment.propertyName)
@@ -890,9 +890,9 @@ internal fun buildLayer3AssignmentsForCue(
             isGroup: Boolean,
             category: PropertyCategory,
             override: CompositionRule,
-            value: Layer3Resolver.PropertyValue,
+            value: CueAssignmentResolver.PropertyValue,
             paletteUuid: java.util.UUID? = null,
-        ) = Layer3Resolver.Assignment(
+        ) = CueAssignmentResolver.Assignment(
             cueId = cueData.cueId,
             priority = priority,
             fadeWeight = 1.0,
@@ -937,7 +937,7 @@ internal fun buildLayer3AssignmentsForCue(
             continue
         }
 
-        val parsed = Layer3Resolver.parseAssignmentValue(category, canonical, assignment.value, effectivePalette) ?: run {
+        val parsed = CueAssignmentResolver.parseAssignmentValue(category, canonical, assignment.value, effectivePalette) ?: run {
             logger.warn("cue {}: invalid value '{}' for {}.{} — skipping", cueData.cueId, assignment.value, target.key, assignment.propertyName)
             continue
         }
@@ -947,7 +947,7 @@ internal fun buildLayer3AssignmentsForCue(
         } else {
             // Emit only per-member rows; the group-level key isn't a resolvable fixture at
             // publish time. Mark these as targetIsGroup=true so a direct fixture-level row
-            // for the same member overrides via [Layer3Resolver.applySpecificity].
+            // for the same member overrides via [CueAssignmentResolver.applySpecificity].
             for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true, category, override, parsed))
         }
     }
@@ -955,17 +955,17 @@ internal fun buildLayer3AssignmentsForCue(
 }
 
 /**
- * Republish Layer 3 for [cueId] from pre-built [applyData], combining the cue's own property
+ * Republish Layer 4 for [cueId] from pre-built [applyData], combining the cue's own property
  * assignments with those of each immediate preset application (timed presets don't contribute
- * — matching [applyCue]). Effects are left alone: this is the Layer 3 half of an apply.
+ * — matching [applyCue]). Effects are left alone: this is the Layer 4 half of an apply.
  *
  * Used by cue-edit persists and by Record/Update after they rewrite a cue that is currently
  * live. Without it the DB rows and the published layer disagree, and the next Clear would
  * snap the rig back to the cue's pre-edit values.
  */
-internal fun republishCueLayer3(state: State, cueId: Int, applyData: CueApplyData) {
+internal fun republishCueLayer(state: State, cueId: Int, applyData: CueApplyData) {
     val engine = state.show.fxEngine
-    val combined = buildCombinedCueLayer3Rows(state, cueId, applyData)
+    val combined = buildCombinedCueLayerRows(state, cueId, applyData)
     if (combined.isNotEmpty()) {
         engine.setCueAssignments(cueId, combined, cueStackId = applyData.cueStackId)
     } else {
@@ -974,30 +974,30 @@ internal fun republishCueLayer3(state: State, cueId: Int, applyData: CueApplyDat
 }
 
 /**
- * The rows [republishCueLayer3] would publish: the cue's own assignments plus those of each
+ * The rows [republishCueLayer] would publish: the cue's own assignments plus those of each
  * *immediate* preset application (timed presets don't contribute — matching [applyCue]).
  *
- * Split out from [republishCueLayer3] so a caller that needs to rebuild several cues can publish
+ * Split out from [republishCueLayer] so a caller that needs to rebuild several cues can publish
  * them in one pass — see `republishForPaletteEdit`, where publishing per cue would take the engine
  * lock and transmit once per cue for what is a single operator edit.
  */
-internal fun buildCombinedCueLayer3Rows(
+internal fun buildCombinedCueLayerRows(
     state: State,
     cueId: Int,
     applyData: CueApplyData,
-): List<Layer3Resolver.Assignment> {
+): List<CueAssignmentResolver.Assignment> {
     val cascade = PaletteCascade(
         cue = applyData.palette.toPaletteColours(),
         global = state.show.fxEngine.getPalette(),
     )
-    val cueOwn = buildLayer3AssignmentsForCue(state.show.fixtures, applyData, cascade, state.show.paletteRegistry)
+    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, applyData, cascade, state.show.paletteRegistry)
     val priority = cueDerivedPriority(applyData)
     val presetRows = transaction(state.database) {
         applyData.presetApplications
             .filter { it.delayMs == null && it.intervalMs == null }
             .flatMap { app ->
                 val preset = DaoFxPreset.findById(app.presetId) ?: return@flatMap emptyList()
-                buildLayer3AssignmentsForPreset(
+                buildCueAssignmentsForPreset(
                     state.show.fixtures, cueId, priority,
                     app.presetId, preset.toPropertyAssignmentDtos(), app.targets,
                     cascade = cascade.copy(preset = preset.palette.toPaletteColours()),
@@ -1040,7 +1040,7 @@ internal fun groupHintsForTargets(
 }
 
 /**
- * Build Layer 3 rows for a preset application. Preset assignments are preset-local
+ * Build Layer 4 rows for a preset application. Preset assignments are preset-local
  * (no target field) — the builder fans each (propertyName, value) across the supplied
  * [applyTargets], reusing the cue builder's group→member expansion and specificity tagging.
  *
@@ -1048,7 +1048,7 @@ internal fun groupHintsForTargets(
  * ([FxEngine.removeCueAssignments]) cleans up preset-originated rows alongside the cue's
  * own assignments. If both the applying cue and the preset assert the same
  * `(targetKey, propertyName)`, the caller concatenates the two lists and lets
- * [Layer3Resolver.resolve] pick the winner by [Layer3Resolver.Assignment.priority] —
+ * [CueAssignmentResolver.resolve] pick the winner by [CueAssignmentResolver.Assignment.priority] —
  * callers should keep preset rows at the same priority as the cue's own rows so the sort
  * order alone decides (last-write-wins for OVERRIDE blend). Rows whose fixture / group /
  * property cannot be resolved are logged at warn and skipped — stale data must not break
@@ -1057,7 +1057,7 @@ internal fun groupHintsForTargets(
  * Palette refs in colour values resolve against [cascade] — see [PaletteCascade] for the
  * preset > cue > global scope rules.
  */
-internal fun buildLayer3AssignmentsForPreset(
+internal fun buildCueAssignmentsForPreset(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
     cueId: Int,
     priority: Int,
@@ -1066,10 +1066,10 @@ internal fun buildLayer3AssignmentsForPreset(
     applyTargets: List<CueTargetDto>,
     cascade: PaletteCascade = PaletteCascade.EMPTY,
     paletteRegistry: PaletteRegistry? = null,
-): List<Layer3Resolver.Assignment> {
+): List<CueAssignmentResolver.Assignment> {
     if (presetAssignments.isEmpty() || applyTargets.isEmpty()) return emptyList()
     val effectivePalette = cascade.effective
-    val out = ArrayList<Layer3Resolver.Assignment>(presetAssignments.size * applyTargets.size * 2)
+    val out = ArrayList<CueAssignmentResolver.Assignment>(presetAssignments.size * applyTargets.size * 2)
 
     for (target in applyTargets) {
         val targetRef = target.target
@@ -1136,9 +1136,9 @@ internal fun buildLayer3AssignmentsForPreset(
                 isGroup: Boolean,
                 rowCategory: PropertyCategory = category,
                 rowOverride: CompositionRule = override,
-                value: Layer3Resolver.PropertyValue,
+                value: CueAssignmentResolver.PropertyValue,
                 paletteUuid: java.util.UUID? = null,
-            ) = Layer3Resolver.Assignment(
+            ) = CueAssignmentResolver.Assignment(
                 cueId = cueId,
                 priority = priority,
                 fadeWeight = 1.0,
@@ -1197,7 +1197,7 @@ internal fun buildLayer3AssignmentsForPreset(
                 continue
             }
 
-            val parsed = Layer3Resolver.parseAssignmentValue(category, canonical, assignment.value, effectivePalette) ?: run {
+            val parsed = CueAssignmentResolver.parseAssignmentValue(category, canonical, assignment.value, effectivePalette) ?: run {
                 logger.warn(
                     "preset {} (cue {}): invalid value '{}' for {}.{} — skipping",
                     presetId, cueId, assignment.value, targetRef.key, assignment.propertyName,

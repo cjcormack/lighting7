@@ -18,7 +18,7 @@ import kotlin.test.Test
  * Per-tick allocation & latency benchmark for [FxEngine]'s hot path.
  *
  * Exercises a synthetic rig of 4 universes × 64 HexFixtures each (256 fixtures, ≈3 000 DMX
- * channels), with both BEAT and WALL_CLOCK effects running, plus a handful of cue-level Layer 3
+ * channels), with both BEAT and WALL_CLOCK effects running, plus a handful of cue-level Layer 4
  * assignments. Pumps ticks through [FxEngine.processBeatTick] / [FxEngine.processWallClockTick]
  * and reports allocation bytes/tick and p50/p99 tick duration.
  *
@@ -73,13 +73,13 @@ class FxEngineBenchmark {
             fixtures = fixtures,
             speedMasters = SpeedMasterBank(),
             programmerStore = programmerStore,
-            layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
+            layerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
         )
 
-        // Populate half the fixtures with cue-level Layer 3 dimmer assignments so
-        // `resetActiveProperties` actually has Layer 3 work to do during effect reset.
+        // Populate half the fixtures with cue-level Layer 4 dimmer assignments so
+        // `resetActiveProperties` actually has Layer 4 work to do during effect reset.
         val assignments = fixtures.fixtures.filterIndexed { i, _ -> i % 2 == 0 }.map { f ->
-            Layer3Resolver.Assignment(
+            CueAssignmentResolver.Assignment(
                 cueId = 1,
                 priority = 1,
                 fadeWeight = 1.0,
@@ -88,7 +88,7 @@ class FxEngineBenchmark {
                 propertyName = "dimmer",
                 category = PropertyCategory.DIMMER,
                 compositionOverride = CompositionRule.UNSET,
-                value = Layer3Resolver.PropertyValue.Slider(128u),
+                value = CueAssignmentResolver.PropertyValue.Slider(128u),
             )
         }
         engine.setCueAssignments(1, assignments)

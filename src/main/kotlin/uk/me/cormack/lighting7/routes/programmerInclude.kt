@@ -6,7 +6,7 @@ import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.IncludedTarget
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.PaletteCascade
 import uk.me.cormack.lighting7.fx.ProgrammerFxOrigin
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
@@ -82,9 +82,9 @@ internal fun includeCueIntoProgrammer(
     )
     val priority = cueDerivedPriority(cueData)
 
-    val cueOwnRows = buildLayer3AssignmentsForCue(fixtures, cueData, cascade, state.show.paletteRegistry)
+    val cueOwnRows = buildCueAssignmentsForCue(fixtures, cueData, cascade, state.show.paletteRegistry)
     val presetRows = immediatePresets.flatMap { preset ->
-        buildLayer3AssignmentsForPreset(
+        buildCueAssignmentsForPreset(
             fixtures, cueData.cueId, priority,
             preset.presetId, presetPropertyAssignments(state, preset.presetId),
             preset.application.targets,
@@ -170,16 +170,16 @@ private fun presetPropertyAssignments(state: State, presetId: Int) =
 /**
  * Collapse the builders' output the way the resolver would at compose time.
  *
- * `buildLayer3AssignmentsForCue` deliberately emits *both* a group-expanded member row and any
- * direct fixture row for the same member, leaving `Layer3Resolver.applySpecificity` to drop the
+ * `buildCueAssignmentsForCue` deliberately emits *both* a group-expanded member row and any
+ * direct fixture row for the same member, leaving `CueAssignmentResolver.applySpecificity` to drop the
  * former when composing. The programmer has no such pass — writing the raw list would let list
  * order decide the winner — so Include applies the same rule up front: a direct fixture row
  * beats a group-expanded one, and among equals the last wins.
  */
 private fun applySpecificityForInclude(
-    rows: List<Layer3Resolver.Assignment>,
-): List<Layer3Resolver.Assignment> {
-    val winners = LinkedHashMap<Pair<String, String>, Layer3Resolver.Assignment>()
+    rows: List<CueAssignmentResolver.Assignment>,
+): List<CueAssignmentResolver.Assignment> {
+    val winners = LinkedHashMap<Pair<String, String>, CueAssignmentResolver.Assignment>()
     for (row in rows) {
         val key = row.targetKey to canonicalPropertyName(row.propertyName)
         val current = winners[key]

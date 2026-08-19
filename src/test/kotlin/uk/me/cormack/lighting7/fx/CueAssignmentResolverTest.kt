@@ -9,9 +9,9 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class Layer3ResolverTest {
+class CueAssignmentResolverTest {
 
-    private val resolver = Layer3Resolver()
+    private val resolver = CueAssignmentResolver()
 
     private fun slider(
         cueId: Int,
@@ -21,7 +21,7 @@ class Layer3ResolverTest {
         propertyName: String = "dimmer",
         value: UByte,
         category: PropertyCategory = PropertyCategory.DIMMER,
-    ) = Layer3Resolver.Assignment(
+    ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
         fadeWeight = fadeWeight,
@@ -29,7 +29,7 @@ class Layer3ResolverTest {
         targetIsGroup = false,
         propertyName = propertyName,
         category = category,
-        value = Layer3Resolver.PropertyValue.Slider(value),
+        value = CueAssignmentResolver.PropertyValue.Slider(value),
     )
 
     private fun colour(
@@ -38,7 +38,7 @@ class Layer3ResolverTest {
         fadeWeight: Double,
         targetKey: String = "fx-1",
         red: Int, green: Int, blue: Int,
-    ) = Layer3Resolver.Assignment(
+    ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
         fadeWeight = fadeWeight,
@@ -46,7 +46,7 @@ class Layer3ResolverTest {
         targetIsGroup = false,
         propertyName = "rgbColour",
         category = PropertyCategory.COLOUR,
-        value = Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(red, green, blue))),
+        value = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(red, green, blue))),
     )
 
     private fun position(
@@ -58,7 +58,7 @@ class Layer3ResolverTest {
         tilt: UByte,
         moveInDark: Boolean = false,
         targetIsGroup: Boolean = false,
-    ) = Layer3Resolver.Assignment(
+    ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
         fadeWeight = fadeWeight,
@@ -66,7 +66,7 @@ class Layer3ResolverTest {
         targetIsGroup = targetIsGroup,
         propertyName = "position",
         category = PropertyCategory.PAN,
-        value = Layer3Resolver.PropertyValue.Position(pan, tilt),
+        value = CueAssignmentResolver.PropertyValue.Position(pan, tilt),
         moveInDark = moveInDark,
     )
 
@@ -82,8 +82,8 @@ class Layer3ResolverTest {
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 100u),
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 180u),
         ))
-        val v = result[Layer3Resolver.Key.fixture("fx-1", "dimmer")]
-        assertIs<Layer3Resolver.PropertyValue.Slider>(v)
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")]
+        assertIs<CueAssignmentResolver.PropertyValue.Slider>(v)
         assertEquals(180u.toUByte(), v.value)
     }
 
@@ -94,7 +94,7 @@ class Layer3ResolverTest {
             slider(cueId = 1, priority = 1, fadeWeight = 0.5, value = 100u), // → 50 after scale
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 180u),
         ))
-        val v = result[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
         assertEquals(180u.toUByte(), v.value)
     }
 
@@ -106,7 +106,7 @@ class Layer3ResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 0.0, value = 200u),
-        ))[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
         assertEquals(50u.toUByte(), v.value)
     }
 
@@ -115,7 +115,7 @@ class Layer3ResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 0.5, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 0.5, value = 200u),
-        ))[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
         assertEquals(125u.toUByte(), v.value)
     }
 
@@ -124,7 +124,7 @@ class Layer3ResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 0.0, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 200u),
-        ))[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
         assertEquals(200u.toUByte(), v.value)
     }
 
@@ -133,7 +133,7 @@ class Layer3ResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 100u),
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 180u),
-        ))[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
         assertEquals(180u.toUByte(), v.value)
     }
 
@@ -143,26 +143,26 @@ class Layer3ResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 0.5, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 0.5, value = 200u),
-        ))[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
         assertEquals(125u.toUByte(), v.value)
     }
 
     @Test
     fun `HTP setting category uses blend path for crossfade`() {
-        val assignment1 = Layer3Resolver.Assignment(
+        val assignment1 = CueAssignmentResolver.Assignment(
             cueId = 1, priority = 1, fadeWeight = 0.5,
             targetKey = "fx-1", targetIsGroup = false,
             propertyName = "mode", category = PropertyCategory.SETTING,
             compositionOverride = CompositionRule.HTP,
-            value = Layer3Resolver.PropertyValue.Setting(60u),
+            value = CueAssignmentResolver.PropertyValue.Setting(60u),
         )
         val assignment2 = assignment1.copy(
             cueId = 2, priority = 2,
-            value = Layer3Resolver.PropertyValue.Setting(200u),
+            value = CueAssignmentResolver.PropertyValue.Setting(200u),
         )
         val v = resolver.resolve(listOf(assignment1, assignment2))[
-            Layer3Resolver.Key.fixture("fx-1", "mode")
-        ] as Layer3Resolver.PropertyValue.Setting
+            CueAssignmentResolver.Key.fixture("fx-1", "mode")
+        ] as CueAssignmentResolver.PropertyValue.Setting
         assertEquals(130u.toUByte(), v.channelValue)
     }
 
@@ -173,7 +173,7 @@ class Layer3ResolverTest {
             colour(cueId = 1, priority = 1, fadeWeight = 1.0, red = 255, green = 0, blue = 0),
             colour(cueId = 2, priority = 2, fadeWeight = 1.0, red = 0, green = 0, blue = 255),
         ))
-        val v = result[Layer3Resolver.Key.fixture("fx-1", "rgbColour")] as Layer3Resolver.PropertyValue.Colour
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "rgbColour")] as CueAssignmentResolver.PropertyValue.Colour
         assertEquals(Color(0, 0, 255), v.value.color)
     }
 
@@ -184,7 +184,7 @@ class Layer3ResolverTest {
             colour(cueId = 1, priority = 1, fadeWeight = 0.4, red = 255, green = 0, blue = 0),
             colour(cueId = 2, priority = 2, fadeWeight = 0.6, red = 0, green = 0, blue = 255),
         ))
-        val v = result[Layer3Resolver.Key.fixture("fx-1", "rgbColour")] as Layer3Resolver.PropertyValue.Colour
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "rgbColour")] as CueAssignmentResolver.PropertyValue.Colour
         // Linear RGB: (1 - 0.6) * red + 0.6 * blue per channel.
         assertEquals(102, v.value.color.red, "red")
         assertEquals(0, v.value.color.green, "green")
@@ -199,7 +199,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.7, value = 200u,
                 category = PropertyCategory.PAN, propertyName = "pan"),
         ))
-        val v = result[Layer3Resolver.Key.fixture("fx-1", "pan")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "pan")] as CueAssignmentResolver.PropertyValue.Slider
         // outgoing 100 → incoming 200 at progress 0.7 → 100 + 100 * 0.7 = 170
         assertEquals(170u.toUByte(), v.value)
     }
@@ -218,7 +218,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.0, value = 200u,
                 category = PropertyCategory.PAN, propertyName = "pan"),
         ))
-        val v = result[Layer3Resolver.Key.fixture("fx-1", "pan")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "pan")] as CueAssignmentResolver.PropertyValue.Slider
         // progress 0 → 100 + (200 - 100) * 0 = 100 (outgoing value).
         assertEquals(100u.toUByte(), v.value)
     }
@@ -232,7 +232,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 200u,
                 category = PropertyCategory.PAN, propertyName = "pan"),
         ))
-        val v = result[Layer3Resolver.Key.fixture("fx-1", "pan")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "pan")] as CueAssignmentResolver.PropertyValue.Slider
         assertEquals(200u.toUByte(), v.value)
     }
 
@@ -242,7 +242,7 @@ class Layer3ResolverTest {
             colour(cueId = 1, priority = 1, fadeWeight = 1.0, red = 255, green = 0, blue = 0),
             colour(cueId = 2, priority = 2, fadeWeight = 0.0, red = 0, green = 0, blue = 255),
         ))
-        val v = result[Layer3Resolver.Key.fixture("fx-1", "rgbColour")] as Layer3Resolver.PropertyValue.Colour
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "rgbColour")] as CueAssignmentResolver.PropertyValue.Colour
         assertEquals(Color(255, 0, 0), v.value.color, "outgoing red dominates at progress 0")
     }
 
@@ -250,33 +250,33 @@ class Layer3ResolverTest {
     fun `LTP settings snap at 50 percent fade progress`() {
         // Progress < 0.5 → outgoing; progress >= 0.5 → incoming.
         val earlyIn = resolver.resolve(listOf(
-            Layer3Resolver.Assignment(
+            CueAssignmentResolver.Assignment(
                 cueId = 1, priority = 1, fadeWeight = 0.4, targetKey = "fx-1", targetIsGroup = false,
                 propertyName = "mode", category = PropertyCategory.SETTING,
-                value = Layer3Resolver.PropertyValue.Setting(10u),
+                value = CueAssignmentResolver.PropertyValue.Setting(10u),
             ),
-            Layer3Resolver.Assignment(
+            CueAssignmentResolver.Assignment(
                 cueId = 2, priority = 2, fadeWeight = 0.4, targetKey = "fx-1", targetIsGroup = false,
                 propertyName = "mode", category = PropertyCategory.SETTING,
-                value = Layer3Resolver.PropertyValue.Setting(50u),
+                value = CueAssignmentResolver.PropertyValue.Setting(50u),
             ),
         ))
-        val early = earlyIn[Layer3Resolver.Key.fixture("fx-1", "mode")] as Layer3Resolver.PropertyValue.Setting
+        val early = earlyIn[CueAssignmentResolver.Key.fixture("fx-1", "mode")] as CueAssignmentResolver.PropertyValue.Setting
         assertEquals(10u.toUByte(), early.channelValue, "below 50% should still be outgoing")
 
         val lateIn = resolver.resolve(listOf(
-            Layer3Resolver.Assignment(
+            CueAssignmentResolver.Assignment(
                 cueId = 1, priority = 1, fadeWeight = 0.6, targetKey = "fx-1", targetIsGroup = false,
                 propertyName = "mode", category = PropertyCategory.SETTING,
-                value = Layer3Resolver.PropertyValue.Setting(10u),
+                value = CueAssignmentResolver.PropertyValue.Setting(10u),
             ),
-            Layer3Resolver.Assignment(
+            CueAssignmentResolver.Assignment(
                 cueId = 2, priority = 2, fadeWeight = 0.6, targetKey = "fx-1", targetIsGroup = false,
                 propertyName = "mode", category = PropertyCategory.SETTING,
-                value = Layer3Resolver.PropertyValue.Setting(50u),
+                value = CueAssignmentResolver.PropertyValue.Setting(50u),
             ),
         ))
-        val late = lateIn[Layer3Resolver.Key.fixture("fx-1", "mode")] as Layer3Resolver.PropertyValue.Setting
+        val late = lateIn[CueAssignmentResolver.Key.fixture("fx-1", "mode")] as CueAssignmentResolver.PropertyValue.Setting
         assertEquals(50u.toUByte(), late.channelValue, "at/above 50% should flip to incoming")
     }
 
@@ -287,7 +287,7 @@ class Layer3ResolverTest {
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 100u).copy(targetIsGroup = true),
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 200u).copy(targetIsGroup = false),
         ))
-        val v = result[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
         assertEquals(200u.toUByte(), v.value, "fixture-level contributor wins")
     }
 
@@ -300,7 +300,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 50u)
                 .copy(compositionOverride = CompositionRule.LTP),
         ))
-        val v = result[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
         assertEquals(50u.toUByte(), v.value, "LTP picks highest-priority (cueId 2 at 50) despite lower value")
     }
 
@@ -309,7 +309,7 @@ class Layer3ResolverTest {
         val result = resolver.resolve(listOf(
             slider(cueId = 1, priority = 5, fadeWeight = 0.2, value = 200u),
         ))
-        val v = result[Layer3Resolver.Key.fixture("fx-1", "dimmer")] as Layer3Resolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
         // Single HTP contributor: max(200 * 0.2) = 40.
         assertEquals(40u.toUByte(), v.value)
     }
@@ -332,7 +332,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.0, targetKey = "head-1", value = 255u),
             position(cueId = 2, priority = 2, fadeWeight = 0.0, pan = 192u, tilt = 192u, moveInDark = true),
         ))
-        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
         assertEquals(192u.toUByte(), v.pan, "snap to incoming pan at fade start")
         assertEquals(192u.toUByte(), v.tilt, "snap to incoming tilt at fade start")
     }
@@ -346,7 +346,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.5, targetKey = "head-1", value = 255u),
             position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 192u, tilt = 192u, moveInDark = true),
         ))
-        val midPos = mid[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        val midPos = mid[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
         assertEquals(192u.toUByte(), midPos.pan, "snap holds at progress 0.5")
         assertEquals(192u.toUByte(), midPos.tilt, "snap holds at progress 0.5")
 
@@ -357,7 +357,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.99, targetKey = "head-1", value = 255u),
             position(cueId = 2, priority = 2, fadeWeight = 0.99, pan = 192u, tilt = 192u, moveInDark = true),
         ))
-        val latePos = late[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        val latePos = late[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
         assertEquals(192u.toUByte(), latePos.pan, "snap holds at progress 0.99")
         assertEquals(192u.toUByte(), latePos.tilt, "snap holds at progress 0.99")
     }
@@ -371,7 +371,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.0, targetKey = "head-1", value = 255u),
             position(cueId = 2, priority = 2, fadeWeight = 0.0, pan = 200u, tilt = 200u, moveInDark = false),
         ))
-        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
         // At fade start the outgoing wins (priority tie-break by fadeWeight) and `winner.fadeWeight >= 1.0`
         // returns winner.value → outgoing position (0,0).
         assertEquals(0u.toUByte(), v.pan)
@@ -387,7 +387,7 @@ class Layer3ResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.5, targetKey = "head-1", value = 255u),
             position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 200u, tilt = 200u, moveInDark = true),
         ))
-        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
         // Linear blend at progress 0.5: pan = 0 + (200 - 0) * 0.5 = 100. (winner = incoming on priority.)
         assertEquals(100u.toUByte(), v.pan)
         assertEquals(100u.toUByte(), v.tilt)
@@ -403,7 +403,7 @@ class Layer3ResolverTest {
             position(cueId = 1, priority = 1, fadeWeight = 0.5, pan = 0u, tilt = 0u),
             position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 200u, tilt = 200u, moveInDark = true),
         ))
-        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
         assertEquals(100u.toUByte(), v.pan, "no dimmer evidence → linear blend at 0.5")
         assertEquals(100u.toUByte(), v.tilt)
     }
@@ -421,7 +421,7 @@ class Layer3ResolverTest {
             position(cueId = 1, priority = 1, fadeWeight = 1.0, pan = 100u, tilt = 100u, moveInDark = true),
         ))
         // Single Position contributor → winner.value returned directly. Position(100,100).
-        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
         assertEquals(100u.toUByte(), v.pan)
         assertEquals(100u.toUByte(), v.tilt)
     }
@@ -443,8 +443,8 @@ class Layer3ResolverTest {
             position(cueId = 2, priority = 2, fadeWeight = 0.3, targetKey = "head-1", pan = 220u, tilt = 220u, moveInDark = true, targetIsGroup = true),
             position(cueId = 2, priority = 2, fadeWeight = 0.3, targetKey = "head-2", pan = 220u, tilt = 220u, moveInDark = true, targetIsGroup = true),
         ))
-        val h1 = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
-        val h2 = result[Layer3Resolver.Key.fixture("head-2", "position")] as Layer3Resolver.PropertyValue.Position
+        val h1 = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
+        val h2 = result[CueAssignmentResolver.Key.fixture("head-2", "position")] as CueAssignmentResolver.PropertyValue.Position
         assertEquals(220u.toUByte(), h1.pan)
         assertEquals(220u.toUByte(), h2.pan)
     }
@@ -462,7 +462,7 @@ class Layer3ResolverTest {
             position(cueId = 1, priority = 1, fadeWeight = 0.5, pan = 0u, tilt = 0u),
             position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 200u, tilt = 200u, moveInDark = true),
         ))
-        val v = result[Layer3Resolver.Key.fixture("head-1", "position")] as Layer3Resolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
         assertEquals(200u.toUByte(), v.pan, "armed by cueId=1's dimmer=0")
         assertEquals(200u.toUByte(), v.tilt)
     }
@@ -471,34 +471,34 @@ class Layer3ResolverTest {
 
     @Test
     fun `parseAssignmentValue - slider from numeric string`() {
-        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "180")
-        assertEquals(Layer3Resolver.PropertyValue.Slider(180u.toUByte()), v)
+        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "180")
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(180u.toUByte()), v)
     }
 
     @Test
     fun `parseAssignmentValue - slider clamps out of range`() {
-        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.UV, "uv", "999")
-        assertEquals(Layer3Resolver.PropertyValue.Slider(255u.toUByte()), v)
-        val neg = Layer3Resolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "-10")
-        assertEquals(Layer3Resolver.PropertyValue.Slider(0u.toUByte()), neg)
+        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.UV, "uv", "999")
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u.toUByte()), v)
+        val neg = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "-10")
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u.toUByte()), neg)
     }
 
     @Test
     fun `parseAssignmentValue - setting category produces Setting value`() {
-        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.SETTING, "mode", "64")
-        assertEquals(Layer3Resolver.PropertyValue.Setting(64u.toUByte()), v)
+        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.SETTING, "mode", "64")
+        assertEquals(CueAssignmentResolver.PropertyValue.Setting(64u.toUByte()), v)
     }
 
     @Test
     fun `parseAssignmentValue - OTHER category produces Setting value`() {
-        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.OTHER, "misc", "32")
-        assertEquals(Layer3Resolver.PropertyValue.Setting(32u.toUByte()), v)
+        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.OTHER, "misc", "32")
+        assertEquals(CueAssignmentResolver.PropertyValue.Setting(32u.toUByte()), v)
     }
 
     @Test
     fun `parseAssignmentValue - colour from hex`() {
-        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", "#FF0000")
-        assertIs<Layer3Resolver.PropertyValue.Colour>(v)
+        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", "#FF0000")
+        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
         assertEquals(Color.RED, v.value.color)
     }
 
@@ -508,30 +508,30 @@ class Layer3ResolverTest {
             ExtendedColour(Color(10, 20, 30)),
             ExtendedColour(Color(40, 50, 60)),
         )
-        val v = Layer3Resolver.parseAssignmentValue(
+        val v = CueAssignmentResolver.parseAssignmentValue(
             PropertyCategory.COLOUR, "rgbColour", "P2", palette,
         )
-        assertIs<Layer3Resolver.PropertyValue.Colour>(v)
+        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
         assertEquals(Color(40, 50, 60), v.value.color)
     }
 
     @Test
     fun `parseAssignmentValue - palette ref with empty palette falls through to white`() {
         // P1 isn't a valid hex or named colour, so parseExtendedColour returns white.
-        val v = Layer3Resolver.parseAssignmentValue(
+        val v = CueAssignmentResolver.parseAssignmentValue(
             PropertyCategory.COLOUR, "rgbColour", "P1",
         )
-        assertIs<Layer3Resolver.PropertyValue.Colour>(v)
+        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
         assertEquals(Color.WHITE, v.value.color)
     }
 
     @Test
     fun `parseAssignmentValue - hex value ignores supplied palette`() {
         val palette = listOf(ExtendedColour(Color(10, 20, 30)))
-        val v = Layer3Resolver.parseAssignmentValue(
+        val v = CueAssignmentResolver.parseAssignmentValue(
             PropertyCategory.COLOUR, "rgbColour", "#00FF00", palette,
         )
-        assertIs<Layer3Resolver.PropertyValue.Colour>(v)
+        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
         assertEquals(Color(0, 255, 0), v.value.color)
     }
 
@@ -542,17 +542,17 @@ class Layer3ResolverTest {
             ExtendedColour(Color(40, 50, 60)),
         )
         // P3 on a 2-entry palette → (3-1) mod 2 = 0 → first entry.
-        val v = Layer3Resolver.parseAssignmentValue(
+        val v = CueAssignmentResolver.parseAssignmentValue(
             PropertyCategory.COLOUR, "rgbColour", "P3", palette,
         )
-        assertIs<Layer3Resolver.PropertyValue.Colour>(v)
+        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
         assertEquals(Color(10, 20, 30), v.value.color)
     }
 
     @Test
     fun `parseAssignmentValue - colour from named value with extended channels`() {
-        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", "red;w32;uv16")
-        assertIs<Layer3Resolver.PropertyValue.Colour>(v)
+        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", "red;w32;uv16")
+        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
         assertEquals(Color.RED, v.value.color)
         assertEquals(32u.toUByte(), v.value.white)
         assertEquals(16u.toUByte(), v.value.uv)
@@ -560,69 +560,69 @@ class Layer3ResolverTest {
 
     @Test
     fun `parseAssignmentValue - position from pan-comma-tilt`() {
-        val v = Layer3Resolver.parseAssignmentValue(PropertyCategory.PAN, "position", "100,200")
-        assertEquals(Layer3Resolver.PropertyValue.Position(100u.toUByte(), 200u.toUByte()), v)
+        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", "100,200")
+        assertEquals(CueAssignmentResolver.PropertyValue.Position(100u.toUByte(), 200u.toUByte()), v)
     }
 
     @Test
     fun `parseAssignmentValue - position rejects malformed pair`() {
-        assertNull(Layer3Resolver.parseAssignmentValue(PropertyCategory.PAN, "position", "100"))
-        assertNull(Layer3Resolver.parseAssignmentValue(PropertyCategory.PAN, "position", "abc,def"))
-        assertNull(Layer3Resolver.parseAssignmentValue(PropertyCategory.PAN, "position", "1,2,3"))
+        assertNull(CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", "100"))
+        assertNull(CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", "abc,def"))
+        assertNull(CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", "1,2,3"))
     }
 
     @Test
     fun `parseAssignmentValue - slider rejects non-numeric`() {
-        assertNull(Layer3Resolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "nope"))
+        assertNull(CueAssignmentResolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "nope"))
     }
 
     // ─── PropertyValue.serialize round-trip ───────────────────────────────
 
     @Test
     fun `serialize round-trip - slider`() {
-        val original = Layer3Resolver.PropertyValue.Slider(180u)
-        val parsed = Layer3Resolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", original.serialize())
+        val original = CueAssignmentResolver.PropertyValue.Slider(180u)
+        val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", original.serialize())
         assertEquals(original, parsed)
     }
 
     @Test
     fun `serialize round-trip - setting`() {
-        val original = Layer3Resolver.PropertyValue.Setting(64u)
-        val parsed = Layer3Resolver.parseAssignmentValue(PropertyCategory.SETTING, "mode", original.serialize())
+        val original = CueAssignmentResolver.PropertyValue.Setting(64u)
+        val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.SETTING, "mode", original.serialize())
         assertEquals(original, parsed)
     }
 
     @Test
     fun `serialize round-trip - plain colour`() {
-        val original = Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(255, 128, 64)))
-        val parsed = Layer3Resolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", original.serialize())
+        val original = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(255, 128, 64)))
+        val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", original.serialize())
         assertEquals(original, parsed)
     }
 
     @Test
     fun `serialize round-trip - extended colour with white amber and uv`() {
-        val original = Layer3Resolver.PropertyValue.Colour(
+        val original = CueAssignmentResolver.PropertyValue.Colour(
             ExtendedColour(Color(10, 20, 30), white = 40u, amber = 50u, uv = 60u)
         )
-        val parsed = Layer3Resolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", original.serialize())
+        val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", original.serialize())
         assertEquals(original, parsed)
     }
 
     @Test
     fun `serialize round-trip - position`() {
-        val original = Layer3Resolver.PropertyValue.Position(pan = 100u, tilt = 200u)
-        val parsed = Layer3Resolver.parseAssignmentValue(PropertyCategory.PAN, "position", original.serialize())
+        val original = CueAssignmentResolver.PropertyValue.Position(pan = 100u, tilt = 200u)
+        val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", original.serialize())
         assertEquals(original, parsed)
     }
 
     @Test
     fun `serialize slider produces decimal string without u suffix`() {
-        assertEquals("0", Layer3Resolver.PropertyValue.Slider(0u).serialize())
-        assertEquals("255", Layer3Resolver.PropertyValue.Slider(255u).serialize())
+        assertEquals("0", CueAssignmentResolver.PropertyValue.Slider(0u).serialize())
+        assertEquals("255", CueAssignmentResolver.PropertyValue.Slider(255u).serialize())
     }
 
     @Test
     fun `serialize position emits pan-comma-tilt`() {
-        assertEquals("128,200", Layer3Resolver.PropertyValue.Position(128u, 200u).serialize())
+        assertEquals("128,200", CueAssignmentResolver.PropertyValue.Position(128u, 200u).serialize())
     }
 }

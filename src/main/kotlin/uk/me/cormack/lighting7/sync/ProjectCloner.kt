@@ -17,7 +17,7 @@ import java.util.UUID
  *
  * This exists instead of a hand-written table-by-table copy because the hand-written one
  * silently rotted: it covered 5 of 21 project-owned tables, so clones lost their patch
- * list, groups, universes, Layer 3 assignments, triggers, prompt book and more. Reusing
+ * list, groups, universes, Layer 4 assignments, triggers, prompt book and more. Reusing
  * the exporter/importer means a table is cloned the moment it's wired into sync — which
  * `CLAUDE.md`'s schema-change rules already require — and `ProjectCloneTest` holds that
  * guarantee in place.

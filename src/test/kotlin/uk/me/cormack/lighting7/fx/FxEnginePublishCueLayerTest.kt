@@ -11,17 +11,17 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Exercises the Layer 3 transmit path: [FxEngine.setCueAssignments] /
+ * Exercises the Layer 4 transmit path: [FxEngine.setCueAssignments] /
  * [FxEngine.removeCueAssignments] / [FxEngine.clearAllCueAssignments] must write the composed
- * Layer 3 → Layer 4 → Layer 5 fallback onto the [uk.me.cormack.lighting7.dmx.DmxController]
+ * Layer 2 → Layer 4 → Layer 5 fallback onto the [uk.me.cormack.lighting7.dmx.DmxController]
  * even when no effects are running.
  *
  * Regression target: the 2026-04-19d smoke-check found that pure-assignment cues (no effects)
  * never painted the stage because the tick loop early-returns and the effect-reset pass is
- * the only code path that currently composes Layer 3 onto controllers. These tests assert the
+ * the only code path that currently composes Layer 4 onto controllers. These tests assert the
  * fix via real [MockDmxController] reads — no tick loop involvement.
  */
-class FxEnginePublishLayer3Test {
+class FxEnginePublishCueLayerTest {
 
     private val universe = Universe(0, 0)
 
@@ -48,7 +48,7 @@ class FxEnginePublishLayer3Test {
             fixtures = fixtures,
             speedMasters = SpeedMasterBank(),
             programmerStore = programmerStore,
-            layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
+            layerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
         )
         return Rig(controller, fixtures, engine, programmerStore)
     }
@@ -60,7 +60,7 @@ class FxEnginePublishLayer3Test {
         propertyName: String = "dimmer",
         value: UByte,
         category: PropertyCategory = PropertyCategory.DIMMER,
-    ) = Layer3Resolver.Assignment(
+    ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
         fadeWeight = 1.0,
@@ -68,21 +68,21 @@ class FxEnginePublishLayer3Test {
         targetIsGroup = false,
         propertyName = propertyName,
         category = category,
-        value = Layer3Resolver.PropertyValue.Slider(value),
+        value = CueAssignmentResolver.PropertyValue.Slider(value),
     )
 
     @Test
     fun `setCueAssignments writes dimmer value to controller with no effects running`() {
         val rig = newRig(firstChannel = 1)
         rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 180u)))
-        assertEquals(180u.toUByte(), rig.controller.currentValues[1], "dimmer channel must reflect Layer 3 publish")
+        assertEquals(180u.toUByte(), rig.controller.currentValues[1], "dimmer channel must reflect Layer 4 publish")
     }
 
     @Test
     fun `a programmer value wins over a cue and survives its release`() {
         val rig = newRig(firstChannel = 1)
         // Sticky programmer write — sits ABOVE the cue layer.
-        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(55u))
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(55u))
 
         rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 180u)))
         assertEquals(
@@ -124,7 +124,7 @@ class FxEnginePublishLayer3Test {
     @Test
     fun `clearAllCueAssignments releases every previously-asserted channel`() {
         val rig = newRig(firstChannel = 1)
-        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(30u))
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(30u))
 
         rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 180u)))
         assertEquals(
@@ -142,7 +142,7 @@ class FxEnginePublishLayer3Test {
     @Test
     fun `colour assignment writes R G B channels`() {
         val rig = newRig(firstChannel = 1) // R/G/B at channels 2/3/4
-        val assignment = Layer3Resolver.Assignment(
+        val assignment = CueAssignmentResolver.Assignment(
             cueId = 10,
             priority = 1,
             fadeWeight = 1.0,
@@ -151,7 +151,7 @@ class FxEnginePublishLayer3Test {
             propertyName = "rgbColour",
             category = PropertyCategory.COLOUR,
             compositionOverride = CompositionRule.UNSET,
-            value = Layer3Resolver.PropertyValue.Colour(
+            value = CueAssignmentResolver.PropertyValue.Colour(
                 ExtendedColour(java.awt.Color(128, 64, 200), 0u, 0u, 0u)
             ),
         )
@@ -178,7 +178,7 @@ class FxEnginePublishLayer3Test {
     @Test
     fun `publish does not touch unrelated channels`() {
         val rig = newRig(firstChannel = 1)
-        // Touch an unrelated channel via direct write. Layer 3 publish walks only affected
+        // Touch an unrelated channel via direct write. Layer 4 publish walks only affected
         // keys, so the unrelated channel must remain untouched.
         rig.controller.setValue(200, 77u, 0L)
 
@@ -187,10 +187,10 @@ class FxEnginePublishLayer3Test {
         assertEquals(77u.toUByte(), rig.controller.currentValues[200], "unrelated channel untouched")
     }
 
-    // ─── Layer 3 crossfade-weight integration ───────────────────────────────
+    // ─── Layer 4 crossfade-weight integration ───────────────────────────────
     //
     // Drives [FxEngine.updateCueFadeWeights] directly, covering the composition behaviour
-    // that [CueStackManager.runCrossfade] ticks each frame (Layer 3 only — effects snap on
+    // that [CueStackManager.runCrossfade] ticks each frame (Layer 4 only — effects snap on
     // cue transition and don't participate in the crossfade). Simulates the
     // outgoing-at-1.0 / incoming-at-0.0 start, the 0.5 / 0.5 mid-fade, and the 0.0 / 1.0 end.
 
@@ -204,7 +204,7 @@ class FxEnginePublishLayer3Test {
         targetKey: String = "hex-a",
         propertyName: String = "dimmer",
         value: UByte,
-    ) = Layer3Resolver.Assignment(
+    ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
         fadeWeight = 1.0,
@@ -213,7 +213,7 @@ class FxEnginePublishLayer3Test {
         propertyName = propertyName,
         category = PropertyCategory.DIMMER,
         compositionOverride = CompositionRule.LTP,
-        value = Layer3Resolver.PropertyValue.Slider(value),
+        value = CueAssignmentResolver.PropertyValue.Slider(value),
     )
 
     @Test
@@ -339,15 +339,15 @@ class FxEnginePublishLayer3Test {
     @Test
     fun `crossfade weights ramp colour RGB linearly`() {
         val rig = newRig(firstChannel = 1)
-        val red = Layer3Resolver.Assignment(
+        val red = CueAssignmentResolver.Assignment(
             cueId = 10, priority = 1, fadeWeight = 1.0,
             targetKey = "hex-a", targetIsGroup = false,
             propertyName = "rgbColour", category = PropertyCategory.COLOUR,
-            value = Layer3Resolver.PropertyValue.Colour(ExtendedColour(java.awt.Color(255, 0, 0), 0u, 0u, 0u)),
+            value = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(java.awt.Color(255, 0, 0), 0u, 0u, 0u)),
         )
         val blue = red.copy(
             cueId = 20, priority = 2,
-            value = Layer3Resolver.PropertyValue.Colour(ExtendedColour(java.awt.Color(0, 0, 255), 0u, 0u, 0u)),
+            value = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(java.awt.Color(0, 0, 255), 0u, 0u, 0u)),
         )
         rig.engine.setCueAssignments(10, listOf(red))
         rig.engine.setCueAssignments(20, listOf(blue))
@@ -372,14 +372,14 @@ class FxEnginePublishLayer3Test {
         // The programmer holds a dim red on the colour property.
         rig.programmerStore.put(
             ProgrammerOwner.WEB, "hex-a", "rgbColour",
-            Layer3Resolver.PropertyValue.Colour(ExtendedColour(java.awt.Color(40, 10, 10))),
+            CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(java.awt.Color(40, 10, 10))),
         )
 
-        val assignment = Layer3Resolver.Assignment(
+        val assignment = CueAssignmentResolver.Assignment(
             cueId = 10, priority = 1, fadeWeight = 1.0,
             targetKey = "hex-a", targetIsGroup = false,
             propertyName = "rgbColour", category = PropertyCategory.COLOUR,
-            value = Layer3Resolver.PropertyValue.Colour(
+            value = CueAssignmentResolver.PropertyValue.Colour(
                 ExtendedColour(java.awt.Color(255, 255, 255), 0u, 0u, 0u)
             ),
         )

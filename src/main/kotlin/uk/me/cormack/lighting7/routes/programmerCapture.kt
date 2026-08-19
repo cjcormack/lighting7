@@ -12,7 +12,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.paletteUuidOrNull
@@ -107,7 +107,7 @@ data class RecordSkip(
 data class RecordEntry(
     val fixtureKey: String,
     val propertyName: String,
-    val value: Layer3Resolver.PropertyValue,
+    val value: CueAssignmentResolver.PropertyValue,
     val sourceGroup: String?,
     val maskGroup: PropertyMaskGroup?,
     /**
@@ -163,7 +163,7 @@ internal fun collectProgrammerEntries(
     fun accept(
         fixtureKey: String,
         rawPropertyName: String,
-        value: Layer3Resolver.PropertyValue,
+        value: CueAssignmentResolver.PropertyValue,
         sourceGroup: String?,
         seq: Long,
         paletteUuid: UUID? = null,
@@ -484,14 +484,14 @@ internal fun readOutputPropertyValue(
     fixture: GroupableFixture,
     propertyName: String,
     universe: Int,
-): Layer3Resolver.PropertyValue? {
+): CueAssignmentResolver.PropertyValue? {
     val canonical = canonicalPropertyName(propertyName)
     if (canonical.equals("position", ignoreCase = true)) {
         val positioned = fixture as? WithPosition ?: return null
         val pan = positioned.pan as? DmxSlider
         val tilt = positioned.tilt as? DmxSlider
         if (pan == null || tilt == null) return null
-        return Layer3Resolver.PropertyValue.Position(
+        return CueAssignmentResolver.PropertyValue.Position(
             channelOutput(state, universe, pan.channelNo),
             channelOutput(state, universe, tilt.channelNo),
         )
@@ -500,13 +500,13 @@ internal fun readOutputPropertyValue(
         val raw = uk.me.cormack.lighting7.fx.PropertyChannelWriter
             .resolveProperty(fixture, canonical)?.value
     ) {
-        is DmxColour -> Layer3Resolver.PropertyValue.Colour(
+        is DmxColour -> CueAssignmentResolver.PropertyValue.Colour(
             readOutputColour(state, fixture as? Fixture, raw, universe),
         )
         is DmxFixtureSetting<*> ->
-            Layer3Resolver.PropertyValue.Setting(channelOutput(state, universe, raw.channelNo))
+            CueAssignmentResolver.PropertyValue.Setting(channelOutput(state, universe, raw.channelNo))
         is DmxSlider ->
-            Layer3Resolver.PropertyValue.Slider(channelOutput(state, universe, raw.channelNo))
+            CueAssignmentResolver.PropertyValue.Slider(channelOutput(state, universe, raw.channelNo))
         else -> null
     }
 }
@@ -551,7 +551,7 @@ internal fun readOutputColour(
 /**
  * One channel's current output: the programmer's sideband slot if it holds one, else the
  * controller's buffer. Park is deliberately not consulted — a parked channel's *underlying*
- * value is what a cue should record, matching how the Layer 3 snapshot reads.
+ * value is what a cue should record, matching how the Layer 4 snapshot reads.
  */
 private fun channelOutput(state: State, universe: Int, channelNo: Int): UByte {
     state.show.programmerStore.getChannel(universe, channelNo)?.let { return it }

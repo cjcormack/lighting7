@@ -28,7 +28,7 @@ typealias PaletteType = PropertyMaskGroup
  * rule included.
  *
  * [value] is always a literal in the canonical
- * [uk.me.cormack.lighting7.fx.Layer3Resolver.PropertyValue.serialize] grammar. **Palettes do
+ * [uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.serialize] grammar. **Palettes do
  * not nest**: a `ref:` value is rejected at the write boundary, so resolving a reference can
  * never recurse.
  */

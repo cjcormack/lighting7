@@ -298,7 +298,7 @@ The system prompt describes:
 
 A `cue_property_assignments.value` (and its FX-preset twin) holds one of:
 
-1. a **literal** in the canonical `Layer3Resolver.PropertyValue.serialize()` grammar — `"200"`,
+1. a **literal** in the canonical `CueAssignmentResolver.PropertyValue.serialize()` grammar — `"200"`,
    `"#rrggbb[;wN;aN;uvN]"`, `"pan,tilt"`;
 2. a **positional palette ref** — `"P1"`, `"P2"`, `"P*"` — indexing the ordered colour list scoped
    global → stack → cue (`PaletteCascade`), colour-only;

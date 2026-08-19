@@ -662,7 +662,7 @@ class SurfaceFeedbackPublisherTest {
             val cc = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()
             assertTrue(cc.isNotEmpty(), "Expected feedback after session Started event")
             val expected = PropertyChannelResolver.scaleDmxTo7Bit(64u)
-            assertEquals(expected, cc.last().value, "Feedback should reflect cue's Layer 3 (64) not live DMX (255)")
+            assertEquals(expected, cc.last().value, "Feedback should reflect cue's Layer 4 (64) not live DMX (255)")
         } finally {
             h.publisher.stop()
             scope.cancel()

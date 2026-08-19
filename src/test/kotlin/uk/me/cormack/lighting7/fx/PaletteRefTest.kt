@@ -52,11 +52,11 @@ class PaletteRefTest {
         // parseAssignmentValue, and why that ordering is called out in its KDoc. The literal
         // parser answers white for unrecognised input rather than failing, so an unintercepted
         // ref would light the fixture white instead of reporting a dead reference.
-        val parsed = Layer3Resolver.parseAssignmentValue(
+        val parsed = CueAssignmentResolver.parseAssignmentValue(
             PropertyCategory.COLOUR, "colour", paletteRefValue(uuid),
         )
         assertEquals(
-            Layer3Resolver.PropertyValue.Colour(parseExtendedColour("#ffffff")), parsed,
+            CueAssignmentResolver.PropertyValue.Colour(parseExtendedColour("#ffffff")), parsed,
             "if this ever starts failing instead, the ordering guarantee can relax — until then it cannot",
         )
     }
@@ -66,10 +66,10 @@ class PaletteRefTest {
         // The inverse direction: nothing the canonical serialiser produces can be mistaken for a
         // reference, so the two forms cannot collide in the value column.
         val values = listOf(
-            Layer3Resolver.PropertyValue.Slider(200u),
-            Layer3Resolver.PropertyValue.Setting(12u),
-            Layer3Resolver.PropertyValue.Colour(parseExtendedColour("#ff8800;w5")),
-            Layer3Resolver.PropertyValue.Position(120u, 64u),
+            CueAssignmentResolver.PropertyValue.Slider(200u),
+            CueAssignmentResolver.PropertyValue.Setting(12u),
+            CueAssignmentResolver.PropertyValue.Colour(parseExtendedColour("#ff8800;w5")),
+            CueAssignmentResolver.PropertyValue.Position(120u, 64u),
         )
         values.forEach { assertFalse(isPaletteRefValue(it.serialize()), "${it.serialize()} reads as a ref") }
     }

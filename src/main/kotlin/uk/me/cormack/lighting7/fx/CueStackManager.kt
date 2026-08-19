@@ -18,8 +18,8 @@ import java.util.concurrent.ConcurrentHashMap
  * Tracks which cue is active in each stack, maintains stack-level palettes
  * (which persist across cue transitions), and handles auto-advance timers.
  *
- * Supports Layer 3 property-assignment crossfades: when a cue has `fadeDurationMs`
- * configured, its outgoing and incoming Layer 3 assignments crossfade using per-cue
+ * Supports Layer 4 property-assignment crossfades: when a cue has `fadeDurationMs`
+ * configured, its outgoing and incoming Layer 4 assignments crossfade using per-cue
  * fade weights and the configured [EasingCurve]. Effects always snap on cue transition
  * (outgoing removed, incoming start at full intensity) — matching Eos / grandMA / Hog 4.
  * Auto-advance and crossfade are per-cue settings.
@@ -38,7 +38,7 @@ class CueStackManager(
         var crossfadeJob: Job? = null,
         // Cue id being faded out by [crossfadeJob], if any. Tracked so that cancelling a
         // mid-flight crossfade (because a new cue activates) can drop the now-abandoned
-        // outgoing's Layer 3 assignments — otherwise they'd linger past the cancellation.
+        // outgoing's Layer 4 assignments — otherwise they'd linger past the cancellation.
         var crossfadeOutgoingCueId: Int? = null,
     )
 
@@ -61,9 +61,9 @@ class CueStackManager(
      *
      * 1. Cancel any in-flight crossfade and remove outgoing effects (effects always snap)
      * 2. Merge the cue's palette into the stack palette
-     * 3. Apply the cue's effects (tagged with both cueId and cueStackId) and Layer 3
+     * 3. Apply the cue's effects (tagged with both cueId and cueStackId) and Layer 4
      *    assignments (at weight 0 if crossfading, 1 otherwise)
-     * 4. Start Layer 3 crossfade coroutine if configured
+     * 4. Start Layer 4 crossfade coroutine if configured
      * 5. Start auto-advance timer if configured
      */
     fun activateCueInStack(
@@ -137,7 +137,7 @@ class CueStackManager(
         }
 
         // Cancel any in-progress crossfade for this stack. A crossfade cancelled mid-flight
-        // still holds onto the previous outgoing cue's Layer 3 assignments (they'd have been
+        // still holds onto the previous outgoing cue's Layer 4 assignments (they'd have been
         // removed at end-of-crossfade). Drop those now so the new activation starts clean.
         val existingState = activeStacks[stackId]
         existingState?.crossfadeJob?.cancel()
@@ -150,7 +150,7 @@ class CueStackManager(
         val outgoingCueId = existingState?.activeCueId
 
         val fadeDurationMs = cueData.fadeDurationMs ?: 0L
-        // Governs Layer 3 assignments only — effects always snap (see
+        // Governs Layer 4 assignments only — effects always snap (see
         // `removeEffectsForCueStackKeepPalette` below).
         val useCrossfade = fadeDurationMs > 0 && outgoingCueId != null
 
@@ -158,7 +158,7 @@ class CueStackManager(
         if (outgoingCueId != null) {
             state.cueTriggerManager.deactivateTriggersForCue(outgoingCueId)
             if (!useCrossfade) {
-                // Snap path: drop outgoing Layer 3 immediately. Crossfade path keeps
+                // Snap path: drop outgoing Layer 4 immediately. Crossfade path keeps
                 // assignments live and ticks the weight down — removal happens at end-of-crossfade.
                 fxEngine.removeCueAssignments(outgoingCueId)
             }
@@ -249,25 +249,25 @@ class CueStackManager(
             effectCount++
         }
 
-        // Apply Layer 3 for the incoming cue. Under crossfade the incoming starts at weight 0
+        // Apply Layer 4 for the incoming cue. Under crossfade the incoming starts at weight 0
         // atomically with the insert; `runCrossfade` ticks it up from there. Stomp runs off
         // the same assignments so HTP/LTP and stomp overlap agree.
         val stackCascade = PaletteCascade(
             cue = fxEngine.getStackPalette(stackId) ?: emptyList(),
             global = fxEngine.getPalette(),
         )
-        val layer3Assignments = buildLayer3AssignmentsForCue(state.show.fixtures, cueData, stackCascade, state.show.paletteRegistry)
+        val cueLayerRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, stackCascade, state.show.paletteRegistry)
         val incomingStartWeight = if (useCrossfade) 0.0 else 1.0
-        if (layer3Assignments.isNotEmpty()) {
+        if (cueLayerRows.isNotEmpty()) {
             fxEngine.setCueAssignments(
-                cueData.cueId, layer3Assignments, incomingStartWeight, cueStackId = stackId,
+                cueData.cueId, cueLayerRows, incomingStartWeight, cueStackId = stackId,
             )
         } else {
             fxEngine.removeCueAssignments(cueData.cueId)
         }
         // Restore outgoing to 1.0 in case a prior mid-flight crossfade left it partial.
         // `useCrossfade` already implies `outgoingCueId != null`.
-        if (useCrossfade && layer3Assignments.isNotEmpty()) {
+        if (useCrossfade && cueLayerRows.isNotEmpty()) {
             fxEngine.updateCueFadeWeights(mapOf(outgoingCueId!! to 1.0))
         }
         if (cueData.stomp) {
@@ -288,7 +288,7 @@ class CueStackManager(
             } catch (_: Exception) {
                 EasingCurve.LINEAR
             }
-            val incomingCueId = if (layer3Assignments.isNotEmpty()) cueData.cueId else null
+            val incomingCueId = if (cueLayerRows.isNotEmpty()) cueData.cueId else null
 
             val stackState = activeStacks[stackId]
             stackState?.crossfadeOutgoingCueId = outgoingCueId
@@ -345,7 +345,7 @@ class CueStackManager(
     }
 
     /**
-     * Crossfade Layer 3 property assignments between outgoing and incoming cues.
+     * Crossfade Layer 4 property assignments between outgoing and incoming cues.
      *
      * Each tick, the per-cue fade weight is ticked through [FxEngine.updateCueFadeWeights]
      * — outgoing from 1→0, incoming from 0→1 — so sliders / colours / positions blend
@@ -356,8 +356,8 @@ class CueStackManager(
      * Eos / grandMA / Hog 4 and avoids the drop-to-0 bug that came from scaling
      * OVERRIDE-blend effect outputs by `intensityMultiplier`.
      *
-     * When complete, outgoing Layer 3 is dropped via [FxEngine.removeCueAssignments] and
-     * incoming Layer 3 weight is pinned at 1.0.
+     * When complete, outgoing Layer 4 is dropped via [FxEngine.removeCueAssignments] and
+     * incoming Layer 4 weight is pinned at 1.0.
      */
     private suspend fun runCrossfade(
         outgoingCueId: Int?,
@@ -376,7 +376,7 @@ class CueStackManager(
             val incomingWeight = easedProgress
 
             // Single atomic update so the engine only republishes once per tick even when both
-            // cues contributed Layer 3.
+            // cues contributed Layer 4.
             if (outgoingCueId != null || incomingCueId != null) {
                 val updates = buildMap {
                     if (outgoingCueId != null) put(outgoingCueId, outgoingWeight)
@@ -389,7 +389,7 @@ class CueStackManager(
             delay(CROSSFADE_TICK_MS)
         }
 
-        // Crossfade complete — drop outgoing Layer 3 contributions and pin incoming to 1.0.
+        // Crossfade complete — drop outgoing Layer 4 contributions and pin incoming to 1.0.
         if (outgoingCueId != null) {
             fxEngine.removeCueAssignments(outgoingCueId)
         }
@@ -503,7 +503,7 @@ class CueStackManager(
         stackState?.autoAdvanceJob?.cancel()
         stackState?.crossfadeJob?.cancel()
 
-        // `removeEffectsForCueStack` below wipes effects but not Layer 3 — clear the active
+        // `removeEffectsForCueStack` below wipes effects but not Layer 4 — clear the active
         // cue's assignments here so an assignment-only cue doesn't leave stale state behind.
         // Also drop the mid-flight crossfade's outgoing if one was in-flight.
         stackState?.activeCueId?.let { fxEngine.removeCueAssignments(it) }

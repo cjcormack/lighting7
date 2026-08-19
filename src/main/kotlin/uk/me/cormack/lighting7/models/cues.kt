@@ -40,9 +40,9 @@ data class CuePresetApplicationDto(
 )
 
 /**
- * Layer 3 property assignment — operator-authored "this cue asserts property X = value" record.
- * See `docs/lighting-composition-model.md` §"Layer 3" for semantics (specificity, composition,
- * crossfade) and `uk.me.cormack.lighting7.fx.Layer3Resolver` for the canonical value parser.
+ * Layer 4 property assignment — operator-authored "this cue asserts property X = value" record.
+ * See `docs/lighting-composition-model.md` §"Layer 4" for semantics (specificity, composition,
+ * crossfade) and `uk.me.cormack.lighting7.fx.CueAssignmentResolver` for the canonical value parser.
  */
 @Serializable
 data class CuePropertyAssignmentDto(
@@ -128,8 +128,8 @@ object DaoCues : IntIdTable("cues") {
     val cueType = varchar("cue_type", 20).default("STANDARD")
     /**
      * When true, applying this cue removes ad-hoc effects owned by *other* cues that target
-     * properties covered by this cue's Layer 3 assignments. Mirrors grandMA3's `Stomp`. Phase 0
-     * lands the column and resolver hook; Phase 1 wires real Layer 3 data in as the overlap
+     * properties covered by this cue's Layer 4 assignments. Mirrors grandMA3's `Stomp`. Phase 0
+     * lands the column and resolver hook; Phase 1 wires real Layer 4 data in as the overlap
      * source. See `docs/lighting-composition-model.md` §"Stomp".
      */
     val stomp = bool("stomp").default(false)

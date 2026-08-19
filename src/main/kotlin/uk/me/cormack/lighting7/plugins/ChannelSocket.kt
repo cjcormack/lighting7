@@ -9,7 +9,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fx.ExtendedColour
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
 import uk.me.cormack.lighting7.state.State
@@ -180,16 +180,16 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
             }
             engine.writeProgrammerProperty(
                 ProgrammerOwner.WEB, fixture, key.propertyName,
-                Layer3Resolver.PropertyValue.Colour(replaced), fadeMs = fade,
+                CueAssignmentResolver.PropertyValue.Colour(replaced), fadeMs = fade,
             )
         }
         is DmxFixtureSetting<*> -> engine.writeProgrammerProperty(
             ProgrammerOwner.WEB, fixture, key.propertyName,
-            Layer3Resolver.PropertyValue.Setting(level), fadeMs = fade,
+            CueAssignmentResolver.PropertyValue.Setting(level), fadeMs = fade,
         )
         is DmxSlider -> engine.writeProgrammerProperty(
             ProgrammerOwner.WEB, fixture, key.propertyName,
-            Layer3Resolver.PropertyValue.Slider(level), fadeMs = fade,
+            CueAssignmentResolver.PropertyValue.Slider(level), fadeMs = fade,
         )
         else -> engine.writeProgrammerChannel(
             ProgrammerOwner.WEB, universe, channel, level, coveringKey = key, fadeMs = fade,
@@ -214,7 +214,7 @@ private fun currentExtendedColour(
     // count as part of the colour; the entry preference is this path's own rule, because
     // Record has already applied its own precedence before it gets there.
     (state.show.programmerStore.get(fixtureKey, propertyName)?.value?.resolved
-        as? Layer3Resolver.PropertyValue.Colour)
+        as? CueAssignmentResolver.PropertyValue.Colour)
         ?.let { return it.value }
 
     val fixture = try {

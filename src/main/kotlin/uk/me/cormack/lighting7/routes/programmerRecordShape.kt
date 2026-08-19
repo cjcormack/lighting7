@@ -29,7 +29,7 @@ data class CollapsedAssignments(
  * of the named group holds an entry for that property **and** they all carry the same value.
  * A missing or stale hint therefore degrades to per-fixture rows: more verbose, never wrong.
  *
- * This is the same uniformity test [captureLayer3AssignmentsFromSnapshot] applies to the stage
+ * This is the same uniformity test [captureCueAssignmentsFromSnapshot] applies to the stage
  * snapshot, so both record paths preserve operator-authored group shape identically.
  *
  * Pure: no DB, no engine, no [uk.me.cormack.lighting7.state.State] — the fixture patch is the

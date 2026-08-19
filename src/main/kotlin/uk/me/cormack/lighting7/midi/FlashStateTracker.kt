@@ -13,8 +13,8 @@ import java.util.concurrent.ConcurrentHashMap
  * clobber each other's release state.
  *
  * v1 scope: we only need to know "is this binding currently pressed?". On release, the
- * [SurfaceInputRouter] calls [clearPress] and clears the Layer 4 entries the press installed.
- * That restores whatever layer was underneath (Layer 3 from an active cue, or the neutral
+ * [SurfaceInputRouter] calls [clearPress] and clears the Layer 2 entries the press installed.
+ * That restores whatever layer was underneath (Layer 4 from an active cue, or the neutral
  * base value). The tracker itself doesn't need to store the pre-press channel values — the
  * composition model resolves them on next frame via [uk.me.cormack.lighting7.fx.LayerResolver].
  *

@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.test.Test
@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 
 /**
  * [collapseRecordingToAssignments] — the programmer-driven twin of
- * [captureLayer3AssignmentsFromSnapshot], and the place the §7 "group entries" decision lives.
+ * [captureCueAssignmentsFromSnapshot], and the place the §7 "group entries" decision lives.
  *
  * The rule under test: a `sourceGroup` hint only *nominates* a group row. It is emitted iff
  * every member holds an entry for that property with the same value. That is what makes a
@@ -42,7 +42,7 @@ class ProgrammerRecordShapeTest {
     ) = RecordEntry(
         fixtureKey = key,
         propertyName = property,
-        value = Layer3Resolver.PropertyValue.Slider(value.toUByte()),
+        value = CueAssignmentResolver.PropertyValue.Slider(value.toUByte()),
         sourceGroup = group,
         maskGroup = PropertyMaskGroup.INTENSITY,
     )

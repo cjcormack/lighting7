@@ -79,10 +79,10 @@ value class ProgrammerOwner(val id: String) {
  */
 sealed interface ProgrammerValue {
     /** The concrete value the entry contributes to the cascade. */
-    val resolved: Layer3Resolver.PropertyValue
+    val resolved: CueAssignmentResolver.PropertyValue
 
     /** A literal value, not derived from any palette. */
-    data class Hard(override val resolved: Layer3Resolver.PropertyValue) : ProgrammerValue
+    data class Hard(override val resolved: CueAssignmentResolver.PropertyValue) : ProgrammerValue
 
     /**
      * A named-palette reference plus the literal it currently resolves to *for this fixture and
@@ -96,7 +96,7 @@ sealed interface ProgrammerValue {
      */
     data class Ref(
         val paletteUuid: UUID,
-        override val resolved: Layer3Resolver.PropertyValue,
+        override val resolved: CueAssignmentResolver.PropertyValue,
     ) : ProgrammerValue
 }
 
@@ -110,7 +110,7 @@ val ProgrammerValue.paletteUuidOrNull: UUID?
  * than at each of the engine's write entry points.
  */
 fun programmerValueOf(
-    value: Layer3Resolver.PropertyValue,
+    value: CueAssignmentResolver.PropertyValue,
     paletteUuid: UUID?,
 ): ProgrammerValue =
     if (paletteUuid == null) ProgrammerValue.Hard(value) else ProgrammerValue.Ref(paletteUuid, value)
@@ -234,7 +234,7 @@ class ProgrammerStore {
 
     /**
      * Channel sideband: packed `(universe << 20 | channel)` → owner stack. Values are
-     * [Layer3Resolver.PropertyValue.Slider]-wrapped raw bytes.
+     * [CueAssignmentResolver.PropertyValue.Slider]-wrapped raw bytes.
      */
     private val channels = ConcurrentHashMap<Long, Holder>()
 
@@ -302,7 +302,7 @@ class ProgrammerStore {
         owner: ProgrammerOwner,
         fixtureKey: String,
         propertyName: String,
-        value: Layer3Resolver.PropertyValue,
+        value: CueAssignmentResolver.PropertyValue,
         touched: Boolean = true,
         sourceGroup: String? = null,
     ) = putValue(owner, fixtureKey, propertyName, ProgrammerValue.Hard(value), touched, sourceGroup)
@@ -377,7 +377,7 @@ class ProgrammerStore {
     ) {
         val slot = Slot(
             owner,
-            ProgrammerValue.Hard(Layer3Resolver.PropertyValue.Slider(value)),
+            ProgrammerValue.Hard(CueAssignmentResolver.PropertyValue.Slider(value)),
             touched,
             sourceGroup = null,
             seq = bumpEpoch(),
@@ -392,7 +392,7 @@ class ProgrammerStore {
     /** The winning sideband value at (universe, channel), or null. Hot path. */
     fun getChannel(universe: Int, channel: Int): UByte? {
         val top = getChannelSlot(universe, channel) ?: return null
-        return (top.value.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+        return (top.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
     }
 
     /** Remove [owner]'s sideband slot at (universe, channel). */
@@ -410,7 +410,7 @@ class ProgrammerStore {
     fun channelValueFor(owner: ProgrammerOwner, universe: Int, channel: Int): UByte? {
         val slot = channels[packChannelKey(universe, channel)]?.all()?.firstOrNull { it.owner == owner }
             ?: return null
-        return (slot.value.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+        return (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
     }
 
     /**
@@ -526,8 +526,8 @@ class ProgrammerStore {
      */
     fun rewriteSlotValues(
         transform: (fixtureKey: String, propertyName: String, slot: Slot) -> ProgrammerValue?,
-    ): Set<Layer3Resolver.Key> {
-        val changed = HashSet<Layer3Resolver.Key>()
+    ): Set<CueAssignmentResolver.Key> {
+        val changed = HashSet<CueAssignmentResolver.Key>()
         // Tracked separately from [changed]: hardening a ref replaces the slot without moving its
         // resolved value, so there is nothing to republish but the store *has* mutated and
         // epoch-cached consumers must re-read.
@@ -550,7 +550,7 @@ class ProgrammerStore {
                     mutated = true
                     val next = if (rewritten.size == 1) Single(rewritten[0]) else Stack(rewritten)
                     if (next.top.value.resolved != before) {
-                        changed.add(Layer3Resolver.Key.fixture(fixtureKey, propertyName))
+                        changed.add(CueAssignmentResolver.Key.fixture(fixtureKey, propertyName))
                     }
                     next
                 }
@@ -563,10 +563,10 @@ class ProgrammerStore {
     }
 
     /** The (fixture, property) keys currently holding at least one slot. Cold path. */
-    fun activeKeys(): Set<Layer3Resolver.Key> = buildSet {
+    fun activeKeys(): Set<CueAssignmentResolver.Key> = buildSet {
         for ((fixtureKey, byProperty) in properties) {
             for (propertyName in byProperty.keys) {
-                add(Layer3Resolver.Key.fixture(fixtureKey, propertyName))
+                add(CueAssignmentResolver.Key.fixture(fixtureKey, propertyName))
             }
         }
     }

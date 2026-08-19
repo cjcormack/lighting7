@@ -21,7 +21,7 @@ import kotlin.test.Test
  * Phase B item 4 of the follow-up drain plan; companion to `EffectStormHarness`.
  * Referenced by `FU-PERF-COALESCE-WRITES` (the headline target — 100 Hz fader CC traffic
  * runs through `CueEditSessionHandler.setPropertyForSession` per event, with a Hikari
- * borrow + Exposed transaction + Layer 3 republish each time) and by `FU-MANUAL-SUSPEND-PATH`.
+ * borrow + Exposed transaction + Layer 4 republish each time) and by `FU-MANUAL-SUSPEND-PATH`.
  *
  * Opens a libremidi virtual output port with the same shape as
  * `src/main/kotlin/uk/me/cormack/lighting7/midi/KtmidiAccessSource.kt`, so the running

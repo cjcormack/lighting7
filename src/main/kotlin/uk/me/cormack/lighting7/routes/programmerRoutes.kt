@@ -442,7 +442,7 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
         val modeLabel = if (request.targets != null) "B" else "A"
 
         // Mode A into a palette. Mode B stays cue-only on purpose: its premise is "which cue am I
-        // sitting on top of", answered from the Layer 3 winner map — and a palette is not in the
+        // sitting on top of", answered from the Layer 4 winner map — and a palette is not in the
         // output cascade at all, so there is no palette equivalent to derive.
         if (modeLabel == "A" && includeTarget!!.kind == IncludedTarget.Kind.PALETTE) {
             updateIncludedPalette(state, project, includeTarget, mask)

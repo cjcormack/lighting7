@@ -78,7 +78,7 @@ class FxEnginePipelineTest {
             fixtures = fixtures,
             speedMasters = speedMasters,
             programmerStore = programmerStore,
-            layerResolver = LayerResolver(Layer3Resolver(), programmerStore),
+            layerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
         )
         return Rig(controller, fixtures, engine, programmerStore, speedMasters, parkSource)
     }
@@ -107,7 +107,7 @@ class FxEnginePipelineTest {
         targetKey: String = "hex-a",
         value: UByte,
         compositionOverride: CompositionRule = CompositionRule.UNSET,
-    ) = Layer3Resolver.Assignment(
+    ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
         fadeWeight = 1.0,
@@ -116,7 +116,7 @@ class FxEnginePipelineTest {
         propertyName = "dimmer",
         category = PropertyCategory.DIMMER,
         compositionOverride = compositionOverride,
-        value = Layer3Resolver.PropertyValue.Slider(value),
+        value = CueAssignmentResolver.PropertyValue.Slider(value),
     )
 
     private fun colourAssignment(
@@ -124,7 +124,7 @@ class FxEnginePipelineTest {
         priority: Int = 1,
         targetKey: String = "hex-a",
         color: Color,
-    ) = Layer3Resolver.Assignment(
+    ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
         fadeWeight = 1.0,
@@ -132,7 +132,7 @@ class FxEnginePipelineTest {
         targetIsGroup = false,
         propertyName = "rgbColour",
         category = PropertyCategory.COLOUR,
-        value = Layer3Resolver.PropertyValue.Colour(ExtendedColour(color, 0u, 0u, 0u)),
+        value = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(color, 0u, 0u, 0u)),
     )
 
     private fun makeStaticDimmer(value: UByte, blendMode: BlendMode, priority: Int = 0): FxInstance =
@@ -179,7 +179,7 @@ class FxEnginePipelineTest {
     fun `Worked Example 2 — a programmer value suppresses a manual effect on its property`() {
         val rig = newRig(firstChannel = 1)
         // Programmer sticky write: operator dragged dimmer to 180.
-        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u))
 
         // The programmer sits above effects: a manual (priority 0) effect on the same
         // property is suppressed — the reset pass paints 180 and the apply is skipped.
@@ -197,7 +197,7 @@ class FxEnginePipelineTest {
     @Test
     fun `a programmer-band effect is exempt from suppression and composes over the value`() {
         val rig = newRig(firstChannel = 1)
-        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u))
 
         // Same effect, but in the reserved programmer priority band — Session 2's
         // programmer-owned busking FX. It modulates on top of the programmer value.
@@ -217,7 +217,7 @@ class FxEnginePipelineTest {
     @Test
     fun `a suppressed effect's removal leaves the programmer value on stage`() {
         val rig = newRig(firstChannel = 1)
-        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u))
 
         val effect = makeStaticDimmer(value = 30u, blendMode = BlendMode.ADDITIVE)
         val id = rig.engine.addEffect(effect)
@@ -237,7 +237,7 @@ class FxEnginePipelineTest {
         // Programmer holds the dimmer; an effect on the white slider is untouched.
         rig.engine.writeProgrammerProperty(
             ProgrammerOwner.WEB, rig.fixtures.fixture<HexFixture>("hex-a"), "dimmer",
-            Layer3Resolver.PropertyValue.Slider(180u),
+            CueAssignmentResolver.PropertyValue.Slider(180u),
         )
 
         val whiteEffect = FxInstance(
@@ -258,7 +258,7 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
         rig.engine.writeProgrammerProperty(
-            ProgrammerOwner.WEB, hex, "dimmer", Layer3Resolver.PropertyValue.Slider(180u),
+            ProgrammerOwner.WEB, hex, "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
 
         val effect = makeStaticDimmer(value = 30u, blendMode = BlendMode.OVERRIDE)
@@ -282,13 +282,13 @@ class FxEnginePipelineTest {
         rig.engine.setCueAssignments(10, listOf(dimmerAssignment(cueId = 10, priority = 1, value = 100u)))
         rig.engine.setCueAssignments(20, listOf(dimmerAssignment(cueId = 20, priority = 2, value = 180u)))
 
-        // With no effect running, Layer 3 publish is enough. Pump a tick to confirm the effect
-        // reset path (when it runs) doesn't stomp Layer 3.
+        // With no effect running, Layer 4 publish is enough. Pump a tick to confirm the effect
+        // reset path (when it runs) doesn't stomp Layer 4.
         val harmless = makeStaticDimmer(value = 50u, blendMode = BlendMode.MAX)
         rig.engine.addEffect(harmless)
         rig.engine.processBeatTick(tick(0))
 
-        // Layer 3 HTP: max(100, 180) = 180. MAX-blend effect at 50 keeps 180.
+        // Layer 4 HTP: max(100, 180) = 180. MAX-blend effect at 50 keeps 180.
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
 
         // Fading cue A out: weight 0.5 scales A to 50. max(50, 180) = 180. Cue B stays dominant.
@@ -367,7 +367,7 @@ class FxEnginePipelineTest {
     fun `SineWave plus updateChannel at 180 — direct write remains visible as effect baseline`() {
         val rig = newRig(firstChannel = 1)
         // updateChannel equivalent: the shim lifts the dimmer channel to a programmer entry.
-        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u))
         // Immediately paint the sticky value onto the controller so any tick that runs
         // without a cue reset reads 180 as the fallback baseline (matches the real
         // updateChannel socket handler which writes through the controller).
@@ -470,17 +470,17 @@ class FxEnginePipelineTest {
     // ─── Additional composition invariants ──────────────────────────────────
 
     @Test
-    fun `cue assignments composed under a MAX-blend effect — Layer 3 baseline wins when higher`() {
+    fun `cue assignments composed under a MAX-blend effect — Layer 4 baseline wins when higher`() {
         val rig = newRig(firstChannel = 1)
         rig.engine.setCueAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 200u)))
 
-        // MAX-blend effect at 50 should NOT lower the Layer 3 baseline of 200.
+        // MAX-blend effect at 50 should NOT lower the Layer 4 baseline of 200.
         val effect = makeStaticDimmer(value = 50u, blendMode = BlendMode.MAX)
         rig.engine.addEffect(effect)
         rig.engine.processBeatTick(tick(0))
         assertEquals(200u.toUByte(), rig.controller.currentValues[1], "max(200, 50) = 200")
 
-        // MAX-blend effect at 220 should lift above Layer 3.
+        // MAX-blend effect at 220 should lift above Layer 4.
         val lifter = makeStaticDimmer(value = 220u, blendMode = BlendMode.MAX)
         rig.engine.addEffect(lifter)
         rig.engine.processBeatTick(tick(1))
@@ -488,19 +488,19 @@ class FxEnginePipelineTest {
     }
 
     @Test
-    fun `removing the only effect covering a property resets to Layer 3 composed value`() {
+    fun `removing the only effect covering a property resets to Layer 4 composed value`() {
         val rig = newRig(firstChannel = 1)
         rig.engine.setCueAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 120u)))
 
         val effect = makeStaticDimmer(value = 255u, blendMode = BlendMode.OVERRIDE)
         val id = rig.engine.addEffect(effect)
         rig.engine.processBeatTick(tick(0))
-        assertEquals(255u.toUByte(), rig.controller.currentValues[1], "effect OVERRIDES Layer 3")
+        assertEquals(255u.toUByte(), rig.controller.currentValues[1], "effect OVERRIDES Layer 4")
 
         rig.engine.removeEffect(id)
         assertEquals(
             120u.toUByte(), rig.controller.currentValues[1],
-            "removal falls back to Layer 3 composed value (120)",
+            "removal falls back to Layer 4 composed value (120)",
         )
     }
 
@@ -509,20 +509,20 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
         rig.engine.setCueAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 180u)))
 
-        // Effect running, Layer 3 asserted: max(180, 40) = 180.
+        // Effect running, Layer 4 asserted: max(180, 40) = 180.
         val effect = makeStaticDimmer(value = 40u, blendMode = BlendMode.MAX)
         rig.engine.addEffect(effect)
         rig.engine.processBeatTick(tick(0))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
 
         rig.engine.clearAllCueAssignments()
-        // Layer 3 cleared. Next beat tick should reset to programmer (empty) → baseline (0),
+        // Layer 4 cleared. Next beat tick should reset to programmer (empty) → baseline (0),
         // then compose max(0, 40) = 40.
         rig.engine.processBeatTick(tick(1))
         assertEquals(40u.toUByte(), rig.controller.currentValues[1])
     }
 
-    // ─── Worked Example 6: Layer 4 property-level writes ────────────────────
+    // ─── Worked Example 6: programmer property-level writes ─────────────────
 
     @Test
     fun `Worked Example 6 — writeProgrammerProperty paints RGB and UV channels`() {
@@ -530,7 +530,7 @@ class FxEnginePipelineTest {
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
         val red = ExtendedColour(Color(255, 0, 0), uv = 128u)
-        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(red))
 
         // Hex R/G/B at channels 2/3/4, UV at channel 7.
         assertEquals(255u.toUByte(), rig.controller.currentValues[2], "red painted")
@@ -545,19 +545,19 @@ class FxEnginePipelineTest {
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
         val red = ExtendedColour(Color(255, 0, 0))
-        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(red))
         assertEquals(255u.toUByte(), rig.controller.currentValues[2])
 
         // A raw channel write lands in the sideband; being newer than the colour entry it
         // wins recency arbitration for its channel.
         rig.engine.writeProgrammerChannel(
             ProgrammerOwner.WEB, 0, 3, 128u,
-            coveringKey = Layer3Resolver.Key.fixture("hex-a", "rgbColour"),
+            coveringKey = CueAssignmentResolver.Key.fixture("hex-a", "rgbColour"),
         )
         assertEquals(128u.toUByte(), rig.controller.currentValues[3], "manual channel write wins")
 
         // Writing the colour again is newer still — and absorbs the sideband slot.
-        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", Layer3Resolver.PropertyValue.Colour(red))
+        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(red))
         assertEquals(0u.toUByte(), rig.controller.currentValues[3], "programmer re-write stomps previous")
         assertNull(rig.programmerStore.getChannel(0, 3), "sideband slot absorbed by the property write")
     }
@@ -570,7 +570,7 @@ class FxEnginePipelineTest {
         rig.engine.writeProgrammerProperty(
             ProgrammerOwner.WEB,
             hex, "rgbColour",
-            Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(255, 0, 0))),
+            CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(255, 0, 0))),
         )
         assertEquals(255u.toUByte(), rig.controller.currentValues[2], "programmer red on stage")
 
@@ -600,7 +600,7 @@ class FxEnginePipelineTest {
         rig.engine.writeProgrammerProperty(
             ProgrammerOwner.WEB,
             hex, "rgbColour",
-            Layer3Resolver.PropertyValue.Colour(ExtendedColour(Color(200, 100, 50), uv = 128u)),
+            CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(200, 100, 50), uv = 128u)),
         )
         assertEquals(200u.toUByte(), rig.controller.currentValues[2])
 
@@ -619,10 +619,10 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
-        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "dimmer", Layer3Resolver.PropertyValue.Slider(180u))
+        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
         assertEquals(
-            Layer3Resolver.PropertyValue.Slider(180u),
+            CueAssignmentResolver.PropertyValue.Slider(180u),
             rig.programmerStore.get("hex-a", "dimmer")?.value?.resolved,
         )
 
@@ -639,7 +639,7 @@ class FxEnginePipelineTest {
         val effect = makeStaticDimmer(value = 50u, blendMode = BlendMode.ADDITIVE)
         rig.engine.addEffect(effect)
 
-        // Run 50 ticks; the output must be stable: 100 (layer 3) + 50 (additive) = 150.
+        // Run 50 ticks; the output must be stable: 100 (layer 4) + 50 (additive) = 150.
         for (n in 0L..49L) {
             rig.engine.processBeatTick(tick(n))
             assertEquals(

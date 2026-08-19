@@ -10,7 +10,7 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
  * Deliberately coarser than [PropertyCategory]. A category-level mask would be
  * *fixture-dependent*: the same physical attribute is annotated differently across heads
  * (a gobo wheel is a `DmxFixtureSetting` on one fixture and a plain slider on another, and
- * [Layer3Resolver.parseAssignmentValue]'s own comment notes the GOBO/SETTING split is
+ * [CueAssignmentResolver.parseAssignmentValue]'s own comment notes the GOBO/SETTING split is
  * "only a labelling choice"). Ticking `GOBO` would then silently miss a gobo modelled as
  * `SETTING`. I/P/C/B collapses exactly that instability, and it is the vocabulary the
  * programmer redesign proposal (§2, §3.4) is written in.
@@ -73,7 +73,7 @@ fun PropertyCategory.maskGroup(): PropertyMaskGroup = when (this) {
  *
  * `position` is the synthetic pan/tilt pair: it has no `@FixtureProperty` annotation to read a
  * category from, so it is answered before the lookup — the same special case
- * `Layer3Resolver.parseAssignmentValue` and `fixtureCategoryFor` already make. `colour` /
+ * `CueAssignmentResolver.parseAssignmentValue` and `fixtureCategoryFor` already make. `colour` /
  * `color` / `rgbColour` need no case: [canonicalPropertyName] collapses them onto the
  * annotated `COLOUR` property.
  */

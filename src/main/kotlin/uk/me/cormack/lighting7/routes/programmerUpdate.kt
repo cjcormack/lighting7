@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.routes
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.FxEngine
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.paletteUuidOrNull
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
@@ -102,7 +102,7 @@ internal fun changedSinceInclude(
  * are currently overriding.
  *
  * Uses [FxEngine.underlyingSources] rather than provenance: provenance correctly reports the
- * programmer as the winner, which is precisely the answer this can't use. The Layer 3 winner
+ * programmer as the winner, which is precisely the answer this can't use. The Layer 4 winner
  * map is computed at publish time and knows nothing about the programmer, so it already is
  * "the cue underneath".
  *
@@ -122,8 +122,8 @@ internal fun buildUpdateChecklist(
         return ProgrammerUpdateChecklistDto(emptyList(), emptyList(), 0)
     }
 
-    val byKey = entries.associateBy { Layer3Resolver.Key.fixture(it.fixtureKey, it.propertyName) }
-    val layer3State = engine.layerResolver.currentLayer3State
+    val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.propertyName) }
+    val cueLayerState = engine.layerResolver.currentCueLayerState
     val sources = engine.underlyingSources(byKey.keys)
 
     val unattributed = ArrayList<ProgrammerChecklistKeyDto>()
@@ -136,7 +136,7 @@ internal fun buildUpdateChecklist(
             targetKey = entry.fixtureKey,
             propertyName = entry.propertyName,
             currentValue = entry.value.serialize(),
-            cueValue = layer3State[source.key]?.serialize(),
+            cueValue = cueLayerState[source.key]?.serialize(),
             viaEffect = source.viaEffectId != null,
         )
         val cueId = source.cueId
@@ -233,7 +233,7 @@ internal fun entriesUnderlyingCue(
     val engine = state.show.fxEngine
     val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
     if (entries.isEmpty()) return emptyList()
-    val byKey = entries.associateBy { Layer3Resolver.Key.fixture(it.fixtureKey, it.propertyName) }
+    val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.propertyName) }
     return engine.underlyingSources(byKey.keys)
         .filter { it.cueId == cueId }
         .mapNotNull { byKey[it.key] }

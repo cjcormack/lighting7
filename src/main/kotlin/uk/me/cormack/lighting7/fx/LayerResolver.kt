@@ -10,7 +10,7 @@ import uk.me.cormack.lighting7.fixture.GroupableFixture
  * 1. **PROGRAMMER** — sticky manual property entries (and the raw-channel sideband) held
  *    in [ProgrammerStore], unless the blind gate is engaged. Sits above cue assignments —
  *    a manual value wins over the playback state, console-style.
- * 2. **Cue property assignments** — composed by [Layer3Resolver] from active cues.
+ * 2. **Cue property assignments** — composed by [CueAssignmentResolver] from active cues.
  * 3. **Baseline** — fixture defaults (0 for sliders, black for colour, 128 centered for
  *    pan/tilt, 0 for settings).
  *
@@ -28,41 +28,42 @@ import uk.me.cormack.lighting7.fixture.GroupableFixture
  * *before* calling [fallbackFor] and skip the property entirely for parked channels.
  */
 class LayerResolver(
-    private val layer3: Layer3Resolver,
+    private val cueAssignmentResolver: CueAssignmentResolver,
     private val programmer: ProgrammerStore,
 ) {
     /**
-     * Current Layer 3 composition output, indexed by (targetKey, propertyName). Rebuilt when
+     * Current Layer 4 composition output, indexed by (targetKey, propertyName). Rebuilt when
      * cues change active state (Phase 1 wires this; Phase 0 keeps it empty).
      */
     @Volatile
-    private var layer3State: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue> = emptyMap()
+    private var cueLayerState: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue> = emptyMap()
 
     // Hot-path index keyed by fixtureKey → propertyName → value. Lets the per-tick reset path
-    // look up a Layer 3 contribution without allocating a compound `Layer3Resolver.Key` per
-    // call. Rebuilt atomically alongside `layer3State` in [applyAssignments].
+    // look up a Layer 4 contribution without allocating a compound
+    // `CueAssignmentResolver.Key` per call. Rebuilt atomically alongside `cueLayerState`
+    // in [applyAssignments].
     @Volatile
-    private var layer3Index: Map<String, Map<String, Layer3Resolver.PropertyValue>> = emptyMap()
+    private var cueLayerIndex: Map<String, Map<String, CueAssignmentResolver.PropertyValue>> = emptyMap()
 
     // Winning contributor per composed key — provenance only, never on the hot path.
     // Approximation: the highest-(priority, fadeWeight) contributor, which matches the LTP
     // winner exactly and names the dominant contributor under HTP/crossfade blends.
     @Volatile
-    private var layer3Winners: Map<Layer3Resolver.Key, Int> = emptyMap()
+    private var cueLayerWinners: Map<CueAssignmentResolver.Key, Int> = emptyMap()
 
-    /** Replace the Layer 3 state from the current set of assignments. Called on cue apply. */
-    fun applyAssignments(assignments: List<Layer3Resolver.Assignment>) {
-        val composed = if (assignments.isEmpty()) emptyMap() else layer3.resolve(assignments)
-        layer3State = composed
-        layer3Index = buildIndex(composed)
-        layer3Winners = computeWinners(assignments)
+    /** Replace the Layer 4 state from the current set of assignments. Called on cue apply. */
+    fun applyAssignments(assignments: List<CueAssignmentResolver.Assignment>) {
+        val composed = if (assignments.isEmpty()) emptyMap() else cueAssignmentResolver.resolve(assignments)
+        cueLayerState = composed
+        cueLayerIndex = buildIndex(composed)
+        cueLayerWinners = computeWinners(assignments)
     }
 
-    private fun computeWinners(assignments: List<Layer3Resolver.Assignment>): Map<Layer3Resolver.Key, Int> {
+    private fun computeWinners(assignments: List<CueAssignmentResolver.Assignment>): Map<CueAssignmentResolver.Key, Int> {
         if (assignments.isEmpty()) return emptyMap()
-        val winners = HashMap<Layer3Resolver.Key, Layer3Resolver.Assignment>()
+        val winners = HashMap<CueAssignmentResolver.Key, CueAssignmentResolver.Assignment>()
         for (a in assignments) {
-            val key = Layer3Resolver.Key.fixture(a.targetKey, a.propertyName)
+            val key = CueAssignmentResolver.Key.fixture(a.targetKey, a.propertyName)
             val current = winners[key]
             // Final tiebreak on cueId keeps the attribution deterministic on an exact
             // (priority, fadeWeight) tie — the flat assignment list comes from HashMap
@@ -81,30 +82,30 @@ class LayerResolver(
     }
 
     private fun buildIndex(
-        composed: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue>,
-    ): Map<String, Map<String, Layer3Resolver.PropertyValue>> {
+        composed: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
+    ): Map<String, Map<String, CueAssignmentResolver.PropertyValue>> {
         if (composed.isEmpty()) return emptyMap()
-        val idx = HashMap<String, HashMap<String, Layer3Resolver.PropertyValue>>()
+        val idx = HashMap<String, HashMap<String, CueAssignmentResolver.PropertyValue>>()
         for ((key, value) in composed) {
             idx.getOrPut(key.targetKey) { HashMap() }[key.propertyName] = value
         }
         return idx
     }
 
-    /** Clear the Layer 3 state — equivalent to "no cue contributing". */
+    /** Clear the Layer 4 state — equivalent to "no cue contributing". */
     fun clearAssignments() {
-        layer3State = emptyMap()
-        layer3Index = emptyMap()
-        layer3Winners = emptyMap()
+        cueLayerState = emptyMap()
+        cueLayerIndex = emptyMap()
+        cueLayerWinners = emptyMap()
     }
 
     /** Current snapshot; exposed for tests and diagnostics. */
-    val currentLayer3State: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue>
-        get() = layer3State
+    val currentCueLayerState: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>
+        get() = cueLayerState
 
     /** Winning contributor cueId per composed key — provenance / diagnostics. */
-    val currentLayer3Winners: Map<Layer3Resolver.Key, Int>
-        get() = layer3Winners
+    val currentCueLayerWinners: Map<CueAssignmentResolver.Key, Int>
+        get() = cueLayerWinners
 
     /**
      * Resolve the fallback [FxOutput] for the given target + fixture. Returned value is what
@@ -116,9 +117,9 @@ class LayerResolver(
         // partially-covering programmer contribution (one sideband channel of a colour)
         // needs the below value for the components it doesn't own.
         val below = run {
-            val idx = layer3Index
-            val l3 = if (idx.isNotEmpty()) idx[fixtureKey]?.get(target.propertyName) else null
-            l3?.asFxOutputFor(target) ?: target.baselineFallback(fixture)
+            val idx = cueLayerIndex
+            val cue = if (idx.isNotEmpty()) idx[fixtureKey]?.get(target.propertyName) else null
+            cue?.asFxOutputFor(target) ?: target.baselineFallback(fixture)
         }
         if (programmer.blind) return below
         // Per-fixture O(1) gate: composeProgrammerOver's colour path does reflective
@@ -130,14 +131,14 @@ class LayerResolver(
         return target.composeProgrammerOver(fixture, programmer, below)
     }
 
-    private fun Layer3Resolver.PropertyValue.asFxOutputFor(target: FxTarget): FxOutput? = when (this) {
-        is Layer3Resolver.PropertyValue.Slider ->
+    private fun CueAssignmentResolver.PropertyValue.asFxOutputFor(target: FxTarget): FxOutput? = when (this) {
+        is CueAssignmentResolver.PropertyValue.Slider ->
             if (target is SliderTarget) FxOutput.Slider(value) else null
-        is Layer3Resolver.PropertyValue.Colour ->
+        is CueAssignmentResolver.PropertyValue.Colour ->
             if (target is ColourTarget) FxOutput.Colour(value) else null
-        is Layer3Resolver.PropertyValue.Position ->
+        is CueAssignmentResolver.PropertyValue.Position ->
             if (target is PositionTarget) FxOutput.Position(pan, tilt) else null
-        is Layer3Resolver.PropertyValue.Setting ->
+        is CueAssignmentResolver.PropertyValue.Setting ->
             if (target is SettingTarget) FxOutput.Slider(channelValue) else null
     }
 }

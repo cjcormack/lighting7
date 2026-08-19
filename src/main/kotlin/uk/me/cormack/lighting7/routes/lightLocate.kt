@@ -188,7 +188,7 @@ private fun clearLocateWrites(state: State, writes: List<LocateManager.LocateWri
         state.show.fxEngine.clearProgrammerProperties(ProgrammerOwner.LOCATE, clears)
     } catch (_: Exception) {
         // Bookkeeping is already updated; a throw here would strand the manager mid-toggle.
-        // Unpublished channels cascade on the next effect tick or Layer-3 republish.
+        // Unpublished channels cascade on the next effect tick or cue-layer republish.
     }
 }
 

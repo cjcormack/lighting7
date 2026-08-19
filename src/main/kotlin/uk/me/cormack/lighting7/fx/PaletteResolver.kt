@@ -11,12 +11,12 @@ import java.util.UUID
  * @property paletteUuid non-null iff the stored value was a named-palette reference, **whatever
  *   the outcome**. Consumers that lift a resolved row back into the programmer read this so the
  *   slot stays a [ProgrammerValue.Ref] rather than hardening: Include and the FX-preset toggle
- *   carry it through [Layer3Resolver.Assignment.paletteUuid]. Record captures live programmer
+ *   carry it through [CueAssignmentResolver.Assignment.paletteUuid]. Record captures live programmer
  *   state rather than stored rows, so it reads the identity off the slot instead.
  * @property health why it didn't resolve, or [AssignmentHealth.Ok].
  */
 data class AssignmentValueResolution(
-    val value: Layer3Resolver.PropertyValue?,
+    val value: CueAssignmentResolver.PropertyValue?,
     val paletteUuid: UUID?,
     val health: AssignmentHealth,
 )
@@ -27,12 +27,12 @@ data class AssignmentValueResolution(
  * This is the single door every consumer goes through — the cue builder, the preset builder,
  * `programmer.set`, and Make Hard — so the ref grammar is interpreted in exactly one place.
  *
- * **The ref check happens before [Layer3Resolver.parseAssignmentValue], and that ordering is
+ * **The ref check happens before [CueAssignmentResolver.parseAssignmentValue], and that ordering is
  * load-bearing rather than stylistic.** For [PropertyCategory.COLOUR] that function routes to
  * `resolveColour` → `parseExtendedColour`, which answers **white** for anything it doesn't
  * recognise. A `ref:` string reaching it would therefore not fail — it would silently light the
  * fixture white, which is the worst available outcome and invisible in a diff. `parseAssignmentValue`
- * itself is left byte-for-byte unchanged and never sees a `ref:` value; `Layer3ResolverTest` pins
+ * itself is left byte-for-byte unchanged and never sees a `ref:` value; `CueAssignmentResolverTest` pins
  * the white-for-junk behaviour so the reason this ordering exists stays legible.
  *
  * [positionalPalette] is the *other* palette system — the ordered colour list behind `P1` / `P2`
@@ -53,7 +53,7 @@ fun resolveAssignmentValueForFixture(
 ): AssignmentValueResolution {
     val paletteUuid = parsePaletteRef(rawValue)
         ?: return AssignmentValueResolution(
-            value = Layer3Resolver.parseAssignmentValue(category, canonicalProperty, rawValue, positionalPalette),
+            value = CueAssignmentResolver.parseAssignmentValue(category, canonicalProperty, rawValue, positionalPalette),
             paletteUuid = null,
             health = AssignmentHealth.Ok,
         )
@@ -76,7 +76,7 @@ fun resolveAssignmentValueForFixture(
             ),
         )
 
-    val parsed = Layer3Resolver.parseAssignmentValue(category, canonicalProperty, literal, positionalPalette)
+    val parsed = CueAssignmentResolver.parseAssignmentValue(category, canonicalProperty, literal, positionalPalette)
     return AssignmentValueResolution(
         value = parsed,
         paletteUuid = paletteUuid,

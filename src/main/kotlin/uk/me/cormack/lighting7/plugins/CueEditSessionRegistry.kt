@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Phase 6 of `docs/plans/completed/control-surface-plan.md`: surface fader writes route through
  * `cueEdit.setProperty` when [activeSession] returns non-null for the project, and the
- * [SurfaceFeedbackPublisher] drives motors from the cue's Layer 3 value instead of the
+ * [SurfaceFeedbackPublisher] drives motors from the cue's Layer 4 value instead of the
  * composed live value.
  *
  * Conflict resolution for multiple sessions is out of scope here — we just report "some
@@ -39,7 +39,7 @@ class CueEditSessionRegistry {
 
         /**
          * A single property assignment was upserted. [value] is the canonical string form
-         * that round-trips through [uk.me.cormack.lighting7.fx.Layer3Resolver.parseAssignmentValue].
+         * that round-trips through [uk.me.cormack.lighting7.fx.CueAssignmentResolver.parseAssignmentValue].
          */
         data class AssignmentChanged(
             val projectId: Int,

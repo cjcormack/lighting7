@@ -14,7 +14,7 @@ import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetRef
 import uk.me.cormack.lighting7.fx.FxTiming
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.effects.SineWave
 import uk.me.cormack.lighting7.fx.SliderTarget
@@ -80,11 +80,11 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         state.show.fxEngine.setCueAssignments(
             991,
             listOf(
-                Layer3Resolver.Assignment(
+                CueAssignmentResolver.Assignment(
                     cueId = 991, priority = 10, fadeWeight = 1.0,
                     targetKey = "hex-1", targetIsGroup = false, propertyName = "dimmer",
                     category = uk.me.cormack.lighting7.fixture.PropertyCategory.DIMMER,
-                    value = Layer3Resolver.PropertyValue.Slider(90u),
+                    value = CueAssignmentResolver.PropertyValue.Slider(90u),
                 )
             ),
             cueStackId = stackId,
@@ -113,11 +113,11 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         state.show.fxEngine.setCueAssignments(
             992,
             listOf(
-                Layer3Resolver.Assignment(
+                CueAssignmentResolver.Assignment(
                     cueId = 992, priority = 10, fadeWeight = 1.0,
                     targetKey = "hex-2", targetIsGroup = false, propertyName = "dimmer",
                     category = uk.me.cormack.lighting7.fixture.PropertyCategory.DIMMER,
-                    value = Layer3Resolver.PropertyValue.Slider(90u),
+                    value = CueAssignmentResolver.PropertyValue.Slider(90u),
                 )
             ),
             cueStackId = stackId,
@@ -133,7 +133,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         val rows = response.cue.propertyAssignments.associate { it.targetKey to it.value }
         assertEquals("90", rows["hex-2"], "the cue layer is in the snapshot")
-        // The old snapshot-from-live read Layer 3 only, so this row was silently dropped.
+        // The old snapshot-from-live read Layer 4 only, so this row was silently dropped.
         assertEquals("200", rows["hex-1"], "the programmer overlays the snapshot")
     }
 
@@ -622,11 +622,11 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         state.show.fxEngine.setCueAssignments(
             993,
             listOf(
-                Layer3Resolver.Assignment(
+                CueAssignmentResolver.Assignment(
                     cueId = 993, priority = 10, fadeWeight = 1.0,
                     targetKey = "hex-2", targetIsGroup = false, propertyName = "dimmer",
                     category = uk.me.cormack.lighting7.fixture.PropertyCategory.DIMMER,
-                    value = Layer3Resolver.PropertyValue.Slider(90u),
+                    value = CueAssignmentResolver.PropertyValue.Slider(90u),
                 )
             ),
             cueStackId = stackId,

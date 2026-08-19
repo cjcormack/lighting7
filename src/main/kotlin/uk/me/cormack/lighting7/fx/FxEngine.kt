@@ -64,7 +64,7 @@ class FxEngine(
      * Cue-layer composition resolver. Resolves per-cue property assignments to the composed
      * value that sits below effects.
      */
-    val layerResolver: LayerResolver = LayerResolver(Layer3Resolver(), programmerStore),
+    val layerResolver: LayerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
     /**
      * Layer 1 park query. If non-null, the engine skips effect reset / apply for channels
      * that are parked. The parked value is still re-applied at transmit time in
@@ -219,7 +219,7 @@ class FxEngine(
 
     // Coalesces provenance recomputes: emitProvenanceUpdate is called from every
     // layer-event site — including per-MIDI-CC programmer writes and per-crossfade-tick
-    // Layer 3 republishes that run while holding [cueAssignmentsLock] — so the marker must
+    // Layer 4 republishes that run while holding [cueAssignmentsLock] — so the marker must
     // be near-free and the O(effects + keys) recompute must happen off the caller's
     // thread, outside any lock. `dirty` is flipped false *before* computing so a mutation
     // landing mid-compute schedules a fresh cycle.
@@ -228,7 +228,7 @@ class FxEngine(
 
     /**
      * Mark provenance stale and schedule a coalesced recompute + broadcast. Called from
-     * every layer-event site (programmer writes/clears/blind, Layer 3 republish, effect
+     * every layer-event site (programmer writes/clears/blind, Layer 4 republish, effect
      * lifecycle changes via [emitStateUpdate]) and by the park handlers. Cheap enough to
      * call while holding locks. Before [start] wires a scope (unit tests), the recompute
      * runs synchronously so assertions stay deterministic.
@@ -269,13 +269,13 @@ class FxEngine(
 
         val effectByKey = highestPriorityEffectByKey()
 
-        val layer3State = layerResolver.currentLayer3State
-        val layer3Winners = layerResolver.currentLayer3Winners
+        val cueLayerState = layerResolver.currentCueLayerState
+        val cueLayerWinners = layerResolver.currentCueLayerWinners
 
-        val keys = HashSet<Layer3Resolver.Key>(programmerKeys)
-        keys.addAll(layer3State.keys)
+        val keys = HashSet<CueAssignmentResolver.Key>(programmerKeys)
+        keys.addAll(cueLayerState.keys)
         for ((pair, _) in effectByKey) {
-            keys.add(Layer3Resolver.Key.fixture(pair.first, pair.second))
+            keys.add(CueAssignmentResolver.Key.fixture(pair.first, pair.second))
         }
 
         val entries = ArrayList<ProvenanceEntry>(keys.size)
@@ -302,8 +302,8 @@ class FxEngine(
                     key.targetKey, key.propertyName, ProvenanceSource.EFFECT,
                     cueId = effect.cueId, cueStackId = effect.cueStackId, effectId = effect.id,
                 )
-                key in layer3State -> {
-                    val winningCueId = layer3Winners[key]
+                key in cueLayerState -> {
+                    val winningCueId = cueLayerWinners[key]
                     ProvenanceEntry(
                         key.targetKey, key.propertyName, ProvenanceSource.CUE,
                         cueId = winningCueId,
@@ -348,7 +348,7 @@ class FxEngine(
      *
      * This is deliberately *not* [computeProvenance]: provenance reports the programmer as the
      * winner (correctly — it is what's on stage), which is exactly the answer Mode B can't use.
-     * `currentLayer3Winners` is computed at Layer 3 publish time and knows nothing about the
+     * `currentCueLayerWinners` is computed at Layer 4 publish time and knows nothing about the
      * programmer, so it already *is* "the cue underneath". Keys with no cue row fall back to
      * the highest-priority running cue-owned effect; programmer-band effects are skipped
      * because they are part of the same busk being written back, not something underneath it.
@@ -358,22 +358,22 @@ class FxEngine(
      * operator ("record a new cue") than "you're overriding cue 3".
      */
     data class UnderlyingSource(
-        val key: Layer3Resolver.Key,
+        val key: CueAssignmentResolver.Key,
         val cueId: Int?,
         val cueStackId: Int?,
         val viaEffectId: Long?,
     )
 
-    fun underlyingSources(keys: Collection<Layer3Resolver.Key>): List<UnderlyingSource> {
+    fun underlyingSources(keys: Collection<CueAssignmentResolver.Key>): List<UnderlyingSource> {
         if (keys.isEmpty()) return emptyList()
-        val layer3Winners = layerResolver.currentLayer3Winners
+        val cueLayerWinners = layerResolver.currentCueLayerWinners
         // Band effects are excluded from the *scan*, not filtered from its result. Filtering
         // afterwards would lose the cue underneath: band effects always outrank cue-derived
         // priorities, so a single top-priority-per-key map would only ever hold the band one,
         // and a cue driving that property through its own FX would report as unattributed.
         val effectByKey = highestPriorityEffectByKey { !isProgrammerFxPriority(it.priority) }
         return keys.map { key ->
-            val cueId = layer3Winners[key]
+            val cueId = cueLayerWinners[key]
             if (cueId != null) {
                 UnderlyingSource(key, cueId, cueStackIdFor(cueId), viaEffectId = null)
             } else {
@@ -481,7 +481,7 @@ class FxEngine(
         cuePalettes.remove(cueId)
     }
 
-    // --- Per-Cue Layer 3 Assignments ---
+    // --- Per-Cue Layer 4 Assignments ---
     //
     // Tracks the property assignments contributed by each currently-active cue. All writes go
     // through [cueAssignmentsLock] so the "mutate map + republish flat snapshot" step is atomic
@@ -491,7 +491,7 @@ class FxEngine(
     // The map is plain [HashMap] because every access is already serialised by the lock; a
     // [ConcurrentHashMap] would add internal striping we don't need.
 
-    private val cueAssignments = HashMap<Int, List<Layer3Resolver.Assignment>>()
+    private val cueAssignments = HashMap<Int, List<CueAssignmentResolver.Assignment>>()
 
     // Per-cue crossfade weight in [0, 1]. Absent entries default to 1.0 (fully in). Scales each
     // stored Assignment's own `fadeWeight` at flat-list build time — the composition resolver
@@ -502,8 +502,8 @@ class FxEngine(
 
     // cueId → the stack that cue belongs to, recorded when its assignments are published.
     //
-    // The Layer 3 machinery is keyed by cue alone (`cueAssignments`, and the resolver's
-    // `currentLayer3Winners: Key → cueId`), so a CUE-sourced provenance entry had nowhere to
+    // The Layer 4 machinery is keyed by cue alone (`cueAssignments`, and the resolver's
+    // `currentCueLayerWinners: Key → cueId`), so a CUE-sourced provenance entry had nowhere to
     // read a stack from and always reported null — the wire-format asymmetry against EFFECT
     // sources that `FU-PROG-PROVENANCE-STACKID` tracked. Every caller of [setCueAssignments]
     // holds a stack id, so recording it here costs one map write per publish and lets both
@@ -514,7 +514,7 @@ class FxEngine(
     private val cueAssignmentsLock = Any()
 
     /**
-     * Replace the Layer 3 assignments contributed by [cueId]. An empty list removes the cue's
+     * Replace the Layer 4 assignments contributed by [cueId]. An empty list removes the cue's
      * contribution (equivalent to [removeCueAssignments]).
      *
      * Does not touch the cue's fade weight — callers that want to publish at a weight other
@@ -522,7 +522,7 @@ class FxEngine(
      * path the absent-entry default (1.0) is correct.
      */
     /**
-     * Replace [cueId]'s Layer 3 assignments. Empty [assignments] removes the cue entirely
+     * Replace [cueId]'s Layer 4 assignments. Empty [assignments] removes the cue entirely
      * (equivalent to [removeCueAssignments]). The optional [weight] sets the cue's crossfade
      * weight atomically in the same publish — used by the crossfade-start path to pin the
      * incoming cue at 0 without briefly flashing its full value onto stage. A weight of 1.0
@@ -536,7 +536,7 @@ class FxEngine(
      */
     fun setCueAssignments(
         cueId: Int,
-        assignments: List<Layer3Resolver.Assignment>,
+        assignments: List<CueAssignmentResolver.Assignment>,
         weight: Double = 1.0,
         cueStackId: Int? = null,
     ) {
@@ -545,7 +545,7 @@ class FxEngine(
                 val removed = cueAssignments.remove(cueId) != null
                 cueFadeWeights.remove(cueId)
                 cueStackIds.remove(cueId)
-                if (removed) republishLayer3Assignments()
+                if (removed) republishCueAssignments()
                 return
             }
             cueAssignments[cueId] = assignments
@@ -556,12 +556,12 @@ class FxEngine(
             } else {
                 cueFadeWeights[cueId] = clamped
             }
-            republishLayer3Assignments()
+            republishCueAssignments()
         }
     }
 
     /**
-     * Replace several live cues' Layer 3 rows in one locked mutation with a single republish —
+     * Replace several live cues' Layer 4 rows in one locked mutation with a single republish —
      * the [repriorityCues] shape, for callers that rebuilt rows rather than re-prioritised them.
      * Returns the number of cues actually replaced.
      *
@@ -574,7 +574,7 @@ class FxEngine(
      * Cues absent from [cueAssignments] are skipped: a cue that stopped being live between the
      * caller's scan and this call has nothing to republish.
      */
-    fun replaceCueAssignments(updates: Map<Int, List<Layer3Resolver.Assignment>>): Int {
+    fun replaceCueAssignments(updates: Map<Int, List<CueAssignmentResolver.Assignment>>): Int {
         if (updates.isEmpty()) return 0
         var replaced = 0
         synchronized(cueAssignmentsLock) {
@@ -589,7 +589,7 @@ class FxEngine(
                 }
                 replaced++
             }
-            if (replaced > 0) republishLayer3Assignments()
+            if (replaced > 0) republishCueAssignments()
         }
         return replaced
     }
@@ -622,28 +622,28 @@ class FxEngine(
                 }
                 changed = true
             }
-            if (changed) republishLayer3Assignments()
+            if (changed) republishCueAssignments()
         }
     }
 
     /**
-     * Append [additions] to [cueId]'s Layer 3 assignments without touching existing rows. Used
-     * by the runtime timed-preset fire path to contribute Layer 3 rows at fire time rather than
+     * Append [additions] to [cueId]'s Layer 4 assignments without touching existing rows. Used
+     * by the runtime timed-preset fire path to contribute Layer 4 rows at fire time rather than
      * at cue-apply time (immediate presets fan their assignments in during [applyCue]; timed
      * presets stay effects-only until fired). Creates the cue's entry if absent.
      */
-    fun appendCueAssignments(cueId: Int, additions: List<Layer3Resolver.Assignment>) {
+    fun appendCueAssignments(cueId: Int, additions: List<CueAssignmentResolver.Assignment>) {
         if (additions.isEmpty()) return
         mutateCueAssignments(cueId, toRemove = emptyList(), additions = additions)
     }
 
     /**
-     * Remove rows matching [toRemove] from [cueId]'s Layer 3 assignments by structural equality.
+     * Remove rows matching [toRemove] from [cueId]'s Layer 4 assignments by structural equality.
      * Each element in [toRemove] removes exactly one matching occurrence — so
      * appendCueAssignments(X) followed by removeCueAssignmentSubset(X) round-trips cleanly even
      * when the cue independently asserts a value-equal row.
      */
-    fun removeCueAssignmentSubset(cueId: Int, toRemove: List<Layer3Resolver.Assignment>) {
+    fun removeCueAssignmentSubset(cueId: Int, toRemove: List<CueAssignmentResolver.Assignment>) {
         if (toRemove.isEmpty()) return
         mutateCueAssignments(cueId, toRemove = toRemove, additions = emptyList())
     }
@@ -651,13 +651,13 @@ class FxEngine(
     /**
      * Atomically remove [toRemove] and append [additions] in a single locked mutation with one
      * republish. Used by the recurring timed-preset fire path — retracting the prior fire's
-     * rows and appending the new ones separately costs two full Layer 3 publishes per tick;
+     * rows and appending the new ones separately costs two full Layer 4 publishes per tick;
      * this collapses them into one.
      */
     fun replaceCueAssignmentSubset(
         cueId: Int,
-        toRemove: List<Layer3Resolver.Assignment>,
-        additions: List<Layer3Resolver.Assignment>,
+        toRemove: List<CueAssignmentResolver.Assignment>,
+        additions: List<CueAssignmentResolver.Assignment>,
     ) {
         if (toRemove.isEmpty() && additions.isEmpty()) return
         mutateCueAssignments(cueId, toRemove = toRemove, additions = additions)
@@ -670,18 +670,18 @@ class FxEngine(
      */
     private fun mutateCueAssignments(
         cueId: Int,
-        toRemove: List<Layer3Resolver.Assignment>,
-        additions: List<Layer3Resolver.Assignment>,
+        toRemove: List<CueAssignmentResolver.Assignment>,
+        additions: List<CueAssignmentResolver.Assignment>,
     ) {
         synchronized(cueAssignmentsLock) {
             val existing = cueAssignments[cueId]
             if (existing == null) {
                 if (additions.isEmpty()) return
                 cueAssignments[cueId] = ArrayList(additions)
-                republishLayer3Assignments()
+                republishCueAssignments()
                 return
             }
-            val mutable = ArrayList<Layer3Resolver.Assignment>(existing.size + additions.size)
+            val mutable = ArrayList<CueAssignmentResolver.Assignment>(existing.size + additions.size)
             mutable.addAll(existing)
             var changed = additions.isNotEmpty()
             for (row in toRemove) {
@@ -696,30 +696,30 @@ class FxEngine(
             } else {
                 cueAssignments[cueId] = mutable
             }
-            republishLayer3Assignments()
+            republishCueAssignments()
         }
     }
 
-    /** Drop all Layer 3 contributions from [cueId]. */
+    /** Drop all Layer 4 contributions from [cueId]. */
     fun removeCueAssignments(cueId: Int) {
         synchronized(cueAssignmentsLock) {
             val removed = cueAssignments.remove(cueId) != null
             cueFadeWeights.remove(cueId)
             cueStackIds.remove(cueId)
             if (removed) {
-                republishLayer3Assignments()
+                republishCueAssignments()
             }
         }
     }
 
-    /** Drop every cue's Layer 3 contribution — used by [stop] / [clearAllEffects] callers. */
+    /** Drop every cue's Layer 4 contribution — used by [stop] / [clearAllEffects] callers. */
     fun clearAllCueAssignments() {
         synchronized(cueAssignmentsLock) {
             if (cueAssignments.isEmpty() && cueFadeWeights.isEmpty()) return
             cueAssignments.clear()
             cueFadeWeights.clear()
             cueStackIds.clear()
-            republishLayer3Assignments()
+            republishCueAssignments()
         }
     }
 
@@ -727,7 +727,7 @@ class FxEngine(
     fun cueStackIdFor(cueId: Int): Int? = synchronized(cueAssignmentsLock) { cueStackIds[cueId] }
 
     /**
-     * Snapshot the set of cue ids currently contributing Layer 3 assignments. Used by
+     * Snapshot the set of cue ids currently contributing Layer 4 assignments. Used by
      * `snapshot-from-live` to read each active cue's pre-expansion DB rows and preserve the
      * group-scoped shape in the captured state.
      */
@@ -744,7 +744,7 @@ class FxEngine(
      * those cues composing in their *old* relative order until each was re-applied. Callers that
      * change `sort_order` hand the fresh map here to keep the engine consistent with the stack.
      *
-     * Touches both layers a cue can own — Layer 2 [FxInstance.priority] and the Layer 3
+     * Touches both layers a cue can own — Layer 3 [FxInstance.priority] and the Layer 4
      * assignment rows — and leaves [cueFadeWeights] alone so a repriority mid-crossfade doesn't
      * disturb the fade. Entries whose priority already matches are skipped, which makes the
      * common single-live-cue reorder a no-op. Returns the number of rows changed.
@@ -753,7 +753,7 @@ class FxEngine(
         if (priorities.isEmpty()) return 0
         var changed = 0
 
-        // Layer 2 — mutate in place, then re-sort the snapshots the tick loop reads.
+        // Layer 3 — mutate in place, then re-sort the snapshots the tick loop reads.
         val staleEffects = activeEffects.values.filter { effect ->
             val target = priorities[effect.cueId ?: return@filter false] ?: return@filter false
             effect.priority != target
@@ -765,9 +765,9 @@ class FxEngine(
             emitStateUpdate()
         }
 
-        // Layer 3 — Assignment.priority is a val, so the rows are rebuilt by copy.
+        // Layer 4 — Assignment.priority is a val, so the rows are rebuilt by copy.
         synchronized(cueAssignmentsLock) {
-            var layer3Changed = false
+            var cueLayerChanged = false
             for ((cueId, target) in priorities) {
                 val rows = cueAssignments[cueId] ?: continue
                 if (rows.all { it.priority == target }) continue
@@ -775,9 +775,9 @@ class FxEngine(
                     if (it.priority == target) it else it.copy(priority = target)
                 }
                 changed += rows.count { it.priority != target }
-                layer3Changed = true
+                cueLayerChanged = true
             }
-            if (layer3Changed) republishLayer3Assignments()
+            if (cueLayerChanged) republishCueAssignments()
         }
 
         return changed
@@ -813,7 +813,7 @@ class FxEngine(
         owner: ProgrammerOwner,
         fixture: GroupableFixture,
         propertyName: String,
-        value: Layer3Resolver.PropertyValue,
+        value: CueAssignmentResolver.PropertyValue,
         touched: Boolean = true,
         sourceGroup: String? = null,
         absorbSideband: Boolean = true,
@@ -827,7 +827,7 @@ class FxEngine(
         )
         if (absorbSideband) absorbSidebandUnder(writes)
         synchronized(cueAssignmentsLock) {
-            publishCascadeForKeys(setOf(Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)), fadeMs)
+            publishCascadeForKeys(setOf(CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)), fadeMs)
         }
         emitProvenanceUpdate()
         return writes
@@ -845,7 +845,7 @@ class FxEngine(
         owner: ProgrammerOwner,
         group: FixtureGroup<*>,
         propertyName: String,
-        value: Layer3Resolver.PropertyValue,
+        value: CueAssignmentResolver.PropertyValue,
         touched: Boolean = true,
         absorbSideband: Boolean = true,
         fadeMs: Long = 0,
@@ -874,7 +874,7 @@ class FxEngine(
         programmerStore.clear(owner, fixture.targetKey, propertyName)
         if (channels.isEmpty()) return channels
         synchronized(cueAssignmentsLock) {
-            publishCascadeForKeys(setOf(Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)), fadeMs)
+            publishCascadeForKeys(setOf(CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)), fadeMs)
         }
         emitProvenanceUpdate()
         return channels
@@ -896,7 +896,7 @@ class FxEngine(
     data class ProgrammerPropertyWrite(
         val fixture: GroupableFixture,
         val propertyName: String,
-        val value: Layer3Resolver.PropertyValue,
+        val value: CueAssignmentResolver.PropertyValue,
         /** Group name when this entry came from a group control, else null (§7.1). */
         val sourceGroup: String? = null,
         /**
@@ -925,7 +925,7 @@ class FxEngine(
         fadeMs: Long = 0,
     ): List<List<PropertyChannelResolver.ChannelWrite>> {
         val resolved = writes.map { PropertyChannelWriter.resolve(it.fixture, it.propertyName, it.value) }
-        val keys = HashSet<Layer3Resolver.Key>()
+        val keys = HashSet<CueAssignmentResolver.Key>()
         for ((index, channelWrites) in resolved.withIndex()) {
             if (channelWrites.isEmpty()) continue
             val write = writes[index]
@@ -938,7 +938,7 @@ class FxEngine(
                 write.sourceGroup,
             )
             if (absorbSideband) absorbSidebandUnder(channelWrites)
-            keys += Layer3Resolver.Key.fixture(write.fixture.targetKey, write.propertyName)
+            keys += CueAssignmentResolver.Key.fixture(write.fixture.targetKey, write.propertyName)
         }
         if (keys.isNotEmpty()) {
             synchronized(cueAssignmentsLock) {
@@ -960,12 +960,12 @@ class FxEngine(
         fadeMs: Long = 0,
     ): List<PropertyChannelResolver.ChannelWrite> {
         val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
-        val keys = HashSet<Layer3Resolver.Key>()
+        val keys = HashSet<CueAssignmentResolver.Key>()
         for ((fixture, propertyName) in clears) {
             programmerStore.clear(owner, fixture.targetKey, propertyName)
             val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
             if (channels.isEmpty()) continue
-            keys += Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)
+            keys += CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)
             all += channels
         }
         if (keys.isNotEmpty()) {
@@ -989,7 +989,7 @@ class FxEngine(
         fadeMs: Long = 0,
     ): List<PropertyChannelResolver.ChannelWrite> {
         val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
-        val keys = HashSet<Layer3Resolver.Key>()
+        val keys = HashSet<CueAssignmentResolver.Key>()
         var clearedAny = false
         for ((fixture, propertyName) in clears) {
             for (slot in programmerStore.slotsFor(fixture.targetKey, propertyName)) {
@@ -998,7 +998,7 @@ class FxEngine(
             }
             val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
             if (channels.isEmpty()) continue
-            keys += Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)
+            keys += CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)
             all += channels
         }
         if (keys.isNotEmpty()) {
@@ -1026,7 +1026,7 @@ class FxEngine(
         universe: Int,
         channel: Int,
         value: UByte,
-        coveringKey: Layer3Resolver.Key?,
+        coveringKey: CueAssignmentResolver.Key?,
         touched: Boolean = true,
         fadeMs: Long = 0,
     ) {
@@ -1111,7 +1111,7 @@ class FxEngine(
             val value = if (blind) {
                 0u.toUByte()
             } else {
-                (entry.slots.firstOrNull()?.value?.resolved as? Layer3Resolver.PropertyValue.Slider)?.value
+                (entry.slots.firstOrNull()?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
                     ?: continue
             }
             fixtures.controllerOrNull(Universe(0, entry.universe))
@@ -1133,7 +1133,7 @@ class FxEngine(
      * position axes — the same channel set [FxTarget.fallbackFromProgrammer]'s sideband
      * lookups consult.
      */
-    fun resolveChannelCoveringKey(universe: Int, channel: Int): Layer3Resolver.Key? {
+    fun resolveChannelCoveringKey(universe: Int, channel: Int): CueAssignmentResolver.Key? {
         val mappings = fixtures.getChannelMappings()
         val fixtureKey = mappings[universe]?.get(channel)?.fixtureKey ?: return null
         val fixture = try {
@@ -1150,17 +1150,17 @@ class FxEngine(
             } ?: continue
             when (value) {
                 is DmxSlider -> if (value.channelNo == channel) {
-                    return Layer3Resolver.Key.fixture(fixture.key, prop.name)
+                    return CueAssignmentResolver.Key.fixture(fixture.key, prop.name)
                 }
                 is DmxFixtureSetting<*> -> if (value.channelNo == channel) {
-                    return Layer3Resolver.Key.fixture(fixture.key, prop.name)
+                    return CueAssignmentResolver.Key.fixture(fixture.key, prop.name)
                 }
                 is DmxColour -> if (
                     channel == value.redSlider.channelNo ||
                     channel == value.greenSlider.channelNo ||
                     channel == value.blueSlider.channelNo
                 ) {
-                    return Layer3Resolver.Key.fixture(fixture.key, prop.name)
+                    return CueAssignmentResolver.Key.fixture(fixture.key, prop.name)
                 }
             }
         }
@@ -1170,7 +1170,7 @@ class FxEngine(
             val pan = positionFixture.pan as? DmxSlider
             val tilt = positionFixture.tilt as? DmxSlider
             if (pan?.channelNo == channel || tilt?.channelNo == channel) {
-                return Layer3Resolver.Key.fixture(fixture.key, "position")
+                return CueAssignmentResolver.Key.fixture(fixture.key, "position")
             }
         }
         return null
@@ -1179,16 +1179,16 @@ class FxEngine(
     /**
      * Transmit the composed cascade fallback (cue layer → programmer → baseline) for each
      * affected (fixtureKey, propertyName) key. Same publish machinery as
-     * [publishLayer3ToControllers], scoped to a caller-supplied key set rather than the
-     * full Layer 3 diff.
+     * [publishCueLayerToControllers], scoped to a caller-supplied key set rather than the
+     * full Layer 4 diff.
      *
      * Skips keys a currently-running effect covers and fully-parked targets. The
      * effect-covered skip stays valid with the programmer above effects because the tick's
      * reset pass is programmer-aware: it repaints suppressed keys with programmer values
      * within one frame (≤20 ms) — the consequence is that writes/clears on effect-covered
      * keys settle on the next tick and do **not** fade. Callers hold [cueAssignmentsLock]
-     * so this doesn't race with a concurrent Layer 3 republish or fade-weight update
-     * reading the same `layer3State`.
+     * so this doesn't race with a concurrent Layer 4 republish or fade-weight update
+     * reading the same `cueLayerState`.
      *
      * [fadeMs] > 0 drives the per-channel [uk.me.cormack.lighting7.dmx.TickerState] ramp
      * for the uncovered keys this publish writes.
@@ -1201,7 +1201,7 @@ class FxEngine(
      * [ProgrammerStore] directly rather than through a `writeProgrammer*` entry point, and so
      * have nothing to publish from. Takes the lock and emits provenance the same way those do.
      */
-    fun republishProgrammerKeys(keys: Set<Layer3Resolver.Key>, fadeMs: Long = 0) {
+    fun republishProgrammerKeys(keys: Set<CueAssignmentResolver.Key>, fadeMs: Long = 0) {
         if (keys.isEmpty()) return
         synchronized(cueAssignmentsLock) {
             publishCascadeForKeys(keys, fadeMs)
@@ -1209,7 +1209,7 @@ class FxEngine(
         emitProvenanceUpdate()
     }
 
-    private fun publishCascadeForKeys(keys: Set<Layer3Resolver.Key>, fadeMs: Long = 0) {
+    private fun publishCascadeForKeys(keys: Set<CueAssignmentResolver.Key>, fadeMs: Long = 0) {
         if (keys.isEmpty()) return
 
         // Empty effects is the common preset-toggle case; skip the scan and transaction alloc.
@@ -1265,8 +1265,8 @@ class FxEngine(
 
     /**
      * Infer the [FxTarget] kind for a cascade publish from the backing DMX property type on
-     * [fixture]. Mirrors the type-dispatch that [resolveTargetForLayer3Key] does from a
-     * [Layer3Resolver.PropertyValue], but resolves the backing value by name via
+     * [fixture]. Mirrors the type-dispatch that [resolveTargetForCueLayerKey] does from a
+     * [CueAssignmentResolver.PropertyValue], but resolves the backing value by name via
      * [PropertyChannelWriter.resolveProperty] instead — the clear path doesn't have a value
      * in hand. Handles [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement]s
      * as well as whole fixtures.
@@ -1275,7 +1275,7 @@ class FxEngine(
      */
     private fun inferTargetForProperty(
         fixture: uk.me.cormack.lighting7.fixture.GroupableFixture,
-        key: Layer3Resolver.Key,
+        key: CueAssignmentResolver.Key,
     ): FxTarget? {
         if (key.propertyName.equals("position", ignoreCase = true)) {
             if (fixture !is WithPosition) return null
@@ -1291,12 +1291,12 @@ class FxEngine(
     }
 
     /** Callers hold [cueAssignmentsLock]. */
-    private fun republishLayer3Assignments() {
-        val beforeState = layerResolver.currentLayer3State
+    private fun republishCueAssignments() {
+        val beforeState = layerResolver.currentCueLayerState
         if (cueAssignments.isEmpty()) {
             layerResolver.applyAssignments(emptyList())
         } else {
-            val flat = ArrayList<Layer3Resolver.Assignment>()
+            val flat = ArrayList<CueAssignmentResolver.Assignment>()
             for ((cueId, list) in cueAssignments) {
                 val cueWeight = cueFadeWeights[cueId] ?: 1.0
                 if (cueWeight >= 1.0) {
@@ -1309,46 +1309,46 @@ class FxEngine(
             }
             layerResolver.applyAssignments(flat)
         }
-        val afterState = layerResolver.currentLayer3State
-        publishLayer3ToControllers(beforeState, afterState)
+        val afterState = layerResolver.currentCueLayerState
+        publishCueLayerToControllers(beforeState, afterState)
         emitProvenanceUpdate()
     }
 
     /**
-     * Transmit the composed Layer 3 → Layer 4 → Layer 5 fallback for every property whose
-     * Layer 3 state changed. Without this, cues that contribute only property assignments
+     * Transmit the composed Layer 2 → Layer 4 → Layer 5 fallback for every property whose
+     * cue-layer state changed. Without this, cues that contribute only property assignments
      * (no effects) never paint the stage — the tick loop early-returns when no effects are
      * running, and the effect-reset pass is the only other site that writes the composed
      * cascade onto controllers.
      *
-     * Walks the union of (fixtureKey, propertyName) keys from the before and after Layer 3
+     * Walks the union of (fixtureKey, propertyName) keys from the before and after cue-layer
      * snapshots. Skips keys a currently-running effect covers (the effect tick will paint
      * them) and fully-parked targets (park wins at transmit regardless). Otherwise opens a
      * single [ControllerTransaction] and writes the resolved fallback via
      * [FxTarget.resetToFallback] — same mechanism [resetActiveProperties] uses.
      *
      * Release semantics: when a key is in [beforeState] but not [afterState],
-     * [LayerResolver.fallbackFor] naturally falls through to Layer 4 (sticky direct writes)
-     * then Layer 5 (baseline), so the channel releases to whatever's underneath rather than
-     * to zero.
+     * [LayerResolver.fallbackFor] naturally falls through to the programmer (Layer 2, sticky
+     * direct writes included) then Layer 5 (baseline), so the channel releases to whatever's
+     * underneath rather than to zero.
      *
      * Callers hold [cueAssignmentsLock]. The controller write is in-memory buffering on the
      * transaction; the actual transmit-side work is quick enough that running it under the
      * lock is fine — mirrors the pattern in the `updateChannel` handler which also writes
      * through to the controller synchronously.
      */
-    private fun publishLayer3ToControllers(
-        beforeState: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue>,
-        afterState: Map<Layer3Resolver.Key, Layer3Resolver.PropertyValue>,
+    private fun publishCueLayerToControllers(
+        beforeState: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
+        afterState: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
     ) {
         if (beforeState.isEmpty() && afterState.isEmpty()) return
 
-        val keys = HashSet<Layer3Resolver.Key>(beforeState.size + afterState.size)
+        val keys = HashSet<CueAssignmentResolver.Key>(beforeState.size + afterState.size)
         keys.addAll(beforeState.keys)
         keys.addAll(afterState.keys)
 
         // Precompute the (fixtureKey, propertyName) set covered by running effects — one walk
-        // instead of re-scanning effects per Layer 3 key. The resolver already handles group
+        // instead of re-scanning effects per Layer 4 key. The resolver already handles group
         // expansion + multi-element keys, matching the behaviour of [isPropertyCoveredByAny].
         val coveredByEffects = buildSet {
             for (effect in activeEffects.values) {
@@ -1369,7 +1369,7 @@ class FxEngine(
 
             val before = beforeState[key]
             val after = afterState[key]
-            // Skip keys whose composed Layer 3 value didn't actually change. Crossfade ticks
+            // Skip keys whose composed Layer 4 value didn't actually change. Crossfade ticks
             // call republish at ~60 fps; mid-fade the eased weight often quantises to the
             // same UByte for several ticks in a row, and any cue not involved in the fade
             // keeps a constant composed value the whole way through. Equality is a cheap
@@ -1377,7 +1377,7 @@ class FxEngine(
             if (before == after) continue
 
             val typeSource = after ?: before ?: continue
-            val target = resolveTargetForLayer3Key(key, typeSource)
+            val target = resolveTargetForCueLayerKey(key, typeSource)
 
             try {
                 val fixture = fixturesWithTx.untypedGroupableFixture(key.targetKey)
@@ -1387,7 +1387,7 @@ class FxEngine(
                 wrote = true
             } catch (e: Exception) {
                 System.err.println(
-                    "FX Engine: failed to publish Layer 3 for ${key.targetKey}.${key.propertyName}: ${e.message}"
+                    "FX Engine: failed to publish Layer 4 for ${key.targetKey}.${key.propertyName}: ${e.message}"
                 )
             }
         }
@@ -1395,18 +1395,18 @@ class FxEngine(
         if (wrote) transaction.apply()
     }
 
-    /** Construct the [FxTarget] for a Layer 3 [key], deriving target kind from [typeSource]. */
-    private fun resolveTargetForLayer3Key(
-        key: Layer3Resolver.Key,
-        typeSource: Layer3Resolver.PropertyValue,
+    /** Construct the [FxTarget] for a Layer 4 [key], deriving target kind from [typeSource]. */
+    private fun resolveTargetForCueLayerKey(
+        key: CueAssignmentResolver.Key,
+        typeSource: CueAssignmentResolver.PropertyValue,
     ): FxTarget = when (typeSource) {
-        is Layer3Resolver.PropertyValue.Slider ->
+        is CueAssignmentResolver.PropertyValue.Slider ->
             SliderTarget(key.targetKey, key.propertyName)
-        is Layer3Resolver.PropertyValue.Colour ->
+        is CueAssignmentResolver.PropertyValue.Colour ->
             ColourTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
-        is Layer3Resolver.PropertyValue.Position ->
+        is CueAssignmentResolver.PropertyValue.Position ->
             PositionTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
-        is Layer3Resolver.PropertyValue.Setting ->
+        is CueAssignmentResolver.PropertyValue.Setting ->
             SettingTarget(key.targetKey, key.propertyName)
     }
 
@@ -1871,7 +1871,7 @@ class FxEngine(
     /**
      * Identifies a single (fixture, property) pair for stomp overlap checks.
      *
-     * Phase 0 builds these from the stomping cue's own ad-hoc effect targets because Layer 3
+     * Phase 0 builds these from the stomping cue's own ad-hoc effect targets because Layer 4
      * assignments don't exist yet. Phase 1 switches the overlap source to the cue's property
      * assignments. The shape is stable across the transition.
      */
@@ -1880,7 +1880,7 @@ class FxEngine(
     /**
      * Remove ad-hoc effects owned by *other* cues that target properties in the [overlap]
      * set. Effects owned by the stomping cue itself are not stomped — they co-exist with its
-     * Layer 3 assertions. Manual (uncued) effects are not stomped either.
+     * Layer 4 assertions. Manual (uncued) effects are not stomped either.
      *
      * @param stompingCueId the cue whose apply triggered the stomp.
      * @param overlap the set of (targetKey, propertyName) pairs the stomping cue covers.
@@ -1973,7 +1973,7 @@ class FxEngine(
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
 
-        // Reset properties controlled by BEAT effects to the layer below (Layer 3 → Layer 4 →
+        // Reset properties controlled by BEAT effects to the layer below (Layer 2 → Layer 4 →
         // Layer 5 baseline) before applying. This prevents accumulative blend modes from
         // ratcheting across ticks and keeps direct writes + cue state visible under effects.
         resetActiveProperties(fixturesWithTx, beatEffects)
@@ -2343,10 +2343,10 @@ class FxEngine(
     }
 
     /**
-     * Reset properties controlled by running effects to the layer below (Layer 3 → Layer 4 →
+     * Reset properties controlled by running effects to the layer below (Layer 2 → Layer 4 →
      * Layer 5 baseline). This ensures blend modes operate against the correct baseline each
      * tick rather than accumulating from previous ticks — and crucially that direct
-     * `updateChannel` writes (Layer 4) remain visible under running effects instead of being
+     * `updateChannel` writes (Layer 2) remain visible under running effects instead of being
      * clobbered to zero.
      *
      * Layer 1 (parking) short-circuits: a fully-parked property skips the reset entirely
@@ -2447,7 +2447,7 @@ class FxEngine(
         fixture: uk.me.cormack.lighting7.fixture.GroupableFixture,
         propertyName: String,
     ): ProgrammerPublishability {
-        val key = Layer3Resolver.Key.fixture(fixture.targetKey, propertyName)
+        val key = CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)
         val target = inferTargetForProperty(fixture, key) ?: return ProgrammerPublishability.UNRESOLVED
         if (PropertyChannelWriter.channelsFor(fixture, propertyName).isEmpty()) {
             // A property whose descriptor exists but is not DMX-backed (e.g. `position` on a

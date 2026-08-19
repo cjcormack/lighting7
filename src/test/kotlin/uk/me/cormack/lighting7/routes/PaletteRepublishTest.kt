@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.routes
 import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
-import uk.me.cormack.lighting7.fx.Layer3Resolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerValue
 import uk.me.cormack.lighting7.fx.paletteRefValue
@@ -90,9 +90,9 @@ class PaletteRepublishTest : RouteIntegrationTest() {
         return cueId
     }
 
-    private fun cueColour(fixtureKey: String): Layer3Resolver.PropertyValue.Colour {
+    private fun cueColour(fixtureKey: String): CueAssignmentResolver.PropertyValue.Colour {
         val value = state.show.fxEngine.layerResolver
-            .currentLayer3State[Layer3Resolver.Key.fixture(fixtureKey, "rgbColour")]
+            .currentCueLayerState[CueAssignmentResolver.Key.fixture(fixtureKey, "rgbColour")]
         return assertIs(value)
     }
 
@@ -145,7 +145,7 @@ class PaletteRepublishTest : RouteIntegrationTest() {
         val fixture = state.show.fixtures.untypedGroupableFixture("hex-1")
         state.show.fxEngine.writeProgrammerProperty(
             ProgrammerOwner.WEB, fixture, "rgbColour",
-            Layer3Resolver.parseAssignmentValue(
+            CueAssignmentResolver.parseAssignmentValue(
                 uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR, "rgbColour", "#ff8800",
             )!!,
             paletteUuid = paletteUuid,
@@ -158,7 +158,7 @@ class PaletteRepublishTest : RouteIntegrationTest() {
         assertEquals(paletteUuid, slot.value.paletteUuidOrNull, "it is still a reference")
         assertEquals(
             "#0000ff",
-            (slot.value.resolved as Layer3Resolver.PropertyValue.Colour).value.toSerializedString(),
+            (slot.value.resolved as CueAssignmentResolver.PropertyValue.Colour).value.toSerializedString(),
             "and it now resolves to the new value",
         )
         assertEquals(1, outcome.programmerKeysRefreshed)
@@ -173,7 +173,7 @@ class PaletteRepublishTest : RouteIntegrationTest() {
         val fixture = state.show.fixtures.untypedGroupableFixture("hex-1")
         state.show.fxEngine.writeProgrammerProperty(
             ProgrammerOwner.WEB, fixture, "rgbColour",
-            Layer3Resolver.parseAssignmentValue(
+            CueAssignmentResolver.parseAssignmentValue(
                 uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR, "rgbColour", "#ff8800",
             )!!,
             paletteUuid = paletteUuid,
@@ -188,7 +188,7 @@ class PaletteRepublishTest : RouteIntegrationTest() {
         val slot = state.show.programmerStore.get("hex-1", "rgbColour")!!
         assertEquals(
             "#ff8800",
-            (slot.value.resolved as Layer3Resolver.PropertyValue.Colour).value.toSerializedString(),
+            (slot.value.resolved as CueAssignmentResolver.PropertyValue.Colour).value.toSerializedString(),
             "silently dropping an operator's programmer entry mid-show would be worse than a stale value",
         )
         assertIs<ProgrammerValue.Ref>(slot.value, "and it stays a reference, so the sheet can mark it broken")
@@ -205,7 +205,7 @@ class PaletteRepublishTest : RouteIntegrationTest() {
         val fixture = state.show.fixtures.untypedGroupableFixture("hex-1")
         state.show.fxEngine.writeProgrammerProperty(
             ProgrammerOwner.WEB, fixture, "rgbColour",
-            Layer3Resolver.parseAssignmentValue(
+            CueAssignmentResolver.parseAssignmentValue(
                 uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR, "rgbColour", "#ff8800",
             )!!,
             paletteUuid = paletteUuid,
@@ -219,7 +219,7 @@ class PaletteRepublishTest : RouteIntegrationTest() {
         val slot = state.show.programmerStore.get("hex-1", "rgbColour")!!
         assertEquals(
             "#0000ff",
-            (slot.value.resolved as Layer3Resolver.PropertyValue.Colour).value.toSerializedString(),
+            (slot.value.resolved as CueAssignmentResolver.PropertyValue.Colour).value.toSerializedString(),
         )
         assertTrue(state.show.programmerStore.blind)
     }
@@ -256,7 +256,7 @@ class PaletteRepublishTest : RouteIntegrationTest() {
         assertEquals(
             null,
             state.show.fxEngine.layerResolver
-                .currentLayer3State[Layer3Resolver.Key.fixture("hex-1", "rgbColour")],
+                .currentCueLayerState[CueAssignmentResolver.Key.fixture("hex-1", "rgbColour")],
             "a dangling ref contributes nothing at all — not white",
         )
     }
@@ -288,7 +288,7 @@ class PaletteRepublishTest : RouteIntegrationTest() {
         assertEquals(
             "#0000ff",
             (state.show.programmerStore.get("hex-1", "rgbColour")!!.value.resolved
-                as Layer3Resolver.PropertyValue.Colour).value.toSerializedString(),
+                as CueAssignmentResolver.PropertyValue.Colour).value.toSerializedString(),
         )
     }
 }

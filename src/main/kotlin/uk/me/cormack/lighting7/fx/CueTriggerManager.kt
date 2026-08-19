@@ -5,7 +5,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.TogglePresetTarget
-import uk.me.cormack.lighting7.routes.buildLayer3AssignmentsForPreset
+import uk.me.cormack.lighting7.routes.buildCueAssignmentsForPreset
 import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
 import uk.me.cormack.lighting7.routes.toPropertyAssignmentDtos
@@ -53,8 +53,8 @@ class CueTriggerManager(
      * Call this after the cue's immediate effects have been applied. Only effects
      * with non-null delayMs or intervalMs should be passed here.
      *
-     * [priority] is the cue-derived Layer 3 priority (see
-     * [uk.me.cormack.lighting7.routes.cueDerivedPriority]). Timed preset fires produce Layer 3
+     * [priority] is the cue-derived Layer 4 priority (see
+     * [uk.me.cormack.lighting7.routes.cueDerivedPriority]). Timed preset fires produce Layer 4
      * rows at this priority so they compose consistently with the cue's apply-time rows.
      *
      * [cuePalette] is the cue's declared palette (parsed to [ExtendedColour]) or empty when the
@@ -82,10 +82,10 @@ class CueTriggerManager(
         // will re-apply the cue anyway.
         val baseCascade = PaletteCascade(cue = cuePalette, global = fxEngine.getPalette())
 
-        // Timed presets contribute their property assignments to Layer 3 atomically alongside
+        // Timed presets contribute their property assignments to Layer 4 atomically alongside
         // spawning effects; recurring fires retract the prior tick's rows in the same
         // mutation so the cue's assignment list does not accumulate duplicates. Cue
-        // deactivation wipes the whole cue's Layer 3 via [FxEngine.removeCueAssignments] —
+        // deactivation wipes the whole cue's Layer 4 via [FxEngine.removeCueAssignments] —
         // no explicit retract of the final fire is needed.
         for (presetApp in timedPresets) {
             val job = launchTimedActionWithState(
@@ -93,8 +93,8 @@ class CueTriggerManager(
                 intervalMs = presetApp.intervalMs,
                 randomWindowMs = presetApp.randomWindowMs,
                 scope = scope,
-                initialState = emptyList<Layer3Resolver.Assignment>(),
-            ) { priorLayer3Rows ->
+                initialState = emptyList<CueAssignmentResolver.Assignment>(),
+            ) { priorCueLayerRows ->
                 // One transaction per fire loads both effects, property assignments, and the
                 // preset's palette — splitting them would double the DB hit on recurring presets.
                 val loaded = transaction(state.database) {
@@ -105,7 +105,7 @@ class CueTriggerManager(
                         preset.palette.toPaletteColours(),
                     )
                 }
-                if (loaded == null) return@launchTimedActionWithState priorLayer3Rows
+                if (loaded == null) return@launchTimedActionWithState priorCueLayerRows
                 val (presetEffects, presetAssignments, presetPalette) = loaded
 
                 applyPresetToTargets(
@@ -114,13 +114,13 @@ class CueTriggerManager(
                     overrideRateSpeedMasterUuid = speedMasterUuidOrNull(presetApp.rateSpeedMasterUuid),
                 )
 
-                val newRows = if (presetAssignments.isEmpty()) emptyList() else buildLayer3AssignmentsForPreset(
+                val newRows = if (presetAssignments.isEmpty()) emptyList() else buildCueAssignmentsForPreset(
                     state.show.fixtures, cueId, priority,
                     presetApp.presetId, presetAssignments, presetApp.targets,
                     cascade = baseCascade.copy(preset = presetPalette),
                     paletteRegistry = state.show.paletteRegistry,
                 )
-                fxEngine.replaceCueAssignmentSubset(cueId, priorLayer3Rows, newRows)
+                fxEngine.replaceCueAssignmentSubset(cueId, priorCueLayerRows, newRows)
                 newRows
             }
             if (job != null) jobs.add(job)
@@ -265,7 +265,7 @@ class CueTriggerManager(
      * fire and emits the next state. For one-shot (delayed-only) actions the state is simply
      * consumed by the single fire and never re-used.
      *
-     * Used by the timed-preset path to carry the previous fire's Layer 3 contribution across
+     * Used by the timed-preset path to carry the previous fire's Layer 4 contribution across
      * ticks so each fire can retract it before appending the new one.
      */
     private fun <T> launchTimedActionWithState(
@@ -307,7 +307,7 @@ class CueTriggerManager(
 
     /**
      * Spawn effects for a timed preset application. Takes the preset's effects list preloaded
-     * by the caller so the fire path can share one DB transaction with the Layer 3 property-
+     * by the caller so the fire path can share one DB transaction with the Layer 4 property-
      * assignment lookup.
      */
     private fun applyPresetToTargets(
