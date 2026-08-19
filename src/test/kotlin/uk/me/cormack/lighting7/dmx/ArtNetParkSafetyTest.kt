@@ -192,10 +192,10 @@ class ArtNetParkSafetyTest {
             val blackout = TransmitModifier { _, _, _ -> 0u }
             controller.addTransmitModifier(blackout)
 
-            // Output is a continuous stream, so frames already in flight predate the
-            // modifier. Advance to the first frame that actually shows it (ch6 zeroed)
-            // rather than assuming the very next frame is the one — the old
-            // `requestTransmit()` nudge that made that assumption safe is now a no-op.
+            // Output is a continuous stream and there is no push-to-transmit path, so
+            // frames already in flight predate the modifier. Advance to the first frame that
+            // actually shows it (ch6 zeroed) rather than assuming the very next frame is the
+            // one.
             val afterModifier = withTimeout(5_000) {
                 var frame = transport.frames.receive()
                 while (frame.data[5] != 0.toByte()) {

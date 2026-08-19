@@ -42,8 +42,6 @@ import kotlin.reflect.full.memberProperties
  *     lookup on the hot path.
  *   - Registers itself as a [TransmitModifier] on every controller in [Fixtures] when
  *     [attach] is called, and refreshes on `fixturesChanged`.
- *   - On toggle, calls [DmxController.requestTransmit] on every attached controller so the
- *     change shows up immediately instead of waiting up to 25 ms for the next frame.
  */
 class GlobalScalerState(
     private val fixtures: Fixtures,
@@ -179,39 +177,19 @@ class GlobalScalerState(
         holder.blackoutEnabled.value || !holder.grandMasterEnabled.value
 
     /** Toggle blackout. Returns the new state. */
-    fun toggleBlackout(): Boolean {
-        val next = holder.toggleBlackout()
-        requestTransmit()
-        return next
-    }
+    fun toggleBlackout(): Boolean = holder.toggleBlackout()
 
     /** Toggle Grand Master. Returns the new state. */
-    fun toggleGrandMaster(): Boolean {
-        val next = holder.toggleGrandMaster()
-        requestTransmit()
-        return next
-    }
+    fun toggleGrandMaster(): Boolean = holder.toggleGrandMaster()
 
     /** Explicitly set the blackout state (exposed for WS `surfaceScaler.set`). */
     fun setBlackout(enabled: Boolean) {
-        if (holder.setBlackout(enabled)) requestTransmit()
+        holder.setBlackout(enabled)
     }
 
     /** Explicitly set the Grand Master state. */
     fun setGrandMaster(enabled: Boolean) {
-        if (holder.setGrandMaster(enabled)) requestTransmit()
-    }
-
-    private fun requestTransmit() {
-        synchronized(controllers) {
-            for (c in controllers) {
-                try {
-                    c.requestTransmit()
-                } catch (_: Exception) {
-                    // best-effort — a controller may be mid-shutdown.
-                }
-            }
-        }
+        holder.setGrandMaster(enabled)
     }
 
     /**

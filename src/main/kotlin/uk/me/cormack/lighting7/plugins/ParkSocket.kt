@@ -2,7 +2,6 @@ package uk.me.cormack.lighting7.plugins
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.state.State
 
 // ─── Inbound ────────────────────────────────────────────────────────────
@@ -55,24 +54,20 @@ data class ParkStateOutMessage(
 
 suspend fun handlePark(scope: SocketScope, message: ParkInMessage) {
     val parkManager = scope.state.show.parkManager
-    val controllers = scope.state.show.fixtures
     when (message) {
         is ParkStateInMessage -> scope.send(buildParkStateMessage(scope.state))
         is ParkChannelInMessage -> {
+            // Nothing to nudge: controllers consult the ParkSource at transmit time, so the
+            // park lands on the next frame of the affected universe.
             parkManager.park(message.universe, message.channel, message.value)
-            // Null-safe: a park row can outlive the universe it names (patch edit, project
-            // import), and a missing controller is nothing to transmit to — not a crash.
-            controllers.controllerOrNull(Universe(0, message.universe))?.requestTransmit()
             scope.state.show.fxEngine.emitProvenanceUpdate()
         }
         is UnparkChannelInMessage -> {
             parkManager.unpark(message.universe, message.channel)
-            controllers.controllerOrNull(Universe(0, message.universe))?.requestTransmit()
             scope.state.show.fxEngine.emitProvenanceUpdate()
         }
         is UnparkAllInMessage -> {
             parkManager.unparkAll()
-            controllers.controllers.forEach { it.requestTransmit() }
             scope.state.show.fxEngine.emitProvenanceUpdate()
         }
     }

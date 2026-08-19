@@ -81,22 +81,6 @@ class GlobalScalerStateTest {
     }
 
     @Test
-    fun `setBlackout triggers transmit request`() {
-        val (fixtures, controller) = registry()
-        val scaler = GlobalScalerState(fixtures)
-        scaler.attach()
-
-        val before = controller.transmitRequests
-        scaler.setBlackout(true)
-        val afterOn = controller.transmitRequests
-        assertTrue(afterOn > before)
-
-        // Setting to same value is a no-op.
-        scaler.setBlackout(true)
-        assertEquals(afterOn, controller.transmitRequests)
-    }
-
-    @Test
     fun `detach removes modifier from controllers`() {
         val (fixtures, controller) = registry()
         val scaler = GlobalScalerState(fixtures)

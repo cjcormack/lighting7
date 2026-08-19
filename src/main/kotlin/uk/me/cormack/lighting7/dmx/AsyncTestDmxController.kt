@@ -103,7 +103,6 @@ class AsyncTestDmxController(
 
     override fun addTransmitModifier(modifier: TransmitModifier) {}
     override fun removeTransmitModifier(modifier: TransmitModifier) {}
-    override fun requestTransmit() {}
 
     /** Cancel the per-channel consumers and await termination. Idempotent. */
     fun close() {

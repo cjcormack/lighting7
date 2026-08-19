@@ -62,12 +62,4 @@ sealed interface DmxController {
      * Remove a previously-registered [TransmitModifier]. No-op if not registered.
      */
     fun removeTransmitModifier(modifier: TransmitModifier)
-
-    /**
-     * Notify the controller that a transmit modifier's internal state has changed and an
-     * immediate re-transmission is needed so the UI / hardware sees the scaled output.
-     * Without this hook, modifiers like Blackout would only take effect on the next
-     * periodic transmit tick (up to 25 ms delay).
-     */
-    fun requestTransmit()
 }

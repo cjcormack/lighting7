@@ -14,9 +14,6 @@ class MockDmxController(
     /** Modifiers registered on this controller. Mock lets tests inspect them without forcing transmit. */
     val transmitModifiers: List<TransmitModifier> get() = _transmitModifiers.toList()
 
-    var transmitRequests: Int = 0
-        private set
-
     private val _writeLog = mutableListOf<Pair<Int, UByte>>()
 
     /**
@@ -86,10 +83,6 @@ class MockDmxController(
         _transmitModifiers.remove(modifier)
     }
 
-    override fun requestTransmit() {
-        transmitRequests++
-    }
-
     /**
      * Get the effective output value for a channel, applying modifiers. For test assertions.
      * Park takes absolute precedence via the [ParkSource]; then modifiers run over the raw
@@ -109,6 +102,5 @@ class MockDmxController(
         values.clear()
         _transmitModifiers.clear()
         _writeLog.clear()
-        transmitRequests = 0
     }
 }

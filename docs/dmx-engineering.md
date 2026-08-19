@@ -120,9 +120,6 @@ sealed interface DmxController {
     // Transmit-time modifiers (Blackout / Grand Master / future)
     fun addTransmitModifier(modifier: TransmitModifier)
     fun removeTransmitModifier(modifier: TransmitModifier)
-
-    // Legacy wake-up hook. No-op on ArtNet, which transmits every tick regardless.
-    fun requestTransmit()
 }
 ```
 
@@ -295,9 +292,9 @@ for each channel:
 
 - [`GlobalScalerState`](midi-control-surface-engineering.md) — Blackout and Grand Master
   are `TransmitModifier`s that zero intensity-category channels (DIMMER / UV / STROBE)
-  when enabled. It calls `requestTransmit()`, which is a no-op on ArtNet — under
-  continuous streaming the change is on the wire within one `refreshIntervalMs` anyway,
-  and an out-of-band packet would push the universe above its configured frame rate.
+  when enabled. A toggle only flips the modifier's own state; the next frame of each
+  universe picks it up. There is no push-to-transmit path — see
+  [§Refresh interval](#refresh-interval).
 
 This pattern generalises: any feature that needs to transform DMX values at transmit
 time without being part of the composition layers (parking is the other canonical
@@ -408,6 +405,21 @@ tick.
 Note this is *not* about refreshing fixtures. An Art-Net node holds the last frame it
 received and clocks DMX512 out onto the physical line continuously at its own rate, so the
 fixtures never see a gap regardless of what the desk does.
+
+### Change latency
+
+One consequence worth stating plainly: **a change reaches the wire within one
+`refreshIntervalMs`, and nothing is special-cased — Blackout included.** A blackout is
+materially no different to any other change in lighting state; it flips a `TransmitModifier`
+and the next scheduled frame carries it, exactly like a cue go, an FX step or a fader move.
+Park is the same: controllers consult the `ParkSource` at transmit time.
+
+So a universe deliberately slowed toward the 1000 ms ceiling accepts up to a second of
+latency on *everything*, which is the trade being made by slowing it — not a bug in one
+control. There is deliberately no push-to-transmit path. `DmxController` briefly carried a
+`requestTransmit()` hook from the change-driven era; it became a no-op the moment output
+became a continuous stream and has been removed, because an out-of-band packet would push
+the universe above its configured rate, which DMX512 bounds at ~44 frames/sec anyway.
 
 ### Configuring it
 

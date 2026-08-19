@@ -233,14 +233,6 @@ class ArtNetController(
     }
 
     /**
-     * No-op for Art-Net. Every universe transmits unconditionally on every tick, so a
-     * modifier or park change reaches the wire within one [refreshIntervalMs] with no
-     * explicit nudge — and an out-of-band packet would push the universe above its
-     * configured frame rate, which DMX512 bounds at ~44/sec in the first place.
-     */
-    override fun requestTransmit() {}
-
-    /**
      * Stop transmitting and release the transmit thread and socket. Idempotent: the
      * project-switch path closes controllers through [Fixtures.register]'s `removeUnused`
      * block and shutdown closes them again through `Show.close()`.
