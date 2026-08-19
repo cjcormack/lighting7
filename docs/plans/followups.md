@@ -1,530 +1,412 @@
 # Lighting7 Follow-ups
 
-Consolidated follow-up items from the completed plans in
-[`completed/`](completed/) — cue-authoring-unification and control-surface
-(Phases 0–9, through 2026-04-23), windows-distribution, cloud-sync, the
-programmer redesign (Sessions 1–5, through 2026-08-14), and multi-user-auth
-(Sessions 1–3, through 2026-08-17). Each entry is self-contained so a Claude Code
-session can pick up one item cold.
+Dormant engineering work left behind by the completed plans in [`completed/`](completed/).
+Each item is self-contained so a cold session can pick one up. Operational rig checks live
+next door in [`manual-validation.md`](manual-validation.md).
 
-> **Status (2026-08-18, later)**: **`FU-DIST-KCS-RETIRE` landed** — the bundled
-> `kotlin-compiler-server` fork is gone and the script editor's `/versions`, `/highlight` and
-> `/complete` are served in-process at `/script-editor/*`. That is ~122 MB out of the installer on
-> top of the slimming below, projecting the Windows MSI to roughly **130 MB**. The trigger for it
-> turned out to be moot rather than met: upstream had already stubbed and then deleted its own
-> `/complete`, so the desk's autocomplete had silently been dead and the fork was earning one
-> endpoint. Three things to know before working nearby: `ScriptSourceWrapper` is now the only
-> place that knows how a script body becomes compilable Kotlin (and fixes the off-by-one it
-> inherited); a fresh `KJvmReplCompilerWithIdeServices` per request is mandatory, not tidiness;
-> and the frontend's `SCRIPT_WRAPPERS` are presentation only apart from their
-> `//@lighting7-script-type=` marker. It closed `FU-DIST-KCS-LIB-PRUNE` as moot, unblocked
-> `FU-DIST-JLINK-MODULES`, and left `FU-MANUAL-EDITOR-INPROCESS` open — editor compiles now share
-> the JVM that drives DMX, which only a rig can confirm.
->
-> **Status (2026-08-18)**: the **MSI slimming pass landed** — see
-> [`msi-slimming-plan.md`](msi-slimming-plan.md). Staged bytes went 354.6 → 287.7 MB
-> (−67.0 MB), projecting the Windows MSI from 312 MB to **~253 MB**: the four unused
-> Kotlin/JS + Wasm + Compose-Wasm compiler library dirs stopped shipping (−37.2), the fat
-> jar now carries natives for one OS only (−17.9), `jlink` gained
-> `--include-locales=en-GB,en-US` (−10.5), and the editor jar lost the React bundle it was
-> shipping a second copy of (−1.4). It deposited seven `FU-DIST-*` items below — all
-> **Trigger** or **Rejected**, none Ready — and extended `FU-MANUAL-DIST-INSTALL`.
-> Two things to know before working nearby: **`lighting7.jar` is now target-OS-specific**
-> (`-PnativePayloadOs=all` restores a portable one), and `copyFrontend` is a `Sync`, so
-> anything hand-placed in `src/main/resources/static/` is deleted on the next build.
->
-> **Status (2026-08-17, later)**: four of the five **Ready** desk-account items landed in
-> lighting7 `631a94f` + lighting-react `81b3fd9` — `FU-AUTH-SELF-ROLE-GUARD`,
-> `FU-AUTH-SELF-RESET-GUARD`, `FU-AUTH-RESET-TOKEN-HISTORY` and `FU-AUTH-LOGIN-QR`, all in
-> [Completed](#completed) with the review findings that shaped them.
-> **`FU-AUTH-PROFILE-SHEET` landed too**, in lighting7 `bbb1a87` + lighting-react `3dfee11`,
-> so all five of that batch are now in [Completed](#completed) and the multi-user-auth review
-> cuts are drained. Building it raised `FU-WS-USER-INVALIDATION`, **which has since landed
-> too** — desk accounts and the install row now broadcast their changes over a machine-scoped
-> `SharedFlow` collected in `plugins/MachineSocket.kt`, deliberately *not* on
-> `FixturesChangeListener`. It left three items behind: `FU-AUTH-STALE-ANON-SOCKET` (**Ready**,
-> and a security boundary rather than a cache one), plus `FU-AUTH-RESET-TOKEN-STALENESS` and
-> `FU-AUTH-SESSION-LIST-STALENESS` (both **Trigger**).
-> Two things that commit changed for anyone working nearby: the self guards now run *before*
-> the last-admin one, so `LAST_ADMIN` is unreachable over HTTP and only the service-level
-> test covers it; and the desk grew a second phone-facing public page (`/device/<token>`
-> beside `/reset/<token>`), so `isAuthExempt` and the frontend's `publicPath` flag now have
-> two entries each to keep in step.
->
-> **Status (2026-08-17)**: the **multi-user-auth plan is closed out** and moved to
-> [`completed/multi-user-auth-plan.md`](completed/multi-user-auth-plan.md); durable
-> reference is [`docs/desk-accounts.md`](../desk-accounts.md). It left eleven items
-> in the [Desk accounts](#desk-accounts) section plus
-> [Manual hardware validation](#manual-hardware-validation):
-> five **Ready** review cuts (see the note above for what became of them); five **Trigger**
-> deferrals promoted from the plan's
-> out-of-scope list (`FU-AUTH-ATTRIBUTION`, `FU-AUTH-AUDIT-LOG`,
-> `FU-AUTH-WS-PER-MESSAGE`, `FU-AUTH-OPERATOR-LOCKDOWN`, `FU-AUTH-TLS-COOKIES`); and
-> one **Manual** item, `FU-MANUAL-AUTH-QR-SCAN`, the only behaviour of that plan
-> never run against real hardware. Note the desk is now **locked** — it is not
-> bootstrap-open, so `RESET-ADMIN` is the way back in if you lose the admin password.
->
-> **Status (2026-08-16)**: The programmer redesign's five sessions landed and
-> deposited their cuts here, so the backlog is **no longer drained** — five items
-> are **Ready**: `FU-PROG-L3RESOLVER-RENAME`, `FU-PROG-VIS-SOURCE`,
-> `FU-PAL-PRESET-MAKE-HARD`, `FU-PAL-POSITIONAL-CONVERSION`, and `FU-DIST-ICONS`
-> (which has been Ready since 2026-04-28 — the previous "nothing is in Ready"
-> note predated it). `FU-PROG-RECORD-SELECTION-SCOPE` landed on 2026-08-16. Two
-> **Manual** items are the last unverified behaviour of the programmer work:
-> `FU-MANUAL-PALETTE-TOURING` and `FU-MANUAL-SPEED-MASTERS-RIG`, the second of
-> which needs a backend restart before it can even be attempted. Everything else
-> remains **Trigger-gated**, **Blocked**, or **Manual**. Still don't poll this
-> doc; consult it when your work might fire a listed trigger (CLAUDE.md →
-> "Follow-ups" explains when to look), or when you want a Ready item to pick up.
+**Don't poll this file.** Read the index below when your change might fire a listed gate, or
+when you want a Ready item to pick up.
 
-## How to use
+## Index
 
-- **Pick items by slug ID** (e.g. `FU-PERF-COALESCE-WRITES`). Slugs are stable —
-  unlike numbers, they don't shift when items land.
-- **Check the status tag first**:
-  - **Ready** — scope is clear, no blocker; pick up and go.
-  - **Trigger** — listed signal must fire first; the condition is named in the
-    item body.
-  - **Blocked** — named prerequisite must land first.
-  - **Manual** — operational validation on hardware; no engineering scope.
-  - **Rejected** — a decision record. The reasoning lives in the body so the
-    idea isn't re-litigated; there is nothing to pick up.
-- **Each item is self-contained**: origin, scope, suggested shape, and (where
-  relevant) the trigger to revisit. A cold session should need nothing else.
-- **When an item lands**, move it to the Completed section at the bottom with
-  the commit SHA or PR link — keeps an audit trail.
-- **New follow-ups** surfacing during work: add them here rather than a new doc.
+Status meanings: **Ready** — pick up and go. **Trigger** — the named signal must fire first.
+**Blocked** — the named prerequisite must land first. **Rejected** — a decision record; there
+is nothing to pick up, and the reasoning is there so the idea isn't re-litigated.
+
+| Slug | Status | Area | Gate |
+|---|---|---|---|
+| [`FU-PERF-BLACKOUT-LATENCY`](#fu-perf-blackout-latency) | Ready | Perf | needs a product call between three shapes |
+| [`FU-PROG-L3RESOLVER-RENAME`](#fu-prog-l3resolver-rename) | Ready | Prog | — |
+| [`FU-PROG-VIS-SOURCE`](#fu-prog-vis-source) | Ready | Prog | — |
+| [`FU-PAL-PRESET-MAKE-HARD`](#fu-pal-preset-make-hard) | Ready | Pal | — |
+| [`FU-AUTH-STALE-ANON-SOCKET`](#fu-auth-stale-anon-socket) | Ready | Auth | — |
+| [`FU-DIST-ICONS`](#fu-dist-icons) | Ready | Dist | — |
+| [`FU-SYNC-FORMAT-MIGRATIONS`](#fu-sync-format-migrations) | Blocked | Sync | a real breaking `formatVersion` bump |
+| [`FU-TEST-MULTI-CONN-CUEEDIT`](#fu-test-multi-conn-cueedit) | Blocked | Test | cue-authoring `beginEdit` conflict semantics |
+| [`FU-DIST-NO-BUNDLED-JRE`](#fu-dist-no-bundled-jre) | Rejected | Dist | decision record — do not re-propose |
+| [`FU-PERF-FRAME-TXN-UNIFY`](#fu-perf-frame-txn-unify) | Trigger | Perf | visible flicker where beat + wall-clock share a universe |
+| [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Trigger | FE | operator asks for it |
+| [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 4th surface renders `AssignmentHealth` |
+| [`FU-FE-USE-TARGET-PROPERTIES`](#fu-fe-use-target-properties) | Trigger | FE | a 6th consumer of fixture/group property lookup |
+| [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
+| [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
+| [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
+| [`FU-PROG-PER-USER`](#fu-prog-per-user) | Trigger | Prog | a second operator programming the same show |
+| [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
+| [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
+| [`FU-PAL-POSITIONAL-CONVERSION`](#fu-pal-positional-conversion) | Trigger | Pal | a show maintains the same colours in both forms |
+| [`FU-PAL-APPLY-NEAREST-COVERAGE`](#fu-pal-apply-nearest-coverage) | Trigger | Pal | an operator asks for gap-filling |
+| [`FU-PAL-LINKED`](#fu-pal-linked) | Trigger | Pal | a palette kept hand-synced to another |
+| [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
+| [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
+| [`FU-AUTH-ATTRIBUTION`](#fu-auth-attribution) | Trigger | Auth | two accounts co-author, or any `formatVersion` bump |
+| [`FU-AUTH-AUDIT-LOG`](#fu-auth-audit-log) | Trigger | Auth | a security question nobody can answer |
+| [`FU-AUTH-WS-PER-MESSAGE`](#fu-auth-ws-per-message) | Trigger | Auth | an admin-only operation gains a WS command |
+| [`FU-AUTH-OPERATOR-LOCKDOWN`](#fu-auth-operator-lockdown) | Trigger | Auth | an operator changes something they shouldn't have |
+| [`FU-AUTH-TLS-COOKIES`](#fu-auth-tls-cookies) | Trigger | Auth | the desk leaves a trusted LAN |
+| [`FU-DIST-JLINK-MODULES`](#fu-dist-jlink-modules) | Trigger | Dist | the runtime needs to shrink (1 MB on offer) |
+| [`FU-DIST-NATIVE-ARCH`](#fu-dist-native-arch) | Trigger | Dist | the MSI needs a final ~3 MB, or a 2nd arch ships |
+| [`FU-SYNC-TOMBSTONE-GC`](#fu-sync-tombstone-gc) | Trigger | Sync | ~1000 tombstone files on a real working tree |
+| [`FU-SYNC-JGIT-STRESS-BENCH`](#fu-sync-jgit-stress-bench) | Trigger | Sync | ~1000 synced records, `runSync` >5 s, or an OOM |
+| [`FU-SYNC-STREAMING-PROGRESS`](#fu-sync-streaming-progress) | Trigger | Sync | sync feels unresponsive, or a cycle exceeds 5 s |
+| [`FU-SYNC-MERGE-ATOMICITY`](#fu-sync-merge-atomicity) | Trigger | Sync | a merged change reverts after a crash |
+| [`FU-SYNC-ORDINAL-DOUBLE`](#fu-sync-ordinal-double) | Trigger | Sync | surprising cue order after a merge, or a bump |
+| [`FU-SYNC-FETCHING-STATE`](#fu-sync-fetching-state) | Trigger | Sync | a sync "just stopped" with no log trail |
+| [`FU-SYNC-FIELD-LEVEL-MERGE`](#fu-sync-field-level-merge) | Trigger | Sync | frequent conflicts on disjoint fields |
+| [`FU-SYNC-MANUAL-MULTIFILE`](#fu-sync-manual-multifile) | Trigger | Sync | an operator wants to hand-merge a script conflict |
+| [`FU-SYNC-PUSHRETRY-TEST-SEAM`](#fu-sync-pushretry-test-seam) | Trigger | Sync | `FU-SYNC-MERGE-ATOMICITY` is picked up |
+| [`FU-SYNC-BINDING-PAYLOAD-UUIDS`](#fu-sync-binding-payload-uuids) | Trigger | Sync | dead MIDI bindings after a clone, or `BindingTarget` work |
+| [`FU-TEST-FX-BENCH-CI-GATE`](#fu-test-fx-bench-ci-gate) | Trigger | Test | a week of baseline numbers to judge variance |
+
+**Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
+its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
+message and, if it's durable, in the relevant `docs/*-engineering.md`. New follow-ups go here
+rather than in a new doc.
 
 ---
 
 ## Performance
 
-### `FU-PERF-FRAME-TXN-UNIFY` — FX beat + wall-clock frame-transaction unification
+### `FU-PERF-BLACKOUT-LATENCY`
 
-**Status**: Trigger (event-driven)
-**Origin**: Control-surface Phase 8 step 2, deferred 2026-04-23
+**Blackout lands up to one refresh interval late** · Ready · Continuous Art-Net streaming
+(2026-08-18, `eb190ef`)
 
-The two FX tick loops (`processBeatTickSuspend` ~120 Hz,
-`processWallClockTickSuspend` 50 Hz) each construct their own
-`ControlTransaction` and call `applySuspend()` independently. Within the same
-~20 ms window on the same universe. **Continuous streaming (2026-08-18) removed
-the packet-rate half of this entirely**: `ArtNetController` now emits exactly one
-frame per universe per `refreshIntervalMs` regardless of how many transactions
-committed, so two transactions in a frame can no longer produce two packets. What
-remains is purely a value-domain concern — two transactions 5 ms apart write two
-different values to the same channel, and the loop transmits whichever landed last.
-The per-channel delta filter in `sendCurrentValues()` (`previousSentDmxData !=
-byteValue`) no longer suppresses packets at all; it now only suppresses redundant
-*WebSocket* notifications.
+`GlobalScalerState` calls `DmxController.requestTransmit()` when Blackout or Grand Master is
+toggled. Under continuous streaming that is a **no-op** — the change reaches the wire on the next
+scheduled tick, and an out-of-band packet would push the universe above its configured rate.
 
-Phase 8 design sketched a `FrameTransaction` abstraction: beat + wall-clock
-share one `ControlTransaction` when their tick times fall inside a
-configurable fuzz window (default 10 ms); otherwise commit independently.
-Implementation needs an `AtomicReference<FrameTransaction?>` + a short mutex
-around the open/close edge (both loops run on `Dispatchers.Default`).
+At the 25 ms default that's imperceptible. The problem is the ceiling: `MAX_REFRESH_INTERVAL_MS`
+is 1000 and is reachable from the universe chip, so an operator who slowed a universe for a fussy
+node can hit Blackout mid-show and watch it stay lit for a full second. Blackout is a safety
+control; the desk currently promises "up to 1 s" without saying so.
 
-**Trigger to revisit** (any one):
-- Operator reports visible flicker / double-stepping on a fixture where beat
-  and wall-clock effects share a universe.
-- ~~Profiling shows sustained ArtNet packet rate above ~40 pkts/sec per
-  universe~~ — **obsolete.** Under continuous streaming the rate is exactly
-  `1000 / refreshIntervalMs` by construction and cannot be pushed above it by
-  effect load. `GET /api/rest/perf/artnet-rates` now reads as a *configuration*
-  check, not a contention one.
-- A future effect category pushes wall-clock density high enough that the tick
-  windows overlap frequently (current 50 Hz wall-clock + ~120 Hz beat worst-
-  case doesn't).
+Three shapes, in order of preference:
 
-Without one of those, coordination cost > savings. Leave dormant.
-
-### `FU-PERF-BLACKOUT-LATENCY` — Blackout lands up to one refresh interval late
-
-**Status**: Ready
-**Origin**: Continuous Art-Net streaming (2026-08-18, eb190ef), review finding
-shipped as-designed pending a decision
-
-`GlobalScalerState` calls `DmxController.requestTransmit()` on every controller
-when Blackout or Grand Master is toggled, which used to force an immediate frame.
-`ArtNetController.requestTransmit()` is now a **no-op**: under continuous
-streaming the change reaches the wire on the next scheduled tick anyway, and an
-out-of-band packet would push the universe above its configured frame rate.
-
-At the 25 ms default that is imperceptible. The problem is the ceiling —
-`MAX_REFRESH_INTERVAL_MS` is 1000, and it is reachable from the universe chip, so
-an operator who slowed a universe for a fussy node can hit Blackout mid-show and
-watch that universe stay lit for up to a full second. Blackout is a safety
-control; "up to 1 s" is a different promise from "immediately", and the desk
-currently makes the weaker one without saying so.
-
-Three shapes, roughly in order of preference:
-
-1. **Lower the ceiling** to ~100 ms. Keeps one rule for all output, costs the
-   slow-node case that motivated a configurable rate in the first place. Cheapest
-   and most honest if nobody actually needs 1 Hz.
-2. **Exempt modifier changes** — let `requestTransmit()` emit one out-of-band
-   frame and re-base the loop's deadline from it, so the *average* rate holds
-   even though one frame arrives early. Preserves the full range; reintroduces
-   the "is this above the configured rate?" question the no-op was meant to
-   settle, and needs care that a Blackout spam-click can't become a packet flood.
-3. **Bound the interval only while a modifier is active** — clamp to 25 ms when
-   Blackout or Grand Master is engaged. Narrowest blast radius, but a rate that
+1. **Lower the ceiling** to ~100 ms — one rule for all output, costs the slow-node case.
+2. **Exempt modifier changes** — one out-of-band frame that re-bases the loop deadline, so the
+   average rate holds. Needs care that Blackout spam-clicking can't become a packet flood.
+3. **Clamp to 25 ms only while a modifier is engaged** — narrowest blast radius, but a rate that
    silently changes under you is its own surprise.
 
-Not deferred for cost — (1) is a one-constant change. It is here because picking
-between them is a product call about what the desk promises, not a code fix.
+Not deferred for cost — (1) is a one-constant change. It's here because choosing is a product
+call. See [dmx-engineering.md §Refresh interval](../dmx-engineering.md#refresh-interval).
 
-**Related**: DMX output model in
-[dmx-engineering.md §Refresh interval](../dmx-engineering.md#refresh-interval).
+### `FU-PERF-FRAME-TXN-UNIFY`
+
+**FX beat + wall-clock frame-transaction unification** · Trigger · Control-surface Phase 8 step 2,
+deferred 2026-04-23
+
+The two FX tick loops (`processBeatTickSuspend` ~120 Hz, `processWallClockTickSuspend` 50 Hz)
+each build their own `ControlTransaction` and commit independently within the same ~20 ms window
+on the same universe.
+
+Continuous streaming (2026-08-18) removed the packet-rate half of this: `ArtNetController` emits
+exactly one frame per universe per `refreshIntervalMs` however many transactions committed. What
+remains is purely value-domain — two transactions 5 ms apart write different values to the same
+channel and the loop transmits whichever landed last. (The per-channel delta filter in
+`sendCurrentValues()` no longer suppresses packets at all, only redundant WebSocket
+notifications.)
+
+Phase 8 sketched a `FrameTransaction`: the two loops share one `ControlTransaction` when their
+tick times fall inside a configurable fuzz window (default 10 ms), else commit independently.
+Needs an `AtomicReference<FrameTransaction?>` plus a short mutex around the open/close edge —
+both loops run on `Dispatchers.Default`.
+
+**Trigger** (either): an operator reports visible flicker or double-stepping where beat and
+wall-clock effects share a universe; or a future effect category pushes wall-clock density high
+enough that the tick windows overlap often (today's 50 Hz + ~120 Hz worst case doesn't).
+
+*The old packet-rate trigger is obsolete — under continuous streaming the rate is
+`1000 / refreshIntervalMs` by construction, so `GET /api/rest/perf/artnet-rates` now reads as a
+configuration check, not a contention one.*
 
 ---
 
 ## Frontend polish
 
-### `FU-FE-REBIND-INPLACE` — In-place "Rebind" UX for dead assignments
+### `FU-FE-REBIND-INPLACE`
 
-**Status**: Trigger (operator feedback)
-**Origin**: Cue-authoring Phase 6, deferred 2026-04-22
+**In-place "Rebind" for dead assignments** · Trigger · Cue-authoring Phase 6, deferred 2026-04-22
 
-`DeadAssignmentsBanner` / `DeadPresetAssignmentsBanner` ship a single Remove
-button per dead row. The plan's original framing called for a "Rebind" quick-
-action that opens a picker pre-populated with the dead assignment's property +
-value and creates a new row on commit. We shipped the simpler Remove-and-re-
-author flow.
+`DeadAssignmentsBanner` / `DeadPresetAssignmentsBanner` ship one Remove button per dead row. The
+plan wanted a Rebind quick-action opening a picker pre-populated with the dead assignment's
+property + value; we shipped Remove-and-re-author instead.
 
-**Trigger to revisit**: operator feedback asks for it.
-`PropertyChannelWriter` (Phase 7) can drive live-preview of the proposed
-rebind — implementation is unblocked.
+**Trigger**: an operator asks for it. Implementation is unblocked — `PropertyChannelWriter`
+(Phase 7) can drive live preview of the proposed rebind.
 
-### `FU-FE-HEALTH-BADGE` — Shared `<HealthBadge>` for AssignmentHealth
+### `FU-FE-HEALTH-BADGE`
 
-**Status**: Trigger (4th display surface)
-**Origin**: `moveInDark` row-list editor, 2026-04-25
+**Shared `<HealthBadge>` for `AssignmentHealth`** · Trigger · `moveInDark` row-list editor,
+2026-04-25
 
-`AssignmentHealth` is now rendered in three places:
-[`DeadAssignmentsBanner.tsx`](https://github.com/cjcormack/lighting-react/blob/main/src/components/cues/editor/DeadAssignmentsBanner.tsx),
-[`DeadPresetAssignmentsBanner.tsx`](https://github.com/cjcormack/lighting-react/blob/main/src/components/presets/DeadPresetAssignmentsBanner.tsx),
-and `PropertyAssignmentsList.tsx`. All three use `describeHealth()` from
-`lib/healthDescriptor.ts` for the label, but each wraps it in its own
-`<Badge>` / `<Alert>` markup. Worth extracting a small `<HealthBadge
-health={...} />` once a fourth surface needs it (likely candidates: cue
-detail sheet, surface bindings list).
+`AssignmentHealth` renders in three places — `DeadAssignmentsBanner.tsx`,
+`DeadPresetAssignmentsBanner.tsx`, `PropertyAssignmentsList.tsx`. All three use `describeHealth()`
+from `lib/healthDescriptor.ts` for the label but wrap it in their own `<Badge>` / `<Alert>`.
 
-**Trigger to revisit**: a new UI surface needs to render `AssignmentHealth` —
-extract then rather than now. Three call sites with stable display patterns
-isn't enough to overcome the cost of the abstraction.
+**Trigger**: a fourth surface needs it (likely the cue detail sheet or the surface bindings list).
+Three call sites with stable display patterns don't pay for the abstraction.
 
-### `FU-FE-USE-TARGET-PROPERTIES` — Shared hook for fixture/group property lookup
+### `FU-FE-USE-TARGET-PROPERTIES`
 
-**Status**: Trigger (next consumer)
-**Origin**: `moveInDark` row-list editor, 2026-04-25
+**Shared hook for fixture/group property lookup** · Trigger · `moveInDark` row-list editor,
+2026-04-25
 
-`PropertyAssignmentsList.tsx::useTargetProperties` fetches a fixture's or
-group's available properties via `useFixtureListQuery` / `useGroupPropertiesQuery`
-and maps to a uniform shape. The same fetch-and-map pattern appears in
-`FixtureContent.tsx`, `GroupCard.tsx`, `PresetEditor.tsx`,
-`PresetLivePreview.tsx`, and the busking target panel — each one re-doing the
-property categorization inline. Extract a `useTargetProperties(selection)` hook
-in `src/hooks/` returning a flat `AvailableProperty[]` (and ideally a
-categorized variant for surfaces that need colour/dimmer/position grouping).
+`PropertyAssignmentsList.tsx::useTargetProperties` fetches a fixture's or group's properties via
+`useFixtureListQuery` / `useGroupPropertiesQuery` and maps to a uniform shape. The same
+fetch-and-map appears in `FixtureContent.tsx`, `GroupCard.tsx`, `PresetEditor.tsx`,
+`PresetLivePreview.tsx` and the busking target panel, each re-doing the categorisation inline.
+Extract `useTargetProperties(selection)` into `src/hooks/`, returning a flat `AvailableProperty[]`
+plus a categorised variant for surfaces that need colour/dimmer/position grouping.
 
-**Trigger to revisit**: the next time a sixth consumer needs the same lookup,
-or a property-shape change forces a multi-file edit. Today's three
-implementations are stable; pulling them together is mechanical churn that
-risks breaking visual regressions until the next consumer pays for itself.
+**Trigger**: a sixth consumer, or a property-shape change that forces a multi-file edit. Today's
+implementations are stable, so pulling them together now is churn that risks visual regressions.
 
 ---
 
-## Backend / composition model
+## Speed masters
 
-### `FU-SPEED-SURFACE-TAP-LED` — LED feedback for tempo tap buttons
+### `FU-SPEED-SURFACE-TAP-LED`
 
-**Status**: Trigger (an operator wants confirmation on the surface)
-**Origin**: Speed-master follow-ups session (2026-08-14), deliberate v1 cut
+**LED feedback for tempo tap buttons** · Trigger · Speed-master follow-ups (2026-08-14), v1 cut
 
-`BindingTarget.SpeedMasterTap` deliberately gets no LED. Every entry
-`SurfaceFeedbackPublisher` currently indexes for LEDs (`Flash`, `Blackout`,
-`GrandMasterToggle`) reflects a **steady boolean it can read back**; a tap is a
-momentary trigger with no "on" state to hold, so a blink-on-tap would need
-timer/debounce machinery that exists nowhere else in that class. The nearest
-existing shape is `FlashStateTracker`'s press/release pair, which a tap has no
-release half for. `SurfaceFeedbackPublisherTest` pins the cut with a test
-asserting tap bindings never enter the LED index — update that test rather than
-deleting it.
+`BindingTarget.SpeedMasterTap` deliberately gets no LED. Everything `SurfaceFeedbackPublisher`
+indexes for LEDs (`Flash`, `Blackout`, `GrandMasterToggle`) reflects a **steady boolean it can
+read back**; a tap is momentary with no "on" state, so blink-on-tap needs timer/debounce
+machinery that exists nowhere else in that class. The nearest existing shape,
+`FlashStateTracker`'s press/release pair, has a release half a tap doesn't.
+`SurfaceFeedbackPublisherTest` pins the cut — update that test rather than deleting it.
 
-**Trigger to revisit**: an operator taps tempo from hardware and asks why the
-button doesn't acknowledge, or a second momentary-with-no-steady-state target
-type appears and the two can share the machinery.
+**Trigger**: an operator taps from hardware and asks why the button doesn't acknowledge, or a
+second momentary-with-no-steady-state target appears and the two can share the machinery.
 
-### `FU-SPEED-RATEMASTER-STATEFUL` — rate masters are inert for STATEFUL wall-clock effects
+### `FU-SPEED-RATEMASTER-STATEFUL`
 
-**Status**: Trigger (a stateful effect wants to follow a rate master)
-**Origin**: Speed-master follow-ups session (2026-08-14)
+**Rate masters are inert for STATEFUL wall-clock effects** · Trigger · Speed-master follow-ups,
+2026-08-14
 
-The rate master scales `accumulatedScaledMs`, which reaches an effect as its
-*phase*. STATEFUL effects are driven by `deltaMs` instead and mostly ignore
-phase — both shipped wall-clock effects (`CandleFlicker`, `FluorescentFlicker`)
-do — so assigning them a rate master is legal, persisted, and has no audible
-effect. The UI deliberately does **not** gate the picker on `effectMode`:
-`calculateWallClockPhase` is called for every wall-clock effect regardless, and
-a user `.fx.kts` that is STATEFUL *and* reads `phase` would be scaled correctly,
-so gating would hide a working control.
+The rate master scales `accumulatedScaledMs`, which reaches an effect as its *phase*. STATEFUL
+effects are driven by `deltaMs` and mostly ignore phase — both shipped wall-clock effects
+(`CandleFlicker`, `FluorescentFlicker`) do — so assigning them a rate master is legal, persisted,
+and silent.
 
-Making it apply to `deltaMs` too would mean handing each effect a scaled delta,
-which changes what `deltaMs` means for every stateful effect — a bigger decision
-than it looks.
+The UI deliberately does **not** gate the picker on `effectMode`: `calculateWallClockPhase` runs
+for every wall-clock effect, so a user `.fx.kts` that is STATEFUL *and* reads `phase` scales
+correctly, and gating would hide a working control. Making it apply to `deltaMs` too would change
+what `deltaMs` means for every stateful effect — a bigger decision than it looks.
 
-**Trigger to revisit**: someone writes a stateful wall-clock effect and expects
-a rate master to speed it up.
+**Trigger**: someone writes a stateful wall-clock effect and expects a rate master to speed it up.
 
-### `FU-SPEED-PER-ATTRIBUTE` — per-attribute masters inside one FX instance
+### `FU-SPEED-PER-ATTRIBUTE`
 
-**Status**: Trigger (a composite needs split tempos)
-**Origin**: Programmer redesign §3.6, promoted on Session 5 landing (2026-08-14)
+**Per-attribute masters inside one FX instance** · Trigger · Programmer redesign §3.6, promoted
+2026-08-14
 
-`FxInstance.speedMasterUuid` is per *instance*, which already gives "different
-speeds for different properties" for everything except composites: a position
-wave on master 2 and a dimmer chase on master 1 are simply two instances. MA3
-assigns masters per-attribute *inside* one phaser; here that would mean a
-composite (`Effect.calculateComposite`, e.g. `LightningStrike`) whose outputs
-advance on different clocks.
+`FxInstance.speedMasterUuid` is per *instance*, which already gives per-property speeds for
+everything except composites — a position wave on master 2 and a dimmer chase on master 1 are
+simply two instances. MA3 assigns masters per-attribute *inside* one phaser; here that means a
+composite (`Effect.calculateComposite`, e.g. `LightningStrike`) whose outputs advance on
+different clocks.
 
-Cut deliberately, not missed — a composite computes every output from a single
-phase, and that coupling is the whole reason it is a composite rather than N
-instances. Splitting it means `calculateComposite` taking a per-output phase map
-instead of one phase, and a picker that can address a constituent.
+Cut deliberately: a composite computes every output from a single phase, and that coupling is why
+it's a composite rather than N instances. Splitting it means `calculateComposite` taking a
+per-output phase map, plus a picker that can address a constituent.
 
-**Trigger to revisit**: an operator wants one shipped composite's constituents on
-different tempos and cannot express it as separate instances.
-
-### `FU-PROG-L3RESOLVER-RENAME` — rename `Layer3Resolver` to `CueAssignmentResolver`
-
-**Status**: Ready (standalone mechanical commit)
-**Origin**: Programmer redesign Session 1 (2026-08), decision §5.9
-
-The programmer redesign renumbered the layer stack (cue property assignments are
-now **Layer 4**), but `Layer3Resolver`, `Layer3Resolver.Key`,
-`LayerResolver.currentLayer3State`, `republishLayer3Assignments`, and
-`publishLayer3ToControllers` keep the old number baked into their names — a
-deliberate Session 1 scope cut (~25-file mechanical churn in the middle of
-delicate engine surgery). The KDoc on each names the mismatch. Do the rename as
-its own commit with no behavioural changes: `Layer3Resolver` →
-`CueAssignmentResolver`, `currentLayer3State` → `currentCueLayerState`, and the
-`*Layer3*` engine internals to match. Grep docs afterwards — the composition
-model doc points at this item.
-
-### `FU-PROG-VIS-SOURCE` — Stage3D vis-source selector
-
-**Status**: Ready (severed from Session 3, which shipped without it)
-**Origin**: Programmer redesign §3.7 / Session 3 (2026-08)
-
-Stage3D renders the final merged DMX output only. The proposal asks for a source
-selector: `Output` (today) / `Output + Programmer` (see blind edits over the live
-show) / `Programmer only` / `Next GO` (preview the next cue in the active stack).
-
-Two are cheap and one is not:
-
-- `Output + Programmer` is identical to `Output` unless Blind is on, so it only
-  needs work for the blind case.
-- `Programmer only` has a shortcut nobody has used yet: `ProgrammerState.channels`
-  (`src/api/programmerWsApi.ts`) already arrives on every `programmer.state`
-  snapshot and is consumed by nothing. It refreshes on the 100 ms provenance
-  debounce rather than at wire rate, and `ProgrammerApi` exposes no per-channel
-  subscribe, so a `subscribeToChannelValue` mirroring `channelsApi` is the missing
-  piece.
-- `Next GO` has no data behind it at all — there is no client-side cue resolver,
-  and turning Layer 4 assignments into channel values in the browser would mean
-  reimplementing the backend merge. It needs a backend preview-compose endpoint or
-  WS channel first.
-
-Note when picking this up: `FixtureModel`'s value reads all funnel through
-`getChannelValue` / `useLiveColour`, so swapping the source is largely "inject a
-value provider instead of importing `lightingApi.channels`". Also note the preview
-pane is Chromium while the rig is driven from Safari, so a clean preview is not
-proof for WebGL-adjacent changes.
-
-### `FU-PROG-PER-USER` — per-user programmers
-
-**Status**: Trigger (a second operator)
-**Origin**: Programmer redesign §5 decision 2, promoted on Session 5 landing (2026-08-14)
-
-`ProgrammerStore` is a **single shared programmer** — a locked decision for a
-solo-operator system, and the reason two browser tabs see each other's edits (the
-`provenanceState` broadcast is what tells the second tab to re-read
-`programmer.state`). MA3 gives each user their own.
-
-The store is keyed so the change is mechanical rather than structural: `Slot`
-already carries a `ProgrammerOwner`, and a user dimension is another key
-component beside `(target, propertyName)`. The expensive half is everywhere the
-programmer is *read* as a singleton — the blind gate, Clear, Record/Include/Update,
-the sheets' provenance colouring, and the `programmer.*` broadcast fan-out would
-all need a user scope, and the merge would need a rule for two users holding the
-same property.
-
-**Trigger to revisit**: two people programming one show at once — a second
-operator on a tablet whose edits must not appear on the first's stage.
-
-### `FU-PROG-STAGED-CLEAR` — MA-style staged three-press Clear
-
-**Status**: Trigger (the simple Clear bites)
-**Origin**: Programmer redesign §5 decision 6, promoted on Session 5 landing (2026-08-14)
-
-Clear ships as one action with a fade time, plus clear-selected and the
-FX-vs-values split (`ProgrammerToolbar` disables it only when both are empty).
-MA stages it: first press clears the selection, second clears values, third
-clears the whole programmer — muscle memory built for a hardware key, which is
-why it was cut for a web UI where the three are separate controls anyway.
-
-Decision §5.6 named its own trigger: **revisit if the simple version bites.**
-Concretely that means an operator reporting they cleared more than they meant to,
-or reaching for Clear repeatedly to get a partial release.
-
-### `FU-PROG-HIGHLIGHT-PERSONALITY` — highlight/lowlight personality values
-
-**Status**: Trigger (a rig big enough to lose a head in)
-**Origin**: Programmer redesign §6 deferred list, promoted on Session 5 landing (2026-08-14)
-
-`useHighlight` (`lighting-react/src/components/fixtures-list/useHighlight.ts`)
-takes every selected target's **dimmer to full** while held and restores the
-previous programmer state on release. Consoles do more: a per-fixture-type
-*highlight personality* — open the shutter, drop the gobo, go to open white,
-sometimes centre the head — so a highlighted moving head is actually findable,
-plus **lowlight**, which dims everything *not* selected instead.
-
-Scope, if picked up: a highlight-value set on the fixture type (natural home is
-the trait/`FixtureTypeRegistry` layer that already knows a fixture has a shutter
-or a colour wheel), with `useHighlight` writing the whole set rather than one
-dimmer property. Its capture/restore machinery is already per-property and
-per-target, so it widens rather than changes shape. Lowlight is the cheaper half
-and needs no personality data — invert the target set and scale.
-
-**Trigger to revisit**: an operator can't pick their highlighted head out of a
-wash, or asks for lowlight by name.
+**Trigger**: an operator wants one shipped composite's constituents on different tempos and can't
+express it as separate instances.
 
 ---
 
-### `FU-PAL-PRESET-MAKE-HARD` — Make Hard for FX preset assignments
+## Programmer
 
-**Status**: Ready
-**Origin**: Programmer redesign Session 4 (2026-08), deliberately cut
+### `FU-PROG-L3RESOLVER-RENAME`
+
+**Rename `Layer3Resolver` to `CueAssignmentResolver`** · Ready · Programmer redesign Session 1,
+decision §5.9
+
+The redesign renumbered the layer stack — cue property assignments are now **Layer 4** — but
+`Layer3Resolver`, `Layer3Resolver.Key`, `LayerResolver.currentLayer3State`,
+`republishLayer3Assignments` and `publishLayer3ToControllers` keep the old number. A deliberate
+Session 1 cut (~25 files of mechanical churn mid-surgery); the KDoc on each names the mismatch.
+
+Do it as its own commit, no behavioural change: `Layer3Resolver` → `CueAssignmentResolver`,
+`currentLayer3State` → `currentCueLayerState`, `*Layer3*` internals to match. Grep docs
+afterwards — the composition model doc points here.
+
+### `FU-PROG-VIS-SOURCE`
+
+**Stage3D vis-source selector** · Ready · Programmer redesign §3.7 / Session 3
+
+Stage3D renders final merged DMX only. The proposal asks for a source selector: `Output` (today) /
+`Output + Programmer` / `Programmer only` / `Next GO`.
+
+- **`Output + Programmer`** is identical to `Output` unless Blind is on, so only the blind case
+  needs work.
+- **`Programmer only`** has an unused shortcut: `ProgrammerState.channels`
+  (`src/api/programmerWsApi.ts`) already arrives on every `programmer.state` snapshot and is
+  consumed by nothing. It refreshes on the 100 ms provenance debounce rather than at wire rate,
+  and `ProgrammerApi` exposes no per-channel subscribe — a `subscribeToChannelValue` mirroring
+  `channelsApi` is the missing piece.
+- **`Next GO`** has no data behind it. There is no client-side cue resolver, and turning Layer 4
+  assignments into channel values in the browser means reimplementing the backend merge. Needs a
+  backend preview-compose endpoint or WS channel first.
+
+Two notes for pickup: `FixtureModel`'s value reads all funnel through `getChannelValue` /
+`useLiveColour`, so swapping source is largely "inject a value provider instead of importing
+`lightingApi.channels`". And the preview pane is Chromium while the rig runs from Safari, so a
+clean preview isn't proof for WebGL-adjacent changes.
+
+### `FU-PROG-PER-USER`
+
+**Per-user programmers** · Trigger · Programmer redesign §5 decision 2, promoted 2026-08-14
+
+`ProgrammerStore` is a **single shared programmer** — a locked decision for a solo-operator
+system, and why two browser tabs see each other's edits (the `provenanceState` broadcast tells
+the second tab to re-read `programmer.state`). MA3 gives each user their own.
+
+The store is keyed so the change is mechanical rather than structural: `Slot` already carries a
+`ProgrammerOwner`, and a user dimension is another key component beside `(target, propertyName)`.
+The expensive half is everywhere the programmer is *read* as a singleton — the blind gate, Clear,
+Record/Include/Update, provenance colouring, the `programmer.*` fan-out — plus a merge rule for
+two users holding the same property.
+
+**Trigger**: two people programming one show at once — a second operator on a tablet whose edits
+must not appear on the first's stage.
+
+### `FU-PROG-STAGED-CLEAR`
+
+**MA-style staged three-press Clear** · Trigger · Programmer redesign §5 decision 6, promoted
+2026-08-14
+
+Clear ships as one action with a fade time, plus clear-selected and the FX-vs-values split
+(`ProgrammerToolbar` disables it only when both are empty). MA stages it: first press clears
+selection, second values, third the whole programmer — muscle memory built for a hardware key,
+which is why it was cut for a web UI where the three are separate controls anyway.
+
+**Trigger**, as decision §5.6 named it: an operator reports clearing more than they meant to, or
+reaches for Clear repeatedly to get a partial release.
+
+### `FU-PROG-HIGHLIGHT-PERSONALITY`
+
+**Highlight/lowlight personality values** · Trigger · Programmer redesign §6, promoted 2026-08-14
+
+`useHighlight` (`lighting-react/src/components/fixtures-list/useHighlight.ts`) takes every
+selected target's dimmer to full while held and restores on release. Consoles do more: a
+per-fixture-type *highlight personality* — open the shutter, drop the gobo, open white, sometimes
+centre the head — so a highlighted moving head is findable; plus **lowlight**, which dims
+everything *not* selected.
+
+Scope: a highlight-value set on the fixture type (natural home is the trait /
+`FixtureTypeRegistry` layer that already knows a fixture has a shutter or colour wheel), with
+`useHighlight` writing the whole set rather than one property. Its capture/restore machinery is
+already per-property and per-target, so it widens rather than changes shape. Lowlight is the
+cheaper half and needs no personality data — invert the target set and scale.
+
+**Trigger**: an operator can't pick their highlighted head out of a wash, or asks for lowlight.
+
+---
+
+## Palettes
+
+### `FU-PAL-PRESET-MAKE-HARD`
+
+**Make Hard for FX preset assignments** · Ready · Programmer redesign Session 4, deliberately cut
 
 Make Hard ships at programmer level (`POST /programmer/make-hard`) and cue level
-(`POST /project/{id}/cues/{cueId}/make-hard`). Preset assignments can hold
-`ref:` values too — `buildLayer3AssignmentsForPreset` resolves them per member —
-but have no equivalent, so a palette referenced only from a preset can't be
-detached from it.
+(`POST /project/{id}/cues/{cueId}/make-hard`). Preset assignments can hold `ref:` values too —
+`buildLayer3AssignmentsForPreset` resolves them per member — but have no equivalent, so a palette
+referenced only from a preset can't be detached.
 
-Cut rather than missed: preset property assignments are **target-less**. A cue
-row names the fixture or group it applies to, and hardening it means resolving
-that reference for that target; a preset row says "whatever this preset is
-applied to", which at hardening time is a set the preset doesn't know. Hardening
-one therefore means inventing a target set — either the union of every current
-`CuePresetApplication`'s targets (wrong the moment the preset is applied
-somewhere new) or a set the operator supplies (a different, larger UI). Decide
-which before picking this up; the route is the easy part.
+Cut rather than missed: preset property assignments are **target-less**. A cue row names the
+fixture or group it applies to; a preset row says "whatever this preset is applied to", which at
+hardening time is a set the preset doesn't know. So hardening means inventing a target set —
+either the union of every current `CuePresetApplication`'s targets (wrong the moment the preset is
+applied somewhere new) or a set the operator supplies (a larger UI). **Decide which before picking
+this up**; the route is the easy part.
 
----
+### `FU-PAL-POSITIONAL-CONVERSION`
 
-### `FU-PAL-POSITIONAL-CONVERSION` — convert `P1`/`P2` colour lists to named palettes
+**Convert `P1`/`P2` colour lists to named palettes** · Trigger · Programmer redesign §3.5 /
+Session 4, deferred
 
-**Status**: Ready
-**Origin**: Programmer redesign §3.5 / Session 4 (2026-08), explicitly deferred
+Two unrelated things are called "palette": the positional ordered colour list that FX params index
+as `P1`/`P2`/`P*` (global / stack / cue scopes, `PaletteCascade.effective`), and the Session-4
+named `Palette` entity. Session 4 left the old one untouched and relabelled it **"Colour List"**
+throughout the UI, removing the confusion without removing the duplication.
 
-Two unrelated things are called "palette": the positional ordered colour list
-that FX parameters index as `P1`/`P2`/`P*` (global / stack / cue scopes,
-`PaletteCascade.effective`), and the Session-4 named `Palette` entity. Session 4
-left the old one functionally untouched and relabelled it **"Colour List"**
-throughout the UI, which removes the confusion without removing the duplication.
+A conversion tool would take a cue's or stack's colour list and mint a named COLOUR palette per
+entry, rewriting the FX params that index it. The hard part isn't the minting: a positional entry
+is a bare colour with no fixture attached while a named palette entry is per-fixture, so the
+conversion must choose which fixtures the new palette covers — the cue's targets is the obvious
+answer and not always the right one.
 
-A conversion tool would take a cue's or stack's colour list and mint a named
-COLOUR palette per entry, rewriting the FX params that index it. The hard part
-is not the minting: a positional entry is a bare colour with no fixture
-attached, while a named palette entry is per-fixture, so the conversion has to
-choose which fixtures the new palette covers — the cue's targets is the obvious
-answer and is not always the right one.
+**Trigger**: a show is found maintaining the same colours in both forms. Until then the two
+coexist and the relabel carries the distinction.
 
-Trigger: pick this up when a show is found maintaining the same colours in both
-forms, not before. Until then the two coexist happily and the relabel carries
-the distinction.
+### `FU-PAL-APPLY-NEAREST-COVERAGE`
 
----
+**Fan a palette onto fixtures it doesn't cover** · Trigger · Programmer redesign Session 4, cut as
+fuzzy
 
-### `FU-PAL-APPLY-NEAREST-COVERAGE` — fan a palette onto fixtures it doesn't cover
+Applying a palette skips targets it holds no entry for and names them in a warning
+(`paletteCoverageWarnings` in `lighting-react/src/components/palettes/applyPalette.ts`).
+Skip-and-report is deliberate: resolving an uncovered fixture to its "nearest" covered neighbour
+is guesswork — *plausible* for COLOUR (one colour usually suits a wash), actively wrong for
+POSITION, and a rule that behaves differently per type is worse than no rule.
 
-**Status**: Trigger — an operator asks for it
-**Origin**: Programmer redesign Session 4 (2026-08), cut as fuzzy
+**Trigger**: an operator asks. If they do, scope it to COLOUR and make it an explicit gesture
+("apply, filling gaps") rather than a mode on the existing one.
 
-Applying a palette to a selection skips targets the palette holds no entry for,
-and names them in a warning (`paletteCoverageWarnings` in
-`lighting-react/src/components/palettes/applyPalette.ts`). Skip-and-report is
-the only behaviour, deliberately: the alternative — resolve an uncovered fixture
-to its "nearest" covered neighbour — is guesswork. For COLOUR it is *plausible*
-guesswork (one colour usually suits a whole wash), but for POSITION it is
-actively wrong, and a rule that behaves differently per type is worse than no
-rule.
+### `FU-PAL-LINKED`
 
-Revisit only if an operator asks, and if they do, scope it to COLOUR and make it
-an explicit gesture ("apply, filling gaps") rather than a mode on the existing
-one.
+**Linked palettes — a palette entry referencing another palette** · Trigger · Programmer redesign
+§2, promoted 2026-08-14
 
----
+A `Palette` entry holds a resolved `PropertyValue` per fixture. Consoles also let one palette
+*reference* another, so "Warm Wash" can be defined as "House Amber" and follow it — the same
+touring leverage the cue→palette reference gives, one level up.
 
-### `FU-PAL-LINKED` — linked palettes (a palette entry that references another palette)
+Closer than it looks: `resolveAssignmentValueForFixture` is the single door for `ref:{uuid}` and
+already runs before `parseAssignmentValue`, so a palette entry whose stored value is a `ref:`
+resolves through the same path. Genuinely new: **cycle detection** (A → B → A refused at write
+time, not discovered at 50 Hz), depth-bounded resolution inside `PaletteRegistry`'s version-counter
+cache, republish-on-palette-edit walking the reference graph rather than one hop, and a
+`PALETTE_IN_USE` delete guard that counts palette-to-palette references.
 
-**Status**: Trigger (a palette maintained as a copy of another)
-**Origin**: Programmer redesign §2 ("phase-later at most"), promoted on Session 5 landing (2026-08-14)
-
-A `Palette` entry holds a resolved `PropertyValue` per fixture. Consoles also let
-one palette *reference* another, so "Warm Wash" can be defined as "House Amber"
-and follow it when that changes — the same touring leverage the cue→palette
-reference gives, one level up.
-
-Session 4 shipped only the cue/preset/programmer → palette direction, and the
-machinery is closer than it looks: `resolveAssignmentValueForFixture` is the
-single door for `ref:{uuid}` and already runs before `parseAssignmentValue`, so a
-palette entry whose stored value is a `ref:` would resolve through the same path.
-What is genuinely new is **cycle detection** (A → B → A must be refused at write
-time, not discovered at 50 Hz), depth-bounded resolution inside `PaletteRegistry`'s
-version-counter cache, and extending republish-on-palette-edit to walk the
-reference graph rather than one hop — plus a `PALETTE_IN_USE` delete guard that
-counts palette-to-palette references too.
-
-**Trigger to revisit**: a show is found keeping one palette hand-synced to
-another, which is the same signal `FU-PAL-POSITIONAL-CONVERSION` waits on. If both
-fire together, do the conversion first — it decides how many palettes exist.
+**Trigger**: a show keeps one palette hand-synced to another — the same signal
+`FU-PAL-POSITIONAL-CONVERSION` waits on. If both fire, do the conversion first; it decides how
+many palettes exist.
 
 ---
 
 ## Desk accounts
 
-Origin for everything here is the multi-user-auth plan, closed out 2026-08-17
-([`completed/multi-user-auth-plan.md`](completed/multi-user-auth-plan.md)). Five **Ready**
-items were raised reviewing the shipped Users tab and QR reset flow; **all five landed
-2026-08-17** (see Completed). `FU-WS-USER-INVALIDATION` came out of building the last of them and
-landed the same day, leaving `FU-AUTH-STALE-ANON-SOCKET` as the one **Ready** item here and two
-staleness items behind it. The five **Trigger** items further down are that plan's
-§"Deliberately out of scope" list, promoted on close-out. Reference doc:
-[`docs/desk-accounts.md`](../desk-accounts.md) — now also the record for the device-login QR.
-The one unverified behaviour is `FU-MANUAL-AUTH-QR-SCAN` under "Manual hardware validation".
+Everything here originates in the multi-user-auth plan, closed out 2026-08-17
+([`completed/multi-user-auth-plan.md`](completed/multi-user-auth-plan.md)); the durable reference
+is [`docs/desk-accounts.md`](../desk-accounts.md). The five Trigger items from
+`FU-AUTH-ATTRIBUTION` down are that plan's §"Deliberately out of scope" list, promoted on
+close-out. The desk is **locked** — not bootstrap-open — so `RESET-ADMIN` is the way back in if
+the admin password is lost.
 
-### `FU-AUTH-STALE-ANON-SOCKET` — a bootstrap-open socket outlives the bootstrap
+### `FU-AUTH-STALE-ANON-SOCKET`
 
-**Status**: Ready (small, but it is a security boundary — decide deliberately)
-**Origin**: Noticed implementing `FU-WS-USER-INVALIDATION`, 2026-08-17
+**A bootstrap-open socket outlives the bootstrap** · Ready (small, but it's a security boundary —
+decide deliberately) · Noticed implementing `FU-WS-USER-INVALIDATION`, 2026-08-17
 
 The socket auth gate runs at **upgrade time only** (`plugins/Sockets.kt`: resolve the cookie,
-close 4401 if `hasAnyUser` and there is no session). On a desk with zero accounts it admits
-everyone, which is what makes a fresh install usable. But a socket admitted that way keeps full
-access after the desk gains its first admin — nothing re-checks it, and `scope.user` stays null
-for the life of the connection.
+close 4401 if `hasAnyUser` and there's no session). On a desk with zero accounts it admits
+everyone, which is what makes a fresh install usable — but a socket admitted that way keeps full
+access after the desk gains its first admin. Nothing re-checks it, and `scope.user` stays null for
+the life of the connection.
 
-In practice the window is short and the frontend closes it by accident: completing setup calls
-`reconnect(true)`, and the new socket is gated properly. What is *not* covered is a second tab, or
-any client that was already connected and never re-handshakes. `FU-WS-USER-INVALIDATION` mitigated
-the visible half of this — an anonymous socket now receives `ownAccountChanged` when the first
-account appears, so its `auth/status` re-read moves it to the login screen — but that is
-cache coherence doing a gate's job.
+The frontend closes the window by accident: completing setup calls `reconnect(true)` and the new
+socket is gated properly. Not covered: a second tab, or any client already connected that never
+re-handshakes. `FU-WS-USER-INVALIDATION` mitigated the visible half — an anonymous socket now gets
+`ownAccountChanged` when the first account appears — but that is cache coherence doing a gate's
+job.
 
-The real fix is two lines in the `userChanges` collector in `plugins/MachineSocket.kt`:
+The fix is two lines in the `userChanges` collector in `plugins/MachineSocket.kt`:
 
 ```kotlin
 if (scope.user == null && scope.state.authService.hasAnyUser) {
@@ -532,1890 +414,641 @@ if (scope.user == null && scope.state.authService.hasAnyUser) {
 }
 ```
 
-Deliberately not folded into that change, because closing a live socket is a different kind of
-decision from invalidating a cache, and it wants its own thought about the setup-race ordering
-(the tab that *performed* setup must not be closed out from under itself before its own cookie
-lands).
+Deliberately not folded into that change: closing a live socket is a different decision from
+invalidating a cache, and it wants its own thought about setup-race ordering — the tab that
+*performed* setup must not be closed out from under itself before its own cookie lands.
 
-### `FU-AUTH-RESET-TOKEN-STALENESS` — reset-link history goes stale between admins
+### `FU-AUTH-RESET-TOKEN-STALENESS`
 
-**Status**: Trigger (two admins routinely administering the same desk)
-**Origin**: Scoped out of `FU-WS-USER-INVALIDATION`, 2026-08-17
+**Reset-link history goes stale between admins** · Trigger · Scoped out of
+`FU-WS-USER-INVALIDATION`, 2026-08-17
 
-`userChanges` fires on **account-row writes**, and minting a reset token is not one. So with
+`userChanges` fires on **account-row writes**, and minting a reset token isn't one. With
 `UserDetailSheet` open on user X, two things go unnoticed:
 
-1. **Another admin mints a link for X.** The history list misses the new PENDING row *and* the
-   row it superseded (minting retires the previous one).
-2. **Anything that calls `cancelOutstandingResetTokens`** — `rotatePassword`, or
+1. **Another admin mints a link for X** — the history misses the new PENDING row *and* the row it
+   superseded (minting retires the previous one).
+2. **Anything calling `cancelOutstandingResetTokens`** — `rotatePassword`, or
    `updateUser(disabled = true)` — silently turns a PENDING row CANCELLED.
 
-Display-only: `ResetToken` (the QR sheet's own poll) still self-heals, so nobody acts on a link
-that has died. **Do not "fix" this by adding `ResetTokenList` to the WS bridge in
-`store/users.ts`.** That bridge only fires on account writes, so it would cover case 2 and miss
-case 1 — worse than covering neither, because it would look solved. The honest shapes are a
-second flow keyed on token writes, or a poll on the history list while the sheet is open.
+Display-only: `ResetToken` (the QR sheet's own poll) still self-heals, so nobody acts on a dead
+link. **Do not "fix" this by adding `ResetTokenList` to the WS bridge in `store/users.ts`** — that
+bridge fires only on account writes, so it covers case 2 and misses case 1, which is worse than
+covering neither because it looks solved. The honest shapes are a second flow keyed on token
+writes, or a poll on the history list while the sheet is open.
 
-### `FU-AUTH-SESSION-LIST-STALENESS` — a new sign-in doesn't appear in the Devices list
+### `FU-AUTH-SESSION-LIST-STALENESS`
 
-**Status**: Trigger (someone asks "why isn't my phone listed?")
-**Origin**: Scoped out of `FU-WS-USER-INVALIDATION`, 2026-08-17
+**A new sign-in doesn't appear in the Devices list** · Trigger · Scoped out of
+`FU-WS-USER-INVALIDATION`, 2026-08-17
 
-Sign in on your phone and the desk's Profile → Devices panel doesn't notice until it refetches.
-Every *other* path that changes a session list either revokes the observer (so they get 4401 and
-the panel goes away with them) or is the observer's own mutation, which already invalidates
-`AuthSessions` locally. The one uncovered case is a **new** session appearing.
+Sign in on your phone and Profile → Devices doesn't notice until it refetches. Every *other* path
+that changes a session list either revokes the observer (4401, panel goes with it) or is the
+observer's own mutation, which already invalidates `AuthSessions` locally. The uncovered case is a
+**new** session appearing.
 
-This is coupled to a deliberate omission and stands or falls with it: the only place to emit from
-is `mintSession`, which is reached from `POST /auth/login` (auth-exempt, throttled) and
+Coupled to a deliberate omission and stands or falls with it: the only place to emit from is
+`mintSession`, reached from `POST /auth/login` (auth-exempt, throttled) and
 `POST /auth/device/{token}` (auth-exempt, LAN-public). Emitting there wires an **unauthenticated
 request path to a fan-out across every connected client** — a new amplification surface on the two
-endpoints that already needed `awaitThrottle` and `requireLanPeer`. The same reasoning is why
+endpoints that already needed `awaitThrottle` and `requireLanPeer`. Same reasoning is why
 `lastLoginAtMs` in the users list is allowed to be stale.
 
-If it does become worth doing, the shape that avoids the amplification is a *targeted* frame like
-`ownAccountChanged` — only the sockets of the user who just signed in — rather than a broadcast,
-plus whatever rate limiting the login throttle doesn't already give.
+If it becomes worth doing, the shape that avoids amplification is a *targeted* frame like
+`ownAccountChanged` — only the signing-in user's own sockets — plus whatever rate limiting the
+login throttle doesn't already give.
 
+### `FU-AUTH-ATTRIBUTION`
 
-### `FU-AUTH-ATTRIBUTION` — per-user attribution of edits
+**Per-user attribution of edits** · Trigger · Multi-user-auth §out of scope, promoted 2026-08-17
 
-**Status**: Trigger (a second person authoring the same show)
-**Origin**: Multi-user-auth plan §"Deliberately out of scope", promoted on close-out 2026-08-17
+Nothing records *who* made a change. `users.uuid` exists partly so it can be referenced later, and
+the auth half is already there — every gated request has an `AuthenticatedUser` in
+`call.attributes`. `created_by` / `modified_by` on cues, presets and patches is the obvious shape.
 
-Nothing records *who* made a change. `users.uuid` exists partly so it can be
-referenced later — a `created_by` / `modified_by` on cues, presets and patches is
-the obvious shape, and the auth half of it is already there (every gated request
-has an `AuthenticatedUser` in `call.attributes`).
+Why it isn't an auth ticket: those tables are **portable show content**, so a user reference means
+deciding what an attribution means on an install where that user doesn't exist. Users are
+machine-local by requirement, so either the column carries a uuid that dangles after import (and
+the UI renders "unknown user" gracefully), or the exporter denormalises a display name at write
+time. That's a `formatVersion` question for `docs/sync-engineering.md` — see
+`FU-SYNC-FORMAT-MIGRATIONS` for the framework it wants.
 
-The reason it isn't an auth ticket: those tables are **portable show content**, so
-adding a user reference to them means deciding what an attribution means on an
-install where that user doesn't exist. Users are machine-local by requirement, so
-either the column carries a uuid that dangles after import (and the UI must render
-"unknown user" gracefully), or the exporter denormalises a display name at write
-time. That's a `formatVersion` question for `docs/sync-engineering.md`, not a
-question about the auth gate — see `FU-SYNC-FORMAT-MIGRATIONS` for the migration
-framework it would want.
+**Trigger**: two accounts routinely edit one show and someone asks who changed a cue — or any
+`formatVersion` bump is already planned, in which case fold the column in rather than paying for a
+second migration.
 
-**Trigger to revisit**: two accounts routinely edit one show and someone asks who
-changed a cue — or any `formatVersion` bump is already being planned, in which case
-fold the column in rather than paying for a second migration.
+### `FU-AUTH-AUDIT-LOG`
 
-### `FU-AUTH-AUDIT-LOG` — a `user_audit` table for logins, resets and user changes
+**A `user_audit` table for logins, resets and user changes** · Trigger · Multi-user-auth §out of
+scope, promoted 2026-08-17
 
-**Status**: Trigger (a security question nobody can answer)
-**Origin**: Multi-user-auth plan §"Deliberately out of scope", promoted on close-out 2026-08-17
+Logins, failed logins, reset-token mints and redemptions, and user create/update/delete happen
+with no durable trace — INFO logs and nothing else. A machine-local `user_audit` table (same
+disposition as the other three, so it never leaves the desk) would make "did someone else sign in
+as me?" answerable.
 
-Logins, failed logins, reset-token mints and redemptions, and user create/update/
-delete all happen with no durable trace — they log at INFO and that's it. A
-machine-local `user_audit` table (same disposition as the other three, so it never
-leaves the desk) would make "did someone else sign in as me?" answerable.
+Two things narrowed the gap on 2026-08-17 without closing it: reset tokens keep a 30-day history
+with the minting admin's name, and sessions record `created_via` so a QR sign-in is
+distinguishable from a password one. **Device-login codes went the other way** — they live in
+memory, so a mint and a redemption leave nothing after a restart. The one auth event that hands
+out a session is the one with no durable trace at all, which is a decent argument for this item.
 
-Two things narrowed that gap on 2026-08-17 without closing it. Reset tokens now keep a
-30-day history with the minting admin's name (`FU-AUTH-RESET-TOKEN-HISTORY`), and sessions
-record `created_via`, so a QR sign-in is at least distinguishable from a password one in the
-devices list. **Device-login codes went the other way**: they live in memory, so a mint and a
-redemption leave *nothing* behind after a restart — the one auth event that hands out a
-session is the one with no durable trace at all, which is a decent argument for this item.
+The write sites already exist and are all inside `AuthService`, the only class touching the auth
+tables — so this is a table, a `record(...)` call per mutation, and a read surface. Settle two
+decisions first: **retention** (an append-only table on a desk that runs for years wants a cap or
+age prune, alongside `pruneExpiredSessionRows` / `pruneOldResetTokenRows`) and **where it
+surfaces** — a tab beside Users is cheap, the cloud-sync activity-log feed is better integrated.
 
-The write sites already exist and are all inside `AuthService`, which is the only
-class touching the auth tables — so this is a table, a `record(...)` call per
-mutation, and a read surface. Two decisions to settle first: **retention** (an
-append-only table on a desk that runs for years wants a cap or an age prune,
-alongside the existing `pruneExpiredSessionRows` / `pruneOldResetTokenRows`), and
-**where it surfaces** — a tab beside Users is the cheap answer, the activity-log
-feed the cloud-sync work already has is the better-integrated one.
+**Trigger**: someone wants to know who did something and the answer is "we can't tell" — or
+`FU-SYNC-FETCHING-STATE`'s activity-log extension lands and auth events can ride the same feed.
 
-**Trigger to revisit**: someone wants to know who did something and the answer is
-"we can't tell" — or `FU-SYNC-FETCHING-STATE`'s activity-log extension lands and
-auth events can ride the same feed.
+### `FU-AUTH-WS-PER-MESSAGE`
 
-### `FU-AUTH-WS-PER-MESSAGE` — per-message WebSocket authorisation
+**Per-message WebSocket authorisation** · Trigger · Multi-user-auth Decision 10, promoted
+2026-08-17
 
-**Status**: Trigger (an operator can do over WS what they can't do over REST)
-**Origin**: Multi-user-auth plan Decision 10, promoted on close-out 2026-08-17
+The socket is authenticated at handshake and revoked live (`AuthService.revocations` closes it
+4401), but **every message is available to any signed-in user**. An explicit decision, not an
+oversight: the REST gate's admin-only surfaces (users, install `PUT`, cloud sync, OAuth) have no
+socket equivalent, so today the socket carries nothing an operator shouldn't have.
 
-The socket is authenticated at handshake and revoked live (`AuthService.revocations`
-closes it with 4401), but **every message is available to any signed-in user**. That
-was an explicit decision, not an oversight: the REST gate's admin-only surfaces
-(users, install `PUT`, cloud sync, OAuth) have no socket equivalent, so today the
-socket carries nothing an operator shouldn't have.
+That stops being true the moment an admin-only capability grows a WS command. The hook is in place
+— `SocketScope` carries the resolved `AuthenticatedUser` (nullable, for a bootstrap-open desk) —
+so the work is a per-message role check at the dispatch site plus a decision about what an
+unauthorised message *answers* (an error frame, not a close: the socket is shared by every
+subscription).
 
-It stops being true the moment an admin-only capability grows a WS command. The
-hook is already in place — `SocketScope` carries the resolved `AuthenticatedUser`
-(nullable, for a bootstrap-open desk) — so the work is a per-message role check at
-the dispatch site plus a decision about what an unauthorised message *answers*
-(an error frame, not a close, since the socket is shared by every subscription).
+**Trigger**: an admin-only operation gains a socket command, or `FU-AUTH-OPERATOR-LOCKDOWN` lands
+and a locked-down control is also reachable over WS — otherwise the two are the same change made
+twice.
 
-**Trigger to revisit**: an admin-only operation gains a socket command, or
-`FU-AUTH-OPERATOR-LOCKDOWN` lands and any locked-down control is also reachable
-over WS — the two would be the same change made twice otherwise.
+### `FU-AUTH-OPERATOR-LOCKDOWN`
 
-### `FU-AUTH-OPERATOR-LOCKDOWN` — admin-only lockdown of specific controls
+**Admin-only lockdown of specific controls** · Trigger · Multi-user-auth §out of scope, promoted
+2026-08-17
 
-**Status**: Trigger (an operator changes something they shouldn't have)
-**Origin**: Multi-user-auth plan §"Deliberately out of scope", promoted on close-out 2026-08-17
+`OPERATOR` can do everything to show content: patch fixtures, delete projects, edit scripts. The
+role split is deliberately coarse — two roles, no per-project or per-fixture permissions — because
+the crew is familiar and physically present.
 
-`OPERATOR` can do everything to show content: patch fixtures, delete projects, edit
-scripts. The role split is deliberately coarse — two roles, no per-project or
-per-fixture permissions — because the crew is familiar and physically present.
+If that changes, `ADMIN_ONLY_PREFIXES` in `auth/AuthGate.kt` is the whole mechanism, and the shape
+matters more than the list: the gate matches **routing-normalised path prefixes**, so anything
+method-sensitive (as `PUT /api/rest/install` already is) needs a per-route `call.requireAdmin()`
+instead — patch editing and script editing are both read-for-everyone, write-for-admin, so they'd
+be the second and third instances of that pattern. Mirror any addition in
+`lighting-react/src/navigation.ts` (`adminOnly` on the `NavItem`) so Cmd+K stops offering a page
+that can only answer 403 — and remember that's presentation, never permission.
 
-If that changes, `ADMIN_ONLY_PREFIXES` in `auth/AuthGate.kt` is the whole
-mechanism, and the shape of the change matters more than the list: the gate matches
-**routing-normalised path prefixes**, so anything method-sensitive (as `PUT
-/api/rest/install` already is) needs a per-route `call.requireAdmin()` instead —
-patch editing and script editing are both read-for-everyone, write-for-admin, so
-they'd be the second and third instances of that pattern. Mirror any addition in
-`lighting-react/src/navigation.ts` (`adminOnly` on the `NavItem`) so Cmd+K stops
-offering a page that can only answer 403, and remember that is presentation, never
-permission.
+**Trigger**: an operator changes a patch or deletes a project and the desk owner asks for it to be
+locked. Do it then, driven by the actual case — a speculative split risks locking out the person
+who needs the control mid-show.
 
-**Trigger to revisit**: an operator changes a patch or deletes a project and the
-desk owner asks for it to be locked. Do it then, driven by the actual case — a
-speculative split risks locking out the person who needs the control mid-show.
+### `FU-AUTH-TLS-COOKIES`
 
-### `FU-AUTH-TLS-COOKIES` — HTTPS, `Secure` cookies, and the CSRF answer
+**HTTPS, `Secure` cookies, and the CSRF answer** · Trigger · Multi-user-auth §out of scope,
+promoted 2026-08-17
 
-**Status**: Trigger (the desk leaves the LAN)
-**Origin**: Multi-user-auth plan §"Deliberately out of scope", promoted on close-out 2026-08-17
+Sessions ride a cookie with `secure = false` over plain HTTP, deliberately: desks serve a LAN on
+`:8413` and a `Secure` cookie would never be sent. Four things are load-bearing on that choice and
+would move together:
 
-Sessions ride a cookie with `secure = false` over plain HTTP, deliberately: desks
-serve a LAN on `:8413`, and a `Secure` cookie would simply never be sent. Three
-things are load-bearing on that choice and would all move together:
+- **The cookie flag** (`routes/auth.kt`), and whether `SameSite=Lax` stays the CSRF answer. It
+  plus **every state-changing endpoint requiring a JSON body** is what stands in for a CSRF token,
+  which holds because everything is same-origin. The second half is enforced, not incidental:
+  `POST /auth/device/{token}` takes a body it barely reads for exactly this reason, and
+  `plugins/ErrorHandling.kt` maps `CannotTransformContentToTypeException` to 400 so refusing a
+  form post reads as a refusal. `DeviceLoginRoutesTest` pins it.
+- **The QR URL scheme** (`auth/ResetUrls.kt`), which hardcodes the request's own scheme and falls
+  back to `http://` for the mDNS/site-local alternates. A phone hitting a self-signed cert gets a
+  warning interstitial — on flows whose whole point is getting someone onto the desk who can't
+  currently get on it. **Two** flows share `buildLanUrls` now (`/reset/` and `/device/`).
+- **The device-login LAN check** (`requireLanPeer` in `routes/auth.kt`), which trusts the socket
+  peer precisely because no proxy sits in front. Terminating TLS anywhere but in the JVM means
+  installing `ForwardedHeaders`, which silently turns both this check and the IP throttle beside
+  it into client-supplied values.
+- **Certificate provisioning** for a name a phone will accept — the actual hard part on a machine
+  with an mDNS name and a rotating DHCP address.
 
-- The cookie flag itself (`routes/auth.kt`), and whether `SameSite=Lax` stays the
-  CSRF answer — it plus **every state-changing endpoint requiring a JSON body** is what
-  stands in for a CSRF token today, which holds because everything is same-origin. That
-  second half is enforced, not incidental: `POST /auth/device/{token}` takes a body it barely
-  reads for exactly this reason, and `plugins/ErrorHandling.kt` maps
-  `CannotTransformContentToTypeException` to 400 so refusing a form post reads as a refusal.
-  A test in `DeviceLoginRoutesTest` pins it.
-- The **QR URL scheme** (`auth/ResetUrls.kt`), which hardcodes the request's own
-  scheme and falls back to `http://` for the mDNS/site-local alternates. A phone
-  hitting a self-signed cert gets a warning interstitial — on flows whose whole point is
-  getting someone onto the desk who cannot currently get on it. **Two** flows share
-  `buildLanUrls` now (`/reset/` and `/device/`), so this moves for both at once.
-- The **device-login LAN check** (`routes/auth.kt`'s `requireLanPeer`), which trusts the
-  socket peer precisely because no proxy sits in front. Terminating TLS anywhere but in the
-  JVM would mean installing `ForwardedHeaders`, and that silently turns both this check and
-  the IP throttle beside it into client-supplied values.
-- Certificate provisioning for a name a phone will accept, which is the actual
-  hard part on a machine with an mDNS name and a rotating DHCP address.
-
-**Trigger to revisit**: the desk is reachable from outside a trusted LAN (a venue
-network with guests on it counts), or a browser starts refusing cookies on plain
-HTTP for this kind of origin. Not before — a self-signed cert would degrade the
-reset flow while adding no real confidentiality against anyone already on the LAN.
+**Trigger**: the desk is reachable from outside a trusted LAN (a venue network with guests counts),
+or a browser starts refusing cookies on plain HTTP for this kind of origin. Not before — a
+self-signed cert would degrade the reset flow while adding no real confidentiality against anyone
+already on the LAN.
 
 ---
 
 ## Distribution
 
-### `FU-DIST-ICONS` — Real macOS / Windows installer icons
+### `FU-DIST-ICONS`
 
-**Status**: Ready
-**Origin**: Windows-distribution Phase 3, 2026-04-28
+**Real macOS / Windows installer icons** · Ready · Windows-distribution Phase 3, 2026-04-28
 
-`packageMac` / `packageWindows` pass `--icon` only when `assets/lighting7.icns`
-or `assets/lighting7.ico` exists. Today neither does, so jpackage falls back
-to its default Java cup icon for the dock / taskbar / installer.
+`packageMac` / `packageWindows` pass `--icon` only when `assets/lighting7.icns` or
+`assets/lighting7.ico` exists. Neither does, so jpackage falls back to the default Java cup icon
+for dock / taskbar / installer.
 
-**Scope**: design (or commission) a 1024×1024 source PNG for lighting7, then
-generate `assets/lighting7.icns` (macOS) and `assets/lighting7.ico` (Windows,
-multi-resolution embed: 16/32/48/64/128/256). `iconutil` produces `.icns`
-from an `iconset` directory; ImageMagick `convert` produces `.ico`. Drop both
-files at `assets/`; `packageMac` and `packageWindows` pick them up on the
-next run with no Gradle changes.
+Design or commission a 1024×1024 source PNG, then generate `assets/lighting7.icns` (`iconutil`
+from an `iconset` directory) and `assets/lighting7.ico` (ImageMagick `convert`, multi-resolution:
+16/32/48/64/128/256). Drop both at `assets/`; both package tasks pick them up with no Gradle
+change. `launcher/src/main/resources/lighting7.png` is the tray-icon placeholder — too small and
+not OS-icon-shaped; inspiration, not source.
 
-The existing `launcher/src/main/resources/lighting7.png` is the tray-icon
-placeholder and is too small / not OS-icon-shaped — use it as inspiration,
-not as the source PNG.
+### `FU-DIST-NO-BUNDLED-JRE`
 
----
+**Download the JRE at install time instead of bundling it** · **Rejected — decision record, do not
+re-propose** · MSI slimming, 2026-08-18
 
-### `FU-DIST-NO-BUNDLED-JRE` — Download the JRE at install time instead of bundling it
+Recurring suggestion: drop the ~59 MB `runtime/` and fetch a JRE on first run. Four independent
+reasons not to, any one sufficient:
 
-**Status**: Rejected — decision record, do not re-propose
-**Origin**: MSI slimming, 2026-08-18
+1. **It inverts a stated product goal.**
+   [`completed/windows-distribution-plan.md`](completed/windows-distribution-plan.md) line 19
+   defines the deliverable as launching the whole stack with "no external dependencies — no
+   Postgres, no Docker, no node, **no JDK on the target machine**".
+2. **It's a launcher rewrite, not a jpackage flag.** `resolveJavaExecutable()` in
+   `launcher/.../LauncherMain.kt` resolves only `System.getProperty("java.home")` + `/bin/java` —
+   no system-JVM discovery, no version gate, no fallback. A download/verify/unpack/pin component
+   would have to exist and be correct before the first launch.
+3. **A venue desk may have no internet when it is installed.** "The lighting desk won't start" is
+   the worst possible moment to discover a missing prerequisite, and unlike a slow download it is
+   not recoverable in the room.
+4. **The MSI is unsigned and already trips SmartScreen.** A first-run downloader that fetches and
+   executes a JVM makes that story strictly worse.
 
-Recurring suggestion: drop the ~59 MB `runtime/` from the installer and fetch a JRE on
-first run. Four independent reasons not to, any one of which is sufficient:
+The defensible half — *trimming* the bundled runtime rather than removing it — was done:
+`--include-locales` took 10.5 MB off. What remains is 1 MB; see `FU-DIST-JLINK-MODULES`.
 
-1. It inverts a stated product goal.
-   [`completed/windows-distribution-plan.md`](completed/windows-distribution-plan.md)
-   line 19 defines the deliverable as launching the whole stack with "no external
-   dependencies — no Postgres, no Docker, no node, **no JDK on the target machine**".
-2. It is a launcher rewrite, not a jpackage flag. `resolveJavaExecutable()` in
-   `launcher/.../LauncherMain.kt` resolves only `System.getProperty("java.home")` +
-   `/bin/java` — no system-JVM discovery, no version gate, no fallback — and a new
-   download/verify/unpack/pin component would have to exist and be correct before the
-   first launch.
-3. **A venue desk may have no internet when it is installed.** "The lighting desk won't
-   start" is the worst possible moment to discover a missing prerequisite, and unlike a
-   slow download it is not recoverable in the room.
-4. The MSI is unsigned and already trips SmartScreen (see the release body in
-   `.github/workflows/windows-build.yml`). A first-run downloader that fetches and
-   executes a JVM makes that story strictly worse, not better.
+### `FU-DIST-JLINK-MODULES`
 
-The defensible half of the same idea — *trimming* the bundled runtime rather than removing
-it — was done: `--include-locales` took 10.5 MB off it. What remains is 1 MB, see
-`FU-DIST-JLINK-MODULES`.
+**Replace the `java.se` aggregate with an explicit module list** · Trigger · MSI slimming,
+2026-08-18
 
----
+**Trigger**: only if the runtime needs to shrink — 1 MB is not a reason on its own. (The
+`FU-DIST-KCS-RETIRE` precondition is met; the old jdeps workaround for the fork's `BOOT-INF/lib/`
+layout no longer applies.)
 
-### `FU-DIST-JLINK-MODULES` — Replace the `java.se` aggregate with an explicit module list
+Measured at **1 MB** of image (51 → 50 MB on JDK 26). Everything the surgery removes is `java.se`'s
+small transitive tail — `java.xml.crypto` 0.66, `java.security.jgss` 0.55, `java.rmi` 0.22,
+`java.sql.rowset` 0.20, `java.management.rmi` 0.08 MB — and it's all-or-nothing, because `java.se`
+`requires transitive` each of them.
 
-**Status**: Trigger
-**Origin**: MSI slimming, 2026-08-18
-**Trigger**: only worth revisiting if the runtime needs to shrink — 1 MB is not a reason on its
-own. `FU-DIST-KCS-RETIRE` has since landed, so the precondition is met.
+Candidate list: `java.base, java.compiler, java.datatransfer, java.desktop, java.instrument,
+java.logging, java.management, java.naming, java.net.http, java.prefs, java.scripting,
+java.security.sasl, java.sql, java.transaction.xa, java.xml, jdk.crypto.ec, jdk.localedata,
+jdk.unsupported, jdk.zipfs`.
 
-Measured at **1 MB** of image (51 → 50 MB on JDK 26), which is why it was not done.
-Everything the surgery can remove is `java.se`'s small transitive tail —
-`java.xml.crypto` 0.66, `java.security.jgss` 0.55, `java.rmi` 0.22, `java.sql.rowset` 0.20,
-`java.management.rmi` 0.08 MB — and it is all-or-nothing, because `java.se`
-`requires transitive` each of them, so none can be dropped while the aggregate stays.
+Non-negotiable, with the API forcing each: **`java.desktop`** (AWT `SystemTray`,
+`javax.sound.midi`; drags `java.datatransfer` + `java.prefs`), **`java.sql`** (JDBC; drags
+`java.xml` + `java.logging`), **`java.management`** and **`java.naming`** (reached *reflectively*
+by Spring Boot and logback), **`java.net.http`** (the launcher's readiness probe and the update
+checker), **`jdk.crypto.ec`** (TLS to GitHub).
 
-Candidate list, if it is ever wanted: `java.base, java.compiler, java.datatransfer,
-java.desktop, java.instrument, java.logging, java.management, java.naming, java.net.http,
-java.prefs, java.scripting, java.security.sasl, java.sql, java.transaction.xa, java.xml,
-jdk.crypto.ec, jdk.localedata, jdk.unsupported, jdk.zipfs`.
+Derive with `jdeps --multi-release 24 --ignore-missing-deps --print-module-deps` over
+`lighting7.jar` and `launcher.jar`, unioned with the baseline above. **jdeps output is a floor,
+never an answer** — reflection, `Class.forName`, `ServiceLoader` and JNDI are invisible to it,
+which is exactly how the four reflective modules get reached. One-off measurement, not build
+machinery.
 
-Non-negotiable, with the API that forces each: **`java.desktop`** (AWT `SystemTray` for the
-tray icon, `javax.sound.midi`; drags `java.datatransfer` + `java.prefs`), **`java.sql`**
-(JDBC; drags `java.xml` + `java.logging`), **`java.management`** and **`java.naming`**
-(reached *reflectively* by Spring Boot and logback), **`java.net.http`** (the launcher's
-readiness probe and the update checker), **`jdk.crypto.ec`** (TLS to GitHub).
-
-Deriving it needs a workaround, because jdeps cannot walk Spring Boot's `BOOT-INF/lib/`
-nested jars: unpack `kotlin-compiler-server.jar` to a temp dir, then
-
-```
-jdeps --multi-release 24 --ignore-missing-deps --print-module-deps <jar>
-```
-
-over `lighting7.jar` and `launcher.jar`, and union that with the baseline above. **jdeps output is a floor, never an answer** — reflection, `Class.forName`,
-`ServiceLoader` and JNDI are invisible to it, which is exactly how the four reflective
-modules above get reached. This is a one-off measurement, not build machinery.
-
-**Gate before committing any such change**: temporarily add
-`jvmArgs("--limit-modules", <list>)` to `tasks.test` and run the whole suite — it simulates
-the trimmed runtime on a full JDK and exercises far more than a boot smoke test. Then the
-per-module boot exercise in `FU-MANUAL-DIST-INSTALL`. The failure mode is a
-`NoClassDefFoundError` at the first use of one feature, which for a lighting desk can be
+**Gate before committing**: temporarily add `jvmArgs("--limit-modules", <list>)` to `tasks.test`
+and run the whole suite — it simulates the trimmed runtime on a full JDK and exercises far more
+than a boot smoke test. Then the per-module boot exercise in `FU-MANUAL-DIST-INSTALL`. The failure
+mode is a `NoClassDefFoundError` at the first use of one feature, which for a lighting desk can be
 mid-show.
 
 Note `jdk.charsets` (1.63 MB) and `jdk.management` are **already absent** — `java.se` never
 included them and the shipped desk works. Don't add them speculatively.
 
----
+### `FU-DIST-NATIVE-ARCH`
 
-### `FU-DIST-KCS-LIB-PRUNE` — Drop playground-only jars from the staged script classpath
+**Key the native excludes by architecture as well as OS** · Trigger · MSI slimming, 2026-08-18
 
-**Status**: Moot — closed by `FU-DIST-KCS-RETIRE` (2026-08-18)
-
-~2.9 MB of upstream playground jars inside `<fork>/2.4.10/`. That directory was staged into the
-installer only to give the bundled compiler server a script classpath, and neither the directory
-nor the server ships any more — the editor resolves against the running app's own classpath via
-`dependenciesFromCurrentContext(wholeClasspath = true)`. Nothing left to prune.
-
----
-
-### `FU-DIST-NATIVE-ARCH` — Key the native excludes by architecture as well as OS
-
-**Status**: Trigger
-**Origin**: MSI slimming, 2026-08-18
 **Trigger**: the MSI needs a final couple of MB, or a second architecture ships.
 
 ~2.9 MB more on Windows. `nativePayloads` in `build.gradle.kts` is keyed by OS only, so the
-Windows jar keeps all four sqlite arches (`x86_64`, `x86`, `aarch64`, `armv7` — 3.7 MB) and
-all three `com/sun/jna/win32-*` arches, though the MSI is x64.
+Windows jar keeps all four sqlite arches (`x86_64`, `x86`, `aarch64`, `armv7` — 3.7 MB) and all
+three `com/sun/jna/win32-*` arches, though the MSI is x64.
 
-Deferred deliberately: it adds a second axis to the table for a third of what the OS key
-gave, and it would arch-lock the jar in a way the `-windows-x64` filename only implies today.
-Keep `win32-x86-64` **and** the x64 sqlite dll if this is done — `docs/windows-updates.md`
-notes x64-under-emulation on Windows-on-ARM as a supported configuration, and the readiness
-timeout override exists for it.
-
----
-
-### `FU-DIST-EDITOR-JAR-CLASSES-ONLY` — Build the editor jar from `classesDirs` only
-
-**Status**: Trigger
-**Origin**: MSI slimming, 2026-08-18
-**Trigger**: when the npm dependency in the compiler-server chain becomes a nuisance (e.g. a
-CI job that wants `assembleCompilerServer` without a frontend build).
-
-`compilerServerLightingJar` currently builds from `sourceSets["main"].output` minus
-`static/**`, so it still transitively depends on `processResources` → `copyFrontend` →
-`buildFrontend`, i.e. on npm. Narrowing it to `sourceSets["main"].output.classesDirs` would
-sever that — verified feasible: the metadata the fork needs
-(`META-INF/uk.me.cormack_Lighting7.kotlin_module`) lives in `build/classes/kotlin/main/`,
-not in resources.
-
-Deferred because `routes/kotlinCompilerServer.kt` proxies `{action}` as a wildcard, so
-`/compiler/run` is reachable and the fork can **execute** against this jar rather than only
-resolving symbols against it. Dropping `application.conf`, `logback.xml` and `fx/` (~30 KB
-combined) therefore needs its own thinking about what execution touches — which is why the
-current cut is `static/**` only, capturing ~99% of the size win at no behavioural risk.
-
----
-
-### `FU-DIST-KCS-SKIP-KLIB-DOWNLOAD` — Stop the fork downloading the JS/Wasm klibs
-
-**Status**: Trigger
-**Origin**: MSI slimming, 2026-08-18
-**Trigger**: the Windows job's 60-minute timeout gets tight.
-
-**0 shipped bytes.** Since the MSI slimming pass the fork still *builds* its `-js`, `-wasm`,
-`-compose-wasm` and `-compose-wasm-compiler-plugins` directories (37.2 MB of resolve +
-copy); `assembleCompilerServer` simply no longer stages them. This item is purely CI
-wall-clock.
-
-Would need a third patch anchor in `ApplyCompilerServerPatches` against the fork's
-`dependencies/build.gradle.kts` (`copyJSDependencies` / `copyWasmDependencies` /
-`copyComposeWasmDependencies` / `copyComposeWasmCompilerPlugins`). Deliberately not done:
-the fork is an upstream-tracking checkout, every anchor is a drift risk that fails the build
-on the next bump, and the payoff is zero bytes in the deliverable.
+Deferred deliberately: a second axis on the table for a third of what the OS key gave, and it
+would arch-lock the jar in a way the `-windows-x64` filename only implies. If done, keep
+`win32-x86-64` **and** the x64 sqlite dll — `docs/windows-updates.md` notes x64-under-emulation on
+Windows-on-ARM as supported, and the readiness timeout override exists for it.
 
 ---
 
 ## Cloud sync
 
-### `FU-SYNC-TOMBSTONE-GC` — Tombstone garbage collection
+### `FU-SYNC-TOMBSTONE-GC`
 
-**Status**: Trigger (deferred maintenance)
-**Origin**: Cloud-sync Phases 7–8, deferred 2026-05-01
+**Tombstone garbage collection** · Trigger · Cloud-sync Phases 7–8, deferred 2026-05-01
 
-`tombstones/{tableName}/{uuid}.json` files (~25 bytes each) plus their
-matching `sync_state` rows accumulate forever. GC isn't a correctness
-issue, just tree-size optimisation — but the *safety analysis* is the
-load-bearing part, not the home of the loop.
+`tombstones/{tableName}/{uuid}.json` files (~25 bytes each) plus their `sync_state` rows
+accumulate forever. GC is tree-size optimisation, not correctness — but the *safety analysis* is
+the load-bearing part.
 
-**Why pure age-based GC is unsafe.** A naive 90-day cutoff would resurrect
-records on installs that were offline longer than the cutoff: an install
-catching up after, say, 6 months would see `live record locally, no remote
-file, no sync_state row` and treat it as a brand-new local record (push
-it). That's the exact resurrection scenario the tombstone was preventing
-— see
+**Why pure age-based GC is unsafe.** A naive 90-day cutoff resurrects records on installs offline
+longer than the cutoff: an install catching up after 6 months sees `live record locally, no remote
+file, no sync_state row` and treats it as brand new, pushing it. That's the exact resurrection the
+tombstone prevented — see
 [`RemoteSyncEngineTombstonePropagationTest`](../../src/test/kotlin/uk/me/cormack/lighting7/sync/RemoteSyncEngineTombstonePropagationTest.kt).
 
-**Safe shape.** Extend `installs.json` so each install records the commit
-SHA and timestamp it last synced to. GC only tombstones whose path's last
-touch (`git log -1 --format=%ct -- tombstones/{table}/{uuid}.json`) is
-older than the *oldest* install's last-synced timestamp — i.e. older than
-the slowest peer's view of history. That's a `formatVersion` bump (new
-required field on the install registry) plus a migration for repos
-already in flight. A simpler escape hatch: drop installs from
-`installs.json` once they haven't pushed in N months, GC tombstones
-older than every remaining install's last-synced, and document that
-re-introducing a long-dormant install requires a clean clone.
+**Safe shape.** Extend `installs.json` so each install records the commit SHA and timestamp it
+last synced to. GC only tombstones whose path's last touch
+(`git log -1 --format=%ct -- tombstones/{table}/{uuid}.json`) predates the *oldest* install's
+last-synced timestamp. That's a `formatVersion` bump (new required field on the install registry)
+plus a migration for in-flight repos. Simpler escape hatch: drop installs from `installs.json`
+after N months without a push, GC below every remaining install's low-water mark, and document
+that reviving a long-dormant install needs a clean clone.
 
-**Where it lives.** A separate `SyncMaintenance` coroutine in
-[`sync/`](../../src/main/kotlin/uk/me/cormack/lighting7/sync/), started
-from `Application.module()` parallel to
-[`AutoSyncScheduler`](../../src/main/kotlin/uk/me/cormack/lighting7/sync/AutoSyncScheduler.kt),
-ticking once per day. Iterates every `sync_configs.enabled = true`
-project (not just auto-sync — manual-sync projects also accumulate
-tombstones). A manual `POST /api/rest/project/{id}/sync/maintenance/gc-tombstones`
-endpoint surfaces the same operation for operator-driven cleanup and
-tests. Tying GC to `AutoSyncScheduler` would skip projects that only
-ever sync on demand.
+**Where it lives.** A `SyncMaintenance` coroutine in
+[`sync/`](../../src/main/kotlin/uk/me/cormack/lighting7/sync/), started from
+`Application.module()` parallel to `AutoSyncScheduler`, ticking daily over every
+`sync_configs.enabled = true` project — not just auto-sync ones, since manual-sync projects
+accumulate tombstones too. A manual
+`POST /api/rest/project/{id}/sync/maintenance/gc-tombstones` surfaces the same operation for
+operators and tests.
 
-**Per-project GC steps.** `git log` the `tombstones/` paths, identify
-files older than the low-water mark, then in order: (1) snapshot a
-commit that `git rm`s the tombstone, (2) drop the matching
-[`sync_state`](../../src/main/kotlin/uk/me/cormack/lighting7/models/syncState.kt)
-row. Reverse order would leave a snapshot with no `sync_state` row,
-re-arming carry-forward (`SnapshotEngine.snapshot` only writes
-tombstones for records that *do* have a `sync_state` row), so a peer
-that hadn't yet caught up would resurrect the deletion.
+**Ordering is an invariant.** Per project: (1) snapshot a commit that `git rm`s the tombstone,
+(2) drop the matching [`sync_state`](../../src/main/kotlin/uk/me/cormack/lighting7/models/syncState.kt)
+row. Reverse order leaves a snapshot with no `sync_state` row, re-arming carry-forward
+(`SnapshotEngine.snapshot` only writes tombstones for records that *have* one), so a peer behind
+would resurrect the deletion.
 
-**Trigger to revisit** (any one):
-- `find tombstones -type f | wc -l` exceeds ~1000 on a real project's
-  working tree.
-- Operator reports working-tree size pain or `git gc` failing to
-  reclaim meaningful space.
-- A delete-heavy migration is being planned (e.g. tearing out an old
-  fixture set en masse) where the post-migration tombstone count is
-  predictable and the operator wants a clean tree before pushing.
+**Trigger** (any): `find tombstones -type f | wc -l` exceeds ~1000 on a real working tree; an
+operator reports tree-size pain or `git gc` reclaiming nothing; or a delete-heavy migration is
+planned and the operator wants a clean tree before pushing.
 
-Below those, the engineering cost (peer low-water in `installs.json`,
-migration, ordering invariants) is out of proportion to the disk
-savings.
+### `FU-SYNC-JGIT-STRESS-BENCH`
 
-### `FU-SYNC-JGIT-STRESS-BENCH` — JGit memory stress benchmark
+**JGit memory stress benchmark** · Trigger · Cloud-sync §Risks, revisited 2026-05-01
 
-**Status**: Trigger (signal-driven)
-**Origin**: Cloud-sync plan §"Risks and open items", revisited 2026-05-01
-
-The cloud-sync design doc flagged "JGit memory on large projects with
-thousands of cues" as a Phase-5 stress-test item. Phases 5–8 landed
-without a concrete stress fixture. The dominant memory cost during
-`runSync` is
+The design doc flagged "JGit memory on large projects with thousands of cues" as a Phase-5
+stress-test item; Phases 5–8 landed without a fixture. The dominant cost during `runSync` is
 [`JGitClient.walkTree`](../../src/main/kotlin/uk/me/cormack/lighting7/sync/JGitClient.kt)
-materialising every blob into a `Map<String, String>` — bounded by ~2×
-the working tree's blob size resident at peak (local + remote snapshots
-plus the merged tree).
+materialising every blob into a `Map<String, String>` — bounded by ~2× the working tree's blob
+size resident at peak. Invisible at real deployment scale (tens to low hundreds of cues); the risk
+is the speculative "thousands" tier.
 
-For lighting7's actual deployment scale (personal rig: tens of cues per
-project; small touring rig: low hundreds), this is invisible. The risk
-only matters at the speculative "thousands of cues" tier the design doc
-called out.
+**Harness shape**: a new test under
+[`src/test/kotlin/.../sync/`](../../src/test/kotlin/uk/me/cormack/lighting7/sync/) seeding
+N cues × M stacks × K assignments at ~5 KB per cue JSON (N = 1000 / 5000 / 10000); a full
+`RemoteSyncEngine.runSync` against a local bare repo (same pattern as `JGitRemoteTest`, no
+network); peak heap via `totalMemory() - freeMemory()` at phase boundaries (post-fetch, -diff,
+-apply, -push) or a JFR recording; one `[stress]` log line per size with peak heap, wall-clock and
+allocations. Gate on `-Dsync.stress=true`, mirroring the `dmx.benchmark` / `fx.benchmark`
+precedent in `build.gradle.kts`.
 
-**Suggested harness shape.**
-- Programmatic seed in a new test under
-  [`src/test/kotlin/uk/me/cormack/lighting7/sync/`](../../src/test/kotlin/uk/me/cormack/lighting7/sync/):
-  N cues × M stacks × K propertyAssignments per cue at realistic content
-  sizes (~5 KB per cue JSON). Sane large N: 1000 / 5000 / 10000.
-- Run a full `RemoteSyncEngine.runSync` cycle against a local bare-repo
-  remote (no network — same pattern as
-  [`JGitRemoteTest`](../../src/test/kotlin/uk/me/cormack/lighting7/sync/JGitRemoteTest.kt)).
-- Measure peak heap via
-  `Runtime.getRuntime().totalMemory() - freeMemory()` snapshots at the
-  obvious phase boundaries (post-fetch, post-diff, post-apply,
-  post-push), or attach a JFR recording for an allocation profile.
-- Output: a one-shot `[stress]` log line per project size with peak
-  heap, runSync wall-clock, and total allocations. Gate on
-  `-Dsync.stress=true` (mirrors the `dmx.benchmark` / `fx.benchmark`
-  precedent forwarded by [`build.gradle.kts`](../../build.gradle.kts)).
+**Likely fixes if a threshold is hit**: stream blobs through `walkTree` instead of materialising
+every body, or shallow-clone the working tree if push-history walking isn't needed. Both are real
+engineering, hence not pre-empted.
 
-**Likely fixes if a threshold is hit.** Stream blobs through `walkTree`
-instead of materialising every body (yield per-record snapshots to the
-diff). Shallow clones (`--depth=1`) for the working tree if
-push-history walking isn't needed. Both are real engineering, hence not
-pre-empted.
+**Trigger** (any): a real project hits ~1000 synced records; `runSync` exceeds 5 s; or sync OOMs
+in the field. The speculative threshold sits in
+[`sync-engineering.md`](../sync-engineering.md) §Operational notes.
 
-**Trigger to revisit** (any one):
-- A real project hits ~1000 synced records (sum across
-  `cues + cuePropertyAssignments + cuePresetApplications + ...`).
-- Operator reports `runSync` taking >5s on a real project.
-- Sync OOMs in the field.
+### `FU-SYNC-STREAMING-PROGRESS`
 
-Until one of those fires, the speculative threshold sits in
-[`docs/sync-engineering.md`](../sync-engineering.md) §"Operational
-notes" so future-you knows where to look.
+**Streaming sync progress (fetch %, conflict count)** · Trigger · Cloud-sync §Risks, revisited
+2026-05-01
 
-### `FU-SYNC-STREAMING-PROGRESS` — Streaming sync progress (fetch %, conflict count)
+`runSync` emits exactly one terminal WS message per cycle: `cloudSyncDone` / `cloudSyncFailed` /
+`cloudSyncConflictsPending`. Intermediate progress was punted on the basis that data volumes don't
+justify the ceremony, and for typical projects the whole `cloudSyncStarted → cloudSyncDone`
+interval is sub-second.
 
-**Status**: Trigger (operator feedback)
-**Origin**: Cloud-sync plan §"Risks and open items", revisited 2026-05-01
+**Trigger**: an operator reports the sync UX feels unresponsive, **or** a real project's cycle
+consistently exceeds 5 s. Either means someone is staring at a non-progressing spinner. No design
+sketch needed pre-emptively — the wire shape follows the actual unmet case.
 
-Today `runSync` emits exactly one terminal WS message per cycle:
-`cloudSyncDone` / `cloudSyncFailed` / `cloudSyncConflictsPending`. The
-design doc deliberately punted intermediate progress (a hypothetical
-`cloudSyncProgress` carrying fetch %, conflicts-discovered count, etc.)
-on the basis that data volumes don't justify the ceremony.
+### `FU-SYNC-MERGE-ATOMICITY`
 
-For typical projects the entire `cloudSyncStarted → cloudSyncDone`
-interval is sub-second. UX feels fine; no signal yet that operators
-need more.
+**Reset-before-import window in the auto-merge path** · Trigger · Surfaced 2026-07-23 fixing the
+sibling fast-forward bug
 
-**Trigger to revisit**: operator reports the sync UX feels
-unresponsive, **or** a real project's `cloudSyncStarted →
-cloudSyncDone` interval consistently exceeds 5s. Either indicates the
-user is staring at a non-progressing spinner and would benefit from
-intermediate state. The wire-protocol shape will follow whatever the
-actual unmet case demands — no design sketch needed pre-emptively.
+The **fast-forward path is fixed**: `RemoteSyncEngine.fastForwardTo` now imports the remote tree
+into the DB first (from a scratch materialisation read via `JGitClient.walkTree`) and only advances
+HEAD once the import commits, so a failure leaves DB-ahead-of-git, which the next sync reconciles
+to a content-identical no-op merge.
 
-### `FU-SYNC-MERGE-ATOMICITY` — Reset-before-import window in the auto-merge path
-
-**Status**: Trigger (correctness corner)
-**Origin**: Surfaced 2026-07-23 while fixing the sibling fast-forward bug.
-
-The fast-forward pull path used to `resetHard(origin/{branch})` (moving git
-HEAD) *before* `ProjectImporter.replaceFromWorkingTree` caught the DB up. With
-no `sync_session` for a plain FF, a crash or import exception in that window
-left git ahead of the DB, and the next `SnapshotEngine` run re-exported the
-stale DB over the pulled tree and pushed it — silently reverting the peer's
-change. That path is **fixed**: `RemoteSyncEngine.fastForwardTo` now imports
-the remote tree into the DB first (from a scratch materialisation read via
-`JGitClient.walkTree`) and only advances HEAD once the import commits, so a
-failure leaves DB-ahead-of-git, which the next sync reconciles to a
-content-identical no-op merge.
-
-The **auto-merge path shares the same hazard and is not yet fixed.**
+The **auto-merge path shares the hazard and is not fixed**.
 [`RemoteSyncEngine.autoMerge`](../../src/main/kotlin/uk/me/cormack/lighting7/sync/RemoteSyncEngine.kt)
-does `resetHard(remoteRef)` → overlay local-wins files →
-`replaceFromWorkingTree` → `commitWithParents` → push. A crash or exception
-between the `resetHard` and the DB import commit leaves HEAD at the remote tip
-with a pre-merge DB; the next snapshot commits the stale DB as a child of the
-remote tip (`LocalAhead`) and pushes it, reverting the merge. The
-`Diverged`-with-zero-conflicts case has no session at all; the
-apply-from-session case is only partially covered (a crashed `APPLYING`
-session is demoted to `FAILED` by `ConflictSession.recoverFromCrash`, but the
-DB/git inconsistency itself still relies on the operator aborting).
+does `resetHard(remoteRef)` → overlay local-wins files → `replaceFromWorkingTree` →
+`commitWithParents` → push. A crash between the `resetHard` and the DB import commit leaves HEAD
+at the remote tip with a pre-merge DB; the next snapshot commits the stale DB as a child of the
+remote tip (`LocalAhead`) and pushes it, reverting the merge. The `Diverged`-with-zero-conflicts
+case has no session at all; the apply-from-session case is only partially covered (a crashed
+`APPLYING` session is demoted to `FAILED` by `ConflictSession.recoverFromCrash`, but the DB/git
+inconsistency still relies on the operator aborting).
 
-The FF fix's import-first reorder is the model for the safe shape, but
-auto-merge is harder: it must also produce the two-parent merge commit
-(tree = merged, parents = `[remoteTip, localSha]`), so the reorder has to build
-the merged tree in scratch, import it, *then* reset + re-stage + commit. Left
-as a follow-up rather than bundled with the FF fix because the merge-commit
-plumbing wants its own test pass.
+The FF import-first reorder is the model, but auto-merge is harder: it must also produce the
+two-parent merge commit (tree = merged, parents = `[remoteTip, localSha]`), so the reorder has to
+build the merged tree in scratch, import it, *then* reset + re-stage + commit. The merge-commit
+plumbing wants its own test pass, which is why it wasn't bundled with the FF fix.
 
-**Trigger to revisit** (any one):
-- A field report of a merged/pulled change reappearing or reverting after a
-  crash or a failed `runSync`.
-- Any work that adds a test seam for injecting a failure mid-`autoMerge` (see
-  `FU-SYNC-PUSHRETRY-TEST-SEAM`) — fold the fix in while the seam is fresh.
+**Trigger** (either): a field report of a merged or pulled change reverting after a crash or failed
+`runSync`; or any work adding a mid-`autoMerge` failure seam (see `FU-SYNC-PUSHRETRY-TEST-SEAM`) —
+fold the fix in while the seam is fresh.
 
-### `FU-SYNC-ORDINAL-DOUBLE` — Double-precision ordinals for concurrent inserts
+### `FU-SYNC-ORDINAL-DOUBLE`
 
-**Status**: Trigger (multi-master ordering)
-**Origin**: Cloud-sync plan §"Ordering" / §"Risks and open items"; unshipped
-through Phase 8, re-logged 2026-07-23.
+**Double-precision ordinals for concurrent inserts** · Trigger · Cloud-sync §Ordering; unshipped
+through Phase 8, re-logged 2026-07-23
 
-The design (and `docs/sync-engineering.md` §"Ordinal contract") specifies that
-Phase 5 replaces `sortOrder: Int` with `ordinal: Double` on the ten ordered
-tables, so two installs inserting into the same position pick a midpoint
-instead of colliding, tiebroken by UUID. **Not implemented** — the DTOs in
-`sync/dto/SyncDtos.kt` still carry `sortOrder: Int` (exports already sort by
-`(sortOrder, uuid)` for deterministic output, which is the pre-work the doc
-notes, but the type change itself never landed).
+The design (and `sync-engineering.md` §"Ordinal contract") specifies that Phase 5 replaces
+`sortOrder: Int` with `ordinal: Double` on the ten ordered tables, so two installs inserting into
+the same position pick a midpoint instead of colliding, tiebroken by UUID. **Not implemented** —
+`sync/dto/SyncDtos.kt` still carries `sortOrder: Int`. (Exports already sort by `(sortOrder, uuid)`
+for deterministic output, which is the pre-work; the type change never landed.)
 
-Consequence today: two installs each inserting a cue "between 5 and 6" isn't a
-conflict (distinct UUIDs) but both land on the same integer `sortOrder`, so the
-merged ordering is decided only by the UUID tiebreak — non-deterministic from
-the operator's point of view, and integer renumbers can cascade. Acceptable for
-solo-multi-machine use; bites once two people routinely reorder the same stack.
+Consequence: two installs each inserting a cue "between 5 and 6" isn't a conflict (distinct UUIDs)
+but both land on the same integer `sortOrder`, so merged ordering is decided only by the UUID
+tiebreak — non-deterministic from the operator's point of view, and integer renumbers can cascade.
+Fine for solo-multi-machine use; bites once two people routinely reorder the same stack.
 
-**Shape when it lands**: `ordinal: Double` column + one-shot migration
-(renumber existing rows to `1.0, 2.0, …`), DTO field swap, `formatVersion` bump
-(→ 4) with a v3→v4 reader (see `FU-SYNC-FORMAT-MIGRATIONS`), and midpoint-pick
-insert logic in the routes that create ordered rows.
+**Shape**: `ordinal: Double` column + one-shot migration (renumber to `1.0, 2.0, …`), DTO field
+swap, `formatVersion` bump (→ 4) with a v3→v4 reader (see `FU-SYNC-FORMAT-MIGRATIONS`), and
+midpoint-pick insert logic in the routes creating ordered rows.
 
-**Trigger to revisit**: two installs editing the same project report cues/
-stacks landing in a surprising order after a merge, **or** any `formatVersion`
-bump is already being planned (do it in the same bump to avoid a second
-migration).
+**Trigger**: two installs report cues/stacks landing in a surprising order after a merge, **or** a
+`formatVersion` bump is already planned — do it in the same bump.
 
-### `FU-SYNC-FORMAT-MIGRATIONS` — Repo-format migration framework
+### `FU-SYNC-FORMAT-MIGRATIONS`
 
-**Status**: Blocked (needs a real breaking bump) / Trigger
-**Origin**: Cloud-sync plan §"Format versioning"; re-logged 2026-07-23.
+**Repo-format migration framework** · Blocked (needs a real breaking bump) · Cloud-sync §Format
+versioning; re-logged 2026-07-23
 
-Both the design and `docs/sync-engineering.md` reference migrations living at
-`sync/migrations/V{n}_to_V{n+1}.kt`, run on pull before the three-way diff. The
-directory **does not exist** — there is no migration framework. Today an
-imported/pulled repo whose `formatVersion` differs from `3` is hard-rejected
-(HTTP 422 in `ProjectImporter.loadAndValidateArchive`, both too-old and
-too-new). The v2→v3 jump was handled by rejecting old repos outright on the
-rationale that the project hadn't shipped beyond the dev box.
+Both the design and `sync-engineering.md` reference migrations at
+`sync/migrations/V{n}_to_V{n+1}.kt`, run on pull before the three-way diff. **The directory does
+not exist.** Today an imported or pulled repo whose `formatVersion` differs from `3` is
+hard-rejected (HTTP 422 in `ProjectImporter.loadAndValidateArchive`, both too-old and too-new).
+The v2→v3 jump was handled by rejecting old repos outright, on the rationale that the project
+hadn't shipped beyond the dev box.
 
-That shortcut stops being acceptable once >1 install exists in the field and a
-breaking bump ships: without a reader for the previous version, every peer must
-upgrade in lockstep or lose access to the repo.
+That shortcut stops being acceptable once >1 install exists in the field and a breaking bump
+ships: without a reader for the previous version, every peer must upgrade in lockstep or lose
+access to the repo.
 
-**Shape when it lands**: a `SyncMigrations` registry keyed by source version, a
-`migrate(sourceDir, fromVersion)` step invoked from both import entry points
-before validation/diff, and per-version transformers. The `formatVersion.json`
-`minReader` field already exists to gate truly-breaking changes.
+**Shape**: a `SyncMigrations` registry keyed by source version, a `migrate(sourceDir,
+fromVersion)` step invoked from both import entry points before validation/diff, and per-version
+transformers. The `formatVersion.json` `minReader` field already exists to gate truly-breaking
+changes.
 
-**Trigger to revisit**: the next `formatVersion` bump is planned (e.g.
-`FU-SYNC-ORDINAL-DOUBLE`, or re-nesting cue children under their stack folder),
-**or** a second install needs to read a repo written by a newer install.
+**Unblock when**: the next `formatVersion` bump is planned (e.g. `FU-SYNC-ORDINAL-DOUBLE`, or
+re-nesting cue children under their stack folder), **or** a second install needs to read a repo
+written by a newer one.
 
-### `FU-SYNC-FETCHING-STATE` — Observe crash-mid-fetch via a `FETCHING` session
+### `FU-SYNC-FETCHING-STATE`
 
-**Status**: Trigger (crash observability)
-**Origin**: Cloud-sync Phase 6 deferral; `SessionState.FETCHING` reserved but
-unused. Re-logged 2026-07-23.
+**Observe crash-mid-fetch via a `FETCHING` session** · Trigger · Cloud-sync Phase 6 deferral;
+re-logged 2026-07-23
 
-`SessionState.FETCHING` is defined on the enum and documented as reserved, but
-no code ever writes it. `runSync` opens no session until conflicts are found,
-so a crash during the fetch/classify/snapshot phase leaves no row — the mutex
-just releases and the next run starts clean. That's *safe* (the FF and
-auto-merge reorder work covers the DB/git consistency corners), but it means a
-crash mid-fetch is invisible: no audit-log breadcrumb, no "a previous sync was
-interrupted" surfacing in the UI.
+`SessionState.FETCHING` is on the enum and documented as reserved, but nothing writes it. `runSync`
+opens no session until conflicts are found, so a crash during fetch/classify/snapshot leaves no
+row — the mutex releases and the next run starts clean. That's *safe* (the FF and auto-merge
+reorder work covers the DB/git corners) but invisible: no audit breadcrumb, no "a previous sync was
+interrupted" in the UI.
 
-**Shape when it lands**: open a `FETCHING` session at the top of `runSync`,
-transition it through the existing states, and extend
-`ConflictSession.recoverFromCrash` to reap stale `FETCHING` rows on startup
-(log + drop, since nothing was applied). Low value until crash-mid-sync is
-something operators actually hit and want explained.
+**Shape**: open a `FETCHING` session at the top of `runSync`, transition it through the existing
+states, and extend `ConflictSession.recoverFromCrash` to reap stale `FETCHING` rows on startup
+(log + drop, since nothing was applied).
 
-**Trigger to revisit**: operator reports a sync that "just stopped" with no log
-trail, **or** the activity-log feed is being extended and a
-`SYNC_INTERRUPTED` breadcrumb would be cheap to add alongside.
+**Trigger**: an operator reports a sync that "just stopped" with no log trail, **or** the
+activity-log feed is being extended and a `SYNC_INTERRUPTED` breadcrumb would be cheap alongside.
 
-### `FU-SYNC-FIELD-LEVEL-MERGE` — Field-level conflict granularity
+### `FU-SYNC-FIELD-LEVEL-MERGE`
 
-**Status**: Trigger (operator friction)
-**Origin**: Cloud-sync three-way-diff design; re-logged 2026-07-23.
+**Field-level conflict granularity** · Trigger · Cloud-sync three-way-diff design; re-logged
+2026-07-23
 
-Conflicts are detected and resolved at **whole-record** granularity: the diff
-hashes each record's entire canonical JSON. Two installs editing *different
-fields* of the same cue (one changes the name, the other the fade time) is a
-`EDIT_EDIT` conflict the operator must resolve by picking a whole side or
-hand-merging via MANUAL — even though a field-level merge would be
-unambiguous.
+Conflicts are detected and resolved at **whole-record** granularity — the diff hashes each
+record's entire canonical JSON. Two installs editing *different fields* of the same cue (one the
+name, one the fade time) is an `EDIT_EDIT` the operator must resolve by picking a whole side or
+hand-merging via MANUAL, even though a field-level merge would be unambiguous.
 
-Fine at current scale (edits rarely overlap on one record); becomes friction if
-two people routinely co-edit the same records. A field-level three-way merge
-(diff the JSON objects key-by-key, auto-merge disjoint field edits, only
-surface same-field disagreements) would cut the conflict rate but adds real
-complexity to `ThreeWayDiff` / the resolution model and the conflict UI.
+Fine at current scale; friction if two people routinely co-edit the same records. A field-level
+three-way merge (diff key-by-key, auto-merge disjoint edits, surface only same-field
+disagreements) would cut the conflict rate but adds real complexity to `ThreeWayDiff`, the
+resolution model and the conflict UI.
 
-**Trigger to revisit**: operators report frequent conflicts on records where
-the two sides "obviously" touched different fields.
+**Trigger**: operators report frequent conflicts on records where the two sides "obviously"
+touched different fields.
 
-### `FU-SYNC-MANUAL-MULTIFILE` — MANUAL resolution for scripts + richer editors
+### `FU-SYNC-MANUAL-MULTIFILE`
 
-**Status**: Trigger (conflict-UX gap)
-**Origin**: Cloud-sync Phase 6/7; documented single-file restriction. Re-logged
-2026-07-23.
+**MANUAL resolution for scripts + richer editors** · Trigger · Cloud-sync Phase 6/7; re-logged
+2026-07-23
 
-MANUAL conflict resolution only works on records that serialise to a single
-file. The route layer's `isManualEditAllowed` returns false for multi-file
-records — currently just `scripts` (`scripts/{uuid}.kts` +
-`scripts/{uuid}.meta.json`) — and for `DELETE_EDIT` conflicts. So a script
-edited on both sides can only be resolved whole-side (LOCAL/REMOTE); the user
-can't hand-merge the body. The conflict DTO already carries `manualEditAllowed`
-so the UI hides the option cleanly, but the capability gap remains.
+MANUAL resolution only works on records serialising to a single file. `isManualEditAllowed`
+returns false for multi-file records — currently just `scripts` (`scripts/{uuid}.kts` +
+`scripts/{uuid}.meta.json`) — and for `DELETE_EDIT` conflicts. So a script edited on both sides can
+only be resolved whole-side; the user can't hand-merge the body. The conflict DTO carries
+`manualEditAllowed` so the UI hides the option cleanly, but the capability gap remains.
 
-**Shape when it lands**: a multi-file-aware MANUAL editor (body textarea + meta
-fields, or two panes) and a resolve/apply path that accepts a per-file payload
-map instead of a single `manualValueJson`. Worth pairing with any broader
-"richer per-table conflict editors" work (structured pickers instead of raw
-JSON textareas).
+**Shape**: a multi-file-aware MANUAL editor (body textarea + meta fields, or two panes) and a
+resolve/apply path accepting a per-file payload map instead of a single `manualValueJson`. Worth
+pairing with any broader "richer per-table conflict editors" work.
 
-**Trigger to revisit**: an operator hits a same-script conflict and wants to
-keep parts of both sides, **or** conflict-resolution UX is being reworked
-anyway.
+**Trigger**: an operator hits a same-script conflict and wants parts of both sides, **or**
+conflict-resolution UX is being reworked anyway.
 
-### `FU-SYNC-PUSHRETRY-TEST-SEAM` — Deterministic push-retry / merge-failure coverage
+### `FU-SYNC-PUSHRETRY-TEST-SEAM`
 
-**Status**: Trigger (test hardening)
-**Origin**: `docs/sync-engineering.md` §"Push-rejected retry → Coverage
-limitation"; re-logged 2026-07-23.
+**Deterministic push-retry / merge-failure coverage** · Trigger · `sync-engineering.md`
+§"Push-rejected retry → Coverage limitation"; re-logged 2026-07-23
 
-Fully-deterministic coverage of the push-rejected retry path (and, now, the
-mid-`autoMerge` failure window from `FU-SYNC-MERGE-ATOMICITY`) needs a seam to
-inject a peer push / a failure between our fetch and our push. The current
-synchronous IO block in `RemoteSyncEngine` has no such seam, so
-`RemoteSyncEnginePushRetryTest` exercises the path opportunistically via
-concurrent `runSync` calls against a shared bare repo and asserts *eventual
-consistency* rather than verifying the retry counter or a specific interleaving.
+Fully-deterministic coverage of the push-rejected retry path (and the mid-`autoMerge` window from
+`FU-SYNC-MERGE-ATOMICITY`) needs a seam to inject a peer push or a failure between our fetch and
+our push. The synchronous IO block in `RemoteSyncEngine` has none, so
+`RemoteSyncEnginePushRetryTest` exercises the path opportunistically via concurrent `runSync` calls
+against a shared bare repo and asserts *eventual consistency* rather than the retry counter or a
+specific interleaving.
 
-**Shape when it lands**: extract a `JGitClient` interface (the wrapper is
-already a single object — this is mechanical) so tests can substitute a fake
-that fails/steps the remote deterministically at a chosen point. Unlocks
-counter-level assertions on the retry budget and a real test for the
-reset-before-import windows.
+**Shape**: extract a `JGitClient` interface (the wrapper is already a single object — mechanical)
+so tests can substitute a fake that fails or steps the remote at a chosen point. Unlocks
+counter-level assertions on the retry budget and a real test for the reset-before-import windows.
 
-**Trigger to revisit**: `FU-SYNC-MERGE-ATOMICITY` is picked up (the seam is a
-prerequisite for testing that fix), **or** a push-retry regression is suspected
-and the non-deterministic test can't pin it down.
+**Trigger**: `FU-SYNC-MERGE-ATOMICITY` is picked up (this is a prerequisite for testing that fix),
+**or** a push-retry regression is suspected and the non-deterministic test can't pin it.
 
----
+### `FU-SYNC-BINDING-PAYLOAD-UUIDS`
 
-### `FU-SYNC-BINDING-PAYLOAD-UUIDS` — Control-surface binding targets address rows by integer id
+**Control-surface binding targets address rows by integer id** · Trigger (correctness, latent) ·
+Code review of the project-clone rewrite, 2026-07-27
 
-**Status**: Trigger (correctness, latent)
-**Origin**: Code review of the project-clone rewrite, 2026-07-27
+`control_surface_bindings.targetPayload` serialises `midi.BindingTarget` verbatim, and the
+cue-facing variants carry **integer row ids** — `FireCue(cueId: Int)`,
+`CueStackGo/Back/Pause(stackId: Int)`. The exporter writes the payload as an opaque string, so
+those ids cross project and install boundaries unchanged. Nothing can translate them:
+`ExportUuidRemapper` only substitutes UUID-shaped strings and by design knows no field schemas.
 
-`control_surface_bindings.targetPayload` serialises
-`uk.me.cormack.lighting7.midi.BindingTarget` verbatim, and the cue-facing
-variants carry **integer row ids** — `FireCue(cueId: Int)`,
-`CueStackGo/Back/Pause(stackId: Int)`. The exporter writes the payload as an
-opaque string
-([`ProjectExporter`](../../src/main/kotlin/uk/me/cormack/lighting7/sync/ProjectExporter.kt)),
-so those ids cross project and install boundaries unchanged. Nothing can
-translate them: `ExportUuidRemapper` only substitutes UUID-shaped strings, and
-by design it knows no field schemas.
+Consequences, increasing in severity:
 
-Consequences, in increasing severity:
+* **Clone** (`sync/ProjectCloner.kt`): a cloned project's cue/stack bindings point at the *source*
+  project's rows. `State.buildBindingHealthContext` resolves them against the clone's own ids, so
+  each evaluates to `MissingCue` / `MissingStack` and `SurfaceInputRouter` drops the press. The
+  clone's MIDI surface is dead until rebound — loud rather than silent, but wrong.
+* **Import on another install**: same failure, except the stale id may coincidentally *exist* and
+  name an unrelated cue, so a button fires the wrong look instead of nothing.
+* **Pre-init window**: `buildBindingHealthContext` returns null before the show is initialised and
+  health defaults to `Ok`. A press in that window dispatches `CueStackManager.fireCue`, which does
+  `DaoCue.findById(id)` with **no project check** — firing another project's cue.
 
-* **Clone** (`sync/ProjectCloner.kt`): a cloned project's cue/stack bindings
-  point at the *source* project's rows. `State.buildBindingHealthContext`
-  resolves them against the clone's own ids, so each one evaluates to
-  `MissingCue` / `MissingStack` and `SurfaceInputRouter` drops the press. The
-  clone's MIDI surface is dead until rebound. Visible in the assignment-health
-  UI, so it's loud rather than silent — but still wrong.
-* **Import on another install**: same failure, except the stale id may
-  coincidentally *exist* and name an unrelated cue, so a button fires the wrong
-  look instead of nothing.
-* **Pre-init window**: `buildBindingHealthContext` returns null before the show
-  is initialised, and health then defaults to `Ok`. A press in that window
-  dispatches `CueStackManager.fireCue`, which does `DaoCue.findById(id)` with
-  **no project check**
-  ([`fx/CueStackManager.kt`](../../src/main/kotlin/uk/me/cormack/lighting7/fx/CueStackManager.kt)) —
-  firing another project's cue while this one is current.
+**Shape** — two independent pieces:
 
-**Shape when it lands.** Two independent pieces:
+1. Make `BindingTarget`'s cue/stack variants carry UUIDs (or have `ControlSurfaceBindingJson`
+   translate id ↔ uuid at the export/import boundary, leaving the runtime type alone). Either way
+   it's a `formatVersion` bump plus a payload migration, and it fixes clone and cross-install
+   import together.
+2. Independently, project-scope the lookups in `CueStackManager.fireCue` and its stack equivalents
+   so a stale id can never reach another project's row. Worth doing on its own merits.
 
-1. Make `BindingTarget`'s cue/stack variants carry UUIDs (or have
-   `ControlSurfaceBindingJson` translate id ↔ uuid on the export/import
-   boundary, leaving the runtime type alone). Either way it's a
-   `formatVersion` bump plus a migration for existing payloads, and it fixes
-   clone and cross-install import together.
-2. Independently, project-scope the lookups in `CueStackManager.fireCue` and
-   its stack equivalents so a stale id can never reach another project's row.
-   Worth doing on its own merits regardless of (1).
-
-**Trigger to revisit** (any one):
-- An operator reports dead or wrong-cue MIDI bindings after cloning or
-  importing a project.
-- Any work touching `BindingTarget`, `ControlSurfaceBindingJson`, or the
-  binding-health context — fold the fix in rather than adding another
-  id-addressed payload variant.
-- A `formatVersion` bump lands for another reason (piggyback the migration).
-
----
-
-## Code quality
+**Trigger** (any): an operator reports dead or wrong-cue MIDI bindings after a clone or import; any
+work touching `BindingTarget`, `ControlSurfaceBindingJson` or the binding-health context (fold it
+in rather than adding another id-addressed variant); or a `formatVersion` bump lands for another
+reason.
 
 ---
 
 ## Testing
 
-### `FU-TEST-FX-BENCH-CI-GATE` — `FxEngineBenchmark` CI regression gate
+### `FU-TEST-FX-BENCH-CI-GATE`
 
-**Status**: Trigger (variance study)
-**Origin**: Cue-authoring Phase 5, deferred 2026-04-22
+**`FxEngineBenchmark` CI regression gate** · Trigger · Cue-authoring Phase 5, deferred 2026-04-22
 
-Benchmark ships track-only. The plan called for a fail-on-regression gate at
-±20% tolerance against a committed baseline.
+The benchmark ships track-only; the plan called for a fail-on-regression gate at ±20% against a
+committed baseline.
 
-**Trigger to revisit**: collect a week of baseline numbers across dev / CI
-hardware first to judge variance. 20% is a guess; real tolerance depends on
-how jittery the allocation counter + `measureNanoTime` numbers are on the
-actual CI runner. Without that variance study, a fixed threshold will either
-flake constantly or fail to catch real regressions.
+**Trigger**: collect a week of baseline numbers across dev and CI hardware first. 20% is a guess —
+real tolerance depends on how jittery the allocation counter and `measureNanoTime` are on the
+actual runner, and without that study a fixed threshold either flakes constantly or catches
+nothing.
 
-### `FU-TEST-MULTI-CONN-CUEEDIT` — Multi-connection cueEdit conflict
+### `FU-TEST-MULTI-CONN-CUEEDIT`
 
-**Status**: Blocked (awaiting cue-authoring semantics)
-**Origin**: Control-surface Phase 6
+**Multi-connection cueEdit conflict** · Blocked · Control-surface Phase 6
 
-The plan defers to cue-authoring's "reject-second-beginEdit" conflict
-resolution, but there's no Phase 6 test that two WS connections racing on
-`beginEdit` behave correctly for surface routing.
+The plan defers to cue-authoring's "reject-second-`beginEdit`" conflict resolution, but no Phase 6
+test covers two WS connections racing on `beginEdit` for surface routing.
 
-**Unblock by**: confirming exact semantics with cue-authoring owners, then
-add the test.
-
----
-
-## Manual hardware validation
-
-These are operational validations pending an operator session on the rig (most
-on the X-Touch Compact). No engineering scope; each is 10–15 minutes end-to-end.
-
-### `FU-MANUAL-EDITOR-INPROCESS` — script editor compiling while the rig is live
-
-**Status**: Manual
-**Origin**: `FU-DIST-KCS-RETIRE`, 2026-08-18
-
-The one property the retired compiler server was actually providing, beyond answering
-`/highlight`: **process isolation**. Editor highlighting (every pause in typing) and completion
-(most keystrokes) used to run in a separate JVM on port 8321. They now run in the same JVM that
-drives DMX.
-
-`ScriptEditorService` bounds this deliberately — a single below-normal-priority daemon thread, so
-no amount of typing yields more than one concurrent compiler; superseded requests dropped rather
-than queued; a 10 s cap on the response. But that caps *concurrency*, not cost: a compile is
-0.2-0.6 s of real work, and it now competes for heap and CPU with the output loop. No unit test
-can speak to that.
-
-**To validate**: with a cue stack running and effects live on real fixtures, open the script
-editor and type continuously for a minute or so in a GENERAL script — enough to trigger many
-highlight and completion round-trips. Watch for output stutter, dropped frames, or audible
-hesitation in moving-head motion. Repeat with an FX_CALC script, whose template differs.
-
-**If it does stutter**, the levers in order of bluntness: raise the debounce client-side, drop
-`autocomplete` on lower-powered desks, or gate the editor routes on the rig being idle. Reaching
-for a second process again should be the last resort — it is what this change removed.
-
----
-
-### `FU-MANUAL-PALETTE-TOURING` — palette edit moves a live look (Session 4)
-
-**Status**: Manual
-**Origin**: Programmer redesign Session 4, 2026-08-14
-
-Session 4 was verified on a live rig for record, include, apply, cue-side badges
-and health, and Make Hard at both levels. The one behaviour **not** verified on
-stage is the point of the whole feature: **edit a palette while a cue that
-references it is live, and watch the output move without re-firing the cue.**
-
-Republish-on-palette-edit is unit-covered, but the path it exercises is long —
-`PaletteRegistry` cache invalidation → the version counter's re-check →
-`replaceCueAssignments` (which preserves `cueFadeWeights`, unlike
-`setCueAssignments`) → the controller write. A stale cache or a dropped republish
-would look exactly like "nothing happened", which is indistinguishable from
-operator error unless someone is watching lamps.
-
-**Manual test**: record a COLOUR palette from two heads → author a cue that
-references it → GO the cue → edit the palette (change one head's colour) → the
-live heads move, the other cue content does not, and no cue re-fire was needed.
-Repeat with a POSITION palette on a moving head, which is where per-fixture
-resolution matters (the same `ref:` string must resolve to a different pan/tilt
-per head). Then mid-crossfade: edit a palette referenced by the *incoming* cue
-while the fade is running, and confirm the fade continues rather than snapping —
-that is the `cueFadeWeights` preservation.
-
-### `FU-MANUAL-SPEED-MASTERS-RIG` — two masters driving one show (Session 5)
-
-**Status**: Manual — **backend restart required first** (new classes)
-**Origin**: Programmer redesign Session 5, 2026-08-14
-
-Session 5 shipped with a restart still outstanding, so **no part of the speed
-master bank has run against the rig**. `SpeedMasterBankTest` pins the tick-interval
-arithmetic (the old `toLong()` truncation ran 120 BPM at ~125, which with two
-masters is *relative* drift at 120:60 ⇒ 2.05:1) and `SocketMessageWireFormatTest`
-pins the master-1 wire compatibility, but the single-engine-pass composition — one
-`ControllerTransaction` per frame however many masters ticked — has only ever been
-exercised by tests.
-
-Coordinate the restart with the user before doing this; it may be driving a live
-rig.
-
-**Manual test**: restart the backend → confirm the default bank seeds and the
-existing BPM tile still reads and taps master 1 (the wire-compat promise, from a
-client that never learned about masters). Then: put a position wave on master 2 at
-half master 1's BPM, a dimmer chase on master 1, both on the same fixtures →
-confirm the two run at a visibly 2:1 ratio and hold it over a few minutes (drift
-is what the deadline timer fixes, and it only shows up over time). Tap master 2 →
-only its effect changes rate. Finally check the legacy surfaces still land on
-master 1: script `setBpm`, REST `/fx/clock/*`, and `setFxBpm` over WS.
-
-While you're there, check the per-master beat dots: `BeatIndicator` now takes a
-master and pulses from the keyed `speedMasters.beat` stream, so the dot beside a
-master-2 effect should track master 2 — it used to be master-1-only and visibly
-wrong, which is what `FU-SPEED-BEATINDICATOR-PERMASTER` was filed for. Watch the
-**master 1** dot in particular: `beatSync` used to (accidentally) arrive every
-beat, and now genuinely arrives every 16, so the client's local interpolation is
-load-bearing for the first time.
-
-### `FU-MANUAL-AUTH-QR-SCAN` — the two QR flows on an actual phone
-
-**Status**: Manual
-**Origin**: Multi-user-auth Session 3, 2026-08-17; widened for the device-login QR 2026-08-17
-
-Both QR flows are covered end to end by `UsersRoutesTest`, `PasswordResetRoutesTest`,
-`DeviceLoginRoutesTest`, `ResetPasswordPage.test.tsx` and `DeviceLoginPage.test.tsx`, and the
-desk is locked with a real admin account. The one thing no test can prove is the **two-device
-path**: that the URL behind the QR is an address a phone on the same Wi-Fi can
-actually reach. `auth/ResetUrls.kt` builds it from the request's own `Host` header —
-correct by construction when the admin browsed by mDNS name or LAN IP, and falling
-back to the mDNS name plus site-local IPv4s when that host is loopback — but a QR
-that resolves to the phone itself is the one failure this flow cannot recover from,
-because the person scanning it is by definition already locked out.
-
-**Still outstanding as of `631a94f`.** Everything below *except the actual camera scan* was
-walked against a running desk on 2026-08-17 — both 409s by curl, mint → close sheet → history
-row → cancel, the full device-login exchange, and the phone page rendered at mobile width in
-a browser. What that did not test is a real phone's camera resolving the encoded host, which
-is the whole point of this item. Two flows share that mechanism now, so both need a look;
-`buildLanUrls` is common to them, so a failure in one implicates the other.
-
-**Manual test** (needs a backend on `631a94f` or later; confirm
-`GET /api/rest/auth/device-logins` answers rather than 404):
-
-1. As admin, create a throwaway operator. Sign in as them in a private window and
-   confirm the Users tab and sync nav entries are absent while lighting control works.
-2. Open the operator's detail sheet → **Reset with a QR code…** → scan it with a
-   phone on the same Wi-Fi. The phone should show *that operator's* display name,
-   not a login form and not a connection error.
-3. Set a new password on the phone → the admin's sheet flips to "used" within ~2 s
-   (2 s poll), and the operator's private window drops to the login screen on its
-   next click with the socket closing 4401.
-4. Sign in on the desk with the phone-set password.
-5. With the operator's socket open, disable them from the detail sheet → the socket
-   closes immediately (that's `AuthService.revocations`, the half that only exists
-   because a REST-only check would wait for their next request).
-6. Repeat step 2 while browsing the desk as `localhost` — this is the loopback
-   fallback, and the QR must carry the mDNS/LAN address instead. Check the
-   alternates disclosure lists something the phone can reach.
-7. Delete the throwaway operator.
-
-**Then the device-login QR**, which shares `buildLanUrls` but hands out a *session* rather
-than a password-set, so the negative cases matter more than the happy one:
-
-8. User menu → **Sign in on a phone…** → scan on a phone on the same Wi-Fi. It should name
-   your account and wait for a tap — confirm nothing is signed in *before* you tap, since a
-   scanner that prefetches must not burn the code. Tap; the phone lands in the app and the
-   desk's sheet flips to a success state naming the device.
-9. Check the devices list in the user menu says that session came in by QR.
-10. Mint another and **close the sheet** — the phone must then be refused (`CANCELLED`).
-    Mint another and leave it for two minutes untouched — refused as `EXPIRED`.
-11. Mint one and press **"Sign out everywhere else"** before scanning: refused. Repeat with
-    plain **Log out**: also refused. These two are the interlocks review found missing, and
-    they are the ones worth a real check.
-12. Off-LAN, if you can arrange it (phone on cellular, or a port-forward): the exchange must
-    answer 404. That check reads the socket peer, so a VPN or a flat venue network is the
-    realistic way it gets weaker.
-
-Note step 2 is the only irreplaceable one; if the phone can't reach the URL, capture
-what it *was* (the sheet shows it as selectable text) before changing anything —
-that string is the whole diagnosis.
-
-### `FU-MANUAL-SCALER-PROJECT-SWITCH` — Scaler state across project switches (Phase 9)
-
-**Status**: Manual
-**Origin**: Control-surface Phase 9
-
-Connect device → toggle **Blackout** on project A (confirm LED + stage) →
-switch to project B via `/projects` → Blackout off on B (fresh holder) →
-switch back to A → Blackout still on, stage still dark. Same flow for
-**Grand Master**. Verify a WS client open across the switch sees the correct
-`surfaceScaler.state` payload at each switch and after toggling within the
-new project. Backend restart resets both projects (expected — option B not
-landed; see `FU-BE-SCALER-PERSISTENCE`).
-
-### `FU-MANUAL-SUSPEND-PATH` — Suspend-path sanity check (Phase 8)
-
-**Status**: Manual
-**Origin**: Control-surface Phase 8
-
-Run a script that adds and removes 100 effects/sec while a MIDI fader is at
-full 60 Hz on the same property. Confirm no stage stutter, no WebSocket
-`channelState` lag, no coroutine leak on a thread dump. No functional changes
-expected — the suspend path delivers the same per-channel acks as the old
-blocking path — regression sanity check, not new validation work.
-
-### `FU-MANUAL-CUEEDIT-HARDWARE` — cueEdit integration on hardware (Phase 6)
-
-**Status**: Manual
-**Origin**: Control-surface Phase 6
-
-Open a cue for edit in Live mode via the frontend → wiggle a bound fader →
-confirm the cue's Layer 3 `dimmer` row updates (via `GET /cues/{id}`) →
-stage reflects the new value → close the editor → retrigger the cue →
-reproduces the edit. Repeat in Blind mode: stage unaffected during the edit,
-value still persists.
-
-### `FU-MANUAL-SURFACES-FLOW` — End-to-end `/surfaces` flow (Phase 5)
-
-**Status**: Manual
-**Origin**: Control-surface Phase 5
-
-Connect the device → `/surfaces` shows it as attached. Click **+** on a fader
-row, open MIDI Learn, wiggle the physical fader → binding appears. Switch
-banks via the `BankSwitcher` → matrix rows update. Validates the Phase 5 UI
-+ Phase 3/4 wiring against real hardware edges (debounce, device-side bank
-events, motor drive under load).
-
-### `FU-MANUAL-DIST-INSTALL` — End-to-end installer validation on Mac + Windows
-
-**Status**: Manual
-**Origin**: Windows-distribution Phases 1–3, 2026-04-28
-
-All three phases of the Windows-distribution plan are build-side green —
-backend boots from `lighting7.jar` on the trimmed JRE, `packageMac`
-produces a 337 MB `.pkg` with the right install layout, the launcher's
-`ensureDefaultConfig` writes `local.conf` on first launch. What's never
-been exercised end-to-end:
-
-- **Mac**: install `lighting7-1.0.0.pkg` on a clean machine (or wipe
-  `/Applications/lighting7.app` + `~/Library/Application Support/lighting7`
-  first). Double-click → tray icon appears in the menu bar, browser opens
-  to `localhost:8413`, iPad on the same Wi-Fi reaches
-  `http://lighting7-<hostname>.local:8413/`, Quit from tray leaves no
-  `java` processes (`pgrep -f lighting7`).
-- **Windows**: `gradlew.bat packageWindows` on a Windows host →
-  install `.msi` on a clean Windows VM with no JDK. Same checks plus:
-  `%APPDATA%\lighting7\` is writable for the launcher's first-run
-  `local.conf`, mDNS resolves from the iPad (Bonjour-on-Windows ships
-  with iTunes / Apple Software Update; without it, JmDNS is the
-  responder), Windows Defender doesn't quarantine `lighting7.exe`.
-- **Smoke checklist** in either install: BPM tap, fixture patch CRUD,
-  run a cue, edit a script in the embedded editor (covers the
-  compiler-server child process), iPad WebSocket reconnects after a
-  brief Wi-Fi drop.
-- **Native payloads** (added 2026-08-18 — the MSI now ships binaries for the
-  target OS only, see [`msi-slimming-plan.md`](msi-slimming-plan.md)). One
-  feature per stripped artifact, because each fails independently and none is
-  covered by a test:
-  - **sqlite-jdbc** — the app boots at all and fixture patch CRUD persists
-    across a restart. A missing payload is `No native library found for
-    os.name=…` at the first connection.
-  - **libremidi / javax.sound.midi** — a MIDI control surface enumerates under
-    `/surfaces`. Note Windows deliberately uses `JvmMidiAccess`, so this
-    exercises different code on each OS.
-  - **coremidi4j** (Mac only) — the `midi-enum:` debug line from
-    `midi/MidiDeviceRegistry.kt` reports `coremidi4j=loaded=true`.
-  - **JNA** — store a GitHub PAT and confirm it survives a restart
-    (`java-keyring` → JNA → the platform keychain). **Easiest of the four to
-    forget**, and the only one whose payload arrives transitively.
-- **Editor completion** — type a Lighting7 receiver and `.` in the script
-  editor and confirm **project** completions, not just stdlib. The editor jar no
-  longer contains the frontend bundle and only two of the fork's six library
-  directories ship; this is the check that both cuts were safe.
-- **Size** — record the MSI byte count. Baseline for comparison: 312 MB before
-  the slimming pass, projected ~253 MB after.
-
-10–20 minutes per OS. Failures here likely surface as concrete engineering
-items (jlink module gaps, mDNS edge cases, Windows path quirks); promote
-those to dedicated `FU-DIST-*` follow-ups before fixing.
-
-### `FU-MANUAL-UPDATE-APPLY` — In-app update, end to end on Windows
-
-**Status**: Manual
-**Origin**: Windows in-app updates, 2026-08-17
-**Blocked on**: `FU-MANUAL-DIST-INSTALL` — there is no point testing an upgrade path from a
-build nobody has confirmed installs.
-
-Everything from `POST /update/apply` onward is unautomatable: the marker protocol is
-round-tripped in one JVM by `UpdateMarkerRoundTripTest` and the PowerShell command line is pinned
-by `WindowsUpdateApplyTest`, but no test can observe a real launcher exiting, a UAC prompt, or
-`msiexec` replacing files in `C:\Program Files`.
-
-**Upgrade mechanics** (this is what proves the UpgradeCode fix worked):
-
-1. Install `v1.1.0` on a clean VM. Note the install directory and **whether UAC prompted** —
-   that answers per-machine vs per-user, which is a one-way door and must be settled before the
-   first release ships.
-2. Add/Remove Programs shows **one** `lighting7`.
-3. Install `v1.1.1` by double-click → still **one** entry, version bumped, one Start-menu
-   shortcut, and `%APPDATA%\lighting7\` untouched (DB, `local.conf`, logs all survive).
-4. Repeat with `msiexec /i <msi> /qb /norestart /l*v %TEMP%\l7.log` — the exact command the apply
-   flow issues. Confirm the behaviour **while the app is running**, and grep the log for
-   `RemoveExistingProducts`.
-5. Install `v1.1.0` over `v1.1.1` → expect a downgrade refusal, not a silent side-by-side.
-6. Confirm a user-chosen install directory (`--win-dir-chooser`) is honoured across the upgrade.
-
-**The in-app path**, in order: dev-build state → check with no release published (expect the
-404/"nothing yet" state, not an error) → check with a release → download and verify →
-**deliberately corrupt the staged MSI and confirm the launcher refuses it and keeps running** →
-real apply → confirm the relaunch happens and the new version is reported.
-
-**Failure paths**: cancel the UAC prompt (expect exit 1602 recorded and the desk back on the old
-version); kill the wrapper mid-install; unplug the network mid-download (expect the `.part` gone,
-nothing staged); fill the disk.
-
-Failures here likely surface as concrete engineering items — promote them to dedicated
-`FU-DIST-*` / `FU-UPDATE-*` follow-ups rather than fixing inline. See `docs/windows-updates.md`.
-
-### `FU-MANUAL-DEAD-ASSIGNMENTS` — Dead-assignment banner live rig (Phase 6)
-
-**Status**: Manual
-**Origin**: Cue-authoring Phase 6, 2026-04-22
-
-Backend logic for `DeadAssignmentsBanner` / `DeadPresetAssignmentsBanner` is
-stateless and covered by unit tests. WS fan-out + React rendering of dead
-markers after a fixture rename wasn't validated end-to-end on real hardware.
-
-**Manual test**: rename a fixture in a patch, reload the cue editor, confirm
-dead markers appear on affected rows, confirm Remove clears them. 10 minutes.
+**Unblock by**: confirming the exact semantics with cue-authoring, then adding the test.
 
 ---
 
 ## Completed
 
-_Move items here as they land. Format:_
-`- FU-SLUG-ID — commit abcdef0 (YYYY-MM-DD) / [PR link] — short note if useful_
+One line each: slug, what shipped, commit. Full narratives live in the commit messages and in this
+file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
-- `FU-DIST-KCS-RETIRE` — (2026-08-18) — the bundled `kotlin-compiler-server` fork is gone, and
-  with it ~122 MB of installer (`kotlin-compiler-server.jar` 100.3 + `2.4.10*/` ~16.5), the
-  patch-then-revert dance over a sibling git checkout, the one-minor Kotlin drift constraint,
-  `assembleCompilerServer`/`runCompilerServer`, the second JVM on port 8321, the Ktor reverse
-  proxy, and CI's dual JDK 17 + 24 setup. `/versions`, `/highlight` and `/complete` are now served
-  from this app's own scripting host at **`/script-editor/*`**
-  (`routes/scriptEditor.kt` + `scripts/ScriptEditorService.kt`).
+### 2026-08
 
-  **The ticket's premise was out of date, and that is what made this tractable.** It assumed
-  completion had to be reimplemented — "completion and highlighting via the analysis API is most of
-  what the compiler server *is*". Upstream had already given up on it: `85c80df1` (2025-08-07,
-  "Removed indexation module and kotlin idea dependencies") stubbed `complete()` to
-  `return emptyList()`, and `a0a9af31` deleted the endpoint outright, moving completions to a
-  separate WebFlux service that shells out to kotlin-lsp. The fork tracks branch `2.4.10`, past
-  both — **so the desk's editor has had no working autocomplete at all**, and the whole 122 MB was
-  earning one endpoint that upstream implements as "compile and return the diagnostics".
+- `FU-DIST-KCS-RETIRE` — compiler-server fork retired, editor served in-process at
+  `/script-editor/*`; ~122 MB off the installer — `0199762`
+- `FU-DIST-KCS-LIB-PRUNE` — moot: the staged playground jars went with the fork — `0199762`
+- `FU-DIST-EDITOR-JAR-CLASSES-ONLY` — moot: `compilerServerLightingJar` no longer exists —
+  `0199762`
+- `FU-DIST-KCS-SKIP-KLIB-DOWNLOAD` — moot: no fork left to download klibs — `0199762`
+- `FU-WS-USER-INVALIDATION` — account and install edits broadcast over a machine-scoped
+  `SharedFlow`, not `FixturesChangeListener` — `0730295` + lighting-react `b3c4645`
+- `FU-AUTH-PROFILE-SHEET` — four-tab profile sheet and `PUT /auth/profile`, any role — `bbb1a87`
+  + lighting-react `3dfee11`
+- `FU-AUTH-SELF-ROLE-GUARD` — a self role change answers 409 `SELF_TARGET` — `631a94f` +
+  lighting-react `81b3fd9`
+- `FU-AUTH-SELF-RESET-GUARD` — reset-token mint refuses your own account — same commits
+- `FU-AUTH-RESET-TOKEN-HISTORY` — reset links survive sheet close, 30-day polled history — same
+  commits
+- `FU-AUTH-LOGIN-QR` — QR sign-in on a phone, in-memory codes, six revocation interlocks — same
+  commits
+- `FU-PROG-RECORD-SELECTION-SCOPE` — Record scoped to selected fixtures, list selection moved into
+  the store — `6b40950` + lighting-react `f2c2a47`
+- `FU-SPEED-RATEMASTER-UI` — rate-master picker on every FX authoring surface — `9541322`
+- `FU-SPEED-MIDI-BINDING` — `SpeedMasterBpm` / `SpeedMasterTap` binding targets — `9541322`
+- `FU-SPEED-BEATINDICATOR-PERMASTER` — `BeatIndicator` pulses from the keyed `speedMasters.beat`
+  stream — `9541322`
+- `FU-PROG-PROVENANCE-STACKID` — CUE provenance entries carry `cueStackId` — `714d742`
+- `FU-PROG-EFFECTSREMOVED-FIELD` — dropped the always-zero `ToggleLocateResponse.effectsRemoved` —
+  `d8fa43c`
 
-  Completion is therefore *new*, not restored: `kotlin-scripting-ide-services` (**200 KB**;
-  `KJvmReplCompilerWithIdeServices` implements both `ReplCompleter` and `ReplCodeAnalyzer`) gives
-  `show.` → 118 correctly-typed members, `fixtures.` → 104, and resolves `LightingScript`'s own
-  top-level DSL. The feared shaded/unshaded clash did not exist — the runtime classpath already
-  carried only the `-embeddable` variants — but `kotlin-scripting-compiler-embeddable` has to be
-  declared at *compile* scope, because `KJvmReplCompilerBase` lives there and the ide-services POM
-  declares it only at runtime.
+### 2026-04
 
-  Three things worth knowing before working nearby:
-
-  - **A fresh `KJvmReplCompilerWithIdeServices` per request is mandatory.** It keeps REPL snippet
-    history; reuse across unrelated snippets corrupts its analysis state so that the first call
-    succeeds and every later one fails with `NoDescriptorForDeclarationException`. A test pins it.
-  - **`ScriptSourceWrapper` is now the single owner of how a script body becomes compilable
-    Kotlin**, replacing the independent copies in `Show.Script.init` and
-    `FxScriptCompiler.wrapInLambda`. It reports the line offset it introduces — which fixed a
-    standing bug neither of those had: diagnostics for GENERAL and the FX_CALC family were
-    reported against the *wrapped* text, so every compile error in those editors pointed one line
-    low.
-  - **The frontend's `SCRIPT_WRAPPERS` are presentation only now.** The backend strips them and
-    compiles the body against the real `.kts` template, so they no longer have to be kept in
-    lockstep with six Kotlin base-class signatures. What *is* load-bearing is the
-    `//@lighting7-script-type=<TYPE>` marker on the first line of each prefix: it is how the
-    backend picks the template, and without it that editor silently falls back to GENERAL.
-
-  The editor widget's own Run button is hidden (`.kotlin-editor .run-button`); every surface
-  already supplied its own Run wired to `/{projectId}/scripts/run`, which runs against the live
-  show. `FU-DIST-KCS-LIB-PRUNE` is closed as moot and `FU-DIST-JLINK-MODULES` is unblocked (its
-  jdeps workaround existed only because of the fork's `BOOT-INF/lib/` layout).
-  Left open: `FU-MANUAL-EDITOR-INPROCESS`.
-
-- `FU-WS-USER-INVALIDATION` — commits 0730295 (lighting7) + b3c4645 (lighting-react)
-  (2026-08-17) — desk-account and install-row
-  edits now reach other clients. **The open question was the channel, and the sibling emitter
-  won**: `AuthService.userChanges: SharedFlow<Int>` beside the existing `revocations`, plus
-  `State.machineEventsFlow` for the install row, collected by a new `plugins/MachineSocket.kt`.
-  Widening `FixturesChangeListener` was rejected on two counts — 14 methods with no default
-  bodies means five no-op overrides in unrelated subsystems, and its `Fixtures` instance is torn
-  down on project switch while accounts outlive every project. Two frames, not one:
-  `userListChanged` broadcast, `ownAccountChanged` only to the subject's own sockets (a broadcast
-  `Auth` invalidation would have every client re-read `auth/status` on any admin edit). Both
-  payload-free, because these sockets are open to operators and `/api/rest/users` is not.
-  Three things the implementation turned up that the ticket didn't predict: the collector belongs
-  **before** the boot warm-up gate, not with the show-scoped subscriptions (after it, an edit
-  during warm-up is lost rather than delayed, and a FAILED boot never registers at all); the
-  own-account frame must be sent **first**, or a just-demoted admin refetches `/users` with the
-  role it no longer has; and `scope.user == null` needs its own arm, because a bootstrap-open tab
-  sitting on the setup screen otherwise never learns that another tab completed setup — which
-  also raised `FU-AUTH-STALE-ANON-SOCKET`. Emission is from the six funnels inside `AuthService`
-  rather than the routes, which covers break-glass for free. `store/installs.ts`, which the
-  ticket named as the next occupant of this gap, went in the same change.
-  `FU-AUTH-RESET-TOKEN-STALENESS` and `FU-AUTH-SESSION-LIST-STALENESS` were scoped out with
-  reasons written down rather than left implicit.
-
-- `FU-AUTH-PROFILE-SHEET` — commits bbb1a87 (lighting7) + 3dfee11 (lighting-react)
-  (2026-08-17) — `ChangePasswordSheet` became `ProfileSheet`, and grew the one field a user
-  should be able to change without an admin. Backend is `PUT /api/rest/auth/profile`
-  (`{displayName}` → `AuthUserDto`), beside `PUT /auth/password` rather than a self-exception
-  in the admin-only users route: `isAdminOnly` is a plain prefix match, so a carve-out inside
-  one of its prefixes would mean that list no longer describes its own subtree. Matching
-  neither `ADMIN_ONLY_PREFIXES` nor `isAuthExempt` makes it authenticated-any-role for free,
-  and `AuthGateTest` pins that an operator gets through. `MAX_DISPLAY_NAME_LENGTH` /
-  `validateDisplayName` went `internal` so both routes answer identically — a rename
-  accepting what the admin route rejects would be a length limit that depends on who is
-  asking. No `AuthService` change: `updateUser` already writes through to the cache
-  `AuthenticatedUser` is rebuilt from.
-
-  Two extensions beyond the original scope, both asked for during the work. The sheet became
-  **four tabs** — Profile / Password / Devices / Sign-in — each owning its own action button,
-  footer reduced to Close, one error state per tab; a footer Save would have had to mean
-  "save the display name" while you were looking at the devices list. And **"Manage users"
-  left the user menu**, because the `users` nav entry is already `adminOnly`, so a second
-  entry point only meant role-filtering one destination twice.
-
-  The sign-in QR moved in as the Sign-in tab (`DeviceLoginSheet` → `DeviceLoginSection`, keyed
-  on `active` instead of `open`): **arriving on the tab mints the code, leaving cancels it, no
-  button either way.** Navigating to a tab named for the thing is as deliberate as pressing a
-  button labelled the same, and the tab bar above the code is a better exit than a Hide button
-  inside it. The half carrying the security property is that opening the sheet lands on
-  Profile, so nothing mints unasked — which is why closing resets the tab from an effect on
-  `open` rather than from a close handler, since Esc, the overlay, the X and Close all call
-  `onOpenChange` straight through.
-
-  **Four lifecycle bugs, and they are why that component has the test file it has.** A ref
-  keeping its last value through unmount leaked a code minted while the section was going
-  away. The reveal flag reset from a close *handler* was skipped by a close that bypassed it,
-  so the next open minted a credential nobody asked for. Under **StrictMode** the section
-  minted twice — which matters because `createDeviceLogin` retires the caller's previous code,
-  so the two promises race and resolving them backwards displays a QR the server has already
-  cancelled; the first fix attempt (cancel the displaced code) made it worse by killing the
-  live one, because the client cannot know which mint the server saw last. The only fix is not
-  making the second call. Plain `render` passes while all of that is broken, so two tests
-  render under `StrictMode`. Review found the fourth: a *failed* mint latched the one-mint
-  guard shut while the expired/cancelled retry branch needs a `code` a failed mint never
-  produces — an error with nothing to press.
-
-- `FU-AUTH-SELF-ROLE-GUARD` — commits 631a94f (lighting7) + 81b3fd9 (lighting-react)
-  (2026-08-17) — a self-role change answers 409 `SELF_TARGET`, keyed on an actual change so
-  a no-op resend isn't a conflict. Consequence worth knowing: the self guards run *before*
-  the last-admin one, so over HTTP **every** arm of `LAST_ADMIN` is now unreachable — a
-  caller is always an enabled admin, so a different user can never be the last one. Its only
-  coverage is the service-level test in `UsersRoutesTest`, whose docblock says so. The `Auth`
-  invalidation on `updateUser` stayed (an edit to *another* account still changes what its
-  owner may do) but its comment stopped claiming self-demotion as the reason.
-
-- `FU-AUTH-SELF-RESET-GUARD` — same commits — `POST /users/{id}/reset-tokens` refuses your
-  own account, 409 `SELF_TARGET`. The sheet *hides* rather than disables both password
-  routes for your own row: a Password section made of three greyed-out controls and a
-  paragraph pointing at them reads as breakage.
-
-- `FU-AUTH-RESET-TOKEN-HISTORY` — same commits — closing the QR sheet no longer cancels the
-  link; `GET /users/{id}/reset-tokens` plus `ResetTokenHistory` make a live one visible and
-  deliberately revocable. The boot prune became a 30-day retention window ageing on
-  `created_at_ms` (one predicate replaces three, because a row is never PENDING longer than
-  its TTL — asserted by a `require` in `init` rather than trusted as a comment). Two things
-  the first pass got wrong and review caught: the list needs to **poll** and to derive
-  EXPIRED from its own countdown, because the two events that change a row happen where the
-  admin's browser can't see them (the *phone* redeems; expiry is just the clock passing), so
-  a redeemed link sat badged "Live" at 0:00 — the exact question the list exists to answer.
-
-- `FU-AUTH-LOGIN-QR` — same commits — QR sign-in on a phone, any role, `/auth/device-logins`
-  to mint and public `/auth/device/{token}` to exchange. Decisions are recorded in
-  [`docs/desk-accounts.md`](../desk-accounts.md); the ones that would otherwise be
-  re-litigated: codes live **in memory, not a table** (their life is shorter than a restart,
-  so a row would only buy a write on the shared connection from a public path plus a
-  hand-rolled delete in `deleteUser`), a 120s TTL with cancel-on-close as the real control,
-  and an explicit tap to redeem so a scanner prefetch can't burn a single-use code.
-  **Six** interlocks retire a live code — disable, delete, admin password set, own password
-  change, logout, revoke-all. Review found three real holes in the first pass, all now
-  closed and all invisible to tests: the LAN check read `origin.remoteHost`, which under
-  Netty is a reverse-DNS lookup the peer influences, so forward-resolving it let an off-LAN
-  caller present a site-local address and bypass the check outright; `logout` was the missing
-  sixth interlock; and the mint's cancel-then-insert wasn't atomic, so two concurrent mints
-  could leave two live codes and revive a QR the desk believed superseded. Also fixed in
-  passing: `mintSession` now refuses a disabled account (that check lived only in `login`, so
-  every new caller inherited nothing).
-
-- `FU-PROG-RECORD-SELECTION-SCOPE` — commits 6b40950 (lighting7) + f2c2a47
-  (lighting-react) (2026-08-16) — "record just these heads into this cue".
-  `ProgrammerRecordRequest` gained `targets`, expanded through the existing
-  `expandTargetsToFixtureKeys`; `targetInScope` is the single predicate read
-  both as "may I capture this" and "may I overwrite this", with a group target
-  in scope only when *every* member is.
-  Two paths needed more than passing the set through, and both would have been
-  silent: **STAGE_SNAPSHOT** never reaches `collectProgrammerEntries` so it
-  needs its own filter, and **UPDATE_EXISTING** deletes rows the recording
-  doesn't name, so without a guard "re-record these two heads" clears the other
-  ten (preserved rows are counted as `preserved.outOfScopeAssignments`).
-  FX are captured only when every head they drive is in scope, and a scoped
-  re-record refuses to add an FX child that a surviving partly-covered group row
-  already covers — `CueStackManager.activateCueInStack` instantiates per row per
-  target with no de-duplication, so the effect would genuinely run twice on the
-  overlap. Warned rather than guessed, matching REMOVE's group-shadow warning.
-  Found in review after the first pass shipped the stacking bug.
-  Frontend: the blocker was never the field but the entry point — `RecordSheet`
-  opens from `ProgrammerToolbar` (a `toolbarExtra` prop) and from a cue card,
-  neither of which can see the list's selection. Selection therefore moved into
-  `store/selectionSlice`, keyed by list, with the pure reducer split out to
-  `listSelectionModel.ts` to avoid an import cycle. The warning in
-  `includeSelection.ts` about rewriting the keyboard/range machinery did **not**
-  bite: `useListSelection` had one consumer and an already-pure reducer, so
-  `ListSelection` kept its shape and that machinery was untouched — the comment
-  there has been updated to say so rather than left describing a live decision.
-- `FU-PROG-PROVENANCE-STACKID` — commit 714d742 (2026-08-12) — CUE-sourced
-  provenance entries carry `cueStackId` alongside `cueId`. Raised in Session 1,
-  where provenance shipped with `cueId` only; Session 3 needed the stack id so
-  Update's Mode B checklist can group overridden cues by stack, which is how the
-  operator recognises what they are sitting on top of. (Filed here retroactively
-  on 2026-08-14 — Session 3 deleted the open item outright instead of moving it,
-  which left no audit trail.)
-- `FU-PROG-EFFECTSREMOVED-FIELD` — Programmer redesign Session 2 (2026-08-12) —
-  dropped `ToggleLocateResponse.effectsRemoved`. Locate stopped removing effects
-  once programmer suppression replaced destruction (Session 1), leaving the field
-  a constant 0 kept only because the lighting-react frontend read it. Session 2
-  removed it from `ToggleLocateResponse` and from lighting-react's mirror type in
-  one change. (Was struck through in place above until 2026-08-14; moved here to
-  match the convention.)
-- `FU-BE-MOVE-IN-DARK` — commit 0593d81 (2026-04-25) — Layer3 position
-  snap during outgoing fade. Hardware blocker cleared by
-  `Fusion100SpotMkIIFixture` modes 8CH/15CH (both `WithDimmer` +
-  `WithPosition`). Schema: new `move_in_dark` column on
-  `cue_property_assignments` (default false), `moveInDark: Boolean` on
-  `CuePropertyAssignmentDto` plumbed through every DAO↔DTO conversion site.
-  Detection lives inside `Layer3Resolver.resolve()` via a new
-  `computeMoveInDarkArmed` pre-pass: a fixture target arms when a Position
-  contributor with the flag is accompanied by a *different* cue's
-  DIMMER-category contributor with value 0 on the same target (the
-  different-cue requirement excludes self-arming, which the LTP fallback
-  already handles correctly). Snap branch runs at the top of `composeLtp`
-  *before* the winner-by-priority logic — at fade start the outgoing cue
-  wins on the `fadeWeight` tie-break and would otherwise short-circuit to
-  outgoing.value. 7 new test cases in `Layer3ResolverTest` cover
-  snap-at-start/mid/end, no-flag baseline, bright-dimmer veto,
-  no-dimmer-row defensive, self-cue guard, group-expansion per-member, and
-  parallel bright-cue. Frontend (lighting-react) ships a new "Assignments"
-  tab in `CueTargetDetail` with a per-row editor (value + fade override +
-  delete) and a "Move in dark" checkbox visible only on `position` rows;
-  authored at the cue level and saved through the existing PUT path.
-  Browser-verified end-to-end: UI toggle → PUT → DB column → GET → reopen
-  → checkbox state restored. Stage-behaviour validation on the moving head
-  remains for the operator (3-cue stack with a dark cue between two
-  position-different cues, slow fade, `moveInDark = true` on the second
-  position row → head should be aimed for the entire fade-up).
-- `FU-PERF-COALESCE-WRITES` — cancelled 2026-04-25 — Profiled the cueEdit
-  hot path via new opt-in
-  [`CueEditProfileTest`](../../src/test/kotlin/uk/me/cormack/lighting7/perf/CueEditProfileTest.kt)
-  (gated on `-Dcueedit.profile=true`, forwarded by
-  [build.gradle.kts](../../build.gradle.kts) alongside `dmx.benchmark` /
-  `fx.benchmark`). Test extends `RouteIntegrationTest`, patches a
-  `HexFixture`, opens a Live cueEdit session over WS, and drives a 6000-event
-  flood across four sub-profiles inline (ramp / wiggle / colour-ramp /
-  burst — mixed `dimmer` slider + `rgbColour` to exercise both the SQL
-  upsert hot path and the `ExtendedColour.toSerializedString` →
-  `Color.toHexString` allocation path that
-  `FU-PERF-HEX-FORMAT-ALLOC` would have targeted). Histogram scraped from
-  `GET /api/rest/perf/cueedit-histogram` after `endEdit`. Drain coroutine
-  signals `sessionEnded` via a `CompletableDeferred` so the post-flood
-  handshake doesn't race the in-flight ack backlog. Made
-  `RouteIntegrationTest.testTimeout` open so the profile harness can extend
-  the per-test cap to 300 s. Result on a clean Hikari + embedded-Postgres
-  rig: **count=6000 p50=524µs p95=2097µs p99=2097µs max=17.3ms mean=617µs**
-  — well under the 5 ms p99 threshold from the decision criteria. Hikari +
-  Exposed on local Postgres is fast enough for show-scale operation; the
-  "operators probably don't wiggle faders at 100 Hz for minutes on end"
-  hypothesis is confirmed. No coalescer needed; existing CONFLATED + signal
-  pattern in `KtMidiController` / `ArtNetController` stays the precedent
-  for any future flood-path optimisation. Distribution shape
-  (54% ≤524µs, 40% ≤1ms, 5% ≤2.1ms, <1% above 2.1ms, single 17ms outlier)
-  shows the path is well-behaved with no GC pathology under load.
-- `FU-PERF-HEX-FORMAT-ALLOC` — cancelled 2026-04-25 — Was gated on
-  `FU-PERF-COALESCE-WRITES` ("low priority — dwarfed by COALESCE-WRITES");
-  with that cancelled, this becomes a tiny micro-allocation chasing a
-  non-bottleneck. The same 6000-event profile (1000 events through the
-  colour serialize path) lands inside the same fast distribution as the
-  slider path — no measurable colour-vs-slider gap to chase. The
-  `String.format` allocation in
-  [Effect.kt:247](../../src/main/kotlin/uk/me/cormack/lighting7/fx/Effect.kt:247)
-  stays as-is; if a future workload ever surfaces it, the lookup-table fix
-  shape is sketched in the original slug body.
-- `FU-TEST-DMX-FX-BENCH-HARNESS` — commit 6e1222e (2026-04-25) — Added
-  [`AsyncTestDmxController`](src/main/kotlin/uk/me/cormack/lighting7/dmx/AsyncTestDmxController.kt),
-  a coroutine-aware `DmxController` test fake that mirrors
-  `ArtNetController`'s per-channel conflated consumer + ack-roundtrip loop
-  without UDP — `MockDmxController.setValuesSuspend` falls through to the
-  sync body and would silently flatter both paths. New track-only
-  [`BenchmarkSetValues`](src/test/kotlin/uk/me/cormack/lighting7/dmx/BenchmarkSetValues.kt)
-  drives a 4-universe rig (128 writes per universe per iteration =
-  512 total) through `ControllerTransaction.apply()` vs `applySuspend()`,
-  prints `[blocking]` / `[suspend]` summary lines (p50/p99/mean/allocBytes),
-  and gates on a 1 s p99 floor only. Banked infrastructure — no concrete
-  perf change in flight; the harness is calibration-ready for the next
-  `setValues` refactor. Skipped by default; opt in via `-Ddmx.benchmark=true`
-  ([`build.gradle.kts`](build.gradle.kts) forwards the flag alongside
-  `fx.benchmark`). ±20% regression gate stays deferred to
-  `FU-TEST-FX-BENCH-CI-GATE`.
-- `FU-BE-PALETTE-CASCADE` — commit 3181784 (2026-04-23) — Introduced
-  `PaletteCascade(preset, cue, global)` in [Layer3Resolver.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/Layer3Resolver.kt)
-  with an `effective` property that picks the most-specific non-empty scope.
-  Extended `Layer3Resolver.parseAssignmentValue` with an optional
-  `palette: List<ExtendedColour>` that routes colour values through
-  `resolveColour` (palette-ref aware). Both `buildLayer3AssignmentsForCue`
-  and `buildLayer3AssignmentsForPreset` take a single `cascade: PaletteCascade`
-  parameter; callers construct the cascade once per cue-apply and reuse via
-  `cascade.copy(preset = ip.palette)` for each preset contribution. Added
-  `List<String>.toPaletteColours()` helper in
-  [EffectParamUtils.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/EffectParamUtils.kt)
-  collapsing 10+ `map { parseExtendedColour(it) }` sites. Threaded the
-  cascade through all call sites: `applyCue`, `republishLayer3`,
-  `activateTimedEffectsForCue` (global palette hoisted out of per-fire
-  lambda; recurring fires load only the preset's palette each transaction),
-  `CueStackManager.activateCueInStack`, and the preset toggle / Layer 4
-  write paths. Tests in
-  [Layer3ResolverTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/Layer3ResolverTest.kt)
-  cover palette-ref parsing with empty / non-empty palettes and wrap-modulo
-  indexing;
-  [BuildLayer3AssignmentsForPresetTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/BuildLayer3AssignmentsForPresetTest.kt)
-  asserts the preset → cue → global cascade ordering and static-colour
-  bypass;
-  [BuildLayer3AssignmentsForCueTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/BuildLayer3AssignmentsForCueTest.kt)
-  asserts cue-palette application and no-palette → white fallback.
-- `FU-BE-PRESET-FIXTURE-TYPE-NOTNULL` — commit 83ae4d3 (2026-04-23) — Dropped `.nullable()` on
-  `DaoFxPresets.fixtureType` and added `migrateFxPresetsFixtureTypeNotNull` to
-  [State.kt](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt): inspects
-  `information_schema`, deletes any legacy NULL-type presets (plus their
-  `fx_preset_property_assignments` and `cue_preset_applications` children) so
-  the subsequent `ALTER TABLE … SET NOT NULL` succeeds. Tightened
-  `FxPresetDetails.fixtureType`, `PersistedFixtureReferenceValidator.validatePresetPropertyReference`,
-  and the `lightFixtures` / `lightGroups` compatibility filters to non-nullable
-  now that the column can't be null; required `fixtureType` in the `create_fx_preset`
-  AI tool schema. Dropped the now-obsolete "preset with null fixtureType" test.
-- `FU-BE-TIMED-PRESETS-LAYER3` — commit ce5304c (2026-04-23) — Added
-  `FxEngine.appendCueAssignments(cueId, additions)` and
-  `removeCueAssignmentSubset(cueId, toRemove)` (structural-equality
-  one-per-element remove). Wired `CueTriggerManager`'s timed-preset fire path
-  to append the preset's property assignments to Layer 3 at fire time and
-  retract the prior fire's rows on each recurring tick so the cue's assignment
-  list does not accumulate duplicates. Cue teardown still calls
-  `removeCueAssignments(cueId)` which clears everything in one shot —
-  `removeCueAssignmentSubset` is only needed for the recurring re-fire path.
-  `activateTimedEffectsForCue` now takes a `priority: Int` parameter (passed
-  from `cueDerivedPriority(cueData)` at both call sites) so timed and
-  apply-time rows share composition priority.
-- `FU-FE-EXT-COLOUR-CHANNELS` — commit 53a96a0 in lighting-react + b39f1f2
-  (docs) in lighting7 (2026-04-23) — Added W/A/UV sliders to
-  `ColourPickerPopover` (lighting-react), gated on
-  `ColourPropertyDescriptor.whiteChannel` / `amberChannel` / `uvChannel`
-  presence. Writes route through existing `useUpdateFixtureColour` /
-  `useUpdateGroupColour` hooks unchanged. Both `PropertyVisualizers` (fixture)
-  and `GroupPropertyVisualizers` (group) pass current `w` / `a` / `uv` values
-  so the popover reflects live state.
-- `FU-TEST-PROJECT-SWITCH-CUEEDIT` — commit ef3cf29 (2026-04-24) — Added
-  integration test in
-  [SurfaceFeedbackPublisherTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisherTest.kt)
-  (`project switch clears cue-edit session cache and falls back to live DMX`)
-  that drives the scenario: begin a cueEdit session on project A (cue
-  `dimmer=64` while live DMX=255, so feedback tracks the cue at 7-bit 32) →
-  call `SurfaceFeedbackPublisher.onProjectChanged()` → assert the post-switch
-  full-resync feedback flips to 7-bit 127 (live DMX 255), proving
-  `sessionAssignments` was cleared.
-- `FU-BE-GROUP-LAYER3-ROUNDTRIP` — commit ff578a9 (2026-04-24) — Reworked
-  `captureCurrentState` in
-  [projectCues.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt)
-  to preserve group-scoped Layer 3 shape. Added
-  `FxEngine.activeCueAssignmentIds()` (snapshot of the cue-assignment map
-  keys). `captureCurrentState` now fetches each active cue's DB
-  `propertyAssignments` in a single transaction, collects every
-  `(groupKey, propertyName)` mentioned with `targetType="group"`, and
-  delegates to the pure `captureLayer3AssignmentsFromSnapshot` helper. That
-  helper emits one group row per hint iff all members share a single composed
-  value in `currentLayer3State`; any break in uniformity (cross-cue fixture
-  override, partial timed-preset) falls back to per-fixture rows. Composed
-  values remain authoritative — the DB rows only hint at which groups to try
-  to preserve, so HTP / LTP / crossfade still reflect the stage look.
-  Uncovered `currentLayer3State` entries (e.g. timed-preset fires not in DB)
-  still emit as `targetType="fixture"`. Unit coverage in
-  [CaptureLayer3AssignmentsTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/CaptureLayer3AssignmentsTest.kt)
-  exercises collapse on uniform values, fallback on override break / missing
-  member / unknown group, mixed group + uncovered uv row, and empty-snapshot
-  short-circuit.
-- `FU-PERF-REGISTRY-INDICES` — commit 672c139 (2026-04-24) — Added secondary
-  index `sessionsByProject: ConcurrentHashMap<Int, Entry>` to
-  [CueEditSessionRegistry.kt](src/main/kotlin/uk/me/cormack/lighting7/plugins/CueEditSessionRegistry.kt),
-  kept in lockstep with the handle-keyed `sessions` map under a single
-  `mutationLock` critical section on register / unregister. `activeSession` now
-  does a direct `sessionsByProject[projectId]` lookup instead of the prior
-  `sessions.values.firstOrNull { ... }` scan. Added
-  `continuousByAssignmentKey: Map<AssignmentKey, List<ContinuousEntry>>` to the
-  `Index` snapshot in
-  [SurfaceFeedbackPublisher.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisher.kt),
-  populated in `rebuildIndex()` from the pre-existing `assignmentKeyFor(entry)`
-  helper; `resyncEntriesMatching(key)` now iterates that index's pre-filtered
-  list instead of walking every `continuousByDisplay` entry and filtering with
-  `entryMatchesAssignmentKey`. `entryMatchesAssignmentKey` deleted — the
-  secondary index subsumes its role. Existing
-  [CueEditSessionRegistryTest.kt](src/test/kotlin/uk/me/cormack/lighting7/plugins/CueEditSessionRegistryTest.kt)
-  and
-  [SurfaceFeedbackPublisherTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisherTest.kt)
-  cover the new paths (including the `AssignmentChanged event drives feedback
-  to the new cue value` case which exercises the assignment-key index).
-- `FU-FE-PRESET-LIVE-PREVIEW` — commit bb24302 in lighting7 + 9929274 in
-  lighting-react (2026-04-24) —
-  Added `POST /{projectId}/fx-presets/preview` and `DELETE /{projectId}/fx-presets/preview`
-  in [projectFxPresets.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectFxPresets.kt).
-  Each push atomically clears the project's prior preview Layer-4 writes (via the
-  existing `clearPresetToggleWrite`) and reapplies the in-progress draft using
-  `applyPresetLayer4Writes` with a synthetic preset id derived from the project key
-  hash. `swapPresetPreviewSlot` extracts the `ConcurrentHashMap.compute` lifecycle
-  so two concurrent pushes for the same project can't interleave; coverage in
-  [PresetPreviewSlotTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/PresetPreviewSlotTest.kt).
-  Frontend ships a `PresetLivePreview` panel inside `PresetEditor` (lighting-react
-  `src/components/presets/PresetLivePreview.tsx`) — operator toggles "Live Preview" on,
-  picks compatible fixtures (filtered by `preset.fixtureType`) and/or groups (unfiltered),
-  the panel debounces draft pushes at 80 ms and fires a clear on toggle-off / editor
-  unmount via the new `usePreviewPresetMutation` / `useClearPresetPreviewMutation`
-  RTK hooks. Effects-channel preview is intentionally out of scope — only Layer-4
-  property assignments land. Single preview slot per project (last-writer-wins);
-  multi-tab race is acceptable, mid-show preview by an operator is the dominant case.
-- `FU-QUAL-PUSHDOWN-SESSION-ROUTING` — commit 379a845 (2026-04-24) — Dropped
-  `writeFixturePropertyToCueEdit` / `writeGroupPropertyToCueEdit` from the
-  [SurfaceActions.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceActions.kt)
-  interface; `DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty`
-  now call a private `activeCueEditSession()` that reads
-  `state.cueEditSessionRegistry.activeSession(projectId)?.session` and fans out
-  to the existing `upsertCueAssignment` path when a session is open. Router
-  [SurfaceInputRouter.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt)
-  drops its `cueEditSessionProvider` constructor param; `dispatchContinuous`
-  becomes a plain 2-arm `when` over `BindingTarget.FixtureProperty` /
-  `GroupProperty`. [State.kt](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt)
-  no longer wires a provider into the router. Flash press keeps hitting Layer 4
-  regardless of session (frontend parity) — that path was always outside the
-  removed router branch. Router tests that exercised session routing at the
-  router layer (3 tests) are deleted — the behaviour moves inside
-  `DefaultSurfaceActions`, which is state-coupled and exercised by hardware
-  validation (FU-MANUAL-CUEEDIT-HARDWARE). Remaining
-  [SurfaceInputRouterTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouterTest.kt)
-  is correspondingly simpler (no session parameter, no `CueEditSessionState`
-  import).
-- `FU-QUAL-TARGET-REF-SEALED` — commit 8161820 (2026-04-24) — Introduced
-  [TargetRef.kt](src/main/kotlin/uk/me/cormack/lighting7/models/TargetRef.kt):
-  `sealed class TargetRef { Fixture(key); Group(key) }` with `discriminator` /
-  `key` accessors and `TargetRef.of(type, key)` for parsing DB / DTO strings.
-  Wire format stays unchanged — DTOs (`CueTargetDto`, `CuePropertyAssignmentDto`,
-  `CueAdHocEffectDto`, `TogglePresetTarget`) keep their `targetType: String` +
-  `targetKey: String` fields and gain a `target: TargetRef` computed property
-  plus a `constructor(target: TargetRef)` convenience. DAO entities
-  (`DaoCuePropertyAssignment`, `DaoCueAdHocEffect`) gain a `var target: TargetRef`
-  with a setter that mirrors into the underlying varchar columns. Internal
-  branch logic converts from `when/if (... == "group")` over the string to
-  `when (ref) { is TargetRef.Fixture -> ...; is TargetRef.Group -> ... }` in
-  [projectCues.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt)
-  (`buildLayer3AssignmentsForCue`, `buildLayer3AssignmentsForPreset`,
-  `buildStompOverlapFromAssignments`, `captureLayer3Assignments`,
-  `resolveTargetForCue`),
-  [projectFxPresets.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectFxPresets.kt)
-  (`isPresetActiveOnTarget`, `resolveTarget`, toggle preset flow), and
-  [AiTools.kt](src/main/kotlin/uk/me/cormack/lighting7/ai/AiTools.kt)
-  (`executeClearEffects`). Event payloads in
-  [CueEditSessionRegistry.kt](src/main/kotlin/uk/me/cormack/lighting7/plugins/CueEditSessionRegistry.kt)
-  (`Event.AssignmentChanged` / `AssignmentCleared`) now carry a `target: TargetRef`
-  in place of the prior `targetType` / `targetKey` pair; ditto
-  `SurfaceFeedbackPublisher.AssignmentKey`. `CueEditSessionHandler.setProperty` /
-  `setPropertyForSession` / `clearAssignment` now take `target: TargetRef`;
-  [Sockets.kt](src/main/kotlin/uk/me/cormack/lighting7/plugins/Sockets.kt)
-  converts from the WS message's still-stringly-typed `targetType` / `targetKey`
-  at the entry point. `DefaultSurfaceActions` likewise parses to `TargetRef` at
-  the call site. `PersistedFixtureReferenceValidator.validateTargetedReference`
-  now takes `target: TargetRef`; callers in
-  [BindingHealthEvaluator.kt](src/main/kotlin/uk/me/cormack/lighting7/midi/BindingHealthEvaluator.kt)
-  and `toDtoWithHealth` in
-  [projectCues.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt)
-  adapted accordingly. Tests updated:
-  [PersistedFixtureReferenceValidatorTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidatorTest.kt),
-  [CueEditSessionRegistryTest.kt](src/test/kotlin/uk/me/cormack/lighting7/plugins/CueEditSessionRegistryTest.kt),
-  [SurfaceFeedbackPublisherTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisherTest.kt).
-  DB columns stay as `varchar(50)`; JSON wire format unchanged; frontend needs
-  no changes. `FxTargetRef` (in `fx/FxTarget.kt`) left as-is — it's an
-  fx-target-specific type with richer semantics (property mapping, blend
-  modes).
-- `FU-FE-PICKER-UX-POLISH` — commit e97a664 in lighting-react (2026-04-24) —
-  Added a `preselectedTarget?: CueTarget | null` prop to both
-  [EffectFlow.tsx](src/components/cues/editor/EffectFlow.tsx) and
-  [PresetPicker.tsx](src/components/cues/editor/PresetPicker.tsx). When set
-  in add mode, the flow starts at the category / preset step with
-  `selectedTarget` pre-filled instead of re-asking for a target; back from
-  that step calls `onCancel` (no target-picker to return to).
-  [CueTargetDetail.tsx](src/components/cues/editor/CueTargetDetail.tsx)
-  passes its current `selection` directly (`TargetSelection` is
-  structurally `CueTarget`). The full target-picker flow is preserved for
-  any non-preselected entry path.
-- `FU-BE-PRESET-PER-ELEMENT` — commit 0106ab4 (2026-04-24) — Added nullable
-  `element_key` column to `fx_preset_property_assignments` via
-  [fxPresets.kt](src/main/kotlin/uk/me/cormack/lighting7/models/fxPresets.kt)
-  (picked up automatically by `SchemaUtils.createMissingTablesAndColumns`;
-  no explicit migration). DTO `FxPresetPropertyAssignmentDto.elementKey` is
-  optional (`null` preserves existing per-fixture behaviour); when non-null
-  it's interpreted as either a suffix (`"head-0"`) or a fully-qualified
-  element key (`"bar-1.head-0"`). `buildLayer3AssignmentsForPreset` in
-  [projectCues.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt)
-  now resolves element-scoped assignments via a new `findElement` helper
-  (requires `MultiElementFixture` on the target; skips members without a
-  matching element) and looks up category / composition via
-  `elementCategoryFor`, which reflects on the element class's
-  `@FixtureProperty` annotations since `FixtureElement` isn't a `Fixture`
-  and doesn't participate in the parent's `fixtureProperties` catalogue.
-  Group-scoped element assignments fan out per-member: one row per
-  `${memberKey}.${elementSuffix}` target that exists. Widened
-  [PropertyChannelWriter.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/PropertyChannelWriter.kt)
-  (`resolve` / `channelsFor`) to accept `GroupableFixture` — internally
-  branches on `Fixture` vs `FixtureElement<*>` for the reflection lookup;
-  widened `FxEngine.writeLayer4Property` / `clearLayer4Property` to match
-  so preset toggle / preview Layer 4 writes work on elements too.
-  `applyPresetLayer4Writes` / `clearPresetToggleWrite` switched from
-  `untypedFixture` to `untypedGroupableFixture` to resolve element rows.
-  `PersistedFixtureReferenceValidator.validatePresetPropertyReference` now
-  takes an optional `elementKey: String?`; when set, it validates against
-  `FixtureTypeInfo.elementGroupProperties` (properties common to all
-  elements) rather than the fixture-level descriptor list, so multi-head
-  presets with mixed per-head properties don't false-positive. Coverage:
-  6 new cases in
-  [BuildLayer3AssignmentsForPresetTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/BuildLayer3AssignmentsForPresetTest.kt)
-  (fixture + group element targeting, full-key vs suffix, non-multi-element
-  fixture skip, mixed-group skip-one-emit-other, `elementKey=null`
-  backwards-compat); 4 new cases in
-  [PersistedFixtureReferenceValidatorTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/PersistedFixtureReferenceValidatorTest.kt)
-  (valid element property, synthetic `position` via pan+tilt, single-head
-  fixture rejection, unknown property on multi-head); 3 new cases in
-  [PropertyChannelWriterTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/PropertyChannelWriterTest.kt)
-  (element slider / position / channelsFor) exercising the
-  `GroupableFixture` path. Frontend preset-editor element switcher is out
-  of scope for this backend landing — when added, it surfaces through the
-  existing `elementGroupProperties` on `FixtureTypeInfo`; DTO already
-  round-trips `elementKey`.
-- `FU-QUAL-KEY-CONVERGENCE` — commit 30dd0fc (2026-04-24) — Replaced
-  `Layer3Resolver.Key(targetKey: String, propertyName)` with
-  `Layer3Resolver.Key(target: TargetRef, propertyName)` in
-  [Layer3Resolver.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/Layer3Resolver.kt),
-  keeping `targetKey: String` as a computed accessor (`target.key`) so
-  existing read sites stayed untouched. Added
-  `Layer3Resolver.Key.fixture(fixtureKey, propertyName)` and
-  `.group(groupKey, propertyName)` companion factories — the former is the
-  dominant-case constructor for resolver output (post-expansion rows are
-  always `TargetRef.Fixture`). Updated internal `resolve()` plus every
-  construction site in `FxEngine` (`clearLayer4Property`,
-  `applyLayer4Write`, `applyLayer4GroupOperation`), `LayerResolver`
-  (`fallbackFor`), and `captureLayer3AssignmentsFromSnapshot` in
-  [projectCues.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt).
-  Deleted `SurfaceFeedbackPublisher.AssignmentKey` — it was structurally
-  identical `(target: TargetRef, propertyName: String)`; converged on
-  `Layer3Resolver.Key`, which correctly expresses `TargetRef.Group` for
-  pre-expansion surface routing alongside the resolver's own
-  `TargetRef.Fixture` output. Tests in
-  [Layer3ResolverTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/Layer3ResolverTest.kt),
-  [FxEngineCueAssignmentsTest.kt](src/test/kotlin/uk/me/cormack/lighting7/fx/FxEngineCueAssignmentsTest.kt),
-  [CaptureLayer3AssignmentsTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/CaptureLayer3AssignmentsTest.kt),
-  and
-  [BuildLayer3AssignmentsForCueTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/BuildLayer3AssignmentsForCueTest.kt)
-  adopt `Layer3Resolver.Key.fixture(...)` at every site. No
-  semantic change — the resolver still emits only fixture-level keys
-  post-expansion; the type now just carries the discriminator the surface
-  layer already needed.
-- `FU-BE-SCALER-PERSISTENCE` — commit 7bcd109 (2026-04-24) — Added
-  [DaoProjectScalerStates](../../src/main/kotlin/uk/me/cormack/lighting7/models/projectScalerStates.kt)
-  (`project_scaler_states(project_id UNIQUE, blackout BOOLEAN default false,
-  grand_master BOOLEAN default true)`) and registered it in
-  `SchemaUtils.createMissingTablesAndColumns` so it materialises on next boot
-  with no explicit migration. Widened
-  [GlobalScalerStateHolder](../../src/main/kotlin/uk/me/cormack/lighting7/midi/GlobalScalerStateHolder.kt)
-  with optional `initialBlackout` / `initialGrandMaster` constructor args and
-  a `persist: (Boolean, Boolean) -> Unit` write-through callback fired on every
-  actual state change (skipped on no-op writes via the existing equality
-  guard). [State.scalerHolderFor](../../src/main/kotlin/uk/me/cormack/lighting7/state/State.kt)
-  now seeds the holder from the persisted row on first access (defaults
-  `false` / `true` when absent) and wires `persist` to an upsert against
-  `DaoProjectScalerStates` inside `transaction(state.database)`. Tests added
-  to [GlobalScalerStateTest.kt](../../src/test/kotlin/uk/me/cormack/lighting7/midi/GlobalScalerStateTest.kt)
-  cover (a) seeded initial state (restart rehydration), (b) persist fires on
-  every mutation path including toggles and carries the current counterpart
-  value, (c) no-op writes skip persist, (d) mutations routed through
-  `GlobalScalerState.setBlackout` / `setGrandMaster` still reach the persist
-  callback.
-- `FU-PERF-FX-TICK-ALLOCS` — commit a0d5a8c (2026-04-24) — On the
-  [FxEngineBenchmark](src/test/kotlin/uk/me/cormack/lighting7/fx/FxEngineBenchmark.kt)
-  rig (4 universes × 168 HexFixtures × 336 effects) cut p50 beat-tick latency
-  ~520µs → ~287µs and per-tick allocation ~1.97 MB → ~1.03 MB (both ~45–48%
-  down). Three changes: (1) in
-  [ControllerTransaction.kt](src/main/kotlin/uk/me/cormack/lighting7/dmx/ControllerTransaction.kt)
-  dropped the eager `currentValues.toMutableMap()` copy per transaction;
-  `getValue` now checks the staged `valuesToSet` first and falls through to
-  the live controller, killing an O(channels-per-universe × universes) copy
-  per tick. Also added a fast-path in `applySuspend` that skips the
-  coroutineScope when nothing is pending. (2) Added a per-transaction
-  `wrappedFixtureCache` in
-  [Fixtures.FixturesWithTransaction](src/main/kotlin/uk/me/cormack/lighting7/show/Fixtures.kt)
-  so repeated `untypedFixture` / `untypedGroupableFixture` lookups within a
-  tick reuse the cloned wrapper instead of re-cloning the fixture's 10+ DMX
-  property objects on every call — halves per-tick fixture-wrap allocation on
-  the reset + apply double-lookup pattern. (3) In
-  [LayerResolver.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/LayerResolver.kt)
-  built a `layer3Index: Map<String, Map<String, PropertyValue>>` alongside
-  `layer3State` so `fallbackFor` skips the compound `Layer3Resolver.Key`
-  allocation on every reset. Also restructured
-  `FxEngine.resetActiveProperties` in
-  [FxEngine.kt](src/main/kotlin/uk/me/cormack/lighting7/fx/FxEngine.kt) to
-  drop the per-(fixture, property) `PropertyKey` data class + `buildList`
-  with composite-secondary targets, using a two-level `HashMap<String,
-  HashSet<String>>` dedupe that only fans out when `compositeTargets` is
-  non-null. New coverage in
-  [ControllerTransactionSuspendTest.kt](src/test/kotlin/uk/me/cormack/lighting7/dmx/ControllerTransactionSuspendTest.kt)
-  pins the lazy-read semantics (`getValue` returns staged writes before
-  commit, falls through to live controller otherwise); new coverage in
-  [FixturesWithTransactionTest.kt](src/test/kotlin/uk/me/cormack/lighting7/show/FixturesWithTransactionTest.kt)
-  asserts repeated lookups return the same wrapped instance.
-- `FU-PERF-INSTRUMENT-ARTNET` — commit 0d19fad (2026-04-25) — Added
-  [PacketRateCounter.kt](src/main/kotlin/uk/me/cormack/lighting7/dmx/PacketRateCounter.kt):
-  lock-free 30-bucket sliding-window counter (one bucket per second, keyed by
-  `epochSecond % windowSeconds`); stale buckets CAS-reset before increment so
-  a wrap-around doesn't carry yesterday's count into the new second. The
-  in-progress second is excluded from the rate average — partial counts would
-  otherwise depress p99 readings. Wired into
-  [ArtNetController.sendCurrentValues](src/main/kotlin/uk/me/cormack/lighting7/dmx/ArtNetController.kt)
-  with one `record()` call after each successful `broadcastDmx` /
-  `unicastDmx`; exposed as `packetsPerSecond: Double` and
-  `totalPacketsSent: Long` properties on the controller. New
-  [perf.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/perf.kt) route
-  registers `GET /api/rest/perf/artnet-rates`, filtering
-  `state.show.fixtures.controllers` to `ArtNetController` instances and
-  returning `{ windowSeconds, universes: [{subnet, universe, packetsPerSec,
-  totalPackets}, …] }`. Mock-only test setups return an empty `universes`
-  list so the endpoint stays well-formed in tests. Unit coverage in
-  [PacketRateCounterTest.kt](src/test/kotlin/uk/me/cormack/lighting7/dmx/PacketRateCounterTest.kt)
-  exercises stale-bucket reset on wrap-around (the load-bearing case for
-  correctness — `t=100` and `t=130` collide on `% 30`), bucket-out-of-window
-  exclusion, partial-window readings, and concurrent-record total
-  preservation. Route coverage in
-  [PerfRouteTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/PerfRouteTest.kt)
-  asserts the empty-mock-show contract.
-- `FU-TEST-HTTP-ROUNDTRIP` — commit 4245a7d (2026-04-24) — Added
-  `src/test/kotlin/uk/me/cormack/lighting7/testsupport/` harness
-  ([EmbeddedTestPostgres.kt](src/test/kotlin/uk/me/cormack/lighting7/testsupport/EmbeddedTestPostgres.kt),
-  [RouteIntegrationTest.kt](src/test/kotlin/uk/me/cormack/lighting7/testsupport/RouteIntegrationTest.kt),
-  [TestAppConfig.kt](src/test/kotlin/uk/me/cormack/lighting7/testsupport/TestAppConfig.kt),
-  [TestShow.kt](src/test/kotlin/uk/me/cormack/lighting7/testsupport/TestShow.kt))
-  built around `io.zonky.test:embedded-postgres` — Testcontainers 1.21
-  hardcodes Docker API 1.32 via `DockerClientProviderStrategy`, which
-  Docker Engine 25+ and OrbStack reject (min 1.40); embedded Postgres runs
-  a real Postgres binary in-JVM with no Docker daemon needed. Split
-  `Application.module()` → `moduleWithState(state)` in
-  [Application.kt](src/main/kotlin/uk/me/cormack/lighting7/Application.kt)
-  so tests mount routes over an externally-provided `State` without
-  re-entering `initializeShow`. `RouteIntegrationTest` abstract base owns
-  per-test schema reset + project + MOCK universe seed + show init.
-  Primary test
-  [HttpRoundTripTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/HttpRoundTripTest.kt)
-  drives POST `/patches` (hex at ch1) → WS `cueEdit.beginEdit(LIVE)` →
-  `setProperty(dimmer=200)` → POST `/snapshot-from-live` → `endEdit` →
-  GET, asserting the snapshot captured the Live edit's Layer 3 state
-  (snapshot intentionally lands inside the open Live session because
-  `endEdit` for a standalone cue triggers `removeEffectsForCue` →
-  `removeCueAssignments`, tearing Layer 3 down). Inbound WS filter
-  `awaitOfType<T>` skips the initial-state burst
-  (`channelMapping`/`fxState`/`palette`/`beatSync`) the socket fans out
-  on connect. Broader coverage:
-  [CueCrudRoundTripTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/CueCrudRoundTripTest.kt)
-  (pure-HTTP cue CRUD + PATCH partial update + stack membership),
-  [FxPresetRoundTripTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/FxPresetRoundTripTest.kt)
-  (preset POST/GET/PUT/DELETE with property-assignment children). All 3
-  pass; full suite green. Bumped `kotlin.daemon.jvmargs=-Xmx2g` — default
-  1 GB OOMs on full recompiles with Kotlin 2.2 + FX DSL + new test
-  sources. Scope limits retained from the plan: no migration of existing
-  DTO-level route tests, no `State.shutdown` for clean coroutine teardown
-  (known-leaky GlobalScope pollers from `initializeShow` tolerated), no
-  Hikari pool close in tearDown (3 tests × 8 connections acceptable).
-- `FU-PERF-INSTRUMENT-CUEEDIT` — commit 1607d91 (2026-04-25) — Added
-  [LatencyHistogram.kt](src/main/kotlin/uk/me/cormack/lighting7/perf/LatencyHistogram.kt):
-  lock-free log2-bucketed nanosecond histogram (`AtomicLongArray` per bucket +
-  `AtomicLong` count / sum / max with CAS-update on max). Default 32 buckets
-  cover [1 ns, ~4.29 s); observations beyond the top bucket pile into bucket
-  31 but `maxNanos` still tracks the actual peak. `percentileNanos(p)` walks
-  buckets cumulatively and returns the right bound of the bucket holding the
-  target observation, capped by `maxNanos` so the top bucket never reports an
-  inflated value. Wrapped in
-  [CueEditLatencyTracker.kt](src/main/kotlin/uk/me/cormack/lighting7/perf/CueEditLatencyTracker.kt):
-  one tracker per [State](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt);
-  `onBeginEdit` resets the live histogram and flips `sessionActive`, `measure {}`
-  records each call's wall-clock duration (records on exception too — a failed
-  transaction is part of what the operator wants to see), `onEndEdit` freezes
-  a snapshot to `lastSessionEnded`. Wired into
-  [CueEditSessionHandler](src/main/kotlin/uk/me/cormack/lighting7/plugins/CueEditSession.kt):
-  `beginEdit` calls `onBeginEdit` after the apply succeeds (so a failed
-  Live-apply doesn't reset the histogram); `setPropertyForSession`'s body
-  runs inside `measure { }` so both call sites (WS `cueEdit.setProperty` and
-  the MIDI fader path through `DefaultSurfaceActions`) record uniformly;
-  `endEdit` and `endSessionOnDisconnect` both call `onEndEdit` so a closed
-  WebSocket still freezes the snapshot. New `GET /api/rest/perf/cueedit-histogram`
-  in [perf.kt](src/main/kotlin/uk/me/cormack/lighting7/routes/perf.kt) returns
-  `{ sessionActive, live, lastSessionEnded }` — the harness operator scrapes
-  this after a `MidiFloodHarness` flood + endEdit to read p50/p95/p99/max
-  + per-bucket counts. Unit coverage in
-  [LatencyHistogramTest.kt](src/test/kotlin/uk/me/cormack/lighting7/perf/LatencyHistogramTest.kt)
-  pins log2 bucket placement, percentile cumulative walk + max-capped right
-  bound, top-bucket overflow, reset semantics, and concurrent-record count
-  preservation; in
-  [CueEditLatencyTrackerTest.kt](src/test/kotlin/uk/me/cormack/lighting7/perf/CueEditLatencyTrackerTest.kt)
-  asserts the begin → measure → end lifecycle, the next-begin reset
-  preserving lastSessionEnded, and that a throwing block still records;
-  in [PerfRouteTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/PerfRouteTest.kt)
-  asserts the empty-snapshot pre-session case and the surfaced
-  `lastSessionEnded` after a synthetic begin → measure ×3 → end cycle.
-  Unblocks `FU-PERF-COALESCE-WRITES` and `FU-PERF-HEX-FORMAT-ALLOC` —
-  the trigger condition for both ("profile first") is now answerable.
-- `FU-PERF-INSTRUMENT-MIDI` — commit b01d4b3 (2026-04-25) — Added
-  [MidiLatencyTracker.kt](src/main/kotlin/uk/me/cormack/lighting7/perf/MidiLatencyTracker.kt)
-  with `enum MidiLatencyStage(val wireName)` covering the four named buckets
-  (`INGRESS_CONTINUOUS`/`INGRESS_BUTTON`/`EGRESS_MOTOR`/`EGRESS_LED`); the
-  tracker pre-allocates one [LatencyHistogram] per stage in an
-  ordinal-indexed `Array`. `inline fun <T> measure(stage, block)` — array
-  index + `System.nanoTime()` pair, no map lookup, no lambda allocation on the
-  ~100 Hz hot path. Threaded through
-  [State.midiLatencyTracker](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt)
-  into both [SurfaceInputRouter](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouter.kt)
-  (wraps `dispatchContinuous` in `INGRESS_CONTINUOUS`; `dispatchButtonPress` /
-  `dispatchButtonRelease` in `INGRESS_BUTTON`) and
-  [SurfaceFeedbackPublisher](src/main/kotlin/uk/me/cormack/lighting7/midi/SurfaceFeedbackPublisher.kt)
-  (wraps `controller.sendFeedback` in `EGRESS_MOTOR` / `EGRESS_LED`). Tracker
-  parameter is non-null with a default `MidiLatencyTracker()` — no opt-out
-  needed; tests construct their own. Added `inboundCcRate` / `outboundCcRate:
-  PacketRateCounter` to the `MidiController` interface;
-  [KtMidiController](src/main/kotlin/uk/me/cormack/lighting7/midi/KtMidiController.kt)
-  records inbound on each parsed `MidiInputEvent.ControlChange` and outbound
-  on each `MidiFeedbackMessage.ControlChangeFeedback` that survives delta
-  suppression — sysex / NoteOn / NoteOff are not counted.
-  [MidiDeviceRegistry.portCcRates](src/main/kotlin/uk/me/cormack/lighting7/midi/MidiDeviceRegistry.kt)
-  exposes a per-port `@Serializable PortCcRates` snapshot returned directly by
-  the route (mirroring the `UniversePacketStats` pattern). New
-  [GET /api/rest/perf/midi-latency](src/main/kotlin/uk/me/cormack/lighting7/routes/perf.kt)
-  returns `{ windowSeconds, histograms: {wireName → snapshot}, ports }`;
-  `POST .../reset` zeroes every bucket (operator-driven; no per-session
-  boundary exists for MIDI). Bucket keys sorted alphabetically by `wireName`.
-  Adjacent: reordered `registerCoreMidiChangeListener()` before
-  `midiRegistry.start(...)` in
-  [State.initializeShow](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt)
-  to close a poll-loop ↔ listener-add deadlock that hung the full test suite —
-  see `FU-TEST-COREMIDI-INIT-DEADLOCK`. Coverage:
-  [MidiLatencyTrackerTest.kt](src/test/kotlin/uk/me/cormack/lighting7/perf/MidiLatencyTrackerTest.kt)
-  pins pre-allocated buckets, alphabetic snapshot ordering, reset semantics,
-  exception-records-still-counted, and `record(stage, nanos)` accepts
-  pre-measured durations;
-  [MidiFeedbackConflationTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/MidiFeedbackConflationTest.kt)
-  adds three cases (outbound CC counted, delta-suppressed sends not counted,
-  inbound CC parsed-and-counted while NoteOn skipped);
-  [SurfaceInputRouterTest.kt](src/test/kotlin/uk/me/cormack/lighting7/midi/SurfaceInputRouterTest.kt)
-  adds three cases (`INGRESS_CONTINUOUS` on fader CC, `INGRESS_BUTTON` on
-  press + release, no recording when binding misses);
-  [PerfRouteTest.kt](src/test/kotlin/uk/me/cormack/lighting7/routes/PerfRouteTest.kt)
-  adds three cases (empty snapshot, surfaced buckets, POST reset zeroing).
-  Unblocks end-to-end interpretation of `MidiFloodHarness` output and
-  quantitative `FU-MANUAL-SUSPEND-PATH` validation.
-- `FU-FE-PERF-DASHBOARD` — commit 73f11bb in lighting-react (2026-04-25) — Added a
-  `Diagnostics` route in `lighting-react` consuming all three
-  `/api/rest/perf/*` endpoints (`artnet-rates`, `cueedit-histogram`,
-  `midi-latency`). New
-  [perf.ts](../../../lighting-react/src/store/perf.ts) RTK Query slice
-  injects `useGetArtNetRatesQuery` / `useGetCueEditHistogramQuery` /
-  `useGetMidiLatencyQuery` / `useResetMidiLatencyMutation` into the
-  shared `restApi`; all three queries polled at 2 s — slow enough not to
-  pressure the backend, fast enough to see effect-load spikes. Added a
-  new `'PerfMidi'` tag in
-  [restApi.ts](../../../lighting-react/src/store/restApi.ts) so the
-  `POST /perf/midi-latency/reset` mutation invalidates the MIDI query
-  immediately rather than waiting for the next 2 s tick.
-  Route component
-  [Diagnostics.tsx](../../../lighting-react/src/routes/Diagnostics.tsx)
-  renders three cards: ArtNet panel (per-universe table: subnet,
-  universe, packets/sec, total), cueEdit panel (live snapshot while
-  `sessionActive`, falling back to `lastSessionEnded` when idle), and
-  MIDI panel (per-stage latency table — count / p50 / p95 / p99 / max
-  per `ingressContinuous` / `ingressButton` / `egressMotor` /
-  `egressLed` — plus per-port CC rates and a Reset button since MIDI
-  has no per-session boundary). The cueEdit histogram view trims
-  leading/trailing zero-count log2 buckets to focus on the active
-  range, surfaces count / mean / p50 / p95 / p99 / max inline, and
-  renders a horizontal bar chart of bucket counts with bucket-bound
-  labels (`formatNanos` switches between ns / µs / ms / s). Empty-state
-  copy on each panel covers the harness flow ("patch a non-mock
-  universe" / "open a cue editor in Live mode and adjust a bound
-  fader" / "connect a control surface"). Wired the route into
-  [App.tsx](../../../lighting-react/src/App.tsx) at
-  `/projects/:projectId/diagnostics` (with a `/diagnostics` redirect to
-  the current project, mirroring the `/surfaces` pattern) and into the
-  shared
-  [navigation.ts](../../../lighting-react/src/navigation.ts) registry as
-  a `live`-group entry with `Activity` icon and `visibility: "always"`
-  (the perf endpoints are process-global — they don't need an active
-  project to return data). Type-check passes; smoke-tested in-browser
-  against a running backend — `/diagnostics` redirect resolves to the
-  current project, the live-group sidebar entry highlights when active,
-  all three perf queries poll cleanly at 2 s with 200 OK, ArtNet table
-  populates from real universe data, cueEdit and MIDI empty states
-  render as expected with no console errors.
-- `FU-TEST-COREMIDI-INIT-DEADLOCK` — commit 19fa952 (2026-04-25) — Reorder
-  fix already landed in `FU-PERF-INSTRUMENT-MIDI` (b01d4b3) — the
-  `addNotificationListener` call now precedes `midiRegistry.start(...)` in
-  [State.initializeShow](src/main/kotlin/uk/me/cormack/lighting7/state/State.kt),
-  closing the AB/BA window directly. This landing adds the durable second
-  half: `State.shutdown()` cancels the `projectChangedFlow` collector and
-  walks each surface class's existing `stop()` / `close()` in reverse-startup
-  order (input → feedback → learn → matcher → registry), then closes the
-  show and drains the Hikari pool (the previously-untracked
-  `HikariDataSource` is now retained in a private nullable field so
-  `dataSource.close()` can run — Exposed's `Database.connect()` doesn't
-  surface the underlying datasource itself). Idempotent via a `shutdownDone`
-  flag; every step is `runCatching`-wrapped so a partially-initialised State
-  (e.g. `initializeShow` never called) tears down without throwing.
-  [RouteIntegrationTest.tearDownIntegrationTest](src/test/kotlin/uk/me/cormack/lighting7/testsupport/RouteIntegrationTest.kt)
-  now calls `state.shutdown()` instead of the prior pair of
-  `runCatching { state.show.fxEngine.stop() }` / `state.show.close()` —
-  the new path subsumes both. Added a base-class
-  `@get:Rule val testTimeout: Timeout = Timeout.seconds(60)` so any future
-  hang fails the offending test loudly instead of dragging `gradlew test`
-  out for the worker idle timeout. Verified: `./gradlew test` finishes green
-  in ~43s (full suite ran end-to-end without wedging — same suite that
-  previously hung ~18 minutes when run after the targeted integration
-  tests). CoreMIDI4J listener removal not attempted; `addNotificationListener`
-  has no remove counterpart in the codebase, and on tests the leaked
-  callbacks fire only on hot-plug events that don't occur in CI.
-- `FU-TEST-VITE-BUILD` — validated 2026-04-25 — `npm run build` (which
-  runs `tsc && vite build`) is clean on Node 24.12 LTS:
-  2344 modules transformed, dist artefacts emitted, no errors. Only
-  output is the informational "chunk > 500 kB" code-splitting hint —
-  unchanged from prior runs, not a regression. The Node 16.x → 24.x
-  bump on the dev machine resolved the original blocker; the wider
-  shell-init issue (Bash subshells inheriting an older Node from PATH
-  even after `nvm alias default lts/*`) is sidestepped by sourcing
-  `~/.nvm/nvm.sh` in the launch.json invocation.
+- `FU-BE-MOVE-IN-DARK` — Layer 3 position snap during an outgoing fade, authored per cue row —
+  `0593d81`
+- `FU-PERF-COALESCE-WRITES` — cancelled: profiled at p99 2.1 ms, well under the 5 ms bar
+  (`CueEditProfileTest`)
+- `FU-PERF-HEX-FORMAT-ALLOC` — cancelled with it: no measurable colour-vs-slider gap to chase
+- `FU-TEST-DMX-FX-BENCH-HARNESS` — `AsyncTestDmxController` + `BenchmarkSetValues`, opt-in via
+  `-Ddmx.benchmark=true` — `6e1222e`
+- `FU-BE-PALETTE-CASCADE` — `PaletteCascade(preset, cue, global)` threaded through every Layer 3
+  build site — `3181784`
+- `FU-BE-PRESET-FIXTURE-TYPE-NOTNULL` — `fx_presets.fixture_type` made NOT NULL with a migration —
+  `83ae4d3`
+- `FU-BE-TIMED-PRESETS-LAYER3` — timed presets append and retract Layer 3 rows per fire — `ce5304c`
+- `FU-FE-EXT-COLOUR-CHANNELS` — W/A/UV sliders in `ColourPickerPopover` — lighting-react `53a96a0`
+- `FU-TEST-PROJECT-SWITCH-CUEEDIT` — test that a project switch clears the cue-edit session cache —
+  `ef3cf29`
+- `FU-BE-GROUP-LAYER3-ROUNDTRIP` — `captureCurrentState` preserves group-scoped Layer 3 shape —
+  `ff578a9`
+- `FU-PERF-REGISTRY-INDICES` — secondary indices on the cue-edit session and feedback registries —
+  `672c139`
+- `FU-FE-PRESET-LIVE-PREVIEW` — preset draft preview endpoints and panel — `bb24302` +
+  lighting-react `9929274`
+- `FU-QUAL-PUSHDOWN-SESSION-ROUTING` — cue-edit session routing pushed into
+  `DefaultSurfaceActions` — `379a845`
+- `FU-QUAL-TARGET-REF-SEALED` — `sealed class TargetRef` replaces stringly-typed target pairs —
+  `8161820`
+- `FU-FE-PICKER-UX-POLISH` — a preselected target skips the picker's first step — lighting-react
+  `e97a664`
+- `FU-BE-PRESET-PER-ELEMENT` — nullable `element_key` on preset assignments, resolved per element —
+  `0106ab4`
+- `FU-QUAL-KEY-CONVERGENCE` — `Layer3Resolver.Key` carries a `TargetRef`; `AssignmentKey` deleted —
+  `30dd0fc`
+- `FU-BE-SCALER-PERSISTENCE` — `project_scaler_states` persists Blackout / Grand Master per project
+  — `7bcd109`
+- `FU-PERF-FX-TICK-ALLOCS` — beat-tick p50 and per-tick allocation both ~45% down — `a0d5a8c`
+- `FU-PERF-INSTRUMENT-ARTNET` — `PacketRateCounter` + `GET /perf/artnet-rates` — `0d19fad`
+- `FU-TEST-HTTP-ROUNDTRIP` — `RouteIntegrationTest` harness on embedded Postgres — `4245a7d`
+- `FU-PERF-INSTRUMENT-CUEEDIT` — `LatencyHistogram` + `GET /perf/cueedit-histogram` — `1607d91`
+- `FU-PERF-INSTRUMENT-MIDI` — per-stage MIDI latency and CC rates + `GET /perf/midi-latency` —
+  `b01d4b3`
+- `FU-FE-PERF-DASHBOARD` — `/diagnostics` route over all three perf endpoints — lighting-react
+  `73f11bb`
+- `FU-TEST-COREMIDI-INIT-DEADLOCK` — `State.shutdown()` and a listener-before-start reorder —
+  `19fa952`
+- `FU-TEST-VITE-BUILD` — validated: `npm run build` clean on Node 24.12 LTS

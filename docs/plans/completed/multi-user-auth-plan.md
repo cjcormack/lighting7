@@ -34,7 +34,7 @@
 >
 > **One behaviour is shipped but never seen on real hardware**, and it is the only
 > outstanding work from this plan: the two-device QR scan — tracked as
-> `FU-MANUAL-AUTH-QR-SCAN` in [followups.md](../followups.md). Everything else has
+> `FU-MANUAL-AUTH-QR-SCAN` in [manual-validation.md](../manual-validation.md). Everything else has
 > automated coverage (`AuthServiceTest`, `AuthRoutesTest`, `AuthGateTest`,
 > `UsersRoutesTest`, `PasswordResetRoutesTest`, `ResetPasswordPage.test.tsx`).
 > Ten further follow-ups — five **Ready** review cuts and five trigger-gated

@@ -494,14 +494,20 @@ the same split `PUT /install` uses.
 
 ## Follow-ups
 
-[`docs/plans/followups.md`](docs/plans/followups.md) tracks dormant work — mostly
-Trigger-gated, Blocked or Manual, plus a handful of **Ready** items left behind by
-the programmer-redesign and multi-user-auth close-outs. Don't poll it routinely.
-**Open it only when your current change might fire a listed trigger** (e.g.,
+[`docs/plans/followups.md`](docs/plans/followups.md) tracks dormant engineering
+work — mostly Trigger-gated or Blocked, plus a handful of **Ready** items.
+[`docs/plans/manual-validation.md`](docs/plans/manual-validation.md) holds the
+operator-on-the-rig checks. Don't poll either routinely.
+
+**Open followups.md when your current change might fire a listed gate** (e.g.
 touching FX tick loops, ArtNet output paths, shared `AssignmentHealth` UI,
 cueEdit session routing, the auth gate's role prefixes, anything that adds a WS
 command an operator shouldn't have, or anything that adds a 6th consumer of
-fixture/group property lookup) — or when you want a Ready item to pick up. Grep
-the file's `### `FU-…`` headers + `**Trigger to revisit**` lines first; only read
-full bodies for matches. If a trigger fires, flag it inline (or promote the item
-to Ready) rather than silently working around it.
+fixture/group property lookup) — or when you want a Ready item to pick up. **Read
+the index table at the top first** — one row per item with its status and gate —
+and only read the body of a matching item. If a gate fires, flag it inline (or
+promote the item to Ready) rather than silently working around it.
+
+When an item lands, replace its section with a one-line row in Completed. The
+narrative belongs in the commit message, and anything durable belongs in the
+relevant `docs/*-engineering.md` — not in the follow-ups tracker.
