@@ -98,11 +98,17 @@ internal fun Route.routeScriptEditor(state: State) {
 }
 
 /**
- * The editor sends one synthetic file: a prefix that declares a stand-in class so the user's body
- * has somewhere to live, the body itself between `//sampleStart` and `//sampleEnd`, and a closing
- * suffix. Only the body is real, and it is compiled against the genuine script template rather
- * than the prefix's approximation of it — which is what stops the two definitions of the DSL
- * drifting apart.
+ * The editor sends one synthetic file, and what the frontend writes is not what arrives here. It
+ * puts a `//@lighting7-script-type=` line above the body and wraps the body itself in
+ * `//sampleStart` / `//sampleEnd`. The widget uses the fold markers to decide what to show and then
+ * **strips them**, posting `everythingBeforeSampleStart + editorContents + everythingAfterSampleEnd`.
+ * So the live shape is the marker line followed by the user's body, and it lands on the no-marker
+ * path below: the whole document is the user's script, one line of it a comment.
+ *
+ * The marker-bearing shape is still handled, for a client that hands its own text through
+ * unaltered. There only the body between the markers is compiled — never a stand-in class the
+ * frontend invented for the widget to display, which is how the two definitions of the DSL are
+ * kept from drifting apart.
  *
  * [prefixLines] is how many lines precede the body, and is what converts between the widget's
  * coordinate space and the compiler's.
@@ -134,19 +140,23 @@ private data class EditorDocument(
         private const val SAMPLE_END = "//sampleEnd"
 
         /**
-         * Both markers are emitted by the frontend's own wrappers. A document without them — a bare
-         * playground pointed at this desk, say — is taken at face value as a GENERAL script, which
-         * degrades to slightly-wrong completions rather than to an error.
+         * The fold markers are absent from everything the widget posts, so the no-marker path is
+         * the normal one rather than the fallback it looks like. A document with no script-type
+         * marker either — a bare playground pointed at this desk, say — is taken at face value as a
+         * GENERAL script, which degrades to slightly-wrong completions rather than to an error.
          */
         fun of(source: String): EditorDocument {
             val lines = source.lines()
             val start = lines.indexOfFirst { it.trim() == SAMPLE_START }
 
-            // Only the prefix is searched for the marker. Scanning the whole document would let
-            // the user's own text name the template: an unrecognised marker (frontend ahead of
-            // backend on a new script type) makes the lookup fall through, and a line like
-            // `//@lighting7-script-type=FX_DEFINITION` pasted into a script — from documentation,
-            // say — would then be adopted and the body compiled against the wrong base class.
+            // The search is restricted to the prefix when there is one, so a line the user typed
+            // cannot name the template. In the shape the widget actually posts there is no prefix
+            // to restrict it to, and what protects the choice is ordering instead: the frontend's
+            // marker is line 1 and the *first* recognised one wins, so a
+            // `//@lighting7-script-type=FX_DEFINITION` pasted in from documentation is ignored.
+            // (An unrecognised name falls through rather than matching — a frontend ahead of this
+            // backend on a new script type is the one case where a pasted line could still be
+            // adopted.)
             val prefix = if (start >= 0) lines.subList(0, start) else lines
             val scriptType = prefix.firstNotNullOfOrNull { line ->
                 line.trim().removePrefixOrNull(SCRIPT_TYPE_MARKER)?.let { name ->

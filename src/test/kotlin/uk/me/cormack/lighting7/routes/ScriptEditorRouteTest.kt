@@ -16,53 +16,40 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The wire contract with the `kotlin-playground` widget, which owns the whole protocol
- * client-side and cannot be reconfigured beyond its base URL. These use the **real** wrapper text
- * the frontend sends, markers and all, because the parsing of that wrapper is the seam where the
- * two repos meet.
+ * The wire contract with the `kotlin-playground` widget, which owns the whole protocol client-side
+ * and cannot be reconfigured beyond its base URL.
  *
- * Positions here are the widget's: 0-based line and column, in the whole wrapped document.
+ * The documents here are the ones the widget really posts, which is **not** the text the frontend
+ * hands it. `lighting-react`'s `wrapForEditor` wraps the body in `//sampleStart` / `//sampleEnd`,
+ * and the widget splits on those markers and then drops them: it keeps `prefix` as the text before
+ * `//sampleStart` and `suffix` as the text after `//sampleEnd`, and every request body is
+ * `prefix + editorContents + suffix`. So what arrives here is the script-type marker line followed
+ * by the user's body, and `EditorDocument` takes its no-marker path — the whole document is the
+ * user's script, at a one-line offset.
+ *
+ * Positions are the widget's: 0-based line and column, in the document as posted. The widget then
+ * subtracts the newlines in its `prefix` — [MARKER_LINES] of them — before drawing anything, which
+ * is why the round-trip is asserted rather than just the raw line.
  */
 class ScriptEditorRouteTest : RouteIntegrationTest() {
 
-    // Verbatim from SCRIPT_WRAPPERS.GENERAL in lighting-react's ScriptEditor.tsx. If that file
-    // changes shape, this test should be the thing that notices.
-    private val generalPrefix = """
-        //@lighting7-script-type=GENERAL
-        import uk.me.cormack.lighting7.fixture.*
-        import uk.me.cormack.lighting7.show.*
-        import uk.me.cormack.lighting7.scripts.*
-        import kotlinx.coroutines.*
-
-        class TestScript(
-            show: Show,
-            fixtures: Fixtures.FixturesWithTransaction,
-            fxEngine: FxEngine,
-            scriptName: String,
-            step: Int,
-            coroutineScope: CoroutineScope,
-        ): LightingScript(show, fixtures, fxEngine, scriptName, step, coroutineScope) {}
-
-        fun TestScript.test() {
-        //sampleStart
-    """.trimIndent() + "\n"
-
-    private val generalSuffix = "\n//sampleEnd\n}\n"
-
-    /** Lines of prefix before the user's first line — what the widget subtracts client-side. */
-    private val prefixLines = generalPrefix.count { it == '\n' }
-
-    private fun wrap(userScript: String) = generalPrefix + userScript + generalSuffix
+    /**
+     * What the widget sends. Mirrors `wrapForEditor` in lighting-react's `ScriptEditor.tsx` with
+     * the fold markers removed, exactly as the widget removes them. If that function grows a
+     * header again, this is the test that should notice.
+     */
+    private fun asSent(userScript: String, scriptType: String = "GENERAL") =
+        "//@lighting7-script-type=$scriptType\n$userScript"
 
     @Test
-    fun `highlight reports errors against the wrapped document the widget sent`() = testApplication {
+    fun `highlight reports errors where the widget will draw them`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
         // Two user lines; the error is on the second.
         val response = client.post("/script-editor/api/2.4.10/compiler/highlight") {
             contentType(ContentType.Application.Json)
-            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", wrap("val ok = 1\nval bad: Int = \"nope\"")))))
+            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent("val ok = 1\nval bad: Int = \"nope\"")))))
         }
         assertEquals(HttpStatusCode.OK, response.status)
 
@@ -71,8 +58,10 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         assertEquals(1, errors.size, "expected exactly one error, got $errors")
 
         val error = errors.single()
-        // User line 2 (1-based) → document line prefixLines + 1 (0-based).
-        assertEquals(prefixLines + 1, error.interval.start.line)
+        // The marker occupies document line 0, so the user's second line is document line 2 …
+        assertEquals(2, error.interval.start.line)
+        // … and the widget subtracts its prefix to land on the second line of the editor.
+        assertEquals(1, error.interval.start.line - MARKER_LINES, "would be drawn on the wrong line")
         assertEquals("red_wavy_line", error.className)
         assertTrue(error.interval.end.line >= error.interval.start.line)
     }
@@ -84,7 +73,7 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
 
         val response = client.post("/script-editor/api/2.4.10/compiler/highlight") {
             contentType(ContentType.Application.Json)
-            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", wrap("val level = 255")))))
+            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent("val level = 255")))))
         }
 
         val diagnostics = response.body<Map<String, List<HighlightDto>>>().getValue("File.kt")
@@ -97,13 +86,13 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         val userScript = "show."
-        // The widget sends the cursor in document coordinates: 0-based line, 0-based column.
-        val line = prefixLines
+        // Cursor on the first line of the editor: the widget adds its prefix back before asking.
+        val line = 0 + MARKER_LINES
         val ch = userScript.length
 
         val response = client.post("/script-editor/api/2.4.10/compiler/complete?line=$line&ch=$ch") {
             contentType(ContentType.Application.Json)
-            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", wrap(userScript)))))
+            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent(userScript)))))
         }
         assertEquals(HttpStatusCode.OK, response.status)
 
@@ -121,7 +110,7 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
 
         val response = client.post("/script-editor/api/2.4.10/compiler/complete") {
             contentType(ContentType.Application.Json)
-            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", wrap("show.")))))
+            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent("show.")))))
         }
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
@@ -137,10 +126,9 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         // `params` is an FxCalcScript constructor property; it does not exist on LightingScript.
-        val fxCalcDocument = "//@lighting7-script-type=FX_CALC\nfun x() {\n//sampleStart\nparams\n//sampleEnd\n}\n"
         val response = client.post("/script-editor/api/2.4.10/compiler/highlight") {
             contentType(ContentType.Application.Json)
-            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", fxCalcDocument))))
+            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent("params", "FX_CALC")))))
         }
 
         val diagnostics = response.body<Map<String, List<HighlightDto>>>().getValue("File.kt")
@@ -151,24 +139,24 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
     }
 
     /**
-     * The marker is read from the prefix only. A line in the user's own body that looks like one —
-     * pasted from documentation, say — must not be able to redirect the compile at a different
-     * base class.
+     * A line in the user's own body that looks like a marker — pasted from documentation, say —
+     * must not redirect the compile at a different base class. In the shape the widget sends there
+     * is no prefix to restrict the search to, so what protects this is ordering: the frontend's
+     * marker is the document's first line and the first recognised one wins.
      */
     @Test
     fun `a marker inside the user's script cannot override the declared template`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
-        // Declared GENERAL in the prefix; the body claims FX_CALC. `fixtures` is public on
-        // LightingScript and absent from FxCalcScript, so it resolving proves the prefix won.
-        // (`show` would not do — it is deliberately `private val` on the base class.)
+        // Declared GENERAL on line 1; the body claims FX_CALC. `fixtures` is public on
+        // LightingScript and absent from FxCalcScript, so it resolving proves the first marker won.
         val response = client.post("/script-editor/api/2.4.10/compiler/highlight") {
             contentType(ContentType.Application.Json)
             setBody(
                 PlaygroundProjectDto(
                     files = listOf(
-                        PlaygroundFileDto("File.kt", wrap("//@lighting7-script-type=FX_CALC\nval f = fixtures")),
+                        PlaygroundFileDto("File.kt", asSent("//@lighting7-script-type=FX_CALC\nval f = fixtures")),
                     ),
                 ),
             )
@@ -177,8 +165,33 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         val diagnostics = response.body<Map<String, List<HighlightDto>>>().getValue("File.kt")
         assertTrue(
             diagnostics.none { it.severity == "ERROR" },
-            "`show` should resolve under the prefix's GENERAL template — got $diagnostics",
+            "`fixtures` should resolve under the leading GENERAL marker — got $diagnostics",
         )
+    }
+
+    /**
+     * The fallback shape: a document that still carries the fold markers. The widget never sends
+     * one — it strips them — but the route accepts it, and a bare playground pointed at this desk
+     * or a frontend that hands its own text straight through would produce it. Here the body is
+     * everything between the markers, and positions are relative to the whole document, so the
+     * offset is the number of lines up to and including `//sampleStart`.
+     */
+    @Test
+    fun `a document that still carries the fold markers is read as body only`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val document = "//@lighting7-script-type=GENERAL\nfun x() {\n//sampleStart\nval ok = 1\nval bad: Int = \"nope\"\n//sampleEnd\n}\n"
+        val response = client.post("/script-editor/api/2.4.10/compiler/highlight") {
+            contentType(ContentType.Application.Json)
+            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", document))))
+        }
+
+        val errors = response.body<Map<String, List<HighlightDto>>>().getValue("File.kt")
+            .filter { it.severity == "ERROR" }
+        assertEquals(1, errors.size, "expected exactly one error, got $errors")
+        // Three lines precede the body, so its second line is document line 4.
+        assertEquals(4, errors.single().interval.start.line)
     }
 
     @Test
@@ -188,13 +201,17 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
 
         val response = client.post("/script-editor/api/2.4.10/compiler/run") {
             contentType(ContentType.Application.Json)
-            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", wrap("val x = 1")))))
+            setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent("val x = 1")))))
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
         assertTrue(response.body<ExecutionResultDto>().exception!!.message.contains("Run button"))
     }
 }
+
+/** The frontend's marker line, which the widget keeps as its `prefix` and subtracts client-side. */
+private const val MARKER_LINES = 1
+
 
 @Serializable
 private data class PlaygroundProjectDto(
