@@ -134,12 +134,26 @@ class ScriptEditorService(
         if (severity == ScriptDiagnostic.Severity.DEBUG) return null
         val location = location ?: return null
         val end = location.end ?: location.start
+
+        // Anything starting above the user's first line belongs to the wrapper's header, and what
+        // the compiler reports there is a property of the template rather than of the script: an
+        // FX_CALC body that ignores `phase` draws `Parameter 'phase' is never used` on every
+        // keystroke, three of them, at columns past the end of any line the user has typed.
+        // Dropping them costs nothing — they are not the user's to fix — and the editor now draws
+        // its marks itself, so clamping them onto line 1 would underline whatever they landed on.
+        //
+        // Errors are clamped rather than dropped: a script that does not compile has to say so
+        // somewhere, and an approximate position beats a clean-looking editor that will not run.
+        val startsAboveUserScript = location.start.line - lineOffset < 1
+        val isError = severity == ScriptDiagnostic.Severity.ERROR || severity == ScriptDiagnostic.Severity.FATAL
+        if (startsAboveUserScript && !isError) return null
+
         return EditorDiagnostic(
             severity = severity,
             message = message,
-            // Clamped at both ends: below, a diagnostic against the wrapper's header lands on
-            // line 0 or lower; above, one against its footer lands past the user's last line. The
-            // editor silently fails to mark either, so both are pulled onto the nearest real line.
+            // Clamped at both ends: an error from the header still lands on line 0 or lower, and
+            // anything blamed on the wrapper's footer lands past the user's last line. The editor
+            // silently fails to mark either, so both are pulled onto the nearest real line.
             startLine = (location.start.line - lineOffset).coerceIn(1, lastUserLine),
             startCol = location.start.col,
             endLine = (end.line - lineOffset).coerceIn(1, lastUserLine),

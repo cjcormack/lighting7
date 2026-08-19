@@ -75,6 +75,28 @@ class ScriptEditorServiceTest {
         assertTrue(error.endLine <= 1, "end line escaped the user's script: ${error.endLine}")
     }
 
+    /**
+     * The FX_CALC template declares `phase`, `context` and `params`, so a body that uses none of
+     * them makes the compiler report three "never used" warnings against the template's own
+     * header — on every keystroke. Clamped onto the user's line 1 they arrive with the header's
+     * columns, well past the end of anything typed, and the editor draws its marks itself now, so
+     * they would underline whatever happened to be there.
+     */
+    @Test
+    fun `warnings about the template's own parameters are not reported as the user's`() = runBlocking {
+        val diagnostics = service.analyse("val x = 1\nval bad: Int = \"nope\"", ScriptType.FX_CALC)
+
+        assertTrue(
+            diagnostics.none { it.message.contains("Parameter") && it.message.contains("never used") },
+            "template header noise leaked into the user's script: $diagnostics",
+        )
+        // The user's own unused-variable warning is still theirs, and so is the error.
+        assertTrue(
+            diagnostics.any { it.severity == ScriptDiagnostic.Severity.ERROR && it.startLine == 2 },
+            "the real error should survive: $diagnostics",
+        )
+    }
+
     @Test
     fun `completion resolves members of the show DSL`() = runBlocking {
         val completions = service.complete("show.", ScriptType.GENERAL, line = 1, col = 6)
