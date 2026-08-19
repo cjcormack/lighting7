@@ -15,10 +15,10 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 
 | Slug | Status | Area | Gate |
 |---|---|---|---|
-| [`FU-PROG-VIS-SOURCE`](#fu-prog-vis-source) | Ready | Prog | — |
 | [`FU-PAL-PRESET-MAKE-HARD`](#fu-pal-preset-make-hard) | Ready | Pal | — |
 | [`FU-AUTH-STALE-ANON-SOCKET`](#fu-auth-stale-anon-socket) | Ready | Auth | — |
 | [`FU-DIST-ICONS`](#fu-dist-icons) | Ready | Dist | — |
+| [`FU-PROG-VIS-NEXTGO`](#fu-prog-vis-nextgo) | Blocked | Prog | a backend preview-compose endpoint |
 | [`FU-SYNC-FORMAT-MIGRATIONS`](#fu-sync-format-migrations) | Blocked | Sync | a real breaking `formatVersion` bump |
 | [`FU-TEST-MULTI-CONN-CUEEDIT`](#fu-test-multi-conn-cueedit) | Blocked | Test | cue-authoring `beginEdit` conflict semantics |
 | [`FU-DIST-NO-BUNDLED-JRE`](#fu-dist-no-bundled-jre) | Rejected | Dist | decision record — do not re-propose |
@@ -193,28 +193,27 @@ express it as separate instances.
 
 ## Programmer
 
-### `FU-PROG-VIS-SOURCE`
+### `FU-PROG-VIS-NEXTGO`
 
-**Stage3D vis-source selector** · Ready · Programmer redesign §3.7 / Session 3
+**`Next GO` as a fourth vis source** · Blocked · split out of `FU-PROG-VIS-SOURCE` on 2026-08-19
 
-Stage3D renders final merged DMX only. The proposal asks for a source selector: `Output` (today) /
-`Output + Programmer` / `Programmer only` / `Next GO`.
+The other three vis sources shipped (see Completed). `Next GO` — previewing the look the next GO
+would produce — did not, and is blocked on two things rather than one.
 
-- **`Output + Programmer`** is identical to `Output` unless Blind is on, so only the blind case
-  needs work.
-- **`Programmer only`** has an unused shortcut: `ProgrammerState.channels`
-  (`src/api/programmerWsApi.ts`) already arrives on every `programmer.state` snapshot and is
-  consumed by nothing. It refreshes on the 100 ms provenance debounce rather than at wire rate,
-  and `ProgrammerApi` exposes no per-channel subscribe — a `subscribeToChannelValue` mirroring
-  `channelsApi` is the missing piece.
-- **`Next GO`** has no data behind it. There is no client-side cue resolver, and turning Layer 4
-  assignments into channel values in the browser means reimplementing the backend merge. Needs a
-  backend preview-compose endpoint or WS channel first.
+**No backend preview compose.** Turning Layer 4 cue assignments into channel values in the browser
+means reimplementing the backend merge: specificity, HTP/LTP, palette resolution, move-in-dark
+arming, effects in the cue band. Needs a preview-compose endpoint or WS channel that runs the real
+`CueAssignmentResolver` against a hypothetical active-cue set and returns channel values.
 
-Two notes for pickup: `FixtureModel`'s value reads all funnel through `getChannelValue` /
-`useLiveColour`, so swapping source is largely "inject a value provider instead of importing
-`lightingApi.channels`". And the preview pane is Chromium while the rig runs from Safari, so a
-clean preview isn't proof for WebGL-adjacent changes.
+**"Next" is not well defined.** `nextCueId` is computed client-side *per stack*
+(`lighting-react/src/routes/PromptBookPage.tsx`: an explicit standby, else the next cue in order),
+so with several stacks running there is no single next look. Decide first: the focused stack, every
+armed stack merged, or a stack picker on the selector.
+
+Once a source of channel values exists, the client side is small: implement `ChannelSource` over it
+and add a fourth `VisSource` member. `lighting-react/docs/stage-vis-engineering.md` has the seam.
+
+**Blocked on**: a backend preview-compose endpoint, plus a decision on multi-stack semantics.
 
 ### `FU-PROG-PER-USER`
 
@@ -947,6 +946,12 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-08
 
+- `FU-PROG-VIS-SOURCE` — Output / Output + Programmer / Programmer only across all three stage
+  surfaces, via an injected `ChannelSource`; the item's premise that `ProgrammerState.channels`
+  was the programmer's channel output was wrong (it is the sideband), so the programmer is
+  resolved from its property entries instead. The 2D plot gained live values on the way. `Next GO`
+  split out as [`FU-PROG-VIS-NEXTGO`](#fu-prog-vis-nextgo) — lighting-react, see
+  `docs/stage-vis-engineering.md`
 - `FU-PROG-L3RESOLVER-RENAME` — `Layer3Resolver` → `CueAssignmentResolver`, the `*Layer3*`
   engine internals with it, and the layer numbers in the comments — `7d3711e`
 - `FU-PERF-BLACKOUT-LATENCY` — latency accepted as expected behaviour: a blackout is no
