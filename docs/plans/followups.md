@@ -15,7 +15,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 
 | Slug | Status | Area | Gate |
 |---|---|---|---|
-| [`FU-PERF-BLACKOUT-LATENCY`](#fu-perf-blackout-latency) | Ready | Perf | needs a product call between three shapes |
 | [`FU-PROG-L3RESOLVER-RENAME`](#fu-prog-l3resolver-rename) | Ready | Prog | — |
 | [`FU-PROG-VIS-SOURCE`](#fu-prog-vis-source) | Ready | Prog | — |
 | [`FU-PAL-PRESET-MAKE-HARD`](#fu-pal-preset-make-hard) | Ready | Pal | — |
@@ -66,31 +65,6 @@ rather than in a new doc.
 ---
 
 ## Performance
-
-### `FU-PERF-BLACKOUT-LATENCY`
-
-**Blackout lands up to one refresh interval late** · Ready · Continuous Art-Net streaming
-(2026-08-18, `eb190ef`)
-
-`GlobalScalerState` calls `DmxController.requestTransmit()` when Blackout or Grand Master is
-toggled. Under continuous streaming that is a **no-op** — the change reaches the wire on the next
-scheduled tick, and an out-of-band packet would push the universe above its configured rate.
-
-At the 25 ms default that's imperceptible. The problem is the ceiling: `MAX_REFRESH_INTERVAL_MS`
-is 1000 and is reachable from the universe chip, so an operator who slowed a universe for a fussy
-node can hit Blackout mid-show and watch it stay lit for a full second. Blackout is a safety
-control; the desk currently promises "up to 1 s" without saying so.
-
-Three shapes, in order of preference:
-
-1. **Lower the ceiling** to ~100 ms — one rule for all output, costs the slow-node case.
-2. **Exempt modifier changes** — one out-of-band frame that re-bases the loop deadline, so the
-   average rate holds. Needs care that Blackout spam-clicking can't become a packet flood.
-3. **Clamp to 25 ms only while a modifier is engaged** — narrowest blast radius, but a rate that
-   silently changes under you is its own surprise.
-
-Not deferred for cost — (1) is a one-constant change. It's here because choosing is a product
-call. See [dmx-engineering.md §Refresh interval](../dmx-engineering.md#refresh-interval).
 
 ### `FU-PERF-FRAME-TXN-UNIFY`
 
@@ -988,6 +962,9 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-08
 
+- `FU-PERF-BLACKOUT-LATENCY` — latency accepted as expected behaviour: a blackout is no
+  different to any other change in lighting state, so it gets no special transmit path. The
+  dead `requestTransmit()` hook went with the decision — `cdd97c5`
 - `FU-DIST-KCS-RETIRE` — compiler-server fork retired, editor served in-process at
   `/script-editor/*`; ~122 MB off the installer — `0199762`
 - `FU-DIST-KCS-LIB-PRUNE` — moot: the staged playground jars went with the fork — `0199762`
