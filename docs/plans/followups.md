@@ -15,7 +15,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 
 | Slug | Status | Area | Gate |
 |---|---|---|---|
-| [`FU-PROG-L3RESOLVER-RENAME`](#fu-prog-l3resolver-rename) | Ready | Prog | — |
 | [`FU-PROG-VIS-SOURCE`](#fu-prog-vis-source) | Ready | Prog | — |
 | [`FU-PAL-PRESET-MAKE-HARD`](#fu-pal-preset-make-hard) | Ready | Pal | — |
 | [`FU-AUTH-STALE-ANON-SOCKET`](#fu-auth-stale-anon-socket) | Ready | Auth | — |
@@ -193,20 +192,6 @@ express it as separate instances.
 ---
 
 ## Programmer
-
-### `FU-PROG-L3RESOLVER-RENAME`
-
-**Rename `Layer3Resolver` to `CueAssignmentResolver`** · Ready · Programmer redesign Session 1,
-decision §5.9
-
-The redesign renumbered the layer stack — cue property assignments are now **Layer 4** — but
-`Layer3Resolver`, `Layer3Resolver.Key`, `LayerResolver.currentLayer3State`,
-`republishLayer3Assignments` and `publishLayer3ToControllers` keep the old number. A deliberate
-Session 1 cut (~25 files of mechanical churn mid-surgery); the KDoc on each names the mismatch.
-
-Do it as its own commit, no behavioural change: `Layer3Resolver` → `CueAssignmentResolver`,
-`currentLayer3State` → `currentCueLayerState`, `*Layer3*` internals to match. Grep docs
-afterwards — the composition model doc points here.
 
 ### `FU-PROG-VIS-SOURCE`
 
@@ -962,6 +947,8 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-08
 
+- `FU-PROG-L3RESOLVER-RENAME` — `Layer3Resolver` → `CueAssignmentResolver`, the `*Layer3*`
+  engine internals with it, and the layer numbers in the comments — `7d3711e`
 - `FU-PERF-BLACKOUT-LATENCY` — latency accepted as expected behaviour: a blackout is no
   different to any other change in lighting state, so it gets no special transmit path. The
   dead `requestTransmit()` hook went with the decision — `cdd97c5`
