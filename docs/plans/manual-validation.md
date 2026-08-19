@@ -3,16 +3,17 @@
 Operational checks pending an operator session on the rig (most on the X-Touch Compact). No
 engineering scope — each is 10–20 minutes end-to-end. Engineering follow-ups live in
 [`followups.md`](followups.md); if a check here fails, promote the finding to a `FU-` item there
-rather than fixing inline.
+rather than fixing inline. Checks that have passed move to [Validated](#validated) at the bottom
+as a one-line row.
+
+## Outstanding
 
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-EDITOR-INPROCESS`](#fu-manual-editor-inprocess) | in-process editor compiles don't stutter live output | KCS retire, 2026-08-18 |
 | [`FU-MANUAL-PALETTE-TOURING`](#fu-manual-palette-touring) | a palette edit moves a live look | Programmer S4, 2026-08-14 |
 | [`FU-MANUAL-SPEED-MASTERS-RIG`](#fu-manual-speed-masters-rig) | two masters drive one show — **restart required first** | Programmer S5, 2026-08-14 |
-| [`FU-MANUAL-AUTH-QR-SCAN`](#fu-manual-auth-qr-scan) | both QR flows resolve on a real phone | Multi-user-auth S3, 2026-08-17 |
-| [`FU-MANUAL-DIST-INSTALL`](#fu-manual-dist-install) | the installers work on clean Mac + Windows | Windows-dist P1–3, 2026-04-28 |
-| [`FU-MANUAL-UPDATE-APPLY`](#fu-manual-update-apply) | the in-app update upgrades in place — *blocked on the above* | Windows updates, 2026-08-17 |
+| [`FU-MANUAL-UPDATE-APPLY`](#fu-manual-update-apply) | the in-app update upgrades in place — now unblocked | Windows updates, 2026-08-17 |
 | [`FU-MANUAL-SCALER-PROJECT-SWITCH`](#fu-manual-scaler-project-switch) | scaler state survives a project switch | Control-surface P9 |
 | [`FU-MANUAL-SUSPEND-PATH`](#fu-manual-suspend-path) | the suspend path doesn't stutter under load | Control-surface P8 |
 | [`FU-MANUAL-CUEEDIT-HARDWARE`](#fu-manual-cueedit-hardware) | cueEdit works from a bound fader | Control-surface P6 |
@@ -89,106 +90,11 @@ While there, check the per-master beat dots — `BeatIndicator` pulses from the 
 **master 1** dot in particular: `beatSync` used to (accidentally) arrive every beat and now
 genuinely arrives every 16, so the client's local interpolation is load-bearing for the first time.
 
-## `FU-MANUAL-AUTH-QR-SCAN`
-
-**The two QR flows on an actual phone** · Multi-user-auth Session 3, 2026-08-17
-
-Both flows are covered end to end by `UsersRoutesTest`, `PasswordResetRoutesTest`,
-`DeviceLoginRoutesTest`, `ResetPasswordPage.test.tsx` and `DeviceLoginPage.test.tsx`. The one thing
-no test can prove is the **two-device path**: that the URL behind the QR is an address a phone on
-the same Wi-Fi can actually reach. `auth/ResetUrls.kt` builds it from the request's own `Host`
-header — correct by construction when the admin browsed by mDNS name or LAN IP, falling back to the
-mDNS name plus site-local IPv4s when that host is loopback — but a QR that resolves to the phone
-itself is the one failure this flow can't recover from, because the person scanning it is by
-definition already locked out.
-
-**Still outstanding as of `631a94f`.** Everything below *except the actual camera scan* was walked
-against a running desk on 2026-08-17. Two flows share `buildLanUrls`, so a failure in one implicates
-the other.
-
-Needs a backend on `631a94f` or later — confirm `GET /api/rest/auth/device-logins` answers rather
-than 404.
-
-**Password-reset QR:**
-
-1. As admin, create a throwaway operator. Sign in as them in a private window; confirm the Users
-   tab and sync nav entries are absent while lighting control works.
-2. Their detail sheet → **Reset with a QR code…** → scan with a phone on the same Wi-Fi. The phone
-   shows *that operator's* display name, not a login form and not a connection error.
-3. Set a new password on the phone → the admin's sheet flips to "used" within ~2 s (2 s poll), and
-   the operator's private window drops to the login screen on its next click, socket closing 4401.
-4. Sign in on the desk with the phone-set password.
-5. With the operator's socket open, disable them from the detail sheet → the socket closes
-   immediately (`AuthService.revocations`, the half that exists because a REST-only check would
-   wait for their next request).
-6. Repeat step 2 while browsing the desk as `localhost` — the loopback fallback, where the QR must
-   carry the mDNS/LAN address instead. Check the alternates disclosure lists something reachable.
-7. Delete the throwaway operator.
-
-**Device-login QR** — shares `buildLanUrls` but hands out a *session*, so the negative cases matter
-more than the happy one:
-
-8. User menu → **Sign in on a phone…** → scan. It should name your account and wait for a tap —
-   confirm nothing is signed in *before* you tap, since a scanner that prefetches must not burn the
-   code. Tap; the phone lands in the app and the desk's sheet flips to success naming the device.
-9. The devices list in the user menu says that session came in by QR.
-10. Mint another and **close the sheet** — the phone must then be refused (`CANCELLED`). Mint
-    another and leave it two minutes untouched — refused as `EXPIRED`.
-11. Mint one and press **"Sign out everywhere else"** before scanning: refused. Repeat with plain
-    **Log out**: also refused. These two are the interlocks review found missing.
-12. Off-LAN if you can arrange it (cellular, or a port-forward): the exchange must answer 404. That
-    check reads the socket peer, so a VPN or flat venue network is how it gets weaker.
-
-Step 2 is the only irreplaceable one. If the phone can't reach the URL, capture what it *was* (the
-sheet shows it as selectable text) before changing anything — that string is the whole diagnosis.
-
-## `FU-MANUAL-DIST-INSTALL`
-
-**End-to-end installer validation on Mac + Windows** · Windows-distribution Phases 1–3, 2026-04-28
-
-All three phases are build-side green — the backend boots from `lighting7.jar` on the trimmed JRE,
-`packageMac` produces a `.pkg` with the right layout, the launcher's `ensureDefaultConfig` writes
-`local.conf` on first launch. Never exercised end-to-end:
-
-**Mac** — install the `.pkg` on a clean machine (or wipe `/Applications/lighting7.app` +
-`~/Library/Application Support/lighting7`). Double-click → tray icon in the menu bar, browser opens
-to `localhost:8413`, an iPad on the same Wi-Fi reaches `http://lighting7-<hostname>.local:8413/`,
-Quit from the tray leaves no `java` processes (`pgrep -f lighting7`).
-
-**Windows** — `gradlew.bat packageWindows` on a Windows host, install the `.msi` on a clean VM with
-no JDK. Same checks plus: `%APPDATA%\lighting7\` writable for the launcher's first-run `local.conf`;
-mDNS resolves from the iPad (Bonjour ships with iTunes / Apple Software Update, else JmDNS is the
-responder); Defender doesn't quarantine `lighting7.exe`.
-
-**Smoke checklist** in either install: BPM tap, fixture patch CRUD, run a cue, edit a script in the
-embedded editor, iPad WebSocket reconnects after a brief Wi-Fi drop.
-
-**Native payloads** (the MSI ships binaries for the target OS only — see
-[`msi-slimming-plan.md`](msi-slimming-plan.md)). One feature per stripped artifact, because each
-fails independently and none is covered by a test:
-
-- **sqlite-jdbc** — the app boots and fixture patch CRUD survives a restart. A missing payload is
-  `No native library found for os.name=…` at the first connection.
-- **libremidi / javax.sound.midi** — a MIDI surface enumerates under `/surfaces`. Windows
-  deliberately uses `JvmMidiAccess`, so this exercises different code per OS.
-- **coremidi4j** (Mac only) — the `midi-enum:` debug line from `midi/MidiDeviceRegistry.kt` reports
-  `coremidi4j=loaded=true`.
-- **JNA** — store a GitHub PAT and confirm it survives a restart (`java-keyring` → JNA → the
-  platform keychain). **Easiest of the four to forget**, and the only one arriving transitively.
-
-**Editor completion** — type a Lighting7 receiver and `.` in the script editor and confirm
-**project** completions, not just stdlib.
-
-**Size** — record the MSI byte count. Baseline: 312 MB before the slimming pass, ~253 MB projected
-after, ~130 MB projected after the compiler-server retirement.
-
-10–20 minutes per OS.
-
 ## `FU-MANUAL-UPDATE-APPLY`
 
 **In-app update, end to end on Windows** · Windows in-app updates, 2026-08-17 ·
-**Blocked on `FU-MANUAL-DIST-INSTALL`** — no point testing an upgrade from a build nobody has
-confirmed installs
+**Unblocked** — `FU-MANUAL-DIST-INSTALL` passed 2026-08-19, so there is now a confirmed-installing
+build to upgrade from. This is the next one to run.
 
 Everything from `POST /update/apply` onward is unautomatable: the marker protocol is round-tripped
 in one JVM by `UpdateMarkerRoundTripTest` and the PowerShell command line is pinned by
@@ -267,3 +173,14 @@ validated end-to-end.
 
 **Test**: rename a fixture in a patch, reload the cue editor, confirm dead markers appear on the
 affected rows and Remove clears them. 10 minutes.
+
+---
+
+## Validated
+
+Passed on the rig; the procedures are in this file's git history if one is ever needed again.
+
+| Item | Passed | Result |
+|---|---|---|
+| `FU-MANUAL-DIST-INSTALL` | 2026-08-19 | clean install on Mac + Windows; all four native payloads and editor completion good |
+| `FU-MANUAL-AUTH-QR-SCAN` | 2026-08-19 | both QR flows resolved and completed from a real phone |

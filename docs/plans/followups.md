@@ -650,12 +650,17 @@ machinery.
 
 **Gate before committing**: temporarily add `jvmArgs("--limit-modules", <list>)` to `tasks.test`
 and run the whole suite — it simulates the trimmed runtime on a full JDK and exercises far more
-than a boot smoke test. Then the per-module boot exercise in `FU-MANUAL-DIST-INSTALL`. The failure
-mode is a `NoClassDefFoundError` at the first use of one feature, which for a lighting desk can be
+than a boot smoke test. Then exercise each native-payload feature on a real install — DB
+connection, MIDI enumeration, coremidi4j on Mac, and a keychain write via JNA. The failure mode is
+a `NoClassDefFoundError` at the first use of one feature, which for a lighting desk can be
 mid-show.
 
 Note `jdk.charsets` (1.63 MB) and `jdk.management` are **already absent** — `java.se` never
-included them and the shipped desk works. Don't add them speculatively.
+included them and the shipped desk works. Don't add them speculatively. And `jdk.localedata` stays
+in the list: the shipped 10.5 MB saving is `--include-locales=en-GB,en-US`, a locale **filter**, not
+a module removal. `FormatData_en_GB` lives in `jdk.localedata` rather than `java.base`, so dropping
+the module silently switches every server-side `en_GB` date, number and currency to US forms —
+wrong output, no exception.
 
 ### `FU-DIST-NATIVE-ARCH`
 
@@ -666,6 +671,10 @@ included them and the shipped desk works. Don't add them speculatively.
 ~2.9 MB more on Windows. `nativePayloads` in `build.gradle.kts` is keyed by OS only, so the
 Windows jar keeps all four sqlite arches (`x86_64`, `x86`, `aarch64`, `armv7` — 3.7 MB) and all
 three `com/sun/jna/win32-*` arches, though the MSI is x64.
+
+Watch the hyphen when writing patterns: `com/sun/jna/win32-x86-64/` is a native payload, while
+`com/sun/jna/win32/` is a Java package of 12 `.class` files that must always ship. The trailing
+hyphen in the JNA prefixes is the only thing drawing that line.
 
 Deferred deliberately: a second axis on the table for a third of what the OS key gave, and it
 would arch-lock the jar in a way the `-windows-x64` filename only implies. If done, keep

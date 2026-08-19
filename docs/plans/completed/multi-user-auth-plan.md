@@ -32,11 +32,12 @@
 >   against the DB, because as a route-level check-then-act two admins demoting each
 >   other from two tabs could both pass it.
 >
-> **One behaviour is shipped but never seen on real hardware**, and it is the only
-> outstanding work from this plan: the two-device QR scan — tracked as
-> `FU-MANUAL-AUTH-QR-SCAN` in [manual-validation.md](../manual-validation.md). Everything else has
-> automated coverage (`AuthServiceTest`, `AuthRoutesTest`, `AuthGateTest`,
-> `UsersRoutesTest`, `PasswordResetRoutesTest`, `ResetPasswordPage.test.tsx`).
+> **Nothing from this plan is unverified any more.** The one behaviour no test could
+> reach — the two-device QR scan, `FU-MANUAL-AUTH-QR-SCAN` — passed on a real phone
+> on 2026-08-19 (see [manual-validation.md](../manual-validation.md) → Validated).
+> Everything else has automated coverage (`AuthServiceTest`, `AuthRoutesTest`,
+> `AuthGateTest`, `UsersRoutesTest`, `PasswordResetRoutesTest`,
+> `ResetPasswordPage.test.tsx`).
 > Ten further follow-ups — five **Ready** review cuts and five trigger-gated
 > deferrals from §"Deliberately out of scope" — live in
 > [followups.md](../followups.md) → "Desk accounts".

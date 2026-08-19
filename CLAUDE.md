@@ -34,8 +34,7 @@ connection with `No native library found for os.name=Linux`. Two overrides:
 A `doLast` verifier fails the build if the resulting jar has the wrong payloads, because
 a stale Ant exclude matches nothing *silently* in both directions. `packageMac` /
 `packageWindows` refuse a mismatched override. Tests and `run` are unaffected — they use
-`runtimeClasspath`, not the fat jar. See
-[`docs/plans/msi-slimming-plan.md`](docs/plans/msi-slimming-plan.md).
+`runtimeClasspath`, not the fat jar.
 
 Also note `copyFrontend` is a `Sync`: it owns `src/main/resources/static/` and deletes
 anything it didn't put there, so don't hand-place files in it.
