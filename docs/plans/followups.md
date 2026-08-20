@@ -950,7 +950,7 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
   surfaces, via an injected `ChannelSource`; the item's premise that `ProgrammerState.channels`
   was the programmer's channel output was wrong (it is the sideband), so the programmer is
   resolved from its property entries instead. The 2D plot gained live values on the way. `Next GO`
-  split out as [`FU-PROG-VIS-NEXTGO`](#fu-prog-vis-nextgo) — lighting-react, see
+  split out as [`FU-PROG-VIS-NEXTGO`](#fu-prog-vis-nextgo) — lighting-react `c91294a`, see
   `docs/stage-vis-engineering.md`
 - `FU-PROG-L3RESOLVER-RENAME` — `Layer3Resolver` → `CueAssignmentResolver`, the `*Layer3*`
   engine internals with it, and the layer numbers in the comments — `7d3711e`
