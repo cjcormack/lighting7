@@ -264,6 +264,11 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
         }
     }
 
+    // POST /{projectId}/fx-presets/{presetId}/make-hard - Replace palette refs with literals
+    post<MakeFxPresetHardResource> { resource ->
+        handleMakeFxPresetHard(state, resource.parent.projectId, resource.presetId)
+    }
+
     // POST /{projectId}/fx-presets/{presetId}/toggle - Toggle preset on/off for targets
     post<ToggleFxPresetResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->

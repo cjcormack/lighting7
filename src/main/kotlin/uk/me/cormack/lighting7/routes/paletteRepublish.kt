@@ -171,7 +171,7 @@ internal fun activeCuesReferencingPalette(
  * Mirrors [republishCueLayer]'s composition (cue rows plus immediate-preset rows) but *returns*
  * the rows instead of publishing, so a palette edit spanning several cues can publish once.
  */
-private fun rebuildCueLayerRows(state: State, cueId: Int): List<CueAssignmentResolver.Assignment>? {
+internal fun rebuildCueLayerRows(state: State, cueId: Int): List<CueAssignmentResolver.Assignment>? {
     val applyData = transaction(state.database) {
         uk.me.cormack.lighting7.models.DaoCue.findById(cueId)?.let { buildCueApplyData(it) }
     } ?: return null

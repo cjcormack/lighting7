@@ -804,7 +804,7 @@ internal fun buildStompOverlapFromAssignments(
  * `"position"` (paired PAN+TILT), `"colour"` / `"color"` / `"rgbColour"` (RGB+W/A/UV bundle).
  * For these names [fixture] is consulted only to verify the capability exists.
  */
-private fun fixtureCategoryFor(
+internal fun fixtureCategoryFor(
     fixture: Fixture,
     propertyName: String,
 ): Pair<PropertyCategory, CompositionRule>? {

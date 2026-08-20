@@ -182,12 +182,13 @@ private fun hardenCueRows(
         if (!maskAllows(mask, maskGroupForProperty(members.first(), canonical))) continue
 
         // Resolve every member; a member that can't resolve contributes nothing.
+        //
+        // [fixtureCategoryFor], not a raw property lookup: `position` is a synthetic pan/tilt
+        // pair with no `@FixtureProperty` of its own, so looking the name up directly answers
+        // null and every POSITION palette ref would be reported as unresolvable.
         val resolvedByKey = LinkedHashMap<String, String>()
         for (member in members) {
-            val category = maskGroupForProperty(member, canonical)?.let {
-                uk.me.cormack.lighting7.fx.PropertyChannelWriter
-                    .resolveProperty(member, canonical)?.category
-            } ?: continue
+            val category = fixtureCategoryFor(member, canonical)?.first ?: continue
             val resolution = resolveAssignmentValueForFixture(
                 registry, member.key, canonical, category, row.value,
             )

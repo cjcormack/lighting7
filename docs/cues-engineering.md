@@ -116,6 +116,7 @@ Writing the *programmer* into a cue lives outside this namespace, under
 | POST | `/programmer/record-palette` | Record the programmer into a named palette, masked by its type |
 | POST | `/programmer/make-hard` | Replace the programmer's palette references with literals |
 | POST | `/project/{id}/cues/{cueId}/make-hard` | Replace a stored cue's palette references with literals |
+| POST | `/project/{id}/fx-presets/{presetId}/make-hard` | Replace an FX preset's palette references with literals, where the palette agrees across the preset's fixture type |
 | POST | `/programmer/update` | Write programmer edits back — to the include target, or to cues named from the Mode B checklist |
 
 `POST /{projectId}/cues/{cueId}/snapshot-from-live` was removed in the programmer redesign's

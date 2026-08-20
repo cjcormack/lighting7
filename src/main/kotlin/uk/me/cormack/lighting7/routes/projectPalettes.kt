@@ -250,6 +250,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                         cueAssignmentCount = outcome.usage.cueAssignments,
                         presetAssignmentCount = outcome.usage.presetAssignments,
                         cueIds = outcome.usage.cueIds,
+                        presets = outcome.usage.presets,
                     ),
                 )
 
@@ -318,7 +319,17 @@ data class PaletteDetails(
     val referenceCount: Int,
     /** Cues holding at least one row that references this palette. */
     val referencedByCueIds: List<Int>,
+    /**
+     * FX presets holding at least one row that references this palette. Named, not just counted,
+     * because a preset row is the one referrer the operator cannot reach from here — the delete
+     * guard has to be able to point at it.
+     */
+    val referencedByPresets: List<PaletteRefPresetDto> = emptyList(),
 )
+
+/** A preset that references a palette, and how many of its rows do. */
+@Serializable
+data class PaletteRefPresetDto(val id: Int, val name: String, val referenceCount: Int)
 
 @Serializable
 data class CreatePaletteRequest(
@@ -337,6 +348,8 @@ data class PaletteInUseResponse(
     val cueAssignmentCount: Int,
     val presetAssignmentCount: Int,
     val cueIds: List<Int>,
+    /** The referencing presets, so the client can offer "make those hard, then delete". */
+    val presets: List<PaletteRefPresetDto> = emptyList(),
 )
 
 /** Persisted references to one palette. Programmer slots are excluded — see the DELETE doc. */
@@ -344,6 +357,7 @@ internal data class PaletteUsage(
     val cueAssignments: Int,
     val presetAssignments: Int,
     val cueIds: List<Int>,
+    val presets: List<PaletteRefPresetDto> = emptyList(),
 ) {
     val total: Int get() = cueAssignments + presetAssignments
 
@@ -385,17 +399,23 @@ internal fun paletteUsageFor(paletteUuids: Collection<UUID>): Map<UUID, PaletteU
     val cueRows = DaoCuePropertyAssignment
         .find { DaoCuePropertyAssignments.value inList refValues }
         .groupBy({ it.value }, { it.cue.id.value })
-    val presetCounts = DaoFxPresetPropertyAssignment
+    // Grouped rather than counted, so the same query yields both the count and the referring
+    // presets' identities — the delete guard needs to name them, not just tally them.
+    val presetRows = DaoFxPresetPropertyAssignment
         .find { DaoFxPresetPropertyAssignments.value inList refValues }
-        .groupingBy { it.value }
-        .eachCount()
+        .groupBy({ it.value }, { it.preset })
 
     return byRefValue.entries.associate { (refValue, uuid) ->
         val cues = cueRows[refValue] ?: emptyList()
+        val presets = presetRows[refValue] ?: emptyList()
         uuid to PaletteUsage(
             cueAssignments = cues.size,
-            presetAssignments = presetCounts[refValue] ?: 0,
+            presetAssignments = presets.size,
             cueIds = cues.distinct().sorted(),
+            presets = presets
+                .groupBy { it.id.value }
+                .map { (_, rows) -> PaletteRefPresetDto(rows.first().id.value, rows.first().name, rows.size) }
+                .sortedBy { it.name },
         )
     }
 }
@@ -470,5 +490,6 @@ private fun DaoPalette.toDetailsDto(): PaletteDetails {
             },
         referenceCount = usage.total,
         referencedByCueIds = usage.cueIds,
+        referencedByPresets = usage.presets,
     )
 }

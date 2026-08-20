@@ -594,6 +594,57 @@ class PaletteRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `make-hard converts a position ref row`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedFixture(state, projectId, "martin-mac-250-mode-4", "mac-1", 1)
+
+        // `position` is a synthetic pan/tilt pair with no `@FixtureProperty` of its own, so a
+        // category lookup that goes straight to the property catalogue answers null and reports
+        // every POSITION reference as unresolvable. This pins the alias path.
+        val palette = client.post("/api/rest/project/$projectId/palettes") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePaletteRequest(
+                    name = "Downstage", type = PaletteType.POSITION.name,
+                    entries = listOf(
+                        PaletteEntryDto("fixture", "mac-1", "position", "10,20", 0),
+                    ),
+                )
+            )
+        }.body<PaletteDetails>()
+        val cueId = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project
+                name = "stack-${System.nanoTime()}"; this.palette = emptyList(); loop = false
+                type = CueStackType.STACK.name; sortOrder = 0
+            }
+            val cue = DaoCue.new {
+                this.project = project
+                name = "look"; cueStack = stack; sortOrder = 0
+                this.palette = emptyList(); cueType = CueType.STANDARD.name
+            }
+            DaoCuePropertyAssignment.new {
+                this.cue = cue
+                this.targetType = "fixture"; this.targetKey = "mac-1"
+                propertyName = "position"
+                value = paletteRefValue(UUID.fromString(palette.uuid))
+                sortOrder = 0
+            }
+            cue.id.value
+        }
+
+        val body = client.post("/api/rest/project/$projectId/cues/$cueId/make-hard") {
+            contentType(ContentType.Application.Json)
+            setBody(CueMakeHardRequest())
+        }.body<CueMakeHardResponse>()
+        assertEquals(1, body.converted)
+        assertEquals(0, body.unresolved)
+        assertEquals("10,20", body.cue.propertyAssignments.single().value)
+    }
+
+    @Test
     fun `make-hard expands a group row whose members disagree`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

@@ -291,9 +291,40 @@ disappearing programmer entry mid-show is worse than a stale one the sheet marks
 ### Hardening
 
 **Make Hard** replaces references with the literals they currently resolve to — the explicit opt-out
-from reference-preserving Update, available on the programmer and on a stored cue. A group row can
-only harden to a group row when every member agrees; otherwise it expands to one fixture row per
-member, since no single literal can say what the group row said.
+from reference-preserving Update, available on the programmer, on a stored cue, and on an FX preset.
+A group row can only harden to a group row when every member agrees; otherwise it expands to one
+fixture row per member, since no single literal can say what the group row said.
+
+An **FX preset** row is the awkward case, because it is *target-less*: a cue row names the fixture
+or group it applies to, a preset row says "whatever this preset is applied to". So hardening it
+cannot resolve "per target" at all, and the two obvious ways to invent a target set are both wrong
+— the union of today's `CuePresetApplication` targets stops being true the moment the preset is
+applied somewhere new, and asking the operator for one asks them to answer for applications that
+don't exist yet.
+
+Instead the palette is asked whether the answer is *target-independent*. Candidates are the patched
+fixtures whose `typeKey` matches the preset's declared `fixtureType` — every fixture the preset
+could ever apply to, which is a property of the preset rather than of its current use. Each
+candidate resolves through `resolveAssignmentValueForFixture` and the results are grouped by
+serialized literal:
+
+- **one** distinct literal — the reference says the same thing everywhere, so the row hardens to it;
+- **more than one** — the row stays a reference, and the response reports each literal with the
+  fixtures holding it. There is no single value that can stand in, and guessing one would silently
+  change what the preset does on some of its targets;
+- **none** — unresolved, as everywhere else. Element-scoped rows land here by construction: palettes
+  are fixture-shaped, so `buildCueAssignmentsForPreset` never resolves a ref on an element row and
+  there is nothing to harden it to.
+
+A partial result is the normal outcome, not an error: some rows harden while others are reported,
+and both halves come back in one 200. Hardening a preset republishes the live cues that apply it —
+output-neutral for a fixture the palette covered, but a fixture it *didn't* cover had its row
+skipped at apply and now takes the literal.
+
+One detail shared by the cue and preset paths: the category for a row's property comes from
+`fixtureCategoryFor`, not a direct property-catalogue lookup, because `position` is a synthetic
+pan/tilt pair with no `@FixtureProperty` of its own. Looking the name up directly answers null and
+reports every POSITION reference as unresolvable.
 
 Update is reference-*preserving* by default: it writes back only what changed since Include,
 comparing reference identity and value independently, so an untouched ref stays a ref and an
