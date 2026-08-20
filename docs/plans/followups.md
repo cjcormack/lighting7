@@ -18,7 +18,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PAL-PRESET-MAKE-HARD`](#fu-pal-preset-make-hard) | Ready | Pal | — |
 | [`FU-AUTH-STALE-ANON-SOCKET`](#fu-auth-stale-anon-socket) | Ready | Auth | — |
 | [`FU-DIST-ICONS`](#fu-dist-icons) | Ready | Dist | — |
-| [`FU-PROG-VIS-NEXTGO`](#fu-prog-vis-nextgo) | Blocked | Prog | a backend preview-compose endpoint |
+| [`FU-PROG-VIS-NEXTGO`](#fu-prog-vis-nextgo) | Ready | Prog | — |
 | [`FU-SYNC-FORMAT-MIGRATIONS`](#fu-sync-format-migrations) | Blocked | Sync | a real breaking `formatVersion` bump |
 | [`FU-TEST-MULTI-CONN-CUEEDIT`](#fu-test-multi-conn-cueedit) | Blocked | Test | cue-authoring `beginEdit` conflict semantics |
 | [`FU-DIST-NO-BUNDLED-JRE`](#fu-dist-no-bundled-jre) | Rejected | Dist | decision record — do not re-propose |
@@ -195,25 +195,35 @@ express it as separate instances.
 
 ### `FU-PROG-VIS-NEXTGO`
 
-**`Next GO` as a fourth vis source** · Blocked · split out of `FU-PROG-VIS-SOURCE` on 2026-08-19
+**`Next GO` as a fourth vis source** · Ready · split out of `FU-PROG-VIS-SOURCE` on 2026-08-19,
+unblocked 2026-08-20
 
-The other three vis sources shipped (see Completed). `Next GO` — previewing the look the next GO
-would produce — did not, and is blocked on two things rather than one.
+Both original blockers are gone; what's left is the client half.
 
-**No backend preview compose.** Turning Layer 4 cue assignments into channel values in the browser
-means reimplementing the backend merge: specificity, HTP/LTP, palette resolution, move-in-dark
-arming, effects in the cue band. Needs a preview-compose endpoint or WS channel that runs the real
-`CueAssignmentResolver` against a hypothetical active-cue set and returns channel values.
+**Backend preview compose — done.** `POST /project/{id}/cue-stacks/{stackId}/preview` (body
+`{cueId?}`, null → the stack's effective next) returns the DMX channel values a cue would produce,
+composed by the real `CueAssignmentResolver` against what is already live. `routes/cuePreview.kt`;
+mechanism and rationale in `docs/cue-stacks-engineering.md` §"Preview compose".
 
-**"Next" is not well defined.** `nextCueId` is computed client-side *per stack*
-(`lighting-react/src/routes/PromptBookPage.tsx`: an explicit standby, else the next cue in order),
-so with several stacks running there is no single next look. Decide first: the focused stack, every
-armed stack merged, or a stack picker on the selector.
+**"Next" — decided and moved server-side.** It is no longer a per-session guess: `CueStackManager`
+owns the armed standby, `effectiveNextCueId` is the one definition (armed standby, else positional
+next), and `cueRunStateChanged` broadcasts it. Per stack, as before — a stack's GO previews that
+stack's next cue — so the multi-stack question the item raised answers itself: the preview retains
+every *other* stack's live rows and replaces only this one's.
 
-Once a source of channel values exists, the client side is small: implement `ChannelSource` over it
-and add a fourth `VisSource` member. `lighting-react/docs/stage-vis-engineering.md` has the seam.
+**What's left**: a `ChannelSource` over the preview response, re-requested on `cueRunStateChanged`
+(the previewed look changes whenever the next cue does), and a fourth `VisSource` member.
+`lighting-react/docs/stage-vis-engineering.md` §"The fourth source: Next GO" has the seam and the
+`usePreviewCueLookMutation` hook is already wired.
 
-**Blocked on**: a backend preview-compose endpoint, plus a decision on multi-stack semantics.
+Two limits shape what the UI can promise, both worth reading before starting:
+
+* **Layer 4 only.** Cue-band effects and timed presets aren't previewed — they have no static
+  value. A cue whose look is carried by an effect previews as little or nothing, and the source
+  should not pretend otherwise.
+* **Assertions only.** Channels no cue asserts are absent from the response rather than 0, so the
+  source must fall back to the wire for them (as `outputProgrammer` already does). Treating absent
+  as 0 would black out every unaddressed fixture.
 
 ### `FU-PROG-PER-USER`
 

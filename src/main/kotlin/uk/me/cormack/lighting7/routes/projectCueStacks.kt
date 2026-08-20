@@ -354,6 +354,53 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         }
     }
 
+    // POST /{projectId}/cue-stacks/{stackId}/standby - Arm (or disarm) the next GO
+    post<CueStackStandbyResource> { resource ->
+        withCurrentProject(state, resource.parent.parent.projectId, "Cannot arm - not current project") { _ ->
+            val request = try { call.receive<SetStandbyRequest>() } catch (_: Exception) { SetStandbyRequest() }
+            val manager = state.show.cueStackManager
+            val stackId = resource.parent.stackId
+
+            try {
+                if (request.cueId != null) {
+                    manager.setStandby(state, stackId, request.cueId)
+                } else {
+                    manager.clearStandby(state, stackId)
+                }
+                // No `cueStackListChanged` — the manager already broadcast the run state, and
+                // this changes nothing about the stack collection.
+                call.respond(
+                    CueStackRunStateResponse(
+                        stackId = stackId,
+                        activeCueId = manager.getActiveCueId(stackId),
+                        standbyCueId = manager.getStandbyCueId(stackId),
+                        nextCueId = manager.effectiveNextCueId(state, stackId),
+                    )
+                )
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to arm cue"))
+            }
+        }
+    }
+
+    // POST /{projectId}/cue-stacks/{stackId}/preview - Compose a cue without firing it
+    post<CueStackPreviewResource> { resource ->
+        withCurrentProject(state, resource.parent.parent.projectId, "Cannot preview - not current project") { _ ->
+            val request = try { call.receive<PreviewCueRequest>() } catch (_: Exception) { PreviewCueRequest() }
+            try {
+                when (val result = previewCueLook(state, resource.parent.stackId, request.cueId)) {
+                    null -> call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorResponse("Nothing to preview - the stack has no next cue"),
+                    )
+                    else -> call.respond(result)
+                }
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to preview cue"))
+            }
+        }
+    }
+
     // POST /{projectId}/cue-stacks/{stackId}/sort-by-cue-number - Group-aware natural sort
     post<CueStackSortByNumberResource> { resource ->
         withCurrentProject(state, resource.parent.parent.projectId) { project ->
@@ -437,6 +484,12 @@ data class CueStackAdvanceResource(val parent: ProjectCueStackResource)
 @Resource("/go-to")
 data class CueStackGoToResource(val parent: ProjectCueStackResource)
 
+@Resource("/standby")
+data class CueStackStandbyResource(val parent: ProjectCueStackResource)
+
+@Resource("/preview")
+data class CueStackPreviewResource(val parent: ProjectCueStackResource)
+
 @Resource("/sort-by-cue-number")
 data class CueStackSortByNumberResource(val parent: ProjectCueStackResource)
 
@@ -466,6 +519,13 @@ data class CueStackDetails(
     val label: String?,
     val cues: List<CueStackCueEntry>,
     val activeCueId: Int?,
+    /** The cue an operator has explicitly armed, if any. */
+    val standbyCueId: Int?,
+    /**
+     * The cue the next GO fires — [standbyCueId] when set, else the positional next. Server-side
+     * so a page load agrees with every other session; see `CueStackManager.effectiveNextCueId`.
+     */
+    val nextCueId: Int?,
     val canEdit: Boolean,
     val canDelete: Boolean,
 )
@@ -522,6 +582,20 @@ data class GoToCueRequest(
 )
 
 @Serializable
+data class SetStandbyRequest(
+    /** The cue to arm; null disarms and leaves the positional next on deck. */
+    val cueId: Int? = null,
+)
+
+@Serializable
+data class CueStackRunStateResponse(
+    val stackId: Int,
+    val activeCueId: Int?,
+    val standbyCueId: Int?,
+    val nextCueId: Int?,
+)
+
+@Serializable
 data class CueStackActivateResponse(
     val stackId: Int,
     val cueId: Int,
@@ -575,6 +649,7 @@ private fun DaoCueStack.toCueStackDetails(
             cueType = cue.cueType,
         )
     }
+    val standardCueIds = orderedCues.filter { it.cueType == CueType.STANDARD.name }.map { it.id }
     return CueStackDetails(
         id = id.value,
         name = name,
@@ -585,6 +660,10 @@ private fun DaoCueStack.toCueStackDetails(
         label = label,
         cues = orderedCues,
         activeCueId = manager.getActiveCueId(id.value),
+        standbyCueId = manager.getStandbyCueId(id.value),
+        // The list overload: the cues are already loaded here, and the rules stay in the
+        // manager rather than being re-derived from `orderedCues` by the client.
+        nextCueId = manager.effectiveNextCueId(id.value, standardCueIds, loop),
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
     )

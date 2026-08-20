@@ -85,6 +85,7 @@ class Show(
             override fun riggingListChanged() {}
             override fun stageRegionListChanged() {}
             override fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {}
+            override fun cueRunStateChanged(runState: CueRunState) {}
             override fun promptBookChanged() {}
         })
     }

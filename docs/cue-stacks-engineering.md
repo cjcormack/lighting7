@@ -129,10 +129,48 @@ data class ActiveStackState(
     var activeCueId: Int,
     var autoAdvanceJob: Job?,
     var crossfadeJob: Job?,
+    // Copied from the live cue at activation, so the run-state broadcast can describe
+    // the stack without going back to the DB.
+    var fadeDurationMs: Long?,
+    // The cue's own flag. What goes on the wire is derived from `autoAdvanceJob` instead —
+    // "will it advance", not "is it configured to".
+    var autoAdvance: Boolean,
+    var autoAdvanceDelayMs: Long?,
+    // Null unless a real crossfade is under way — a cue that snapped (no outgoing cue to fade
+    // out of) has no elapsed time to report, and reporting one would have every client animate
+    // a fade that never happened.
+    var fadeStartedAtMs: Long?,
 )
 ```
 
 Stored in a `ConcurrentHashMap<Int, ActiveStackState>`.
+
+### Standby — the armed "next"
+
+`standbyCueIds: ConcurrentHashMap<Int, Int>` (`stackId → cue`) holds the cue an operator has
+armed as the next GO. It sits **beside** `activeStacks`, not inside `ActiveStackState`, for two
+reasons: a cue can be armed before the stack is running (pre-show), and `activateCueInStack`
+replaces the whole `ActiveStackState` entry.
+
+Transient runtime state — never persisted, never synced (see `docs/sync-engineering.md`'s
+decision tree).
+
+It used to live in the browser. Each session computed "next" for itself, so a cue armed on a
+tablet was invisible to the desk and the two disagreed about what GO would fire. There is now
+one definition, `effectiveNextCueId`:
+
+> the armed standby, when one is set and isn't already live — else the positional next
+> STANDARD cue, honouring `loop`. Null at the end of a non-looping stack.
+
+Everything reads it: `advanceStack` FORWARD **fires** it (so a client calls `advance`
+unconditionally instead of choosing between `advance` and `go-to`), `activateAtFirstCue` starts a
+stopped stack on it, `CueStackDetails.nextCueId` reports it, and the run-state broadcast carries
+it. A GO consumes the standby; deactivating a stack clears it.
+
+`orderedStandardCueIds` + `positionalCueId` are the shared primitives — `advanceStack` and
+`effectiveNextCueId` cannot drift because they walk the same list by the same rules. The one
+difference is at a non-looping boundary: `positionalCueId` returns null there, which GO reads as
+"stay on the current cue" and "next" reads as "nothing on deck".
 
 ### Key Methods
 
@@ -143,6 +181,11 @@ Stored in a `ConcurrentHashMap<Int, ActiveStackState>`.
 | `goToCue(state, stackId, cueId, scope)` | Jump to a specific cue |
 | `deactivateStack(stackId)` | Remove all effects, cancel timers |
 | `getActiveCueId(stackId)` | Query active cue (or null) |
+| `setStandby(state, stackId, cueId)` / `clearStandby(state, stackId)` | Arm / disarm the next GO. Rejects a MARKER and a cue from another stack — arming is a deferred GO |
+| `getStandbyCueId(stackId)` | The explicitly armed cue, if any |
+| `effectiveNextCueId(...)` | What the next GO fires. Two overloads: one taking the stack's already-loaded cue list (for the details DTO), one that queries |
+| `runStateFor(state, stackId)` | The stack's run state, for the broadcast and the connect-time snapshot |
+| `stacksWithRunState()` | Stacks that are live or hold an armed cue — what the connect snapshot walks |
 | `getActiveStackIds()` | All active stack IDs |
 | `isStackActive(stackId)` | Check if active |
 
@@ -228,6 +271,8 @@ All endpoints under `/api/rest/project/{projectId}/cue-stacks`.
 | POST | `/{stackId}/deactivate` | Deactivate stack |
 | POST | `/{stackId}/advance` | Advance STANDARD cues only: body `{ direction: "FORWARD"\|"BACKWARD" }` |
 | POST | `/{stackId}/go-to` | Go to specific cue: body `{ cueId }` — HTTP 400 if MARKER |
+| POST | `/{stackId}/standby` | Arm the next GO: body `{ cueId }`; `{ cueId: null }` disarms. HTTP 400 for a MARKER or a cue from another stack |
+| POST | `/{stackId}/preview` | Compose a cue without firing it: body `{ cueId? }` (null → the effective next). See below |
 | POST | `/{stackId}/sort-by-cue-number` | Group-aware sort of cue_number |
 
 ### `add-cue` with `insertByNumber`
@@ -258,6 +303,41 @@ Both this and `reorder` also call `FxEngine.repriorityCues`, since cue priority 
 - `CueStackDeactivateResponse` — stackId, removedCount
 - `SortByNumberResponse` — updatedCues, pinnedCount, nullNumberCount
 
+## Preview compose
+
+`POST /{stackId}/preview` answers "what would this cue look like?" — the channel values a cue
+*would* produce, with nothing published. It backs the Next GO stage view
+(`FU-PROG-VIS-NEXTGO`): composing a cue in the browser would otherwise mean reimplementing
+specificity, HTP/LTP, palette resolution and move-in-dark arming client-side.
+
+`routes/cuePreview.kt`, and it is reuse end to end:
+
+1. **Retained rows** — `FxEngine.cueAssignmentsExcludingStack(stackId)`: every published cue
+   that isn't this stack's, because firing a cue replaces its own stack's contribution and
+   nothing else. Cues published without a stack (a cue-edit live apply) survive a stack GO, so
+   they are retained too. The filter lives in the engine so the rows and the `cueId → stackId`
+   map are read under one lock. The rows carry their *stored* weight (always 1.0 — live
+   crossfade progress lives in `cueFadeWeights`), so a cue caught mid-crossfade is previewed
+   settled, which is what a preview wants.
+2. **Incoming rows** — `buildCombinedCueLayerRows`, the same builder `republishCueLayer` uses,
+   with the cue-scope palette a GO would use: `activateCueInStack` merges the cue's palette into
+   the *stack* palette and resolves refs against that, so a palette-less cue in a stack that has
+   a palette is previewed against the stack's palette rather than against nothing.
+3. **Compose** — a *fresh* `CueAssignmentResolver`. `resolve` is a pure function of its rows, so
+   this cannot disturb `layerResolver`'s live state (`CuePreviewRouteTest` asserts that).
+4. **To channels** — `PropertyChannelWriter.resolve` per composed property, subnet 0 only,
+   keyed so two properties backing one channel resolve last-write-wins as a transaction would.
+
+Three deliberate limits, all worth knowing before building UI on it:
+
+- **Layer 4 only.** Effects in the cue band have no static value to report, and timed preset
+  applications don't contribute (matching `applyCue`). A cue whose look is carried by an effect
+  previews as whatever its assignments say — possibly nothing.
+- **Assertions only.** Channels no cue asserts are *absent* rather than reported as 0; the caller
+  falls back to the live output the way the "Output + Programmer" vis source already overlays.
+  Reporting 0 would black out every unaddressed fixture in the preview.
+- **No programmer, no park.** A preview of playback, not of the stage.
+
 ## WebSocket
 
 ### Messages
@@ -267,6 +347,44 @@ Both this and `reorder` also call `FxEngine.repriorityCues`, since cue priority 
 ```
 
 Broadcast on stack CRUD operations. Frontend subscribes and invalidates `CueStackList` RTK Query tag.
+
+```json
+{"type": "cueRunStateChanged", "projectId": 1, "stackId": 4, "activeCueId": 12,
+ "nextCueId": 13, "nextIsArmed": false, "transition": true, "fadeDurationMs": 2000,
+ "fadeElapsedMs": 0, "autoAdvance": false, "autoAdvanceDelayMs": null}
+```
+
+A stack's run state: what is live, what the next GO fires, and how far through a fade the desk
+is. **One frame per transition, not a per-tick stream** — the client animates the fade locally
+from `fadeElapsedMs` + `fadeDurationMs`, the way the session that pressed GO always did. The
+crossfade itself still ticks at 60 fps inside `FxEngine`; that never goes on the wire.
+
+Fired from `CueStackManager`, not from the routes, so *every* path reports: REST, the MIDI
+surface's GO binding, a cue-edit live apply, and the auto-advance timer (which previously moved
+the rig with no client ever being told). `setupBroadcastSubscriptions` also sends one frame per
+stack in `stacksWithRunState()` on connect, so a session that opens mid-fade animates the
+remainder instead of nothing. That snapshot is *read* synchronously while the listener is being
+registered and only *sent* from a coroutine: read inside the coroutine it would describe whenever
+the coroutine got scheduled, which can be after a GO the listener has already queued a frame for
+— i.e. a `transition = false` frame carrying a newer cue than the transition frame beside it.
+
+`fadeElapsedMs` is an elapsed duration, deliberately not a start timestamp: a tablet with a
+skewed clock would otherwise animate a fade that is already over. Null means no fade is running
+— which is also how a client tells a standby-only change (leave the animation alone) from a cue
+transition.
+
+`autoAdvance` reports whether the stack **will** roll forward — a live `autoAdvanceJob`, not
+merely a cue configured for one. `pauseAutoAdvance` / `resumeAutoAdvance` publish a frame for
+exactly this reason: a cue-edit Live session cancels the timer on a cue still flagged
+`autoAdvance`, and since the client draws the countdown but no longer *drives* it (see below), a
+config-shaped answer leaves every session with a bar completing into nothing.
+
+### The client no longer drives auto-advance
+
+lighting-react used to run its own auto-advance timer and call the server when it finished. With
+the transition broadcast in place that would step the stack once per open session, so
+`scheduleAutoAdvance` here is the only timer and the client's countdown is a display of it. Any
+change to who owns that timer has to move both halves together.
 
 ### FxState Integration
 

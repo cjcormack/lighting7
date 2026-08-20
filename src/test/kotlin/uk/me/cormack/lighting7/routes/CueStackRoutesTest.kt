@@ -92,6 +92,8 @@ class CueStackRoutesTest {
                 CueStackCueEntry(id = 11, name = "Scene 2", sortOrder = 1, paletteSize = 0, presetCount = 0, adHocEffectCount = 3, fadeDurationMs = 1500, fadeCurve = "CUBIC_IN_OUT"),
             ),
             activeCueId = 10,
+            standbyCueId = null,
+            nextCueId = null,
             canEdit = true,
             canDelete = true,
         )
@@ -112,6 +114,8 @@ class CueStackRoutesTest {
             label = null,
             cues = emptyList(),
             activeCueId = null,
+            standbyCueId = null,
+            nextCueId = null,
             canEdit = true,
             canDelete = true,
         )
@@ -133,6 +137,8 @@ class CueStackRoutesTest {
             label = null,
             cues = emptyList(),
             activeCueId = null,
+            standbyCueId = null,
+            nextCueId = null,
             canEdit = false,
             canDelete = false,
         )
@@ -177,6 +183,8 @@ class CueStackRoutesTest {
             label = "Interval",
             cues = emptyList(),
             activeCueId = null,
+            standbyCueId = null,
+            nextCueId = null,
             canEdit = true,
             canDelete = true,
         )
@@ -299,6 +307,8 @@ class CueStackRoutesTest {
             label = null,
             cues = cues,
             activeCueId = 102,
+            standbyCueId = null,
+            nextCueId = null,
             canEdit = true,
             canDelete = true,
         )

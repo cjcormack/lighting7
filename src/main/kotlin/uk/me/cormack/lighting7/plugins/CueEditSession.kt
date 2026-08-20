@@ -860,7 +860,7 @@ object CueEditSessionHandler {
         val stackId = applyData.cueStackId
         if (stackId != null) {
             state.show.cueStackManager.activateCueInStack(state, stackId, applyData.cueId)
-            state.show.cueStackManager.pauseAutoAdvance(stackId)
+            state.show.cueStackManager.pauseAutoAdvance(state, stackId)
         } else {
             applyCue(state, applyData, replaceAll = false)
         }

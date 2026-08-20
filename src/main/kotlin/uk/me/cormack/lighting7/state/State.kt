@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.auth.AuthService
 import uk.me.cormack.lighting7.auth.DEFAULT_BCRYPT_COST
+import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.fx.CueTriggerManager
 import uk.me.cormack.lighting7.midi.ActiveBankState
 import uk.me.cormack.lighting7.midi.BindingHealthEvaluator
@@ -745,6 +746,7 @@ class State(val config: ApplicationConfig) {
         override fun riggingListChanged() {}
         override fun stageRegionListChanged() {}
         override fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {}
+        override fun cueRunStateChanged(runState: CueRunState) {}
         override fun promptBookChanged() {}
     }
 

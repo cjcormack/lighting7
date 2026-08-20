@@ -277,6 +277,10 @@ group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrateg
 - `POST /api/rest/fx/{id}/pause` / `resume` - Control effect
 - `GET /api/rest/fx/library` - Available effect types
 
+### Cue Stack Run Endpoints
+- `POST /api/rest/project/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{cueId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby"
+- `POST /api/rest/project/{id}/cue-stacks/{stackId}/preview` - Compose a cue without firing it (`{cueId?}`, null → the effective next). Layer 4 only; see §"Preview compose"
+
 ### Group REST Endpoints
 - `GET /api/rest/groups` - List all fixture groups
 - `GET /api/rest/groups/{name}` - Get group details with members
@@ -300,6 +304,7 @@ group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrateg
 - `groupsState` - Request/receive fixture groups state
 - `clearGroupFx` - Clear all effects for a group
 - `groupFxCleared` - Confirmation of group effect removal
+- `cueRunStateChanged` - A cue stack's live cue, armed next, and fade timing. One frame per transition from `CueStackManager` (so REST, the MIDI surface and auto-advance all report), plus a snapshot on connect; clients animate the fade locally from `fadeElapsedMs`
 
 ## Database
 

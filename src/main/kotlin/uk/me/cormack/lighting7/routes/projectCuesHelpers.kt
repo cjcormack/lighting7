@@ -980,14 +980,21 @@ internal fun republishCueLayer(state: State, cueId: Int, applyData: CueApplyData
  * Split out from [republishCueLayer] so a caller that needs to rebuild several cues can publish
  * them in one pass — see `republishForPaletteEdit`, where publishing per cue would take the engine
  * lock and transmit once per cue for what is a single operator edit.
+ *
+ * [cuePalette] overrides the cue-scope palette. A stack cue's cue-scope palette is the *stack*
+ * palette (`activateCueInStack` merges the cue's own palette into it before building), which the
+ * cue's `applyData.palette` only equals when the cue carries a palette of its own — so the
+ * preview path passes the resolved stack palette rather than letting a palette-less cue resolve
+ * its refs against nothing. Null means "use the cue's own palette", as the apply paths do.
  */
 internal fun buildCombinedCueLayerRows(
     state: State,
     cueId: Int,
     applyData: CueApplyData,
+    cuePalette: List<ExtendedColour>? = null,
 ): List<CueAssignmentResolver.Assignment> {
     val cascade = PaletteCascade(
-        cue = applyData.palette.toPaletteColours(),
+        cue = cuePalette ?: applyData.palette.toPaletteColours(),
         global = state.show.fxEngine.getPalette(),
     )
     val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, applyData, cascade, state.show.paletteRegistry)

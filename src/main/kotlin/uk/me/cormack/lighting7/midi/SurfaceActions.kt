@@ -233,7 +233,7 @@ class DefaultSurfaceActions(
 
     override fun cueStackPause(stackId: Int) {
         try {
-            cueStackManager.pauseAutoAdvance(stackId)
+            cueStackManager.pauseAutoAdvance(state, stackId)
         } catch (e: Exception) {
             logger.warn("Surface PAUSE failed for stack $stackId: ${e.message}")
         }

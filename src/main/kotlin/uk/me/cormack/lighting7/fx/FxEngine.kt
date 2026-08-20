@@ -736,6 +736,28 @@ class FxEngine(
     }
 
     /**
+     * The published Layer 4 rows of every cue *except* those belonging to [stackId] — what a GO
+     * on that stack would leave alone, since firing a cue replaces its own stack's contribution
+     * and nothing else. Cues published without a stack (a cue-edit live apply) survive a stack
+     * GO, so they are included.
+     *
+     * Used by the cue-preview compose (`routes/cuePreview.kt`) to recompose a hypothetical cue
+     * set against what is already live without touching [layerResolver]'s state. Filtered in
+     * here rather than by the caller so the rows and the `cueId → stackId` map are read under
+     * one [cueAssignmentsLock] acquisition and cannot disagree.
+     *
+     * Rows carry their stored `fadeWeight` (always 1.0 — live crossfade progress lives in
+     * `cueFadeWeights` and is applied at republish time), so the result describes the settled
+     * look rather than a cue caught mid-crossfade.
+     */
+    fun cueAssignmentsExcludingStack(stackId: Int): List<CueAssignmentResolver.Assignment> =
+        synchronized(cueAssignmentsLock) {
+            cueAssignments.entries
+                .filter { cueStackIds[it.key] != stackId }
+                .flatMap { it.value }
+        }
+
+    /**
      * Rewrite the composition priority of live rows owned by the cues in [priorities]
      * (`cueId → new priority`).
      *

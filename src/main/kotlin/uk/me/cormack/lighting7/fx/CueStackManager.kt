@@ -13,6 +13,42 @@ import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.ConcurrentHashMap
 
 /**
+ * A cue stack's *run state* — what is live, what the next GO will fire, and how far through a
+ * fade the desk is. Broadcast on every transition (see [CueStackManager.runStateFor]) so a
+ * prompt book on a tablet agrees with the desk that armed or fired the cue, rather than each
+ * session computing "next" for itself.
+ *
+ * @property nextCueId the cue the next GO fires: the explicitly armed standby when there is
+ *   one, else the positional next. Null at the end of a non-looping stack.
+ * @property nextIsArmed true when [nextCueId] is an operator-armed standby rather than the
+ *   positional next — the difference a "NEXT" pill draws differently.
+ * @property transition true when this frame *is* a cue transition — a GO just happened. False
+ *   for a standby change, a stack stopping, and the connect-time snapshot. A client can't infer
+ *   it: a snapshot of a cue that fired an hour ago looks exactly like the cue firing now, and
+ *   guessing means a freshly-opened session replays a fade that is long over.
+ * @property autoAdvance whether the stack *will* roll forward on its own — a live auto-advance
+ *   timer, not merely a cue configured for one. A paused timer reports false, because a client
+ *   drawing the countdown would otherwise show a bar completing into nothing.
+ * @property fadeDurationMs the live cue's configured fade, whether or not a fade is running.
+ * @property fadeElapsedMs null when no fade is in progress; otherwise how far into the fade
+ *   the desk is *at send time*. A session joining mid-fade starts its animation there instead
+ *   of replaying from zero. Deliberately a duration and not a wall-clock instant: a tablet
+ *   with a skewed clock would otherwise animate a fade that is already over.
+ */
+data class CueRunState(
+    val projectId: Int,
+    val stackId: Int,
+    val activeCueId: Int?,
+    val nextCueId: Int?,
+    val nextIsArmed: Boolean,
+    val transition: Boolean,
+    val fadeDurationMs: Long?,
+    val fadeElapsedMs: Long?,
+    val autoAdvance: Boolean,
+    val autoAdvanceDelayMs: Long?,
+)
+
+/**
  * Manages runtime state for active cue stacks.
  *
  * Tracks which cue is active in each stack, maintains stack-level palettes
@@ -40,9 +76,27 @@ class CueStackManager(
         // mid-flight crossfade (because a new cue activates) can drop the now-abandoned
         // outgoing's Layer 4 assignments — otherwise they'd linger past the cancellation.
         var crossfadeOutgoingCueId: Int? = null,
+        // The live cue's fade / auto-advance configuration, copied at activation so
+        // [runStateFor] can describe the stack without going back to the DB.
+        var fadeDurationMs: Long? = null,
+        var autoAdvance: Boolean = false,
+        var autoAdvanceDelayMs: Long? = null,
+        // When the live cue's crossfade started, or null when the cue snapped (no outgoing
+        // cue to fade out of, so the configured fade time never ran). Never cleared once set —
+        // [runStateFor] treats an elapsed time past the duration as "settled".
+        var fadeStartedAtMs: Long? = null,
     )
 
     private val activeStacks = ConcurrentHashMap<Int, ActiveStackState>()
+
+    /**
+     * `stackId → explicitly armed next cue`.
+     *
+     * Deliberately not a field of [ActiveStackState]: an operator arms a cue *before* the
+     * stack is running (pre-show), and [activateCueInStack] replaces the whole
+     * [ActiveStackState] entry. Transient runtime state — never persisted, never synced.
+     */
+    private val standbyCueIds = ConcurrentHashMap<Int, Int>()
 
     /** Tick interval for crossfade envelope updates (≈60fps). */
     private val CROSSFADE_TICK_MS = 16L
@@ -275,11 +329,20 @@ class CueStackManager(
             fxEngine.stompForCue(cueData.cueId, overlap)
         }
 
-        // 4. Update active state
+        // 4. Update active state. The GO consumed any armed standby — the next one is
+        // positional again until an operator arms another.
         activeStacks[stackId] = ActiveStackState(
             stackId = stackId,
             activeCueId = cueData.cueId,
+            fadeDurationMs = cueData.fadeDurationMs,
+            autoAdvance = cueData.autoAdvance,
+            autoAdvanceDelayMs = cueData.autoAdvanceDelayMs,
+            // Only a real crossfade has elapsed time to report. On the snap path the cue is
+            // already at full level, and a non-null start would have every client animate a
+            // fade that never happened.
+            fadeStartedAtMs = if (useCrossfade) System.currentTimeMillis() else null,
         )
+        standbyCueIds.remove(stackId)
 
         // 5. Start crossfade or finalize
         if (useCrossfade) {
@@ -335,6 +398,10 @@ class CueStackManager(
         if (cueData.autoAdvance && cueData.autoAdvanceDelayMs != null) {
             scheduleAutoAdvance(state, stackId, cueData.autoAdvanceDelayMs, scope)
         }
+
+        // Every activation path lands here — REST, the MIDI surface, a cue-edit live apply and
+        // the auto-advance timer — so this is the one place that has to tell the other sessions.
+        publishRunState(state, stackId, transition = true)
 
         return ActivateResult(
             stackId = stackId,
@@ -401,11 +468,16 @@ class CueStackManager(
     /**
      * Advance to the next or previous cue in a stack.
      *
+     * FORWARD fires whatever [effectiveNextCueId] names — the armed standby when there is one,
+     * else the positional next. That's the point of the standby living here: a client no longer
+     * has to choose between `advance` and `go-to` depending on what it thinks is armed, and the
+     * MIDI surface's GO fires the same cue the tablet has on deck.
+     *
      * Only STANDARD cues are candidates for advancement — MARKERs are skipped.
      * Respects the stack's loop setting. If at the end and not looping,
      * stays on the current cue.
      *
-     * @return The result of activating the next cue, or null if at end and not looping
+     * @return The result of activating the next cue, or null if the stack has no STANDARD cues
      */
     fun advanceStack(
         state: State,
@@ -420,28 +492,22 @@ class CueStackManager(
             val stack = DaoCueStack.findById(stackId)
                 ?: throw IllegalArgumentException("Cue stack not found: $stackId")
 
-            // Only STANDARD cues are candidates for advancement
-            val orderedCues = DaoCue.find {
-                (DaoCues.cueStack eq stackId) and (DaoCues.cueType eq CueType.STANDARD.name)
-            }.orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                .map { it.id.value }
-
+            val orderedCues = orderedStandardCueIds(stackId)
             if (orderedCues.isEmpty()) return@transaction null
 
-            val currentIndex = orderedCues.indexOf(currentState.activeCueId)
-            if (currentIndex == -1) return@transaction orderedCues.first() // Fallback to first STANDARD
-
-            val nextIndex = when (direction) {
-                AdvanceDirection.FORWARD -> currentIndex + 1
-                AdvanceDirection.BACKWARD -> currentIndex - 1
+            if (direction == AdvanceDirection.FORWARD) {
+                val armed = standbyCueIds[stackId]
+                // `armed in orderedCues` also covers a standby whose cue was deleted or turned
+                // into a MARKER since it was armed — fall through to positional rather than
+                // throwing out of a GO.
+                if (armed != null && armed != currentState.activeCueId && armed in orderedCues) {
+                    return@transaction armed
+                }
             }
 
-            when {
-                nextIndex in orderedCues.indices -> orderedCues[nextIndex]
-                stack.loop && direction == AdvanceDirection.FORWARD -> orderedCues.first()
-                stack.loop && direction == AdvanceDirection.BACKWARD -> orderedCues.last()
-                else -> orderedCues[currentIndex] // At boundary and not looping — stay on current cue
-            }
+            // At a boundary of a non-looping stack, stay on the current cue.
+            positionalCueId(orderedCues, currentState.activeCueId, direction, stack.loop)
+                ?: currentState.activeCueId
         }
 
         if (nextCueId == null) {
@@ -478,19 +544,169 @@ class CueStackManager(
         return activateCueInStack(state, stackId, cueId, scope, rejectMarkers = true)
     }
 
+    // ─── "Next" — one definition, shared by GO, the run-state broadcast and the DTO ───────
+
+    /** Ordered STANDARD cue ids for [stackId]. Must be called inside a transaction. */
+    private fun orderedStandardCueIds(stackId: Int): List<Int> =
+        DaoCue.find {
+            (DaoCues.cueStack eq stackId) and (DaoCues.cueType eq CueType.STANDARD.name)
+        }.orderBy(DaoCues.sortOrder to SortOrder.ASC)
+            .map { it.id.value }
+
     /**
-     * Activate a cue stack at its first STANDARD cue.
+     * The cue [direction] from [fromCueId] within [ordered], honouring [loop].
+     *
+     * Null when the walk runs off the end of a non-looping stack — callers decide what that
+     * means: [advanceStack] stays on the current cue, [effectiveNextCueId] reports "nothing on
+     * deck". A [fromCueId] that isn't in [ordered] (deleted, or turned into a MARKER) falls
+     * back to the first cue.
+     */
+    private fun positionalCueId(
+        ordered: List<Int>,
+        fromCueId: Int?,
+        direction: AdvanceDirection,
+        loop: Boolean,
+    ): Int? {
+        if (ordered.isEmpty()) return null
+        if (fromCueId == null) return ordered.first()
+        val currentIndex = ordered.indexOf(fromCueId)
+        if (currentIndex == -1) return ordered.first()
+        val nextIndex = when (direction) {
+            AdvanceDirection.FORWARD -> currentIndex + 1
+            AdvanceDirection.BACKWARD -> currentIndex - 1
+        }
+        return when {
+            nextIndex in ordered.indices -> ordered[nextIndex]
+            !loop -> null
+            direction == AdvanceDirection.FORWARD -> ordered.first()
+            else -> ordered.last()
+        }
+    }
+
+    /** The cue an operator has explicitly armed on [stackId], if any. */
+    fun getStandbyCueId(stackId: Int): Int? = standbyCueIds[stackId]
+
+    /**
+     * The cue the next GO on [stackId] will fire: the armed standby when one is set and isn't
+     * already live, else the positional next. Null at the end of a non-looping stack.
+     *
+     * Overload taking an already-loaded cue list, for callers that are inside a transaction and
+     * hold the stack's cues (the details DTO). The rules live here, not in the caller.
+     */
+    fun effectiveNextCueId(stackId: Int, orderedStandardCueIds: List<Int>, loop: Boolean): Int? {
+        val active = activeStacks[stackId]?.activeCueId
+        val armed = standbyCueIds[stackId]
+        if (armed != null && armed != active && armed in orderedStandardCueIds) return armed
+        return positionalCueId(orderedStandardCueIds, active, AdvanceDirection.FORWARD, loop)
+    }
+
+    /** [effectiveNextCueId] for a stack whose cues aren't already loaded. */
+    fun effectiveNextCueId(state: State, stackId: Int): Int? = transaction(state.database) {
+        val stack = DaoCueStack.findById(stackId) ?: return@transaction null
+        effectiveNextCueId(stackId, orderedStandardCueIds(stackId), stack.loop)
+    }
+
+    /**
+     * Arm [cueId] as the cue the next GO on [stackId] fires.
+     *
+     * Rejects a cue from another stack, and a MARKER — the same two guards
+     * [activateCueInStack] and [goToCue] apply, because arming is a deferred GO.
+     */
+    fun setStandby(state: State, stackId: Int, cueId: Int) {
+        transaction(state.database) {
+            val cue = DaoCue.findById(cueId)
+                ?: throw IllegalArgumentException("Cue not found: $cueId")
+            if (cue.cueStack.id.value != stackId) {
+                throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
+            }
+            if (cue.cueType != CueType.STANDARD.name) {
+                throw IllegalArgumentException("Cannot arm a ${cue.cueType} cue")
+            }
+        }
+        standbyCueIds[stackId] = cueId
+        publishRunState(state, stackId)
+    }
+
+    /** Disarm [stackId]'s standby, leaving the positional next on deck. */
+    fun clearStandby(state: State, stackId: Int) {
+        if (standbyCueIds.remove(stackId) == null) return
+        publishRunState(state, stackId)
+    }
+
+    /**
+     * Drop any standby pointing at [cueId]. Called when a cue is deleted: [effectiveNextCueId]
+     * already ignores an armed cue that is no longer a STANDARD cue of the stack, but the
+     * entry would otherwise linger and `standbyCueId` would keep reporting a cue that is gone.
+     */
+    fun clearStandbyForCue(state: State, cueId: Int) {
+        for ((stackId, armed) in standbyCueIds) {
+            if (armed == cueId) clearStandby(state, stackId)
+        }
+    }
+
+    /**
+     * [stackId]'s run state as the desk sees it right now — see [CueRunState].
+     *
+     * Also the connect-time snapshot: a session that opens mid-fade reads a non-null
+     * `fadeElapsedMs` and animates the remainder.
+     */
+    fun runStateFor(state: State, stackId: Int, transition: Boolean = false): CueRunState {
+        val active = activeStacks[stackId]
+        val next = effectiveNextCueId(state, stackId)
+        val armed = standbyCueIds[stackId]
+        val fadeElapsed = run {
+            val startedAt = active?.fadeStartedAtMs ?: return@run null
+            val duration = active.fadeDurationMs ?: return@run null
+            val elapsed = System.currentTimeMillis() - startedAt
+            if (elapsed >= duration) null else elapsed
+        }
+        return CueRunState(
+            projectId = state.show.project.id.value,
+            stackId = stackId,
+            activeCueId = active?.activeCueId,
+            nextCueId = next,
+            nextIsArmed = armed != null && armed == next,
+            transition = transition,
+            fadeDurationMs = active?.fadeDurationMs,
+            fadeElapsedMs = fadeElapsed,
+            // Whether the stack *will* advance, not merely whether the cue is configured to:
+            // that's the question a client drawing a countdown is really asking. A paused timer
+            // (a cue-edit Live session, the surface's Pause binding) or a configured cue with no
+            // delay both report false.
+            autoAdvance = active?.autoAdvanceJob?.isActive == true,
+            autoAdvanceDelayMs = active?.autoAdvanceDelayMs,
+        )
+    }
+
+    /**
+     * Stacks with run state worth reporting — live, or holding an armed standby. The
+     * connect-time snapshot walks these rather than every stack in the project.
+     */
+    fun stacksWithRunState(): Set<Int> = activeStacks.keys + standbyCueIds.keys
+
+    /** Fan [stackId]'s run state out to every connected session. */
+    private fun publishRunState(state: State, stackId: Int, transition: Boolean = false) {
+        state.show.fixtures.cueRunStateChanged(runStateFor(state, stackId, transition))
+    }
+
+    /**
+     * Start a stack: fire the armed standby if an operator has one on deck, else the stack's
+     * first STANDARD cue.
+     *
+     * The standby check is what makes the first GO of a show behave like every later one —
+     * arming cue 5 pre-show and pressing GO fires cue 5, not cue 1. Callers no longer have to
+     * pass the armed cue back in for that to work.
+     *
      * Throws [IllegalArgumentException] if the stack has no standard cues.
      */
     fun activateAtFirstCue(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): ActivateResult {
-        val firstCueId = transaction(state.database) {
-            DaoCue.find {
-                (DaoCues.cueStack eq stackId) and (DaoCues.cueType eq CueType.STANDARD.name)
-            }.orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                .firstOrNull()?.id?.value
+        val startCueId = transaction(state.database) {
+            val ordered = orderedStandardCueIds(stackId)
+            val armed = standbyCueIds[stackId]
+            if (armed != null && armed in ordered) armed else ordered.firstOrNull()
         } ?: throw IllegalArgumentException("Cue stack has no standard cues")
 
-        return activateCueInStack(state, stackId, firstCueId, scope)
+        return activateCueInStack(state, stackId, startCueId, scope)
     }
 
     /**
@@ -512,7 +728,12 @@ class CueStackManager(
         // Deactivate triggers for the active cue in this stack
         appState?.cueTriggerManager?.deactivateTriggersForStack(stackId)
 
-        return fxEngine.removeEffectsForCueStack(stackId)
+        val removed = fxEngine.removeEffectsForCueStack(stackId)
+        // A stopped stack has nothing on deck: the standby went with it. Published after the
+        // teardown so the frame describes the stack as it now is.
+        standbyCueIds.remove(stackId)
+        appState?.let { publishRunState(it, stackId) }
+        return removed
     }
 
     /**
@@ -529,12 +750,15 @@ class CueStackManager(
      * Calling this on a stack without auto-advance, or on an inactive stack, is a no-op
      * (returns false).
      */
-    fun pauseAutoAdvance(stackId: Int): Boolean {
-        val state = activeStacks[stackId] ?: return false
-        val job = state.autoAdvanceJob ?: return false
+    fun pauseAutoAdvance(appState: State, stackId: Int): Boolean {
+        val stackState = activeStacks[stackId] ?: return false
+        val job = stackState.autoAdvanceJob ?: return false
         if (!job.isActive) return false
         job.cancel()
-        state.autoAdvanceJob = null
+        stackState.autoAdvanceJob = null
+        // Clients draw the countdown but no longer drive it, so a paused timer they weren't told
+        // about is a bar counting down to a step that never comes.
+        publishRunState(appState, stackId)
         return true
     }
 
@@ -564,6 +788,7 @@ class CueStackManager(
         } ?: return false
 
         scheduleAutoAdvance(state, stackId, cueConfig, scope)
+        publishRunState(state, stackId)
         return true
     }
 

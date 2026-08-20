@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.GroupBuilder
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fx.CueRunState
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -25,6 +26,8 @@ interface FixturesChangeListener {
     fun riggingListChanged()
     fun stageRegionListChanged()
     fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?)
+    /** A cue stack's live cue, armed next, or fade progress changed. */
+    fun cueRunStateChanged(runState: CueRunState)
     fun promptBookChanged()
 }
 
@@ -333,6 +336,12 @@ class Fixtures {
     fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {
         changeListeners.forEach {
             it.showChanged(projectId, activeStackId, activeStackName)
+        }
+    }
+
+    fun cueRunStateChanged(runState: CueRunState) {
+        changeListeners.forEach {
+            it.cueRunStateChanged(runState)
         }
     }
 

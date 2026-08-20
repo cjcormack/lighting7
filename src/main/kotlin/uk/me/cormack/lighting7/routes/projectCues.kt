@@ -301,6 +301,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 // but dropping it here keeps the programmer indicator from offering a cue that
                 // no longer exists.
                 state.show.programmerStore.clearIncludeTargetForCue(resource.cueId)
+                // Same reasoning for the armed standby: GO already ignores an armed cue that
+                // isn't a STANDARD cue of the stack, but leaving the entry makes
+                // `standbyCueId` report a cue that no longer exists.
+                state.show.cueStackManager.clearStandbyForCue(state, resource.cueId)
                 state.show.fixtures.cueListChanged()
                 state.show.fixtures.cueStackListChanged()
                 if (result > 0) state.show.fixtures.promptBookChanged()

@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import java.util.concurrent.atomic.AtomicReference
@@ -77,6 +78,7 @@ class GlobalScalerState(
             activeStackId: Int?,
             activeStackName: String?,
         ) {}
+        override fun cueRunStateChanged(runState: CueRunState) {}
         override fun promptBookChanged() {}
     }
 

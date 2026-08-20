@@ -595,7 +595,7 @@ class AiTools(private val state: State) {
         val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
 
         val manager = state.show.cueStackManager
-        val removedCount = manager.deactivateStack(stackId)
+        val removedCount = manager.deactivateStack(stackId, state)
 
         return ToolExecutionResult(
             success = true,

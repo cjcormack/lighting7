@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.plugins
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.SoftTakeoverStateMachine
 import kotlin.test.Test
@@ -439,6 +440,27 @@ class SocketMessageWireFormatTest {
         val encoded = json.encodeToString<OutMessage>(out)
         assertTrue(encoded.contains(""""type":"showChanged""""))
         assertEquals(out, assertIs<ShowChangedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
+    @Test
+    fun `broadcast domain — CueRunStateChangedOutMessage round-trips with discriminator`() {
+        val out = CueRunStateChangedOutMessage.of(
+            CueRunState(
+                projectId = 3,
+                stackId = 4,
+                activeCueId = 11,
+                nextCueId = 12,
+                nextIsArmed = true,
+                transition = true,
+                fadeDurationMs = 2000,
+                fadeElapsedMs = 0,
+                autoAdvance = false,
+                autoAdvanceDelayMs = null,
+            )
+        )
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"cueRunStateChanged""""))
+        assertEquals(out, assertIs<CueRunStateChangedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
     }
 
     @Test

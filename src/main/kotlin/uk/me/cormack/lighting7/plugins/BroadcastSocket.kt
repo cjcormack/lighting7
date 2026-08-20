@@ -4,7 +4,9 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 
 // ─── Outbound (listener-driven; no inbound) ─────────────────────────────
@@ -68,6 +70,44 @@ data class ShowChangedOutMessage(
     val activeStackName: String?,
 ) : BroadcastOutMessage()
 
+/**
+ * A cue stack's run state — live cue, armed next, fade progress. One frame per transition, not a
+ * per-tick stream: the client animates the fade locally from [fadeElapsedMs] and
+ * [fadeDurationMs], the same way the session that pressed GO always has.
+ *
+ * Mirrors [uk.me.cormack.lighting7.fx.CueRunState]; see its KDoc for the field semantics, in
+ * particular why the fade is described as an elapsed duration rather than a start timestamp.
+ */
+@Serializable
+@SerialName("cueRunStateChanged")
+data class CueRunStateChangedOutMessage(
+    val projectId: Int,
+    val stackId: Int,
+    val activeCueId: Int?,
+    val nextCueId: Int?,
+    val nextIsArmed: Boolean,
+    val transition: Boolean,
+    val fadeDurationMs: Long?,
+    val fadeElapsedMs: Long?,
+    val autoAdvance: Boolean,
+    val autoAdvanceDelayMs: Long?,
+) : BroadcastOutMessage() {
+    companion object {
+        fun of(runState: CueRunState) = CueRunStateChangedOutMessage(
+            projectId = runState.projectId,
+            stackId = runState.stackId,
+            activeCueId = runState.activeCueId,
+            nextCueId = runState.nextCueId,
+            nextIsArmed = runState.nextIsArmed,
+            transition = runState.transition,
+            fadeDurationMs = runState.fadeDurationMs,
+            fadeElapsedMs = runState.fadeElapsedMs,
+            autoAdvance = runState.autoAdvance,
+            autoAdvanceDelayMs = runState.autoAdvanceDelayMs,
+        )
+    }
+}
+
 @Serializable
 @SerialName("fixturesChanged")
 data object FixturesChangedOutMessage : BroadcastOutMessage()
@@ -127,6 +167,10 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
             fire(ShowChangedOutMessage(projectId, activeStackId, activeStackName))
         }
 
+        override fun cueRunStateChanged(runState: CueRunState) {
+            fire(CueRunStateChangedOutMessage.of(runState))
+        }
+
         override fun promptBookChanged() = fire(PromptBookChangedOutMessage)
     }
 
@@ -135,6 +179,24 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
 
     // Initial channel-mapping snapshot so a fresh connection doesn't have to ask.
     session.launch { scope.send(buildChannelMappingMessage(state)) }
+
+    // Run-state snapshot, for the same reason plus one more: a session that opens mid-fade
+    // gets a non-null `fadeElapsedMs` and animates the remainder instead of nothing.
+    //
+    // Captured here, synchronously, and only sent from the launch: a snapshot *read* inside the
+    // coroutine would describe whenever the coroutine happened to be scheduled, which can be
+    // long after the connect and after a GO the listener has already queued a `transition = true`
+    // frame for — a stale-looking `transition = false` frame carrying the newer cue. One
+    // transaction for the whole walk, since each `runStateFor` would otherwise open its own.
+    val runStateSnapshot = transaction(state.database) {
+        val manager = state.show.cueStackManager
+        manager.stacksWithRunState().map { manager.runStateFor(state, it) }
+    }
+    if (runStateSnapshot.isNotEmpty()) {
+        session.launch {
+            for (runState in runStateSnapshot) scope.send(CueRunStateChangedOutMessage.of(runState))
+        }
+    }
 
     // Re-register on project switch — the previous project's [Fixtures] instance is replaced
     // wholesale, so a stale registration would silently stop firing. `.drop(1)` skips the

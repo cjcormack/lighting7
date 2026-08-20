@@ -19,8 +19,36 @@ as a one-line row.
 | [`FU-MANUAL-CUEEDIT-HARDWARE`](#fu-manual-cueedit-hardware) | cueEdit works from a bound fader | Control-surface P6 |
 | [`FU-MANUAL-SURFACES-FLOW`](#fu-manual-surfaces-flow) | the `/surfaces` MIDI-learn flow works | Control-surface P5 |
 | [`FU-MANUAL-DEAD-ASSIGNMENTS`](#fu-manual-dead-assignments) | dead markers render after a fixture rename | Cue-authoring P6 |
+| [`FU-MANUAL-RUN-STATE-TWO-SESSIONS`](#fu-manual-run-state-two-sessions) | desk, tablet and MIDI surface agree on what GO fires | Server-owned Next, 2026-08-20 |
 
 ---
+
+## `FU-MANUAL-RUN-STATE-TWO-SESSIONS`
+
+**Desk, tablet and MIDI surface agree on the show** · from server-owned Next, 2026-08-20
+
+Standby and the cue-fade animation moved out of the browser and into `CueStackManager`, broadcast
+as `cueRunStateChanged`. Integration tests cover the frame reaching a second socket and the
+runner slice adopting it, but three things only a real session can show:
+
+* **Timing.** The client animates from `fadeElapsedMs`, so a following session's fade should look
+  like the desk's, not lag or jump. A phone on wifi is the interesting case.
+* **The MIDI surface.** GO on the X-Touch goes through `advanceStack`, which now fires the armed
+  standby. Arm cue 7 in the prompt book, press GO on the surface, and cue 7 should fire — the
+  surface previously had no idea a cue was armed.
+* **Auto-advance stepping once.** The client stopped calling the server when its countdown
+  finishes (the backend's timer already advances and broadcasts). With three sessions open on an
+  auto-advancing stack the show must step one cue per cue, not three. Pausing (open a cue-edit
+  Live session, or the surface's Pause binding) should stop the countdown bar everywhere, not
+  leave it completing into nothing.
+
+**Test**: desk browser + phone + X-Touch on one show. Arm from each surface in turn and check the
+NEXT pill on the others; GO from each and watch the fade animate everywhere; open a fourth session
+mid-fade and confirm it joins part-way rather than replaying; then run an auto-advancing stack for
+several cues with all sessions watching.
+
+**If a session lags or double-steps**, the levers are in `useShowTransport` /
+`applyServerRunState` — not in the backend, which sends one frame per transition by design.
 
 ## `FU-MANUAL-EDITOR-INPROCESS`
 
