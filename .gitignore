@@ -42,3 +42,6 @@ src/main/resources/static/
 /.claude/worktrees/quizzical-satoshi-7db80b/
 /.claude/launch.json
 /.claude/scheduled_tasks.lock
+
+# Heap dumps (Gradle daemon OOM writes these into the project root)
+*.hprof

@@ -45,6 +45,35 @@ anything it didn't put there, so don't hand-place files in it.
 2. Optionally set `database.path` — empty uses `<appDataDir>/lighting7.db`
 3. Set project name
 
+### Never stop or kill Gradle daemons
+
+**The desk is usually running as `./gradlew run` in the operator's own terminal —
+the app *is* a Gradle daemon.** `gradle --stop` is registry-wide: it stops every
+daemon for that Gradle version, so "just clearing a wedged daemon" kills the live
+show. The app's non-daemon threads (Ktor, ArtNet, the sync engine) then keep the
+JVM alive after Gradle's services are torn down, so the registry keeps a stale
+**busy** entry — `./gradlew run` afterwards reports "1 busy Daemon could not be
+reused" and the operator has to kill the process by hand.
+
+So: never run `./gradlew --stop`, `pkill`/`killall` against java/gradle/kotlin, or
+anything else that takes down a JVM you didn't start. `scripts/claude-gradle-guard.sh`
+is a `PreToolUse` hook that blocks these; if it fires, don't work around it. When a
+build looks wedged, reach for `--no-daemon`, `--rerun-tasks` or `--offline`, and
+otherwise ask the operator.
+
+Two related facts, both visible in `~/.gradle/daemon/<version>/daemon-*.out.log`:
+
+- Daemons an agent starts are forked from the sandboxed shell, so they **inherit
+  the sandbox for life** (`Could not start the FSEvents stream`, `Operation not
+  permitted` on paths outside the write allowlist). Agent sessions therefore set
+  `GRADLE_OPTS=-Dorg.gradle.jvmargs=-Xmx2g`, which both raises the 512 MB default
+  the daemon OOMs at and gives agent builds their own daemon context, so the
+  operator's terminal never lands on a sandboxed daemon.
+- `~/.gradle/.tmp` and `~/.gradle/daemon/*/*.log` leak indefinitely (hundreds of
+  MB each), and `Problems writing to Binary store … (exist: true)` during
+  configuration is the signature of a **full disk**, not a corrupt cache — check
+  `df -h /System/Volumes/Data` before believing anything else.
+
 ### Pre-commit checks
 
 This project has no Makefile — the global `make commit-check` rule does not
