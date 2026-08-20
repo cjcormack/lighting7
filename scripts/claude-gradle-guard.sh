@@ -24,7 +24,19 @@ except Exception:
 
 [ -n "$cmd" ] || exit 0
 
-if printf '%s' "$cmd" | grep -Eq '(gradlew?|gradle)[^;&|]*--stop|--stop[^;&|]*gradlew?'; then
+# Shared "this is the command being run, not prose about it" prefix: start of a
+# line or just after a shell separator, then optional sudo, environment
+# assignments and a path. Both checks use it, because without it a commit message
+# or doc edit that merely *mentions* one of these commands is blocked — which is
+# exactly what happened on the commit that added this file.
+#
+# grep is line-based, so `^` is the start of any line, including a heredoc body's.
+# Prose that opens a line with a bare, unquoted command still trips it; in
+# practice such text is written in backticks, which is enough to fall outside the
+# pattern.
+cmd_pos='(^|[;&|])[[:space:]]*(sudo[[:space:]]+)?([[:alnum:]_]+=[^[:space:]]*[[:space:]]+)*([^[:space:];&|]*/)?'
+
+if printf '%s' "$cmd" | grep -Eq "${cmd_pos}gradlew?\b[^;&|]*--stop"; then
     cat >&2 <<'MSG'
 Blocked: `gradle --stop` stops EVERY Gradle daemon on this machine, including the
 one hosting the operator's `./gradlew run` — that is the live lighting desk, and
@@ -38,7 +50,7 @@ MSG
 fi
 
 # Command-position only, so `grep pkill …` and prose mentioning it stay allowed.
-if printf '%s' "$cmd" | grep -Eq '(^|[;&|])[[:space:]]*(sudo[[:space:]]+)?(pkill|killall)\b[^;&|]*(java|gradle|Gradle|kotlin)'; then
+if printf '%s' "$cmd" | grep -Eq "${cmd_pos}(pkill|killall)\b[^;&|]*(java|gradle|Gradle|kotlin)"; then
     cat >&2 <<'MSG'
 Blocked: killing java/gradle/kotlin processes would take down the operator's
 running lighting7 desk (the app runs as a Gradle daemon) and any Kotlin compile
