@@ -229,9 +229,10 @@ class SpeedMasterBankTest {
      * The regression guard for the tick-interval truncation fix: the old
      * `(60_000 / (bpm * 24)).toLong()` delay made a 120 BPM clock run at 50 ticks/s
      * (~125 BPM) and a 60 BPM clock at ~24.4 ticks/s — a 2.05 ratio between masters that
-     * should hold exactly 2.0. Rates are measured from the clocks' own tick timestamps,
-     * so scheduler jitter inside the window doesn't skew the measurement; the deadline
-     * timer self-corrects per-delay overshoot, which is precisely what's being asserted.
+     * should hold exactly 2.0. Rates are measured entirely from the clocks' own bookkeeping —
+     * tick *numbers* over tick *timestamps* — so neither scheduler jitter nor a dropped
+     * delivery skews the measurement; the deadline timer self-corrects per-delay overshoot,
+     * which is precisely what's being asserted.
      */
     @Test
     fun `deadline timer holds long-run rates exact — 120 vs 60 BPM is 2 to 1`() = runBlocking {
@@ -251,10 +252,16 @@ class SpeedMasterBankTest {
         j1.cancel()
         j2.cancel()
 
+        // Span the *numbered* ticks, not the delivered ones. `tryEmit` on a 1-slot buffer drops
+        // a tick rather than stall the clock, so `ticks.size` under-counts under load and the
+        // measured rate reads low — which is a property of this test's collector, not of the
+        // timer being asserted. Tick numbers are assigned by the clock as it emits, so numerator
+        // and denominator both come from the clock itself.
         fun ratePerSecond(ticks: List<MasterClock.ClockTick>): Double {
             assertTrue(ticks.size > 20, "expected a healthy tick count, got ${ticks.size}")
             val spanMs = ticks.last().timestampMs - ticks.first().timestampMs
-            return (ticks.size - 1) * 1000.0 / spanMs
+            val spanTicks = ticks.last().tickNumber - ticks.first().tickNumber
+            return spanTicks * 1000.0 / spanMs
         }
 
         val fastRate = ratePerSecond(fastTicks.toList())
@@ -284,10 +291,20 @@ class SpeedMasterBankTest {
 
         assertTrue(beforeChange > 0, "clock must have ticked before the change")
         val after = ticks.toList().map { it.tickNumber }
-        assertEquals(after.sorted(), after, "tick numbers stay monotonic across a tempo change")
+
+        // Strictly increasing, *not* gap-free. `tickFlow` is a MutableSharedFlow with
+        // `extraBufferCapacity = 1` published via `tryEmit`, which deliberately drops a tick
+        // rather than let a slow collector stall the clock — so a delivered sequence is allowed
+        // to skip. Asserting `b == a + 1` asserted a delivery guarantee the clock does not make,
+        // and duly failed under full-suite load (observed `(20, 22)`: tick 21 dropped in
+        // delivery, never mis-numbered).
+        //
+        // Strictly increasing is what this test is actually for: a counter *reset* by `setBpm` —
+        // the phase discontinuity being pinned — shows up as a decrease, and a double-count shows
+        // up as a repeat. Both are still caught.
         assertNull(
-            after.zipWithNext().firstOrNull { (a, b) -> b != a + 1 },
-            "no tick number is skipped or repeated across a tempo change",
+            after.zipWithNext().firstOrNull { (a, b) -> b <= a },
+            "tick numbers must never repeat or go backwards across a tempo change",
         )
     }
 }
