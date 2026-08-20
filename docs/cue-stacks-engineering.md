@@ -306,9 +306,10 @@ Both this and `reorder` also call `FxEngine.repriorityCues`, since cue priority 
 ## Preview compose
 
 `POST /{stackId}/preview` answers "what would this cue look like?" — the channel values a cue
-*would* produce, with nothing published. It backs the Next GO stage view
-(`FU-PROG-VIS-NEXTGO`): composing a cue in the browser would otherwise mean reimplementing
-specificity, HTP/LTP, palette resolution and move-in-dark arming client-side.
+*would* produce, with nothing published. It backs the Next GO stage view (lighting-react
+`docs/stage-vis-engineering.md` §"The fourth source: Next GO"): composing a cue in the browser
+would otherwise mean reimplementing specificity, HTP/LTP, palette resolution and move-in-dark
+arming client-side.
 
 `routes/cuePreview.kt`, and it is reuse end to end:
 

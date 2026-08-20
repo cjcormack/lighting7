@@ -13,10 +13,10 @@ import uk.me.cormack.lighting7.state.State
  * "What would this cue look like?" — composes a cue's Layer 4 contribution against what is
  * already live and returns the resulting DMX channel values, without publishing anything.
  *
- * Exists for the Next GO stage view (`FU-PROG-VIS-NEXTGO`): previewing a cue in the browser
- * would otherwise mean reimplementing specificity, HTP/LTP, palette resolution and
- * move-in-dark arming client-side. Every step here is the same code an actual apply runs —
- * [buildCombinedCueLayerRows] for the rows, a [CueAssignmentResolver] for the merge,
+ * Exists for the Next GO stage view (lighting-react `src/hooks/useNextGoPreview.ts`): previewing
+ * a cue in the browser would otherwise mean reimplementing specificity, HTP/LTP, palette
+ * resolution and move-in-dark arming client-side. Every step here is the same code an actual
+ * apply runs — [buildCombinedCueLayerRows] for the rows, a [CueAssignmentResolver] for the merge,
  * [PropertyChannelWriter] for the patch — so a preview and the GO that follows it cannot
  * disagree.
  *
