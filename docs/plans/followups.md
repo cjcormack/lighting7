@@ -15,7 +15,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 
 | Slug | Status | Area | Gate |
 |---|---|---|---|
-| [`FU-PAL-PRESET-MAKE-HARD`](#fu-pal-preset-make-hard) | Ready | Pal | — |
 | [`FU-AUTH-STALE-ANON-SOCKET`](#fu-auth-stale-anon-socket) | Ready | Auth | — |
 | [`FU-DIST-ICONS`](#fu-dist-icons) | Ready | Dist | — |
 | [`FU-SYNC-FORMAT-MIGRATIONS`](#fu-sync-format-migrations) | Blocked | Sync | a real breaking `formatVersion` bump |
@@ -33,6 +32,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
 | [`FU-PAL-POSITIONAL-CONVERSION`](#fu-pal-positional-conversion) | Trigger | Pal | a show maintains the same colours in both forms |
 | [`FU-PAL-APPLY-NEAREST-COVERAGE`](#fu-pal-apply-nearest-coverage) | Trigger | Pal | an operator asks for gap-filling |
+| [`FU-PAL-DELETE-HARDEN-LOOP`](#fu-pal-delete-harden-loop) | Trigger | Pal | an operator force-deletes a palette to get past the guard |
 | [`FU-PAL-LINKED`](#fu-pal-linked) | Trigger | Pal | a palette kept hand-synced to another |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
@@ -244,22 +244,6 @@ cheaper half and needs no personality data — invert the target set and scale.
 
 ## Palettes
 
-### `FU-PAL-PRESET-MAKE-HARD`
-
-**Make Hard for FX preset assignments** · Ready · Programmer redesign Session 4, deliberately cut
-
-Make Hard ships at programmer level (`POST /programmer/make-hard`) and cue level
-(`POST /project/{id}/cues/{cueId}/make-hard`). Preset assignments can hold `ref:` values too —
-`buildCueAssignmentsForPreset` resolves them per member — but have no equivalent, so a palette
-referenced only from a preset can't be detached.
-
-Cut rather than missed: preset property assignments are **target-less**. A cue row names the
-fixture or group it applies to; a preset row says "whatever this preset is applied to", which at
-hardening time is a set the preset doesn't know. So hardening means inventing a target set —
-either the union of every current `CuePresetApplication`'s targets (wrong the moment the preset is
-applied somewhere new) or a set the operator supplies (a larger UI). **Decide which before picking
-this up**; the route is the easy part.
-
 ### `FU-PAL-POSITIONAL-CONVERSION`
 
 **Convert `P1`/`P2` colour lists to named palettes** · Trigger · Programmer redesign §3.5 /
@@ -292,6 +276,24 @@ POSITION, and a rule that behaves differently per type is worse than no rule.
 
 **Trigger**: an operator asks. If they do, scope it to COLOUR and make it an explicit gesture
 ("apply, filling gaps") rather than a mode on the existing one.
+
+### `FU-PAL-DELETE-HARDEN-LOOP`
+
+**Offer "harden the referencing cues, then delete" from the palette sheet** · Trigger · split out
+of `FU-PAL-PRESET-MAKE-HARD`, 2026-08-20
+
+The palette delete guard's copy says "Make those rows hard first if you want to keep their current
+look" (`lighting-react/src/components/palettes/PaletteDetailSheet.tsx`). For the *preset* half that
+is now actionable — the 409 names the presets and offers Make Hard per preset. For the *cue* half it
+still isn't, even though every piece exists: the 409 already carries `cueIds`, `PaletteDetails`
+already carries `referencedByCueIds`, and `makeCueHard` already accepts a `paletteUuids` filter. No
+component reads any of the three; the only exit is still "Delete anyway", which strands the rows.
+
+Not done with the preset half because it is a different gesture: one palette can be referenced by
+many cues, so this is a list with a bulk action and a per-cue result summary, not one button. Scope
+it as such, and decide whether it fires one request per cue or wants a palette-scoped route.
+
+**Trigger**: an operator force-deletes a palette to get past the guard, or asks which cues use one.
 
 ### `FU-PAL-LINKED`
 
@@ -923,6 +925,15 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-08
 
+- `FU-PAL-PRESET-MAKE-HARD` — `POST /project/{id}/fx-presets/{presetId}/make-hard`, plus a
+  reference banner in the preset editor and the referring presets named in the palette delete
+  guard. The target-less problem is answered by never inventing a target set: a row hardens only
+  where the palette gives one literal across every fixture of the preset's declared `fixtureType`,
+  and a disagreement is reported with its variants. Found and fixed on the way: cue-level Make Hard
+  reported every `position` reference as unresolvable, because it read the property catalogue
+  directly instead of through `fixtureCategoryFor`'s pan/tilt alias. The cue half of the
+  delete-guard loop split out as `FU-PAL-DELETE-HARDEN-LOOP` — see
+  `docs/lighting-composition-model.md` §Hardening
 - `FU-PROG-VIS-NEXTGO` — `Next GO` as a fourth stage vis source: a pushed `ChannelSource` over
   `POST /cue-stacks/{stackId}/preview`, overlaid on the wire so channels the cue doesn't assert
   keep their live values, keyed on the playhead stack's `nextCueId` from the WS-patched RTK
