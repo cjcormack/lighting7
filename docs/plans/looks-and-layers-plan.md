@@ -1,6 +1,7 @@
 # Looks and Layers — replacing FX Presets and named Palettes
 
-> **Status: session 1 (backend) landed 2026-08-21. Sessions 2–4 remain — see §5.**
+> **Status: sessions 1 (backend) and 2 (the Look library's frontend) landed 2026-08-21.
+> Sessions 3–4 remain — see §5.**
 > Supersedes the FX-preset and named-palette halves of
 > [programmer-redesign-proposal.md](completed/programmer-redesign-proposal.md) §3.5.
 > Not in production yet — migrate hard, no rollback shims.
@@ -38,19 +39,35 @@
 > `captureCurrentState` record a cue whose preset application named whatever `DaoFxPreset` shared
 > that number (`FxInstance` now carries a separate `lookId`).
 >
-> **Next, and urgent:** session 2, the Look library's frontend. Session 1 unmounted the FX-preset
-> and named-palette HTTP routes, so `/presets`, `/palettes/:type` and the busking pads currently
-> 404. Include/Record/Update still call `buildCueAssignmentsForPreset` and therefore **ignore
-> layers** — that is session 3 (§5.3), as always planned, but it is a live gap until then.
+> **Session 2 landed** — the desk's UI is breathing again. `/projects/:id/looks` replaces both
+> retired routes as one library banked by a sticky in-page family filter (not four sibling routes:
+> a Look's families are derived, so one covering colour and position cannot own a path); the busking
+> pads, the cue editor's layer list and the FX-panel picker all speak Looks; `buildCueInput` sends
+> `layers`; and the ~39 importers of the four retired modules are gone. Four small backend routes
+> came with it, each existing only to serve this UI: `POST /looks/{id}/toggle`,
+> `POST`/`DELETE /looks/preview`, `lookId` on `POST /programmer/include`, and the
+> `compatiblePresetIds` → `compatibleLookIds` rename (that field has held Look ids since session 1;
+> only its name still said preset). `FU-LOOK-HEALTH-ARM-CLEANUP` is done in the same pass.
 >
-> Worse than "ignores layers", and the reason session 3 should not slip: `POST /programmer/include`
-> and `POST /programmer/record-palette` are **still mounted** and still read and write
-> `DaoPalette` / `DaoPaletteEntry`, while `republishForLookEdit` and `includePaletteIntoProgrammer`
-> now resolve through `LookRegistry`, which reads only `looks` / `look_rows`. So recording a *new*
-> palette produces a row no consumer can see, and re-recording a migrated one reports "N entries
-> written, N cues republished" while the rig does not move — the two tables diverge from that point
-> on. Left as-is deliberately (the fix is the session-3 rewrite onto layers, not a patch), but it is
-> a data-integrity gap, not just a missing feature.
+> **Still outstanding for session 3.** Include/Record/Update still call
+> `buildCueAssignmentsForPreset` and therefore **ignore layers** — that was always session 3
+> (§5.3), and it remains a live gap.
+>
+> The data-integrity half of that gap is now *unreachable from the UI*, which is the most session 2
+> could honestly do about it: `POST /programmer/record-palette` is still mounted and still writes
+> `DaoPalette` / `DaoPaletteEntry` rows that `LookRegistry` cannot see, but nothing calls it any
+> more — `RecordPaletteSheet` is deleted rather than left reporting success over an invisible write.
+> Include is retargeted at Looks and is deliberately **one-way**: it stages a Look's literals so
+> they can be seen and busked from, and the programmer disables Update for a `LOOK` target rather
+> than let the write-back path put rows into the retired tables. Making that round trip is the
+> session-3 rewrite.
+>
+> Two smaller things session 3 inherits. There is **no way to create a bound Look** yet (the library
+> says so in the Recorded section's empty state) — it needs the server-side record. And the toggle
+> route stamps `FxInstance.presetId = lookId`, exactly as the AI's `apply_look` already did, so
+> `captureCurrentState` would reconstruct a preset application naming whatever `DaoFxPreset` shares
+> that number; harmless while nothing composes from preset applications, and it goes when the pads
+> become programmer layers.
 >
 > **Five corrections to this plan, found in the code and applied:**
 > 1. **`minReader` is written but never read.** The importer gates on `SUPPORTED_FORMAT_VERSION` /
@@ -430,15 +447,47 @@ Prompt Book rail cards. Session 4 owns these; it is the likeliest thing to slip.
   `ai/AiService.kt` system prompt → look/layer equivalents.
 - Migration (§6), one-shot at startup.
 
-### Session 2 — The Look library's frontend
+### Session 2 — The Look library's frontend — **done 2026-08-21**
 
-**This session is not optional polish — the desk's UI is currently broken without it.** Session 1
+**This session was not optional polish — the desk's UI was broken without it.** Session 1
 unmounted the FX-preset and named-palette HTTP routes (their reference mechanism now resolves
-through `LookRegistry`, so anything the old CRUD created would be invisible to every consumer). The
-frontend still calls them, so today: `/presets` and `/palettes/:type` 404, and **the busking pads
-404** because they toggle a preset by id. Around 35 files import
-`api/fxPresetsApi` / `api/palettesApi` / `store/fxPresets` / `store/palettes`; that import list is
-the real scope of this session, not the three bullets the plan originally carried.
+through `LookRegistry`, so anything the old CRUD created would be invisible to every consumer), and
+the frontend still called them: `/presets` and `/palettes/:type` 404'd, the busking pads 404'd
+because they toggled a preset by id, and every existing `ref:` chip read "broken" because it
+resolved its name from the palette list. The import list — not the three bullets this plan
+originally carried — was the real scope: 79 files changed, +2560/−2235, with both the `presets/` and
+`palettes/` component directories deleted.
+
+**Four decisions taken while doing it, each a departure from what this section assumed:**
+
+1. **One route with a sticky family filter, not four sibling routes.** The plan said "banked by
+   derived family" and the palette banks were four routes with a sticky type. Those cannot be
+   reproduced here, and the reason is the derivation itself: a Look covering colour and position
+   belongs to two banks at once, so no family can own a path. `/looks` therefore takes an in-page
+   `LookFamilyFilterBar` with `'ALL'` as a first-class default, and Cmd+K deep-links via
+   `?family=`. This is a *documented exception* to the sibling-route rule in the frontend's
+   `CLAUDE.md`, not an oversight of it.
+2. **The value-level reference *authoring* surfaces are deleted, not retargeted.** `ref:` still
+   resolves, so `LookRefBadge` still renders rows that hold one — name-only, since there is no
+   declared type to colour a chip by. But nothing mints a new one: `ApplyPalettePopover`,
+   `PalettePickerPopover` and the cue-assignment picker's reference button are gone, because a
+   layer with a `propertyMask` is what replaces them.
+3. **`RecordPaletteSheet` is deleted rather than left working.** Its route is still mounted and
+   still writes rows `LookRegistry` cannot see; a surface that reports success over an invisible
+   write is worse than a missing one. Creating a bound Look therefore waits for session 3, and the
+   library's Recorded section says so in place of a button.
+4. **Include-a-Look is one-way, and enforced at both ends.** The client disables Update for a
+   `LOOK` target (`includedTargetIsReadOnly`), and `handleProgrammerUpdate` refuses one with a new
+   `INCLUDE_TARGET_READ_ONLY`. That second half is not belt-and-braces: Mode A otherwise falls
+   through to `includeTarget.cueId!!`, which is null for a Look, so the alternative to the guard is
+   a 500 rather than a refusal.
+
+Two smaller things found on the way, both of which would have shipped silently broken. The
+`useUnsavedChanges` hook reports through the **Sheet's own context**, so calling it from the
+component that renders the Sheet registers with nothing and the discard guard is dead — both new
+sheets use `<Sheet unsavedChanges={…}>` with Cancel through `SheetClose` instead. And the library
+needed its own `LOOK_IN_USE` delete guard: the guard UI existed only on the bound half, so a
+template Look could not be deleted from anywhere.
 
 One piece of **backend** work falls here rather than in session 1, because it exists only to serve
 this UI: a `POST /project/{id}/looks/{lookId}/toggle` route. `loadLookToggleData`
@@ -586,7 +635,15 @@ golden test will flag those cues, and each should be eyeballed rather than blank
 Status as of session 1: ✅ done · ⬜ outstanding.
 
 1. ✅ `./gradlew test` — the project's pre-commit check (no Makefile; the global
-   `make commit-check` rule does not apply). 1651 tests, all passing.
+   `make commit-check` rule does not apply). 1651 tests at the end of session 1, all passing.
+
+   Session 2 re-ran it **split by package**, because the whole suite exceeds a single foreground
+   timeout: `routes.*` + `plugins.*` (517) and `fx.*` / `state.*` / `sync.*` / `models.*` /
+   `midi.*` / `ai.*` (819), plus `LookRoutesTest` on its own. All green. Two traps worth writing
+   down: the filter needs `:test`, not `test` — the bare form also hits the `launcher` subproject,
+   which has no tests and fails the build with "No tests found for given includes"; and Gradle
+   compiles test sources once at the *start* of a run, so a test file edited after a run began is
+   silently absent from it (a stable test count is the tell).
 2. ✅ **Cook invariant** — at most one `Assignment` per `(targetKey, propertyName)` per cue.
    `CueComposerTest`, including the timed-layer re-cook path.
 3. ✅ **Precedence** — for both an LTP and an HTP category: layer 1 vs layer 2 vs local,
@@ -613,8 +670,21 @@ Status as of session 1: ✅ done · ⬜ outstanding.
 8. ✅ **Crossfade regression** — existing resolver tests pass unchanged; that is the evidence cook
    did not perturb Layer 4. `ProjectCloneTest` also confirms a `ref:` inside an opaque value string
    still remaps to the clone's own Look.
-9. ⬜ **Frontend** — `buildCueInput` regression test for the layers field; component tests for
-   reorder, enable/disable, amount. Session 2.
+9. ✅ **Frontend** — `npm run check` (build + 950 tests + lint at zero warnings). New coverage:
+   `cueUtils.test.ts` pins all thirteen layer fields through `buildCueInput` field by field, that
+   `lookName` is stripped and that `presetApplications` is *not* sent, plus `reorderCueLayers`
+   (moves the item, renumbers every `sortOrder`, densifies a gappy list, ignores an out-of-range
+   index); `LayersPane.test.tsx` (14) covers enable/disable, amount commit-on-blur/Enter with
+   clamping and Escape, remove-and-densify, the read-only mask badge and a reorder handle per
+   layer; `store/looks.test.ts` (10) pins the URL/method contract and that `saveLook` sends **only
+   the keys it was given** — absent `rows` is what stops a metadata edit clearing the contents.
+   `LookRoutesTest` gained toggle, preview and include-by-`lookId`.
+
+   Two notes on what is *not* tested. The dnd-kit drag itself is not drivable with `fireEvent` and
+   nothing in this repo drives one, so the pointer sequence is covered by asserting a handle per
+   layer plus `reorderCueLayers` directly, rather than by a fake drag that would prove only that
+   the mock works. And the amount control is pinned at both ends — a retype to the current value
+   sends nothing — because every commit PATCHes the whole cue.
 10. ⬜ **On the rig** (`docs/plans/manual-validation.md`) — edit a Look while a cue depending on it
     is live and confirm the change moves without re-firing the cue. That is use-case 1's payoff, and
     `FU-MANUAL-PALETTE-TOURING` records it as never yet seen on hardware. `FU-MANUAL-LAYER-PRECEDENCE`

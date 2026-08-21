@@ -404,20 +404,61 @@ internal suspend fun RoutingContext.updateIncludedPalette(
  * Load a palette's entries into the programmer as the edit buffer, and mark it as the include
  * target so a bare Update writes back to it.
  *
- * Writes **[ProgrammerValue.Hard]** slots, not refs: you are editing the palette's own contents, and
- * a slot referencing the palette it is about to rewrite is meaningless. Contrast Include-a-cue,
- * which does write refs — there the reference is part of what the cue means.
- *
- * Group rows expand to members, and a member the palette covers directly wins over the group row,
- * matching how the palette resolves at compose time.
+ * A thin wrapper over [includeExpandedIntoProgrammer] — the resolution happens against the
+ * palette's **uuid**, which the Looks migration preserved, so this reads the migrated Look.
  */
 internal fun includePaletteIntoProgrammer(
     state: State,
     palette: DaoPalette,
     mask: Set<PropertyMaskGroup>?,
     fadeMs: Long,
+): PaletteIncludeOutcome = includeExpandedIntoProgrammer(
+    state, palette.uuid, mask, fadeMs,
+    uk.me.cormack.lighting7.fx.IncludedTarget.palette(palette.id.value, palette.uuid),
+)
+
+/**
+ * Load a Look's rows into the programmer as the edit buffer.
+ *
+ * **One-way for now.** Update-back is not wired to Looks — `updateIncludedPalette` writes into
+ * `DaoPalette`, which no consumer reads any more — so the client disables Update for a `LOOK`
+ * include target rather than being allowed to write rows nothing sees. The record rewrite is what
+ * closes that.
+ *
+ * Only bound rows arrive: a deferred row has no target of its own, and the programmer has no layer
+ * to take one from until the programmer becomes a layer stack. `LookRegistry.expanded` already
+ * drops them.
+ */
+internal fun includeLookIntoProgrammer(
+    state: State,
+    lookId: Int,
+    lookUuid: java.util.UUID,
+    mask: Set<PropertyMaskGroup>?,
+    fadeMs: Long,
+): PaletteIncludeOutcome = includeExpandedIntoProgrammer(
+    state, lookUuid, mask, fadeMs,
+    uk.me.cormack.lighting7.fx.IncludedTarget.look(lookId, lookUuid),
+)
+
+/**
+ * The shared body: expand [sourceUuid] through [uk.me.cormack.lighting7.fx.LookRegistry], write the
+ * literals into the programmer, and record [includedTarget] so Update knows what it is looking at.
+ *
+ * Writes **[ProgrammerValue.Hard]** slots, not refs: you are editing the source's own contents, and
+ * a slot referencing the thing it is about to rewrite is meaningless. Contrast Include-a-cue,
+ * which does write refs — there the reference is part of what the cue means.
+ *
+ * Group rows expand to members, and a member the source covers directly wins over the group row,
+ * matching how it resolves at compose time.
+ */
+internal fun includeExpandedIntoProgrammer(
+    state: State,
+    sourceUuid: java.util.UUID,
+    mask: Set<PropertyMaskGroup>?,
+    fadeMs: Long,
+    includedTarget: uk.me.cormack.lighting7.fx.IncludedTarget,
 ): PaletteIncludeOutcome {
-    val expanded = state.show.lookRegistry.expanded(palette.uuid)
+    val expanded = state.show.lookRegistry.expanded(sourceUuid)
         ?: return PaletteIncludeOutcome(0, emptyList(), emptyList())
 
     val writes = ArrayList<uk.me.cormack.lighting7.fx.FxEngine.ProgrammerPropertyWrite>()
@@ -478,8 +519,7 @@ internal fun includePaletteIntoProgrammer(
             uk.me.cormack.lighting7.fx.ProgrammerOwner.INCLUDE, writes, fadeMs = fadeMs,
         )
     }
-    state.show.programmerStore.lastIncludedTarget =
-        uk.me.cormack.lighting7.fx.IncludedTarget.palette(palette.id.value, palette.uuid)
+    state.show.programmerStore.lastIncludedTarget = includedTarget
 
     return PaletteIncludeOutcome(writes.size, fixtureKeys.toList(), skips)
 }
@@ -489,6 +529,55 @@ internal data class PaletteIncludeOutcome(
     val fixtureKeys: List<String>,
     val skipped: List<RecordSkip>,
 )
+
+/** `POST /programmer/include` with a `lookId`: load a Look's bound rows in as the edit buffer. */
+internal suspend fun RoutingContext.handleIncludeLook(
+    state: State,
+    request: ProgrammerIncludeRequest,
+    mask: Set<PropertyMaskGroup>?,
+) {
+    withCurrentProject(state, request.projectId, { p ->
+        "Cannot include from project '${p.name}' — only the current project can be modified"
+    }) { project ->
+        val look = transaction(state.database) {
+            uk.me.cormack.lighting7.models.DaoLook.findById(request.lookId!!)
+                ?.takeIf { it.project.id == project.id }
+                ?.let { it.id.value to (it.name to it.uuid) }
+        }
+        if (look == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("Look not found in current project"))
+            return@withCurrentProject
+        }
+        val (lookId, nameAndUuid) = look
+        val (name, uuid) = nameAndUuid
+
+        val outcome = includeLookIntoProgrammer(state, lookId, uuid, mask, request.fadeMs ?: 0)
+        call.respond(
+            ProgrammerIncludeResponse(
+                kind = uk.me.cormack.lighting7.fx.IncludedTarget.Kind.LOOK.name,
+                lookId = lookId,
+                name = name,
+                entriesWritten = outcome.entriesWritten,
+                fixtureKeys = outcome.fixtureKeys,
+                // A Look's group rows expand to members before they reach the programmer, so there
+                // is no group-shaped selection to hand back.
+                groupKeys = emptyList(),
+                fxSpawned = 0,
+                fxAlreadyRunning = 0,
+                fxTimedSkipped = 0,
+                lastIncluded = includedTargetDto(state, state.show.programmerStore.lastIncludedTarget),
+                skipped = outcome.skipped.map { it.toDto() },
+                warnings = if (outcome.entriesWritten == 0) {
+                    // A fully-deferred Look has nothing bound to stage, and silently writing
+                    // nothing reads as a broken button.
+                    listOf("'$name' has no rows naming a fixture or group, so nothing was staged.")
+                } else {
+                    emptyList()
+                },
+            ),
+        )
+    }
+}
 
 /** `POST /programmer/include` with a `paletteId`: load a palette in as the edit buffer. */
 internal suspend fun RoutingContext.handleIncludePalette(

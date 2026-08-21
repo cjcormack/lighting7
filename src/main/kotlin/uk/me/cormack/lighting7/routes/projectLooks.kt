@@ -256,6 +256,9 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     ),
                 )
                 is LookDeleteOutcome.Deleted -> {
+                    // Keep the operator's include indicator honest — the same reason
+                    // `clearIncludeTargetForCue` is called on a cue delete.
+                    state.show.programmerStore.clearIncludeTargetForLook(resource.lookId)
                     state.show.fixtures.lookListChanged()
                     call.respond(HttpStatusCode.NoContent)
                 }
@@ -344,6 +347,85 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
             }
         }
     }
+
+    // POST /project/{id}/looks/{lookId}/toggle
+    //
+    // The busking-pad path: put this Look on these targets, or take it off again. Addresses a Look
+    // as a *bundle* rather than through a layer, which is what a pad wants — and only its
+    // **deferred** rows and effects are offered, because the pad supplies the targets and a bound
+    // row would land on the wrong fixtures. A bound Look is recalled through a cue layer instead.
+    //
+    // Note this stamps `FxInstance.presetId = lookId` (via `togglePresetOnTargets`, which keys its
+    // toggle bookkeeping on that field), exactly as the AI's `apply_look` already does. Harmless
+    // while nothing composes from preset applications, but it means `captureCurrentState` would
+    // reconstruct a `CuePresetApplicationDto` naming whatever `DaoFxPreset` shares the number. It
+    // goes when the pads become programmer layers.
+    post<ToggleLookResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<TogglePresetRequest>()
+            if (request.targets.isEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("At least one target is required"))
+                return@withProject
+            }
+
+            val lookData = transaction(state.database) {
+                val look = DaoLook.findById(resource.lookId) ?: return@transaction null
+                if (look.project.id != project.id) return@transaction null
+                loadLookToggleData(resource.lookId)
+            }
+            if (lookData == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(LOOK_NOT_FOUND))
+                return@withProject
+            }
+
+            try {
+                call.respond(
+                    togglePresetOnTargets(
+                        state,
+                        resource.lookId,
+                        lookData.effects,
+                        lookData.propertyAssignments,
+                        request.targets,
+                        request.beatDivision,
+                        presetPalette = lookData.palette,
+                    )
+                )
+            } catch (e: IllegalStateException) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to toggle look"))
+            }
+        }
+    }
+
+    // POST /project/{id}/looks/preview — the Look editor's "live preview" toggle.
+    //
+    // Whole-desired-state, so it needs no stored Look at all and delegates straight to the preview
+    // slot the preset editor used: the request carries the rows, the colour list and the targets,
+    // and an empty one collapses to a clear. That is why this is route plumbing and not a second
+    // implementation.
+    post<LookPreviewResource> { resource ->
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot preview looks in project '${p.name}' - only the current project can be previewed" },
+        ) {
+            val request = call.receive<PresetPreviewRequest>()
+            call.respond(applyPresetPreview(state, resource.parent.projectId, request))
+        }
+    }
+
+    // DELETE /project/{id}/looks/preview
+    delete<LookPreviewResource> { resource ->
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot clear preview in project '${p.name}' - only the current project can be previewed" },
+        ) {
+            clearPresetPreview(state, resource.parent.projectId)
+            call.respond(HttpStatusCode.OK)
+        }
+    }
 }
 
 // ─── Resources ──────────────────────────────────────────────────────────
@@ -360,6 +442,16 @@ internal data class ProjectLookResource(
 
 @Resource("/{lookId}/copy")
 internal data class CopyLookResource(val parent: ProjectLooksResource, val lookId: Int)
+
+@Resource("/{lookId}/toggle")
+internal data class ToggleLookResource(val parent: ProjectLooksResource, val lookId: Int)
+
+/**
+ * Unambiguous against [ProjectLookResource] despite sitting at the same depth: nothing serves
+ * `POST /{lookId}`, and `lookId` is an `Int` that `"preview"` cannot parse as.
+ */
+@Resource("/preview")
+internal data class LookPreviewResource(val parent: ProjectLooksResource)
 
 // ─── DTOs ───────────────────────────────────────────────────────────────
 

@@ -35,7 +35,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-MIDI-RECALL`](#fu-look-midi-recall) | Trigger | Look | an operator wants a Look on a button |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
-| [`FU-LOOK-HEALTH-ARM-CLEANUP`](#fu-look-health-arm-cleanup) | Ready | Look | — |
 | [`FU-CUE-APPLYDATA-ONE-BUILDER`](#fu-cue-applydata-one-builder) | Ready | Cue | — |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
@@ -331,24 +330,6 @@ only after the coarse version has been used on a rig — the Layer 3/4 boundary 
 around may turn out to bite in one specific place rather than generally.
 
 **Trigger**: per-layer stomp proves too coarse in practice.
-
-### `FU-LOOK-HEALTH-ARM-CLEANUP`
-
-**Delete `AssignmentHealth.PaletteTypeMismatch`** · Ready · Looks-and-layers session 1, 2026-08-21
-
-The arm has no producer left. It reported "this is a POSITION palette and that is a COLOUR property",
-which a Look cannot be: its families are *derived* from its rows, and one spanning both is entirely
-legitimate. `validatePaletteReference` now reports the symptom (no row for this fixture and property)
-instead, which is what the resolve path always did.
-
-Left in place only because `AssignmentHealth` is a serialized sealed hierarchy: removing an arm needs
-the frontend health descriptor updated in the same change, and — per
-`sealed-subclass-delete-needs-rerun-tasks` — a forced recompile, or every serialization test fails
-with `NoClassDefFoundError` naming the deleted class while the build reports success.
-
-Ready: delete the arm, its `describeAssignmentHealth` case, and the frontend descriptor entry.
-
----
 
 ### `FU-CUE-APPLYDATA-ONE-BUILDER`
 
@@ -984,6 +965,13 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-08
 
+- `FU-LOOK-HEALTH-ARM-CLEANUP` — `AssignmentHealth.PaletteTypeMismatch` deleted, with its
+  `describeAssignmentHealth` case, the two stale KDoc references, and the frontend descriptor entry
+  and both TS union members, in one change. `MissingPaletteEntry` is now the only diagnosis a failed
+  reference gets, which is the honest one: a Look declares no attribute type, so "wrong type" was no
+  longer a coherent complaint. Done in the looks-and-layers session-2 pass, which is what supplied
+  the frontend half — and with `compileKotlin --rerun-tasks` first, per
+  `sealed-subclass-delete-needs-rerun-tasks`
 - `FU-PAL-PRESET-MAKE-HARD` — `POST /project/{id}/fx-presets/{presetId}/make-hard`, plus a
   reference banner in the preset editor and the referring presets named in the palette delete
   guard. The target-less problem is answered by never inventing a target set: a row hardens only

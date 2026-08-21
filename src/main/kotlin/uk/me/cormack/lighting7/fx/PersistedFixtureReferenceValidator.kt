@@ -109,8 +109,8 @@ fun canonicalPropertyName(propertyName: String): String =
  * [resolveAssignmentValueForFixture]'s health and a warn. This exists so the UI can mark a row
  * before it is ever fired.
  *
- * It no longer separates out [AssignmentHealth.PaletteTypeMismatch]. A palette carried a single
- * declared attribute type, so "this is a POSITION palette, that is a COLOUR property" was a
+ * It reports no wrong-type diagnosis, and there is no longer an arm for one. A palette carried a
+ * single declared attribute type, so "this is a POSITION palette, that is a COLOUR property" was a
  * diagnosable cause. A Look has no such type — its families are *derived* from its rows, and one
  * spanning colour and position is entirely legitimate — so the only honest answer left is the
  * symptom: there is no entry for this fixture and property.

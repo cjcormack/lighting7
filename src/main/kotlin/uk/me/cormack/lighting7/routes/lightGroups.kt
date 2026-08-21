@@ -166,7 +166,7 @@ data class GroupSummaryDto(
     val capabilities: List<String>,
     val symmetricMode: String,
     val defaultDistribution: String,
-    val compatiblePresetIds: List<Int> = emptyList()
+    val compatibleLookIds: List<Int> = emptyList()
 )
 
 @Serializable
@@ -189,7 +189,7 @@ data class GroupDetailDto(
     val symmetricMode: String,
     val defaultDistribution: String,
     val members: List<GroupMemberDto>,
-    val compatiblePresetIds: List<Int> = emptyList()
+    val compatibleLookIds: List<Int> = emptyList()
 )
 
 @Serializable
@@ -258,18 +258,18 @@ data class DistributionStrategiesResponse(
 )
 
 // Helper functions
-private fun FixtureGroup<*>.toDto(compatiblePresetIds: List<Int> = emptyList()): GroupSummaryDto {
+private fun FixtureGroup<*>.toDto(compatibleLookIds: List<Int> = emptyList()): GroupSummaryDto {
     return GroupSummaryDto(
         name = name,
         memberCount = memberCount,  // Uses allMembers.size (includes subgroups)
         capabilities = detectCapabilities(),
         symmetricMode = metadata.symmetricMode.name,
         defaultDistribution = metadata.defaultDistributionName,
-        compatiblePresetIds = compatiblePresetIds
+        compatibleLookIds = compatibleLookIds
     )
 }
 
-private fun FixtureGroup<*>.toDetailedDto(compatiblePresetIds: List<Int> = emptyList()): GroupDetailDto {
+private fun FixtureGroup<*>.toDetailedDto(compatibleLookIds: List<Int> = emptyList()): GroupDetailDto {
     return GroupDetailDto(
         name = name,
         memberCount = memberCount,  // Uses allMembers.size (includes subgroups)
@@ -288,7 +288,7 @@ private fun FixtureGroup<*>.toDetailedDto(compatiblePresetIds: List<Int> = empty
                 tags = member.metadata.tags.toList()
             )
         },
-        compatiblePresetIds = compatiblePresetIds
+        compatibleLookIds = compatibleLookIds
     )
 }
 

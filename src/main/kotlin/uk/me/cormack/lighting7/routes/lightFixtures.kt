@@ -22,7 +22,7 @@ import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 
-internal fun Fixture.details(fixtures: Fixtures, compatiblePresetIds: List<Int> = emptyList()): FixtureDetails {
+internal fun Fixture.details(fixtures: Fixtures, compatibleLookIds: List<Int> = emptyList()): FixtureDetails {
     val fixtureGroups = fixtures.groupsForFixture(this.key)
 
     return when (this) {
@@ -56,12 +56,12 @@ internal fun Fixture.details(fixtures: Fixtures, compatiblePresetIds: List<Int> 
                 elementGroupProperties = this.generateElementGroupPropertyDescriptors(),
                 mode = modeInfo,
                 capabilities = capabilities,
-                compatiblePresetIds = compatiblePresetIds,
+                compatibleLookIds = compatibleLookIds,
                 gelCode = fixtures.patchMetadataFor(this.key)?.gelCode,
             )
         }
         is HueFixture -> {
-            HueFixtureDetails(this.fixtureName, this.key, this.typeKey, fixtureGroups, compatiblePresetIds)
+            HueFixtureDetails(this.fixtureName, this.key, this.typeKey, fixtureGroups, compatibleLookIds)
         }
     }
 }
@@ -220,7 +220,14 @@ sealed interface FixtureDetails {
     val key: String
     val typeKey: String
     val groups: List<String>
-    val compatiblePresetIds: List<Int>
+
+    /**
+     * Ids of the **Looks** this fixture can be pointed at — deferred Looks filtered by
+     * [LookCompatibilityInfo.editorFixtureType] and by inferred capability. Bound Looks are absent
+     * by design: they name their own targets, so "is this compatible?" is not a question about
+     * them. See [compatibleIdsFor].
+     */
+    val compatibleLookIds: List<Int>
 }
 
 @Serializable
@@ -246,7 +253,7 @@ data class DmxFixtureDetails(
     val elementGroupProperties: List<GroupPropertyDescriptor>?,
     val mode: ModeInfo?,
     val capabilities: List<String>,
-    override val compatiblePresetIds: List<Int> = emptyList(),
+    override val compatibleLookIds: List<Int> = emptyList(),
     val gelCode: String? = null,
 ): FixtureDetails
 
@@ -256,7 +263,7 @@ data class HueFixtureDetails(
     override val key: String,
     override val typeKey: String,
     override val groups: List<String>,
-    override val compatiblePresetIds: List<Int> = emptyList()
+    override val compatibleLookIds: List<Int> = emptyList()
 ): FixtureDetails
 
 // Property Descriptor Types

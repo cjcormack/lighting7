@@ -61,6 +61,14 @@ internal data class ProgrammerConflictResponse(
 internal const val CODE_CUE_EDIT_SESSION_OPEN = "CUE_EDIT_SESSION_OPEN"
 internal const val CODE_INCLUDE_TARGET_GONE = "INCLUDE_TARGET_GONE"
 
+/**
+ * The include target exists but cannot be written back to. Distinct from
+ * [CODE_INCLUDE_TARGET_GONE] on purpose: nothing is missing and nothing needs re-including — the
+ * write path simply isn't built yet, so "gone" would send the operator looking for a problem that
+ * isn't there.
+ */
+internal const val CODE_INCLUDE_TARGET_READ_ONLY = "INCLUDE_TARGET_READ_ONLY"
+
 // ── Record ──────────────────────────────────────────────────────────────────
 
 @Serializable
@@ -249,9 +257,10 @@ private fun defaultRecordedCueName(stack: DaoCueStack): String =
 @Serializable
 internal data class ProgrammerIncludeRequest(
     val projectId: String = "current",
-    /** Exactly one of [cueId] / [paletteId]. */
+    /** Exactly one of [cueId] / [paletteId] / [lookId]. */
     val cueId: Int? = null,
     val paletteId: Int? = null,
+    val lookId: Int? = null,
     val mask: List<String>? = null,
     val includeFx: Boolean = true,
     val fadeMs: Long? = null,
@@ -259,15 +268,16 @@ internal data class ProgrammerIncludeRequest(
 
 @Serializable
 internal data class ProgrammerIncludeResponse(
-    /** `CUE` or `PALETTE`. */
+    /** `CUE`, `PALETTE` or `LOOK`. */
     val kind: String = "CUE",
-    /** Null when a palette was included. */
+    /** Null unless a cue was included. */
     val cueId: Int? = null,
     val cueStackId: Int? = null,
     val paletteId: Int? = null,
+    val lookId: Int? = null,
     /**
-     * The cue's or the palette's name. Named `name` rather than `cueName` because it is now
-     * either; a field called `cueName` holding a palette name is a lie.
+     * The included thing's name. Named `name` rather than `cueName` because it is now any of
+     * three; a field called `cueName` holding a Look name is a lie.
      */
     val name: String,
     val entriesWritten: Int,
@@ -290,11 +300,15 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
-    if ((request.cueId == null) == (request.paletteId == null)) {
+    if (listOfNotNull(request.cueId, request.paletteId, request.lookId).size != 1) {
         return call.respond(
             HttpStatusCode.BadRequest,
-            ErrorResponse("Include needs exactly one of cueId or paletteId"),
+            ErrorResponse("Include needs exactly one of cueId, paletteId or lookId"),
         )
+    }
+
+    if (request.lookId != null) {
+        return handleIncludeLook(state, request, mask)
     }
 
     if (request.paletteId != null) {
@@ -446,6 +460,25 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
         // output cascade at all, so there is no palette equivalent to derive.
         if (modeLabel == "A" && includeTarget!!.kind == IncludedTarget.Kind.PALETTE) {
             updateIncludedPalette(state, project, includeTarget, mask)
+            return@withCurrentProject
+        }
+
+        // A Look include is **read-only** until the record rewrite lands: the write-back path here
+        // still goes through the palette tables, which no consumer resolves through any more.
+        //
+        // Refused explicitly rather than left to fall through. The next line takes `cueId!!`, which
+        // is null for a Look target, so falling through would be an NPE and a 500 — and the client
+        // that got here is a stale tab or a direct caller, which deserves the reason rather than a
+        // stack trace. The desk's own Update button is disabled for this target.
+        if (modeLabel == "A" && includeTarget!!.kind == IncludedTarget.Kind.LOOK) {
+            call.respond(
+                HttpStatusCode.Conflict,
+                ProgrammerConflictResponse(
+                    "Writing the programmer back into a look isn't available yet — " +
+                        "include it, edit on stage, and record the result into a cue instead.",
+                    CODE_INCLUDE_TARGET_READ_ONLY,
+                ),
+            )
             return@withCurrentProject
         }
 

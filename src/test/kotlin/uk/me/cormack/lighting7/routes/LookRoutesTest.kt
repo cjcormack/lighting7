@@ -275,4 +275,251 @@ class LookRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.NoContent, client.delete("${base()}/$lookId?force=true").status)
         assertNull(client.get(base()).body<List<LookDto>>().firstOrNull { it.id == lookId })
     }
+
+    // ── Toggle ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `toggling a look applies it and toggling again removes it`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        state.show.fixtures.patchListChanged()
+        val client = jsonClient()
+
+        // Deferred rows and effects only: the pad supplies the targets, so a bound row would land
+        // on fixtures the operator never selected. `loadLookToggleData` filters them out, which is
+        // why this look is authored deferred.
+        val lookId = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLookRequest(
+                    name = "Pulse",
+                    editorFixtureType = "hex-fixture",
+                    rows = listOf(
+                        LookRowDto(
+                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            propertyName = "dimmer", value = "200",
+                        ),
+                    ),
+                    effects = listOf(
+                        LookEffectDto(
+                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
+                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                        ),
+                    ),
+                )
+            )
+        }.body<LookDetails>().id
+
+        val request = TogglePresetRequest(targets = listOf(TogglePresetTarget("fixture", "hex-1")))
+
+        val applied = client.post("${base()}/$lookId/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+        assertEquals(HttpStatusCode.OK, applied.status, applied.bodyAsText())
+        assertEquals("applied", applied.body<TogglePresetResponse>().action)
+
+        val removed = client.post("${base()}/$lookId/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+        assertEquals("removed", removed.body<TogglePresetResponse>().action)
+    }
+
+    @Test
+    fun `toggling refuses an empty target set and an unknown look`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val lookId = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(CreateLookRequest(name = "Pulse"))
+        }.body<LookDetails>().id
+
+        // No targets is a 400 rather than a silent no-op: a toggle that applied nothing and
+        // reported success would read as a dead pad.
+        val empty = client.post("${base()}/$lookId/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(TogglePresetRequest(targets = emptyList()))
+        }
+        assertEquals(HttpStatusCode.BadRequest, empty.status)
+
+        val missing = client.post("${base()}/999999/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(TogglePresetRequest(targets = listOf(TogglePresetTarget("fixture", "hex-1"))))
+        }
+        assertEquals(HttpStatusCode.NotFound, missing.status)
+    }
+
+    // ── Preview ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `preview writes the draft to the slot and clearing releases it`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        state.show.fixtures.patchListChanged()
+        val client = jsonClient()
+
+        // Whole-desired-state, and no stored look involved at all — which is exactly why this
+        // route could reuse the preset editor's preview slot rather than growing new logic.
+        val pushed = client.post("${base()}/preview") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                PresetPreviewRequest(
+                    propertyAssignments = listOf(
+                        uk.me.cormack.lighting7.models.FxPresetPropertyAssignmentDto(
+                            propertyName = "dimmer", value = "128",
+                        ),
+                    ),
+                    targets = listOf(TogglePresetTarget("fixture", "hex-1")),
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.OK, pushed.status, pushed.bodyAsText())
+        assertTrue(pushed.body<PresetPreviewResponse>().writeCount > 0)
+
+        assertEquals(HttpStatusCode.OK, client.delete("${base()}/preview").status)
+    }
+
+    @Test
+    fun `preview does not collide with the look-id routes`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        // `/preview` and `/{lookId}` sit at the same depth. Nothing serves `POST /{lookId}` and
+        // `lookId` is an Int that "preview" cannot parse as, so the two are unambiguous — but a
+        // future `POST /{lookId}` would shadow this route silently, so pin it.
+        val resp = client.post("${base()}/preview") {
+            contentType(ContentType.Application.Json)
+            setBody(PresetPreviewRequest())
+        }
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+    }
+
+    // ── Include ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `including a look stages its bound rows in the programmer`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        state.show.fixtures.patchListChanged()
+        val client = jsonClient()
+
+        val lookId = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLookRequest(
+                    name = "Warm",
+                    rows = listOf(
+                        LookRowDto(
+                            targetType = "fixture", targetKey = "hex-1",
+                            propertyName = "dimmer", value = "180",
+                        ),
+                    ),
+                )
+            )
+        }.body<LookDetails>().id
+
+        val resp = client.post("/api/rest/programmer/include") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("projectId", "current"); put("lookId", lookId) })
+        }
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        val body = resp.body<ProgrammerIncludeResponse>()
+        assertEquals("LOOK", body.kind, "the client keys 'Update is unavailable' off this arm")
+        assertEquals(lookId, body.lookId)
+        assertEquals("Warm", body.name)
+        assertEquals(1, body.entriesWritten)
+        assertEquals(listOf("hex-1"), body.fixtureKeys)
+    }
+
+    @Test
+    fun `including a fully-deferred look stages nothing and says so`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        // A deferred row names no fixture and the programmer has no layer to take one from, so
+        // there is nothing to stage. Silence would read as a broken button.
+        val lookId = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLookRequest(
+                    name = "Template",
+                    editorFixtureType = "hex-fixture",
+                    rows = listOf(
+                        LookRowDto(
+                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            propertyName = "dimmer", value = "180",
+                        ),
+                    ),
+                )
+            )
+        }.body<LookDetails>().id
+
+        val body = client.post("/api/rest/programmer/include") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("projectId", "current"); put("lookId", lookId) })
+        }.body<ProgrammerIncludeResponse>()
+        assertEquals(0, body.entriesWritten)
+        assertTrue(body.warnings.any { it.contains("no rows naming a fixture") }, body.warnings.toString())
+    }
+
+    @Test
+    fun `include refuses more than one of cueId, paletteId and lookId`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val resp = client.post("/api/rest/programmer/include") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("projectId", "current")
+                    put("cueId", 1)
+                    put("lookId", 1)
+                }
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+    }
+
+    @Test
+    fun `update refuses to write back into an included look`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        state.show.fixtures.patchListChanged()
+        val client = jsonClient()
+
+        val lookId = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLookRequest(
+                    name = "Warm",
+                    rows = listOf(
+                        LookRowDto(
+                            targetType = "fixture", targetKey = "hex-1",
+                            propertyName = "dimmer", value = "180",
+                        ),
+                    ),
+                )
+            )
+        }.body<LookDetails>().id
+
+        client.post("/api/rest/programmer/include") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("projectId", "current"); put("lookId", lookId) })
+        }.let { assertEquals(HttpStatusCode.OK, it.status, it.bodyAsText()) }
+
+        // A Look include is one-way until the record rewrite lands. Refused *explicitly*: Mode A
+        // otherwise falls through to `includeTarget.cueId!!`, which is null for a Look, so the
+        // alternative to this guard is a 500 rather than a 400. And the code is its own rather than
+        // INCLUDE_TARGET_GONE — nothing is missing, so "gone" would send the operator looking for a
+        // problem that isn't there.
+        val refused = client.post("/api/rest/programmer/update") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("projectId", "current") })
+        }
+        assertEquals(HttpStatusCode.Conflict, refused.status, refused.bodyAsText())
+        assertEquals(CODE_INCLUDE_TARGET_READ_ONLY, refused.body<ProgrammerConflictResponse>().code)
+    }
 }

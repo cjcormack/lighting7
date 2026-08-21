@@ -204,17 +204,24 @@ data class ProgrammerChannelDto(
  */
 @Serializable
 data class IncludedTargetDto(
-    /** `CUE` or `PALETTE`, and which of the two id/name pairs below is populated. */
+    /** `CUE`, `PALETTE` or `LOOK`, and which of the id/name sets below is populated. */
     val kind: String,
-    /** Null when [kind] is `PALETTE`. */
+    /** Null unless [kind] is `CUE`. */
     val cueId: Int? = null,
     val cueStackId: Int? = null,
     val cueName: String? = null,
     val cueNumber: String? = null,
-    /** Null when [kind] is `CUE`. */
+    /** Null unless [kind] is `PALETTE`. */
     val paletteId: Int? = null,
     val paletteName: String? = null,
     val paletteType: String? = null,
+    /**
+     * Null unless [kind] is `LOOK`. The client keys "Update is not available for this target" off
+     * this arm: Update still writes back through the palette tables, so a Look include is one-way
+     * until the record rewrite lands.
+     */
+    val lookId: Int? = null,
+    val lookName: String? = null,
 )
 
 @Serializable
@@ -294,6 +301,15 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
             null
         }
     }
+    val lookName = target.lookId?.let { lookId ->
+        try {
+            transaction(state.database) {
+                uk.me.cormack.lighting7.models.DaoLook.findById(lookId)?.name
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
     return IncludedTargetDto(
         kind = target.kind.name,
         cueId = target.cueId,
@@ -303,6 +319,8 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
         paletteId = target.paletteId,
         paletteName = palette?.first,
         paletteType = palette?.second,
+        lookId = target.lookId,
+        lookName = lookName,
     )
 }
 
