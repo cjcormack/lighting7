@@ -42,6 +42,34 @@ class CueTriggerManager(
     /** Map of cueId → stackId for stack-level cleanup */
     private val cueToStack = ConcurrentHashMap<Int, Int>()
 
+    /**
+     * `cueId → the *layer* ids of its timed layers that have fired`, so a re-cook reproduces their
+     * contribution instead of dropping it.
+     *
+     * Layer ids, not look ids: one cue may layer the same Look twice at different delays, and keying
+     * this on the look would make the first fire pull in the second layer too.
+     *
+     * This exists because firing a timed layer **re-cooks the whole cue** rather than appending the
+     * layer's rows. Appending was what the preset era did (`replaceCueAssignmentSubset`, matching
+     * the prior fire's rows by structural equality), and it cannot survive cooking: two
+     * contributors would then sit on one (fixture, property) key inside one cue, and the LTP
+     * tie-break between them falls to `HashMap` iteration order in `republishCueAssignments`.
+     * Re-cooking keeps the one-row-per-key invariant globally, and publishing through
+     * [FxEngine.replaceCueAssignments] preserves an in-flight crossfade weight where
+     * `setCueAssignments` would reset it to fully-in.
+     */
+    private val firedTimedLooks = ConcurrentHashMap<Int, MutableSet<Int>>()
+
+    /**
+     * The timed layers of [cueId] that have already fired.
+     *
+     * Anything that rebuilds a live cue's Layer 4 must pass this to
+     * [uk.me.cormack.lighting7.routes.buildCombinedCueLayerRows] — a Look edit, a preview or any
+     * other republish that omits it re-cooks the cue *without* the fired layers and so silently
+     * retracts their contribution, permanently for a one-shot delay.
+     */
+    internal fun firedTimedLayerIds(cueId: Int): Set<Int> = firedTimedLooks[cueId]?.toSet() ?: emptySet()
+
     /** Stored DEACTIVATION script triggers per cue ID (fired on deactivation) */
     private val deactivationTriggers = ConcurrentHashMap<Int, List<CueTriggerDto>>()
 
@@ -61,67 +89,68 @@ class CueTriggerManager(
      * cue doesn't declare one. Combined with each preset's own palette and the global palette
      * at fire time, see [PaletteCascade].
      */
-    fun activateTimedEffectsForCue(
+    internal fun activateTimedEffectsForCue(
         cueId: Int,
         cueStackId: Int?,
         priority: Int,
-        timedPresets: List<CuePresetApplicationDto>,
+        cueData: uk.me.cormack.lighting7.routes.CueApplyData,
         timedAdHocEffects: List<CueAdHocEffectDto>,
         scope: CoroutineScope,
         cuePalette: List<ExtendedColour> = emptyList(),
     ) {
-        if (timedPresets.isEmpty() && timedAdHocEffects.isEmpty()) return
+        val timedLayers = cueData.layers.filter { it.enabled && it.isTimed }
+        if (timedLayers.isEmpty() && timedAdHocEffects.isEmpty()) return
 
         cueStackId?.let { cueToStack[cueId] = it }
 
         val jobs = mutableListOf<Job>()
         val effectIds = triggerEffectIds.getOrPut(cueId) { mutableListOf() }
+        // A fresh activation has fired nothing: start from empty rather than inheriting a previous
+        // run's set, which would make a re-applied cue skip its delays.
+        val fired: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        firedTimedLooks[cueId] = fired
 
         // Hoisted so recurring fires don't re-synchronise the global palette on every tick.
         // The global palette only changes when the operator mutates it, and a palette edit
         // will re-apply the cue anyway.
         val baseCascade = PaletteCascade(cue = cuePalette, global = fxEngine.getPalette())
 
-        // Timed presets contribute their property assignments to Layer 4 atomically alongside
-        // spawning effects; recurring fires retract the prior tick's rows in the same
-        // mutation so the cue's assignment list does not accumulate duplicates. Cue
-        // deactivation wipes the whole cue's Layer 4 via [FxEngine.removeCueAssignments] —
-        // no explicit retract of the final fire is needed.
-        for (presetApp in timedPresets) {
-            val job = launchTimedActionWithState(
-                delayMs = presetApp.delayMs,
-                intervalMs = presetApp.intervalMs,
-                randomWindowMs = presetApp.randomWindowMs,
+        // A timed layer contributes to Layer 4 by joining the cue's fired set and re-cooking, so
+        // the published rows are always a single cook of "apply-time layers + whatever has fired".
+        // Recurring fires are therefore idempotent on Layer 4 — only the effects re-trigger — and
+        // the cue's assignment list can never accumulate duplicates. Cue deactivation wipes the
+        // whole cue's Layer 4 via [FxEngine.removeCueAssignments]; no explicit retract is needed.
+        for (layer in timedLayers) {
+            val job = launchTimedAction(
+                delayMs = layer.delayMs,
+                intervalMs = layer.intervalMs,
+                randomWindowMs = layer.randomWindowMs,
                 scope = scope,
-                initialState = emptyList<CueAssignmentResolver.Assignment>(),
-            ) { priorCueLayerRows ->
-                // One transaction per fire loads both effects, property assignments, and the
-                // preset's palette — splitting them would double the DB hit on recurring presets.
-                val loaded = transaction(state.database) {
-                    val preset = DaoFxPreset.findById(presetApp.presetId) ?: return@transaction null
-                    Triple(
-                        preset.effects,
-                        preset.toPropertyAssignmentDtos(),
-                        preset.palette.toPaletteColours(),
-                    )
+            ) {
+                fired.add(layer.layerId)
+
+                // Effects first, so a fire that spawns nothing still publishes its values.
+                for ((firedLayer, lookEffect, target) in CueComposer.cookEffects(
+                    state.show.fixtures, cueId, listOf(layer), state.show.lookRegistry,
+                    includeTimed = setOf(layer.layerId),
+                )) {
+                    applyLookEffectToTarget(firedLayer, lookEffect, target, cueId, cueStackId, effectIds)
                 }
-                if (loaded == null) return@launchTimedActionWithState priorCueLayerRows
-                val (presetEffects, presetAssignments, presetPalette) = loaded
 
-                applyPresetToTargets(
-                    presetApp.presetId, presetApp.targets, cueId, cueStackId, presetEffects, effectIds,
-                    overrideSpeedMasterUuid = speedMasterUuidOrNull(presetApp.speedMasterUuid),
-                    overrideRateSpeedMasterUuid = speedMasterUuidOrNull(presetApp.rateSpeedMasterUuid),
+                val localRows = uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue(
+                    state.show.fixtures, cueData, baseCascade, state.show.lookRegistry,
                 )
-
-                val newRows = if (presetAssignments.isEmpty()) emptyList() else buildCueAssignmentsForPreset(
-                    state.show.fixtures, cueId, priority,
-                    presetApp.presetId, presetAssignments, presetApp.targets,
-                    cascade = baseCascade.copy(preset = presetPalette),
-                    paletteRegistry = state.show.paletteRegistry,
+                val cooked = CueComposer.cook(
+                    fixtures = state.show.fixtures,
+                    cueId = cueId,
+                    priority = priority,
+                    layers = cueData.layers,
+                    localRows = localRows,
+                    cascade = baseCascade,
+                    lookRegistry = state.show.lookRegistry,
+                    includeTimed = fired.toSet(),
                 )
-                fxEngine.replaceCueAssignmentSubset(cueId, priorCueLayerRows, newRows)
-                newRows
+                fxEngine.replaceCueAssignments(mapOf(cueId to cooked))
             }
             if (job != null) jobs.add(job)
         }
@@ -223,6 +252,7 @@ class CueTriggerManager(
             fxEngine.removeEffect(effectId)
         }
 
+        firedTimedLooks.remove(cueId)
         cueToStack.remove(cueId)
     }
 
@@ -310,36 +340,30 @@ class CueTriggerManager(
      * by the caller so the fire path can share one DB transaction with the Layer 4 property-
      * assignment lookup.
      */
-    private fun applyPresetToTargets(
-        presetId: Int,
-        targets: List<CueTargetDto>,
+    private fun applyLookEffectToTarget(
+        layer: CookLayer,
+        lookEffect: LookEffectEntry,
+        target: uk.me.cormack.lighting7.models.TargetRef,
         cueId: Int,
         cueStackId: Int?,
-        presetEffects: List<FxPresetEffectDto>,
         effectIds: MutableList<Long>,
-        overrideSpeedMasterUuid: java.util.UUID? = null,
-        overrideRateSpeedMasterUuid: java.util.UUID? = null,
     ) {
-        if (presetEffects.isEmpty()) return
-        for (target in targets) {
-            val toggleTarget = TogglePresetTarget(target.target)
-            for (presetEffect in presetEffects) {
-                val fxTarget = try {
-                    resolveTargetForCue(state, toggleTarget, presetEffect)
-                } catch (_: Exception) { null } ?: continue
+        val effectSpec = lookEffect.toEffectSpec()
+        val fxTarget = try {
+            resolveTargetForCue(state, TogglePresetTarget(target), effectSpec)
+        } catch (_: Exception) { null } ?: return
 
-                val instance = createInstanceFromPresetForCue(
-                    presetEffect, fxTarget, presetId, state, cueId,
-                    overrideSpeedMasterUuid = overrideSpeedMasterUuid,
-                    overrideRateSpeedMasterUuid = overrideRateSpeedMasterUuid,
-                )
-                instance.cueId = cueId
-                instance.cueStackId = cueStackId
+        val instance = createInstanceFromPresetForCue(
+            effectSpec, fxTarget, presetId = null, state = state, cueId = cueId,
+            overrideSpeedMasterUuid = layer.speedMasterUuid,
+            overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
+        )
+        instance.lookId = layer.lookId
+        instance.cueId = cueId
+        instance.cueStackId = cueStackId
 
-                val id = fxEngine.addEffect(instance)
-                synchronized(effectIds) { effectIds.add(id) }
-            }
-        }
+        val id = fxEngine.addEffect(instance)
+        synchronized(effectIds) { effectIds.add(id) }
     }
 
     /**

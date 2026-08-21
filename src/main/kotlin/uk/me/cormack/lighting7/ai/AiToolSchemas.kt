@@ -19,7 +19,7 @@ private val targetSchema = buildJsonObject {
     put("required", buildJsonArray { add("type"); add("key") })
 }
 
-private val presetEffectSchema = buildJsonObject {
+private val lookEffectSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
         put("effectType", buildJsonObject { put("type", "string") })
@@ -70,18 +70,18 @@ private val presetEffectSchema = buildJsonObject {
     })
 }
 
-internal val createFxPresetTool = AnthropicToolDef(
-    name = "create_fx_preset",
-    description = "Create a new FX preset (a named collection of beat-synced effects) and optionally apply it immediately to targets. Returns the preset ID.",
+internal val createLookTool = AnthropicToolDef(
+    name = "create_look",
+    description = "Create a new look (a named, reusable bundle of beat-synced effects and static values) and optionally apply it immediately to targets. Returns the look ID.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
-            put("name", buildJsonObject { put("type", "string"); put("description", "Preset name") })
-            put("description", buildJsonObject { put("type", "string"); put("description", "Optional description") })
-            put("fixtureType", buildJsonObject { put("type", "string"); put("description", "Required typeKey scoping the preset to a single fixture type") })
+            put("name", buildJsonObject { put("type", "string"); put("description", "Look name") })
+            put("description", buildJsonObject { put("type", "string"); put("description", "Optional notes") })
+            put("editorFixtureType", buildJsonObject { put("type", "string"); put("description", "Required typeKey the look's effects are authored against. An editor hint, not a constraint: the look's targets come from the layer that applies it.") })
             put("effects", buildJsonObject {
                 put("type", "array")
-                put("items", presetEffectSchema)
+                put("items", lookEffectSchema)
             })
             put("applyToTargets", buildJsonObject {
                 put("type", "array")
@@ -89,17 +89,17 @@ internal val createFxPresetTool = AnthropicToolDef(
                 put("items", targetSchema)
             })
         })
-        put("required", buildJsonArray { add("name"); add("fixtureType"); add("effects") })
+        put("required", buildJsonArray { add("name"); add("editorFixtureType"); add("effects") })
     }
 )
 
-internal val applyPresetTool = AnthropicToolDef(
-    name = "apply_preset",
-    description = "Apply an existing FX preset to targets. If already active on all targets, it will be removed (toggle).",
+internal val applyLookTool = AnthropicToolDef(
+    name = "apply_look",
+    description = "Apply an existing look to targets. If already active on all targets, it will be removed (toggle).",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
-            put("presetId", buildJsonObject { put("type", "integer") })
+            put("lookId", buildJsonObject { put("type", "integer") })
             put("targets", buildJsonObject {
                 put("type", "array")
                 put("items", targetSchema)
@@ -109,7 +109,7 @@ internal val applyPresetTool = AnthropicToolDef(
                 put("description", "Optional beat division override for all effects")
             })
         })
-        put("required", buildJsonArray { add("presetId"); add("targets") })
+        put("required", buildJsonArray { add("lookId"); add("targets") })
     }
 )
 
@@ -170,7 +170,7 @@ internal val getCurrentStateTool = AnthropicToolDef(
                 put("items", buildJsonObject {
                     put("type", "string")
                     put("enum", buildJsonArray {
-                        add("active_effects"); add("bpm"); add("fixtures"); add("groups"); add("presets"); add("palette"); add("cues"); add("cue_stacks")
+                        add("active_effects"); add("bpm"); add("fixtures"); add("groups"); add("looks"); add("palette"); add("cues"); add("cue_stacks")
                     })
                 })
                 put("description", "What to include. Defaults to all.")
@@ -241,21 +241,37 @@ private val adHocEffectSchema = buildJsonObject {
     })
 }
 
-private val cuePresetApplicationSchema = buildJsonObject {
+private val cueLayerSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
-        put("presetId", buildJsonObject { put("type", "integer") })
+        put("lookId", buildJsonObject { put("type", "integer") })
         put("targets", buildJsonObject {
             put("type", "array")
             put("items", targetSchema)
         })
+        put("sortOrder", buildJsonObject {
+            put("type", "integer")
+            put("description", "Position in the cue's layer stack. Later layers override earlier ones for the same fixture and property, whatever the attribute.")
+        })
+        put("propertyMask", buildJsonObject {
+            put("type", "string")
+            put("description", "Optional comma-separated attribute families to include: INTENSITY, POSITION, COLOUR, BEAM. Omit for every property.")
+        })
+        put("blendMode", buildJsonObject {
+            put("type", "string")
+            put("description", "How this layer combines with the layers beneath: OVERRIDE (default), MAX, MIN, MULTIPLY, ADDITIVE")
+        })
+        put("amount", buildJsonObject {
+            put("type", "number")
+            put("description", "How much of this layer to mix over what is beneath, 0..1. Default 1.")
+        })
     })
-    put("required", buildJsonArray { add("presetId"); add("targets") })
+    put("required", buildJsonArray { add("lookId"); add("targets") })
 }
 
 internal val createCueTool = AnthropicToolDef(
     name = "create_cue",
-    description = "Create a named cue that bundles a colour palette with preset applications and ad-hoc effects. Cues allow recalling a complete look with a single action. Use apply_cue to activate it later.",
+    description = "Create a named cue as an ordered stack of look layers plus its own local values and ad-hoc effects. Cues allow recalling a complete state with a single action. Use apply_cue to activate it later.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -263,16 +279,16 @@ internal val createCueTool = AnthropicToolDef(
             put("palette", buildJsonObject {
                 put("type", "array")
                 put("items", buildJsonObject { put("type", "string") })
-                put("description", "Colour palette as ordered colour strings (hex, names, extended format, or palette refs)")
+                put("description", "Positional colour list as ordered colour strings (hex, names or extended format), referenced from effects as P1, P2, ...")
             })
             put("updateGlobalPalette", buildJsonObject {
                 put("type", "boolean")
                 put("description", "When true, applying this cue also sets the global palette (affecting ad-hoc effects). Default false.")
             })
-            put("presetApplications", buildJsonObject {
+            put("layers", buildJsonObject {
                 put("type", "array")
-                put("items", cuePresetApplicationSchema)
-                put("description", "Presets to apply with their targets. Presets are read fresh at apply time.")
+                put("items", cueLayerSchema)
+                put("description", "Looks to layer, with their targets, in sortOrder. Looks are read fresh at apply time, so editing one moves every cue that layers it.")
             })
             put("adHocEffects", buildJsonObject {
                 put("type", "array")

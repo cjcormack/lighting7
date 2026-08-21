@@ -207,7 +207,7 @@ Cue transitions do **not** drive `intensityMultiplier`. On a cue change, outgoin
 
 ## Layer 4 — Cue Property Assignments
 
-Deterministic per-cue state — the "this cue asserts property X = value" layer. Contributed by active cues via the `CuePropertyAssignment` collection.
+Deterministic per-cue state — the "this cue asserts property X = value" layer. Contributed by active cues, each supplying exactly one value per (fixture, property) — see "Looks and layers" below for how a cue's layer stack and its own `CuePropertyAssignment` rows are cooked down to that single contributor.
 
 > Code note: this layer is composed by `CueAssignmentResolver` / consumed via
 > `LayerResolver.currentCueLayerState`.
@@ -242,100 +242,155 @@ Each active cue has a fade weight in `[0, 1]` tracking its crossfade progress. D
 
 Interaction with cue-edit sessions: when a client holds an active `cueEdit` session, surface fader writes route into the cue's Layer 4 property assignments (via `cueEdit.setProperty`) rather than the programmer. See [Cue edit sessions](#cue-edit-sessions) below.
 
-## Named palettes (references)
+## Looks and layers
 
-A stored value — a cue property assignment, an FX preset property assignment, or a programmer entry
-— may be a **reference** to a named palette instead of a literal:
+A **Look** is a named, reusable bundle of property values and effects — one library entity
+replacing what used to be two (FX presets and named palettes). A **Layer** applies one Look inside
+a cue, at a declared position in that cue's stack.
+
+A Look's rows are either **bound** (naming their own fixture or group) or **deferred** (taking
+their targets from the layer that applies them). That single distinction is what lets one entity
+serve both of the jobs its predecessors split between them: a bound Look behaves like a palette —
+edit it and every cue layering it moves — while a fully-deferred one behaves like a preset, a
+bundle you point at whatever you like.
+
+A Look's rows hold **literals only**. A row holding a `ref:` is rejected at the write boundary, so
+**Looks do not nest** and resolution can never recurse.
+
+There is deliberately **no stored attribute type**. Which families a Look touches is derived from
+its rows via `maskGroupForProperty`, so the library banks by family the way the per-type palette
+banks used to, and a Look can grow from one family to several with no migration. One consequence
+worth noting: the old `PaletteTypeMismatch` diagnosis is gone, because "this is a POSITION palette
+and that is a COLOUR property" is no longer a coherent complaint — a Look spanning both is entirely
+legitimate. A reference that finds nothing now reports the symptom (no entry for this fixture and
+property) rather than a cause that no longer exists.
+
+### The cook step
+
+A cue's layer stack plus its own local rows are flattened to **exactly one contributor per
+(fixture, property)** *before* `CueAssignmentResolver` sees them:
 
 ```
-ref:{paletteUuid}
+layers in sortOrder → local rows → cook → ONE contributor per (fixture,property) → resolver
 ```
 
-A `Palette` is typed by attribute (`COLOUR` / `POSITION` / `BEAM` / `INTENSITY` — the same four
-buckets as the record mask, because it is literally `PropertyMaskGroup`) and holds per-target
-entries: `(fixture|group, propertyName) → literal`. Palettes hold **literals only**; an entry
-holding a `ref:` is rejected at the write boundary, so resolution never recurses.
+> Code note: `fx/CueComposer.kt`. The invariant — never two `Assignment`s with the same
+> `(targetKey, propertyName)` for one cue — is asserted by `CueComposerTest`.
 
-### Resolution
+**Within a cue**, composition is therefore strict ordered override: later layers win, and the local
+layer wins over every layer. This holds for *every* attribute, intensity included.
 
-References resolve **per fixture**, at the point the row is built rather than inside the resolver:
+**Across cues**, nothing changed. The resolver still sees one contributor per cue per key, which is
+what it was written for, so all the HTP/LTP, crossfade-weighting and `moveInDark` logic described
+above keeps working unaltered.
 
-- Group rows in a palette expand to their members, and a fixture entry beats a group entry covering
-  the same fixture — the same specificity rule Layer 4 applies, precomputed by `PaletteRegistry`.
-- A cue or preset row whose value is a ref resolves once per expanded member, taking **each
-  member's own property category**. A palette is per-fixture by construction, so a mixed-type group
-  is exactly the case it exists to serve.
-- A programmer entry holds `ProgrammerValue.Ref(paletteUuid, resolved)` — the resolved literal is
-  cached so the 50 Hz fallback path reads `.resolved` with no extra branch.
-- A reference that doesn't resolve **skips the row** and reports health. It never falls back to
-  another fixture's entry: a position palette's value for one head is meaningless on another, which
-  is the whole reason entries are per-fixture.
+**Why cook rather than per-layer priorities.** The obvious alternative is to give each layer its own
+`Assignment.priority` — and there is room, since `cueDerivedPriority` leaves 999 slots between
+cues. It does not work, and the reason is decisive: `composeHtp` ignores `priority` except on an
+exact value tie. Per-layer priority would give ordered override for colour and position and leave
+dimmer on `max()` — precisely the category-dependent split this design exists to remove. Cooking is
+the only way to get one rule for every category.
 
-One ordering rule is load-bearing: the `ref:` check happens **before**
-`CueAssignmentResolver.parseAssignmentValue`, because for `COLOUR` that routes to `parseExtendedColour`,
-which answers **white** for anything it doesn't recognise. An unintercepted ref would silently light
-the fixture rather than report a dead reference.
+**The record this corrects.** Before layers, a cue's own rows and its presets' rows were
+concatenated at the *identical* `priority` and `fadeWeight`. That made within-cue LTP
+**first-in-list-wins** (`composeLtp` uses `maxWithOrNull`, which keeps the first maximal element,
+so cue-own beat preset and an earlier `sortOrder` beat a later one — the reverse of what `sortOrder`
+implies) while HTP was plain `max()`. Both were accidents of concatenation order rather than design,
+and neither was tested: every multi-contributor case in `CueAssignmentResolverTest` used distinct
+priorities, so the exact-tie path never ran. `buildCueAssignmentsForPreset`'s KDoc claimed
+"last-write-wins for OVERRIDE blend", which described the *effect* layer, not this one.
 
-### Editing a palette
+**Named behaviour change.** Layered intensity is later-wins, not HTP `max()`. Stacking a dim layer
+over a bright one inside one cue really does dim. HTP still governs *cross-cue* intensity, so two
+active cues still add up the way every surveyed console does.
 
-Because resolved values are cached, editing a palette must re-resolve and republish its live
-consumers (`routes/paletteRepublish.kt`). That is the feature's whole point: one edit moves every
-look that references the palette, with no cue re-fired. The order is fixed — invalidate the
-registry, re-resolve the programmer's ref slots *without* publishing, replace the affected cues'
-rows in one pass, then publish the programmer keys. Publishing the cue layer first would transmit
-stale programmer values over it for a frame.
+### Blending
 
-A ref whose palette stops covering it keeps its last resolved value rather than vanishing; a
+Each layer carries a `blendMode` (`OVERRIDE`, `MAX`, `MIN`, `MULTIPLY`, `ADDITIVE` — the same
+vocabulary effects use) and an `amount` in `[0, 1]`, which grandMA3 calls Amount. The layer's value
+is combined with the accumulation beneath it under the blend mode, then mixed back over that
+accumulation by `amount`. `OVERRIDE` at `1.0` is plain replacement and is the default. An
+`amount` of 0 makes the layer contribute nothing at all, rather than contributing zero.
+
+With nothing beneath it, a layer mixes from the blend mode's **identity**: zero for
+`OVERRIDE` / `MAX` / `ADDITIVE`, full scale for `MIN` / `MULTIPLY`. That is what makes a lone dimmer
+layer at amount 0.5 read as half intensity while a lone `MULTIPLY` layer at amount 1.0 reads as its
+own value. Positions have no meaningful identity — halving a pan/tilt aims at a corner rather than
+halfway — so a lone position layer stands at its own value whatever the amount, and interpolates
+only once there is a real value beneath it. Discrete settings snap at the halfway point, the same
+rule `composeLtp` uses for a Setting mid-crossfade.
+
+`propertyMask` gives per-property *inclusion*: "this cue's colour comes from Warm, everything else
+local" is one `COLOUR`-masked layer, not a separate feature. Per-property *blend overrides* are out
+of scope.
+
+### Effects, and the constraint that cannot be layered away
+
+Effects do not cook — they spawn `FxInstance`s. Spawning them in layer order is sufficient:
+`FxEngine.sortedEffectsComparator` is `compareBy(priority, id)` with `id` a monotonic creation
+counter, and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`. So
+same-priority effects already resolve last-created-wins, and layer order becomes effect order for
+free — no priority arithmetic, and the uniform per-cue priority stays.
+
+One limit has to be stated rather than designed around: **effects are Layer 3 and values are
+Layer 4**, so an effect sits above a static value regardless of layer order. "Layer 2 sets colour
+statically, Layer 1 runs a colour effect" resolves to the effect winning even though Layer 2 is
+later. Layer order governs values-vs-values and effects-vs-effects, not the value/effect boundary.
+The escape hatch is per-layer `stomp`; note that the existing cue-level `stomp` is *cross-cue*
+(`stompForCue` explicitly excludes the stomping cue's own effects), so within-cue stomp is new
+behaviour built on existing scaffolding rather than a flag flip.
+
+### Timed layers
+
+A layer with `delayMs` / `intervalMs` fires on a timer rather than at cue apply. Firing
+**re-cooks the whole cue** with that layer included, publishing through
+`FxEngine.replaceCueAssignments`. It does not append the layer's rows, and the distinction is
+load-bearing: appending would place two contributors on one (fixture, property) key inside one cue,
+which is exactly the ambiguity cooking removes — and the tie between them would fall to `HashMap`
+iteration order. `replaceCueAssignments` rather than `setCueAssignments` because the latter resets
+an in-flight crossfade weight to fully-in.
+
+A recurring layer is therefore idempotent on Layer 4: only its effects re-trigger.
+
+### Editing a Look
+
+Because resolved values are cached, editing a Look re-resolves and republishes its live consumers
+(`routes/lookRepublish.kt`). That is the feature's whole point: one edit moves every cue layering
+it, with no cue re-fired. The order is fixed — invalidate the registry, re-resolve the programmer's
+reference slots *without* publishing, replace the affected cues' rows in one pass, then publish the
+programmer keys. Publishing the cue layer first would transmit stale programmer values over it for
+a frame.
+
+Finding the affected cues is now an **indexed FK query** on `cue_layers.look_id`, which is the
+structural win of the merge: the palette era could only scan opaque `value` text for an exact string
+match.
+
+A reference whose Look stops covering it keeps its last resolved value rather than vanishing; a
 disappearing programmer entry mid-show is worse than a stale one the sheet marks broken.
 
 ### Hardening
 
-**Make Hard** replaces references with the literals they currently resolve to — the explicit opt-out
-from reference-preserving Update, available on the programmer, on a stored cue, and on an FX preset.
-A group row can only harden to a group row when every member agrees; otherwise it expands to one
-fixture row per member, since no single literal can say what the group row said.
+**Make Hard** replaces references with the literals they currently resolve to. The awkward case it
+used to have is *gone*: an FX preset row was target-*less*, so hardening it could not resolve "per
+target" at all, and the two obvious ways to invent a target set were both wrong — the union of
+today's applications stopped being true the moment the preset was applied somewhere new, and asking
+the operator for one asked them to answer for applications that did not exist yet. A layer always
+has a target set, so flattening a layer into local rows is now a well-posed operation.
 
-An **FX preset** row is the awkward case, because it is *target-less*: a cue row names the fixture
-or group it applies to, a preset row says "whatever this preset is applied to". So hardening it
-cannot resolve "per target" at all, and the two obvious ways to invent a target set are both wrong
-— the union of today's `CuePresetApplication` targets stops being true the moment the preset is
-applied somewhere new, and asking the operator for one asks them to answer for applications that
-don't exist yet.
-
-Instead the palette is asked whether the answer is *target-independent*. Candidates are the patched
-fixtures whose `typeKey` matches the preset's declared `fixtureType` — every fixture the preset
-could ever apply to, which is a property of the preset rather than of its current use. Each
-candidate resolves through `resolveAssignmentValueForFixture` and the results are grouped by
-serialized literal:
-
-- **one** distinct literal — the reference says the same thing everywhere, so the row hardens to it;
-- **more than one** — the row stays a reference, and the response reports each literal with the
-  fixtures holding it. There is no single value that can stand in, and guessing one would silently
-  change what the preset does on some of its targets;
-- **none** — unresolved, as everywhere else. Element-scoped rows land here by construction: palettes
-  are fixture-shaped, so `buildCueAssignmentsForPreset` never resolves a ref on an element row and
-  there is nothing to harden it to.
-
-A partial result is the normal outcome, not an error: some rows harden while others are reported,
-and both halves come back in one 200. Hardening a preset republishes the live cues that apply it —
-output-neutral for a fixture the palette covered, but a fixture it *didn't* cover had its row
-skipped at apply and now takes the literal.
-
-One detail shared by the cue and preset paths: the category for a row's property comes from
+One detail survives from the old implementation: the category for a row's property comes from
 `fixtureCategoryFor`, not a direct property-catalogue lookup, because `position` is a synthetic
 pan/tilt pair with no `@FixtureProperty` of its own. Looking the name up directly answers null and
 reports every POSITION reference as unresolvable.
 
-Update is reference-*preserving* by default: it writes back only what changed since Include,
-comparing reference identity and value independently, so an untouched ref stays a ref and an
-explicit hardening still persists.
-
 ### Relationship to the positional palette
 
 The older ordered-colour-list palette — referenced positionally as `P1` / `P2` / `P*`, scoped
-global → stack → cue by `PaletteCascade` — is unchanged and still supported. The two grammars cannot
-collide (`^P(\d+)$` never matches `ref:…`), and a value is either a `ref:` or a literal that may
-itself be a positional ref.
+global → stack → cue by `PaletteCascade` — is unchanged and still supported. It is a third,
+unrelated thing that was also called "palette": it parameterises *effects* rather than describing a
+look. A Look carries its own colour list, so the cascade's most-specific scope is now
+`look > cue > global`. The two grammars cannot collide (`^P(\d+)$` never matches `ref:…`), and a
+Look row's literal may itself be a positional ref, which is why the cook step threads the cascade
+through exactly as the old builders did.
 
 ## Layer 5 — Baseline / defaults
 

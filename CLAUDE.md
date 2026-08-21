@@ -117,7 +117,7 @@ src/main/kotlin/uk/me/cormack/lighting7/
 │   └── group/             # Group FX distribution
 ├── show/                   # Show orchestration & script runner
 ├── state/                  # Application state management
-├── models/                 # Database entities (projects, scripts, cues, presets)
+├── models/                 # Database entities (projects, scripts, cues, looks)
 ├── routes/                 # REST API endpoints
 ├── plugins/                # Ktor plugins (HTTP, WebSockets, Routing)
 └── scripts/                # LightingScript DSL definition
@@ -493,6 +493,7 @@ For deeper technical details, see the docs in `docs/`:
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, multi-element fixtures
 - [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow, three-way diff + conflict sessions, GitHub OAuth + PAT auth (Phases 1–5 of the cloud-sync plan)
+- [Composition Model](docs/lighting-composition-model.md) - The five layers, and §"Looks and layers" for the cook step: a cue's ordered Look layers plus its local rows flatten to one contributor per (fixture, property) before the resolver, which is what makes within-cue precedence one rule for every attribute
 - [Desk Accounts](docs/desk-accounts.md) - Desk-local users, the two roles and where they're enforced, cookie sessions + live 4401 revocation, the QR password reset, and the `RESET-ADMIN` break-glass recovery
 - [Windows Updates](docs/windows-updates.md) - The pinned MSI UpgradeCode, MSI version rules, `BuildInfo` in both jars, the GitHub release check, and the backend→launcher marker handshake that applies an update
 

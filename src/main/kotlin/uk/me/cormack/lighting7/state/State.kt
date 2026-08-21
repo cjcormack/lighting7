@@ -736,8 +736,7 @@ class State(val config: ApplicationConfig) {
         override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) {}
         override fun controllersChanged() {}
         override fun fixturesChanged() = refreshActiveProjectBindingHealth()
-        override fun presetListChanged() {}
-        override fun paletteListChanged() {}
+        override fun lookListChanged() {}
         override fun speedMasterListChanged() {}
         override fun cueListChanged() = refreshActiveProjectBindingHealth()
         override fun cueStackListChanged() = refreshActiveProjectBindingHealth()

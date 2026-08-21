@@ -107,16 +107,20 @@ fun canonicalPropertyName(propertyName: String): String =
  *
  * Read-path only: cue apply reports the same conditions through
  * [resolveAssignmentValueForFixture]'s health and a warn. This exists so the UI can mark a row
- * before it is ever fired, and it adds [AssignmentHealth.PaletteTypeMismatch] — a diagnosis the
- * resolve path deliberately collapses into "no entry", because at resolve time the two are the same
- * outcome.
+ * before it is ever fired.
+ *
+ * It no longer separates out [AssignmentHealth.PaletteTypeMismatch]. A palette carried a single
+ * declared attribute type, so "this is a POSITION palette, that is a COLOUR property" was a
+ * diagnosable cause. A Look has no such type — its families are *derived* from its rows, and one
+ * spanning colour and position is entirely legitimate — so the only honest answer left is the
+ * symptom: there is no entry for this fixture and property.
  *
  * [target] may be a group; coverage is then checked against its first member, matching how
  * [validateTargetedReference] resolves a reference fixture for property checks.
  */
 fun validatePaletteReference(
     fixtures: Fixtures,
-    registry: PaletteRegistry?,
+    registry: LookRegistry?,
     target: TargetRef,
     propertyName: String,
     value: String,
@@ -132,16 +136,6 @@ fun validatePaletteReference(
             ?: return AssignmentHealth.MissingGroup(target.key)
         is TargetRef.Fixture -> runCatching { fixtures.untypedFixture(target.key) }.getOrNull()
             ?: return AssignmentHealth.MissingFixture(target.key)
-    }
-
-    // A wrong-type reference can never have a matching entry, so name the cause rather than
-    // reporting the symptom.
-    val propertyGroup = maskGroupForProperty(referenceFixture, canonical)
-    val paletteType = expanded.snapshot.type
-    if (paletteType != null && propertyGroup != null && paletteType != propertyGroup) {
-        return AssignmentHealth.PaletteTypeMismatch(
-            paletteUuid.toString(), paletteType.name, propertyGroup.name,
-        )
     }
 
     if (expanded.literalFor(referenceFixture.key, canonical) == null) {

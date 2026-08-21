@@ -153,7 +153,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(error))
                 return@withProject
             }
-            state.show.fixtures.paletteListChanged()
+            state.show.fixtures.lookListChanged()
             call.respond(HttpStatusCode.Created, dto!!)
         }
     }
@@ -207,7 +207,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
             }
             // Renaming changes what the sheet's ref badges read, but not what anything resolves
             // to, so no republish here — only the list broadcast.
-            state.show.fixtures.paletteListChanged()
+            state.show.fixtures.lookListChanged()
             call.respond(dto!!)
         }
     }
@@ -260,7 +260,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                     // The include indicator must stop offering a palette that no longer exists —
                     // Update re-validates anyway, but a stale indicator is its own bug.
                     state.show.programmerStore.clearIncludeTargetForPalette(resource.paletteId)
-                    state.show.fixtures.paletteListChanged()
+                    state.show.fixtures.lookListChanged()
                     call.respond(HttpStatusCode.NoContent)
                 }
             }

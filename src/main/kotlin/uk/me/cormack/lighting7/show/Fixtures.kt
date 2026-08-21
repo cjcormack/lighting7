@@ -16,8 +16,13 @@ interface FixturesChangeListener {
     fun channelsChanged(universe: Universe, changes: Map<Int, UByte>)
     fun controllersChanged()
     fun fixturesChanged()
-    fun presetListChanged()
-    fun paletteListChanged()
+    /**
+     * A Look was created, renamed or deleted. Collapses what used to be two separate signals
+     * (`presetListChanged` + `paletteListChanged`) now that FX presets and named palettes are one
+     * entity. A Look's *contents* changing goes through `republishForLookEdit` instead, which
+     * invalidates the one Look directly rather than dropping every expansion.
+     */
+    fun lookListChanged()
     fun speedMasterListChanged()
     fun cueListChanged()
     fun cueStackListChanged()
@@ -279,9 +284,9 @@ class Fixtures {
         patchMetadataRegister[fixtureKey] = metadata
     }
 
-    fun presetListChanged() {
+    fun lookListChanged() {
         changeListeners.forEach {
-            it.presetListChanged()
+            it.lookListChanged()
         }
     }
 
@@ -318,12 +323,6 @@ class Fixtures {
     fun stageRegionListChanged() {
         changeListeners.forEach {
             it.stageRegionListChanged()
-        }
-    }
-
-    fun paletteListChanged() {
-        changeListeners.forEach {
-            it.paletteListChanged()
         }
     }
 

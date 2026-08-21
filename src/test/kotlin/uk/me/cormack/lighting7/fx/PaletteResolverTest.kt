@@ -4,7 +4,6 @@ import org.junit.Test
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
-import uk.me.cormack.lighting7.models.PaletteType
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
@@ -28,15 +27,15 @@ class PaletteResolverTest {
     }
 
     private fun registry(
-        type: PaletteType = PaletteType.COLOUR,
-        entries: List<PaletteEntryRow> = listOf(
-            PaletteEntryRow(TargetRef.Fixture("hex-1"), "colour", "#ff8800"),
+        rows: List<LookRowEntry> = listOf(
+            LookRowEntry(TargetRef.Fixture("hex-1"), "colour", "#ff8800"),
         ),
-    ) = PaletteRegistry(
+    ) = LookRegistry(
         fixtures = ::fixtures,
         loader = {
-            PaletteSnapshot(
-                paletteId = 1, paletteUuid = uuid, name = "Warm Amber", type = type, entries = entries,
+            LookSnapshot(
+                lookId = 1, lookUuid = uuid, name = "Warm Amber",
+                editorFixtureType = null, palette = emptyList(), rows = rows, effects = emptyList(),
             )
         },
     )
@@ -118,7 +117,7 @@ class PaletteResolverTest {
     @Test
     fun `an unparsable stored literal reports the entry as uncovered`() {
         val reg = registry(
-            entries = listOf(PaletteEntryRow(TargetRef.Fixture("hex-1"), "dimmer", "not-a-level")),
+            rows = listOf(LookRowEntry(TargetRef.Fixture("hex-1"), "dimmer", "not-a-level")),
         )
         val res = resolveAssignmentValueForFixture(
             reg, "hex-1", "dimmer", PropertyCategory.DIMMER, paletteRefValue(uuid),

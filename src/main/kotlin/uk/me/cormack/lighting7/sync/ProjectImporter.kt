@@ -7,6 +7,10 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoCueLayer
+import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
@@ -44,7 +48,8 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
-import uk.me.cormack.lighting7.sync.dto.CuePresetApplicationJson
+import uk.me.cormack.lighting7.sync.dto.LookJson
+import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
@@ -72,12 +77,21 @@ import java.util.UUID
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
-// v4 added `promptScripts/{hash}.pdf` binary blobs to the repo. MIN stays 3 so a v4
-// install still reads pre-v4 (JSON-only) repos; the writer emits 4 (see FormatVersionJson),
-// which makes a pre-v4 install refuse a v4 repo (it lacks the wipe-preserve logic and would
-// delete the PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 4
-internal const val MIN_SUPPORTED_FORMAT_VERSION = 3
+// v5 collapsed FX presets and named palettes into `looks/`, and `cuePresetApplications/` into
+// `cueLayers/`. MIN jumps to 5 with it: a v4 repo's `cuePresetApplications` records name a
+// `presetUuid` that no longer resolves to anything, and there is no in-place upgrade — reading one
+// would import a project whose cues had lost their composition entirely, which is worse than
+// refusing it. Bumping both is therefore deliberate, not an oversight.
+//
+// **These two constants are the real gate.** `FormatVersionJson.minReader` is *written* but never
+// read by the importer — `loadAndValidateArchive` compares against these — so bumping the DTO
+// alone leaves the gate wide open.
+//
+// v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
+// made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
+// PDFs, reverting them onto peers).
+internal const val SUPPORTED_FORMAT_VERSION = 5
+internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
  * Import-time error with the HTTP status the route layer should report. Carrying the status
@@ -210,6 +224,13 @@ class ProjectImporter(private val state: State) {
             }
             project.cueStacks.forEach { it.delete() }
             project.cueSlots.forEach { it.delete() }
+            // Layers before cues would be redundant — deleteCueChildren already drops them — but
+            // looks must go after every layer that points at one.
+            project.looks.forEach { look ->
+                look.rows.forEach { it.delete() }
+                look.effects.forEach { it.delete() }
+                look.delete()
+            }
             project.fxPresets.forEach { preset ->
                 preset.propertyAssignments.forEach { it.delete() }
                 preset.delete()
@@ -290,8 +311,7 @@ class ProjectImporter(private val state: State) {
     private fun populateProject(sourceDir: Path, project: DaoProject) {
         val scriptMap = importScripts(sourceDir, project)
         importFxDefinitions(sourceDir, project)
-        val fxPresetMap = importFxPresets(sourceDir, project)
-        importPalettes(sourceDir, project)
+        val lookMap = importLooks(sourceDir, project)
         importSpeedMasters(sourceDir, project)
         val universeMap = importUniverseConfigs(sourceDir, project)
         val riggingMap = importRiggings(sourceDir, project)
@@ -301,7 +321,7 @@ class ProjectImporter(private val state: State) {
         val cueStackMap = importCueStacks(sourceDir, project)
         val cueMap = importCues(sourceDir, project, cueStackMap)
         importCuePropertyAssignments(sourceDir, cueMap)
-        importCuePresetApplications(sourceDir, cueMap, fxPresetMap)
+        importCueLayers(sourceDir, cueMap, lookMap)
         importCueAdHocEffects(sourceDir, cueMap)
         importCueTriggers(sourceDir, cueMap, scriptMap)
         importLegacyShowOrder(sourceDir, project, cueStackMap)
@@ -359,69 +379,65 @@ class ProjectImporter(private val state: State) {
             uuid to dao
         }
 
-    private fun importFxPresets(dir: Path, project: DaoProject): Map<UUID, DaoFxPreset> =
-        readDir(dir.resolve("fxPresets")) { json ->
-            val p = canonicalDecode(FxPresetJson.serializer(), json)
-            val uuid = UUID.fromString(p.uuid)
-            val dao = DaoFxPreset.new {
-                name = p.name
-                description = p.description
+    /**
+     * Looks, with their rows and effects. Returns a uuid → DAO map because a cue *layer* references
+     * its Look through a real FK — unlike a palette, which was only ever named by a `ref:{uuid}`
+     * string inside an opaque `value` column and so needed no map.
+     */
+    private fun importLooks(dir: Path, project: DaoProject): Map<UUID, DaoLook> =
+        readDir(dir.resolve("looks")) { json ->
+            val l = canonicalDecode(LookJson.serializer(), json)
+            val uuid = UUID.fromString(l.uuid)
+            val dao = DaoLook.new {
                 this.project = project
-                fixtureType = p.fixtureType
-                effects = p.effects
-                palette = p.palette
+                name = l.name
+                notes = l.notes
+                sortOrder = l.sortOrder
+                editorFixtureType = l.editorFixtureType
+                palette = l.palette
                 this.uuid = uuid
             }
-            p.propertyAssignments.forEach { a ->
-                DaoFxPresetPropertyAssignment.new {
-                    preset = dao
-                    propertyName = a.propertyName
-                    value = a.value
-                    fadeDurationMs = a.fadeDurationMs
-                    sortOrder = a.sortOrder
-                    elementKey = a.elementKey
-                    this.uuid = UUID.fromString(a.uuid)
+            l.rows.forEach { r ->
+                DaoLookRow.new {
+                    look = dao
+                    targetType = r.targetType
+                    targetKey = r.targetKey
+                    propertyName = r.propertyName
+                    value = r.value
+                    fadeDurationMs = r.fadeDurationMs
+                    elementKey = r.elementKey
+                    sortOrder = r.sortOrder
+                    this.uuid = UUID.fromString(r.uuid)
                 }
             }
-            uuid to dao
-        }
-
-    /**
-     * Palettes and their entries. Returns nothing: cue and preset rows reference a palette by
-     * the `ref:{uuid}` string inside their opaque `value` column, not through a FK, so no
-     * uuid → DAO map is needed downstream.
-     */
-    private fun importPalettes(dir: Path, project: DaoProject) {
-        readDir(dir.resolve("palettes")) { json ->
-            val p = canonicalDecode(PaletteJson.serializer(), json)
-            val uuid = UUID.fromString(p.uuid)
-            val dao = DaoPalette.new {
-                this.project = project
-                name = p.name
-                type = p.type
-                notes = p.notes
-                sortOrder = p.sortOrder
-                this.uuid = uuid
-            }
-            p.entries.forEach { e ->
-                DaoPaletteEntry.new {
-                    palette = dao
+            l.effects.forEach { e ->
+                DaoLookEffect.new {
+                    look = dao
                     targetType = e.targetType
                     targetKey = e.targetKey
+                    effectType = e.effectType
+                    category = e.category
                     propertyName = e.propertyName
-                    value = e.value
+                    beatDivision = e.beatDivision
+                    blendMode = e.blendMode
+                    distribution = e.distribution
+                    phaseOffset = e.phaseOffset
+                    elementMode = e.elementMode
+                    elementFilter = e.elementFilter
+                    stepTiming = e.stepTiming
+                    parameters = e.parameters
+                    speedMasterUuid = e.speedMasterUuid?.let { UUID.fromString(it) }
+                    rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { UUID.fromString(it) }
                     sortOrder = e.sortOrder
                     this.uuid = UUID.fromString(e.uuid)
                 }
             }
             uuid to dao
         }
-    }
 
     /**
-     * Speed masters. Returns nothing for the same reason [importPalettes] does: preset and
-     * cue effect rows reference a master by `speedMasterUuid` string, not through a FK, so
-     * no uuid → DAO map is needed downstream.
+     * Speed masters. Returns nothing: look-effect and cue-effect rows reference a master by
+     * `speedMasterUuid` string, not through a FK, so no uuid → DAO map is needed downstream.
      */
     private fun importSpeedMasters(dir: Path, project: DaoProject) {
         readDir(dir.resolve("speedMasters")) { json ->
@@ -657,30 +673,35 @@ class ProjectImporter(private val state: State) {
         }
     }
 
-    private fun importCuePresetApplications(
+    private fun importCueLayers(
         dir: Path,
         cueMap: Map<UUID, DaoCue>,
-        presetMap: Map<UUID, DaoFxPreset>,
+        lookMap: Map<UUID, DaoLook>,
     ) {
-        readDir(dir.resolve("cuePresetApplications")) { json ->
-            val a = canonicalDecode(CuePresetApplicationJson.serializer(), json)
-            val cueUuid = UUID.fromString(a.cueUuid)
-            val presetUuid = UUID.fromString(a.presetUuid)
+        readDir(dir.resolve("cueLayers")) { json ->
+            val l = canonicalDecode(CueLayerJson.serializer(), json)
+            val cueUuid = UUID.fromString(l.cueUuid)
+            val lookUuid = UUID.fromString(l.lookUuid)
             val cue = cueMap[cueUuid]
-                ?: throw ImportError.invalidArchive("Preset application ${a.uuid} references unknown cue $cueUuid")
-            val preset = presetMap[presetUuid]
-                ?: throw ImportError.invalidArchive("Preset application ${a.uuid} references unknown preset $presetUuid")
-            val uuid = UUID.fromString(a.uuid)
-            DaoCuePresetApplication.new {
+                ?: throw ImportError.invalidArchive("Cue layer ${l.uuid} references unknown cue $cueUuid")
+            val look = lookMap[lookUuid]
+                ?: throw ImportError.invalidArchive("Cue layer ${l.uuid} references unknown look $lookUuid")
+            val uuid = UUID.fromString(l.uuid)
+            DaoCueLayer.new {
                 this.cue = cue
-                this.preset = preset
-                targets = a.targets
-                delayMs = a.delayMs
-                intervalMs = a.intervalMs
-                randomWindowMs = a.randomWindowMs
-                sortOrder = a.sortOrder
-                speedMasterUuid = a.speedMasterUuid?.let { UUID.fromString(it) }
-                rateSpeedMasterUuid = a.rateSpeedMasterUuid?.let { UUID.fromString(it) }
+                this.look = look
+                sortOrder = l.sortOrder
+                enabled = l.enabled
+                targets = l.targets
+                propertyMask = l.propertyMask
+                blendMode = l.blendMode
+                amount = l.amount
+                stomp = l.stomp
+                speedMasterUuid = l.speedMasterUuid?.let { UUID.fromString(it) }
+                rateSpeedMasterUuid = l.rateSpeedMasterUuid?.let { UUID.fromString(it) }
+                delayMs = l.delayMs
+                intervalMs = l.intervalMs
+                randomWindowMs = l.randomWindowMs
                 this.uuid = uuid
             }
             uuid to Unit

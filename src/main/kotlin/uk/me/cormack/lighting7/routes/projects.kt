@@ -222,6 +222,14 @@ internal fun Route.routeApiRestProjects(state: State) {
                 // Preset property assignments before their presets: the FK has no ON DELETE
                 // cascade, so PostgreSQL rejects the preset delete while assignments remain.
                 // Mirrors ProjectImporter.replaceFromWorkingTree, which already does this.
+                // Looks after cues: deleteCueChildren drops each cue's layers, so nothing points
+                // at a look by the time it goes. No DB-level cascade — SQLite doesn't enforce one
+                // without a per-connection pragma.
+                project.looks.forEach { look ->
+                    look.rows.forEach { it.delete() }
+                    look.effects.forEach { it.delete() }
+                    look.delete()
+                }
                 project.fxPresets.forEach { preset ->
                     preset.propertyAssignments.forEach { it.delete() }
                     preset.delete()
@@ -310,8 +318,13 @@ internal fun Route.routeApiRestProjects(state: State) {
 
         // Script, Preset, Cue, and Cue Stack endpoints are defined in separate files
         routeApiRestProjectScripts(state)
-        routeApiRestProjectFxPresets(state)
-        routeApiRestProjectPalettes(state)
+        // The FX-preset and named-palette HTTP surfaces are deliberately **not** mounted any more.
+        // Both entities are superseded by looks, and their reference mechanism now resolves through
+        // LookRegistry — so a palette created through the old CRUD would be invisible to every
+        // consumer. Leaving the routes reachable would let an operator build data nothing can read.
+        // The files survive because the record / include / make-hard halves are being rewritten
+        // against layers; the tables and routes go in the retirement pass.
+        routeApiRestProjectLooks(state)
         routeApiRestProjectSpeedMasters(state)
         routeApiRestProjectCues(state)
         routeApiRestProjectCueStacks(state)

@@ -28,12 +28,12 @@ internal fun Route.routeApiRestGroups(state: State) {
         // List all groups
         get<GroupsResource> {
             val currentProject = state.projectManager.currentProject
-            val presets = loadPresetCompatibilityInfos(state, currentProject.id.value)
+            val looks = loadLookCompatibilityInfos(state, currentProject.id.value)
 
             val groups = state.show.fixtures.groups.map { group ->
                 val capabilities = group.detectCapabilities().toSet()
                 val memberTypeKeys = group.fixtures.filterIsInstance<Fixture>().map { it.typeKey }.toSet()
-                group.toDto(presets.compatibleIdsFor(memberTypeKeys, capabilities))
+                group.toDto(looks.compatibleIdsFor(memberTypeKeys, capabilities))
             }
             call.respond(groups)
         }
@@ -44,12 +44,12 @@ internal fun Route.routeApiRestGroups(state: State) {
                 val group = state.show.fixtures.untypedGroup(resource.name)
 
                 val currentProject = state.projectManager.currentProject
-                val presets = loadPresetCompatibilityInfos(state, currentProject.id.value)
+                val looks = loadLookCompatibilityInfos(state, currentProject.id.value)
 
                 val capabilities = group.detectCapabilities().toSet()
                 val memberTypeKeys = group.fixtures.filterIsInstance<Fixture>().map { it.typeKey }.toSet()
 
-                call.respond(group.toDetailedDto(presets.compatibleIdsFor(memberTypeKeys, capabilities)))
+                call.respond(group.toDetailedDto(looks.compatibleIdsFor(memberTypeKeys, capabilities)))
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
             }

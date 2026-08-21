@@ -9,7 +9,13 @@ import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
+import uk.me.cormack.lighting7.models.DaoCueLayer
+import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueSlot
@@ -214,64 +220,72 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         notes = "half-time position waves"
     }
 
-    // 1 fx preset with property assignments
-    val preset = DaoFxPreset.new {
+    // 2 looks covering both targeting modes, because they exercise different code paths.
+    //
+    // Every optional field is set to a NON-default value on purpose: canonical JSON omits
+    // defaults entirely, so a field left at its default is invisible to the round-trip and clone
+    // tests and they would pass vacuously.
+
+    // A *bound* look — rows naming their own targets, the shape a palette migrated into and the
+    // shape Record produces. Carries both a fixture row and a group row so the
+    // expansion-and-specificity path is exercised end to end.
+    val boundLook = DaoLook.new {
         this.project = project
-        name = "warm-pulse"; fixtureType = "hex-fixture"
-        description = "warm pulse"
-        effects = listOf(
-            FxPresetEffectDto(
-                effectType = "Pulse", category = "dimmer",
-                propertyName = "dimmer", beatDivision = 0.5,
-                blendMode = "OVERRIDE", distribution = "LINEAR",
-                // Inside the JSON blob column — the reference the ExportUuidRemapper must
-                // rewrite across opaque text for a clone to point at its own master.
-                speedMasterUuid = slowMaster.uuid.toString(),
-                // Same blob, the rate role — parity means this must be remapped too.
-                rateSpeedMasterUuid = slowMaster.uuid.toString(),
-            )
-        )
+        name = "Warm Amber"
+        notes = "act one wash"
+        sortOrder = 3
         palette = listOf("#ff8800")
     }
-    DaoFxPresetPropertyAssignment.new {
-        this.preset = preset; propertyName = "dimmer"; value = "200"; sortOrder = 0
+    DaoLookRow.new {
+        look = boundLook; targetType = "fixture"; targetKey = "hex-1"
+        propertyName = "colour"; value = "#ff8800"; sortOrder = 0
         fadeDurationMs = 750L
     }
-    DaoFxPresetPropertyAssignment.new {
-        this.preset = preset; propertyName = "colour"; value = "#ff8800"; sortOrder = 1
-        elementKey = "head-1"
-    }
-
-    // 2 named palettes of different types, each with non-default notes/sortOrder — a defaulted
-    // field is omitted from canonical JSON entirely, so a copier that dropped it would still
-    // look correct. The COLOUR palette carries both a fixture row and a group row so the
-    // expansion-and-specificity path is exercised end to end.
-    val colourPalette = DaoPalette.new {
-        this.project = project
-        name = "Warm Amber"; type = PaletteType.COLOUR.name
-        notes = "act one wash"; sortOrder = 3
-    }
-    DaoPaletteEntry.new {
-        palette = colourPalette; targetType = "fixture"; targetKey = "hex-1"
-        propertyName = "colour"; value = "#ff8800"; sortOrder = 0
-    }
-    DaoPaletteEntry.new {
-        palette = colourPalette; targetType = "group"; targetKey = "front-wash"
+    DaoLookRow.new {
+        look = boundLook; targetType = "group"; targetKey = "front-wash"
         propertyName = "colour"; value = "#ffaa44"; sortOrder = 1
     }
-    val positionPalette = DaoPalette.new {
+    DaoLookRow.new {
+        look = boundLook; targetType = "fixture"; targetKey = "hex-3"
+        propertyName = "position"; value = "120,64"; sortOrder = 2
+    }
+
+    // A *deferred* look — rows and effects taking their targets from the layer, the shape an FX
+    // preset migrated into. `editorFixtureType` is the surviving remnant of the preset's
+    // `fixtureType`, now an editor hint rather than a data constraint.
+    val deferredLook = DaoLook.new {
         this.project = project
-        name = "Downstage Centre"; type = PaletteType.POSITION.name
-        notes = "vocal spot"; sortOrder = 1
+        name = "warm-pulse"
+        notes = "warm pulse"
+        sortOrder = 1
+        editorFixtureType = "hex-fixture"
+        palette = listOf("#ff8800")
     }
-    DaoPaletteEntry.new {
-        palette = positionPalette; targetType = "fixture"; targetKey = "hex-3"
-        propertyName = "position"; value = "120,64"; sortOrder = 0
+    DaoLookRow.new {
+        look = deferredLook; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
+        propertyName = "dimmer"; value = "200"; sortOrder = 0
+        fadeDurationMs = 750L
     }
-    // Presets share the cue value grammar, so they can hold refs too — same clone guarantee.
-    DaoFxPresetPropertyAssignment.new {
-        this.preset = preset; propertyName = "colour"
-        value = paletteRefValue(colourPalette.uuid); sortOrder = 2
+    // Element-scoped, so the element path survives the round trip.
+    DaoLookRow.new {
+        look = deferredLook; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
+        propertyName = "colour"; value = "#ff8800"; sortOrder = 1
+        elementKey = "head-1"
+    }
+    DaoLookEffect.new {
+        look = deferredLook; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
+        effectType = "Pulse"; category = "dimmer"; propertyName = "dimmer"
+        beatDivision = 0.5; blendMode = "OVERRIDE"; distribution = "LINEAR"
+        phaseOffset = 0.25
+        elementMode = "ALL"
+        elementFilter = "ODD"
+        stepTiming = true
+        parameters = mapOf("depth" to "0.8")
+        // A real column now rather than a field inside a JSON blob, but the reference still has
+        // to be remapped for a clone to point at its own master.
+        speedMasterUuid = slowMaster.uuid
+        rateSpeedMasterUuid = slowMaster.uuid
+        sortOrder = 0
     }
 
     // 2 cue stacks, 3 cues, with property assignments + ad-hoc + preset apps + triggers
@@ -306,13 +320,14 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         propertyName = "position"; value = "120,64"; sortOrder = 1
         moveInDark = true
     }
-    // A named-palette reference, stored as `ref:{uuid}` in the opaque value column. This is
-    // the row that proves the reference survives a clone: ExportUuidRemapper mints a fresh
-    // uuid for the palette and must rewrite this string to match, so the clone's row points
-    // at the clone's palette rather than at the original's (or at nothing).
+    // A Look reference, stored as `ref:{uuid}` in the opaque value column. This is the row that
+    // proves the reference survives a clone: ExportUuidRemapper mints a fresh uuid for the Look
+    // and must rewrite this string to match, so the clone's row points at the clone's Look rather
+    // than at the original's (or at nothing). The grammar is retired with the programmer rewrite;
+    // until then this is the only remaining producer.
     DaoCuePropertyAssignment.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-2"
-        propertyName = "colour"; value = paletteRefValue(colourPalette.uuid); sortOrder = 2
+        propertyName = "colour"; value = paletteRefValue(boundLook.uuid); sortOrder = 2
     }
     DaoCueAdHocEffect.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"
@@ -331,14 +346,29 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
     }
-    DaoCuePresetApplication.new {
-        cue = cue1; this.preset = preset; targets = emptyList()
+    // A timed layer over the deferred look — the shape a timed preset application migrated into,
+    // carrying all three timing fields plus both speed-master overrides.
+    DaoCueLayer.new {
+        cue = cue1; look = deferredLook
+        targets = listOf(CueTargetDto("group", "front-wash"))
+        sortOrder = 2
         delayMs = 250L
         intervalMs = 500L
         randomWindowMs = 125L
-        sortOrder = 2
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
+    }
+    // A second layer exercising every field the first leaves at its default: disabled, masked,
+    // non-OVERRIDE blend, partial amount, stomp.
+    DaoCueLayer.new {
+        cue = cue1; look = boundLook
+        targets = listOf(CueTargetDto("fixture", "hex-1"))
+        sortOrder = 3
+        enabled = false
+        propertyMask = "COLOUR"
+        blendMode = "MULTIPLY"
+        amount = 0.5
+        stomp = true
     }
     DaoCueTrigger.new {
         cue = cue1; this.script = script1

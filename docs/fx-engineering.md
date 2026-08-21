@@ -1055,7 +1055,7 @@ than being captured into a per-master collector.
 
 ## Cue Integration
 
-Cues bundle a colour palette with FX state (preset applications + ad-hoc effects) into a named snapshot. The FX system supports cues via the `cueId` field on `FxInstance`.
+A cue is an ordered stack of **Look layers** plus its own local values and ad-hoc effects. The FX system supports cues via the `cueId` field on `FxInstance`.
 
 ### FxInstance.cueId
 
@@ -1066,24 +1066,44 @@ Each `FxInstance` has an optional `cueId: Int?` field (default `null`). When a c
 
 The `cueId` is preserved across atomic swaps in `FxEngine.updateEffect()`, so updating an effect's parameters doesn't lose its cue association.
 
-### Preset Applications
+### Layers
 
-Cues store **references** to FX presets (by ID) plus the targets they should be applied to. At apply time, the preset is read fresh from the database, so edits to a preset are always reflected when the cue is next applied. Each preset's effects are created as `FxInstance`s tagged with the cue ID.
+A cue layer stores a **reference** to a Look (by id) plus the targets it operates over. At apply
+time the Look is read fresh through `LookRegistry`, so editing a Look is reflected the next time the
+cue is applied — and, for a *live* cue, immediately, via `republishForLookEdit`. Each layer's effects
+are created as `FxInstance`s tagged with the cue id.
+
+**Effects spawn in layer order, and that alone is enough to make layer order the composition
+order.** `sortedEffectsComparator` is `compareBy(priority, id)` with `id` a monotonic creation
+counter, and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`, so
+same-priority effects already resolve last-created-wins. No priority arithmetic is needed and the
+uniform per-cue priority stays. A deferred Look effect fans over the layer's targets; a bound one
+uses its own, filtered by the layer's target set when that set is non-empty.
+
+The one limit worth stating: effects are Layer 3 and static values are Layer 4, so an effect sits
+above a static value regardless of layer order. See `lighting-composition-model.md`
+§"Effects, and the constraint that cannot be layered away".
 
 ### Ad-Hoc Effects
 
-Effects that were manually applied (not from a preset) are stored as full effect definitions in the `cue_ad_hoc_effects` table. At apply time, these are converted directly to `FxInstance`s tagged with the cue ID.
+Effects belonging to no Look are stored as full effect definitions in the `cue_ad_hoc_effects`
+table. At apply time these are converted directly to `FxInstance`s tagged with the cue id.
 
-### Preset Delete Blocking
+### Look Delete Blocking
 
-A preset cannot be deleted if any cue references it via `cue_preset_applications`. The preset detail API includes `cueUsageCount` (number of cue preset application rows referencing the preset) and `cannotDeleteReason` when deletion is blocked.
+A Look cannot be deleted if any cue layer references it via `cue_layers` — a plain indexed FK query,
+where the palette era could only scan opaque `value` text. The Look detail API includes `layerCount`
+and the referencing cue names; the delete returns 409 with code `LOOK_IN_USE`, and `?force=true`
+deletes the layers with it.
 
 ### From-State Capture
 
 The "create from current state" operation captures the live FX engine state:
 
-1. Effects with a non-null `presetId` are grouped by preset, collecting their targets into `CuePresetApplication` rows.
-2. Effects with a null `presetId` are stored as individual `CueAdHocEffect` rows with all effect fields captured.
+1. Effects with a non-null `presetId` (now a look id) are grouped by Look, collecting their targets
+   into cue layer rows.
+2. Effects with a null `presetId` are stored as individual `CueAdHocEffect` rows with all effect
+   fields captured.
 
 ### Related Files
 
@@ -1091,9 +1111,12 @@ The "create from current state" operation captures the live FX engine state:
 |------|-------------------|
 | `fx/FxInstance.kt` | `cueId` field |
 | `fx/FxEngine.kt` | `cueId` preservation in `updateEffect()` |
-| `models/cues.kt` | `DaoCues`, `DaoCuePresetApplications`, `DaoCueAdHocEffects` tables |
+| `models/cues.kt` | `DaoCues`, `DaoCueLayers`, `DaoCueAdHocEffects` tables |
 | `routes/projectCues.kt` | Cue CRUD, apply, from-state endpoints |
-| `routes/projectFxPresets.kt` | Preset delete blocking, `cueUsageCount` |
+| `models/looks.kt` | `DaoLooks`, `DaoLookRows`, `DaoLookEffects` tables |
+| `fx/CueComposer.kt` | The cook step, layer blending, layer-ordered effect spawning |
+| `fx/LookRegistry.kt` | Cached per-fixture Look expansion; two invalidation triggers |
+| `routes/projectLooks.kt` | Look CRUD, derived family banking, `LOOK_IN_USE` delete guard |
 
 See `docs/cues-engineering.md` for full cue system documentation.
 
@@ -1179,7 +1202,7 @@ clock reading — pins it exactly, with no jitter tolerance.
 The rate master scales the effect's *internal cycle* only: cue-trigger scheduling
 (`delayMs`/`intervalMs`/`randomWindowMs`) is deliberately never scaled by any master.
 
-`rateSpeedMasterUuid` is settable everywhere `speedMasterUuid` is — REST add/update, preset
+`rateSpeedMasterUuid` is settable everywhere `speedMasterUuid` is — REST add/update, look
 effects, cue ad-hoc effects, per-application overrides, cue-edit, and sync. The two coexist
 rather than excluding each other, so an effect whose `timingSource` changes keeps both
 assignments; BEAT effects simply never read the rate scale. **Scripts and the AI tool are
@@ -1204,7 +1227,7 @@ timingSource: WALL_CLOCK
 ---*/
 ```
 
-The timing source is stored on `EffectRegistration` in the `FxRegistry` and propagated to `FxInstance.timingSource` when effects are created via presets, cues, or the REST API.
+The timing source is stored on `EffectRegistration` in the `FxRegistry` and propagated to `FxInstance.timingSource` when effects are created via looks, cues, or the REST API.
 
 ### Control-surface bindings
 

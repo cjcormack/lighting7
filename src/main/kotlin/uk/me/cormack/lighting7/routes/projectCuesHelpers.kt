@@ -70,6 +70,11 @@ internal data class CueApplyData(
     val updateGlobalPalette: Boolean,
     val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
+    /**
+     * The cue's ordered Look composition, resolved far enough for [CueComposer.cook] — the Look's
+     * uuid is carried so the uuid-keyed [LookRegistry] needs no second DB hit at apply time.
+     */
+    val layers: List<CookLayer> = emptyList(),
     val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDto> = emptyList(),
     val autoAdvance: Boolean = false,
@@ -315,6 +320,7 @@ internal fun buildCueApplyData(cue: DaoCue): CueApplyData = CueApplyData(
         )
     },
     adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+    layers = cue.layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
     propertyAssignments = cue.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
     triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
         CueTriggerDto(
@@ -329,6 +335,47 @@ internal fun buildCueApplyData(cue: DaoCue): CueApplyData = CueApplyData(
     stomp = cue.stomp,
     cueStackId = cue.cueStack?.id?.value,
     sortOrder = cue.sortOrder,
+)
+
+/**
+ * Resolve a stored cue layer into the composer's input shape. Must run inside a transaction — it
+ * dereferences the layer's Look for its uuid and name.
+ */
+internal fun DaoCueLayer.toCookLayer() = CookLayer(
+    layerId = id.value,
+    lookId = look.id.value,
+    lookUuid = look.uuid,
+    lookName = look.name,
+    sortOrder = sortOrder,
+    enabled = enabled,
+    targets = targets,
+    propertyMask = propertyMask,
+    blendMode = blendMode,
+    amount = amount,
+    stomp = stomp,
+    speedMasterUuid = speedMasterUuid,
+    rateSpeedMasterUuid = rateSpeedMasterUuid,
+    delayMs = delayMs,
+    intervalMs = intervalMs,
+    randomWindowMs = randomWindowMs,
+)
+
+/** Wire form of a stored cue layer. Must run inside a transaction. */
+internal fun DaoCueLayer.toDto() = CueLayerDto(
+    lookId = look.id.value,
+    sortOrder = sortOrder,
+    enabled = enabled,
+    targets = targets,
+    propertyMask = propertyMask,
+    blendMode = blendMode,
+    amount = amount,
+    stomp = stomp,
+    speedMasterUuid = speedMasterUuid?.toString(),
+    rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+    delayMs = delayMs,
+    intervalMs = intervalMs,
+    randomWindowMs = randomWindowMs,
+    lookName = look.name,
 )
 
 /** Convert a DaoCuePropertyAssignment entity to its DTO form. Health defaults to [AssignmentHealth.Ok]. */
@@ -349,7 +396,7 @@ internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
  */
 private fun DaoCuePropertyAssignment.toDtoWithHealth(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
-    paletteRegistry: PaletteRegistry?,
+    lookRegistry: LookRegistry?,
 ): CuePropertyAssignmentDto {
     val base = toDto()
     val targetHealth = PersistedFixtureReferenceValidator.validateTargetedReference(
@@ -360,7 +407,7 @@ private fun DaoCuePropertyAssignment.toDtoWithHealth(
     if (targetHealth != AssignmentHealth.Ok) return base.copy(health = targetHealth)
     return base.copy(
         health = validatePaletteReference(
-            fixtures, paletteRegistry, base.target, base.propertyName, base.value,
+            fixtures, lookRegistry, base.target, base.propertyName, base.value,
         ),
     )
 }
@@ -393,13 +440,13 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
  * with [AssignmentHealth] by resolving each `(targetType, targetKey, propertyName)` against
  * [fixtures] — dead references surface in the UI with markers (Phase 6) rather than
  * silently dropping at apply time. A row holding a `ref:` is additionally checked against
- * [paletteRegistry], so a dead or non-covering palette reference is marked the same way.
+ * [lookRegistry], so a dead or non-covering palette reference is marked the same way.
  */
 internal fun DaoCue.toCueDetails(
     isCurrentProject: Boolean,
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
     /** Null skips named-palette health; rows still get target/property health. */
-    paletteRegistry: PaletteRegistry? = null,
+    lookRegistry: LookRegistry? = null,
 ): CueDetails {
     val presetDetails = presetApplications.sortedBy { it.sortOrder }.map { app ->
         CuePresetApplicationDetail(
@@ -426,12 +473,13 @@ internal fun DaoCue.toCueDetails(
         )
     }
     val assignmentDetails = this.propertyAssignments.sortedBy { it.sortOrder }
-        .map { it.toDtoWithHealth(fixtures, paletteRegistry) }
+        .map { it.toDtoWithHealth(fixtures, lookRegistry) }
     return CueDetails(
         id = this.id.value,
         name = this.name,
         palette = this.palette,
         presetApplications = presetDetails,
+        layers = this.layers.sortedBy { it.sortOrder }.map { it.toDto() },
         adHocEffects = this.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
         propertyAssignments = assignmentDetails,
         triggers = triggerDetails,
@@ -453,14 +501,36 @@ internal fun DaoCue.toCueDetails(
     )
 }
 
-/** Create child preset application, ad-hoc effect, property assignment, and trigger entities for a cue. */
+/** Create child layer, ad-hoc effect, property assignment, and trigger entities for a cue. */
 internal fun createCueChildren(
     cue: DaoCue,
     presetApplications: List<CuePresetApplicationDto>,
     adHocEffects: List<CueAdHocEffectDto>,
     propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     triggers: List<CueTriggerDto> = emptyList(),
+    layers: List<CueLayerDto> = emptyList(),
 ) {
+    for (layer in layers) {
+        // A layer naming a Look that no longer exists is dropped rather than failing the write,
+        // matching how a preset application handled a deleted preset.
+        val look = DaoLook.findById(layer.lookId) ?: continue
+        DaoCueLayer.new {
+            this.cue = cue
+            this.look = look
+            this.sortOrder = layer.sortOrder
+            this.enabled = layer.enabled
+            this.targets = layer.targets
+            this.propertyMask = layer.propertyMask
+            this.blendMode = layer.blendMode
+            this.amount = layer.amount
+            this.stomp = layer.stomp
+            this.speedMasterUuid = speedMasterUuidOrNull(layer.speedMasterUuid)
+            this.rateSpeedMasterUuid = speedMasterUuidOrNull(layer.rateSpeedMasterUuid)
+            this.delayMs = layer.delayMs
+            this.intervalMs = layer.intervalMs
+            this.randomWindowMs = layer.randomWindowMs
+        }
+    }
     for (app in presetApplications) {
         val preset = DaoFxPreset.findById(app.presetId) ?: continue
         DaoCuePresetApplication.new {
@@ -536,11 +606,12 @@ internal fun createCueChildren(
 }
 
 /**
- * Delete all child entities (preset applications, ad-hoc effects, property assignments, and
- * triggers) for a cue. Also used by the cue PUT route to *replace* children on update —
+ * Delete all child entities (layers, ad-hoc effects, property assignments, and triggers) for a
+ * cue. Also used by the cue PUT route to *replace* children on update —
  * anything that must survive a cue edit (e.g. prompt-book anchors) must NOT be deleted here.
  */
 internal fun deleteCueChildren(cue: DaoCue) {
+    cue.layers.forEach { it.delete() }
     cue.presetApplications.forEach { it.delete() }
     cue.adHocEffects.forEach { it.delete() }
     cue.propertyAssignments.forEach { it.delete() }
@@ -602,63 +673,28 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
 
     val priority = cueDerivedPriority(cueData)
 
-    // Load each immediate preset once — effects + property assignments in a single DB hit.
-    // Timed preset applications (delayMs/intervalMs) are handled entirely by CueTriggerManager;
-    // at fire time they append their property assignments to this cue's Layer 4 via
-    // [FxEngine.appendCueAssignments] so they compose like the cue's apply-time rows. The
-    // contribution goes live at fire time, not cue-apply time — see the timed preset wiring
-    // in [CueTriggerManager.activateTimedEffectsForCue].
-    data class ImmediatePreset(
-        val presetId: Int,
-        val targets: List<CueTargetDto>,
-        val effects: List<FxPresetEffectDto>,
-        val assignments: List<FxPresetPropertyAssignmentDto>,
-        val palette: List<ExtendedColour>,
-        /** Per-application speed-master override (null → each effect's own master). */
-        val speedMasterUuid: java.util.UUID? = null,
-        /** Per-application rate-master override (null → each effect's own rate master). */
-        val rateSpeedMasterUuid: java.util.UUID? = null,
-    )
-    val immediatePresets = transaction(state.database) {
-        cueData.presetApplications
-            .filter { it.delayMs == null && it.intervalMs == null }
-            .mapNotNull { app ->
-                val preset = DaoFxPreset.findById(app.presetId) ?: return@mapNotNull null
-                ImmediatePreset(
-                    presetId = app.presetId,
-                    targets = app.targets,
-                    effects = preset.effects,
-                    assignments = preset.toPropertyAssignmentDtos(),
-                    palette = preset.palette.toPaletteColours(),
-                    speedMasterUuid = speedMasterUuidOrNull(app.speedMasterUuid),
-                    rateSpeedMasterUuid = speedMasterUuidOrNull(app.rateSpeedMasterUuid),
-                )
-            }
-    }
-
     val cascade = PaletteCascade(
         cue = cueData.palette.toPaletteColours(),
         global = engine.getPalette(),
     )
 
     // Publish Layer 4 before applying effects so the effect reset pass sees the cue's baseline
-    // instead of Layer 5 zero. Combines the cue's own assignments with each immediate preset's
-    // property assignments.
-    val cueOwnAssignments = buildCueAssignmentsForCue(state.show.fixtures, cueData, cascade, state.show.paletteRegistry)
-    val presetRows = immediatePresets.flatMap { ip ->
-        buildCueAssignmentsForPreset(
-            state.show.fixtures, cueData.cueId, priority,
-            ip.presetId, ip.assignments, ip.targets,
-            cascade = cascade.copy(preset = ip.palette),
-            paletteRegistry = state.show.paletteRegistry,
-        )
-    }
-
-    val cueLayerRows = when {
-        presetRows.isEmpty() -> cueOwnAssignments
-        cueOwnAssignments.isEmpty() -> presetRows
-        else -> cueOwnAssignments + presetRows
-    }
+    // instead of Layer 5 zero.
+    //
+    // Timed layers (delayMs/intervalMs) contribute nothing here — they are handled entirely by
+    // CueTriggerManager, which at fire time re-cooks this cue with the fired layer included. It
+    // re-cooks rather than appending because appending would put two contributors on one
+    // (fixture, property) key, which is precisely the ambiguity cooking removes.
+    val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, cascade, state.show.lookRegistry)
+    val cueLayerRows = CueComposer.cook(
+        fixtures = state.show.fixtures,
+        cueId = cueData.cueId,
+        priority = priority,
+        layers = cueData.layers,
+        localRows = localRows,
+        cascade = cascade,
+        lookRegistry = state.show.lookRegistry,
+    )
     if (cueLayerRows.isNotEmpty()) {
         engine.setCueAssignments(cueData.cueId, cueLayerRows, cueStackId = cueData.cueStackId)
     } else {
@@ -680,26 +716,30 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         }
     }
 
-    // 3. Spawn immediate preset effects from the data loaded above.
-    for (ip in immediatePresets) {
-        for (target in ip.targets) {
-            val toggleTarget = TogglePresetTarget(target.target)
-            for (presetEffect in ip.effects) {
-                val fxTarget = try {
-                    resolveTargetForCue(state, toggleTarget, presetEffect)
-                } catch (_: Exception) { null } ?: continue
+    // 3. Spawn the layers' effects, **in layer order**.
+    //
+    // No priority arithmetic is needed for that order to hold: `sortedEffectsComparator` is
+    // `compareBy(priority, id)` with `id` a monotonic creation counter, and per-tick composition is
+    // a sequential fold through `FxTarget.applyValue`. So same-priority effects already resolve
+    // last-created-wins, and spawn order becomes composition order for free.
+    for ((layer, lookEffect, target) in CueComposer.cookEffects(
+        state.show.fixtures, cueData.cueId, cueData.layers, state.show.lookRegistry,
+    )) {
+        val effectSpec = lookEffect.toEffectSpec()
+        val fxTarget = try {
+            resolveTargetForCue(state, TogglePresetTarget(target), effectSpec)
+        } catch (_: Exception) { null } ?: continue
 
-                val instance = createInstanceFromPresetForCue(
-                    presetEffect, fxTarget, ip.presetId, state, cueData.cueId,
-                    overrideSpeedMasterUuid = ip.speedMasterUuid,
-                    overrideRateSpeedMasterUuid = ip.rateSpeedMasterUuid,
-                )
-                instance.cueId = cueData.cueId
-                instance.priority = priority
-                engine.addEffect(instance)
-                effectCount++
-            }
-        }
+        val instance = createInstanceFromPresetForCue(
+            effectSpec, fxTarget, presetId = null, state = state, cueId = cueData.cueId,
+            overrideSpeedMasterUuid = layer.speedMasterUuid,
+            overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
+        )
+        instance.lookId = layer.lookId
+        instance.cueId = cueData.cueId
+        instance.priority = priority
+        engine.addEffect(instance)
+        effectCount++
     }
 
     // 4. Apply immediate ad-hoc effects
@@ -829,7 +869,7 @@ internal fun fixtureCategoryFor(
  * skipped — missing data must not break cue apply.
  *
  * A row whose value is a named-palette reference (`ref:{uuid}`) resolves **per member** against
- * [paletteRegistry], taking each member's *own* property category rather than the reference
+ * [lookRegistry], taking each member's *own* property category rather than the reference
  * fixture's: a palette is per-fixture by construction, and a mixed-type group is exactly the case
  * it exists to serve. Literal rows keep the single parse before the fanout, so the common path
  * pays nothing for this. A ref that doesn't resolve skips only the members it can't resolve.
@@ -838,7 +878,7 @@ internal fun buildCueAssignmentsForCue(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
     cueData: CueApplyData,
     cascade: PaletteCascade = PaletteCascade.EMPTY,
-    paletteRegistry: PaletteRegistry? = null,
+    lookRegistry: LookRegistry? = null,
 ): List<CueAssignmentResolver.Assignment> {
     if (cueData.propertyAssignments.isEmpty()) return emptyList()
     val priority = cueDerivedPriority(cueData)
@@ -913,7 +953,7 @@ internal fun buildCueAssignmentsForCue(
                     continue
                 }
                 val resolution = resolveAssignmentValueForFixture(
-                    paletteRegistry, fixture.key, canonical, category, assignment.value, effectivePalette,
+                    lookRegistry, fixture.key, canonical, category, assignment.value, effectivePalette,
                 )
                 val value = resolution.value ?: run {
                     logger.warn(
@@ -974,49 +1014,48 @@ internal fun republishCueLayer(state: State, cueId: Int, applyData: CueApplyData
 }
 
 /**
- * The rows [republishCueLayer] would publish: the cue's own assignments plus those of each
- * *immediate* preset application (timed presets don't contribute — matching [applyCue]).
+ * The rows [republishCueLayer] would publish: the cue's layer stack cooked down with its own local
+ * rows on top (timed layers don't contribute unless named in [firedTimedLookIds] — matching
+ * [applyCue]).
  *
  * Split out from [republishCueLayer] so a caller that needs to rebuild several cues can publish
- * them in one pass — see `republishForPaletteEdit`, where publishing per cue would take the engine
+ * them in one pass — see `republishForLookEdit`, where publishing per cue would take the engine
  * lock and transmit once per cue for what is a single operator edit.
  *
  * [cuePalette] overrides the cue-scope palette. A stack cue's cue-scope palette is the *stack*
  * palette (`activateCueInStack` merges the cue's own palette into it before building), which the
  * cue's `applyData.palette` only equals when the cue carries a palette of its own — so the
  * preview path passes the resolved stack palette rather than letting a palette-less cue resolve
- * its refs against nothing. Null means "use the cue's own palette", as the apply paths do.
+ * its references against nothing. Null means "use the cue's own palette", as the apply paths do.
+ *
+ * [firedTimedLayerIds] names the timed layers that have already fired, so a rebuild triggered while
+ * a timed layer is live reproduces its contribution instead of dropping it. See
+ * [uk.me.cormack.lighting7.fx.CueTriggerManager] for why firing re-cooks rather than appending.
+ * Defaulting to null — "ask the trigger manager" — rather than to the empty set is deliberate: an
+ * explicit-empty default made every caller silently retract a live timed layer's rows.
  */
 internal fun buildCombinedCueLayerRows(
     state: State,
     cueId: Int,
     applyData: CueApplyData,
     cuePalette: List<ExtendedColour>? = null,
+    firedTimedLayerIds: Set<Int>? = null,
 ): List<CueAssignmentResolver.Assignment> {
     val cascade = PaletteCascade(
         cue = cuePalette ?: applyData.palette.toPaletteColours(),
         global = state.show.fxEngine.getPalette(),
     )
-    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, applyData, cascade, state.show.paletteRegistry)
-    val priority = cueDerivedPriority(applyData)
-    val presetRows = transaction(state.database) {
-        applyData.presetApplications
-            .filter { it.delayMs == null && it.intervalMs == null }
-            .flatMap { app ->
-                val preset = DaoFxPreset.findById(app.presetId) ?: return@flatMap emptyList()
-                buildCueAssignmentsForPreset(
-                    state.show.fixtures, cueId, priority,
-                    app.presetId, preset.toPropertyAssignmentDtos(), app.targets,
-                    cascade = cascade.copy(preset = preset.palette.toPaletteColours()),
-                    paletteRegistry = state.show.paletteRegistry,
-                )
-            }
-    }
-    return when {
-        presetRows.isEmpty() -> cueOwn
-        cueOwn.isEmpty() -> presetRows
-        else -> cueOwn + presetRows
-    }
+    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, applyData, cascade, state.show.lookRegistry)
+    return CueComposer.cook(
+        fixtures = state.show.fixtures,
+        cueId = cueId,
+        priority = cueDerivedPriority(applyData),
+        layers = applyData.layers,
+        localRows = cueOwn,
+        cascade = cascade,
+        lookRegistry = state.show.lookRegistry,
+        includeTimed = firedTimedLayerIds ?: state.cueTriggerManager.firedTimedLayerIds(cueId),
+    )
 }
 
 /**
@@ -1072,7 +1111,7 @@ internal fun buildCueAssignmentsForPreset(
     presetAssignments: List<FxPresetPropertyAssignmentDto>,
     applyTargets: List<CueTargetDto>,
     cascade: PaletteCascade = PaletteCascade.EMPTY,
-    paletteRegistry: PaletteRegistry? = null,
+    lookRegistry: LookRegistry? = null,
 ): List<CueAssignmentResolver.Assignment> {
     if (presetAssignments.isEmpty() || applyTargets.isEmpty()) return emptyList()
     val effectivePalette = cascade.effective
@@ -1184,7 +1223,7 @@ internal fun buildCueAssignmentsForPreset(
                         continue
                     }
                     val resolution = resolveAssignmentValueForFixture(
-                        paletteRegistry, fixture.key, canonical, memberCategory, assignment.value, effectivePalette,
+                        lookRegistry, fixture.key, canonical, memberCategory, assignment.value, effectivePalette,
                     )
                     val value = resolution.value ?: run {
                         logger.warn(

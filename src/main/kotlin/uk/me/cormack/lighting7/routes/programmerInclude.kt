@@ -82,14 +82,14 @@ internal fun includeCueIntoProgrammer(
     )
     val priority = cueDerivedPriority(cueData)
 
-    val cueOwnRows = buildCueAssignmentsForCue(fixtures, cueData, cascade, state.show.paletteRegistry)
+    val cueOwnRows = buildCueAssignmentsForCue(fixtures, cueData, cascade, state.show.lookRegistry)
     val presetRows = immediatePresets.flatMap { preset ->
         buildCueAssignmentsForPreset(
             fixtures, cueData.cueId, priority,
             preset.presetId, presetPropertyAssignments(state, preset.presetId),
             preset.application.targets,
             cascade = cascade.copy(preset = preset.palette),
-            paletteRegistry = state.show.paletteRegistry,
+            lookRegistry = state.show.lookRegistry,
         )
     }
 

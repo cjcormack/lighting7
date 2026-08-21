@@ -121,7 +121,7 @@ internal suspend fun RoutingContext.handleMakeCueHard(state: State, cueId: Int, 
         if (outcome.converted > 0) state.show.fixtures.cueListChanged()
 
         val details = transaction(state.database) {
-            DaoCue.findById(cueId)!!.toCueDetails(true, state.show.fixtures, state.show.paletteRegistry)
+            DaoCue.findById(cueId)!!.toCueDetails(true, state.show.fixtures, state.show.lookRegistry)
         }
         logger.info(
             "make-hard cue {}: {} converted, {} group row(s) expanded, {} unresolved",
@@ -156,7 +156,7 @@ private fun hardenCueRows(
     var groupRowsExpanded = 0
     var unresolved = 0
     val fixtures = state.show.fixtures
-    val registry = state.show.paletteRegistry
+    val registry = state.show.lookRegistry
 
     // Snapshot first: the loop deletes and creates rows, and iterating a live referrersOn while
     // mutating it is asking for trouble.

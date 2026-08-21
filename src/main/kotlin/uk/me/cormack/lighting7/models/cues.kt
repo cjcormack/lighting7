@@ -40,6 +40,36 @@ data class CuePresetApplicationDto(
 )
 
 /**
+ * One line of a cue's ordered Look composition. Wire shape of [DaoCueLayers]; see its KDoc for
+ * what [targets] and [propertyMask] mean.
+ *
+ * [lookId] is the int PK for API traffic, matching [CuePresetApplicationDto.presetId]'s precedent;
+ * sync carries the Look's uuid instead.
+ */
+@Serializable
+data class CueLayerDto(
+    val lookId: Int,
+    val sortOrder: Int = 0,
+    val enabled: Boolean = true,
+    val targets: List<CueTargetDto> = emptyList(),
+    /** Comma-separated `PropertyMaskGroup` names; null = every property. */
+    val propertyMask: String? = null,
+    val blendMode: String = "OVERRIDE",
+    val amount: Double = 1.0,
+    val stomp: Boolean = false,
+    val speedMasterUuid: String? = null,
+    val rateSpeedMasterUuid: String? = null,
+    val delayMs: Long? = null,
+    val intervalMs: Long? = null,
+    val randomWindowMs: Long? = null,
+    /**
+     * Look name, populated server-side on read so a cue card can label the layer without a second
+     * fetch. Ignored on write — mirroring how `health` is read-only on the assignment DTOs.
+     */
+    val lookName: String? = null,
+)
+
+/**
  * Layer 4 property assignment — operator-authored "this cue asserts property X = value" record.
  * See `docs/lighting-composition-model.md` §"Layer 4" for semantics (specificity, composition,
  * crossfade) and `uk.me.cormack.lighting7.fx.CueAssignmentResolver` for the canonical value parser.
@@ -162,6 +192,7 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var stomp by DaoCues.stomp
     var uuid by DaoCues.uuid
     val presetApplications by DaoCuePresetApplication referrersOn DaoCuePresetApplications.cue
+    val layers by DaoCueLayer referrersOn DaoCueLayers.cue
     val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue
     val propertyAssignments by DaoCuePropertyAssignment referrersOn DaoCuePropertyAssignments.cue
     val triggers by DaoCueTrigger referrersOn DaoCueTriggers.cue
@@ -295,4 +326,101 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
             targetType = value.discriminator
             targetKey = value.key
         }
+}
+
+// ─── Cue Layers table ──────────────────────────────────────────────────
+
+/**
+ * One line of a cue's ordered Look composition — "apply this Look, over these targets, in this
+ * position in the stack".
+ *
+ * Directly supersedes [DaoCuePresetApplications], which was already the ordered per-cue
+ * application list carrying `sortOrder`, the timing triple and speed-master overrides. This is an
+ * extension of that table rather than a new concept beside it.
+ *
+ * The cue's own [DaoCuePropertyAssignments] / [DaoCueAdHocEffects] are **the local layer** —
+ * always exactly one, always last, so it needs no identity row here. Keeping them separate is
+ * deliberate on three counts: they carry `moveInDark`; `CueEditSession.upsertAssignment` matches on
+ * `(targetType, targetKey, propertyName)` with no layer dimension and keeps working unchanged; and
+ * it gives surface and cue-edit writes an unambiguous destination.
+ *
+ * See `docs/plans/looks-and-layers-plan.md` §3.2 and `fx/CueComposer.kt` for how a stack of these
+ * is flattened to one contributor per (fixture, property) before the resolver sees it.
+ */
+object DaoCueLayers : IntIdTable("cue_layers") {
+    val cue = reference("cue_id", DaoCues)
+    val look = reference("look_id", DaoLooks)
+    val sortOrder = integer("sort_order").default(0)
+    val enabled = bool("enabled").default(true)
+
+    /**
+     * The target set this layer operates over. **One meaning serving two jobs**: when non-empty it
+     * *supplies* targets to the Look's deferred rows and *filters* its bound rows. That single rule
+     * is what lets the migration preserve coverage exactly — a cue that referenced a palette for
+     * two fixtures must not start asserting every fixture the palette covers.
+     *
+     * Empty means "the Look's own targets, unfiltered", which is only meaningful for a Look whose
+     * rows are all bound.
+     */
+    val targets = json<List<CueTargetDto>>("targets", Json)
+
+    /**
+     * Comma-separated [uk.me.cormack.lighting7.fx.PropertyMaskGroup] names; null = every property.
+     * This is what subsumes value-level `ref:` — "this cue's colour comes from Warm, everything
+     * else local" is one `COLOUR`-masked layer, not a separate feature. Parsed with the existing
+     * [uk.me.cormack.lighting7.fx.parseMaskGroups] / [uk.me.cormack.lighting7.fx.maskAllows].
+     */
+    val propertyMask = varchar("property_mask", 255).nullable()
+
+    /** How this layer combines with what has accumulated beneath: OVERRIDE / MAX / MIN / MULTIPLY. */
+    val blendMode = varchar("blend_mode", 50).default("OVERRIDE")
+
+    /**
+     * Linear mix of this layer over what is beneath, in `[0, 1]` (grandMA3 calls this Amount).
+     * `OVERRIDE` at `1.0` — the default — is plain replacement.
+     */
+    val amount = double("amount").default(1.0)
+
+    /**
+     * Within-cue stomp: suppress lower layers' *effects* on the properties this layer asserts.
+     * The escape hatch for the one constraint layer order cannot express — effects are Layer 3 and
+     * values are Layer 4, so an effect sits above a static value regardless of layer order.
+     *
+     * Note today's [DaoCues.stomp] is *cross-cue*: `FxEngine.stompForCue` removes ad-hoc effects
+     * owned by *other* cue ids and explicitly excludes the stomping cue's own. Within-cue stomp is
+     * therefore genuinely new behaviour built on existing scaffolding, and the column lands here
+     * ahead of it — the same staging [DaoCues.stomp] itself used.
+     */
+    val stomp = bool("stomp").default(false)
+
+    /** Per-layer speed-master override (null → each Look effect's own → master 1). */
+    val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
+
+    /** Per-layer wall-clock rate-master override (null → the effect's own). */
+    val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
+
+    val delayMs = long("delay_ms").nullable()
+    val intervalMs = long("interval_ms").nullable()
+    val randomWindowMs = long("random_window_ms").nullable()
+    val uuid = javaUUID("uuid").autoGenerate()
+}
+
+class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
+    companion object : IntEntityClass<DaoCueLayer>(DaoCueLayers)
+
+    var cue by DaoCue referencedOn DaoCueLayers.cue
+    var look by DaoLook referencedOn DaoCueLayers.look
+    var sortOrder by DaoCueLayers.sortOrder
+    var enabled by DaoCueLayers.enabled
+    var targets by DaoCueLayers.targets
+    var propertyMask by DaoCueLayers.propertyMask
+    var blendMode by DaoCueLayers.blendMode
+    var amount by DaoCueLayers.amount
+    var stomp by DaoCueLayers.stomp
+    var speedMasterUuid by DaoCueLayers.speedMasterUuid
+    var rateSpeedMasterUuid by DaoCueLayers.rateSpeedMasterUuid
+    var delayMs by DaoCueLayers.delayMs
+    var intervalMs by DaoCueLayers.intervalMs
+    var randomWindowMs by DaoCueLayers.randomWindowMs
+    var uuid by DaoCueLayers.uuid
 }

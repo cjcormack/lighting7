@@ -126,28 +126,30 @@ class ProjectCloneTest {
             val clone = DaoProject.findById(result.projectId)!!
             val source = DaoProject.findById(sourceId)!!
 
-            val clonePalette = clone.palettes.single { it.name == "Warm Amber" }
-            val sourcePalette = source.palettes.single { it.name == "Warm Amber" }
+            val cloneLook = clone.looks.single { it.name == "Warm Amber" }
+            val sourceLook = source.looks.single { it.name == "Warm Amber" }
             assertNotEquals(
-                sourcePalette.uuid, clonePalette.uuid,
-                "clone must mint a fresh palette identity",
+                sourceLook.uuid, cloneLook.uuid,
+                "clone must mint a fresh look identity",
             )
 
+            // The interesting half: the reference lives inside an *opaque value string*, so only
+            // ExportUuidRemapper's text substitution can rewire it. A clone whose row still named
+            // the source's look would resolve against the wrong project — or against nothing.
             val refRows = clone.cues
                 .flatMap { it.propertyAssignments }
                 .filter { isPaletteRefValue(it.value) }
             assertEquals(1, refRows.size, "expected the fixture's single ref'd cue row in the clone")
             assertEquals(
-                paletteRefValue(clonePalette.uuid), refRows.single().value,
-                "clone's cue row must reference the clone's palette, not the source's",
+                paletteRefValue(cloneLook.uuid), refRows.single().value,
+                "clone's cue row must reference the clone's look, not the source's",
             )
 
-            val presetRefRows = clone.fxPresets
-                .flatMap { it.propertyAssignments }
-                .filter { isPaletteRefValue(it.value) }
-            assertEquals(
-                paletteRefValue(clonePalette.uuid), presetRefRows.single().value,
-                "clone's preset row must reference the clone's palette, not the source's",
+            // Look rows themselves can never hold a reference — `validateLookRows` rejects one at
+            // the write boundary, which is what keeps looks from nesting.
+            assertTrue(
+                clone.looks.flatMap { it.rows.toList() }.none { isPaletteRefValue(it.value) },
+                "looks hold literals only",
             )
         }
     }
@@ -176,10 +178,14 @@ class ProjectCloneTest {
                 "clone must mint a fresh master identity",
             )
 
-            val presetEffect = clone.fxPresets.single().effects.single()
+            val lookEffect = clone.looks.flatMap { it.effects.toList() }.single()
             assertEquals(
-                cloneMaster.uuid.toString(), presetEffect.speedMasterUuid,
-                "the preset effect's reference (inside the JSON blob) must point at the clone's master",
+                cloneMaster.uuid, lookEffect.speedMasterUuid,
+                "the look effect's reference must point at the clone's master",
+            )
+            assertEquals(
+                cloneMaster.uuid, lookEffect.rateSpeedMasterUuid,
+                "and so must the rate role — parity matters, they are set independently",
             )
 
             val adHoc = clone.cues.flatMap { it.adHocEffects }.single()
@@ -188,25 +194,21 @@ class ProjectCloneTest {
                 "the ad-hoc effect's column must point at the clone's master",
             )
 
-            val presetApp = clone.cues.flatMap { it.presetApplications }.single()
+            val layer = clone.cues.flatMap { it.layers }.single { it.speedMasterUuid != null }
             assertEquals(
-                cloneMaster.uuid, presetApp.speedMasterUuid,
-                "the preset application's override must point at the clone's master",
+                cloneMaster.uuid, layer.speedMasterUuid,
+                "the cue layer's override must point at the clone's master",
             )
 
-            // The rate role is a second, independent reference to the same master — it has
-            // to be rewritten in all three places too, or a cloned wall-clock look would
-            // scale against the source project's tempo.
-            assertEquals(
-                cloneMaster.uuid.toString(), presetEffect.rateSpeedMasterUuid,
-                "the preset effect's rate reference must be remapped inside the JSON blob",
-            )
+            // The rate role is a second, independent reference to the same master — it has to be
+            // rewritten everywhere too, or a cloned wall-clock effect would scale against the
+            // source project's tempo.
             assertEquals(
                 cloneMaster.uuid, adHoc.rateSpeedMasterUuid,
                 "the ad-hoc effect's rate column must point at the clone's master",
             )
             assertEquals(
-                cloneMaster.uuid, presetApp.rateSpeedMasterUuid,
+                cloneMaster.uuid, layer.rateSpeedMasterUuid,
                 "the preset application's rate override must point at the clone's master",
             )
         }

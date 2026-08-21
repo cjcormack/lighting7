@@ -32,6 +32,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 DaoCue.find { DaoCues.project eq project.id }
                     .orderBy(DaoCues.name to SortOrder.ASC)
                     .with(
+                        DaoCue::layers,
                         DaoCue::presetApplications,
                         DaoCue::adHocEffects,
                         DaoCue::propertyAssignments,
@@ -40,7 +41,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                         DaoCuePresetApplication::preset,
                         DaoCueTrigger::script,
                     )
-                    .map { it.toCueDetails(isCurrentProject, state.show.fixtures, state.show.paletteRegistry) }
+                    .map { it.toCueDetails(isCurrentProject, state.show.fixtures, state.show.lookRegistry) }
             }
             call.respond(cues)
         }
@@ -101,10 +102,11 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     newCue.adHocEffects,
                     newCue.propertyAssignments,
                     newCue.triggers,
+                    newCue.layers,
                 )
                 // A cue created without a number gets one derived from where it landed.
                 renumberAutoCues(stack)
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.paletteRegistry) to null
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.lookRegistry) to null
             }
             val (cueDetails, error) = result
             if (error != null || cueDetails == null) {
@@ -124,7 +126,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val cue = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
-                cue.toCueDetails(isCurrentProject, state.show.fixtures, state.show.paletteRegistry)
+                cue.toCueDetails(isCurrentProject, state.show.fixtures, state.show.lookRegistry)
             }
 
             if (cue != null) {
@@ -178,10 +180,11 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     updatedData.adHocEffects,
                     updatedData.propertyAssignments,
                     updatedData.triggers,
+                    updatedData.layers,
                 )
 
                 if (numberChanged) renumberAutoCues(cue.cueStack)
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.paletteRegistry)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.lookRegistry)
             }
 
             if (cueDetails != null) {
@@ -229,11 +232,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
                 // Children arrays — replace wholesale when present
                 val hasPresets = "presetApplications" in body
+                val hasLayers = "layers" in body
                 val hasEffects = "adHocEffects" in body
                 val hasAssignments = "propertyAssignments" in body
                 val hasTriggers = "triggers" in body
 
-                if (hasPresets || hasEffects || hasAssignments || hasTriggers) {
+                if (hasPresets || hasLayers || hasEffects || hasAssignments || hasTriggers) {
                     val json = Json { ignoreUnknownKeys = true }
                     val presets = if (hasPresets)
                         json.decodeFromJsonElement<List<CuePresetApplicationDto>>(body["presetApplications"]!!)
@@ -247,8 +251,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     val triggers = if (hasTriggers)
                         json.decodeFromJsonElement<List<CueTriggerDto>>(body["triggers"]!!)
                     else null
+                    val layers = if (hasLayers)
+                        json.decodeFromJsonElement<List<CueLayerDto>>(body["layers"]!!)
+                    else null
 
                     // Delete only the children being replaced
+                    if (hasLayers) cue.layers.forEach { it.delete() }
                     if (hasPresets) cue.presetApplications.forEach { it.delete() }
                     if (hasEffects) cue.adHocEffects.forEach { it.delete() }
                     if (hasAssignments) cue.propertyAssignments.forEach { it.delete() }
@@ -260,11 +268,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                         effects ?: emptyList(),
                         assignments ?: emptyList(),
                         triggers ?: emptyList(),
+                        layers ?: emptyList(),
                     )
                 }
 
                 if (numberChanged) renumberAutoCues(cue.cueStack)
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.paletteRegistry)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.lookRegistry)
             }
 
             if (cueDetails != null) {
@@ -358,6 +367,24 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             }
 
             // Copy child entities
+            for (layer in sourceCue.layers) {
+                DaoCueLayer.new {
+                    cue = newCue
+                    look = layer.look
+                    sortOrder = layer.sortOrder
+                    enabled = layer.enabled
+                    targets = layer.targets
+                    propertyMask = layer.propertyMask
+                    blendMode = layer.blendMode
+                    amount = layer.amount
+                    stomp = layer.stomp
+                    speedMasterUuid = layer.speedMasterUuid
+                    rateSpeedMasterUuid = layer.rateSpeedMasterUuid
+                    delayMs = layer.delayMs
+                    intervalMs = layer.intervalMs
+                    randomWindowMs = layer.randomWindowMs
+                }
+            }
             for (app in sourceCue.presetApplications) {
                 DaoCuePresetApplication.new {
                     cue = newCue
@@ -560,6 +587,7 @@ data class NewCue(
     val name: String,
     val palette: List<String> = emptyList(),
     val presetApplications: List<CuePresetApplicationDto> = emptyList(),
+    val layers: List<CueLayerDto> = emptyList(),
     val adHocEffects: List<CueAdHocEffectDto> = emptyList(),
     val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDto> = emptyList(),
@@ -582,6 +610,8 @@ data class CueDetails(
     val name: String,
     val palette: List<String>,
     val presetApplications: List<CuePresetApplicationDetail>,
+    /** The cue's ordered Look composition, in `sortOrder`. */
+    val layers: List<CueLayerDto> = emptyList(),
     val adHocEffects: List<CueAdHocEffectDto>,
     val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDetailDto> = emptyList(),

@@ -258,7 +258,7 @@ class AiService(
         sb.appendLine()
 
         // Effect library summary
-        sb.appendLine("## Effect Library (for create_fx_preset)")
+        sb.appendLine("## Effect Library (for create_look)")
         for (effect in state.show.fxRegistry.getLibrary()) {
             val params = effect.parameters.joinToString(", ") { "${it.name}:${it.type}=${it.defaultValue}" }
             sb.appendLine("- **${effect.name}** (category=${effect.category}, output=${effect.outputType}) params: $params")
@@ -288,15 +288,23 @@ class AiService(
         }
         sb.appendLine()
 
-        // Existing presets
+        // Existing looks
         val project = state.projectManager.currentProject
-        val presets = transaction(state.database) {
-            DaoFxPreset.find { DaoFxPresets.project eq project.id }
-                .map { "${it.name} (id=${it.id.value}, ${it.effects.size} effects)" }
+        val looks = transaction(state.database) {
+            DaoLook.find { DaoLooks.project eq project.id }
+                .map { look ->
+                    val binding = if (look.editorFixtureType != null) {
+                        "deferred, authored for ${look.editorFixtureType}"
+                    } else {
+                        "bound to its own targets"
+                    }
+                    "${look.name} (id=${look.id.value}, ${look.rows.count()} rows, " +
+                        "${look.effects.count()} effects, $binding)"
+                }
         }
-        if (presets.isNotEmpty()) {
-            sb.appendLine("## Existing Presets")
-            presets.forEach { sb.appendLine("- $it") }
+        if (looks.isNotEmpty()) {
+            sb.appendLine("## Existing Looks")
+            looks.forEach { sb.appendLine("- $it") }
             sb.appendLine()
         }
 
@@ -346,7 +354,10 @@ class AiService(
         sb.appendLine("- For group effects, use distribution=LINEAR for chases, UNIFIED for all-together")
         sb.appendLine("- **Step timing**: Controls whether beat division means per-step time or total cycle time. When stepTiming=true, each step gets one full beat-division (total cycle = beatDivision × steps). When false, the entire cycle completes in one beat-division. Static effects default to stepTiming=true (chase), continuous effects default to false. You can override per-effect in the preset.")
         sb.appendLine("- UByte values range 0-255 (use 'u' suffix in scripts: 128u)")
-        sb.appendLine("- **Cues**: A cue is a named snapshot bundling a colour palette with preset applications and ad-hoc effects. Multiple cues can run concurrently — applying a cue adds it alongside existing cues. Each cue has its own isolated palette (effects resolve P1, P2 etc. against the cue's palette, not the global palette). Cues with updateGlobalPalette=true also set the global palette when applied. Re-applying the same cue refreshes it (stops and re-starts its effects). Use stop_cue to stop a specific cue without affecting others. Use apply_cue with replaceAll=true to stop all other running cues first. Preset applications in cues are read fresh at apply time, so edits to presets are always reflected.")
+        sb.appendLine("- **Looks and layers**: A *look* is a named, reusable bundle of static values and effects. A *layer* applies one look inside a cue, at a position in the cue's stack. A look whose rows name their own fixtures is **bound** (edit it and every cue layering it moves); one whose rows are deferred takes its targets from the layer, so the same look can be pointed at different fixtures.")
+        sb.appendLine("- **Layer order**: within a cue, later layers override earlier ones for the same fixture and property — for *every* attribute, intensity included. This is not HTP: a later dim layer really does dim. The cue's own local values always win over every layer. Per-layer blendMode (MAX/MIN/MULTIPLY/ADDITIVE) and amount (0..1) modify how a layer mixes over what is beneath it.")
+        sb.appendLine("- **One limit worth knowing**: effects sit above static values regardless of layer order, because effects are a higher composition layer than values. So a later layer setting colour statically will not beat an earlier layer running a colour effect.")
+        sb.appendLine("- **Cues**: A cue is an ordered stack of look layers plus its own local values and ad-hoc effects. Multiple cues can run concurrently — applying a cue adds it alongside existing cues. Each cue has its own isolated positional colour list (effects resolve P1, P2 etc. against it, not against the global one). Cues with updateGlobalPalette=true also set the global list when applied. Re-applying the same cue refreshes it. Use stop_cue to stop one cue, or apply_cue with replaceAll=true to stop all others first. Looks are read fresh at apply time, so edits to a look are always reflected.")
         sb.appendLine("- **Cue Stacks**: An ordered container of cues for sequential playback (theatre-style cue-to-cue). Create a stack with create_cue_stack, add cues with add_cue_to_stack, then activate with activate_cue_stack. Use advance_cue_stack to go forward/backward. Stacks support looping (wraps at end). Individual cues within a stack can have: auto-advance (timed transition to next cue, configured per-cue via autoAdvance + autoAdvanceDelayMs), crossfade (intensity envelope between cue transitions, configured per-cue via fadeDurationMs + fadeCurve). Stack palette cascading: cue palette replaces stack palette when set; stack palette persists when a cue has no palette. Multiple stacks can be active simultaneously.")
 
         return sb.toString()

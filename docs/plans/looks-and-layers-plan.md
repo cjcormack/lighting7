@@ -1,9 +1,75 @@
 # Looks and Layers — replacing FX Presets and named Palettes
 
-> **Status: APPROVED, not yet started (2026-08-20).** Three implementation sessions, per §5.
+> **Status: session 1 (backend) landed 2026-08-21. Sessions 2–4 remain — see §5.**
 > Supersedes the FX-preset and named-palette halves of
 > [programmer-redesign-proposal.md](completed/programmer-redesign-proposal.md) §3.5.
 > Not in production yet — migrate hard, no rollback shims.
+>
+> **Landed:** the four tables, `fx/CueComposer.kt` (cook + blending, 29 tests),
+> `fx/LookRegistry.kt` replacing `PaletteRegistry`, `routes/projectLooks.kt`, the `lookListChanged`
+> collapse, `applyCue` / `buildCombinedCueLayerRows` / `CueStackManager` / `CueTriggerManager`
+> rewired onto cook, compatibility filtering, sync at `formatVersion` 5, the AI surface, and the
+> startup migration. The FX-preset and named-palette HTTP routes are unmounted.
+>
+> **Outstanding from session 1:** the migration still has **no test** — see §9.6. It remains the
+> largest residual risk, and the check that would flag the two intended behaviour changes cue by cue.
+> A review pass caught two bugs in it that no test would have had to be clever to find, both now
+> fixed:
+>
+> - Every uuid was read with `ResultSet.getString` on a column Exposed stores as a **16-byte blob**
+>   (`UUIDColumnType` → `BINARY(16)`), which reinterprets the bytes as text and replaces everything
+>   above 0x7F with U+FFFD. Verified on a real desk database: a preset uuid of
+>   `7849763a-28bd-…` migrated to a 16-character mojibake string. That destroyed every guarantee
+>   uuid preservation buys — idempotency, `ref:{uuid}` resolution, sync identity.
+> - Uuids were written back as **text** literals. SQLite never compares a BLOB equal to a TEXT
+>   value, so even a correct uuid written that way is invisible to `DaoLooks.uuid eq lookUuid` —
+>   the lookup `loadLookSnapshot` performs — and every migrated Look would have failed to load with
+>   "look could not be loaded — skipping layer".
+>
+> Both now go through `javaUuid()` / `sqlUuid()` helpers, and the migration deletes the unreachable
+> rows its pre-fix version wrote (`typeof(uuid) <> 'blob'`) so the repaired pass stays idempotent
+> instead of minting a duplicate "Warm (2)".
+>
+> The same pass found three more, also fixed: `CueStackManager.activateCueInStack` and the AI
+> `apply_cue` tool both hand-roll their `CueApplyData` and neither set `layers`, so **no layer fired
+> at all on a stack GO** — the primary firing path — nor through the AI; the fired-timed-layer set
+> was keyed on the *look* rather than the layer, so one cue layering a Look twice at two delays fired
+> both at the first delay; and look-spawned effects were stamped with `presetId = lookId`, which made
+> `captureCurrentState` record a cue whose preset application named whatever `DaoFxPreset` shared
+> that number (`FxInstance` now carries a separate `lookId`).
+>
+> **Next, and urgent:** session 2, the Look library's frontend. Session 1 unmounted the FX-preset
+> and named-palette HTTP routes, so `/presets`, `/palettes/:type` and the busking pads currently
+> 404. Include/Record/Update still call `buildCueAssignmentsForPreset` and therefore **ignore
+> layers** — that is session 3 (§5.3), as always planned, but it is a live gap until then.
+>
+> Worse than "ignores layers", and the reason session 3 should not slip: `POST /programmer/include`
+> and `POST /programmer/record-palette` are **still mounted** and still read and write
+> `DaoPalette` / `DaoPaletteEntry`, while `republishForLookEdit` and `includePaletteIntoProgrammer`
+> now resolve through `LookRegistry`, which reads only `looks` / `look_rows`. So recording a *new*
+> palette produces a row no consumer can see, and re-recording a migrated one reports "N entries
+> written, N cues republished" while the rig does not move — the two tables diverge from that point
+> on. Left as-is deliberately (the fix is the session-3 rewrite onto layers, not a patch), but it is
+> a data-integrity gap, not just a missing feature.
+>
+> **Five corrections to this plan, found in the code and applied:**
+> 1. **`minReader` is written but never read.** The importer gates on `SUPPORTED_FORMAT_VERSION` /
+>    `MIN_SUPPORTED_FORMAT_VERSION` in `ProjectImporter.kt`; both had to move to 5 as well, or the
+>    bump is inert.
+> 2. **Timed layers cannot append.** `CueTriggerManager` retracted a fired preset's rows by
+>    *structural equality*; appending a fired layer beside cooked rows puts two contributors on one
+>    key, with the tie decided by `HashMap` order. Firing now re-cooks the whole cue and publishes
+>    through `replaceCueAssignments`, which preserves an in-flight crossfade weight.
+> 3. **`CueStackManager.activateCueInStack` was already asymmetric** — it called
+>    `buildCueAssignmentsForCue` alone, so an immediate preset's *property assignments* never reached
+>    Layer 4 on a stack GO. Routing both paths through cook fixes that silently; it is a real
+>    behaviour change beyond the intended LTP flip.
+> 4. **Presets and palettes stop being portable at v5**, rather than being exported alongside looks.
+>    Exporting both would put two representations of one entity in the repo and materialise both on
+>    import. Their `SyncCoverageTest` dispositions are now `Excluded`.
+> 5. **`AssignmentHealth.PaletteTypeMismatch` lost its only producer.** A Look has no declared
+>    attribute type — families are derived — so "wrong-type reference" is no longer a coherent
+>    diagnosis. The arm is unreachable and should be deleted with the frontend health descriptor.
 
 ## 1. Context
 
@@ -74,7 +140,7 @@ no dual-read period.
 | D1 | **Full merge: layers only.** One `Look` entity; `ref:{uuid}` retired as a value grammar. | `PaletteRegistry`, `PaletteResolver`, `PaletteRef`, `paletteRepublish.kt` and both Make-Hard routes collapse into the cook step plus one "flatten layer" gesture. |
 | D2 | **Both targeting modes, via deferred targets.** A Look row names a concrete target, or is deferred and takes targets from the layer line referencing it. | A bound Look behaves like today's palette; a fully-deferred one like today's preset. `fixtureType` survives only as an editor hint. |
 | D3 | **Naming: Look + Layer.** | Avoids colliding with cue *children* (timed applications, `CueTriggerManager`) that "sub-cue" would have implied. Matches `LayersPane` and the composition-model doc's existing language. |
-| D4 | **Three sessions, each shipping its own frontend slice.** | Nothing half-migrated at a session boundary; UX is not deferred to a trailing session. |
+| D4 | **Four sessions; the Look library's frontend is its own.** *(Revised 2026-08-21 — originally "three sessions, each shipping its own frontend slice".)* | The backend slice alone filled a session, so pairing it with its UX meant shipping neither. The frontend is now session 2, immediately after the backend it consumes, rather than folded into it or deferred to the end. |
 
 Routine calls made while planning, stated so they can be overridden: the Look keeps a
 positional colour-list column so `PaletteCascade`'s most-specific scope survives (§7);
@@ -150,7 +216,7 @@ The cue's own `DaoCuePropertyAssignments` / `DaoCueAdHocEffects` stay as they ar
 **the local layer** — always exactly one, always last, so it needs no identity row. Keeping
 them separate is deliberate on three counts: they carry `moveInDark`; `CueEditSession`'s
 `upsertAssignment` matches on `(targetType, targetKey, propertyName)` with no layer dimension
-and keeps working unchanged (§5.2); and it gives surface/cue-edit writes an unambiguous
+and keeps working unchanged (§5.3); and it gives surface/cue-edit writes an unambiguous
 destination.
 
 The programmer holds the same structure in memory — an ordered layer list, no table, since the
@@ -265,7 +331,8 @@ recipes and should gain a short section.
 
 ## 4. UX
 
-First-class, one slice per session (D4).
+First-class, and never deferred to a trailing session — but not necessarily in the same session as
+the backend it consumes (D4). The Look library's own UX is session 2.
 
 ### 4.1 The one component
 
@@ -322,13 +389,12 @@ cook step knows the winner already, so this is a small change with high operator
 
 Cue content is rendered by **four** component trees sharing nothing with `LayersPane`:
 `RunCueCard`/`CueCardBody`, `RunMobileCueCard` (below the 600px runner threshold), and the
-Prompt Book rail cards. Session 3 owns these; it is the likeliest thing to slip.
+Prompt Book rail cards. Session 4 owns these; it is the likeliest thing to slip.
 
-## 5. Implementation — three sessions
+## 5. Implementation — four sessions
 
-### Session 1 — Look entity, cook step, layer model
+### Session 1 — Look entity, cook step, layer model (backend) — **done 2026-08-21**
 
-Backend:
 - `models/looks.kt`: `DaoLooks`, `DaoLookRows`, `DaoLookEffects`. `DaoCueLayers` in
   `models/cues.kt`. Register all four in `models/Schema.kt` `ALL_TABLES`.
 - `fx/CueComposer.kt`: `cook`, the blend functions, the one-row-per-key invariant.
@@ -364,15 +430,46 @@ Backend:
   `ai/AiService.kt` system prompt → look/layer equivalents.
 - Migration (§6), one-shot at startup.
 
-Frontend:
-- `/projects/:id/looks` library replacing the Presets and Palettes routes; banked by derived
-  family; both authoring models (§4.2).
-- `LayersPane.tsx` gains the real ordered layer section with dnd-kit reordering.
-- `lib/cueUtils.ts` `buildCueInput`: add the layers field **and its regression test** — that
-  function is a deliberate field-by-field rebuild, so a missed field silently drops on every
-  inline edit.
+### Session 2 — The Look library's frontend
 
-### Session 2 — Programmer as a layer stack; the view merge
+**This session is not optional polish — the desk's UI is currently broken without it.** Session 1
+unmounted the FX-preset and named-palette HTTP routes (their reference mechanism now resolves
+through `LookRegistry`, so anything the old CRUD created would be invisible to every consumer). The
+frontend still calls them, so today: `/presets` and `/palettes/:type` 404, and **the busking pads
+404** because they toggle a preset by id. Around 35 files import
+`api/fxPresetsApi` / `api/palettesApi` / `store/fxPresets` / `store/palettes`; that import list is
+the real scope of this session, not the three bullets the plan originally carried.
+
+One piece of **backend** work falls here rather than in session 1, because it exists only to serve
+this UI: a `POST /project/{id}/looks/{lookId}/toggle` route. `loadLookToggleData`
+(`routes/projectLooks.kt`) already adapts a Look into the shapes `togglePresetOnTargets` consumes —
+deferred rows and effects only, since the toggle surface supplies the targets — and `apply_look` in
+the AI surface already uses it. There is no HTTP endpoint yet, and the pads need one. (Session 3
+then converts the pads from "toggle" to "add a programmer layer", which is the end state; a toggle
+route is what keeps them working in between.)
+
+Frontend:
+- `api/looksApi.ts` + `store/looks.ts` replacing the four `fxPresets*` / `palettes*` modules.
+- `/projects/:id/looks` library replacing the Presets and Palettes routes; banked by derived
+  family (`LookDto.families`, server-derived); both authoring models (§4.2). The deferred half
+  reuses `PresetEditor` / `PresetDraftContext` / `syntheticFixture.ts` against
+  `editorFixtureType`; the bound half is Record-and-edit-on-stage, so it needs no value grid.
+- `LayersPane.tsx` gains the real ordered layer section with dnd-kit reordering.
+- `lib/cueUtils.ts` `buildCueInput`: replace `presetApplications` with `layers` **and extend its
+  regression test** — that function is a deliberate field-by-field rebuild, so a missed field
+  silently drops on every inline edit.
+- Busking pads point at the Look toggle route.
+- Every other importer of the retired modules: `PresetPicker` (both of them),
+  `ApplyPalettePopover`, `PalettePickerPopover`, `PaletteRefBadge`, `MakeHardDialog`,
+  `RecordPaletteSheet`, `FixturesTable`, `AddFixtureSheet`, `ViewSwitcher`, `IncludeSheet`,
+  `CueDetailContent`, and the `presets/` and `palettes/` component directories.
+- `AssignmentHealth.PaletteTypeMismatch` has no producer left (it named a Look's declared
+  attribute type, which no longer exists). Delete the arm, its `describeAssignmentHealth` case and
+  the frontend descriptor entry **in one change** — it is a serialized sealed arm, so removing it
+  needs a forced recompile or every serialization test fails with `NoClassDefFoundError` while the
+  build reports success. Tracked as `FU-LOOK-HEALTH-ARM-CLEANUP`.
+
+### Session 3 — Programmer as a layer stack; the view merge
 
 Backend:
 - `ProgrammerStore`: ordered layer list above the local slot stack; retire the `preset:{id}`
@@ -391,7 +488,7 @@ Backend:
   also disposes of the target-less hardening problem
   (`docs/lighting-composition-model.md:295`), since a layer always has a target set.
 - `provenanceState` carries the winning layer (§4.3).
-- **§5.2 `CueEditSession`** — `upsertAssignment` matches `(targetType, targetKey,
+- **§5.3 `CueEditSession`** — `upsertAssignment` matches `(targetType, targetKey,
   propertyName)` with no layer dimension, and `setProperty`/`setChannel` callers (including
   `SurfaceInputRouter`) have no way to name a layer. Rule: **surface and cue-edit writes always
   land in the local layer.** Because local rows stay in `DaoCuePropertyAssignments`,
@@ -405,7 +502,7 @@ Frontend:
 - `lib/programmerValue.ts`: drop `parsePaletteRefUuid` / `serializePaletteRef` /
   `isPaletteRefValue`; `PaletteRefBadge` becomes a layer chip.
 
-### Session 3 — Blend/amount UX, remaining renderers, retirement, docs
+### Session 4 — Blend/amount UX, remaining renderers, retirement, docs
 
 Frontend:
 - Per-layer blend / amount / mask / stomp controls.
@@ -486,40 +583,70 @@ golden test will flag those cues, and each should be eyeballed rather than blank
 
 ## 9. Verification
 
-1. `./gradlew test` — the project's pre-commit check (no Makefile; the global
-   `make commit-check` rule does not apply).
-2. **Cook invariant** — at most one `Assignment` per `(targetKey, propertyName)` per cue.
-3. **Precedence** — for both an LTP and an HTP category: layer 1 vs layer 2 vs local,
-   asserting later-wins then local-wins. These are the tests whose absence let the current
-   accidental behaviour survive; `CueAssignmentResolverTest` has no exact-tie case at all.
-4. **Blend/amount** — `OVERRIDE` at amount 0.5, `MAX`, `MIN`, `MULTIPLY`.
-5. **Mask and target restriction** — a masked layer asserts only in-mask properties; a layer
+Status as of session 1: ✅ done · ⬜ outstanding.
+
+1. ✅ `./gradlew test` — the project's pre-commit check (no Makefile; the global
+   `make commit-check` rule does not apply). 1651 tests, all passing.
+2. ✅ **Cook invariant** — at most one `Assignment` per `(targetKey, propertyName)` per cue.
+   `CueComposerTest`, including the timed-layer re-cook path.
+3. ✅ **Precedence** — for both an LTP and an HTP category: layer 1 vs layer 2 vs local,
+   asserting later-wins then local-wins. These are the tests whose absence let the accidental
+   behaviour survive; `CueAssignmentResolverTest` had no exact-tie case at all.
+4. ✅ **Blend/amount** — `OVERRIDE` at amount 0.5, `MAX`, `MIN`, `MULTIPLY`, plus the
+   lone-layer identity cases (mixing up from zero, down from full).
+5. ✅ **Mask and target restriction** — a masked layer asserts only in-mask properties; a layer
    with explicit `targets` asserts only those, even when the Look covers more.
-6. **Migration golden test** — pre/post `cook` equivalence per §6.
-7. **Sync round-trip** — extend `sync/ProjectRoundTripTest.kt`; `SyncCoverageTest` must pass
-   with dispositions recorded for the new tables (it fails the build otherwise), and
-   `RichProjectFixture` must set every optional field non-default or the round-trip and clone
-   tests pass vacuously.
-8. **Crossfade regression** — existing resolver tests pass unchanged; that is the evidence
-   cook did not perturb Layer 4.
-9. **Frontend** — `buildCueInput` regression test for the layers field; component tests for
-   reorder, enable/disable, amount.
-10. **On the rig** (`docs/plans/manual-validation.md`) — edit a Look while a cue referencing it
-    is live and confirm the change moves without re-firing the cue. That is use-case 1's
-    payoff, and `FU-MANUAL-PALETTE-TOURING` records it as never yet seen on hardware.
+6. ⬜ **Migration golden test** — pre/post `cook` equivalence per §6. **Not written.** The
+   migration itself is in `StateMigrations.kt` and is idempotent by uuid, but nothing exercises
+   it: there is no equivalent of `CollapseShowMigrationTest`, so no test has ever run a palette or
+   preset through it. This is the largest outstanding risk in session 1's work and should be closed
+   before session 2 builds UI on top of migrated data. It is also the check that would flag the two
+   intended behaviour changes (§6's LTP ordering flip, and the stack-GO fix in correction 3) cue by
+   cue so each can be eyeballed rather than blanket-accepted.
+7. ✅ **Sync round-trip** — `sync/ProjectRoundTripTest.kt` and `SyncCoverageTest` pass with
+   dispositions recorded for all four new tables; `RichProjectFixture` seeds a bound Look, a
+   deferred Look with an element row and an effect, and two layers between them covering every
+   optional field non-default.
+8. ✅ **Crossfade regression** — existing resolver tests pass unchanged; that is the evidence cook
+   did not perturb Layer 4. `ProjectCloneTest` also confirms a `ref:` inside an opaque value string
+   still remaps to the clone's own Look.
+9. ⬜ **Frontend** — `buildCueInput` regression test for the layers field; component tests for
+   reorder, enable/disable, amount. Session 2.
+10. ⬜ **On the rig** (`docs/plans/manual-validation.md`) — edit a Look while a cue depending on it
+    is live and confirm the change moves without re-firing the cue. That is use-case 1's payoff, and
+    `FU-MANUAL-PALETTE-TOURING` records it as never yet seen on hardware. `FU-MANUAL-LAYER-PRECEDENCE`
+    is the new companion check: layered intensity is later-wins, which is the change an operator is
+    most likely to be surprised by.
 
 Run the desk with `./gradlew run` (REST on :8413). Never stop or kill a Gradle daemon — the
 live desk *is* one.
 
 ## 10. Scope honesty
 
-The test surface is the largest single cost and is concentrated in session 1–2. Roughly ten
-files need substantial rewriting (`FxPresetMakeHardTest`, `FxPresetRoundTripTest`,
-`PresetPreviewSlotTest`, `BuildCueAssignmentsForPresetTest`, `PaletteRoutesTest`,
-`PaletteRepublishTest`, `PaletteRefTest`, `PaletteRegistryTest`, `PaletteResolverTest`,
-`PersistedFixtureReferenceValidatorTest`) and roughly fifteen more need targeted edits
-(the cue, programmer, cue-stack, speed-master, cue-edit-session and wire-format suites).
+**Session 1 is evidence, not an estimate any more.** The backend alone — 4 tables, the composer,
+the registry, the route file, the rewire of five apply paths, sync at v5, the AI surface and the
+migration — filled a whole session: ~1900 insertions and ~2300 deletions across 54 files, plus 6
+new ones. It did not leave room for its own frontend, which is why D4 was revised and the library's
+UX became session 2.
 
-Three sessions is achievable but tight, and §4.5 (four independent read renderers) is the most
-likely thing to slip out of session 3. If it does, the honest move is a fourth session for the
-Run/Prompt-Book/mobile renderers rather than shipping session 3 half-done.
+The test surface was the largest single cost, as predicted, but it landed differently than the
+original estimate assumed. Three files were **deleted rather than rewritten**, because unmounting
+the palette and preset HTTP routes left them without a subject: `PaletteRoutesTest` (778 lines),
+`FxPresetMakeHardTest`, `FxPresetRoundTripTest`. Their coverage does not simply vanish — make-hard
+becomes the flatten-layer route and record/include/update are rewritten against layers, both in
+session 3, and that is where the replacement tests belong. `PaletteRegistryTest`,
+`PaletteRepublishTest` and `PaletteResolverTest` **ported** with only their seeding changed, which is
+the useful signal that the behaviour survived the merge intact.
+
+Net after session 1: 1651 tests, all passing. New coverage is `CueComposerTest` (27 — the invariant,
+precedence both ways, blend/amount, mask, target restriction, cascade, timed layers) and
+`LookRoutesTest` (7, including the layer-FK delete guard end to end).
+
+**The known gap.** Include, Record and Update still call `buildCueAssignmentsForPreset`, so **Include
+currently ignores layers**. The plan always scheduled that work for the programmer session (now 3),
+and §5.3 is where it lands — but it is a live functional gap in the meantime, not merely unfinished
+work, and it is the first thing to fix once the frontend is breathing.
+
+§4.5 (four independent read renderers) remains the most likely thing to slip, now out of session 4.
+If it does, the honest move is a fifth session for the Run/Prompt-Book/mobile renderers rather than
+shipping session 4 half-done.

@@ -142,9 +142,9 @@ internal suspend fun RoutingContext.handleMakeFxPresetHard(
             DaoFxPreset.findById(presetId)!!.toPresetDetails(isCurrentProject = true)
         }
         if (outcome.converted > 0) {
-            state.show.fixtures.presetListChanged()
-            // The palettes' reference counts moved, which gates their delete.
-            state.show.fixtures.paletteListChanged()
+            // One signal now covers both halves: the rows changed *and* the referenced
+            // entities' reference counts moved, which gates their delete.
+            state.show.fixtures.lookListChanged()
         }
         logger.info(
             "make-hard preset {}: {} converted, {} ambiguous, {} unresolved, {} cue(s) republished",
@@ -178,7 +178,7 @@ private fun hardenPresetRows(
     var converted = 0
     var unresolved = 0
     val ambiguous = ArrayList<PresetRefAmbiguity>()
-    val registry = state.show.paletteRegistry
+    val registry = state.show.lookRegistry
 
     // Every fixture this preset could ever be applied to. Not "every fixture it is applied to
     // today" — that set changes the next time an operator drops the preset on something else,

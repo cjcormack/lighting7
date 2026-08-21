@@ -8,12 +8,16 @@ import uk.me.cormack.lighting7.models.ALL_TABLES
 import uk.me.cormack.lighting7.models.DaoAiConversations
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
+import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoCuePresetApplications
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
 import uk.me.cormack.lighting7.models.DaoCueSlots
 import uk.me.cormack.lighting7.models.DaoCueStacks
 import uk.me.cormack.lighting7.models.DaoCueTriggers
 import uk.me.cormack.lighting7.models.DaoCues
+import uk.me.cormack.lighting7.models.DaoLookEffects
+import uk.me.cormack.lighting7.models.DaoLookRows
+import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMembers
 import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.DaoFixturePatches
@@ -104,11 +108,18 @@ class SyncCoverageTest {
 
         DaoScripts to Disposition.Portable("scripts"),
         DaoFxDefinitions to Disposition.Portable("fxDefinitions"),
-        DaoFxPresets to Disposition.Portable("fxPresets"),
-        DaoFxPresetPropertyAssignments to Disposition.Portable("fxPresets", "propertyAssignments"),
-        DaoPalettes to Disposition.Portable("palettes"),
-        DaoPaletteEntries to Disposition.Portable("palettes", "entries"),
-        // Portable rather than excluded-live-state: preset/cue effects reference a master by
+        DaoLooks to Disposition.Portable("looks"),
+        DaoLookRows to Disposition.Portable("looks", "rows"),
+        DaoLookEffects to Disposition.Portable("looks", "effects"),
+        // Superseded by looks at formatVersion 5. The tables still exist so the startup migration
+        // has something to read, but they are no longer exported: writing both representations
+        // would put two copies of one entity in the repo and materialise both on import. Deleted
+        // outright in the retirement pass.
+        DaoFxPresets to Disposition.Excluded("superseded by looks; migrated at startup"),
+        DaoFxPresetPropertyAssignments to Disposition.Excluded("superseded by look rows"),
+        DaoPalettes to Disposition.Excluded("superseded by looks; migrated at startup"),
+        DaoPaletteEntries to Disposition.Excluded("superseded by look rows"),
+        // Portable rather than excluded-live-state: look/cue effects reference a master by
         // speedMasterUuid, and that reference only survives clone/import if the masters
         // travel with the show. The exported bpm is a starting default, not a live knob.
         DaoSpeedMasters to Disposition.Portable("speedMasters"),
@@ -121,7 +132,8 @@ class SyncCoverageTest {
         DaoCueStacks to Disposition.Portable("cueStacks"),
         DaoCues to Disposition.Portable("cues"),
         DaoCuePropertyAssignments to Disposition.Portable("cuePropertyAssignments"),
-        DaoCuePresetApplications to Disposition.Portable("cuePresetApplications"),
+        DaoCueLayers to Disposition.Portable("cueLayers"),
+        DaoCuePresetApplications to Disposition.Excluded("superseded by cue layers; migrated at startup"),
         DaoCueAdHocEffects to Disposition.Portable("cueAdHocEffects"),
         DaoCueTriggers to Disposition.Portable("cueTriggers"),
         DaoCueSlots to Disposition.Portable("cueSlots"),

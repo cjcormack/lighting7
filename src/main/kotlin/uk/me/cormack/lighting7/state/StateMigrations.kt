@@ -10,7 +10,9 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.isNull
 import org.slf4j.LoggerFactory
+import kotlinx.serialization.json.Json
 import uk.me.cormack.lighting7.models.CueType
+import uk.me.cormack.lighting7.models.FxPresetEffectDto
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStacks
 import uk.me.cormack.lighting7.models.DaoCues
@@ -43,6 +45,7 @@ internal fun JdbcTransaction.runStateMigrations() {
     ensureInstallRow()
     migrateUniverseAddressesToOverrides()
     migrateCollapseShowIntoStacks()
+    migratePresetsAndPalettesToLooks()
 }
 
 /**
@@ -291,3 +294,407 @@ private fun JdbcTransaction.columnExists(table: String, column: String): Boolean
     }
     return exists
 }
+
+/**
+ * Collapse FX presets and named palettes into Looks, and cue preset applications into cue layers.
+ *
+ * **Uuid preservation is the load-bearing part.** Each Look keeps the uuid of the palette or preset
+ * it came from, which buys three things at once: the migration is idempotent (a second run finds the
+ * Look already there and skips), existing `ref:{uuid}` values keep resolving through
+ * [uk.me.cormack.lighting7.fx.LookRegistry] with no grammar change, and a synced peer sees the same
+ * record identity rather than a duplicate.
+ *
+ * Mapping:
+ * - each palette → a Look; entries → rows with concrete targets
+ * - each preset → a Look; property assignments → rows marked `deferred`; the `effects` JSON blob →
+ *   real `look_effects` rows; `fixture_type` → `editor_fixture_type`; `palette` carried over
+ * - each cue preset application → a cue layer, carrying `sortOrder`, the timing triple and both
+ *   speed-master overrides
+ * - each cue assignment whose value is `ref:{uuid}` → folded into **one** layer per (cue, Look),
+ *   `targets` = exactly the referenced targets and `propertyMask` = exactly the referenced
+ *   properties, then the row deleted
+ *
+ * That last rule is why a layer's `targets` *filters* bound rows as well as supplying deferred
+ * ones. Without the restriction, a cue that referenced a palette for two fixtures would silently
+ * start asserting every fixture the palette covers.
+ *
+ * A name collision is resolved by suffixing, because palettes and presets had *different* unique
+ * indexes — `(project, type, name)` and `(project, fixtureType, name)` — so a project may legally
+ * hold a "Warm" colour palette, a "Warm" position palette and a "Warm" preset, all of which now
+ * want one `(project, name)` slot.
+ *
+ * Raw SQL throughout rather than the DAOs. The source tables are on their way out and their DAOs go
+ * with them, so reaching through Exposed here would mean this migration has to be rewritten the
+ * moment they are deleted — exactly what `migrateCollapseShowIntoStacks` avoided for `show_entries`.
+ */
+private fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
+    // Drop rows written by the pre-fix version of this migration. It read every source uuid with
+    // `getString` on a BLOB column and wrote it back as a *text* literal, so those rows carry a
+    // uuid that is both corrupted (bytes above 0x7F replaced with U+FFFD, unrecoverable) and
+    // invisible to `DaoLooks.uuid eq …`. They are unreachable at runtime, and leaving them would
+    // also defeat the idempotency check below — the repaired pass would compute the real uuid, miss
+    // it in the index, and mint a duplicate "Warm (2)" Look beside the dead one.
+    //
+    // `typeof(uuid) <> 'blob'` names exactly those rows: every uuid written through Exposed is a
+    // 16-byte blob. Safe on a fresh install, where it matches nothing.
+    exec(
+        "DELETE FROM cue_layers WHERE typeof(uuid) <> 'blob' " +
+            "OR look_id IN (SELECT id FROM looks WHERE typeof(uuid) <> 'blob')"
+    )
+    exec("DELETE FROM look_rows WHERE look_id IN (SELECT id FROM looks WHERE typeof(uuid) <> 'blob')")
+    exec("DELETE FROM look_effects WHERE look_id IN (SELECT id FROM looks WHERE typeof(uuid) <> 'blob')")
+    exec("DELETE FROM looks WHERE typeof(uuid) <> 'blob'")
+
+    if (!tableExists("palettes") && !tableExists("fx_presets")) return
+
+    // uuid → look id, for wiring layers up afterwards. Also the idempotency index: a uuid already
+    // present in `looks` was migrated on an earlier boot.
+    val lookIdByUuid = HashMap<UUID, Int>()
+    exec("SELECT id, uuid FROM looks") { rs ->
+        while (rs.next()) rs.javaUuid("uuid")?.let { lookIdByUuid[it] = rs.getInt("id") }
+    }
+    val takenNames = HashMap<Int, MutableSet<String>>()
+    exec("SELECT project_id, name FROM looks") { rs ->
+        while (rs.next()) takenNames.getOrPut(rs.getInt("project_id")) { HashSet() }.add(rs.getString("name"))
+    }
+
+    fun uniqueName(projectId: Int, desired: String): String {
+        val taken = takenNames.getOrPut(projectId) { HashSet() }
+        if (taken.add(desired)) return desired
+        for (n in 2..10_000) {
+            val candidate = "$desired ($n)"
+            if (taken.add(candidate)) return candidate
+        }
+        return desired
+    }
+
+    fun nextSortOrder(projectId: Int): Int {
+        var next = 0
+        exec("SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM looks WHERE project_id = $projectId") { rs ->
+            if (rs.next()) next = rs.getInt("n")
+        }
+        return next
+    }
+
+    var palettesMigrated = 0
+    var presetsMigrated = 0
+
+    // ── Palettes → bound Looks ──────────────────────────────────────────────
+    if (tableExists("palettes")) {
+        data class Pal(val id: Int, val projectId: Int, val name: String, val notes: String?, val sortOrder: Int, val uuid: UUID?)
+        val palettes = mutableListOf<Pal>()
+        exec("SELECT id, project_id, name, notes, sort_order, uuid FROM palettes") { rs ->
+            while (rs.next()) {
+                palettes.add(Pal(
+                    rs.getInt("id"), rs.getInt("project_id"), rs.getString("name"),
+                    rs.getString("notes"), rs.getInt("sort_order"), rs.javaUuid("uuid"),
+                ))
+            }
+        }
+        for (pal in palettes) {
+            // A palette with no readable uuid cannot be identity-preserved, and migrating it under a
+            // fresh one would strand every `ref:` pointing at it. Leave it for the operator.
+            val palUuid = pal.uuid
+            if (palUuid == null) {
+                logger.warn("Looks migration: palette '{}' has an unreadable uuid — skipping", pal.name)
+                continue
+            }
+            if (palUuid in lookIdByUuid) continue
+            val name = uniqueName(pal.projectId, pal.name)
+            exec(
+                "INSERT INTO looks (project_id, name, notes, sort_order, editor_fixture_type, palette, uuid) " +
+                    "VALUES (${pal.projectId}, ${sqlText(name)}, ${sqlText(pal.notes)}, ${nextSortOrder(pal.projectId)}, " +
+                    "NULL, '[]', ${sqlUuid(palUuid)})"
+            )
+            val lookId = lastInsertRowId() ?: continue
+            lookIdByUuid[palUuid] = lookId
+            exec(
+                "INSERT INTO look_rows (look_id, target_type, target_key, property_name, value, " +
+                    "fade_duration_ms, element_key, sort_order, uuid) " +
+                    "SELECT $lookId, target_type, target_key, property_name, value, NULL, NULL, sort_order, uuid " +
+                    "FROM palette_entries WHERE palette_id = ${pal.id}"
+            )
+            palettesMigrated++
+        }
+    }
+
+    // ── Presets → deferred Looks ────────────────────────────────────────────
+    if (tableExists("fx_presets")) {
+        data class Preset(val id: Int, val projectId: Int, val name: String, val description: String?, val fixtureType: String, val effects: String, val palette: String, val uuid: UUID?)
+        val presets = mutableListOf<Preset>()
+        exec("SELECT id, project_id, name, description, fixture_type, effects, palette, uuid FROM fx_presets") { rs ->
+            while (rs.next()) {
+                presets.add(Preset(
+                    rs.getInt("id"), rs.getInt("project_id"), rs.getString("name"),
+                    rs.getString("description"), rs.getString("fixture_type"),
+                    rs.getString("effects") ?: "[]", rs.getString("palette") ?: "[]",
+                    rs.javaUuid("uuid"),
+                ))
+            }
+        }
+        for (preset in presets) {
+            val presetUuid = preset.uuid
+            if (presetUuid == null) {
+                logger.warn("Looks migration: preset '{}' has an unreadable uuid — skipping", preset.name)
+                continue
+            }
+            if (presetUuid in lookIdByUuid) continue
+            val name = uniqueName(preset.projectId, preset.name)
+            exec(
+                "INSERT INTO looks (project_id, name, notes, sort_order, editor_fixture_type, palette, uuid) " +
+                    "VALUES (${preset.projectId}, ${sqlText(name)}, ${sqlText(preset.description)}, " +
+                    "${nextSortOrder(preset.projectId)}, ${sqlText(preset.fixtureType)}, " +
+                    "${sqlText(preset.palette)}, ${sqlUuid(presetUuid)})"
+            )
+            val lookId = lastInsertRowId() ?: continue
+            lookIdByUuid[presetUuid] = lookId
+
+            // A preset row was target-*less*, so every one becomes deferred: its targets come from
+            // the layer that applies the Look, which is exactly what a preset application supplied.
+            exec(
+                "INSERT INTO look_rows (look_id, target_type, target_key, property_name, value, " +
+                    "fade_duration_ms, element_key, sort_order, uuid) " +
+                    "SELECT $lookId, 'deferred', '', property_name, value, fade_duration_ms, " +
+                    "element_key, sort_order, uuid FROM fx_preset_property_assignments " +
+                    "WHERE preset_id = ${preset.id}"
+            )
+
+            // The effects blob becomes real rows. Uuids are minted here because the blob never had
+            // any — the effects lived inside the preset's own record, so sync only ever saw the
+            // parent's uuid.
+            for ((index, effect) in parseLegacyPresetEffects(preset.effects).withIndex()) {
+                exec(
+                    "INSERT INTO look_effects (look_id, target_type, target_key, effect_type, category, " +
+                        "property_name, beat_division, blend_mode, distribution, phase_offset, element_mode, " +
+                        "element_filter, step_timing, parameters, speed_master_uuid, rate_speed_master_uuid, " +
+                        "sort_order, uuid) VALUES ($lookId, 'deferred', '', " +
+                        "${sqlText(effect.effectType)}, ${sqlText(effect.category)}, " +
+                        "${sqlText(effect.propertyName)}, ${effect.beatDivision}, " +
+                        "${sqlText(effect.blendMode)}, ${sqlText(effect.distribution)}, ${effect.phaseOffset}, " +
+                        "${sqlText(effect.elementMode)}, ${sqlText(effect.elementFilter)}, " +
+                        "${effect.stepTiming?.let { if (it) 1 else 0 }?.toString() ?: "NULL"}, " +
+                        "${sqlText(Json.encodeToString(effect.parameters))}, " +
+                        "${sqlUuid(uuidOrNull(effect.speedMasterUuid))}, " +
+                        "${sqlUuid(uuidOrNull(effect.rateSpeedMasterUuid))}, " +
+                        "$index, ${sqlUuid(UUID.randomUUID())})"
+                )
+            }
+            presetsMigrated++
+        }
+    }
+
+    // ── Cue preset applications → cue layers ────────────────────────────────
+    var layersFromApplications = 0
+    if (tableExists("cue_preset_applications")) {
+        data class App(
+            val id: Int, val cueId: Int, val presetUuid: UUID?, val targets: String,
+            val delayMs: Long?, val intervalMs: Long?, val randomWindowMs: Long?,
+            val sortOrder: Int, val speedMasterUuid: UUID?, val rateSpeedMasterUuid: UUID?,
+            val uuid: UUID?,
+        )
+        val apps = mutableListOf<App>()
+        exec(
+            """SELECT a.id, a.cue_id, p.uuid AS preset_uuid, a.targets, a.delay_ms, a.interval_ms,
+                      a.random_window_ms, a.sort_order, a.speed_master_uuid, a.rate_speed_master_uuid, a.uuid
+               FROM cue_preset_applications a LEFT JOIN fx_presets p ON p.id = a.preset_id"""
+        ) { rs ->
+            while (rs.next()) {
+                apps.add(App(
+                    rs.getInt("id"), rs.getInt("cue_id"), rs.javaUuid("preset_uuid"),
+                    rs.getString("targets") ?: "[]",
+                    rs.getLong("delay_ms").takeUnless { rs.wasNull() },
+                    rs.getLong("interval_ms").takeUnless { rs.wasNull() },
+                    rs.getLong("random_window_ms").takeUnless { rs.wasNull() },
+                    rs.getInt("sort_order"),
+                    rs.javaUuid("speed_master_uuid"), rs.javaUuid("rate_speed_master_uuid"),
+                    rs.javaUuid("uuid"),
+                ))
+            }
+        }
+        val existingLayerUuids = HashSet<UUID>()
+        exec("SELECT uuid FROM cue_layers") { rs ->
+            while (rs.next()) rs.javaUuid("uuid")?.let { existingLayerUuids.add(it) }
+        }
+
+        for (app in apps) {
+            val appUuid = app.uuid ?: UUID.randomUUID()
+            if (appUuid in existingLayerUuids) continue
+            val lookId = app.presetUuid?.let { lookIdByUuid[it] } ?: continue
+            exec(
+                "INSERT INTO cue_layers (cue_id, look_id, sort_order, enabled, targets, property_mask, " +
+                    "blend_mode, amount, stomp, speed_master_uuid, rate_speed_master_uuid, " +
+                    "delay_ms, interval_ms, random_window_ms, uuid) VALUES (" +
+                    "${app.cueId}, $lookId, ${app.sortOrder}, 1, ${sqlText(app.targets)}, NULL, " +
+                    "'OVERRIDE', 1.0, 0, ${sqlUuid(app.speedMasterUuid)}, ${sqlUuid(app.rateSpeedMasterUuid)}, " +
+                    "${app.delayMs ?: "NULL"}, ${app.intervalMs ?: "NULL"}, ${app.randomWindowMs ?: "NULL"}, " +
+                    "${sqlUuid(appUuid)})"
+            )
+            layersFromApplications++
+        }
+    }
+
+    // ── `ref:` cue assignments → one masked layer per (cue, Look) ───────────
+    var refRowsFolded = 0
+    var refLayersCreated = 0
+    run {
+        data class RefRow(val id: Int, val cueId: Int, val targetType: String, val targetKey: String, val propertyName: String, val lookUuid: UUID)
+        val refRows = mutableListOf<RefRow>()
+        exec(
+            "SELECT id, cue_id, target_type, target_key, property_name, value " +
+                "FROM cue_property_assignments WHERE value LIKE 'ref:%'"
+        ) { rs ->
+            while (rs.next()) {
+                val raw = rs.getString("value") ?: continue
+                // `value` is a genuine text column — the `ref:{uuid}` grammar is written as text by
+                // app code — so this one really is a string read.
+                val uuid = uuidOrNull(raw.removePrefix("ref:")) ?: continue
+                refRows.add(RefRow(
+                    rs.getInt("id"), rs.getInt("cue_id"), rs.getString("target_type"),
+                    rs.getString("target_key"), rs.getString("property_name"), uuid,
+                ))
+            }
+        }
+        // One layer per (cue, Look): the targets and properties it covers are exactly the union of
+        // the rows it replaces, so coverage is preserved to the row.
+        for ((key, rows) in refRows.groupBy { it.cueId to it.lookUuid }) {
+            val (cueId, lookUuid) = key
+            val lookId = lookIdByUuid[lookUuid] ?: continue
+            val targets = rows
+                .map { it.targetType to it.targetKey }
+                .distinct()
+                .joinToString(",", "[", "]") { (type, key2) ->
+                    """{"type":"$type","key":"$key2"}"""
+                }
+            val mask = rows.map { it.propertyName }.distinct()
+                .mapNotNull { maskGroupNameForPropertyName(it) }
+                .distinct()
+            exec(
+                "INSERT INTO cue_layers (cue_id, look_id, sort_order, enabled, targets, property_mask, " +
+                    "blend_mode, amount, stomp, speed_master_uuid, rate_speed_master_uuid, " +
+                    "delay_ms, interval_ms, random_window_ms, uuid) VALUES (" +
+                    "$cueId, $lookId, -1, 1, ${sqlText(targets)}, " +
+                    "${if (mask.isEmpty()) "NULL" else sqlText(mask.joinToString(","))}, " +
+                    "'OVERRIDE', 1.0, 0, NULL, NULL, NULL, NULL, NULL, " +
+                    "${sqlUuid(UUID.randomUUID())})"
+            )
+            refLayersCreated++
+            for (row in rows) {
+                exec("DELETE FROM cue_property_assignments WHERE id = ${row.id}")
+                refRowsFolded++
+            }
+        }
+        // Reference layers went in at sort_order -1 so they sit *beneath* the cue's migrated
+        // preset layers, matching the old order: a preset row beat a cue row on an exact priority
+        // tie, because the cue's own rows came first in the concatenated list and `composeLtp`
+        // kept the first maximal element. Densify so nothing stays negative.
+        if (refLayersCreated > 0) densifyCueLayerOrder()
+    }
+
+    if (palettesMigrated + presetsMigrated + layersFromApplications + refRowsFolded > 0) {
+        logger.info(
+            "Looks migration: {} palette(s) and {} preset(s) became looks; " +
+                "{} preset application(s) became layers; {} ref: row(s) folded into {} layer(s)",
+            palettesMigrated, presetsMigrated, layersFromApplications, refRowsFolded, refLayersCreated,
+        )
+    }
+}
+
+/** Renumber each cue's layers from 0 in their current order, so no `sort_order` stays negative. */
+private fun JdbcTransaction.densifyCueLayerOrder() {
+    val byCue = LinkedHashMap<Int, MutableList<Int>>()
+    exec("SELECT id, cue_id FROM cue_layers ORDER BY cue_id, sort_order, id") { rs ->
+        while (rs.next()) byCue.getOrPut(rs.getInt("cue_id")) { mutableListOf() }.add(rs.getInt("id"))
+    }
+    for (ids in byCue.values) {
+        ids.forEachIndexed { index, id ->
+            exec("UPDATE cue_layers SET sort_order = $index WHERE id = $id")
+        }
+    }
+}
+
+/**
+ * The `PropertyMaskGroup` name a property belongs to, without a fixture to ask.
+ *
+ * A layer's mask has to be decided at migration time, when the patch may not even be loaded, so
+ * this maps the *names* the property catalogue uses. Unknown names answer null and simply widen the
+ * mask — an over-broad mask still resolves through the Look's own rows, whereas an over-narrow one
+ * would drop coverage the old `ref:` row had.
+ */
+private fun maskGroupNameForPropertyName(propertyName: String): String? =
+    when (propertyName.lowercase()) {
+        "dimmer", "strobe" -> "INTENSITY"
+        "position", "pan", "tilt", "panfine", "tiltfine" -> "POSITION"
+        "colour", "color", "rgbcolour", "amber", "white", "uv" -> "COLOUR"
+        else -> null
+    }
+
+/** The rowid SQLite assigned to the row just inserted on this connection. */
+private fun JdbcTransaction.lastInsertRowId(): Int? {
+    var id: Int? = null
+    exec("SELECT last_insert_rowid() AS id") { rs -> if (rs.next()) id = rs.getInt("id") }
+    return id
+}
+
+/** SQL string literal, or `NULL`. Doubles embedded quotes — the only escaping SQLite needs. */
+private fun sqlText(value: String?): String =
+    if (value == null) "NULL" else "'" + value.replace("'", "''") + "'"
+
+/**
+ * Read a `javaUUID` column out of a raw-SQL result.
+ *
+ * **Never use `getString` for these.** Exposed's `UUIDColumnType` declares `BINARY(16)` and binds a
+ * 16-byte array, so on SQLite every uuid an app write produced is a **BLOB**. `ResultSet.getString`
+ * on a BLOB reinterprets those bytes as text, and each byte above 0x7F becomes U+FFFD — corruption
+ * that cannot be undone. That silently destroyed the uuid preservation this migration's whole
+ * design rests on: idempotency, `ref:{uuid}` resolution and sync identity all key off it.
+ *
+ * A text value is tolerated so a row written by the pre-fix version of this migration, or by any
+ * other raw-SQL path, still reads back when it happens to be well-formed.
+ */
+private fun java.sql.ResultSet.javaUuid(column: String): UUID? {
+    val bytes = getBytes(column) ?: return null
+    if (bytes.size == 16) {
+        val buf = java.nio.ByteBuffer.wrap(bytes)
+        return UUID(buf.long, buf.long)
+    }
+    return runCatching { UUID.fromString(String(bytes, Charsets.UTF_8)) }.getOrNull()
+}
+
+/**
+ * A `javaUUID` column literal — a **blob** literal, not a quoted string.
+ *
+ * SQLite never compares a BLOB equal to a TEXT value, and Exposed binds these columns as a 16-byte
+ * blob. So a text uuid here reads back fine through the DAO but is invisible to
+ * `DaoLooks.uuid eq someUuid` — which is exactly the lookup `loadLookSnapshot` performs, so every
+ * migrated Look would fail to load and every migrated layer would be skipped at cue apply.
+ */
+@Suppress("MagicNumber")
+private fun sqlUuid(value: UUID?): String =
+    if (value == null) {
+        "NULL"
+    } else {
+        java.nio.ByteBuffer.allocate(16)
+            .putLong(value.mostSignificantBits)
+            .putLong(value.leastSignificantBits)
+            .array()
+            .joinToString(separator = "", prefix = "x'", postfix = "'") { "%02x".format(it) }
+    }
+
+/** Parse a uuid that reached us as text (a JSON blob field, or a `ref:` value). */
+private fun uuidOrNull(value: String?): UUID? =
+    value?.trim()?.takeIf { it.isNotEmpty() }?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+
+/**
+ * Parse the legacy `fx_presets.effects` JSON blob.
+ *
+ * Lenient on purpose (`ignoreUnknownKeys`): the blob accumulated fields over the preset era, and a
+ * migration that throws on an unrecognised one would take startup down over a field nobody reads.
+ */
+private fun parseLegacyPresetEffects(raw: String): List<FxPresetEffectDto> =
+    runCatching { legacyEffectJson.decodeFromString<List<FxPresetEffectDto>>(raw) }
+        .getOrElse {
+            logger.warn("Looks migration: could not parse a preset's effects blob — skipping its effects: {}", it.message)
+            emptyList()
+        }
+
+private val legacyEffectJson = Json { ignoreUnknownKeys = true }

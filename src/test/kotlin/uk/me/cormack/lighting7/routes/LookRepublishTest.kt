@@ -13,10 +13,9 @@ import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
-import uk.me.cormack.lighting7.models.DaoPalette
-import uk.me.cormack.lighting7.models.DaoPaletteEntry
+import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.PaletteType
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.mountTestApp
@@ -26,44 +25,47 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * The touring feature: editing a palette moves every live look that references it, without
- * re-firing a cue. Drives [republishForPaletteEdit] directly — the routes that call it land in the
- * record/update work, but the behaviour it guarantees is worth pinning on its own.
+ * The touring feature: editing a Look moves every live cue that depends on it, without re-firing a
+ * cue. Drives [republishForLookEdit] directly — the routes that call it land in the record/update
+ * work, but the behaviour it guarantees is worth pinning on its own.
+ *
+ * These cues depend on the Look through a `ref:` value rather than through a layer, which is the
+ * path that survives until the grammar is retired. The layer path shares the same republish, and is
+ * covered where layers are composed.
  */
-class PaletteRepublishTest : RouteIntegrationTest() {
+class LookRepublishTest : RouteIntegrationTest() {
 
     private fun seedHex(key: String, startChannel: Int) =
         LocateTestSupport.seedHex(state, projectId, key, startChannel)
 
-    /** A COLOUR palette holding one entry per (fixtureKey → hex) pair. */
-    private fun seedPalette(name: String, entries: Map<String, String>): UUID = transaction(state.database) {
-        val palette = DaoPalette.new {
+    /** A bound Look holding one colour row per (fixtureKey → hex) pair. */
+    private fun seedLook(name: String, entries: Map<String, String>): UUID = transaction(state.database) {
+        val look = DaoLook.new {
             this.project = DaoProject.findById(projectId)!!
             this.name = name
-            this.type = PaletteType.COLOUR.name
         }
         entries.entries.forEachIndexed { index, (fixtureKey, hex) ->
-            DaoPaletteEntry.new {
-                this.palette = palette
+            DaoLookRow.new {
+                this.look = look
                 targetType = "fixture"; targetKey = fixtureKey
                 propertyName = "colour"; value = hex; sortOrder = index
             }
         }
-        palette.uuid
+        look.uuid
     }
 
-    /** Overwrite every entry's value in [paletteUuid]. Mirrors what a re-record does. */
-    private fun rewritePaletteEntries(paletteUuid: UUID, entries: Map<String, String>) {
+    /** Overwrite every row's value in [lookUuid]. Mirrors what a re-record does. */
+    private fun rewriteLookRows(lookUuid: UUID, entries: Map<String, String>) {
         transaction(state.database) {
-            val palette = DaoPalette.all().single { it.uuid == paletteUuid }
-            palette.entries.forEach { row ->
+            val look = DaoLook.all().single { it.uuid == lookUuid }
+            look.rows.forEach { row ->
                 entries[row.targetKey]?.let { row.value = it }
             }
         }
     }
 
-    /** A live cue whose single row references [paletteUuid] on [fixtureKey]. Returns its id. */
-    private fun applyCueReferencing(fixtureKey: String, paletteUuid: UUID?, hex: String? = null): Int {
+    /** A live cue whose single row references [lookUuid] on [fixtureKey]. Returns its id. */
+    private fun applyCueReferencing(fixtureKey: String, lookUuid: UUID?, hex: String? = null): Int {
         val cueId = transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val stack = DaoCueStack.new {
@@ -80,7 +82,7 @@ class PaletteRepublishTest : RouteIntegrationTest() {
                 this.cue = cue
                 targetType = "fixture"; targetKey = fixtureKey
                 propertyName = "colour"
-                value = paletteUuid?.let { paletteRefValue(it) } ?: hex!!
+                value = lookUuid?.let { paletteRefValue(it) } ?: hex!!
                 sortOrder = 0
             }
             cue.id.value
@@ -97,16 +99,16 @@ class PaletteRepublishTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `editing a palette moves a live cue's output without re-firing it`() = testApplication {
+    fun `editing a look moves a live cue's output without re-firing it`() = testApplication {
         mountTestApp(state)
         seedHex("hex-1", startChannel = 1)
 
-        val paletteUuid = seedPalette("Warm Amber", mapOf("hex-1" to "#ff8800"))
-        applyCueReferencing("hex-1", paletteUuid)
+        val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
+        applyCueReferencing("hex-1", lookUuid)
         assertEquals("#ff8800", cueColour("hex-1").value.toSerializedString())
 
-        rewritePaletteEntries(paletteUuid, mapOf("hex-1" to "#0000ff"))
-        val outcome = republishForPaletteEdit(state, paletteUuid)
+        rewriteLookRows(lookUuid, mapOf("hex-1" to "#0000ff"))
+        val outcome = republishForLookEdit(state, lookUuid)
 
         assertEquals(
             "#0000ff", cueColour("hex-1").value.toSerializedString(),
@@ -116,17 +118,17 @@ class PaletteRepublishTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a live cue that does not reference the palette is left alone`() = testApplication {
+    fun `a live cue that does not reference the look is left alone`() = testApplication {
         mountTestApp(state)
         seedHex("hex-1", startChannel = 1)
         seedHex("hex-2", startChannel = 20)
 
-        val paletteUuid = seedPalette("Warm Amber", mapOf("hex-1" to "#ff8800"))
-        val referencing = applyCueReferencing("hex-1", paletteUuid)
-        val literal = applyCueReferencing("hex-2", paletteUuid = null, hex = "#00ff00")
+        val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
+        val referencing = applyCueReferencing("hex-1", lookUuid)
+        val literal = applyCueReferencing("hex-2", lookUuid = null, hex = "#00ff00")
 
-        rewritePaletteEntries(paletteUuid, mapOf("hex-1" to "#0000ff"))
-        val outcome = republishForPaletteEdit(state, paletteUuid)
+        rewriteLookRows(lookUuid, mapOf("hex-1" to "#0000ff"))
+        val outcome = republishForLookEdit(state, lookUuid)
 
         assertEquals(
             listOf(referencing), outcome.cuesRepublished,
@@ -141,21 +143,21 @@ class PaletteRepublishTest : RouteIntegrationTest() {
         mountTestApp(state)
         seedHex("hex-1", startChannel = 1)
 
-        val paletteUuid = seedPalette("Warm Amber", mapOf("hex-1" to "#ff8800"))
+        val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
         val fixture = state.show.fixtures.untypedGroupableFixture("hex-1")
         state.show.fxEngine.writeProgrammerProperty(
             ProgrammerOwner.WEB, fixture, "rgbColour",
             CueAssignmentResolver.parseAssignmentValue(
                 uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR, "rgbColour", "#ff8800",
             )!!,
-            paletteUuid = paletteUuid,
+            paletteUuid = lookUuid,
         )
 
-        rewritePaletteEntries(paletteUuid, mapOf("hex-1" to "#0000ff"))
-        val outcome = republishForPaletteEdit(state, paletteUuid)
+        rewriteLookRows(lookUuid, mapOf("hex-1" to "#0000ff"))
+        val outcome = republishForLookEdit(state, lookUuid)
 
         val slot = state.show.programmerStore.get("hex-1", "rgbColour")!!
-        assertEquals(paletteUuid, slot.value.paletteUuidOrNull, "it is still a reference")
+        assertEquals(lookUuid, slot.value.paletteUuidOrNull, "it is still a reference")
         assertEquals(
             "#0000ff",
             (slot.value.resolved as CueAssignmentResolver.PropertyValue.Colour).value.toSerializedString(),
@@ -165,25 +167,25 @@ class PaletteRepublishTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a ref the palette stops covering keeps its last value rather than vanishing`() = testApplication {
+    fun `a ref the look stops covering keeps its last value rather than vanishing`() = testApplication {
         mountTestApp(state)
         seedHex("hex-1", startChannel = 1)
 
-        val paletteUuid = seedPalette("Warm Amber", mapOf("hex-1" to "#ff8800"))
+        val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
         val fixture = state.show.fixtures.untypedGroupableFixture("hex-1")
         state.show.fxEngine.writeProgrammerProperty(
             ProgrammerOwner.WEB, fixture, "rgbColour",
             CueAssignmentResolver.parseAssignmentValue(
                 uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR, "rgbColour", "#ff8800",
             )!!,
-            paletteUuid = paletteUuid,
+            paletteUuid = lookUuid,
         )
 
-        // Drop the entry entirely — the palette now covers nothing for this fixture.
+        // Drop the row entirely — the Look now covers nothing for this fixture.
         transaction(state.database) {
-            DaoPalette.all().single { it.uuid == paletteUuid }.entries.forEach { it.delete() }
+            DaoLook.all().single { it.uuid == lookUuid }.rows.forEach { it.delete() }
         }
-        val outcome = republishForPaletteEdit(state, paletteUuid)
+        val outcome = republishForLookEdit(state, lookUuid)
 
         val slot = state.show.programmerStore.get("hex-1", "rgbColour")!!
         assertEquals(
@@ -197,23 +199,23 @@ class PaletteRepublishTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `editing a palette while blind stages the value without transmitting it`() = testApplication {
+    fun `editing a look while blind stages the value without transmitting it`() = testApplication {
         mountTestApp(state)
         seedHex("hex-1", startChannel = 1)
 
-        val paletteUuid = seedPalette("Warm Amber", mapOf("hex-1" to "#ff8800"))
+        val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
         val fixture = state.show.fixtures.untypedGroupableFixture("hex-1")
         state.show.fxEngine.writeProgrammerProperty(
             ProgrammerOwner.WEB, fixture, "rgbColour",
             CueAssignmentResolver.parseAssignmentValue(
                 uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR, "rgbColour", "#ff8800",
             )!!,
-            paletteUuid = paletteUuid,
+            paletteUuid = lookUuid,
         )
         state.show.fxEngine.setProgrammerBlind(true)
 
-        rewritePaletteEntries(paletteUuid, mapOf("hex-1" to "#0000ff"))
-        republishForPaletteEdit(state, paletteUuid)
+        rewriteLookRows(lookUuid, mapOf("hex-1" to "#0000ff"))
+        republishForLookEdit(state, lookUuid)
 
         // Stored state moves; the stage does not, because the blind gate is consulted at publish.
         val slot = state.show.programmerStore.get("hex-1", "rgbColour")!!
@@ -225,7 +227,7 @@ class PaletteRepublishTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a cue row referencing a deleted palette is skipped rather than lit white`() = testApplication {
+    fun `a cue row referencing a deleted look is skipped rather than lit white`() = testApplication {
         mountTestApp(state)
         seedHex("hex-1", startChannel = 1)
 
@@ -262,12 +264,12 @@ class PaletteRepublishTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `including a cue keeps its palette reference, so a later edit still moves it`() = testApplication {
+    fun `including a cue keeps its look reference, so a later edit still moves it`() = testApplication {
         mountTestApp(state)
         seedHex("hex-1", startChannel = 1)
 
-        val paletteUuid = seedPalette("Warm Amber", mapOf("hex-1" to "#ff8800"))
-        val cueId = applyCueReferencing("hex-1", paletteUuid)
+        val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
+        val cueId = applyCueReferencing("hex-1", lookUuid)
 
         val applyData = transaction(state.database) { buildCueApplyData(DaoCue.findById(cueId)!!) }
         includeCueIntoProgrammer(
@@ -276,15 +278,15 @@ class PaletteRepublishTest : RouteIntegrationTest() {
 
         val slot = state.show.programmerStore.get("hex-1", "rgbColour")!!
         assertEquals(
-            paletteUuid, slot.value.paletteUuidOrNull,
+            lookUuid, slot.value.paletteUuidOrNull,
             "Include must carry the reference, not just the literal it resolved to — hardening here " +
-                "would both freeze the entry against later palette edits and make the next Update " +
+                "would both freeze the entry against later look edits and make the next Update " +
                 "write a literal back over a row the operator never touched",
         )
 
         // And the reference is live: editing the palette moves the included entry.
-        rewritePaletteEntries(paletteUuid, mapOf("hex-1" to "#0000ff"))
-        republishForPaletteEdit(state, paletteUuid)
+        rewriteLookRows(lookUuid, mapOf("hex-1" to "#0000ff"))
+        republishForLookEdit(state, lookUuid)
         assertEquals(
             "#0000ff",
             (state.show.programmerStore.get("hex-1", "rgbColour")!!.value.resolved

@@ -211,8 +211,7 @@ class SurfaceFeedbackPublisher(
             onChannelsChanged(universe, changes)
         override fun controllersChanged() {}
         override fun fixturesChanged() { rebuildIndex() }
-        override fun presetListChanged() {}
-        override fun paletteListChanged() {}
+        override fun lookListChanged() {}
         // A rename is cosmetic, but a create/delete changes which master uuids resolve — and
         // a tempo-bound encoder pointing at a deleted master must stop being fed.
         override fun speedMasterListChanged() { rebuildIndex() }

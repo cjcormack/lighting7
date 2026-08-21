@@ -3,7 +3,6 @@ package uk.me.cormack.lighting7.fx
 import org.junit.Test
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
-import uk.me.cormack.lighting7.models.PaletteType
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
@@ -13,9 +12,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Pure tests for [PaletteRegistry]: a real [Fixtures] plus a lambda loader, no database.
+ * Pure tests for [LookRegistry]: a real [Fixtures] plus a lambda loader, no database.
  */
-class PaletteRegistryTest {
+class LookRegistryTest {
 
     private val universe = Universe(0, 0)
     private val uuid: UUID = UUID.fromString("2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02")
@@ -33,28 +32,30 @@ class PaletteRegistryTest {
         return fixtures
     }
 
-    private fun snapshot(vararg entries: PaletteEntryRow) = PaletteSnapshot(
-        paletteId = 4,
-        paletteUuid = uuid,
+    private fun snapshot(vararg rows: LookRowEntry) = LookSnapshot(
+        lookId = 4,
+        lookUuid = uuid,
         name = "Warm Amber",
-        type = PaletteType.COLOUR,
-        entries = entries.toList(),
+        editorFixtureType = null,
+        palette = emptyList(),
+        rows = rows.toList(),
+        effects = emptyList(),
     )
 
     private fun registry(
         fixtures: Fixtures,
-        snapshot: PaletteSnapshot?,
+        snapshot: LookSnapshot?,
         loads: AtomicInteger = AtomicInteger(),
-    ) = PaletteRegistry(
+    ) = LookRegistry(
         fixtures = { fixtures },
-        loader = { requested -> loads.incrementAndGet(); snapshot?.takeIf { it.paletteUuid == requested } },
+        loader = { requested -> loads.incrementAndGet(); snapshot?.takeIf { it.lookUuid == requested } },
     )
 
     @Test
     fun `a group row expands to every member`() {
         val reg = registry(
             fixtures(),
-            snapshot(PaletteEntryRow(TargetRef.Group("front-wash"), "colour", "#ff8800")),
+            snapshot(LookRowEntry(TargetRef.Group("front-wash"), "colour", "#ff8800")),
         )
         assertEquals("#ff8800", reg.literalFor(uuid, "hex-1", "colour"))
         assertEquals("#ff8800", reg.literalFor(uuid, "hex-2", "colour"))
@@ -67,8 +68,8 @@ class PaletteRegistryTest {
         val reg = registry(
             fixtures(),
             snapshot(
-                PaletteEntryRow(TargetRef.Group("front-wash"), "colour", "#ff8800"),
-                PaletteEntryRow(TargetRef.Fixture("hex-2"), "colour", "#00ff00"),
+                LookRowEntry(TargetRef.Group("front-wash"), "colour", "#ff8800"),
+                LookRowEntry(TargetRef.Fixture("hex-2"), "colour", "#00ff00"),
             ),
         )
         assertEquals("#ff8800", reg.literalFor(uuid, "hex-1", "colour"))
@@ -82,8 +83,8 @@ class PaletteRegistryTest {
         val reg = registry(
             fixtures(),
             snapshot(
-                PaletteEntryRow(TargetRef.Fixture("hex-2"), "colour", "#00ff00"),
-                PaletteEntryRow(TargetRef.Group("front-wash"), "colour", "#ff8800"),
+                LookRowEntry(TargetRef.Fixture("hex-2"), "colour", "#00ff00"),
+                LookRowEntry(TargetRef.Group("front-wash"), "colour", "#ff8800"),
             ),
         )
         assertEquals("#00ff00", reg.literalFor(uuid, "hex-2", "colour"))
@@ -97,7 +98,7 @@ class PaletteRegistryTest {
         listOf("colour", "color", "rgbColour").forEach { stored ->
             val reg = registry(
                 fixtures(),
-                snapshot(PaletteEntryRow(TargetRef.Fixture("hex-1"), stored, "#ff8800")),
+                snapshot(LookRowEntry(TargetRef.Fixture("hex-1"), stored, "#ff8800")),
             )
             listOf("colour", "color", "rgbColour").forEach { queried ->
                 assertEquals(
@@ -112,7 +113,7 @@ class PaletteRegistryTest {
     fun `an unknown group contributes nothing rather than throwing`() {
         val reg = registry(
             fixtures(),
-            snapshot(PaletteEntryRow(TargetRef.Group("gone"), "colour", "#ff8800")),
+            snapshot(LookRowEntry(TargetRef.Group("gone"), "colour", "#ff8800")),
         )
         assertNull(reg.literalFor(uuid, "hex-1", "colour"))
     }
@@ -128,7 +129,7 @@ class PaletteRegistryTest {
         val loads = AtomicInteger()
         val reg = registry(
             fixtures(),
-            snapshot(PaletteEntryRow(TargetRef.Group("front-wash"), "colour", "#ff8800")),
+            snapshot(LookRowEntry(TargetRef.Group("front-wash"), "colour", "#ff8800")),
             loads,
         )
 
@@ -159,8 +160,8 @@ class PaletteRegistryTest {
         // palette, which reads as a palette bug and isn't.
         val loads = AtomicInteger()
         var live = fixtures(groupMembers = listOf("hex-1"))
-        val snap = snapshot(PaletteEntryRow(TargetRef.Group("front-wash"), "colour", "#ff8800"))
-        val reg = PaletteRegistry(
+        val snap = snapshot(LookRowEntry(TargetRef.Group("front-wash"), "colour", "#ff8800"))
+        val reg = LookRegistry(
             fixtures = { live },
             loader = { loads.incrementAndGet(); snap },
         )
@@ -192,9 +193,9 @@ class PaletteRegistryTest {
         // would hand back a fresh snapshot and the test would pass even against the racy code.
         var current = "#ff8800"
         var raceOnce = true
-        lateinit var reg: PaletteRegistry
+        lateinit var reg: LookRegistry
 
-        reg = PaletteRegistry(
+        reg = LookRegistry(
             fixtures = ::fixtures,
             loader = {
                 val observed = current
@@ -203,10 +204,10 @@ class PaletteRegistryTest {
                     current = "#0000ff"
                     reg.invalidate(uuid)
                 }
-                PaletteSnapshot(
-                    paletteId = 1, paletteUuid = uuid, name = "Warm Amber",
-                    type = PaletteType.COLOUR,
-                    entries = listOf(PaletteEntryRow(TargetRef.Fixture("hex-1"), "colour", observed)),
+                LookSnapshot(
+                    lookId = 1, lookUuid = uuid, name = "Warm Amber",
+                    editorFixtureType = null, palette = emptyList(), effects = emptyList(),
+                    rows = listOf(LookRowEntry(TargetRef.Fixture("hex-1"), "colour", observed)),
                 )
             },
         )

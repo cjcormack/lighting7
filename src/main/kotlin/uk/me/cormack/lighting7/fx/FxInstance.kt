@@ -154,6 +154,16 @@ class FxInstance(
     /** If this effect was applied as part of a preset, the preset ID. Null otherwise. */
     var presetId: Int? = null
 
+    /**
+     * If this effect was spawned by a cue's Look layer, the Look's ID. Null otherwise.
+     *
+     * Kept separate from [presetId] rather than reusing it: the two are ids in *different* tables,
+     * and `captureCurrentState` reads `presetId` to reconstruct `CuePresetApplicationDto`s. Putting
+     * a look id there made recording live state emit a preset application naming whatever
+     * `DaoFxPreset` happened to share the number, baking an unrelated preset into the new cue.
+     */
+    var lookId: Int? = null
+
     /** If this effect was applied as part of a cue, the cue ID. Null otherwise. */
     var cueId: Int? = null
 

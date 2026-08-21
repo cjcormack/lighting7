@@ -229,16 +229,18 @@ class BuildCueAssignmentsForCueTest {
     /** A registry over [fixtures] holding [entries] under [paletteUuid]. */
     private fun registryFor(
         fixtures: Fixtures,
-        vararg entries: uk.me.cormack.lighting7.fx.PaletteEntryRow,
-    ) = uk.me.cormack.lighting7.fx.PaletteRegistry(
+        vararg entries: uk.me.cormack.lighting7.fx.LookRowEntry,
+    ) = uk.me.cormack.lighting7.fx.LookRegistry(
         fixtures = { fixtures },
         loader = { requested ->
-            if (requested != paletteUuid) null else uk.me.cormack.lighting7.fx.PaletteSnapshot(
-                paletteId = 1,
-                paletteUuid = paletteUuid,
+            if (requested != paletteUuid) null else uk.me.cormack.lighting7.fx.LookSnapshot(
+                lookId = 1,
+                lookUuid = paletteUuid,
                 name = "Warm Amber",
-                type = uk.me.cormack.lighting7.models.PaletteType.COLOUR,
-                entries = entries.toList(),
+                editorFixtureType = null,
+                palette = emptyList(),
+                effects = emptyList(),
+                rows = entries.toList(),
             )
         },
     )
@@ -257,9 +259,9 @@ class BuildCueAssignmentsForCueTest {
         val out = buildCueAssignmentsForCue(
             fixtures,
             cueData(refAssignment("fixture", "hex-1")),
-            paletteRegistry = registryFor(
+            lookRegistry = registryFor(
                 fixtures,
-                uk.me.cormack.lighting7.fx.PaletteEntryRow(
+                uk.me.cormack.lighting7.fx.LookRowEntry(
                     uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-1"), "colour", "#ff8800",
                 ),
             ),
@@ -275,12 +277,12 @@ class BuildCueAssignmentsForCueTest {
         val out = buildCueAssignmentsForCue(
             fixtures,
             cueData(refAssignment("group", "front-wash")),
-            paletteRegistry = registryFor(
+            lookRegistry = registryFor(
                 fixtures,
-                uk.me.cormack.lighting7.fx.PaletteEntryRow(
+                uk.me.cormack.lighting7.fx.LookRowEntry(
                     uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-1"), "colour", "#ff8800",
                 ),
-                uk.me.cormack.lighting7.fx.PaletteEntryRow(
+                uk.me.cormack.lighting7.fx.LookRowEntry(
                     uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-2"), "colour", "#00ff00",
                 ),
             ),
@@ -304,9 +306,9 @@ class BuildCueAssignmentsForCueTest {
         val out = buildCueAssignmentsForCue(
             fixtures,
             cueData(refAssignment("group", "front-wash")),
-            paletteRegistry = registryFor(
+            lookRegistry = registryFor(
                 fixtures,
-                uk.me.cormack.lighting7.fx.PaletteEntryRow(
+                uk.me.cormack.lighting7.fx.LookRowEntry(
                     uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-1"), "colour", "#ff8800",
                 ),
             ),
@@ -322,7 +324,7 @@ class BuildCueAssignmentsForCueTest {
         val out = buildCueAssignmentsForCue(
             fixtures,
             cueData(refAssignment("fixture", "hex-1")),
-            paletteRegistry = null,
+            lookRegistry = null,
         )
         assertTrue(out.isEmpty())
     }
@@ -337,7 +339,7 @@ class BuildCueAssignmentsForCueTest {
                 targetType = "fixture", targetKey = "hex-1", propertyName = "colour", value = "P1",
             )),
             cascade = PaletteCascade(cue = listOf(ExtendedColour(Color(0x11, 0x22, 0x33)))),
-            paletteRegistry = registryFor(fixtures),
+            lookRegistry = registryFor(fixtures),
         )
         val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
         assertEquals(ExtendedColour(Color(0x11, 0x22, 0x33)), v.value)

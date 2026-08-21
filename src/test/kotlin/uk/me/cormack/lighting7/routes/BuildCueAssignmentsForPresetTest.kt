@@ -335,22 +335,24 @@ class BuildCueAssignmentsForPresetTest {
 
     private fun registryFor(
         fixtures: Fixtures,
-        vararg entries: uk.me.cormack.lighting7.fx.PaletteEntryRow,
-    ) = uk.me.cormack.lighting7.fx.PaletteRegistry(
+        vararg entries: uk.me.cormack.lighting7.fx.LookRowEntry,
+    ) = uk.me.cormack.lighting7.fx.LookRegistry(
         fixtures = { fixtures },
         loader = { requested ->
-            if (requested != paletteUuid) null else uk.me.cormack.lighting7.fx.PaletteSnapshot(
-                paletteId = 1,
-                paletteUuid = paletteUuid,
+            if (requested != paletteUuid) null else uk.me.cormack.lighting7.fx.LookSnapshot(
+                lookId = 1,
+                lookUuid = paletteUuid,
                 name = "Warm Amber",
-                type = uk.me.cormack.lighting7.models.PaletteType.COLOUR,
-                entries = entries.toList(),
+                editorFixtureType = null,
+                palette = emptyList(),
+                effects = emptyList(),
+                rows = entries.toList(),
             )
         },
     )
 
     private fun colourRow(fixtureKey: String, value: String) =
-        uk.me.cormack.lighting7.fx.PaletteEntryRow(
+        uk.me.cormack.lighting7.fx.LookRowEntry(
             uk.me.cormack.lighting7.models.TargetRef.Fixture(fixtureKey), "colour", value,
         )
 
@@ -366,7 +368,7 @@ class BuildCueAssignmentsForPresetTest {
                 FxPresetPropertyAssignmentDto(propertyName = "colour", value = refValue),
             ),
             applyTargets = listOf(CueTargetDto(type = "group", key = "front-wash")),
-            paletteRegistry = registryFor(
+            lookRegistry = registryFor(
                 fixtures, colourRow("hex-1", "#ff8800"), colourRow("hex-2", "#00ff00"),
             ),
         )
@@ -393,7 +395,7 @@ class BuildCueAssignmentsForPresetTest {
                 FxPresetPropertyAssignmentDto(propertyName = "colour", value = refValue, elementKey = "head-1"),
             ),
             applyTargets = listOf(CueTargetDto(type = "fixture", key = "bar-1")),
-            paletteRegistry = registryFor(fixtures, colourRow("bar-1", "#ff8800")),
+            lookRegistry = registryFor(fixtures, colourRow("bar-1", "#ff8800")),
         )
         assertTrue(out.isEmpty(), "an element-scoped ref resolves to nothing rather than to the parent's value")
     }
@@ -407,7 +409,7 @@ class BuildCueAssignmentsForPresetTest {
                 FxPresetPropertyAssignmentDto(propertyName = "colour", value = refValue),
             ),
             applyTargets = listOf(CueTargetDto(type = "fixture", key = "hex-1")),
-            paletteRegistry = null,
+            lookRegistry = null,
         )
         assertTrue(out.isEmpty())
     }

@@ -26,6 +26,11 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v5: FX presets and named palettes collapse into `looks/`, and `cuePresetApplications/`
+    // becomes `cueLayers/`. `minReader` jumps to 5 because `CuePresetApplicationJson.presetUuid`
+    // — a required field — is gone: an older reader would fail to parse a v5 repo rather than
+    // silently drop the composition, so there is nothing to be gained by letting it try.
+    //
     // v4: prompt-book script PDFs travel in the repo as `promptScripts/{hash}.pdf`.
     //
     // @EncodeDefault(ALWAYS) forces these to be written despite the canonical encoder's
@@ -34,9 +39,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 4,
+    val formatVersion: Int = 5,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 1,
+    val minReader: Int = 5,
 )
 
 /**
@@ -104,6 +109,67 @@ data class FxPresetJson(
     val effects: List<FxPresetEffectDto> = emptyList(),
     val palette: List<String> = emptyList(),
     val propertyAssignments: List<FxPresetPropertyAssignmentJson> = emptyList(),
+)
+
+@Serializable
+data class LookRowJson(
+    val uuid: String,
+    /** A `TargetRef` discriminator, or `"deferred"` when the row takes its targets from the layer. */
+    val targetType: String,
+    val targetKey: String,
+    val propertyName: String,
+    val value: String,
+    val fadeDurationMs: Long? = null,
+    val elementKey: String? = null,
+    val sortOrder: Int = 0,
+)
+
+@Serializable
+data class LookEffectJson(
+    val uuid: String,
+    val targetType: String,
+    val targetKey: String,
+    val effectType: String,
+    val category: String,
+    val propertyName: String? = null,
+    val beatDivision: Double,
+    val blendMode: String,
+    val distribution: String,
+    val phaseOffset: Double = 0.0,
+    val elementMode: String? = null,
+    val elementFilter: String? = null,
+    val stepTiming: Boolean? = null,
+    val parameters: Map<String, String> = emptyMap(),
+    /** Speed master uuid, remapped by ExportUuidRemapper like any uuid. */
+    val speedMasterUuid: String? = null,
+    val rateSpeedMasterUuid: String? = null,
+    val sortOrder: Int = 0,
+)
+
+/**
+ * A Look — portable show content, rows and effects embedded inline.
+ *
+ * Rows address fixtures and groups by *key*, the same as cue assignments do, so nothing inside
+ * needs reference remapping. The record's own `uuid` does matter beyond identity: a cue layer
+ * points at it, and until the `ref:` grammar is retired a stored value may still name it as
+ * `ref:{uuid}`. [uk.me.cormack.lighting7.sync.ExportUuidRemapper] rewrites both, which is why the
+ * reference is a uuid rather than an int id.
+ *
+ * There is deliberately **no attribute-type field**: which families a Look touches is derived from
+ * its rows, so a Look can grow from one family to several with no format change.
+ */
+@Serializable
+data class LookJson(
+    val uuid: String,
+    val name: String,
+    val notes: String? = null,
+    val sortOrder: Int = 0,
+    /** Synthetic-fixture form-editor hint; only meaningful for a Look with deferred rows. */
+    val editorFixtureType: String? = null,
+    /** The positional colour list (`P1` / `P2`), not the Look's own rows. */
+    val palette: List<String> = emptyList(),
+    val rows: List<LookRowJson> = emptyList(),
+    val effects: List<LookEffectJson> = emptyList(),
 )
 
 @Serializable
@@ -281,6 +347,32 @@ data class CuePresetApplicationJson(
     val speedMasterUuid: String? = null,
     /** Per-application wall-clock rate-master override; same remapping. */
     val rateSpeedMasterUuid: String? = null,
+)
+
+/**
+ * One line of a cue's ordered Look composition. Its own top-level folder, the way
+ * [CuePresetApplicationJson] was — a cue child that points at a second entity, so it cannot be
+ * embedded in either one.
+ */
+@Serializable
+data class CueLayerJson(
+    val uuid: String,
+    val cueUuid: String,
+    val lookUuid: String,
+    val sortOrder: Int = 0,
+    val enabled: Boolean = true,
+    val targets: List<CueTargetDto> = emptyList(),
+    /** Comma-separated `PropertyMaskGroup` names; null = every property. */
+    val propertyMask: String? = null,
+    val blendMode: String = "OVERRIDE",
+    val amount: Double = 1.0,
+    val stomp: Boolean = false,
+    /** Per-layer speed-master override, remapped by ExportUuidRemapper like any uuid. */
+    val speedMasterUuid: String? = null,
+    val rateSpeedMasterUuid: String? = null,
+    val delayMs: Long? = null,
+    val intervalMs: Long? = null,
+    val randomWindowMs: Long? = null,
 )
 
 @Serializable

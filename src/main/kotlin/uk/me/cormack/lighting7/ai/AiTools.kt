@@ -21,8 +21,8 @@ import uk.me.cormack.lighting7.state.State
 class AiTools(private val state: State) {
 
     val allTools: List<AnthropicToolDef> = listOf(
-        createFxPresetTool,
-        applyPresetTool,
+        createLookTool,
+        applyLookTool,
         runLightingScriptTool,
         setBpmTool,
         clearEffectsTool,
@@ -44,8 +44,8 @@ class AiTools(private val state: State) {
     suspend fun executeTool(name: String, input: JsonObject): ToolExecutionResult {
         return try {
             when (name) {
-                "create_fx_preset" -> executeCreateFxPreset(input)
-                "apply_preset" -> executeApplyPreset(input)
+                "create_look" -> executeCreateLook(input)
+                "apply_look" -> executeApplyLook(input)
                 "run_lighting_script" -> executeRunLightingScript(input)
                 "set_bpm" -> executeSetBpm(input)
                 "clear_effects" -> executeClearEffects(input)
@@ -76,29 +76,54 @@ class AiTools(private val state: State) {
 
     // ─── Tool Executors ────────────────────────────────────────────────────
 
-    private fun executeCreateFxPreset(input: JsonObject): ToolExecutionResult {
+    private fun executeCreateLook(input: JsonObject): ToolExecutionResult {
         val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
-        val description = input["description"]?.jsonPrimitive?.contentOrNull
-        val fixtureType = input["fixtureType"]?.jsonPrimitive?.contentOrNull
-            ?: return errorResult("Missing 'fixtureType'")
-        if (fixtureType.isBlank()) return errorResult("'fixtureType' cannot be blank")
+        val notes = input["description"]?.jsonPrimitive?.contentOrNull
+        val editorFixtureType = input["editorFixtureType"]?.jsonPrimitive?.contentOrNull
+            ?: return errorResult("Missing 'editorFixtureType'")
+        if (editorFixtureType.isBlank()) return errorResult("'editorFixtureType' cannot be blank")
         val effectsArray = input["effects"]?.jsonArray ?: return errorResult("Missing 'effects'")
 
         val effects = effectsArray.map { parsePresetEffect(it.jsonObject) }
 
         val project = state.projectManager.currentProject
-        val preset = transaction(state.database) {
-            DaoFxPreset.new {
+        val look = transaction(state.database) {
+            val created = DaoLook.new {
                 this.name = name
-                this.description = description
-                this.fixtureType = fixtureType
+                this.notes = notes
+                this.editorFixtureType = editorFixtureType
                 this.project = project
-                this.effects = effects
+                this.sortOrder = (DaoLook.find { DaoLooks.project eq project.id }
+                    .maxOfOrNull { it.sortOrder } ?: -1) + 1
             }
+            // Authored through the AI surface, so every row is deferred: the tool describes the
+            // effects, and the targets come from whatever applies the look.
+            effects.forEachIndexed { index, effect ->
+                DaoLookEffect.new {
+                    this.look = created
+                    targetType = DEFERRED_TARGET_TYPE
+                    targetKey = ""
+                    effectType = effect.effectType
+                    category = effect.category
+                    propertyName = effect.propertyName
+                    beatDivision = effect.beatDivision
+                    blendMode = effect.blendMode
+                    distribution = effect.distribution
+                    phaseOffset = effect.phaseOffset
+                    elementMode = effect.elementMode
+                    elementFilter = effect.elementFilter
+                    stepTiming = effect.stepTiming
+                    parameters = effect.parameters
+                    speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
+                    rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+                    sortOrder = index
+                }
+            }
+            created
         }
-        state.show.fixtures.presetListChanged()
+        state.show.fixtures.lookListChanged()
 
-        val presetId = preset.id.value
+        val lookId = look.id.value
 
         // Optionally apply to targets
         val targets = input["applyToTargets"]?.jsonArray
@@ -112,7 +137,7 @@ class AiTools(private val state: State) {
                 )
             }
             val result = togglePresetOnTargets(
-                state, presetId, effects,
+                state, lookId, effects,
                 presetPropertyAssignments = emptyList(),
                 toggleTargets, null,
             )
@@ -121,10 +146,10 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Created preset '$name' (id=$presetId, ${effects.size} effects)" +
+            description = "Created look '$name' (id=$lookId, ${effects.size} effects)" +
                     if (appliedCount > 0) ", applied $appliedCount effects" else "",
             result = buildJsonObject {
-                put("presetId", presetId)
+                put("lookId", lookId)
                 put("name", name)
                 put("effectCount", effects.size)
                 put("appliedEffectCount", appliedCount)
@@ -132,20 +157,13 @@ class AiTools(private val state: State) {
         )
     }
 
-    private fun executeApplyPreset(input: JsonObject): ToolExecutionResult {
-        val presetId = input["presetId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'presetId'")
+    private fun executeApplyLook(input: JsonObject): ToolExecutionResult {
+        val lookId = input["lookId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'lookId'")
         val targetsArray = input["targets"]?.jsonArray ?: return errorResult("Missing 'targets'")
         val beatDivision = input["beatDivision"]?.jsonPrimitive?.doubleOrNull
 
-        val presetData = transaction(state.database) {
-            val preset = DaoFxPreset.findById(presetId) ?: return@transaction null
-            Triple(
-                preset.effects,
-                preset.toPropertyAssignmentDtos(),
-                preset.palette.toPaletteColours(),
-            )
-        } ?: return errorResult("Preset not found: $presetId")
-        val (presetEffects, presetAssignments, presetPalette) = presetData
+        val lookData = transaction(state.database) { loadLookToggleData(lookId) }
+            ?: return errorResult("Look not found: $lookId")
 
         val targets = targetsArray.map { t ->
             val obj = t.jsonObject
@@ -156,13 +174,13 @@ class AiTools(private val state: State) {
         }
 
         val result = togglePresetOnTargets(
-            state, presetId, presetEffects, presetAssignments,
-            targets, beatDivision, presetPalette = presetPalette,
+            state, lookId, lookData.effects, lookData.propertyAssignments,
+            targets, beatDivision, presetPalette = lookData.palette,
         )
 
         return ToolExecutionResult(
             success = true,
-            description = "${result.action} ${result.effectCount} effects (preset $presetId)",
+            description = "${result.action} ${result.effectCount} effects (look $lookId)",
             result = buildJsonObject {
                 put("action", result.action)
                 put("effectCount", result.effectCount)
@@ -252,7 +270,7 @@ class AiTools(private val state: State) {
 
     private fun executeGetCurrentState(input: JsonObject): ToolExecutionResult {
         val include = input["include"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
-            ?: setOf("active_effects", "bpm", "fixtures", "groups", "presets", "palette", "cues", "cue_stacks")
+            ?: setOf("active_effects", "bpm", "fixtures", "groups", "looks", "palette", "cues", "cue_stacks")
 
         val result = buildJsonObject {
             if ("bpm" in include) {
@@ -309,17 +327,20 @@ class AiTools(private val state: State) {
                 })
             }
 
-            if ("presets" in include) {
+            if ("looks" in include) {
                 val project = state.projectManager.currentProject
-                val presets = transaction(state.database) {
-                    DaoFxPreset.find { DaoFxPresets.project eq project.id }
-                        .map { it.id.value to it.name }
+                val looks = transaction(state.database) {
+                    DaoLook.find { DaoLooks.project eq project.id }
+                        .map { Triple(it.id.value, it.name, it.editorFixtureType) }
                 }
-                put("presets", buildJsonArray {
-                    for ((id, name) in presets) {
+                put("looks", buildJsonArray {
+                    for ((id, name, editorFixtureType) in looks) {
                         addJsonObject {
                             put("id", id)
                             put("name", name)
+                            // Null means the look is bound — its rows name their own targets — so a
+                            // layer applying it needs no targets of its own.
+                            editorFixtureType?.let { put("editorFixtureType", it) }
                         }
                     }
                 })
@@ -347,7 +368,7 @@ class AiTools(private val state: State) {
                                 put("id", cue.id.value)
                                 put("name", cue.name)
                                 put("paletteSize", cue.palette.size)
-                                put("presetApplicationCount", cue.presetApplications.count())
+                                put("layerCount", cue.layers.count())
                                 put("adHocEffectCount", cue.adHocEffects.count())
                             }
                         }
@@ -412,22 +433,28 @@ class AiTools(private val state: State) {
     private fun executeCreateCue(input: JsonObject): ToolExecutionResult {
         val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
         val paletteArray = input["palette"]?.jsonArray
-        val presetAppsArray = input["presetApplications"]?.jsonArray
+        val layersArray = input["layers"]?.jsonArray
         val adHocArray = input["adHocEffects"]?.jsonArray
 
         val updateGlobalPalette = input["updateGlobalPalette"]?.jsonPrimitive?.booleanOrNull ?: false
         val palette = paletteArray?.map { it.jsonPrimitive.content } ?: emptyList()
-        val presetApplications = presetAppsArray?.map { app ->
-            val obj = app.jsonObject
-            CuePresetApplicationDto(
-                presetId = obj["presetId"]!!.jsonPrimitive.int,
+        val layers = layersArray?.mapIndexed { index, layer ->
+            val obj = layer.jsonObject
+            CueLayerDto(
+                lookId = obj["lookId"]!!.jsonPrimitive.int,
                 targets = obj["targets"]!!.jsonArray.map { t ->
                     val tObj = t.jsonObject
                     CueTargetDto(
                         type = tObj["type"]!!.jsonPrimitive.content,
                         key = tObj["key"]!!.jsonPrimitive.content,
                     )
-                }
+                },
+                // Declaration order is the stack order unless the caller says otherwise, so a tool
+                // call that lists layers bottom-to-top composes the way it reads.
+                sortOrder = obj["sortOrder"]?.jsonPrimitive?.int ?: index,
+                propertyMask = obj["propertyMask"]?.jsonPrimitive?.contentOrNull,
+                blendMode = obj["blendMode"]?.jsonPrimitive?.contentOrNull ?: "OVERRIDE",
+                amount = obj["amount"]?.jsonPrimitive?.doubleOrNull ?: 1.0,
             )
         } ?: emptyList()
         val adHocEffects = adHocArray?.map { parseAdHocEffectFromJson(it.jsonObject) } ?: emptyList()
@@ -446,7 +473,7 @@ class AiTools(private val state: State) {
                 this.cueStack = stack
                 this.sortOrder = stack.cues.count().toInt()
             }
-            createCueChildren(newCue, presetApplications, adHocEffects)
+            createCueChildren(newCue, emptyList(), adHocEffects, layers = layers)
             newCue
         }
         state.show.fixtures.cueListChanged()
@@ -455,12 +482,12 @@ class AiTools(private val state: State) {
         val cueId = cue.id.value
         return ToolExecutionResult(
             success = true,
-            description = "Created cue '$name' (id=$cueId, ${palette.size} palette colours, ${presetApplications.size} preset applications, ${adHocEffects.size} ad-hoc effects)",
+            description = "Created cue '$name' (id=$cueId, ${palette.size} palette colours, ${layers.size} layers, ${adHocEffects.size} ad-hoc effects)",
             result = buildJsonObject {
                 put("cueId", cueId)
                 put("name", name)
                 put("paletteSize", palette.size)
-                put("presetApplicationCount", presetApplications.size)
+                put("layerCount", layers.size)
                 put("adHocEffectCount", adHocEffects.size)
             }.toString()
         )
@@ -483,6 +510,9 @@ class AiTools(private val state: State) {
                         targets = app.targets,
                     )
                 },
+                // Without this the tool applies the cue with an empty layer stack — none of its
+                // Looks contribute values or spawn effects. `applyCue` reads only `layers`.
+                layers = cue.layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
                 adHocEffects = cue.adHocEffects.map { effect ->
                     CueAdHocEffectDto(
                         targetType = effect.targetType,

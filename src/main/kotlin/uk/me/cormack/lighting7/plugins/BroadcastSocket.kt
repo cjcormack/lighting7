@@ -14,9 +14,18 @@ import uk.me.cormack.lighting7.show.FixturesChangeListener
 @Serializable
 sealed class BroadcastOutMessage : OutMessage()
 
+/**
+ * Look CRUD only — created, renamed, deleted. Deliberately *not* fired when a Look's contents
+ * change: the client treats this as a cache-invalidation signal, so emitting it per resolution
+ * would be an invalidation storm. A contents change publishes `provenanceState` instead (see
+ * `routes/lookRepublish.kt`), which is what drives the programmer sheet to re-read resolved values.
+ *
+ * Replaces the two messages this collapses — `presetListChanged` and `paletteListChanged` — now
+ * that FX presets and named palettes are one entity.
+ */
 @Serializable
-@SerialName("presetListChanged")
-data object PresetListChangedOutMessage : BroadcastOutMessage()
+@SerialName("lookListChanged")
+data object LookListChangedOutMessage : BroadcastOutMessage()
 
 @Serializable
 @SerialName("cueListChanged")
@@ -43,19 +52,8 @@ data object RiggingListChangedOutMessage : BroadcastOutMessage()
 data object StageRegionListChangedOutMessage : BroadcastOutMessage()
 
 /**
- * Named-palette CRUD only — created, renamed, deleted. Deliberately *not* fired when a
- * palette's contents change: the client treats this as a cache-invalidation signal, so
- * emitting it per resolution would be an invalidation storm. A contents change publishes
- * `provenanceState` instead (see `routes/paletteRepublish.kt`), which is what drives the
- * programmer sheet to re-read resolved ref values.
- */
-@Serializable
-@SerialName("paletteListChanged")
-data object PaletteListChangedOutMessage : BroadcastOutMessage()
-
-/**
  * Speed-master CRUD only — created, renamed, deleted. Live BPM changes stream over the
- * `speedMasters.*` family instead, for the same storm rationale as [PaletteListChangedOutMessage]:
+ * `speedMasters.*` family instead, for the same storm rationale as [LookListChangedOutMessage]:
  * this message is a cache-invalidation signal, and a tapped tempo would fire it twice a second.
  */
 @Serializable
@@ -149,14 +147,13 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
             fire(buildChannelMappingMessage(state))
         }
 
-        override fun presetListChanged() = fire(PresetListChangedOutMessage)
+        override fun lookListChanged() = fire(LookListChangedOutMessage)
         override fun cueListChanged() = fire(CueListChangedOutMessage)
         override fun cueStackListChanged() = fire(CueStackListChangedOutMessage)
         override fun cueSlotListChanged() = fire(CueSlotListChangedOutMessage)
         override fun patchListChanged() = fire(PatchListChangedOutMessage)
         override fun riggingListChanged() = fire(RiggingListChangedOutMessage)
         override fun stageRegionListChanged() = fire(StageRegionListChangedOutMessage)
-        override fun paletteListChanged() = fire(PaletteListChangedOutMessage)
         override fun speedMasterListChanged() = fire(SpeedMasterListChangedOutMessage)
 
         override fun showChanged(

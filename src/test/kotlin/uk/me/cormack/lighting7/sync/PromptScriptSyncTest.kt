@@ -165,11 +165,14 @@ class PromptScriptSyncTest {
         assertTrue(Files.exists(aTreePdf), "A's working tree should hold promptScripts/$hash.pdf")
         assertTrue(pdfV1.contentEquals(Files.readAllBytes(aTreePdf)), "A's committed PDF must be byte-identical")
 
-        // A's working tree gained the binary .gitattributes rule and a v4 formatVersion.
+        // A's working tree gained the binary .gitattributes rule and the current formatVersion.
         val gitattributes = Files.readString(repoPath(workingRootA, projectUuid).resolve(".gitattributes"))
         assertTrue(gitattributes.contains("promptScripts/** binary"), "binary attribute must be present")
         val formatJson = Files.readString(repoPath(workingRootA, projectUuid).resolve("formatVersion.json"))
-        assertTrue(formatJson.contains("\"formatVersion\": 4"), "writer must emit formatVersion 4; got: $formatJson")
+        assertTrue(
+            formatJson.contains("\"formatVersion\": $SUPPORTED_FORMAT_VERSION"),
+            "writer must emit formatVersion $SUPPORTED_FORMAT_VERSION; got: $formatJson",
+        )
 
         // C bootstraps with A's UUID and pulls.
         val projectIdC = transaction(stateC.database) {

@@ -71,7 +71,7 @@ internal data class ProgrammerRecordPaletteResponse(
  * The type *is* the mask — [PaletteType] is [PropertyMaskGroup] — so a COLOUR palette records only
  * colour properties with no separate mask argument to get wrong.
  *
- * Writing contents ends with [republishForPaletteEdit], so re-recording a palette that cues already
+ * Writing contents ends with [republishForLookEdit], so re-recording a palette that cues already
  * reference moves them immediately. That is the same path a palette edit takes, and it is what makes
  * re-record the natural editing gesture.
  */
@@ -136,8 +136,8 @@ internal suspend fun RoutingContext.handleProgrammerRecordPalette(state: State) 
 
         // Re-resolve and republish: a re-record of a referenced palette must move its consumers,
         // exactly as an edit does.
-        val republish = republishForPaletteEdit(state, outcome.paletteUuid)
-        state.show.fixtures.paletteListChanged()
+        val republish = republishForLookEdit(state, outcome.paletteUuid)
+        state.show.fixtures.lookListChanged()
 
         val details = transaction(state.database) {
             DaoPalette.findById(outcome.paletteId)!!.toDetailsDtoForRecord()
@@ -375,8 +375,8 @@ internal suspend fun RoutingContext.updateIncludedPalette(
     val outcome = transaction(state.database) {
         writeRecordingIntoPalette(DaoPalette.findById(paletteId)!!, collapsed, RecordMode.MERGE)
     }
-    val republish = republishForPaletteEdit(state, outcome.paletteUuid)
-    state.show.fixtures.paletteListChanged()
+    val republish = republishForLookEdit(state, outcome.paletteUuid)
+    state.show.fixtures.lookListChanged()
 
     logger.info(
         "update-palette '{}': {} entr{} written, {} programmer key(s) refreshed, {} cue(s) republished",
@@ -417,7 +417,7 @@ internal fun includePaletteIntoProgrammer(
     mask: Set<PropertyMaskGroup>?,
     fadeMs: Long,
 ): PaletteIncludeOutcome {
-    val expanded = state.show.paletteRegistry.expanded(palette.uuid)
+    val expanded = state.show.lookRegistry.expanded(palette.uuid)
         ?: return PaletteIncludeOutcome(0, emptyList(), emptyList())
 
     val writes = ArrayList<uk.me.cormack.lighting7.fx.FxEngine.ProgrammerPropertyWrite>()
@@ -427,7 +427,7 @@ internal fun includePaletteIntoProgrammer(
     // Which group each member was covered by, so the slot keeps the operator's group shape and a
     // later Record can collapse back to a group row.
     val groupHints = HashMap<Pair<String, String>, String>()
-    for (entry in expanded.snapshot.entries) {
+    for (entry in expanded.snapshot.rows) {
         val group = entry.target as? TargetRef.Group ?: continue
         val members = runCatching {
             state.show.fixtures.untypedGroup(group.key).fixtures

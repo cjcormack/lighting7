@@ -1749,6 +1749,7 @@ class FxEngine(
             ).apply {
                 id = existing.id
                 presetId = existing.presetId
+                lookId = existing.lookId
                 cueId = existing.cueId
                 cueStackId = existing.cueStackId
                 priority = existing.priority

@@ -9,19 +9,19 @@ import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerValue
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.paletteRefValue
-import uk.me.cormack.lighting7.models.DaoCuePresetApplication
-import uk.me.cormack.lighting7.models.DaoCuePresetApplications
+import uk.me.cormack.lighting7.models.DaoCueLayer
+import uk.me.cormack.lighting7.models.DaoCueLayers
+import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
-import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
-import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignments
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 
-private val logger = LoggerFactory.getLogger("paletteRepublish")
+private val logger = LoggerFactory.getLogger("lookRepublish")
 
 /** What a palette edit moved. Reported back so a route can tell the operator. */
-internal data class PaletteRepublishOutcome(
+internal data class LookRepublishOutcome(
     /** Programmer keys whose resolved value changed and were re-transmitted. */
     val programmerKeysRefreshed: Int,
     /** Programmer ref slots the palette no longer covers — kept at their last value. */
@@ -31,10 +31,10 @@ internal data class PaletteRepublishOutcome(
 )
 
 /**
- * Re-resolve and republish every live consumer of [paletteUuid] after its contents changed.
+ * Re-resolve and republish every live consumer of [lookUuid] after its contents changed.
  *
- * This is the touring feature: edit a palette once and every look referencing it moves, without
- * re-firing a single cue.
+ * This is the touring feature: edit a Look once and every cue layering it moves, without re-firing
+ * a single cue.
  *
  * **Order of operations matters and is not interchangeable:**
  *
@@ -49,24 +49,24 @@ internal data class PaletteRepublishOutcome(
  * value and be corrected a frame later — a visible flicker on exactly the fixtures the operator is
  * editing.
  *
- * A ref slot the palette no longer covers **keeps its last resolved value** rather than being
+ * A reference slot the Look no longer covers **keeps its last resolved value** rather than being
  * dropped. Silently vanishing an operator's programmer entry mid-show is worse than a stale value
  * the sheet marks as broken.
  */
-internal fun republishForPaletteEdit(state: State, paletteUuid: UUID): PaletteRepublishOutcome {
+internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOutcome {
     val engine = state.show.fxEngine
-    val registry = state.show.paletteRegistry
+    val registry = state.show.lookRegistry
 
     // 1. Drop the cached expansion first, so every read below sees the new contents.
-    registry.invalidate(paletteUuid)
+    registry.invalidate(lookUuid)
 
     // 2. Re-resolve programmer refs in place. No publish yet — see the KDoc.
     var uncovered = 0
     val rewrittenKeys = state.show.programmerStore.rewriteSlotValues { fixtureKey, propertyName, slot ->
         val ref = slot.value as? ProgrammerValue.Ref ?: return@rewriteSlotValues null
-        if (ref.paletteUuid != paletteUuid) return@rewriteSlotValues null
+        if (ref.paletteUuid != lookUuid) return@rewriteSlotValues null
 
-        val literal = registry.literalFor(paletteUuid, fixtureKey, propertyName)
+        val literal = registry.literalFor(lookUuid, fixtureKey, propertyName)
         if (literal == null) {
             uncovered++
             return@rewriteSlotValues null
@@ -76,21 +76,21 @@ internal fun republishForPaletteEdit(state: State, paletteUuid: UUID): PaletteRe
         val reparsed = reparseLike(slot.value.resolved, propertyName, literal)
         if (reparsed == null) {
             logger.warn(
-                "palette {}: entry '{}' for {}.{} does not parse — leaving the programmer slot as it was",
-                paletteUuid, literal, fixtureKey, propertyName,
+                "look {}: row '{}' for {}.{} does not parse — leaving the programmer slot as it was",
+                lookUuid, literal, fixtureKey, propertyName,
             )
             null
         } else {
-            ProgrammerValue.Ref(paletteUuid, reparsed)
+            ProgrammerValue.Ref(lookUuid, reparsed)
         }
     }
 
-    // 3. Rebuild the live cues that reference this palette, then one republish for all of them.
+    // 3. Rebuild the live cues that depend on this Look, then one republish for all of them.
     val activeCueIds = engine.activeCueAssignmentIds()
     val referencing = if (activeCueIds.isEmpty()) {
         emptySet()
     } else {
-        activeCuesReferencingPalette(state, paletteUuid, activeCueIds)
+        activeCuesReferencingLook(state, lookUuid, activeCueIds)
     }
     val rebuilt = LinkedHashMap<Int, List<CueAssignmentResolver.Assignment>>()
     for (cueId in referencing) {
@@ -110,10 +110,10 @@ internal fun republishForPaletteEdit(state: State, paletteUuid: UUID): PaletteRe
     }
 
     logger.info(
-        "palette {} edited: {} programmer key(s) refreshed, {} uncovered, {} of {} active cue(s) republished",
-        paletteUuid, rewrittenKeys.size, uncovered, republished, activeCueIds.size,
+        "look {} edited: {} programmer key(s) refreshed, {} uncovered, {} of {} active cue(s) republished",
+        lookUuid, rewrittenKeys.size, uncovered, republished, activeCueIds.size,
     )
-    return PaletteRepublishOutcome(
+    return LookRepublishOutcome(
         programmerKeysRefreshed = rewrittenKeys.size,
         programmerKeysUncovered = uncovered,
         cuesRepublished = rebuilt.keys.toList(),
@@ -122,54 +122,47 @@ internal fun republishForPaletteEdit(state: State, paletteUuid: UUID): PaletteRe
 }
 
 /**
- * Which of [activeCueIds] hold a row — their own, or one of their immediate presets' — whose value
- * is exactly `ref:{paletteUuid}`.
+ * Which of [activeCueIds] depend on [lookUuid] — through a layer, or through a local row whose value
+ * is exactly `ref:{lookUuid}`.
  *
- * A DB scan rather than state tracked at build time. Tracking would mean threading a referenced-set
- * through both assignment builders, `applyCue`, `republishCueLayer` and `setCueAssignments`, and it
- * would still be *incomplete*: timed-preset rows arrive via `appendCueAssignments`, which carries no
- * palette information at all. The scan is two indexed queries against a handful of live cues.
- *
- * Exact equality, not a `LIKE` prefix — a prefix match is a latent bug the moment the reference form
- * grows a suffix.
+ * The layer half is a plain **indexed FK query**, which is the structural win of the merge: a layer
+ * references its Look through a real column, where the palette era could only scan opaque `value`
+ * text for an exact string match. The `ref:` half survives only until the grammar is retired, and
+ * keeps exact equality rather than a `LIKE` prefix — a prefix match becomes a latent bug the moment
+ * the reference form grows a suffix.
  */
-internal fun activeCuesReferencingPalette(
+internal fun activeCuesReferencingLook(
     state: State,
-    paletteUuid: UUID,
+    lookUuid: UUID,
     activeCueIds: Set<Int>,
 ): Set<Int> {
     if (activeCueIds.isEmpty()) return emptySet()
-    val refValue = paletteRefValue(paletteUuid)
+    val refValue = paletteRefValue(lookUuid)
     return transaction(state.database) {
-        val direct = DaoCuePropertyAssignment.find {
+        val look = DaoLook.find { DaoLooks.uuid eq lookUuid }.firstOrNull()
+
+        val viaLayers = if (look == null) {
+            emptyList()
+        } else {
+            DaoCueLayer.find {
+                (DaoCueLayers.cue inList activeCueIds.toList()) and (DaoCueLayers.look eq look.id)
+            }.map { it.cue.id.value }
+        }
+
+        val viaLocalRefs = DaoCuePropertyAssignment.find {
             (DaoCuePropertyAssignments.cue inList activeCueIds.toList()) and
                 (DaoCuePropertyAssignments.value eq refValue)
         }.map { it.cue.id.value }
 
-        // Preset rows reach the cue layer through its preset applications, so a palette edit has to
-        // republish the cue even though the referencing row belongs to the preset.
-        val presetIds = DaoFxPresetPropertyAssignment
-            .find { DaoFxPresetPropertyAssignments.value eq refValue }
-            .map { it.preset.id.value }
-            .distinct()
-        val viaPresets = if (presetIds.isEmpty()) {
-            emptyList()
-        } else {
-            DaoCuePresetApplication.find {
-                (DaoCuePresetApplications.cue inList activeCueIds.toList()) and
-                    (DaoCuePresetApplications.preset inList presetIds)
-            }.map { it.cue.id.value }
-        }
-
-        (direct + viaPresets).toSet()
+        (viaLayers + viaLocalRefs).toSet()
     }
 }
 
 /**
  * Rebuild one live cue's Layer 4 rows from its persisted state, or null when the cue has gone.
  *
- * Mirrors [republishCueLayer]'s composition (cue rows plus immediate-preset rows) but *returns*
- * the rows instead of publishing, so a palette edit spanning several cues can publish once.
+ * Mirrors [republishCueLayer]'s composition (the cooked layer stack plus local rows) but *returns*
+ * the rows instead of publishing, so a Look edit spanning several cues can publish once.
  */
 internal fun rebuildCueLayerRows(state: State, cueId: Int): List<CueAssignmentResolver.Assignment>? {
     val applyData = transaction(state.database) {

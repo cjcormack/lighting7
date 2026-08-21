@@ -57,7 +57,7 @@ showEntries/{uuid}.json
 cueStacks/{uuid}.json
 cues/{uuid}.json               # carries cueStackUuid (nullable)
 cuePropertyAssignments/{uuid}.json   # carries cueUuid
-cuePresetApplications/{uuid}.json    # carries cueUuid + presetUuid + optional speedMasterUuid
+cueLayers/{uuid}.json          # carries cueUuid + lookUuid + optional speedMasterUuid
 cueAdHocEffects/{uuid}.json    # carries cueUuid + optional speedMasterUuid
 cueTriggers/{uuid}.json        # carries cueUuid + scriptUuid
 fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUuid
@@ -65,8 +65,7 @@ universeConfigs/{uuid}.json    # `address` deliberately omitted (machine-local)
 riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v3+)
 stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
 fixtureGroups/{uuid}.json      # members embedded inline
-fxPresets/{uuid}.json          # propertyAssignments embedded inline
-palettes/{uuid}.json           # entries embedded inline
+looks/{uuid}.json              # rows and effects embedded inline
 speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default
 fxDefinitions/{uuid}.json
 cueSlots/{uuid}.json
@@ -172,13 +171,24 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 3`, `minReader = 1`. Rules for future
+Current writer emits `formatVersion = 5`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
 * New required field, removed field, or semantic change → bump
   `formatVersion`.
 * Truly breaking change → bump both `formatVersion` and `minReader`.
+
+**v5 is the worked example of a truly breaking change.** FX presets and named palettes collapsed
+into `looks/`, and `cuePresetApplications/` became `cueLayers/`. `CuePresetApplicationJson.presetUuid`
+— a *required* field — disappeared, so both numbers moved. A v4 repo's preset applications name a
+`presetUuid` that resolves to nothing, and there is no in-place upgrade: reading one would import a
+project whose cues had lost their composition entirely, which is worse than refusing it. Hence
+`MIN_SUPPORTED_FORMAT_VERSION = 5` as well.
+
+Note the gate lives in **two compiled-in constants** (`SUPPORTED_FORMAT_VERSION` and
+`MIN_SUPPORTED_FORMAT_VERSION` in `ProjectImporter.kt`), not in the DTO. `FormatVersionJson.minReader`
+is *written* but never read by the importer, so bumping the DTO alone leaves the gate wide open.
 
 ### Version 2 — FOH stage geometry
 
@@ -244,7 +254,7 @@ the local working tree. When Phase 5+ migrations land, they live at
 Bumped when the script PDF a prompt book is bound to began travelling in the
 repo. `SUPPORTED_FORMAT_VERSION = 4`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 3**
 so a v4 install still reads pre-v4 (JSON-only) repos. The writer always emits
-`formatVersion = 4`.
+`formatVersion = 5`.
 
 The bump is deliberately a hard gate rather than a graceful additive change: a
 pre-v4 install lacks the wipe-preserve/reconcile logic below, so on its next
@@ -292,7 +302,7 @@ Supporting pieces:
   fast-forward scratch reconstruction never see (and never corrupt) the bytes.
 
 There is no live migration: a pre-v4 repo simply has no `promptScripts/` dir;
-the first v4 push adds it and stamps `formatVersion = 4`.
+the first v4 push adds it and stamps `formatVersion = 5`.
 
 ## Machine-local data
 
@@ -376,7 +386,7 @@ case, not multi-master sync. Import:
    operator switches to the imported project explicitly via the existing
    "Activate" UI.
 5. Resolves UUID-keyed FKs in topological order: `projects → scripts →
-   fxDefinitions → fxPresets → … → cues → cue-children → showEntries →
+   fxDefinitions → looks → … → cues → cue-children → showEntries →
    cueSlots → controlSurfaceBindings`.
 6. Wraps the whole sequence in a single
    `transaction(state.database) { … }` — any FK or validation failure

@@ -44,7 +44,7 @@ data class AssignmentValueResolution(
  * @param canonicalProperty must already be canonicalised via [canonicalPropertyName].
  */
 fun resolveAssignmentValueForFixture(
-    registry: PaletteRegistry?,
+    registry: LookRegistry?,
     fixtureKey: String,
     canonicalProperty: String,
     category: PropertyCategory,

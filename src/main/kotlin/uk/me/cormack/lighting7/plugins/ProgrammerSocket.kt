@@ -433,7 +433,7 @@ object ProgrammerHandler {
     ): OutMessage {
         val paletteUuid = parsePaletteRef(value)
             ?: return ProgrammerErrorOutMessage("Malformed palette reference '$value'")
-        if (state.show.paletteRegistry.snapshot(paletteUuid) == null) {
+        if (state.show.lookRegistry.snapshot(paletteUuid) == null) {
             return ProgrammerErrorOutMessage("Palette $paletteUuid not found")
         }
 
@@ -459,7 +459,7 @@ object ProgrammerHandler {
                 PropertyChannelWriter.resolveProperty(fixture, propertyName)?.category
             } ?: return@mapNotNull null
             val resolution = resolveAssignmentValueForFixture(
-                state.show.paletteRegistry, fixture.targetKey, canonicalPropertyName(propertyName),
+                state.show.lookRegistry, fixture.targetKey, canonicalPropertyName(propertyName),
                 category, value, state.show.fxEngine.getPalette(),
             )
             val resolved = resolution.value ?: return@mapNotNull null
@@ -592,7 +592,7 @@ object ProgrammerHandler {
         val entries = store.entries().map { entry ->
             val top = entry.slots.first()
             val paletteUuid = top.value.paletteUuidOrNull
-            val palette = paletteUuid?.let { state.show.paletteRegistry.snapshot(it) }
+            val palette = paletteUuid?.let { state.show.lookRegistry.snapshot(it) }
             ProgrammerEntryDto(
                 targetKey = entry.fixtureKey,
                 propertyName = entry.propertyName,
@@ -603,14 +603,16 @@ object ProgrammerHandler {
                 },
                 resolvedValue = if (paletteUuid == null) null else top.value.resolved.serialize(),
                 paletteUuid = paletteUuid?.toString(),
-                paletteId = palette?.paletteId,
+                paletteId = palette?.lookId,
                 paletteName = palette?.name,
-                paletteType = palette?.type?.name,
+                // A Look declares no attribute type — its families are derived from its rows, and
+                // one may span several. Nothing sensible to report here any more.
+                paletteType = null,
                 paletteResolved = if (paletteUuid == null) {
                     null
                 } else {
                     palette != null &&
-                        state.show.paletteRegistry.literalFor(
+                        state.show.lookRegistry.literalFor(
                             paletteUuid, entry.fixtureKey, entry.propertyName,
                         ) != null
                 },

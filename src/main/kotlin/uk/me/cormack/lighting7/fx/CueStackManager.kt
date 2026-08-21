@@ -167,6 +167,10 @@ class CueStackManager(
                     )
                 },
                 adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+                // Load-bearing: `cookEffects` and `cook` below both read `cueData.layers`, so
+                // omitting this makes every Look layer inert on the stack GO path — the primary
+                // firing path — while the standalone apply-cue route works fine.
+                layers = cue.layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
                 propertyAssignments = cue.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
                 triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
                     CueTriggerDto(
@@ -237,39 +241,30 @@ class CueStackManager(
         // 3. Apply cue effects with stack palette resolution
         var effectCount = 0
 
-        // Split preset applications into immediate and timed
-        val (immediatePresets, timedPresets) = cueData.presetApplications.partition {
-            it.delayMs == null && it.intervalMs == null
-        }
         val (immediateAdHoc, timedAdHoc) = cueData.adHocEffects.partition {
             it.delayMs == null && it.intervalMs == null
         }
 
-        // Apply immediate preset effects
-        for (presetApp in immediatePresets) {
-            val presetEffects = transaction(state.database) {
-                DaoFxPreset.findById(presetApp.presetId)?.effects
-            } ?: continue
+        // Spawn the layers' effects, in layer order — see [CueComposer.cookEffects] for why
+        // spawn order alone is enough to make layer order the composition order.
+        for ((layer, lookEffect, target) in CueComposer.cookEffects(
+            state.show.fixtures, cueData.cueId, cueData.layers, state.show.lookRegistry,
+        )) {
+            val effectSpec = lookEffect.toEffectSpec()
+            val fxTarget = try {
+                resolveTargetForCue(state, TogglePresetTarget(target), effectSpec)
+            } catch (_: Exception) { null } ?: continue
 
-            for (target in presetApp.targets) {
-                val toggleTarget = TogglePresetTarget(target.target)
-                for (presetEffect in presetEffects) {
-                    val fxTarget = try {
-                        resolveTargetForCue(state, toggleTarget, presetEffect)
-                    } catch (_: Exception) { null } ?: continue
-
-                    val instance = createInstanceForStack(
-                        presetEffect, fxTarget, presetApp.presetId, state, stackId,
-                        overrideSpeedMasterUuid = speedMasterUuidOrNull(presetApp.speedMasterUuid),
-                        overrideRateSpeedMasterUuid = speedMasterUuidOrNull(presetApp.rateSpeedMasterUuid),
-                    )
-                    instance.cueId = cueData.cueId
-                    instance.cueStackId = stackId
-                    instance.presetId = presetApp.presetId
-                    fxEngine.addEffect(instance)
-                    effectCount++
-                }
-            }
+            val instance = createInstanceForStack(
+                effectSpec, fxTarget, presetId = null, state = state, stackId = stackId,
+                overrideSpeedMasterUuid = layer.speedMasterUuid,
+                overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
+            )
+            instance.cueId = cueData.cueId
+            instance.cueStackId = stackId
+            instance.lookId = layer.lookId
+            fxEngine.addEffect(instance)
+            effectCount++
         }
 
         // Apply immediate ad-hoc effects
@@ -310,7 +305,20 @@ class CueStackManager(
             cue = fxEngine.getStackPalette(stackId) ?: emptyList(),
             global = fxEngine.getPalette(),
         )
-        val cueLayerRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, stackCascade, state.show.paletteRegistry)
+        // Cook the layer stack with the cue's local rows on top. Note this path previously called
+        // `buildCueAssignmentsForCue` *alone*, so an immediate preset's property assignments never
+        // reached Layer 4 on a stack GO — unlike `applyCue`, which concatenated both. Routing both
+        // paths through `cook` fixes that asymmetry.
+        val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, stackCascade, state.show.lookRegistry)
+        val cueLayerRows = CueComposer.cook(
+            fixtures = state.show.fixtures,
+            cueId = cueData.cueId,
+            priority = cueDerivedPriority(cueData),
+            layers = cueData.layers,
+            localRows = localRows,
+            cascade = stackCascade,
+            lookRegistry = state.show.lookRegistry,
+        )
         val incomingStartWeight = if (useCrossfade) 0.0 else 1.0
         if (cueLayerRows.isNotEmpty()) {
             fxEngine.setCueAssignments(
@@ -369,12 +377,12 @@ class CueStackManager(
         }
 
         // 6. Activate timed effects (delayed/recurring presets and ad-hoc effects)
-        if (timedPresets.isNotEmpty() || timedAdHoc.isNotEmpty()) {
+        if (cueData.layers.any { it.enabled && it.isTimed } || timedAdHoc.isNotEmpty()) {
             state.cueTriggerManager.activateTimedEffectsForCue(
                 cueId = cueData.cueId,
                 cueStackId = stackId,
                 priority = cueDerivedPriority(cueData),
-                timedPresets = timedPresets,
+                cueData = cueData,
                 timedAdHocEffects = timedAdHoc,
                 scope = scope,
                 // Stack cues merge their own palette into the stack palette (see step 2), so

@@ -60,7 +60,7 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
                 createPresetChildren(preset, newPreset.propertyAssignments)
                 preset.toPresetDetails(isCurrentProject = true)
             }
-            state.show.fixtures.presetListChanged()
+            state.show.fixtures.lookListChanged()
             call.respond(HttpStatusCode.Created, presetDetails)
         }
     }
@@ -119,7 +119,7 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
             }
 
             if (presetDetails != null) {
-                state.show.fixtures.presetListChanged()
+                state.show.fixtures.lookListChanged()
                 call.respond(presetDetails)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Preset not found"))
@@ -158,7 +158,7 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
 
             when {
                 result == "ok" -> {
-                    state.show.fixtures.presetListChanged()
+                    state.show.fixtures.lookListChanged()
                     call.respond(HttpStatusCode.OK)
                 }
                 result.startsWith("used_by_cues:") -> {
@@ -229,7 +229,7 @@ internal fun Route.routeApiRestProjectFxPresets(state: State) {
 
         val (response, error) = result
         if (response != null) {
-            state.show.fixtures.presetListChanged()
+            state.show.fixtures.lookListChanged()
             call.respond(HttpStatusCode.Created, response)
         } else {
             val statusCode = when (error) {
@@ -750,7 +750,7 @@ private fun applyPresetProgrammerWrites(
         presetAssignments = presetPropertyAssignments,
         applyTargets = targets.map { CueTargetDto(type = it.type, key = it.key) },
         cascade = PaletteCascade(preset = presetPalette, global = engine.getPalette()),
-        paletteRegistry = state.show.paletteRegistry,
+        lookRegistry = state.show.lookRegistry,
     )
 
     // The builder fans group targets out to members, dropping the group identity on the way.

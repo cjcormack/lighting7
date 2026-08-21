@@ -31,9 +31,11 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
 | [`FU-PAL-POSITIONAL-CONVERSION`](#fu-pal-positional-conversion) | Trigger | Pal | a show maintains the same colours in both forms |
-| [`FU-PAL-APPLY-NEAREST-COVERAGE`](#fu-pal-apply-nearest-coverage) | Trigger | Pal | an operator asks for gap-filling |
-| [`FU-PAL-DELETE-HARDEN-LOOP`](#fu-pal-delete-harden-loop) | Trigger | Pal | an operator force-deletes a palette to get past the guard |
-| [`FU-PAL-LINKED`](#fu-pal-linked) | Trigger | Pal | a palette kept hand-synced to another |
+| [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
+| [`FU-LOOK-MIDI-RECALL`](#fu-look-midi-recall) | Trigger | Look | an operator wants a Look on a button |
+| [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
+| [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
+| [`FU-LOOK-HEALTH-ARM-CLEANUP`](#fu-look-health-arm-cleanup) | Ready | Look | — |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
 | [`FU-AUTH-ATTRIBUTION`](#fu-auth-attribution) | Trigger | Auth | two accounts co-author, or any `formatVersion` bump |
@@ -263,57 +265,87 @@ answer and not always the right one.
 **Trigger**: a show is found maintaining the same colours in both forms. Until then the two
 coexist and the relabel carries the distinction.
 
-### `FU-PAL-APPLY-NEAREST-COVERAGE`
+### `FU-LOOK-PERPROP-BLEND`
 
-**Fan a palette onto fixtures it doesn't cover** · Trigger · Programmer redesign Session 4, cut as
-fuzzy
+**Per-property blend override within a layer** · Trigger · Looks-and-layers §3.4, cut as
+UI-multiplying
 
-Applying a palette skips targets it holds no entry for and names them in a warning
-(`paletteCoverageWarnings` in `lighting-react/src/components/palettes/applyPalette.ts`).
-Skip-and-report is deliberate: resolving an uncovered fixture to its "nearest" covered neighbour
-is guesswork — *plausible* for COLOUR (one colour usually suits a wash), actively wrong for
-POSITION, and a rule that behaves differently per type is worse than no rule.
+A layer's `blendMode` and `amount` apply to every property it asserts. An operator might want one
+property of a layer to mix while the rest override — "take Warm's colour at 50% but its dimmer
+outright".
 
-**Trigger**: an operator asks. If they do, scope it to COLOUR and make it an explicit gesture
-("apply, filling gaps") rather than a mode on the existing one.
+Cheap in the composer: `CueComposer.blend` is already per-(fixture, property), so the override just
+needs to reach it. The cost is entirely in the UI, which would go from two controls per layer to two
+per property per layer. Recorded rather than silently cut.
 
-### `FU-PAL-DELETE-HARDEN-LOOP`
+**Trigger**: an operator asks for one property of a layer to behave differently from the rest.
 
-**Offer "harden the referencing cues, then delete" from the palette sheet** · Trigger · split out
-of `FU-PAL-PRESET-MAKE-HARD`, 2026-08-20
+### `FU-LOOK-MIDI-RECALL`
 
-The palette delete guard's copy says "Make those rows hard first if you want to keep their current
-look" (`lighting-react/src/components/palettes/PaletteDetailSheet.tsx`). For the *preset* half that
-is now actionable — the 409 names the presets and offers Make Hard per preset. For the *cue* half it
-still isn't, even though every piece exists: the 409 already carries `cueIds`, `PaletteDetails`
-already carries `referencedByCueIds`, and `makeCueHard` already accepts a `paletteUuids` filter. No
-component reads any of the three; the only exit is still "Delete anyway", which strands the rows.
+**A `RecallLook` binding target** · Trigger · Looks-and-layers §7
 
-Not done with the preset half because it is a different gesture: one palette can be referenced by
-many cues, so this is a list with a bulk action and a per-cue result summary, not one button. Scope
-it as such, and decide whether it fires one request per cue or wants a palette-scoped route.
+No binding target names a Look (or, before, a preset or palette) — `midi/BindingTarget.kt` has
+nothing in this space, so the surface needs no redesign to accommodate one. But a Look is an obvious
+thing to want on a button, and the busking pads already do it from the web UI.
 
-**Trigger**: an operator force-deletes a palette to get past the guard, or asks which cues use one.
+Decide first *what* the button does: toggle the Look on the current selection, add it as a programmer
+layer, or recall it onto a fixed target set baked into the binding. The third is the only one that
+behaves identically every press, which is usually what a button should do.
 
-### `FU-PAL-LINKED`
+**Trigger**: an operator asks for a Look on the control surface.
 
-**Linked palettes — a palette entry referencing another palette** · Trigger · Programmer redesign
-§2, promoted 2026-08-14
+### `FU-LOOK-NESTED`
 
-A `Palette` entry holds a resolved `PropertyValue` per fixture. Consoles also let one palette
-*reference* another, so "Warm Wash" can be defined as "House Amber" and follow it — the same
-touring leverage the cue→palette reference gives, one level up.
+**Nested Looks — a Look row referencing another Look** · Trigger · absorbs `FU-PAL-LINKED`
+(Programmer redesign §2, promoted 2026-08-14; re-homed 2026-08-21)
+
+A Look row holds a literal. Consoles also let one palette *reference* another, so "Warm Wash" can be
+defined as "House Amber" and follow it — the same touring leverage a layer gives, one level up.
 
 Closer than it looks: `resolveAssignmentValueForFixture` is the single door for `ref:{uuid}` and
-already runs before `parseAssignmentValue`, so a palette entry whose stored value is a `ref:`
-resolves through the same path. Genuinely new: **cycle detection** (A → B → A refused at write
-time, not discovered at 50 Hz), depth-bounded resolution inside `PaletteRegistry`'s version-counter
-cache, republish-on-palette-edit walking the reference graph rather than one hop, and a
-`PALETTE_IN_USE` delete guard that counts palette-to-palette references.
+already runs before `parseAssignmentValue`, so a row whose stored value is a `ref:` resolves through
+the same path. Genuinely new: **cycle detection** (A → B → A refused at write time, not discovered at
+50 Hz), depth-bounded resolution inside `LookRegistry`'s version-counter cache, `republishForLookEdit`
+walking the reference graph rather than one hop, and a `LOOK_IN_USE` delete guard that counts
+look-to-look references as well as layers.
 
-**Trigger**: a show keeps one palette hand-synced to another — the same signal
-`FU-PAL-POSITIONAL-CONVERSION` waits on. If both fire, do the conversion first; it decides how
-many palettes exist.
+Note the write boundary currently *rejects* a `ref:` in a look row (`validateLookRows`), and that
+rejection is what guarantees resolution never recurses — so this item is precisely the work of
+replacing that guarantee with a bounded one. The cook step is where it would land.
+
+**Trigger**: a show keeps one Look hand-synced to another — the same signal
+`FU-PAL-POSITIONAL-CONVERSION` waits on. If both fire, do the conversion first; it decides how many
+Looks exist.
+
+### `FU-LOOK-STOMP-GRANULAR`
+
+**Finer-grained within-cue stomp** · Trigger · Looks-and-layers §8
+
+Per-layer `stomp` suppresses lower layers' *effects* on every property the layer asserts. That is
+the coarse version: an operator might want to stomp a layer's colour effect while leaving its dimmer
+effect running.
+
+The column landed with the layer model; the behaviour is the retirement-pass item. Judge granularity
+only after the coarse version has been used on a rig — the Layer 3/4 boundary it exists to work
+around may turn out to bite in one specific place rather than generally.
+
+**Trigger**: per-layer stomp proves too coarse in practice.
+
+### `FU-LOOK-HEALTH-ARM-CLEANUP`
+
+**Delete `AssignmentHealth.PaletteTypeMismatch`** · Ready · Looks-and-layers session 1, 2026-08-21
+
+The arm has no producer left. It reported "this is a POSITION palette and that is a COLOUR property",
+which a Look cannot be: its families are *derived* from its rows, and one spanning both is entirely
+legitimate. `validatePaletteReference` now reports the symptom (no row for this fixture and property)
+instead, which is what the resolve path always did.
+
+Left in place only because `AssignmentHealth` is a serialized sealed hierarchy: removing an arm needs
+the frontend health descriptor updated in the same change, and — per
+`sealed-subclass-delete-needs-rerun-tasks` — a forced recompile, or every serialization test fails
+with `NoClassDefFoundError` naming the deleted class while the build reports success.
+
+Ready: delete the arm, its `describeAssignmentHealth` case, and the frontend descriptor entry.
 
 ---
 
@@ -932,7 +964,7 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
   and a disagreement is reported with its variants. Found and fixed on the way: cue-level Make Hard
   reported every `position` reference as unresolvable, because it read the property catalogue
   directly instead of through `fixtureCategoryFor`'s pan/tilt alias. The cue half of the
-  delete-guard loop split out as `FU-PAL-DELETE-HARDEN-LOOP` — see
+  delete-guard loop retired with the palette-ref mechanics it concerned — see
   `docs/lighting-composition-model.md` §Hardening
 - `FU-PROG-VIS-NEXTGO` — `Next GO` as a fourth stage vis source: a pushed `ChannelSource` over
   `POST /cue-stacks/{stackId}/preview`, overlaid on the wire so channels the cue doesn't assert

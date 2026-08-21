@@ -195,7 +195,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                     cueType = cueType,
                 )
                 val cue = DaoCue.findById(outcome.cueId)!!
-                Result(outcome, cue.toCueDetails(true, state.show.fixtures, state.show.paletteRegistry), stack.id.value) to null
+                Result(outcome, cue.toCueDetails(true, state.show.fixtures, state.show.lookRegistry), stack.id.value) to null
             } else {
                 val cue = DaoCue.findById(request.cueId!!)
                     ?: return@transaction null to "Cue not found"
@@ -203,7 +203,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                     return@transaction null to "Cue belongs to a different project"
                 }
                 val outcome = writeRecordingIntoCue(state, cue, recording, mode, mask, scope)
-                Result(outcome, cue.toCueDetails(true, state.show.fixtures, state.show.paletteRegistry), cue.cueStack.id.value) to null
+                Result(outcome, cue.toCueDetails(true, state.show.fixtures, state.show.lookRegistry), cue.cueStack.id.value) to null
             }
         }
 

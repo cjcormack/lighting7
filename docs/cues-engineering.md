@@ -1,6 +1,6 @@
 # Cues Engineering Documentation
 
-This document describes the Cue system — named snapshots that bundle a colour palette with FX preset applications and ad-hoc effects.
+This document describes the Cue system — named states built as an ordered stack of **Look layers** plus the cue's own local values and ad-hoc effects. See `lighting-composition-model.md` §"Looks and layers" for how the stack is composed.
 
 > **See also**: [lighting-composition-model.md](lighting-composition-model.md). Cues contribute
 > at **Layer 4** (property assignments) and own the ad-hoc effects they
@@ -12,8 +12,11 @@ This document describes the Cue system — named snapshots that bundle a colour 
 
 A **Cue** is a named, project-scoped entity that captures a complete lighting look:
 - **Colour palette** (list of extended colour strings) — isolated per-cue, not shared with the global palette
-- **Preset applications** — which FX presets to apply to which targets (fixtures/groups). Presets are read fresh at apply time, so edits to presets are always reflected.
-- **Ad-hoc effects** — manually applied effects not from a preset, stored as full inline effect definitions.
+- **Layers** — an ordered list of Looks to apply, each with its own targets, property mask, blend
+  mode and amount. Looks are read fresh at apply time, so editing a Look moves every cue layering
+  it. Later layers override earlier ones for the same fixture and property, whatever the attribute;
+  the cue's own local values win over every layer.
+- **Ad-hoc effects** — manually applied effects belonging to no Look, stored as full inline effect definitions.
 - **`updateGlobalPalette`** — boolean flag; when true, applying the cue also sets the global palette (affecting ad-hoc effects and the PalettePanel).
 
 Key behaviours:
@@ -23,7 +26,7 @@ Key behaviours:
 - **Stop**: Use the stop endpoint to remove a specific cue's effects without affecting others.
 - Create from current live FX/palette state
 - Duplicate within active project, copy to another project
-- Deleting a preset is blocked if any cue references it
+- Deleting a Look is blocked if any cue layer references it (`LOOK_IN_USE`), unless forced
 
 ## Data Model
 
@@ -37,10 +40,10 @@ cues
 ├── palette (JSON: List<String>)
 └── update_global_palette (boolean, default false)
 
-cue_preset_applications
+cue_layers
 ├── id (auto-increment PK)
 ├── cue_id (FK → cues)
-├── preset_id (FK → fx_presets)
+├── look_id (FK → looks)
 ├── targets (JSON: List<CueTargetDto>)
 ├── delay_ms (long, nullable — delayed application)
 ├── interval_ms (long, nullable — recurring application)
@@ -86,9 +89,9 @@ remain unique per stack via the partial index `uq_cue_number_per_stack`.
 
 ### Key Design Decisions
 
-- **Separate child tables with FKs** rather than JSON columns for preset applications and ad-hoc effects. This provides referential integrity (FK from preset applications to fx_presets), simpler queries for cue usage counts, and proper normalization.
-- **Targets stored as JSON** within `cue_preset_applications` because each application has a small, variable-length list of targets that doesn't benefit from its own table.
-- **Parameters stored as JSON** matching the pattern used by `DaoFxPresets.effects`.
+- **Separate child tables with FKs** rather than JSON columns for layers and ad-hoc effects. This provides referential integrity (FK from a layer to its Look), simpler queries for usage counts — the delete guard is a plain indexed FK query where the palette era could only scan opaque value text — and proper normalization.
+- **Targets stored as JSON** within `cue_layers` because each application has a small, variable-length list of targets that doesn't benefit from its own table.
+- **Parameters stored as JSON**, matching `cue_ad_hoc_effects` and `look_effects`.
 
 ## REST API
 
@@ -116,7 +119,7 @@ Writing the *programmer* into a cue lives outside this namespace, under
 | POST | `/programmer/record-palette` | Record the programmer into a named palette, masked by its type |
 | POST | `/programmer/make-hard` | Replace the programmer's palette references with literals |
 | POST | `/project/{id}/cues/{cueId}/make-hard` | Replace a stored cue's palette references with literals |
-| POST | `/project/{id}/fx-presets/{presetId}/make-hard` | Replace an FX preset's palette references with literals, where the palette agrees across the preset's fixture type |
+| POST | `/project/{id}/looks` … `/looks/{lookId}` | Look CRUD, banked by derived attribute family; delete guarded by `LOOK_IN_USE` |
 | POST | `/programmer/update` | Write programmer edits back — to the include target, or to cues named from the Mode B checklist |
 
 `POST /{projectId}/cues/{cueId}/snapshot-from-live` was removed in the programmer redesign's
@@ -130,7 +133,7 @@ triggers and timed effects the old route left to chance.
 When a cue is applied:
 1. **Remove previous effects for this cue** — only effects tagged with this cue's ID are removed (allows other cues to keep running). If `replaceAll=true`, all effects tagged with any `cueId` are removed instead, and their per-cue palettes are cleaned up.
 2. **Set per-cue palette** — the cue's palette is stored in FxEngine's per-cue palette storage, isolated from the global palette. If `updateGlobalPalette` is true on the cue, the global palette is also updated.
-3. Each preset application's preset is read fresh from DB and its effects are applied to the specified targets
+3. The layer stack is cooked to one contributor per (fixture, property), then each layer's effects are spawned **in layer order**
 4. Each ad-hoc effect is applied directly from its stored definition
 5. All new FxInstances are tagged with the cue's ID
 6. **Palette resolution**: Effects created from a cue use palette suppliers that resolve against the cue's palette first, falling back to the global palette if the cue has no palette set.
@@ -162,12 +165,12 @@ The version supplier sums both versions to ensure cache invalidation when either
 
 The `from-state` endpoint and `programmer/record { source: "STAGE_SNAPSHOT" }` share
 `captureCurrentState`, which captures the current FxEngine state:
-- Effects with a non-null `presetId` are grouped by preset into `CuePresetApplicationDto` entries, deduplicating targets
-- Effects without a `presetId` (ad-hoc) are captured as full `CueAdHocEffectDto` entries with all fields
+- Effects with a non-null `presetId` (now a look id) are grouped by Look into layer entries, deduplicating targets
+- Effects belonging to no Look (ad-hoc) are captured as full `CueAdHocEffectDto` entries with all fields
 
-### Preset Delete Blocking
+### Look Delete Blocking
 
-When a preset is referenced by any cue's preset applications (via FK), the preset cannot be deleted. The delete endpoint returns 409 Conflict with the names of referencing cues.
+When a Look is referenced by any cue layer (via FK), it cannot be deleted. The delete endpoint returns 409 Conflict with code `LOOK_IN_USE` and the names of referencing cues. `?force=true` deletes the layers with it.
 
 ## Cue Stack Membership
 
@@ -203,7 +206,7 @@ The `cues` table has two additional columns:
 
 ## FxInstance Integration
 
-The `FxInstance` class has a `cueId: Int?` field (alongside `presetId`). When a cue is applied, all created FxInstances are tagged with the cue's ID. This allows:
+The `FxInstance` class has a `cueId: Int?` field (alongside `presetId`, which now carries the look id). When a cue is applied, all created FxInstances are tagged with the cue's ID. This allows:
 - The apply logic to identify and remove effects from a specific cue (not all cues)
 - The stop endpoint to remove only the target cue's effects
 - Active cue tracking in the frontend (derived from effect cueIds in WebSocket state)
@@ -283,7 +286,7 @@ The `fxState` WebSocket message now includes `cueId` on each effect in `activeEf
 ## Lux AI Integration
 
 Three tools for the AI assistant:
-- `create_cue` — Create a named cue with palette, preset applications, ad-hoc effects, and optional `updateGlobalPalette` flag
+- `create_cue` — Create a named cue with a positional colour list, Look layers, ad-hoc effects, and optional `updateGlobalPalette` flag
 - `apply_cue` — Apply a saved cue by ID. Optional `replaceAll` parameter to stop all other running cues first.
 - `stop_cue` — Stop a running cue by ID, removing all its effects. Other running cues are unaffected.
 
@@ -297,7 +300,7 @@ The system prompt describes:
 
 ## Assignment values: the third form
 
-A `cue_property_assignments.value` (and its FX-preset twin) holds one of:
+A `cue_property_assignments.value` (and its `look_rows` twin, which accepts literals only) holds one of:
 
 1. a **literal** in the canonical `CueAssignmentResolver.PropertyValue.serialize()` grammar — `"200"`,
    `"#rrggbb[;wN;aN;uvN]"`, `"pan,tilt"`;

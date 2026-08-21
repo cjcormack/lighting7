@@ -465,8 +465,8 @@ class SocketMessageWireFormatTest {
 
     @Test
     fun `broadcast domain — list-changed objects emit the bare discriminator`() {
-        val encoded = json.encodeToString<OutMessage>(PresetListChangedOutMessage)
-        assertEquals("""{"type":"presetListChanged"}""", encoded)
+        val encoded = json.encodeToString<OutMessage>(LookListChangedOutMessage)
+        assertEquals("""{"type":"lookListChanged"}""", encoded)
     }
 
     // ─── Machine domain (out-only) ──────────────────────────────────────────

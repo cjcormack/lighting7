@@ -10,20 +10,19 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
-import uk.me.cormack.lighting7.sync.dto.CuePresetApplicationJson
+import uk.me.cormack.lighting7.sync.dto.LookEffectJson
+import uk.me.cormack.lighting7.sync.dto.LookJson
+import uk.me.cormack.lighting7.sync.dto.LookRowJson
+import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.sync.dto.CueTriggerJson
 import uk.me.cormack.lighting7.sync.dto.FixtureGroupJson
-import uk.me.cormack.lighting7.sync.dto.PaletteEntryJson
-import uk.me.cormack.lighting7.sync.dto.PaletteJson
 import uk.me.cormack.lighting7.sync.dto.FixtureGroupMemberJson
 import uk.me.cormack.lighting7.sync.dto.FixturePatchJson
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.FxDefinitionJson
-import uk.me.cormack.lighting7.sync.dto.FxPresetJson
-import uk.me.cormack.lighting7.sync.dto.FxPresetPropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.ParkedChannelJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
@@ -53,7 +52,7 @@ import java.util.UUID
  * /cueStacks/{uuid}.json           -- includes SEPARATOR rows and show order (sortOrder)
  * /cues/{uuid}.json
  * /cuePropertyAssignments/{uuid}.json
- * /cuePresetApplications/{uuid}.json
+ * /cueLayers/{uuid}.json
  * /cueAdHocEffects/{uuid}.json
  * /cueTriggers/{uuid}.json
  * /fixturePatches/{uuid}.json
@@ -61,8 +60,7 @@ import java.util.UUID
  * /riggings/{uuid}.json
  * /stageRegions/{uuid}.json
  * /fixtureGroups/{uuid}.json       -- members embedded inline
- * /fxPresets/{uuid}.json           -- propertyAssignments embedded inline
- * /palettes/{uuid}.json            -- entries embedded inline
+ * /looks/{uuid}.json               -- rows and effects embedded inline
  * /speedMasters/{uuid}.json
  * /fxDefinitions/{uuid}.json
  * /cueSlots/{uuid}.json
@@ -277,50 +275,57 @@ class ProjectExporter(private val state: State) {
                 FixtureGroupJson(g.uuid.toString(), g.name, members)
             }
 
-            count += writeAll(targetDir, "fxPresets", project.fxPresets.toList(), FxPresetJson.serializer(), { it.uuid }, liveKeys) { p ->
-                val assignments = p.propertyAssignments
+            // FX presets and named palettes are no longer exported: v5 collapsed both into looks,
+            // and the startup migration converts any local rows. Writing either alongside `looks/`
+            // would put two representations of one entity in the repo, and an import would
+            // materialise both.
+            count += writeAll(targetDir, "looks", project.looks.toList(), LookJson.serializer(), { it.uuid }, liveKeys) { l ->
+                val rows = l.rows
                     .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
-                    .map { a ->
-                        FxPresetPropertyAssignmentJson(
-                            uuid = a.uuid.toString(),
-                            propertyName = a.propertyName,
-                            value = a.value,
-                            fadeDurationMs = a.fadeDurationMs,
-                            sortOrder = a.sortOrder,
-                            elementKey = a.elementKey,
+                    .map { r ->
+                        LookRowJson(
+                            uuid = r.uuid.toString(),
+                            targetType = r.targetType,
+                            targetKey = r.targetKey,
+                            propertyName = r.propertyName,
+                            value = r.value,
+                            fadeDurationMs = r.fadeDurationMs,
+                            elementKey = r.elementKey,
+                            sortOrder = r.sortOrder,
                         )
                     }
-                FxPresetJson(
-                    uuid = p.uuid.toString(),
-                    name = p.name,
-                    fixtureType = p.fixtureType,
-                    description = p.description,
-                    effects = p.effects,
-                    palette = p.palette,
-                    propertyAssignments = assignments,
-                )
-            }
-
-            count += writeAll(targetDir, "palettes", project.palettes.toList(), PaletteJson.serializer(), { it.uuid }, liveKeys) { p ->
-                val entries = p.entries
+                val effects = l.effects
                     .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                     .map { e ->
-                        PaletteEntryJson(
+                        LookEffectJson(
                             uuid = e.uuid.toString(),
                             targetType = e.targetType,
                             targetKey = e.targetKey,
+                            effectType = e.effectType,
+                            category = e.category,
                             propertyName = e.propertyName,
-                            value = e.value,
+                            beatDivision = e.beatDivision,
+                            blendMode = e.blendMode,
+                            distribution = e.distribution,
+                            phaseOffset = e.phaseOffset,
+                            elementMode = e.elementMode,
+                            elementFilter = e.elementFilter,
+                            stepTiming = e.stepTiming,
+                            parameters = e.parameters,
+                            speedMasterUuid = e.speedMasterUuid?.toString(),
+                            rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
                             sortOrder = e.sortOrder,
                         )
                     }
-                PaletteJson(
-                    uuid = p.uuid.toString(),
-                    name = p.name,
-                    type = p.type,
-                    notes = p.notes,
-                    sortOrder = p.sortOrder,
-                    entries = entries,
+                LookJson(
+                    uuid = l.uuid.toString(),
+                    name = l.name,
+                    notes = l.notes,
+                    sortOrder = l.sortOrder,
+                    editorFixtureType = l.editorFixtureType,
+                    palette = l.palette,
+                    rows = rows,
+                    effects = effects,
                 )
             }
 
@@ -438,7 +443,7 @@ class ProjectExporter(private val state: State) {
         if (cues.isEmpty()) return 0
 
         val propAssignDir = dir.resolve("cuePropertyAssignments")
-        val presetAppDir = dir.resolve("cuePresetApplications")
+        val cueLayerDir = dir.resolve("cueLayers")
         val adHocDir = dir.resolve("cueAdHocEffects")
         val triggerDir = dir.resolve("cueTriggers")
         var count = 0
@@ -467,25 +472,30 @@ class ProjectExporter(private val state: State) {
                 count++
             }
 
-            c.presetApplications.forEach { a ->
-                Files.createDirectories(presetAppDir)
+            c.layers.forEach { l ->
+                Files.createDirectories(cueLayerDir)
                 writeJson(
-                    presetAppDir.resolve("${a.uuid}.json"),
-                    CuePresetApplicationJson.serializer(),
-                    CuePresetApplicationJson(
-                        uuid = a.uuid.toString(),
+                    cueLayerDir.resolve("${l.uuid}.json"),
+                    CueLayerJson.serializer(),
+                    CueLayerJson(
+                        uuid = l.uuid.toString(),
                         cueUuid = cueUuid,
-                        presetUuid = a.preset.uuid.toString(),
-                        targets = a.targets,
-                        delayMs = a.delayMs,
-                        intervalMs = a.intervalMs,
-                        randomWindowMs = a.randomWindowMs,
-                        sortOrder = a.sortOrder,
-                        speedMasterUuid = a.speedMasterUuid?.toString(),
-                        rateSpeedMasterUuid = a.rateSpeedMasterUuid?.toString(),
+                        lookUuid = l.look.uuid.toString(),
+                        sortOrder = l.sortOrder,
+                        enabled = l.enabled,
+                        targets = l.targets,
+                        propertyMask = l.propertyMask,
+                        blendMode = l.blendMode,
+                        amount = l.amount,
+                        stomp = l.stomp,
+                        speedMasterUuid = l.speedMasterUuid?.toString(),
+                        rateSpeedMasterUuid = l.rateSpeedMasterUuid?.toString(),
+                        delayMs = l.delayMs,
+                        intervalMs = l.intervalMs,
+                        randomWindowMs = l.randomWindowMs,
                     ),
                 )
-                liveKeys.add(RecordKey("cuePresetApplications", a.uuid))
+                liveKeys.add(RecordKey("cueLayers", l.uuid))
                 count++
             }
 

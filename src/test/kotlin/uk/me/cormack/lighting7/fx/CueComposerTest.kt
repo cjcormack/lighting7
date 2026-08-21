@@ -1,0 +1,687 @@
+package uk.me.cormack.lighting7.fx
+
+import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.CompositionRule
+import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.show.Fixtures
+import java.awt.Color
+import java.util.UUID
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/**
+ * Tests for [CueComposer.cook] — the flattening step that turns a cue's ordered layer stack plus
+ * its local rows into exactly one contributor per (fixture, property).
+ *
+ * These are the tests whose absence let the old accidental behaviour survive: every
+ * multi-contributor case in `CueAssignmentResolverTest` uses distinct priorities, so the
+ * exact-tie path that decided within-cue precedence never ran there.
+ */
+class CueComposerTest {
+
+    private val universe = Universe(0, 0)
+    private val cueId = 7
+    private val priority = 3_002_001
+
+    private fun fixturesWithTwoHexesInAGroup(): Fixtures {
+        val fixtures = Fixtures()
+        fixtures.register {
+            val hex1 = addFixture(HexFixture(universe, "hex-1", "Hex 1", firstChannel = 1))
+            val hex2 = addFixture(HexFixture(universe, "hex-2", "Hex 2", firstChannel = 13))
+            createGroup<HexFixture>("front-wash") {
+                addSpread(listOf(hex1, hex2))
+            }
+        }
+        return fixtures
+    }
+
+    // ─── Look / layer builders ──────────────────────────────────────────
+
+    private fun lookRow(
+        targetType: String = "deferred",
+        targetKey: String = "",
+        propertyName: String,
+        value: String,
+    ) = LookRowEntry(
+        target = if (targetType == "deferred") null else uk.me.cormack.lighting7.models.TargetRef.of(targetType, targetKey),
+        propertyName = propertyName,
+        value = value,
+    )
+
+    private fun look(
+        name: String,
+        vararg rows: LookRowEntry,
+        palette: List<String> = emptyList(),
+    ): LookSnapshot = LookSnapshot(
+        lookId = name.hashCode(),
+        lookUuid = UUID.nameUUIDFromBytes(name.toByteArray()),
+        name = name,
+        editorFixtureType = null,
+        palette = palette,
+        rows = rows.toList(),
+        effects = emptyList(),
+    )
+
+    /** A registry backed by a plain map — no database, no invalidation traffic. */
+    private fun registryOf(fixtures: Fixtures, vararg looks: LookSnapshot): LookRegistry {
+        val byUuid = looks.associateBy { it.lookUuid }
+        return LookRegistry(fixtures = { fixtures }, loader = { byUuid[it] })
+    }
+
+    private fun layer(
+        look: LookSnapshot,
+        sortOrder: Int,
+        targets: List<CueTargetDto> = emptyList(),
+        propertyMask: String? = null,
+        blendMode: String = "OVERRIDE",
+        amount: Double = 1.0,
+        enabled: Boolean = true,
+        layerId: Int = look.lookId,
+    ) = CookLayer(
+        lookId = look.lookId,
+        lookUuid = look.lookUuid,
+        lookName = look.name,
+        sortOrder = sortOrder,
+        enabled = enabled,
+        targets = targets,
+        propertyMask = propertyMask,
+        blendMode = blendMode,
+        amount = amount,
+        layerId = layerId,
+    )
+
+    private fun localSlider(
+        targetKey: String,
+        propertyName: String = "dimmer",
+        value: UByte,
+        targetIsGroup: Boolean = false,
+        moveInDark: Boolean = false,
+        paletteUuid: UUID? = null,
+    ) = CueAssignmentResolver.Assignment(
+        cueId = cueId,
+        priority = priority,
+        fadeWeight = 1.0,
+        targetKey = targetKey,
+        targetIsGroup = targetIsGroup,
+        propertyName = propertyName,
+        category = PropertyCategory.DIMMER,
+        compositionOverride = CompositionRule.UNSET,
+        value = CueAssignmentResolver.PropertyValue.Slider(value),
+        moveInDark = moveInDark,
+        paletteUuid = paletteUuid,
+    )
+
+    private fun cook(
+        fixtures: Fixtures,
+        registry: LookRegistry,
+        layers: List<CookLayer>,
+        localRows: List<CueAssignmentResolver.Assignment> = emptyList(),
+        cascade: PaletteCascade = PaletteCascade.EMPTY,
+    ) = CueComposer.cook(
+        fixtures = fixtures,
+        cueId = cueId,
+        priority = priority,
+        layers = layers,
+        localRows = localRows,
+        cascade = cascade,
+        lookRegistry = registry,
+    )
+
+    private fun sliderAt(
+        rows: List<CueAssignmentResolver.Assignment>,
+        targetKey: String,
+        propertyName: String = "dimmer",
+    ): UByte {
+        val row = rows.single { it.targetKey == targetKey && it.propertyName == propertyName }
+        return assertIs<CueAssignmentResolver.PropertyValue.Slider>(row.value).value
+    }
+
+    private fun colourAt(
+        rows: List<CueAssignmentResolver.Assignment>,
+        targetKey: String,
+    ): ExtendedColour {
+        val row = rows.single { it.targetKey == targetKey && it.propertyName == "rgbColour" }
+        return assertIs<CueAssignmentResolver.PropertyValue.Colour>(row.value).value
+    }
+
+    // ─── The invariant ──────────────────────────────────────────────────
+
+    @Test
+    fun `cook never emits two rows for the same fixture and property`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        // Every way of hitting one key at once: two layers, a group row and a fixture row inside
+        // one Look, and a local row on top.
+        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
+        val b = look(
+            "B",
+            lookRow(targetType = "group", targetKey = "front-wash", propertyName = "dimmer", value = "150"),
+            lookRow(targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "200"),
+        )
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a, b),
+            listOf(
+                layer(a, 0, targets = listOf(CueTargetDto("group", "front-wash"))),
+                layer(b, 1),
+            ),
+            localRows = listOf(localSlider("hex-2", value = 250u)),
+        )
+        val keys = rows.map { it.targetKey to it.propertyName }
+        assertEquals(keys.size, keys.toSet().size, "one contributor per (fixture, property): $keys")
+    }
+
+    // ─── Precedence: later layer wins, local wins over all ──────────────
+
+    @Test
+    fun `HTP category resolves later-layer-wins inside a cue, not max`() {
+        // The named behaviour change: layered intensity becomes later-wins. Under the old
+        // concatenate-at-equal-priority scheme this pair composed as max() = 200.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val bright = look("Bright", lookRow(propertyName = "dimmer", value = "200"))
+        val dim = look("Dim", lookRow(propertyName = "dimmer", value = "40"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, bright, dim),
+            listOf(
+                layer(bright, 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                layer(dim, 1, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+            ),
+        )
+        assertEquals(40u.toUByte(), sliderAt(rows, "hex-1"), "the later layer wins even though it is darker")
+    }
+
+    @Test
+    fun `LTP category resolves later-layer-wins inside a cue`() {
+        // Under the old scheme the *earlier* contributor won an exact priority tie, so this is the
+        // ordering flip the migration bakes in.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val red = look("Red", lookRow(propertyName = "rgbColour", value = "#ff0000"))
+        val blue = look("Blue", lookRow(propertyName = "rgbColour", value = "#0000ff"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, red, blue),
+            listOf(
+                layer(red, 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                layer(blue, 1, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+            ),
+        )
+        assertEquals(Color(0, 0, 255), colourAt(rows, "hex-1").color)
+    }
+
+    @Test
+    fun `local rows beat every layer`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
+        val b = look("B", lookRow(propertyName = "dimmer", value = "200"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a, b),
+            listOf(
+                layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                layer(b, 1, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+            ),
+            localRows = listOf(localSlider("hex-1", value = 12u)),
+        )
+        assertEquals(12u.toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    @Test
+    fun `sortOrder decides, not list order`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
+        val b = look("B", lookRow(propertyName = "dimmer", value = "200"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a, b),
+            // b is declared first but sorts last, so it must win.
+            listOf(
+                layer(b, 9, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                layer(a, 1, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+            ),
+        )
+        assertEquals(200u.toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    @Test
+    fun `a disabled layer contributes nothing`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
+        val b = look("B", lookRow(propertyName = "dimmer", value = "200"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a, b),
+            listOf(
+                layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                layer(b, 1, targets = listOf(CueTargetDto("fixture", "hex-1")), enabled = false),
+            ),
+        )
+        assertEquals(100u.toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    @Test
+    fun `a fixture row beats a group row inside one Look regardless of sort order`() {
+        // The same fixture-beats-group specificity LookRegistry.expand applies, resolved here
+        // because after cooking there is only one contributor left to carry the flag.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val mixed = look(
+            "Mixed",
+            lookRow(targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "20"),
+            lookRow(targetType = "group", targetKey = "front-wash", propertyName = "dimmer", value = "180"),
+        )
+        val rows = cook(fixtures, registryOf(fixtures, mixed), listOf(layer(mixed, 0)))
+        assertEquals(20u.toUByte(), sliderAt(rows, "hex-1"), "fixture row wins on hex-1")
+        assertEquals(180u.toUByte(), sliderAt(rows, "hex-2"), "hex-2 keeps the group value")
+        assertEquals(false, rows.single { it.targetKey == "hex-1" }.targetIsGroup)
+        assertEquals(true, rows.single { it.targetKey == "hex-2" }.targetIsGroup)
+    }
+
+    // ─── Blend and amount ───────────────────────────────────────────────
+
+    @Test
+    fun `OVERRIDE at amount 0 point 5 mixes halfway over the layer beneath`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
+        val b = look("B", lookRow(propertyName = "dimmer", value = "200"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a, b),
+            listOf(
+                layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                layer(b, 1, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.5),
+            ),
+        )
+        assertEquals(150u.toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    @Test
+    fun `a lone layer at amount 0 point 5 reads as half, mixing up from zero`() {
+        // Nothing beneath, so OVERRIDE's identity (zero) stands in — which is what makes a single
+        // dimmer layer at half amount read as half intensity, as an operator expects.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "200"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a),
+            listOf(layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.5)),
+        )
+        assertEquals(100u.toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    @Test
+    fun `an amount 0 layer contributes nothing at all`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "200"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a),
+            listOf(layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.0)),
+        )
+        assertTrue(rows.isEmpty(), "an amount-0 layer asserts nothing rather than asserting zero")
+    }
+
+    @Test
+    fun `MAX keeps the brighter of the two layers`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "180"))
+        val b = look("B", lookRow(propertyName = "dimmer", value = "60"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a, b),
+            listOf(
+                layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                layer(b, 1, targets = listOf(CueTargetDto("fixture", "hex-1")), blendMode = "MAX"),
+            ),
+        )
+        assertEquals(180u.toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    @Test
+    fun `MIN keeps the darker of the two layers`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "180"))
+        val b = look("B", lookRow(propertyName = "dimmer", value = "60"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a, b),
+            listOf(
+                layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                layer(b, 1, targets = listOf(CueTargetDto("fixture", "hex-1")), blendMode = "MIN"),
+            ),
+        )
+        assertEquals(60u.toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    @Test
+    fun `MULTIPLY scales the layer beneath`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "200"))
+        val b = look("B", lookRow(propertyName = "dimmer", value = "128"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a, b),
+            listOf(
+                layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                layer(b, 1, targets = listOf(CueTargetDto("fixture", "hex-1")), blendMode = "MULTIPLY"),
+            ),
+        )
+        assertEquals((200 * 128 / 255).toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    @Test
+    fun `a lone MULTIPLY layer reads as its own value, mixing down from full`() {
+        // MULTIPLY's identity is full scale, not zero — otherwise a lone multiply layer would
+        // blackout rather than assert itself.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "128"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a),
+            listOf(layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1")), blendMode = "MULTIPLY")),
+        )
+        assertEquals(128u.toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    @Test
+    fun `an unknown blend mode falls back to OVERRIDE rather than dropping the layer`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "77"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a),
+            listOf(layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1")), blendMode = "SCREEN")),
+        )
+        assertEquals(77u.toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    // ─── Mask and target restriction ────────────────────────────────────
+
+    @Test
+    fun `a masked layer asserts only in-mask properties`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val both = look(
+            "Both",
+            lookRow(propertyName = "dimmer", value = "180"),
+            lookRow(propertyName = "rgbColour", value = "#00ff00"),
+        )
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, both),
+            listOf(layer(both, 0, targets = listOf(CueTargetDto("fixture", "hex-1")), propertyMask = "COLOUR")),
+        )
+        assertEquals(Color(0, 255, 0), colourAt(rows, "hex-1").color)
+        assertNull(
+            rows.firstOrNull { it.propertyName == "dimmer" },
+            "dimmer is INTENSITY, outside a COLOUR mask",
+        )
+    }
+
+    @Test
+    fun `a layer with explicit targets asserts only those, even when the Look covers more`() {
+        // This is what makes the migration coverage-preserving: a cue that referenced a palette for
+        // one fixture must not start asserting every fixture the palette covered.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val wide = look(
+            "Wide",
+            lookRow(targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "111"),
+            lookRow(targetType = "fixture", targetKey = "hex-2", propertyName = "dimmer", value = "222"),
+        )
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, wide),
+            listOf(layer(wide, 0, targets = listOf(CueTargetDto("fixture", "hex-1")))),
+        )
+        assertEquals(1, rows.size)
+        assertEquals(111u.toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    @Test
+    fun `a bound Look with no layer targets asserts everything it covers`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val wide = look(
+            "Wide",
+            lookRow(targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "111"),
+            lookRow(targetType = "fixture", targetKey = "hex-2", propertyName = "dimmer", value = "222"),
+        )
+        val rows = cook(fixtures, registryOf(fixtures, wide), listOf(layer(wide, 0)))
+        assertEquals(111u.toUByte(), sliderAt(rows, "hex-1"))
+        assertEquals(222u.toUByte(), sliderAt(rows, "hex-2"))
+    }
+
+    @Test
+    fun `a deferred Look takes its targets from the layer, expanding groups`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val deferred = look("Deferred", lookRow(propertyName = "dimmer", value = "90"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, deferred),
+            listOf(layer(deferred, 0, targets = listOf(CueTargetDto("group", "front-wash")))),
+        )
+        assertEquals(setOf("hex-1", "hex-2"), rows.map { it.targetKey }.toSet())
+        assertTrue(rows.all { it.targetIsGroup }, "rows fanned from a group target are group-derived")
+    }
+
+    @Test
+    fun `a deferred Look on a layer with no targets contributes nothing`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val deferred = look("Deferred", lookRow(propertyName = "dimmer", value = "90"))
+        val rows = cook(fixtures, registryOf(fixtures, deferred), listOf(layer(deferred, 0)))
+        assertTrue(rows.isEmpty(), "nothing to apply to, so nothing is asserted")
+    }
+
+    @Test
+    fun `a group layer target filters a Look's bound group row to the intersection`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val grouped = look(
+            "Grouped",
+            lookRow(targetType = "group", targetKey = "front-wash", propertyName = "dimmer", value = "140"),
+        )
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, grouped),
+            listOf(layer(grouped, 0, targets = listOf(CueTargetDto("fixture", "hex-2")))),
+        )
+        assertEquals(1, rows.size)
+        assertEquals(140u.toUByte(), sliderAt(rows, "hex-2"))
+    }
+
+    // ─── What the local pass must carry through ─────────────────────────
+
+    @Test
+    fun `cook preserves moveInDark and paletteUuid on local rows`() {
+        // Cook must not launder these: moveInDark drives the resolver's cross-cue arming pre-pass,
+        // and paletteUuid is what lets Include lift a row back as a reference rather than hardening
+        // it. Both are invisible to composition, so only a test keeps them alive.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val paletteUuid = UUID.randomUUID()
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures),
+            layers = emptyList(),
+            localRows = listOf(
+                localSlider("hex-1", value = 0u, moveInDark = true, paletteUuid = paletteUuid),
+            ),
+        )
+        val row = rows.single()
+        assertEquals(true, row.moveInDark)
+        assertEquals(paletteUuid, row.paletteUuid)
+        assertEquals(0u.toUByte(), assertIs<CueAssignmentResolver.PropertyValue.Slider>(row.value).value)
+    }
+
+    @Test
+    fun `cook preserves the cue id, priority and a fade weight of 1`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a),
+            listOf(layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1")))),
+        )
+        val row = rows.single()
+        assertEquals(cueId, row.cueId)
+        assertEquals(priority, row.priority)
+        assertEquals(1.0, row.fadeWeight, "crossfade progress is applied per-cue at publish time")
+    }
+
+    @Test
+    fun `a local fixture row beats a local group-derived row for the same key`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures),
+            layers = emptyList(),
+            localRows = listOf(
+                localSlider("hex-1", value = 150u, targetIsGroup = true),
+                localSlider("hex-1", value = 50u, targetIsGroup = false),
+                localSlider("hex-2", value = 150u, targetIsGroup = true),
+            ),
+        )
+        assertEquals(50u.toUByte(), sliderAt(rows, "hex-1"))
+        assertEquals(150u.toUByte(), sliderAt(rows, "hex-2"))
+    }
+
+    // ─── The cascade ────────────────────────────────────────────────────
+
+    @Test
+    fun `a Look's own colour list is the most specific palette scope`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look(
+            "A",
+            lookRow(propertyName = "rgbColour", value = "P1"),
+            palette = listOf("#00ff00"),
+        )
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a),
+            listOf(layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1")))),
+            cascade = PaletteCascade(cue = listOf(ExtendedColour(Color.RED)), global = listOf(ExtendedColour(Color.BLUE))),
+        )
+        assertEquals(Color(0, 255, 0), colourAt(rows, "hex-1").color, "the Look's list beats cue and global")
+    }
+
+    @Test
+    fun `a Look with no colour list falls through to the cue scope`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val a = look("A", lookRow(propertyName = "rgbColour", value = "P1"))
+        val rows = cook(
+            fixtures,
+            registryOf(fixtures, a),
+            listOf(layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1")))),
+            cascade = PaletteCascade(cue = listOf(ExtendedColour(Color.RED)), global = listOf(ExtendedColour(Color.BLUE))),
+        )
+        assertEquals(Color.RED, colourAt(rows, "hex-1").color)
+    }
+
+    // ─── Timed layers ───────────────────────────────────────────────────
+
+    @Test
+    fun `a timed layer is excluded until its id is passed in`() {
+        // Timed layers contribute at fire time. CueTriggerManager re-cooks the whole cue with the
+        // fired layer included rather than appending its rows, because appending would put two
+        // contributors on one key.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val base = look("Base", lookRow(propertyName = "dimmer", value = "100"))
+        val timed = look("Timed", lookRow(propertyName = "dimmer", value = "255"))
+        val layers = listOf(
+            layer(base, 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+            layer(timed, 1, targets = listOf(CueTargetDto("fixture", "hex-1"))).copy(delayMs = 500L),
+        )
+        val registry = registryOf(fixtures, base, timed)
+
+        val beforeFire = CueComposer.cook(
+            fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
+        )
+        assertEquals(100u.toUByte(), sliderAt(beforeFire, "hex-1"))
+
+        val afterFire = CueComposer.cook(
+            fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
+            includeTimed = setOf(timed.lookId),
+        )
+        assertEquals(255u.toUByte(), sliderAt(afterFire, "hex-1"))
+        val keys = afterFire.map { it.targetKey to it.propertyName }
+        assertEquals(keys.size, keys.toSet().size, "firing a timed layer must not double up a key")
+    }
+
+    @Test
+    fun `two timed layers on one look fire independently`() {
+        // Keyed on the *look*, firing either layer would pull in both, so the second layer's
+        // contribution would land at the first layer's delay. ADDITIVE makes the difference
+        // observable: two layers of one look are otherwise idempotent under OVERRIDE.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val same = look("Same", lookRow(propertyName = "dimmer", value = "100"))
+        val target = listOf(CueTargetDto("fixture", "hex-1"))
+        val first = layer(same, 0, targets = target, blendMode = "ADDITIVE", layerId = 101)
+            .copy(delayMs = 100L)
+        val second = layer(same, 1, targets = target, blendMode = "ADDITIVE", layerId = 102)
+            .copy(delayMs = 900L)
+        val layers = listOf(first, second)
+        val registry = registryOf(fixtures, same)
+
+        val afterFirstFire = CueComposer.cook(
+            fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
+            includeTimed = setOf(first.layerId),
+        )
+        assertEquals(
+            100u.toUByte(),
+            sliderAt(afterFirstFire, "hex-1"),
+            "the second layer must not contribute until its own delay elapses",
+        )
+
+        val afterBoth = CueComposer.cook(
+            fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
+            includeTimed = setOf(first.layerId, second.layerId),
+        )
+        assertEquals(200u.toUByte(), sliderAt(afterBoth, "hex-1"))
+    }
+
+    @Test
+    fun `an amount-0 layer spawns no effects`() {
+        // `cook` drops an amount-0 layer outright, so `cookEffects` must agree — otherwise pulling
+        // Amount to zero mutes a layer's values while leaving its effects running.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val withEffect = LookSnapshot(
+            lookId = 55,
+            lookUuid = UUID.nameUUIDFromBytes("muted".toByteArray()),
+            name = "Muted",
+            editorFixtureType = null,
+            palette = emptyList(),
+            rows = emptyList(),
+            effects = listOf(
+                LookEffectEntry(
+                    target = null,
+                    effectType = "SineWave",
+                    category = "dimmer",
+                    propertyName = "dimmer",
+                    beatDivision = 1.0,
+                    blendMode = "OVERRIDE",
+                    distribution = "LINEAR",
+                    phaseOffset = 0.0,
+                    elementMode = null,
+                    elementFilter = null,
+                    stepTiming = null,
+                    parameters = emptyMap(),
+                    speedMasterUuid = null,
+                    rateSpeedMasterUuid = null,
+                ),
+            ),
+        )
+        val registry = registryOf(fixtures, withEffect)
+        val target = listOf(CueTargetDto("fixture", "hex-1"))
+
+        assertEquals(
+            1,
+            CueComposer.cookEffects(
+                fixtures, cueId, listOf(layer(withEffect, 0, targets = target)), registry,
+            ).size,
+        )
+        assertTrue(
+            CueComposer.cookEffects(
+                fixtures, cueId, listOf(layer(withEffect, 0, targets = target, amount = 0.0)), registry,
+            ).isEmpty(),
+        )
+    }
+}
