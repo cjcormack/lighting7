@@ -36,6 +36,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
 | [`FU-LOOK-HEALTH-ARM-CLEANUP`](#fu-look-health-arm-cleanup) | Ready | Look | — |
+| [`FU-CUE-APPLYDATA-ONE-BUILDER`](#fu-cue-applydata-one-builder) | Ready | Cue | — |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
 | [`FU-AUTH-ATTRIBUTION`](#fu-auth-attribution) | Trigger | Auth | two accounts co-author, or any `formatVersion` bump |
@@ -348,6 +349,32 @@ with `NoClassDefFoundError` naming the deleted class while the build reports suc
 Ready: delete the arm, its `describeAssignmentHealth` case, and the frontend descriptor entry.
 
 ---
+
+### `FU-CUE-APPLYDATA-ONE-BUILDER`
+
+**`CueApplyData` is constructed in two places; a new field reached only one** · Ready ·
+Looks-and-layers session 1 review, 2026-08-21
+
+`buildCueApplyData` (`routes/projectCuesHelpers.kt`) is the documented builder, and
+`CueStackManager.goToCueInStack` hand-rolls a second, near-identical construction. Session 1 added
+a `layers` field and populated only the first, so **every Look layer was inert on the stack GO
+path** — the primary firing path — while the standalone apply-cue route worked. Caught in review,
+not by a test.
+
+This is the same shape of rot `CLAUDE.md` warns about for project cloning ("never add a
+table-by-table clone path"), and the same failure mode `buildCueInput` carries a comment about on
+the frontend: a field-by-field rebuild silently drops whatever the author forgot.
+
+They are not trivially collapsible, which is why this is a follow-up rather than part of the fix:
+`buildCueApplyData` leaves `fadeDurationMs`, `fadeCurve`, `autoAdvance` and `autoAdvanceDelayMs` at
+their defaults, and `CueStackManager` needs all four to drive crossfade and auto-advance. So either
+`buildCueApplyData` gains those fields (check first whether `applyCue` seeing a real
+`fadeDurationMs` changes standalone-apply behaviour — it may be a deliberate omission), or it takes
+a flag, or `CueStackManager` calls it and `.copy()`s the four on top. The last is the smallest and
+cannot drift.
+
+Worth a test either way: apply one cue through both paths and assert the resulting `CueApplyData` —
+or the published Layer 4 rows — agree.
 
 ## Desk accounts
 

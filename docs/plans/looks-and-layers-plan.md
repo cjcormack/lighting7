@@ -596,13 +596,16 @@ Status as of session 1: ✅ done · ⬜ outstanding.
    lone-layer identity cases (mixing up from zero, down from full).
 5. ✅ **Mask and target restriction** — a masked layer asserts only in-mask properties; a layer
    with explicit `targets` asserts only those, even when the Look covers more.
-6. ⬜ **Migration golden test** — pre/post `cook` equivalence per §6. **Not written.** The
-   migration itself is in `StateMigrations.kt` and is idempotent by uuid, but nothing exercises
-   it: there is no equivalent of `CollapseShowMigrationTest`, so no test has ever run a palette or
-   preset through it. This is the largest outstanding risk in session 1's work and should be closed
-   before session 2 builds UI on top of migrated data. It is also the check that would flag the two
-   intended behaviour changes (§6's LTP ordering flip, and the stack-GO fix in correction 3) cue by
-   cue so each can be eyeballed rather than blanket-accepted.
+6. ✅ **Migration golden test** — `state/LooksMigrationTest.kt`, 10 tests. Coverage preservation is
+   asserted as "nothing lost, nothing altered" plus one named addition: a `ref:` naming a *palette*
+   cannot resolve once the resolver reads Looks, so migration *recovers* that row. (A test artefact,
+   not a production window — `runStateMigrations` runs before the show initialises, so a real desk
+   never composes a cue in the pre-migration state.) The documented LTP flip is pinned separately,
+   with its before *and* after values, so the change is a decision rather than a surprise.
+
+   **Validated by mutation**, because a migration test that merely passes proves nothing. Restoring
+   the text-uuid write fails 4 of the 10; restoring `getString` on a blob fails 8. Those are the two
+   bugs that reached a real desk database, and this test would have stopped both.
 7. ✅ **Sync round-trip** — `sync/ProjectRoundTripTest.kt` and `SyncCoverageTest` pass with
    dispositions recorded for all four new tables; `RichProjectFixture` seeds a bound Look, a
    deferred Look with an element row and an effect, and two layers between them covering every

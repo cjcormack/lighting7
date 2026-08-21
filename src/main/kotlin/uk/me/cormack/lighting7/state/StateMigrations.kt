@@ -327,7 +327,7 @@ private fun JdbcTransaction.columnExists(table: String, column: String): Boolean
  * with them, so reaching through Exposed here would mean this migration has to be rewritten the
  * moment they are deleted — exactly what `migrateCollapseShowIntoStacks` avoided for `show_entries`.
  */
-private fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
+internal fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
     // Drop rows written by the pre-fix version of this migration. It read every source uuid with
     // `getString` on a BLOB column and wrote it back as a *text* literal, so those rows carry a
     // uuid that is both corrupted (bytes above 0x7F replaced with U+FFFD, unrecoverable) and
