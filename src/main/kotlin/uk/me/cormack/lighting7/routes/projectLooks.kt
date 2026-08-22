@@ -788,7 +788,7 @@ private fun DaoLook.toSummaryDto(state: State, usage: LookUsage?): LookDto {
 }
 
 /** Must be called inside a transaction. */
-private fun DaoLook.toDetailsDto(state: State): LookDetails {
+internal fun DaoLook.toDetailsDto(state: State): LookDetails {
     val usage = lookUsage(id.value)
     return LookDetails(
         id = id.value,

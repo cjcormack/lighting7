@@ -19,7 +19,8 @@ import uk.me.cormack.lighting7.state.State
  * - `record` / `include` / `update` are the authoring loop.
  * - `make-hard` replaces the programmer's palette references with the literals they currently
  *   resolve to — the explicit escape hatch from reference-preserving Update.
- * - `record-palette` records the programmer into a named palette, masked by the palette's type.
+ * - `record-look` records the programmer into a Look — the gesture that creates a *bound* Look.
+ *   Masked by an explicit `mask`, because a Look has no type to imply one.
  *
  * Why these three are REST rather than `programmer.*` WS ops, unlike every other programmer
  * operation: they all need a *structured reply* — the created cue, the fixture keys to select,
@@ -42,7 +43,7 @@ internal fun Route.routeApiRestProgrammer(state: State) {
 
         post<ProgrammerMakeHardResource> { handleProgrammerMakeHard(state) }
         post<ProgrammerRecordResource> { handleProgrammerRecord(state) }
-        post<ProgrammerRecordPaletteResource> { handleProgrammerRecordPalette(state) }
+        post<ProgrammerRecordLookResource> { handleProgrammerRecordLook(state) }
         post<ProgrammerIncludeResource> { handleProgrammerInclude(state) }
         post<ProgrammerUpdateResource> { handleProgrammerUpdate(state) }
     }

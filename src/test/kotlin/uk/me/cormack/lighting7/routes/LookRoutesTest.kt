@@ -482,44 +482,4 @@ class LookRoutesTest : RouteIntegrationTest() {
         }
         assertEquals(HttpStatusCode.BadRequest, resp.status)
     }
-
-    @Test
-    fun `update refuses to write back into an included look`() = testApplication {
-        mountTestApp(state)
-        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        state.show.fixtures.patchListChanged()
-        val client = jsonClient()
-
-        val lookId = client.post(base()) {
-            contentType(ContentType.Application.Json)
-            setBody(
-                CreateLookRequest(
-                    name = "Warm",
-                    rows = listOf(
-                        LookRowDto(
-                            targetType = "fixture", targetKey = "hex-1",
-                            propertyName = "dimmer", value = "180",
-                        ),
-                    ),
-                )
-            )
-        }.body<LookDetails>().id
-
-        client.post("/api/rest/programmer/include") {
-            contentType(ContentType.Application.Json)
-            setBody(buildJsonObject { put("projectId", "current"); put("lookId", lookId) })
-        }.let { assertEquals(HttpStatusCode.OK, it.status, it.bodyAsText()) }
-
-        // A Look include is one-way until the record rewrite lands. Refused *explicitly*: Mode A
-        // otherwise falls through to `includeTarget.cueId!!`, which is null for a Look, so the
-        // alternative to this guard is a 500 rather than a 400. And the code is its own rather than
-        // INCLUDE_TARGET_GONE — nothing is missing, so "gone" would send the operator looking for a
-        // problem that isn't there.
-        val refused = client.post("/api/rest/programmer/update") {
-            contentType(ContentType.Application.Json)
-            setBody(buildJsonObject { put("projectId", "current") })
-        }
-        assertEquals(HttpStatusCode.Conflict, refused.status, refused.bodyAsText())
-        assertEquals(CODE_INCLUDE_TARGET_READ_ONLY, refused.body<ProgrammerConflictResponse>().code)
-    }
 }
