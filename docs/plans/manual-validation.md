@@ -11,8 +11,6 @@ as a one-line row.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-EDITOR-INPROCESS`](#fu-manual-editor-inprocess) | in-process editor compiles don't stutter live output | KCS retire, 2026-08-18 |
-| [`FU-MANUAL-PALETTE-TOURING`](#fu-manual-palette-touring) | a Look edit moves a live cue | Programmer S4, 2026-08-14; re-scoped Looks S1, 2026-08-21 |
-| [`FU-MANUAL-LAYER-PRECEDENCE`](#fu-manual-layer-precedence) | layered intensity is later-wins, not HTP | Looks S1, 2026-08-21 |
 | [`FU-MANUAL-SPEED-MASTERS-RIG`](#fu-manual-speed-masters-rig) | two masters drive one show — **restart required first** | Programmer S5, 2026-08-14 |
 | [`FU-MANUAL-UPDATE-APPLY`](#fu-manual-update-apply) | the in-app update upgrades in place — now unblocked | Windows updates, 2026-08-17 |
 | [`FU-MANUAL-SCALER-PROJECT-SWITCH`](#fu-manual-scaler-project-switch) | scaler state survives a project switch | Control-surface P9 |
@@ -75,30 +73,45 @@ last resort — it's what this change removed.
 
 ## `FU-MANUAL-PALETTE-TOURING`
 
+> **Core case CLOSED on the rig, 2026-08-22** (looks-and-layers session 4). Against the live test
+> desk on 8413: a bound Look on `freedom-par-hex`, a cue layering it, GO, then a `PUT` changing the
+> Look's colour — the fixture's DMX output went `255,0,0` → `0,0,255` with no re-fire. The feature's
+> whole payoff, seen for the first time outside a unit test. **Three extensions below are still
+> unseen** and are what keeps this item open; if none of them matters to you, close it.
+
 **A Look edit moves a live cue** · Programmer redesign Session 4, 2026-08-14 · re-scoped for Looks
 2026-08-21
 
 Session 4 was verified on a live rig for record, include, apply, cue-side badges and health, and
-Make Hard at both levels. The behaviour **not** verified on stage is the point of the feature:
-edit a Look while a cue depending on it is live and watch the output move without re-firing.
+Make Hard at both levels. The behaviour that was **not** verified on stage was the point of the
+feature: edit a Look while a cue depending on it is live and watch the output move without
+re-firing. That is now done for a colour Look on a single head.
 
 Republish-on-Look-edit is unit-covered (`LookRepublishTest`) but the path is long — `LookRegistry` invalidation →
 version-counter re-check → `replaceCueAssignments` (which preserves `cueFadeWeights`, unlike
 `setCueAssignments`) → the controller write. A stale cache or dropped republish looks exactly like
 "nothing happened", indistinguishable from operator error unless someone is watching lamps.
 
-**Test**: create a bound Look covering two heads → author a cue with a layer over it → GO → edit the
-Look (change one head's colour). The live heads move, other cue content doesn't, no re-fire needed.
-Repeat with a position Look on a moving head, where per-fixture resolution matters (one Look must
-resolve to a different pan/tilt per head). Then mid-crossfade: edit a Look layered by the *incoming*
-cue while the fade runs and confirm it continues rather than snapping — that's the `cueFadeWeights`
-preservation, which is why the republish goes through `replaceCueAssignments`.
+**What remains untested**, all three of which a single-head colour edit cannot show:
 
-Worth doing **both** dependency paths, because they are found differently: a cue that layers the
-Look (an indexed FK query) and a cue holding a `ref:` value for it (an exact-equality text scan,
-until the grammar retires).
+1. **Two heads, so per-fixture resolution matters** — one Look resolving to a different value per
+   head. Trivial for colour, load-bearing for position.
+2. **A position Look on a moving head**, where the per-head difference is the whole point.
+3. **Mid-crossfade**: edit a Look layered by the *incoming* cue while the fade runs and confirm it
+   continues rather than snapping. That is the `cueFadeWeights` preservation, and the reason the
+   republish goes through `replaceCueAssignments` rather than `setCueAssignments`. This is the one
+   worth actually doing — it is the longest path and the least likely to be right by accident.
+
+The "both dependency paths" note is void: the `ref:` value grammar retired in session 4, so the
+indexed FK query is the only path a cue can depend on a Look through.
 
 ## `FU-MANUAL-LAYER-PRECEDENCE`
+
+> **Core case CLOSED on the rig, 2026-08-22** (looks-and-layers session 4). One cue, two layers on
+> `freedom-par-hex` — Bright (dimmer 255) then Dim (dimmer 60): the fixture sat at **60**, not 255,
+> so within-cue composition really is ordered override for intensity and not HTP max. Flipping the
+> two layers' `sortOrder` and re-applying flipped the winner to 255. **The cross-cue, amount and
+> blend-mode extensions below are still unseen.**
 
 **Layered intensity is later-wins, not HTP** · Looks-and-layers Session 1, 2026-08-21
 
@@ -107,10 +120,14 @@ by: **within one cue**, stacking a dim layer over a bright one really does dim, 
 composition is strict ordered override for every attribute. Across cues, HTP still applies. Unit
 tests pin both, but "does this feel right at the desk?" is not something a test answers.
 
-**Test**: one cue, two layers on the same fixture — layer 1 dimmer 200, layer 2 dimmer 40. GO: the
-fixture sits at 40. Then a second cue also asserting dimmer 200 on that fixture: with both cues
-live the fixture goes to 200, because cross-cue is still HTP. Then set layer 2's amount to 0.5 and
-confirm 120 (mixing halfway from layer 1's 200), and its blend mode to MAX and confirm 200.
+**Done**: one cue, two layers on the same fixture — layer 1 dimmer 255, layer 2 dimmer 60. GO: the
+fixture sat at 60, and reordering flipped it to 255.
+
+**Still to do**, and the cross-cue half is the one that matters, because it is the *pairing* an
+operator gets surprised by rather than either rule alone: a second cue also asserting dimmer 255 on
+that fixture — with both cues live the fixture must go to 255, because cross-cue is still HTP. Then
+set layer 2's amount to 0.5 and confirm 120 (mixing halfway from layer 1's 255... 127), and its
+blend mode to MAX and confirm 255.
 
 Also worth confirming on the rig: a layer whose Look runs a colour *effect* beats a later layer
 setting colour statically, because effects sit above static values regardless of layer order. That

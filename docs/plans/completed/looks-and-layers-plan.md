@@ -21,12 +21,16 @@
 > out to be one file and now share `LayerRow`; `models/palettes.kt`, `models/fxPresets.kt` and
 > `DaoCuePresetApplications` are gone.
 >
-> **Three things deliberately not done**, each with a follow-up: per-layer `stomp` remains carried
+> **The rig checks are closed.** All three of §13's cases passed against the live test desk on
+> 2026-08-22 once it was restarted onto this code — the touring edit, the within-cue intensity flip,
+> and a layer drag not respawning the effects under it. Three extensions remain unseen and are
+> listed there; the mid-crossfade Look edit is the one worth doing.
+>
+> **Two things deliberately not done**, each with a follow-up: per-layer `stomp` remains carried
 > but unread (`FU-LOOK-STOMP-WITHIN-CUE` — it needs an `FxInstance` layer id and a suppression
 > channel out of `cook`, which is engine work rather than a flag flip, so shipping the toggle alone
-> would have been a control that does nothing); a Look's element rows still compose nowhere
-> (`FU-LOOK-ELEMENT-ROWS`, correction #10, pre-existing); and the rig checks in §13 still need
-> hardware.
+> would have been a control that does nothing); and a Look's element rows still compose nowhere
+> (`FU-LOOK-ELEMENT-ROWS`, correction #10, pre-existing).
 >
 > **Session 4's own departures from this plan are recorded at the end of §5.**
 >
@@ -1023,7 +1027,29 @@ Status as of session 1: ✅ done · ⬜ outstanding.
 
     Not covered by this route: the live database, and DMX output — the sandbox blocks ArtNet
     broadcast, so a second desk computes values but lights nothing. §13 still needs a rig.
-13. ⬜ **On the rig — still the only outstanding item in this plan.** (`docs/plans/manual-validation.md`) — edit a Look while a cue depending on it
+13. ✅ **On the rig — all three core cases closed 2026-08-22**, against the live test desk on 8413
+    once it was restarted onto session-4 code. Verified from computed DMX output, which is what the
+    composition claims are about; whether the physical heads track it is still a human-eyes
+    question, and three extensions remain (see `manual-validation.md`).
+
+    - **`FU-MANUAL-PALETTE-TOURING`** — a bound Look, a cue layering it, GO, then a `PUT` changing
+      the Look's colour: output went `255,0,0` → `0,0,255` **with no re-fire**. Use-case 1's whole
+      payoff, seen outside a unit test for the first time. Still unseen: two heads (per-fixture
+      resolution), a position Look, and — the one worth doing — a mid-crossfade edit, which is the
+      `cueFadeWeights` preservation `replaceCueAssignments` exists for.
+    - **`FU-MANUAL-LAYER-PRECEDENCE`** — one cue, Bright (255) then Dim (60) on one fixture: the
+      fixture sat at **60**, not 255. Ordered override for intensity, not HTP max. Flipping the two
+      layers' `sortOrder` flipped the winner. Still unseen: the cross-cue half (both cues live → 255,
+      because across cues HTP still governs), which is the *pairing* an operator trips on.
+    - **The layer-drag phase check** — two layer-spawned effects running, `FxInstance` ids `[3,4]`;
+      after `programmer.moveLayer` the stack order was `[4,3]` and the ids were still `[3,4]`. No
+      respawn, so no phase restart. The companion "re-ranked in place" assertion could not be made
+      over the wire: `priority` is not on the active-effect DTO (only a derived `isProgrammerBand`),
+      so that half stays with `ProgrammerLayerStackEffectsTest`.
+
+    The original entry follows.
+
+    ⬜ **On the rig** (`docs/plans/manual-validation.md`) — edit a Look while a cue depending on it
     is live and confirm the change moves without re-firing the cue. That is use-case 1's payoff, and
     `FU-MANUAL-PALETTE-TOURING` records it as never yet seen on hardware. `FU-MANUAL-LAYER-PRECEDENCE`
     is the new companion check: layered intensity is later-wins, which is the change an operator is
