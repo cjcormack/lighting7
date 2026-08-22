@@ -1,7 +1,12 @@
 # Looks and Layers — replacing FX Presets and named Palettes
 
-> **Status: sessions 1 (backend), 2 (the Look library's frontend) and 3a (the programmer as a
-> layer stack) landed. Session 3b (the programmer's frontend) and session 4 remain — see §5.**
+> **Status: sessions 1 (backend), 2 (the Look library's frontend), 3a (the programmer as a
+> layer stack) and 3b (the programmer's frontend) landed. Session 4 remains — see §5.**
+>
+> **Nothing in 3a or 3b has been exercised against a running desk.** New routes and changed classes
+> don't hot-swap into :8413, so a restart is needed and has not happened; `npm run check` is the only
+> evidence either half works. That is the first thing the next session should fix, and §9.12 lists
+> what to look at.
 >
 > **Session 3 split into 3a (backend) and 3b (frontend) on 2026-08-22**, the same call D4 made for
 > sessions 1 and 2, and for the same reason: the programmer route surface alone is ~3,000 lines
@@ -618,22 +623,53 @@ The Look editor's live preview is a layer holding an **inline** snapshot, becaus
 *unsaved* draft that `LookRegistry` has never heard of; `CueComposer.cook` and `cookEffects` take an
 optional `resolveLook` for exactly that one caller.
 
-### Session 3b — the programmer's frontend
+### Session 3b — the programmer's frontend — **done 2026-08-22**
 
-- The `LookStack` component (§4.1), shared by the cue editor and the programmer. `LayersPane` is
-  most of it already; what it lacks is a programmer instance driven by the new
-  `programmer.addLayer` / `removeLayer` / `moveLayer` / `patchLayer` ops and the broadcast
-  `programmer.layerState`.
-- `/programmer` redirects into Program; `FxSheet` folds in as a tab.
-- The busking pads move from `POST /looks/{id}/toggle` to explicit layer ops. The pads' active ring
-  currently matches `FxInstance.presetId == lookId`; nothing stamps `presetId` any more, so it must
-  match the new `lookId` field on the FX-list DTO instead. **This is the one frontend-visible
-  regression 3a leaves**, and it is strictly better than keeping the `presetId = lookId` lie alive.
-- Delete `includedTargetIsReadOnly` and its guard — Update-back into a Look works now.
-- A `RecordLookSheet` for `POST /programmer/record-look`, which is what finally lets the library
-  create a **bound** Look; its Recorded section still says it cannot. `components/programmer/
-  maskPicker.tsx` already has the `MaskPicker` the explicit mask needs, and this is the obvious
-  consumer for `lib/attributeFamily.ts`'s caller-less `FAMILY_COLUMNS` / `familyForCategory`.
+Landed in `lighting-react` as one change: `LookStack` extracted and shared, the programmer's
+layer ops on the wire, the Program/Programmer merge, `RecordLookSheet`, layer-aware provenance,
+and the pads' ring. `npm run check` green at 1008 tests (from 951).
+
+**Seven departures from the plan, each found in the code:**
+
+1. **The pads stayed on `POST /looks/{id}/toggle`.** §5 said move them to explicit layer ops; that
+   route *is* `ProgrammerLayerStack.toggle` now — it adds or removes a layer, matching on
+   `lookId` + exact `targets`. Moving the pads would have duplicated that match rule client-side,
+   because the ring has to compute the same thing. Only the ring changed, and it reads the **layer
+   stack** rather than the effect list: `lookLayerPresence`. The plan's "match the new `lookId`
+   field on the FX-list DTO" is the wrong fix — a Look made only of static rows spawns no effect,
+   so no effect-list match can ever see it.
+2. **The Programmer nav entry was deleted, not repointed.** §4.4 called the merge "nav and chrome
+   only", but `pathMatch: "/program"` and `"/programmer"` cannot both exist for one destination —
+   two sidebar rows leading to one page *is* the collision. `/programmer` and `/programmer/fx` are
+   `ProgrammerLegacyRedirect`. Cost: Cmd+K no longer carries the word "Programmer".
+3. **The Values tab must be `forceMount`ed.** `useListSelection` clears its scope on unmount, and
+   its own comment records why that was safe: "only one list per scope is ever mounted at a time
+   (the three scopes belong to mutually exclusive routes)". Tabs broke that premise, and without
+   the force-mount, glancing at the layer stack silently discards the fixture selection Record and
+   Record-look scope on. It costs nothing new — the pane rendered `ProgrammerSheet` unconditionally
+   before — and Radix never hides a force-mounted panel, so the explicit `hidden` is load-bearing.
+4. **`FAMILY_COLUMNS` was deleted rather than used.** The plan offered "use them or delete them"
+   for both caller-less helpers. `familyForCategory` got a real caller — per-family counts in the
+   record sheet's mask picker — and the family→columns direction still had none.
+5. **Those counts cannot be scoped to the selection**, which matters because the selection defaults
+   *on* in this sheet. A group-addressed entry's expansion into fixtures is server-side, so a
+   client-side filter would drop those entries rather than narrow honestly. They count the whole
+   programmer and the label says so; which *families* are in play survives the narrowing, the
+   magnitude does not.
+6. **The shared layer picker had to learn `allowTiming`.** Its confirm step renders delay /
+   interval / random-window fields, and a programmer layer has no playback to delay against — so
+   the fields were being offered and then dropped. Hidden for the programmer; the speed-master
+   override on that step is still honoured.
+7. **`ProvenanceEntry`'s new fields must go in the client's provenance signature.** A key can move
+   from "the cue" to "the cue's Warm Wash layer" with `source` unchanged, so a cell that didn't
+   wake would keep naming the old answer. Same class of bug as the `entrySignature` note in §9.9.
+
+One frontend trap worth the same billing as session 2's `useUnsavedChanges` note: **RTK Query's
+`data` falls back to the previous argument's result while a new one is in flight, and `isLoading`
+is `false` whenever it does.** `FU-FE-LOOK-SAVE-GUARD-TEST`'s guard read `data`, so editing Look A,
+closing, then opening Look B handed the editor A's rows under B's id — and Update would have written
+A's rows into B, deleting B's. `currentData` is this argument's own data or nothing. Found by a
+review pass, not by the tests that were written first.
 
 ### Session 3 — the original plan, for the record
 
@@ -846,11 +882,36 @@ Status as of session 1: ✅ done · ⬜ outstanding.
     than live calls to the deleted `buildCueAssignmentsForPreset`. That is the right shape for a
     golden test anyway: it states the old behaviour as a fact to be preserved rather than
     re-deriving it from code that can no longer be wrong.
-11. ⬜ **On the rig** (`docs/plans/manual-validation.md`) — edit a Look while a cue depending on it
+11. ✅ **Session 3b** — `npm run check` in `lighting-react`: build + **1008 tests** + lint at zero
+    warnings (951 at the start of the session).
+
+    New coverage: `LookStack.test.tsx` (16 — the shared component's contract driven by spies, so a
+    handler shape that changed breaks it and not the cue's own test), `ProgrammerLookStack.test.tsx`
+    (6 — the index→`layerId` translation, including that a preview layer does not shift the ids the
+    rows act on), `ProgrammerPane.test.tsx` (6 — **mutation-validated**: removing `forceMount` fails
+    two), `lookPresence.test.ts` (9), `LookEditor.test.tsx` (5 — both halves of
+    `FU-FE-LOOK-SAVE-GUARD-TEST`), `lookSaveGuard.test.ts` (4), plus layer cases in
+    `programmerWsApi.test.ts` and `useRowOwnership.test.ts`. `LayersPane.test.tsx` stays as the
+    cue-integration test — it asserts the PATCH payload, which the shared component's test cannot.
+
+    `src/test/backendMock.ts` gained a **stateful** `programmerWs` holder, unlike every other bridge
+    there: the programmer's consumers read `getState()` / `layers()` synchronously and then wait to
+    be told it changed, so a bare callback holder would fire a notification carrying nothing.
+12. ⬜ **Against a running desk — nothing here has been.** A restart is needed (new routes and
+    changed classes don't hot-swap) and has not happened, so 3a and 3b are both unexercised. In
+    order: a **rows-only** Look lights its busking-pad ring; Program → Programmer → Layers shows the
+    stack and disable / amount / reorder move the rig; a second browser tab sees a reorder (the
+    `programmer.layerState` broadcast); Include a Look → edit on stage → Update writes back and
+    every cue layering it moves; Record makes a bound Look that lands in the library's Recorded
+    section; a layer-won cell names its Look on hover.
+13. ⬜ **On the rig** (`docs/plans/manual-validation.md`) — edit a Look while a cue depending on it
     is live and confirm the change moves without re-firing the cue. That is use-case 1's payoff, and
     `FU-MANUAL-PALETTE-TOURING` records it as never yet seen on hardware. `FU-MANUAL-LAYER-PRECEDENCE`
     is the new companion check: layered intensity is later-wins, which is the change an operator is
-    most likely to be surprised by.
+    most likely to be surprised by. 3a adds a third: **dragging a layer must not restart the phase
+    of the effects running under it.** That is what the layer-index priority scheme buys, it is
+    unit-tested by asserting `FxInstance.id`s don't change, and it is exactly the kind of thing that
+    looks fine in a test and wrong on stage.
 
 Run the desk with `./gradlew run` (REST on :8413). Never stop or kill a Gradle daemon — the
 live desk *is* one.
