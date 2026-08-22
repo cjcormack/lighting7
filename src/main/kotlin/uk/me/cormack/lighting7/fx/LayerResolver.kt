@@ -51,15 +51,27 @@ class LayerResolver(
     @Volatile
     private var cueLayerWinners: Map<CueAssignmentResolver.Key, Int> = emptyMap()
 
+    // The winning *layer* per composed key, for the keys a Look layer produced. Same selection as
+    // [cueLayerWinners] — it is the same winning assignment, read for a different field — so the
+    // two can never disagree about which contributor won. Keys whose winner was a cue's local row
+    // are absent rather than null-valued: absence already means "no layer", and a null value would
+    // make "not attributable" and "attributable to nothing" two spellings of one thing.
+    @Volatile
+    private var cueLayerLayerWinners: Map<CueAssignmentResolver.Key, CookWinner> = emptyMap()
+
     /** Replace the Layer 4 state from the current set of assignments. Called on cue apply. */
     fun applyAssignments(assignments: List<CueAssignmentResolver.Assignment>) {
         val composed = if (assignments.isEmpty()) emptyMap() else cueAssignmentResolver.resolve(assignments)
         cueLayerState = composed
         cueLayerIndex = buildIndex(composed)
-        cueLayerWinners = computeWinners(assignments)
+        val winners = selectWinners(assignments)
+        cueLayerWinners = winners.mapValues { (_, a) -> a.cueId }
+        cueLayerLayerWinners = winners.mapNotNull { (key, a) -> a.layerWinner?.let { key to it } }.toMap()
     }
 
-    private fun computeWinners(assignments: List<CueAssignmentResolver.Assignment>): Map<CueAssignmentResolver.Key, Int> {
+    private fun selectWinners(
+        assignments: List<CueAssignmentResolver.Assignment>,
+    ): Map<CueAssignmentResolver.Key, CueAssignmentResolver.Assignment> {
         if (assignments.isEmpty()) return emptyMap()
         val winners = HashMap<CueAssignmentResolver.Key, CueAssignmentResolver.Assignment>()
         for (a in assignments) {
@@ -78,7 +90,7 @@ class LayerResolver(
                 winners[key] = a
             }
         }
-        return winners.mapValues { (_, a) -> a.cueId }
+        return winners
     }
 
     private fun buildIndex(
@@ -97,6 +109,7 @@ class LayerResolver(
         cueLayerState = emptyMap()
         cueLayerIndex = emptyMap()
         cueLayerWinners = emptyMap()
+        cueLayerLayerWinners = emptyMap()
     }
 
     /** Current snapshot; exposed for tests and diagnostics. */
@@ -106,6 +119,14 @@ class LayerResolver(
     /** Winning contributor cueId per composed key — provenance / diagnostics. */
     val currentCueLayerWinners: Map<CueAssignmentResolver.Key, Int>
         get() = cueLayerWinners
+
+    /**
+     * Winning **layer** per composed key, for keys a Look layer produced — provenance.
+     *
+     * A key is absent when a cue's local row won it. See [CookWinner].
+     */
+    val currentCueLayerLayerWinners: Map<CueAssignmentResolver.Key, CookWinner>
+        get() = cueLayerLayerWinners
 
     /**
      * Resolve the fallback [FxOutput] for the given target + fixture. Returned value is what

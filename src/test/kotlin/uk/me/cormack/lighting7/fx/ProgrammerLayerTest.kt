@@ -47,7 +47,11 @@ class ProgrammerLayerTest {
 
     private fun Rig.hex(): HexFixture = fixtures.fixture("hex-a")
 
-    private fun dimmerAssignment(cueId: Int, value: UByte) = CueAssignmentResolver.Assignment(
+    private fun dimmerAssignment(
+        cueId: Int,
+        value: UByte,
+        layerWinner: CookWinner? = null,
+    ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = 1,
         fadeWeight = 1.0,
@@ -56,6 +60,7 @@ class ProgrammerLayerTest {
         propertyName = "dimmer",
         category = PropertyCategory.DIMMER,
         value = CueAssignmentResolver.PropertyValue.Slider(value),
+        layerWinner = layerWinner,
     )
 
     private fun tick(n: Long) = MasterClock.ClockTick(
@@ -273,6 +278,38 @@ class ProgrammerLayerTest {
 
         rig.engine.removeCueAssignments(10)
         assertNull(rig.engine.cueStackIdFor(10), "the mapping goes with the assignments")
+    }
+
+    @Test
+    fun `a CUE provenance entry names the Look layer that won, when a layer did`() {
+        // The operator-facing payoff of the cook step knowing its winner: "why is this fixture this
+        // colour?" can answer *Warm Wash* rather than *cue 10*. Carried as extra fields on a CUE
+        // entry rather than a new ProvenanceSource, so a client that ignores them is unaffected.
+        val rig = newRig()
+        rig.engine.setCueAssignments(
+            10,
+            listOf(dimmerAssignment(10, 100u, CookWinner(index = 1, layerId = 42, lookId = 7, lookName = "Warm Wash"))),
+            cueStackId = 7,
+        )
+
+        val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
+        assertEquals(FxEngine.ProvenanceSource.CUE, entry.source, "the source is still the cue")
+        assertEquals(42, entry.layerId)
+        assertEquals(7, entry.lookId)
+        assertEquals("Warm Wash", entry.lookName)
+    }
+
+    @Test
+    fun `a cue's local row reports no layer at all`() {
+        // Absence, not a null-valued entry: a local row is not attributable to a layer, and the
+        // desk must not render an empty layer chip for one.
+        val rig = newRig()
+        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
+
+        val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
+        assertEquals(FxEngine.ProvenanceSource.CUE, entry.source)
+        assertNull(entry.layerId)
+        assertNull(entry.lookName)
     }
 
     @Test

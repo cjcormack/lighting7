@@ -58,6 +58,22 @@ value class ProgrammerOwner(val id: String) {
         val INCLUDE = ProgrammerOwner("include")
 
         /**
+         * The cooked contribution of the programmer's **Look-layer stack**
+         * ([uk.me.cormack.lighting7.fx.ProgrammerLayerStack]).
+         *
+         * One owner for the whole stack, not one per layer, because the stack is cooked to a
+         * single value per key *before* it reaches the store — which is the point of cooking. Per
+         * layer owners would put the ordering decision back into the slot stack, whose order is
+         * write-recency and therefore the wrong invariant (see [ProgrammerStore]).
+         *
+         * **Slots owned by this sit at the bottom of a key's stack and carry a `seq` in the
+         * reserved [LAYER_SEQ_BASE] band.** Both are needed, for different readers, and together
+         * they are what makes "a local write always wins" true regardless of write order —
+         * see [ProgrammerStore.putLayerSlots].
+         */
+        val LAYERS = ProgrammerOwner("layers")
+
+        /**
          * FX preset toggles and editor live previews (`routes/projectFxPresets.kt`). One
          * owner per preset id, so toggling one preset off cannot release another preset's
          * entry on a shared property. Previews pass their synthetic negative id.
@@ -344,6 +360,91 @@ class ProgrammerStore {
         byProperty.compute(propertyName) { _, holder -> withSlot(holder, slot) }
     }
 
+    /** One key's share of a cooked layer stack, ready for [putLayerSlots]. */
+    data class LayerSlotWrite(
+        val fixtureKey: String,
+        val propertyName: String,
+        val value: CueAssignmentResolver.PropertyValue,
+        /**
+         * Rank of the layer that won this key, within the contributing layers
+         * ([uk.me.cormack.lighting7.fx.CookWinner.index]). Stamped into the reserved
+         * [LAYER_SEQ_BASE] band, never used as a raw `seq`.
+         */
+        val layerIndex: Int,
+        val sourceGroup: String? = null,
+    )
+
+    /**
+     * Replace the [ProgrammerOwner.LAYERS] contribution wholesale with [writes].
+     *
+     * The layer stack is cooked outside the store and materialised here, so this is a **set**
+     * operation rather than a series of puts: any key the new set doesn't name loses its layer slot.
+     * Returns the keys whose *winning* value moved, for the caller to republish.
+     *
+     * Three properties of the implementation are deliberate.
+     *
+     * **Puts before clears.** Installing the new slots first and only then releasing the keys that
+     * dropped out means no key is ever momentarily uncovered. The other order would let the cue or
+     * baseline underneath show through for one publish on every key that survives, which on an
+     * effect-covered key is a visible flash on each Look edit.
+     *
+     * **One epoch bump for the whole swap.** `epoch` gates the per-tick effect-suppression snapshot
+     * (`FxEngine.programmerSuppression`); bumping per key would make it rebuild once per key in the
+     * middle of a half-applied stack.
+     *
+     * **`touched = false`.** These are not operator edits, so `RecordSource.TOUCHED` skips them —
+     * which is exactly right, because Record saves the layer *stack* as layers and only the
+     * operator's own rows as rows. The [ProgrammerOwner.UNPARK] slots use the same flag for the
+     * same reason. `RecordSource.ALL` still sees them, which is what makes "flatten what's on
+     * stage" mean something.
+     *
+     * The sideband is untouched: a layer never absorbs a raw channel write, or the operator's
+     * channel-level drags would be destroyed on every recook.
+     */
+    fun putLayerSlots(writes: List<LayerSlotWrite>): Set<CueAssignmentResolver.Key> {
+        val moved = HashSet<CueAssignmentResolver.Key>()
+        val named = HashSet<Pair<String, String>>(writes.size)
+
+        for (write in writes) {
+            named.add(write.fixtureKey to write.propertyName)
+            val slot = Slot(
+                owner = ProgrammerOwner.LAYERS,
+                value = ProgrammerValue.Hard(write.value),
+                touched = false,
+                sourceGroup = write.sourceGroup,
+                seq = LAYER_SEQ_BASE + write.layerIndex,
+            )
+            val byProperty = properties.computeIfAbsent(write.fixtureKey) { ConcurrentHashMap() }
+            var before: ProgrammerValue? = null
+            byProperty.compute(write.propertyName) { _, holder ->
+                before = holder?.top?.value
+                withSlot(holder, slot)
+            }
+            val after = byProperty[write.propertyName]?.top?.value
+            if (before?.resolved != after?.resolved) {
+                moved.add(CueAssignmentResolver.Key.fixture(write.fixtureKey, write.propertyName))
+            }
+        }
+
+        for ((fixtureKey, byProperty) in properties) {
+            for (propertyName in byProperty.keys) {
+                if (fixtureKey to propertyName in named) continue
+                var before: ProgrammerValue? = null
+                byProperty.computeIfPresent(propertyName) { _, holder ->
+                    before = holder.top.value
+                    withoutOwner(holder, ProgrammerOwner.LAYERS)
+                }
+                val after = byProperty[propertyName]?.top?.value
+                if (before != null && before?.resolved != after?.resolved) {
+                    moved.add(CueAssignmentResolver.Key.fixture(fixtureKey, propertyName))
+                }
+            }
+        }
+
+        bumpEpoch()
+        return moved
+    }
+
     /** The winning (most recent) slot for a property, or null when no owner holds it. */
     fun get(fixtureKey: String, propertyName: String): Slot? =
         properties[fixtureKey]?.get(propertyName)?.top
@@ -626,15 +727,35 @@ class ProgrammerStore {
 
     // ── Slot-stack mechanics (shared by properties and sideband) ────────────
 
-    private fun withSlot(holder: Holder?, slot: Slot): Holder = when (holder) {
+    private fun withSlot(holder: Holder?, slot: Slot): Holder {
+        // The layer stack's cooked contribution goes to the **bottom** of the key's stack, not the
+        // top. Its rank is author-declared — later layers win, and the local layer wins over all of
+        // them — whereas this stack's order is write-recency, re-derived on every put. Head-inserting
+        // it would hide the operator's own WEB/SURFACE slot underneath it, because [get] returns
+        // `top` and both SliderTarget and SettingTarget take the property entry's value
+        // unconditionally, without consulting `seq`.
+        if (slot.owner == ProgrammerOwner.LAYERS) return withLayerSlot(holder, slot)
+        return when (holder) {
+            null -> Single(slot)
+            is Single ->
+                if (holder.slot.owner == slot.owner) Single(slot)
+                else Stack(listOf(slot, holder.slot))
+            is Stack -> Stack(buildList(holder.slots.size + 1) {
+                add(slot)
+                for (s in holder.slots) if (s.owner != slot.owner) add(s)
+            })
+        }
+    }
+
+    private fun withLayerSlot(holder: Holder?, slot: Slot): Holder = when (holder) {
         null -> Single(slot)
         is Single ->
             if (holder.slot.owner == slot.owner) Single(slot)
-            else Stack(listOf(slot, holder.slot))
-        is Stack -> Stack(buildList(holder.slots.size + 1) {
-            add(slot)
-            for (s in holder.slots) if (s.owner != slot.owner) add(s)
-        })
+            else Stack(listOf(holder.slot, slot))
+        is Stack -> {
+            val rest = holder.slots.filter { it.owner != slot.owner }
+            if (rest.isEmpty()) Single(slot) else Stack(rest + slot)
+        }
     }
 
     /** [holder] with [owner]'s slot removed: null when empty, same instance when absent. */
@@ -652,4 +773,30 @@ class ProgrammerStore {
 
     private fun unpackUniverse(packed: Long): Int = (packed shr 20).toInt()
     private fun unpackChannel(packed: Long): Int = (packed and 0xFFFFF).toInt()
+
+    companion object {
+        /**
+         * Base of the reserved [Slot.seq] band for layer-materialised slots.
+         *
+         * Every real write gets `seq >= 1` ([bumpEpoch] is `incrementAndGet` from 0), so this band
+         * sits strictly below all of them: any operator write beats a layer in
+         * [uk.me.cormack.lighting7.fx.FxTarget.composeProgrammerOver]'s cross-granularity recency
+         * comparison, whichever happened first in wall-clock time.
+         *
+         * **Two things about this constant are load-bearing.**
+         *
+         * It is not `0`, and it is not a single value shared by every layer slot. Layer slots are
+         * stamped `LAYER_SEQ_BASE + layerIndex`, so they stay *mutually* ordered by layer rank.
+         * A flat value would make two layer slots tie on `seq` — which cannot happen anywhere else
+         * in this store, and which the four `composeProgrammerOver` overrides resolve
+         * **inconsistently**: `SliderTarget` lets an explicit `white` row beat a Colour entry's
+         * bundled white on a tie, while `ColourTarget.extendedComponent` lets the Colour entry win.
+         * Both write the same DMX channel, so a tie makes the output depend on which `FxTarget` was
+         * inferred last for the key.
+         *
+         * And it is not `Long.MIN_VALUE`, which those same overrides use as the "nothing here"
+         * sentinel. A slot stamped with it would be read as absent and lose to any sideband value.
+         */
+        const val LAYER_SEQ_BASE: Long = Long.MIN_VALUE / 2
+    }
 }

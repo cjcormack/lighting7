@@ -86,6 +86,29 @@ internal data class CookLayer(
  *
  * See `docs/plans/looks-and-layers-plan.md` §3.3 and `docs/lighting-composition-model.md`.
  */
+/**
+ * Which layer produced a cooked row, for the consumers that need to name it rather than just use
+ * its value.
+ *
+ * [index] is the position in the **sortOrder-sorted, enabled** layer list — not the position in the
+ * caller's array, and not [layerId]. Two consumers depend on that specific number:
+ *
+ * - `ProgrammerLayerStack` stamps `ProgrammerStore.Slot.seq` as `LAYER_SEQ_BASE + index`, which is
+ *   what makes layer order behave like write order in `FxTarget.composeProgrammerOver`'s
+ *   cross-granularity recency comparison.
+ * - provenance reports it so the operator can be told *which* layer won a key, rather than only
+ *   that "a cue" or "the programmer" did.
+ *
+ * Public, unlike [CookLayer] beside it, only because it rides on the public
+ * [CueAssignmentResolver.Assignment]. Nothing outside this module is expected to construct one.
+ */
+data class CookWinner(
+    val index: Int,
+    val layerId: Int,
+    val lookId: Int,
+    val lookName: String,
+)
+
 internal object CueComposer {
 
     /**
@@ -101,6 +124,8 @@ internal object CueComposer {
         val value: CueAssignmentResolver.PropertyValue,
         val moveInDark: Boolean = false,
         val paletteUuid: UUID? = null,
+        /** Which layer last wrote this key. Null once a local row has overlaid it. */
+        val winner: CookWinner? = null,
     )
 
     private data class Key(val targetKey: String, val propertyName: String)
@@ -122,6 +147,12 @@ internal object CueComposer {
      * `(targetKey, propertyName)`. Enforced by construction (one map slot per key) and asserted by
      * `CueComposerTest`.
      *
+     * Each returned row carries the layer that produced it in
+     * [CueAssignmentResolver.Assignment.layerWinner]. **That cannot be recovered from the output
+     * order**, which is why it rides on the row: the accumulator is keyed by (target, property) and
+     * a key keeps the *insertion* position of whichever layer wrote it first, so a key introduced by
+     * layer 1 and overwritten by layer 2 still sits where layer 1 put it.
+     *
      * Output order is insertion order, not hash order. That matters: [CueAssignmentResolver.composeLtp]
      * breaks an exact `(priority, fadeWeight)` tie by taking the first maximal element in list
      * order, so a `HashMap` here would make cross-cue ties vary between republishes.
@@ -138,11 +169,15 @@ internal object CueComposer {
     ): List<CueAssignmentResolver.Assignment> {
         val acc = LinkedHashMap<Key, Contribution>()
 
-        for (layer in layers.filter { it.enabled }.sortedBy { it.sortOrder }) {
-            if (layer.isTimed && layer.layerId !in includeTimed) continue
-            // An amount-0 layer contributes nothing at all — cheaper and clearer to drop it here
-            // than to have every blend arm return `below` unchanged.
-            if (layer.amount <= 0.0) continue
+        // Indexed over the *filtered and sorted* list, so a CookWinner.index is a rank within the
+        // layers that actually contribute — which is what the seq band and provenance both mean by
+        // it. Disabled, amount-0 and unfired-timed layers are dropped before numbering; a look that
+        // fails to load is dropped after, so one unreadable Look does not renumber the rest.
+        val contributing = layers
+            .filter { it.enabled && it.amount > 0.0 && (!it.isTimed || it.layerId in includeTimed) }
+            .sortedBy { it.sortOrder }
+
+        for ((index, layer) in contributing.withIndex()) {
             val look = lookRegistry?.snapshot(layer.lookUuid)
             if (look == null) {
                 logger.warn(
@@ -151,7 +186,7 @@ internal object CueComposer {
                 )
                 continue
             }
-            applyLayer(fixtures, cueId, layer, look, cascade, acc)
+            applyLayer(fixtures, cueId, layer, index, look, cascade, acc)
         }
 
         // The local layer always wins. Fixture-level rows beat group-derived ones for the same key,
@@ -167,6 +202,9 @@ internal object CueComposer {
                 value = row.value,
                 moveInDark = row.moveInDark,
                 paletteUuid = row.paletteUuid,
+                // Explicitly null: a local row belongs to no layer, and leaving a layer's winner
+                // in place here would report the overwritten layer as the reason for the value.
+                winner = null,
             )
         }
 
@@ -185,6 +223,7 @@ internal object CueComposer {
                 value = c.value,
                 moveInDark = c.moveInDark,
                 paletteUuid = c.paletteUuid,
+                layerWinner = c.winner,
             )
         }
     }
@@ -252,6 +291,8 @@ internal object CueComposer {
         fixtures: Fixtures,
         cueId: Int,
         layer: CookLayer,
+        /** Rank among the contributing layers — see [CookWinner.index]. */
+        layerIndex: Int,
         look: LookSnapshot,
         baseCascade: PaletteCascade,
         acc: LinkedHashMap<Key, Contribution>,
@@ -338,6 +379,10 @@ internal object CueComposer {
                 category = category,
                 compositionOverride = override,
                 value = blend(below, incoming, blendMode, amount),
+                // The *last* layer to write a key owns it, blend mode notwithstanding: a MAX layer
+                // that kept the value beneath still decided the outcome, so it is the honest answer
+                // to "why is this fixture like this?".
+                winner = CookWinner(layerIndex, layer.layerId, layer.lookId, layer.lookName),
             )
         }
     }

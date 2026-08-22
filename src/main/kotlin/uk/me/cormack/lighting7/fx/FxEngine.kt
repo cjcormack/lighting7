@@ -202,6 +202,18 @@ class FxEngine(
         val cueId: Int? = null,
         val cueStackId: Int? = null,
         val effectId: Long? = null,
+        /**
+         * The Look layer that won, when one did.
+         *
+         * Deliberately **not** a new [ProvenanceSource] arm: the source is still the cue (or, once
+         * the programmer holds layers, the programmer) — the layer is *which part of it*. Adding an
+         * arm would have forced every consumer's `when` to handle a case that answers the same
+         * question as `CUE` does, and would have made "a cue won" and "a cue's layer won" look like
+         * different kinds of event.
+         */
+        val layerId: Int? = null,
+        val lookId: Int? = null,
+        val lookName: String? = null,
     )
 
     // Conflated: recomputed on layer events only (programmer mutation, cue republish,
@@ -271,6 +283,7 @@ class FxEngine(
 
         val cueLayerState = layerResolver.currentCueLayerState
         val cueLayerWinners = layerResolver.currentCueLayerWinners
+        val cueLayerLayerWinners = layerResolver.currentCueLayerLayerWinners
 
         val keys = HashSet<CueAssignmentResolver.Key>(programmerKeys)
         keys.addAll(cueLayerState.keys)
@@ -304,10 +317,14 @@ class FxEngine(
                 )
                 key in cueLayerState -> {
                     val winningCueId = cueLayerWinners[key]
+                    val layer = cueLayerLayerWinners[key]
                     ProvenanceEntry(
                         key.targetKey, key.propertyName, ProvenanceSource.CUE,
                         cueId = winningCueId,
                         cueStackId = winningCueId?.let { cueStackIdFor(it) },
+                        layerId = layer?.layerId,
+                        lookId = layer?.lookId,
+                        lookName = layer?.lookName,
                     )
                 }
                 else -> continue
@@ -1005,6 +1022,13 @@ class FxEngine(
      * one provenance update. Clearing owner-by-owner would transmit each surviving owner's
      * value as an intermediate step (and, with [fadeMs] > 0, restart the ramp per owner);
      * this releases each property in a single step to whatever sits below the programmer.
+     *
+     * **[ProgrammerOwner.LAYERS] is exempt, and that exemption is load-bearing.** A layer's
+     * contribution is derived state: the next recook — any Look edit, amount change or reorder —
+     * rebuilds it from the stack, so clearing it here would come back seconds later and read as the
+     * clear having been ignored. "Clear this entry" means *release the local writes on it*; removing
+     * a layer's contribution is done by removing the layer. Nothing is lost by skipping it, because
+     * with local writes gone the layer slot is what should be showing.
      */
     fun clearProgrammerEntries(
         clears: List<Pair<GroupableFixture, String>>,
@@ -1015,6 +1039,7 @@ class FxEngine(
         var clearedAny = false
         for ((fixture, propertyName) in clears) {
             for (slot in programmerStore.slotsFor(fixture.targetKey, propertyName)) {
+                if (slot.owner == ProgrammerOwner.LAYERS) continue
                 programmerStore.clear(slot.owner, fixture.targetKey, propertyName)
                 clearedAny = true
             }

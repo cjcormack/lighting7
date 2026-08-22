@@ -263,6 +263,16 @@ data class ProvenanceEntryDto(
     val cueId: Int? = null,
     val cueStackId: Int? = null,
     val effectId: Long? = null,
+    /**
+     * The Look layer that won this key, when one did — so the desk can answer "why is this fixture
+     * this colour?" by naming *Warm Wash* rather than *a cue*.
+     *
+     * Additive and defaulted, and not a new `source` value: a client that doesn't know about layers
+     * keeps reading `source` exactly as before. See `FxEngine.ProvenanceEntry`.
+     */
+    val layerId: Int? = null,
+    val lookId: Int? = null,
+    val lookName: String? = null,
 )
 
 /**
@@ -342,6 +352,9 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
                         cueId = it.cueId,
                         cueStackId = it.cueStackId,
                         effectId = it.effectId,
+                        layerId = it.layerId,
+                        lookId = it.lookId,
+                        lookName = it.lookName,
                     )
                 },
             )

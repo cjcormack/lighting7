@@ -132,6 +132,15 @@ class CueComposerTest {
         lookRegistry = registry,
     )
 
+    /** The cooked winner for one key, as `lookName@index`, or null when a local row won. */
+    private fun List<CueAssignmentResolver.Assignment>.winnerAt(
+        targetKey: String,
+        propertyName: String = "dimmer",
+    ): String? {
+        val row = single { it.targetKey == targetKey && it.propertyName == propertyName }
+        return row.layerWinner?.let { "${it.lookName}@${it.index}" }
+    }
+
     private fun sliderAt(
         rows: List<CueAssignmentResolver.Assignment>,
         targetKey: String,
@@ -683,5 +692,125 @@ class CueComposerTest {
                 fixtures, cueId, listOf(layer(withEffect, 0, targets = target, amount = 0.0)), registry,
             ).isEmpty(),
         )
+    }
+
+    // ─── which layer won ────────────────────────────────────────────────
+
+    @Test
+    fun `cook names the layer that produced each row`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val warm = look("Warm", lookRow(propertyName = "dimmer", value = "200"))
+        val cool = look("Cool", lookRow(propertyName = "dimmer", value = "40"))
+        val registry = registryOf(fixtures, warm, cool)
+
+        val rows = cook(
+            fixtures, registry,
+            listOf(
+                layer(warm, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                layer(cool, sortOrder = 1, targets = listOf(CueTargetDto("fixture", "hex-2"))),
+            ),
+        )
+
+        assertEquals("Warm@0", rows.winnerAt("hex-1"))
+        assertEquals("Cool@1", rows.winnerAt("hex-2"))
+    }
+
+    @Test
+    fun `the winner is the last layer to write a key, not the first`() {
+        // The trap this exists for: the accumulator is keyed by (target, property) and keeps the
+        // *insertion* position, so hex-1 still sits where Warm put it even after Cool overwrites
+        // it. Anything deriving the winner from output index reports Warm — wrong exactly in the
+        // overlapping case that matters. hex-2 is here to give the map a second slot, so an
+        // index-derived answer would be visibly off rather than coincidentally right.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val warm = look(
+            "Warm",
+            lookRow("fixture", "hex-1", "dimmer", "200"),
+            lookRow("fixture", "hex-2", "dimmer", "200"),
+        )
+        val cool = look("Cool", lookRow("fixture", "hex-1", "dimmer", "40"))
+        val registry = registryOf(fixtures, warm, cool)
+
+        val rows = cook(
+            fixtures, registry,
+            listOf(layer(warm, sortOrder = 0), layer(cool, sortOrder = 1)),
+        )
+
+        assertEquals("Cool@1", rows.winnerAt("hex-1"), "the later layer owns the key")
+        assertEquals("Warm@0", rows.winnerAt("hex-2"))
+        assertEquals(40u.toUByte(), sliderAt(rows, "hex-1"))
+    }
+
+    @Test
+    fun `a blend that keeps the value beneath still names the blending layer as the winner`() {
+        // MAX at 60 over 200 leaves 200 on the wire, but Cool is still the layer that decided it.
+        // Reporting Warm would tell the operator to go and edit a layer that is no longer in
+        // control of that key.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val warm = look("Warm", lookRow("fixture", "hex-1", "dimmer", "200"))
+        val cool = look("Cool", lookRow("fixture", "hex-1", "dimmer", "60"))
+        val registry = registryOf(fixtures, warm, cool)
+
+        val rows = cook(
+            fixtures, registry,
+            listOf(layer(warm, sortOrder = 0), layer(cool, sortOrder = 1, blendMode = "MAX")),
+        )
+
+        assertEquals(200u.toUByte(), sliderAt(rows, "hex-1"))
+        assertEquals("Cool@1", rows.winnerAt("hex-1"))
+    }
+
+    @Test
+    fun `a local row wins and reports no layer at all`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val warm = look("Warm", lookRow("fixture", "hex-1", "dimmer", "200"))
+        val registry = registryOf(fixtures, warm)
+
+        val rows = cook(
+            fixtures, registry,
+            listOf(layer(warm, sortOrder = 0)),
+            localRows = listOf(localSlider("hex-1", value = 111u)),
+        )
+
+        assertEquals(111u.toUByte(), sliderAt(rows, "hex-1"))
+        assertNull(rows.winnerAt("hex-1"), "a local row belongs to no layer")
+    }
+
+    @Test
+    fun `the winner index ranks contributing layers, skipping disabled and amount-zero ones`() {
+        // The index feeds ProgrammerStore's reserved seq band, where it has to be a dense rank over
+        // the layers that actually contribute — a gap would leave an unused seq and, worse, imply a
+        // layer is present when it is not.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val off = look("Off", lookRow("fixture", "hex-1", "dimmer", "1"))
+        val zero = look("Zero", lookRow("fixture", "hex-1", "dimmer", "2"))
+        val warm = look("Warm", lookRow("fixture", "hex-1", "dimmer", "200"))
+        val registry = registryOf(fixtures, off, zero, warm)
+
+        val rows = cook(
+            fixtures, registry,
+            listOf(
+                layer(off, sortOrder = 0, enabled = false),
+                layer(zero, sortOrder = 1, amount = 0.0),
+                layer(warm, sortOrder = 2),
+            ),
+        )
+
+        assertEquals("Warm@0", rows.winnerAt("hex-1"), "the only contributing layer ranks first")
+    }
+
+    @Test
+    fun `the winner rides on the row, so it survives the resolver's own ordering`() {
+        // cook's output order is insertion order, and LayerResolver picks the winning *assignment*
+        // per key before reading any field off it. Carrying the winner on the row rather than in a
+        // parallel map is what makes those two facts independent — there is no second structure to
+        // fall out of step with the assignments it describes.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val warm = look("Warm", lookRow(propertyName = "dimmer", value = "200"))
+        val registry = registryOf(fixtures, warm)
+
+        val rows = cook(fixtures, registry, listOf(layer(warm, sortOrder = 0)))
+        assertTrue(rows.all { it.layerWinner != null }, "every layer-produced row names its layer")
+        assertEquals(rows.map { it.targetKey }.distinct(), rows.map { it.targetKey })
     }
 }

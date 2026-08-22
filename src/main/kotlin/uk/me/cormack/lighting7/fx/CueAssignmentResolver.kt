@@ -85,6 +85,22 @@ class CueAssignmentResolver {
          * Update silently hardening a reference the operator never touched.
          */
         val paletteUuid: UUID? = null,
+        /**
+         * Which Look layer produced [value], when a layer did — see [CookWinner].
+         *
+         * Composition ignores it completely, exactly as it ignores [paletteUuid]: this is an
+         * attribution, not an input. Two consumers read it, and both need the *winning* layer
+         * rather than the set of layers that touched the key:
+         *
+         * - provenance, so "why is this fixture this colour?" can answer *Warm Wash* instead of
+         *   *a cue* ([LayerResolver.currentCueLayerLayerWinners]);
+         * - the programmer's layer stack, which stamps `ProgrammerStore.Slot.seq` from
+         *   [CookWinner.index] so layer order behaves like write order.
+         *
+         * Null for a cue's **local** rows and for anything built outside [CueComposer.cook] —
+         * local rows belong to no layer, which is the same thing as "not attributable to one".
+         */
+        val layerWinner: CookWinner? = null,
     )
 
     /**
