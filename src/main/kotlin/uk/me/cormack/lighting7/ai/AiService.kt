@@ -313,7 +313,7 @@ class AiService(
             DaoCue.find { DaoCues.project eq project.id }
                 .map {
                     val stackInfo = it.cueStack?.let { s -> " [stack: ${s.name}]" } ?: ""
-                    "**${it.name}** (id=${it.id.value}, ${it.palette.size} palette colours, ${it.presetApplications.count()} preset applications, ${it.adHocEffects.count()} ad-hoc effects)$stackInfo"
+                    "**${it.name}** (id=${it.id.value}, ${it.palette.size} palette colours, ${it.layers.count()} layers, ${it.adHocEffects.count()} ad-hoc effects)$stackInfo"
                 }
         }
         if (cues.isNotEmpty()) {

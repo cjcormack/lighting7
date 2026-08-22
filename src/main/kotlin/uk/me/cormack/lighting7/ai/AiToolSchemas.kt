@@ -293,7 +293,7 @@ internal val createCueTool = AnthropicToolDef(
             put("adHocEffects", buildJsonObject {
                 put("type", "array")
                 put("items", adHocEffectSchema)
-                put("description", "Ad-hoc effects not from a preset, stored as full effect definitions")
+                put("description", "Ad-hoc effects not from a Look layer, stored as full effect definitions")
             })
         })
         put("required", buildJsonArray { add("name") })

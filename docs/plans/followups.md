@@ -24,7 +24,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Trigger | FE | operator asks for it |
 | [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 4th surface renders `AssignmentHealth` |
 | [`FU-FE-USE-TARGET-PROPERTIES`](#fu-fe-use-target-properties) | Trigger | FE | a 6th consumer of fixture/group property lookup |
-| [`FU-FE-LOOK-WS-COMPAT-INVALIDATION`](#fu-fe-look-ws-compat-invalidation) | Trigger | FE | a stale compatibility list after another client edits the library |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
@@ -162,25 +161,6 @@ invalidation half of the same review *is* covered, in `store/looks.test.ts`.
 
 Worth doing because the failure is silent and destructive: nothing errors, the sheet closes, and
 the Look is empty.
-
-### `FU-FE-LOOK-WS-COMPAT-INVALIDATION`
-
-**A remote library edit leaves compatibility lists stale** · Trigger · Looks-and-layers session 2
-review, 2026-08-22
-
-`compatibleLookIds` is derived server-side and rides on the **fixture and group summaries**, not on
-the Look. The local mutations were fixed 2026-08-22 to invalidate `Fixture` / `GroupList` alongside
-`LookList` (pinned by three tests in `store/looks.test.ts`), but `startLooksBridge` — which handles
-the `lookListChanged` socket frame — still invalidates only `Look` / `LookList`. So a Look created
-or deleted on *another* client leaves this one's `LayerPicker` disabling every head for it and
-`LookTogglePicker` not offering it at all, until something unrelated refetches.
-
-**Trigger**: someone sees it — two desks, or a desk and a tablet, with the library open on one and
-a picker open on the other. Deliberately not fixed with the local half: widening the bridge makes
-**every** connected client refetch two lists on **any** library edit, and the fixture list is one of
-the larger payloads on the wire. The cheaper shape, if it comes to it, is to invalidate the two
-lists only on the frames that can move `compatibleLookIds` (create and delete, not a rename) — which
-needs the frame to say which, and today `lookListChanged` carries no payload at all.
 
 ---
 
@@ -1010,6 +990,19 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-08
 
+- `FU-FE-LOOK-WS-COMPAT-INVALIDATION` — `startLooksBridge` now invalidates `Fixture`/`GroupList`
+  alongside `Look`/`LookList`, so a Look created, copied or deleted on another client is offered
+  here immediately instead of being invisible to `LayerPicker` and `LookTogglePicker` until
+  something unrelated refetched. **Recorded as a Trigger item on a mistaken premise and closed the
+  same day.** The deferral rested on "widening the bridge makes every client refetch two lists on
+  *any* library edit" — which is wrong: `lookListChanged` fires only on CRUD and metadata changes,
+  because a *contents* edit goes through `republishForLookEdit` instead (`routes/projectLooks.kt`
+  says so where it chooses between them). CRUD is exactly the set that moves `compatibleLookIds`
+  membership and is far rarer than contents edits, so the cost that justified waiting was never
+  there. The same review found the local half of the original fix was also wrong — `copyLook` gated
+  on source-vs-target project, but those two lists belong to the *active* project and take no
+  project argument, so the main "copy into this project" flow skipped the invalidation it existed
+  to add.
 - `FU-LOOK-HEALTH-ARM-CLEANUP` — `AssignmentHealth.PaletteTypeMismatch` deleted, with its
   `describeAssignmentHealth` case, the two stale KDoc references, and the frontend descriptor entry
   and both TS union members, in one change. `MissingPaletteEntry` is now the only diagnosis a failed

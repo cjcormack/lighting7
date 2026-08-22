@@ -1,7 +1,23 @@
 # Looks and Layers — replacing FX Presets and named Palettes
 
-> **Status: sessions 1 (backend) and 2 (the Look library's frontend) landed 2026-08-21.
-> Sessions 3–4 remain — see §5.**
+> **Status: sessions 1 (backend), 2 (the Look library's frontend) and 3a (the programmer as a
+> layer stack) landed. Session 3b (the programmer's frontend) and session 4 remain — see §5.**
+>
+> **Session 3 split into 3a (backend) and 3b (frontend) on 2026-08-22**, the same call D4 made for
+> sessions 1 and 2, and for the same reason: the programmer route surface alone is ~3,000 lines
+> across nine files, and the frontend slice is a `LookStack` extraction plus the Program/Programmer
+> view merge plus the `ref:` read-path teardown. 3a is deliberately invisible to the desk —
+> `/looks/{id}/toggle` and `/looks/preview` keep their exact request and response shapes, and every
+> new wire field is additive with a default — so the two halves could land weeks apart without a
+> broken intermediate state.
+>
+> **The `ref:` grammar retirement and the flatten-layer route moved out of session 3 into session
+> 4's retirement pass**, joining the `models/palettes.kt` / `models/fxPresets.kt` /
+> `DaoCuePresetApplications` deletion that already lived there. `ProgrammerValue.Ref` is load-bearing
+> for `changedSinceInclude` — the mechanism that stops Mode A hardening every untouched `P1` row
+> into a literal — and Include-a-cue deliberately writes ref slots, so untangling it in the same
+> session that rewrote Update was the riskiest available combination. Grouping all the
+> reference-era removal in one pass is also tidier than splitting it across two sessions.
 > Supersedes the FX-preset and named-palette halves of
 > [programmer-redesign-proposal.md](completed/programmer-redesign-proposal.md) §3.5.
 > Not in production yet — migrate hard, no rollback shims.
@@ -87,6 +103,53 @@
 > 5. **`AssignmentHealth.PaletteTypeMismatch` lost its only producer.** A Look has no declared
 >    attribute type — families are derived — so "wrong-type reference" is no longer a coherent
 >    diagnosis. The arm is unreachable and should be deleted with the frontend health descriptor.
+
+> **Ten corrections to this plan, found while implementing 3a and applied:**
+>
+> 1. **§5's "an ordered layer list *above* the local slot stack" is backwards.** Layers materialise
+>    *below* every local slot — tail of the key's stack, and a `seq` beneath every real write. §3.3's
+>    "local always wins" and `CueComposer.cook`'s unconditional local overlay are the correct
+>    statement; §5 inverts it in one word, and building to that wording gives a programmer where
+>    adding a layer stomps the operator's busk.
+> 2. **§5 and §3.6's "retire the `preset:{id}` *and `include`* owners" — `INCLUDE` must survive.**
+>    It is the only thing preventing Mode A from hardening every untouched `P1`/`ref:` local row
+>    (`changedSinceInclude`, pinned by `ProgrammerIncludeTargetTest`). The structural diff replaces
+>    the *layer-list* half of Include's bookkeeping; the local-row half is still slot survival. Only
+>    `preset:{id}` retired.
+> 3. **§5's "`fxInstancesToCueChildren` collapses live instances per layer" was not possible as
+>    written.** `FxInstance` had no layer dimension, and `lookId` cannot serve because one cue may
+>    layer the same Look twice. A new `FxInstance.programmerLayerId` was required. In the end that
+>    function does not collapse layers at all — it *skips* layer-owned effects, because the layer is
+>    recorded and re-spawns its own.
+> 4. **§5's `plugins/PaletteSocket.kt` carries no named-palette traffic at all.** It is 100% the
+>    positional `P1`/`P2`/`P*` colour list, which §7 says survives. The traffic meant is in
+>    `plugins/ProgrammerSocket.kt`. As written, §5 invites deleting the surviving colour list.
+> 5. **§5's `routes/projectCuesMakeHard.kt` is mounted**, not unmounted (`routes/projectCues.kt`).
+>    Only the preset twin is unmounted. The merge therefore retires a *live* route.
+> 6. **§5 Session 1 records "Delete `buildCueAssignmentsForPreset`" as done. It was not** — it
+>    survived with two live callers until 3a deleted it.
+> 7. **`RecordSource.ALL` needed an explicit rule, and §5 had none.** `ALL` emits flattened rows and
+>    **no** layers; `TOUCHED` emits the layer list plus only the operator's own rows. Emitting both
+>    would put two representations of the same keys in one cue: the composed output would be
+>    identical, but the cue would be permanently detached from the Look, so a later Look edit would
+>    move the layer and be immediately overridden by the frozen row. Losing the touring behaviour
+>    silently is the worst available outcome.
+> 8. **A cue built entirely from layers writes no `INCLUDE` slots.** The gate that sets the include
+>    target counted only `entriesWritten` and `fxSpawned`, so including such a cue left Update
+>    falling through to the Mode B checklist, unable to write back the stack the operator had just
+>    included. `IncludeOutcome.layersInstalled` exists for that gate. Found by a test.
+> 9. **A latent migration bug.** `state/StateMigrations.kt` copies preset property assignments into
+>    `look_rows` verbatim, *without* the `ref:` fold it applies to cue assignments. A pre-migration
+>    preset row holding a `ref:` therefore lands as a **deferred look row holding a `ref:`** — which
+>    `validateLookRows` forbids and which reads as white. It cannot be represented (a deferred row
+>    has no target, and per-fixture palette resolution needs one), so the honest fix is to drop and
+>    count it. No such row exists on the dev desk, and `LooksMigrationTest` does not cover it. Fix in
+>    session 4 with the rest of the migration's reference handling.
+> 10. **A pre-existing gap §3.1 implies works: a Look's element row composes nowhere.**
+>     `DaoLookRows.elementKey` exists, §6 migrates element rows and §9.7 seeds one — but
+>     `CueComposer.applyLayer` drops every element row, and `buildCueAssignmentsForCue` has no
+>     element path either. Not a session-3 regression; it deserves an explicit follow-up rather than
+>     an implied capability.
 
 ## 1. Context
 
@@ -518,7 +581,61 @@ Frontend:
   needs a forced recompile or every serialization test fails with `NoClassDefFoundError` while the
   build reports success. Tracked as `FU-LOOK-HEALTH-ARM-CLEANUP`.
 
-### Session 3 — Programmer as a layer stack; the view merge
+### Session 3a — Programmer as a layer stack (backend) — **done**
+
+Landed as five commits. What differs from the plan below is recorded in the ten corrections at the
+head of this document; the design that replaced it is documented in the code, principally
+`fx/ProgrammerLayerStack.kt`'s class doc and `ProgrammerStore.LAYER_SEQ_BASE`.
+
+The shape of it: the programmer holds an ordered `List<ProgrammerLayer>` in `ProgrammerStore`, and
+every mutation re-cooks the stack and **materialises** the result into slots under one new
+`ProgrammerOwner.LAYERS`, rather than teaching the 50 Hz read path about layers. The deciding reason
+is not the per-tick cost — `composeProgrammerOver` only runs for keys a running effect covers — but
+that *everything else* about the programmer is answered by cold-path coverage oracles
+(`coversFixture`, `activePropertiesByFixture`, `activeKeys`, `entries`), each of which would have had
+to become layer-aware, and each of which needs the cooked key set anyway.
+
+"A local write always wins, whichever happened first" needs **two** mechanisms, and neither implies
+the other: tail insertion in `withSlot` (because `get` returns the stack top and ignores `seq`, and
+`SliderTarget`/`SettingTarget` take the property entry unconditionally), and a reserved negative
+`seq` band (because three of the four overrides also arbitrate across *granularities* by recency).
+The band is `LAYER_SEQ_BASE + layerIndex`, not a flat sentinel: a flat value would produce the first
+`seq` tie this store has ever held, and the two colour-bundling sites break a tie in **opposite**
+directions — `SliderTarget` prefers an explicit `white` row, `ColourTarget` prefers the Colour
+entry's bundled component — while both write the same DMX channel.
+`ProgrammerLayerSlotCompositionTest` pins that the two paths agree; under a `seq = 0` mutant it
+reports 10 and 250 for one channel.
+
+Also here: effect priorities derived from layer index, so a **reorder re-ranks in place rather than
+respawning** (a respawn restarts every effect's phase, mid-drag); Record saves the stack as layers
+(§7 above); Include installs a cue's layers as programmer layers, closing the gap §10 recorded;
+Update diffs the stack structurally against a baseline taken at Include; `CueEditSession` snapshots
+the layer list so Discard reverts a reorder; and the entire preset-toggle apparatus is deleted —
+`presetToggleStates`, `presetPreviewStates`, `swapPresetPreviewSlot`, `togglePresetOnTargets`,
+`applyPresetProgrammerWrites`, `ProgrammerOwner.preset` and `buildCueAssignmentsForPreset`.
+
+The Look editor's live preview is a layer holding an **inline** snapshot, because it previews an
+*unsaved* draft that `LookRegistry` has never heard of; `CueComposer.cook` and `cookEffects` take an
+optional `resolveLook` for exactly that one caller.
+
+### Session 3b — the programmer's frontend
+
+- The `LookStack` component (§4.1), shared by the cue editor and the programmer. `LayersPane` is
+  most of it already; what it lacks is a programmer instance driven by the new
+  `programmer.addLayer` / `removeLayer` / `moveLayer` / `patchLayer` ops and the broadcast
+  `programmer.layerState`.
+- `/programmer` redirects into Program; `FxSheet` folds in as a tab.
+- The busking pads move from `POST /looks/{id}/toggle` to explicit layer ops. The pads' active ring
+  currently matches `FxInstance.presetId == lookId`; nothing stamps `presetId` any more, so it must
+  match the new `lookId` field on the FX-list DTO instead. **This is the one frontend-visible
+  regression 3a leaves**, and it is strictly better than keeping the `presetId = lookId` lie alive.
+- Delete `includedTargetIsReadOnly` and its guard — Update-back into a Look works now.
+- A `RecordLookSheet` for `POST /programmer/record-look`, which is what finally lets the library
+  create a **bound** Look; its Recorded section still says it cannot. `components/programmer/
+  maskPicker.tsx` already has the `MaskPicker` the explicit mask needs, and this is the obvious
+  consumer for `lib/attributeFamily.ts`'s caller-less `FAMILY_COLUMNS` / `familyForCategory`.
+
+### Session 3 — the original plan, for the record
 
 Backend:
 - `ProgrammerStore`: ordered layer list above the local slot stack; retire the `preset:{id}`
@@ -552,6 +669,26 @@ Frontend:
   `isPaletteRefValue`; `PaletteRefBadge` becomes a layer chip.
 
 ### Session 4 — Blend/amount UX, remaining renderers, retirement, docs
+
+**Now also carries the reference-era retirement, moved here from session 3** (see the header):
+the `ref:` value grammar (`fx/PaletteRef.kt`, `fx/PaletteResolver.kt`, `ProgrammerValue.Ref`,
+`CueAssignmentResolver.Assignment.paletteUuid`, the two `AssignmentHealth` arms,
+`PersistedFixtureReferenceValidator.validatePaletteReference`, the `ref:` half of
+`activeCuesReferencingLook`, and the palette arm of Mode A Update), and the merge of
+`projectCuesMakeHard.kt` + `projectFxPresetsMakeHard.kt` into one **flatten-layer** route.
+
+Two notes for whoever picks that up. The **no-nesting guard must survive the grammar**:
+`validateLookRows` rejects a `ref:` in a Look row, `LookRoutesTest` pins it, and that rejection *is*
+the non-recursion guarantee `FU-LOOK-NESTED` depends on — keep it as an inlined shape check.
+And the migration's raw `removePrefix("ref:")` is the **upgrade path**, not dead code.
+
+The flatten-layer route lands on bare ground: there is no test anywhere for any make-hard route, and
+the cue route's group-expansion rule (preserving `sortOrder` / `fadeDurationMs` / `moveInDark`) plus
+its `fixtureCategoryFor`-not-catalogue handling of `position` are both undertested behaviours being
+re-implemented. Also fix its hardcoded `withCurrentProject(state, "current", …)`, which ignores the
+URL's `projectId`.
+
+
 
 Frontend:
 - Per-layer blend / amount / mask / stomp controls.
@@ -685,7 +822,31 @@ Status as of session 1: ✅ done · ⬜ outstanding.
    layer plus `reorderCueLayers` directly, rather than by a fake drag that would prove only that
    the mock works. And the amount control is pinned at both ends — a retype to the current value
    sends nothing — because every commit PATCHes the whole cue.
-10. ⬜ **On the rig** (`docs/plans/manual-validation.md`) — edit a Look while a cue depending on it
+10. ✅ **Session 3a** — `./gradlew :test`, split by package. **The documented two-group split is not
+    the whole suite**: `routes.*`+`plugins.*` and `fx.*`/`state.*`/`sync.*`/`models.*`/`midi.*`/`ai.*`
+    leave out `auth.*`, `dmx.*`, `fixture.*` (22 test files), `perf.*`, `scripts.*`, `show.*` and
+    `update.*` — another ~334 tests. Use three groups, not two.
+
+    New coverage: `ProgrammerLayerSlotCompositionTest` (15 — all four `composeProgrammerOver`
+    overrides, both W/A/UV bundling directions, sideband-beats-layer, the `Long.MIN_VALUE` sentinel
+    guard; **mutation-validated** against `seq = 0`), `ProgrammerLayerStackTest` (22),
+    `ProgrammerLayerStackEffectsTest` (7 — including that a reorder changes no `FxInstance.id`),
+    `LookRecordTest` (12), plus layer cases across the Include, Record and Update route tests and
+    `CueComposerTest`'s winner tests.
+
+    Tests **deleted** rather than ported, each because its subject is gone: `PresetPreviewSlotTest`
+    (contract carried by the stack's preview tests, `assertSame` included),
+    `BuildCueAssignmentsForPresetTest` (20 — `CueComposerTest` covers the same ground for layers),
+    and three per-preset-owner cases in `ProgrammerOwnershipCollisionTest` — a layer stack cooks
+    every layer into **one** slot per key, so "two presets sharing a property release
+    independently" has no equivalent and no stale per-layer bookkeeping can strand an entry. The
+    locate-vs-layer interaction *was* ported, because `LocateManager` does keep per-target records.
+
+    `LooksMigrationTest`'s two "before the migration" computations are now **frozen goldens** rather
+    than live calls to the deleted `buildCueAssignmentsForPreset`. That is the right shape for a
+    golden test anyway: it states the old behaviour as a fact to be preserved rather than
+    re-deriving it from code that can no longer be wrong.
+11. ⬜ **On the rig** (`docs/plans/manual-validation.md`) — edit a Look while a cue depending on it
     is live and confirm the change moves without re-firing the cue. That is use-case 1's payoff, and
     `FU-MANUAL-PALETTE-TOURING` records it as never yet seen on hardware. `FU-MANUAL-LAYER-PRECEDENCE`
     is the new companion check: layered intensity is later-wins, which is the change an operator is
