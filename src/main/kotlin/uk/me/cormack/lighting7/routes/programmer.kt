@@ -59,7 +59,8 @@ internal data class ProgrammerClearOutcome(val entryCount: Int, val effectsClear
  *
  * - bookkeeping first: the store sweep releases every owner's entries, so running the
  *   subsystems' own release paths afterwards would double-release, and leaving their
- *   bookkeeping would desync the toggles;
+ *   bookkeeping would desync the toggles — and, for the Look-layer stack, would let the next
+ *   recook put the whole look back on stage after the operator cleared it;
  * - band FX before the store sweep: removing them restores the cascade under their targets
  *   while the programmer still holds its values, so the single [FxEngine.clearProgrammerAll]
  *   republish that follows lands every affected key once instead of twice.
@@ -69,7 +70,7 @@ internal data class ProgrammerClearOutcome(val entryCount: Int, val effectsClear
  */
 internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): ProgrammerClearOutcome {
     state.show.locateManager.reset()
-    resetPresetProgrammerBookkeeping()
+    state.show.programmerLayerStack.reset()
     val effectsCleared = state.show.fxEngine.removeProgrammerBandEffects()
     val entryCount = state.show.fxEngine.clearProgrammerAll(fadeMs)
     return ProgrammerClearOutcome(entryCount, effectsCleared)

@@ -17,6 +17,10 @@ class ProgrammerStoreTest {
 
     private val web = ProgrammerOwner.WEB
     private val locate = ProgrammerOwner.LOCATE
+    // A third distinct owner. Was `ProgrammerOwner.preset(7)` until the Look-layer stack replaced
+    // per-preset owners; INCLUDE serves the same purpose here — these tests are about the slot
+    // stack's owner semantics, not about who the owners happen to be.
+    private val include = ProgrammerOwner.INCLUDE
 
     private fun slider(v: Int) = CueAssignmentResolver.PropertyValue.Slider(v.toUByte())
 
@@ -115,14 +119,13 @@ class ProgrammerStoreTest {
     @Test
     fun `three owners release in any order and fall back by recency`() {
         val store = ProgrammerStore()
-        val preset = ProgrammerOwner.preset(7)
         store.put(web, "hex-1", "dimmer", slider(10))
-        store.put(preset, "hex-1", "dimmer", slider(20))
+        store.put(include, "hex-1", "dimmer", slider(20))
         store.put(locate, "hex-1", "dimmer", slider(30))
         assertEquals(30u.toUByte(), store.topSlider("hex-1", "dimmer"))
 
         // Release the middle owner first: top is untouched.
-        store.clear(preset, "hex-1", "dimmer")
+        store.clear(include, "hex-1", "dimmer")
         assertEquals(30u.toUByte(), store.topSlider("hex-1", "dimmer"))
 
         store.clear(locate, "hex-1", "dimmer")
@@ -162,45 +165,30 @@ class ProgrammerStoreTest {
             slider(255),
             (store.valueFor(locate, "hex-1", "dimmer") as ProgrammerValue.Hard).resolved,
         )
-        assertNull(store.valueFor(ProgrammerOwner.preset(3), "hex-1", "dimmer"))
+        assertNull(store.valueFor(ProgrammerOwner.FLASH, "hex-1", "dimmer"))
     }
 
     @Test
     fun `clearOwner sweeps only that owner's entries across properties and sideband`() {
         val store = ProgrammerStore()
-        val preset = ProgrammerOwner.preset(7)
-        store.put(preset, "hex-1", "dimmer", slider(100))
-        store.put(preset, "hex-2", "dimmer", slider(110))
-        store.put(web, "hex-1", "dimmer", slider(40))   // stacked above the preset
+        store.put(include, "hex-1", "dimmer", slider(100))
+        store.put(include, "hex-2", "dimmer", slider(110))
+        store.put(web, "hex-1", "dimmer", slider(40))   // stacked above the include slot
         store.put(web, "hex-3", "dimmer", slider(50))
-        store.putChannel(preset, 0, 9, 70u)
+        store.putChannel(include, 0, 9, 70u)
 
-        val swept = store.clearOwner(preset)
+        val swept = store.clearOwner(include)
         assertEquals(3, swept)
         assertEquals(40u.toUByte(), store.topSlider("hex-1", "dimmer"), "web survives the sweep")
-        assertNull(store.get("hex-2", "dimmer"), "preset-only entry fully released")
+        assertNull(store.get("hex-2", "dimmer"), "include-only entry fully released")
         assertEquals(50u.toUByte(), store.topSlider("hex-3", "dimmer"))
         assertNull(store.getChannel(0, 9))
 
-        // No stranded preset entry can resurface once web clears.
+        // No stranded entry can resurface once web clears.
         store.clear(web, "hex-1", "dimmer")
         assertNull(store.get("hex-1", "dimmer"))
-        assertEquals(0, store.clearOwner(preset), "second sweep finds nothing")
+        assertEquals(0, store.clearOwner(include), "second sweep finds nothing")
     }
-
-    @Test
-    fun `distinct preset owners do not collide`() {
-        val store = ProgrammerStore()
-        store.put(ProgrammerOwner.preset(1), "hex-1", "dimmer", slider(100))
-        store.put(ProgrammerOwner.preset(2), "hex-1", "dimmer", slider(200))
-        store.clear(ProgrammerOwner.preset(1), "hex-1", "dimmer")
-        assertEquals(
-            200u.toUByte(), store.topSlider("hex-1", "dimmer"),
-            "preset 2's entry survives preset 1's release",
-        )
-    }
-
-    // --- Touched flag ---
 
     @Test
     fun `touched is sticky per slot and unpark slots are untouched`() {

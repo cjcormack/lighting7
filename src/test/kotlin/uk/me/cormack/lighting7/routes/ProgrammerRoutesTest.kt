@@ -10,10 +10,12 @@ import org.junit.Test
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
-import uk.me.cormack.lighting7.models.FxPresetPropertyAssignmentDto
 import uk.me.cormack.lighting7.plugins.UpdateChannelInMessage
 import uk.me.cormack.lighting7.plugins.handleUpdateChannel
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
+import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
+import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
@@ -90,12 +92,23 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
             LocateTestSupport.toggleLocate(client, "fixture", "hex-clr")
                 .body<ToggleLocateResponse>().active,
         )
-        val presetId = 7301
-        val assignments = listOf(FxPresetPropertyAssignmentDto(propertyName = "strobe", value = "0"))
-        val targets = listOf(TogglePresetTarget(type = "fixture", key = "hex-clr"))
-        togglePresetOnTargets(state, presetId, emptyList(), assignments, targets, null)
+        // A Look applied as a programmer layer, which is what the pads now do.
+        val look = client.post("/api/rest/project/$projectId/looks") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLookRequest(
+                    name = "Strobe off",
+                    rows = listOf(LookRowDto(DEFERRED_TARGET_TYPE, "", "strobe", "0")),
+                )
+            )
+        }.body<LookDetails>()
+        val targets = listOf(CueTargetDto("fixture", "hex-clr"))
+        state.show.programmerLayerStack.toggle(
+            look.id, java.util.UUID.fromString(look.uuid), look.name, targets,
+        )
 
         assertTrue(state.show.programmerStore.size > 0)
+        assertEquals(1, state.show.programmerStore.layers.size)
 
         val response: ProgrammerClearAllResponse =
             client.post("/api/rest/programmer/clear-all").body()
@@ -109,10 +122,14 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         )
         assertNull(programmerValue(state, "hex-clr", "dimmer"))
 
-        // The preset's bookkeeping was reset too: the next toggle applies cleanly rather
-        // than believing it is still active.
-        val reapplied = togglePresetOnTargets(state, presetId, emptyList(), assignments, targets, null)
-        assertEquals("applied", reapplied.action)
+        // The layer stack went with the slots, so the next toggle applies cleanly rather than
+        // believing the Look is still on — and, more importantly, nothing is left to recook the
+        // cleared values back onto the stage by itself.
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "the stack was cleared too")
+        val (action, _) = state.show.programmerLayerStack.toggle(
+            look.id, java.util.UUID.fromString(look.uuid), look.name, targets,
+        )
+        assertEquals("applied", action)
     }
 
     @Test

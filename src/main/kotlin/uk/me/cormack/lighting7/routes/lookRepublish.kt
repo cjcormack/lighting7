@@ -85,6 +85,12 @@ internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOu
         }
     }
 
+    // 2.5 Re-cook the programmer's layer stack, if any of its layers name this Look. Before
+    //     step 3 for exactly the reason step 2 is: `publishCueLayerToControllers` composes the
+    //     programmer *over* the cue layer, so stale layer slots would transmit the old value and be
+    //     corrected a frame later — a visible flicker on the very fixtures being edited.
+    val layerKeys = state.show.programmerLayerStack.recookIfReferences(lookUuid)
+
     // 3. Rebuild the live cues that depend on this Look, then one republish for all of them.
     val activeCueIds = engine.activeCueAssignmentIds()
     val referencing = if (activeCueIds.isEmpty()) {
@@ -103,15 +109,17 @@ internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOu
     //    emits provenance itself, but only when it has keys — so cover the empty case here rather
     //    than emitting twice when it doesn't. (emitProvenanceUpdate coalesces, so a double call is
     //    harmless in a running engine; being exact keeps the intent readable.)
-    if (rewrittenKeys.isEmpty()) {
+    val programmerKeys = rewrittenKeys + layerKeys
+    if (programmerKeys.isEmpty()) {
         engine.emitProvenanceUpdate()
     } else {
-        engine.republishProgrammerKeys(rewrittenKeys)
+        engine.republishProgrammerKeys(programmerKeys)
     }
 
     logger.info(
-        "look {} edited: {} programmer key(s) refreshed, {} uncovered, {} of {} active cue(s) republished",
-        lookUuid, rewrittenKeys.size, uncovered, republished, activeCueIds.size,
+        "look {} edited: {} programmer key(s) refreshed ({} from layers), {} uncovered, " +
+            "{} of {} active cue(s) republished",
+        lookUuid, programmerKeys.size, layerKeys.size, uncovered, republished, activeCueIds.size,
     )
     return LookRepublishOutcome(
         programmerKeysRefreshed = rewrittenKeys.size,

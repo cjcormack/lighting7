@@ -2,6 +2,10 @@ package uk.me.cormack.lighting7.routes
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import io.ktor.client.statement.HttpResponse
 import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.core.eq
@@ -13,7 +17,6 @@ import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatches
-import uk.me.cormack.lighting7.models.FxPresetPropertyAssignmentDto
 import uk.me.cormack.lighting7.plugins.UpdateChannelInMessage
 import uk.me.cormack.lighting7.plugins.handleUpdateChannel
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
@@ -84,69 +87,57 @@ class ProgrammerOwnershipCollisionTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `releasing a locate keeps a preset's write and its toggle-off still works`() = testApplication {
+    fun `releasing a locate reveals a programmer layer instead of wiping it`() = testApplication {
+        // The layer-stack heir to three tests that used to drive `togglePresetOnTargets`. Two of
+        // them are gone rather than ported, because their subject was the per-preset owner: a
+        // layer stack cooks every layer into **one** slot per key, so "two presets sharing a
+        // property release independently" has no equivalent, and neither does a stale per-preset
+        // release stranding entries — there is no per-layer bookkeeping left to go stale.
+        //
+        // What does survive, and matters more, is this: LOCATE writes above LAYERS, and releasing
+        // it must fall back to the layer rather than to baseline. That is the same bug the preset
+        // version guarded, one owner along.
         mountTestApp(state)
         val client = jsonClient()
-        seedHex("hex-preset", startChannel = 1)
+        seedHex("hex-layer", startChannel = 1)
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
 
-        val presetId = 7101
-        val assignments = listOf(FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "120"))
-        val targets = listOf(TogglePresetTarget(type = "fixture", key = "hex-preset"))
+        val look = client.post("/api/rest/project/$projectId/looks") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLookRequest(
+                    name = "Warm",
+                    rows = listOf(
+                        uk.me.cormack.lighting7.models.LookRowDto(
+                            uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE, "", "dimmer", "120",
+                        ),
+                    ),
+                )
+            )
+        }.body<LookDetails>()
 
-        val applied = togglePresetOnTargets(
-            state, presetId,
-            presetEffects = emptyList(),
-            presetPropertyAssignments = assignments,
-            targets = targets,
-            beatDivisionOverride = null,
+        val (layer, _) = state.show.programmerLayerStack.add(
+            lookId = look.id,
+            lookUuid = java.util.UUID.fromString(look.uuid),
+            lookName = look.name,
+            targets = listOf(uk.me.cormack.lighting7.models.CueTargetDto("fixture", "hex-layer")),
         )
-        assertEquals("applied", applied.action)
-        assertEquals(120u.toUByte(), programmerChannel(state, 0, 1), "preset asserted the dimmer")
+        assertEquals(120u.toUByte(), programmerChannel(state, 0, 1), "the layer asserted the dimmer")
 
-        assertTrue(toggle(client, "fixture", "hex-preset").body<ToggleLocateResponse>().active)
-        assertEquals(255u.toUByte(), programmerChannel(state, 0, 1), "locate on top of the preset write")
+        assertTrue(toggle(client, "fixture", "hex-layer").body<ToggleLocateResponse>().active)
+        assertEquals(255u.toUByte(), programmerChannel(state, 0, 1), "locate on top of the layer")
 
-        assertFalse(toggle(client, "fixture", "hex-preset").body<ToggleLocateResponse>().active)
-        assertEquals(120u.toUByte(), programmerChannel(state, 0, 1), "preset write survives the locate release")
+        assertFalse(toggle(client, "fixture", "hex-layer").body<ToggleLocateResponse>().active)
+        assertEquals(
+            120u.toUByte(), programmerChannel(state, 0, 1),
+            "the layer's contribution survives the locate release",
+        )
         assertEquals(120u.toUByte(), controller.getEffectiveValue(1))
 
-        // The bookkeeping still marks the preset active, and — the second half of the old
-        // bug — its toggle-off must actually release the write rather than no-op.
-        val removed = togglePresetOnTargets(
-            state, presetId,
-            presetEffects = emptyList(),
-            presetPropertyAssignments = assignments,
-            targets = targets,
-            beatDivisionOverride = null,
-        )
-        assertEquals("removed", removed.action)
-        assertNull(programmerChannel(state, 0, 1), "preset toggle-off releases its write")
-        assertEquals(0u.toUByte(), controller.getEffectiveValue(1), "channel cascades to baseline")
-    }
-
-    @Test
-    fun `two presets sharing a property release independently`() = testApplication {
-        mountTestApp(state)
-        seedHex("hex-two", startChannel = 1)
-
-        val targets = listOf(TogglePresetTarget(type = "fixture", key = "hex-two"))
-        val dimA = listOf(FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "100"))
-        val dimB = listOf(FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "200"))
-
-        togglePresetOnTargets(state, 8001, emptyList(), dimA, targets, null)
-        togglePresetOnTargets(state, 8002, emptyList(), dimB, targets, null)
-        assertEquals(200u.toUByte(), programmerChannel(state, 0, 1), "most recent preset wins")
-
-        val removedB = togglePresetOnTargets(state, 8002, emptyList(), dimB, targets, null)
-        assertEquals("removed", removedB.action)
-        assertEquals(
-            100u.toUByte(), programmerChannel(state, 0, 1),
-            "first preset's write survives the second's release",
-        )
-
-        togglePresetOnTargets(state, 8001, emptyList(), dimA, targets, null)
+        // And removing the layer really releases it, rather than leaving it stranded.
+        state.show.programmerLayerStack.remove(layer.layerId)
         assertNull(programmerChannel(state, 0, 1))
+        assertEquals(0u.toUByte(), controller.getEffectiveValue(1), "channel cascades to baseline")
     }
 
     @Test
@@ -157,7 +148,9 @@ class ProgrammerOwnershipCollisionTest : RouteIntegrationTest() {
         LocateTestSupport.seedGroup(state, projectId, "programmer-band", "hex-g1", "hex-g2")
         val engine = state.show.fxEngine
         val group = state.show.fixtures.untypedGroup("programmer-band")
-        val owner = ProgrammerOwner.preset(9001)
+        // Any owner that is not WEB; this test is about the group write/clear pairing, not the
+        // owner. Was a per-preset owner before the Look-layer stack retired those.
+        val owner = ProgrammerOwner.INCLUDE
 
         busk(0, 1, 40u)
         engine.writeProgrammerGroupProperty(owner, group, "dimmer", CueAssignmentResolver.PropertyValue.Slider(90u))
@@ -174,37 +167,12 @@ class ProgrammerOwnershipCollisionTest : RouteIntegrationTest() {
         assertNull(programmerChannel(state, 0, 20), "member without other owners fully released")
     }
 
-    @Test
-    fun `stale preset release sweeps its stranded entries instead of ghosting`() = testApplication {
-        mountTestApp(state)
-        seedHex("hex-ghost", startChannel = 1)
-        val store = state.show.programmerStore
-
-        val presetId = 7102
-        val assignments = listOf(FxPresetPropertyAssignmentDto(propertyName = "dimmer", value = "120"))
-        val targets = listOf(TogglePresetTarget(type = "fixture", key = "hex-ghost"))
-        togglePresetOnTargets(state, presetId, emptyList(), assignments, targets, null)
-        assertEquals(120u.toUByte(), programmerChannel(state, 0, 1))
-
-        // Rekey the fixture out from under the recorded write, as the patch editor would.
-        renamePatch("hex-ghost", "hex-ghost-renamed")
-
-        // Toggle-off can no longer resolve the recorded key; the owner sweep must release
-        // the stranded entry rather than leaving it to pollute Record / state forever.
-        val removed = togglePresetOnTargets(state, presetId, emptyList(), assignments, targets, null)
-        assertEquals("removed", removed.action)
-        assertNull(programmerValue(state, "hex-ghost", "dimmer"), "stranded preset entry swept")
-        assertEquals(0, store.size, "no entry survives the sweep")
-
-        // And a fresh busk/release cycle on the same channel leaves nothing behind.
-        busk(0, 1, 60u)
-        state.show.fxEngine.clearProgrammerProperty(
-            ProgrammerOwner.WEB,
-            state.show.fixtures.untypedFixture("hex-ghost-renamed"),
-            "dimmer",
-        )
-        assertNull(programmerChannel(state, 0, 1), "no ghost value resurfaces once busking clears")
-    }
+    // `stale preset release sweeps its stranded entries instead of ghosting` lived here. Its
+    // subject was the per-preset owner's recorded-write bookkeeping, which could strand an entry
+    // when a fixture was rekeyed under it. A layer keeps no such record: every recook rebuilds the
+    // whole LAYERS contribution from the stack and `putLayerSlots` releases any key the new set
+    // does not name, so a rekey cannot leave a ghost behind. The locate equivalent below still
+    // matters, because LocateManager *does* keep per-target records.
 
     @Test
     fun `stale locate records are swept once nothing is located`() = testApplication {

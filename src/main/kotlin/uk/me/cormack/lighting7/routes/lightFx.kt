@@ -355,6 +355,18 @@ data class EffectDto(
     val elementFilter: String? = null,
     val stepTiming: Boolean = false,
     val presetId: Int? = null,
+    /**
+     * The Look this effect came from, when it came from one.
+     *
+     * Separate from [presetId], which names a `DaoFxPreset` — the two are ids in different tables.
+     * The Look toggle used to stamp the Look id into `presetId`, which is what made the busking
+     * pads' active ring work and `captureCurrentState` mint a preset application naming an
+     * unrelated preset. Now that a Look reaches the programmer as a layer, `presetId` stays null and
+     * this is the field to match on.
+     */
+    val lookId: Int? = null,
+    /** The programmer layer that spawned this effect, when one did. */
+    val programmerLayerId: Int? = null,
     val cueId: Int? = null,
     val timingSource: String = "BEAT",
     /** True when this effect sits in the programmer's reserved priority band. */
@@ -413,6 +425,8 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
         elementFilter.name else null,
     stepTiming = stepTiming,
     presetId = presetId,
+    lookId = lookId,
+    programmerLayerId = programmerLayerId,
     cueId = cueId,
     timingSource = timingSource.name,
     programmerOwned = FxEngine.isProgrammerFxPriority(priority),

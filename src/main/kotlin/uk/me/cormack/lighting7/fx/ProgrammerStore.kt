@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -73,12 +74,6 @@ value class ProgrammerOwner(val id: String) {
          */
         val LAYERS = ProgrammerOwner("layers")
 
-        /**
-         * FX preset toggles and editor live previews (`routes/projectFxPresets.kt`). One
-         * owner per preset id, so toggling one preset off cannot release another preset's
-         * entry on a shared property. Previews pass their synthetic negative id.
-         */
-        fun preset(presetId: Int) = ProgrammerOwner("preset:$presetId")
     }
 
     override fun toString(): String = id
@@ -315,6 +310,73 @@ class ProgrammerStore {
     fun clearIncludeTargetForLook(lookId: Int) {
         _lastIncludedTarget.value = _lastIncludedTarget.value?.takeIf { it.lookId != lookId }
     }
+
+    // ── The Look-layer stack ────────────────────────────────────────────────
+
+    /**
+     * The programmer's ordered Look layers, most-significant last (see [ProgrammerLayer]).
+     *
+     * **Held here rather than in [ProgrammerLayerStack] on purpose.** [clearAll] already drops
+     * [lastIncludedTarget] because surviving bookkeeping offers an operation that silently does
+     * nothing; a layer list living outside the store would be a second thing Clear could forget,
+     * and forgetting it is worse than forgetting an include target — Clear would wipe the
+     * materialised slots while the layers survived to resurrect them on the next recook, so the
+     * stage would light up again by itself.
+     *
+     * The store keeps no opinion about what the list *means*: cooking it, materialising it and
+     * spawning its effects all belong to [ProgrammerLayerStack], which is where the dependencies
+     * on `Fixtures`, `LookRegistry` and `FxEngine` live. This is storage.
+     *
+     * Not on any hot path — the tick reads the materialised slots, never this — so a volatile
+     * reference plus a mutation lock is enough.
+     */
+    @Volatile
+    var layers: List<ProgrammerLayer> = emptyList()
+        private set
+
+    /**
+     * The layer list as it stood at the last Include — Update's structural diff baseline.
+     *
+     * The layer-stack counterpart to the `INCLUDE` slot's role for local rows: a slot survives
+     * underneath a later write so Update can ask "did the operator change this?", and this answers
+     * the same question for the stack's *shape*. Both are needed, because reordering a layer changes
+     * no slot's value and editing a row changes no layer.
+     *
+     * Cleared by [clearAll] along with [lastIncludedTarget] and [layers], for the same reason: a
+     * baseline outliving the thing it describes would make the next Update diff against a stack that
+     * no longer exists.
+     */
+    @Volatile
+    var includedLayerSnapshot: List<ProgrammerLayer> = emptyList()
+
+    private val layersLock = Any()
+    private val layerIdCounter = AtomicInteger(1)
+
+    /**
+     * A fresh in-memory layer id. Monotonic for the life of the process and deliberately unrelated
+     * to any `DaoCueLayer` id: a programmer layer has no row, and two layers over the same Look
+     * must be distinguishable.
+     */
+    fun mintLayerId(): Int = layerIdCounter.getAndIncrement()
+
+    /**
+     * Mutate the layer list atomically, returning the new list and whatever [transform] computed.
+     *
+     * Serialised so that decide-and-install cannot interleave — the same guarantee
+     * `swapPresetPreviewSlot` got from `ConcurrentHashMap.compute`, which this replaces. The caller
+     * recooks from the returned list rather than re-reading [layers], so a concurrent mutation
+     * can't make it cook a list nobody asked for.
+     *
+     * **Lock order is `layersLock` → `FxEngine.cueAssignmentsLock`, never the reverse**, and
+     * nothing inside `FxEngine` calls back into the stack. Cooking must happen *outside* this lock
+     * anyway, because `loadLookSnapshot` opens its own transaction.
+     */
+    fun <T> mutateLayers(transform: (List<ProgrammerLayer>) -> Pair<List<ProgrammerLayer>, T>): Pair<List<ProgrammerLayer>, T> =
+        synchronized(layersLock) {
+            val (next, extra) = transform(layers)
+            layers = next
+            next to extra
+        }
 
     private val epochCounter = AtomicLong(0)
 
@@ -593,6 +655,10 @@ class ProgrammerStore {
         properties.clear()
         channels.clear()
         _lastIncludedTarget.value = null
+        // The stack goes with the slots it produced. Leaving it would let the next recook — any
+        // Look edit, anywhere — put the whole look back on stage after the operator cleared it.
+        synchronized(layersLock) { layers = emptyList() }
+        includedLayerSnapshot = emptyList()
         bumpEpoch()
     }
 

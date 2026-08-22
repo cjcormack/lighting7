@@ -136,12 +136,13 @@ class AiTools(private val state: State) {
                     key = obj["key"]!!.jsonPrimitive.content,
                 )
             }
-            val result = togglePresetOnTargets(
-                state, lookId, effects,
-                presetPropertyAssignments = emptyList(),
-                toggleTargets, null,
+            val (_, effectCount) = state.show.programmerLayerStack.toggle(
+                lookId = lookId,
+                lookUuid = transaction(state.database) { look.uuid },
+                lookName = name,
+                targets = toggleTargets.map { CueTargetDto(it.type, it.key) },
             )
-            appliedCount = result.effectCount
+            appliedCount = effectCount
         }
 
         return ToolExecutionResult(
@@ -162,28 +163,34 @@ class AiTools(private val state: State) {
         val targetsArray = input["targets"]?.jsonArray ?: return errorResult("Missing 'targets'")
         val beatDivision = input["beatDivision"]?.jsonPrimitive?.doubleOrNull
 
-        val lookData = transaction(state.database) { loadLookToggleData(lookId) }
-            ?: return errorResult("Look not found: $lookId")
+        val look = transaction(state.database) {
+            DaoLook.findById(lookId)?.let { it.uuid to it.name }
+        } ?: return errorResult("Look not found: $lookId")
 
         val targets = targetsArray.map { t ->
             val obj = t.jsonObject
-            TogglePresetTarget(
+            CueTargetDto(
                 type = obj["type"]!!.jsonPrimitive.content,
                 key = obj["key"]!!.jsonPrimitive.content,
             )
         }
 
-        val result = togglePresetOnTargets(
-            state, lookId, lookData.effects, lookData.propertyAssignments,
-            targets, beatDivision, presetPalette = lookData.palette,
+        // Same programmer layer the busking pads add — so the AI and the pads toggle the *same*
+        // thing, rather than two mechanisms that each think they own the Look.
+        val result = state.show.programmerLayerStack.toggle(
+            lookId = lookId,
+            lookUuid = look.first,
+            lookName = look.second,
+            targets = targets,
+            beatDivisionOverride = beatDivision,
         )
 
         return ToolExecutionResult(
             success = true,
-            description = "${result.action} ${result.effectCount} effects (look $lookId)",
+            description = "${result.first} ${result.second} effects (look $lookId)",
             result = buildJsonObject {
-                put("action", result.action)
-                put("effectCount", result.effectCount)
+                put("action", result.first)
+                put("effectCount", result.second)
             }.toString()
         )
     }

@@ -133,6 +133,20 @@ class Show(
         parkManager = parkManager,
     )
 
+    /**
+     * The programmer's ordered Look layers.
+     *
+     * Every dependency is supplied lazily: this is built before `fxEngine` finishes construction in
+     * source order terms, and `state` is not fully wired until `Show` itself returns.
+     */
+    val programmerLayerStack = ProgrammerLayerStack(
+        fixtures = { fixtures },
+        lookRegistry = { lookRegistry },
+        engine = { fxEngine },
+        store = programmerStore,
+        state = { state },
+    )
+
     /** The show's speed-master clocks; slot 0 is master 1 (the global tempo). */
     val speedMasterBank: SpeedMasterBank get() = fxEngine.speedMasters
     val locateManager = LocateManager()

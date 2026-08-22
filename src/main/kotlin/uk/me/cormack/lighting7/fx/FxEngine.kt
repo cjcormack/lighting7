@@ -1889,6 +1889,30 @@ class FxEngine(
     }
 
     /**
+     * Re-rank live programmer-layer effects in place (`instanceId → new priority`).
+     *
+     * Layer order *is* effect order, and it is expressed as a priority offset within the programmer
+     * band rather than as spawn order, so that reordering the stack does not have to respawn
+     * anything. A respawn would restart every effect's phase — a visible hitch on a drag, and the
+     * whole point of doing it this way.
+     *
+     * Layer 3 only: a programmer layer owns no Layer 4 assignment rows (its values are materialised
+     * into the store), so unlike [repriorityCues] there is no second half. Returns rows changed.
+     */
+    fun repriorityProgrammerLayerEffects(priorities: Map<Long, Int>): Int {
+        if (priorities.isEmpty()) return 0
+        val stale = activeEffects.values.filter { effect ->
+            val target = priorities[effect.id] ?: return@filter false
+            effect.priority != target
+        }
+        if (stale.isEmpty()) return 0
+        for (effect in stale) effect.priority = priorities.getValue(effect.id)
+        rebuildSortedSnapshots()
+        emitStateUpdate()
+        return stale.size
+    }
+
+    /**
      * Remove every effect in the programmer's reserved priority band ([PROGRAMMER_FX_PRIORITY_BASE])
      * — the busking effects the operator added on top of their programmer values. Cue-owned and
      * plain manual effects are untouched.

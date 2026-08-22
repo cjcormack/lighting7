@@ -273,7 +273,11 @@ internal fun Route.routeApiRestProjects(state: State) {
                 DaoMachineOverride.find { DaoMachineOverrides.project eq project.id }.forEach { it.delete() }
 
                 state.controlSurfaceBindingService.invalidate(project.id.value)
-                clearPresetPreview(state, resource.id.toString())
+                // No preview to clear here any more. The Look editor's live preview used to be a
+                // per-project slot in a map, so deleting a project had to evict its entry; it is now
+                // a single layer on the live show's programmer, and the current project cannot be
+                // deleted (IS_CURRENT above). Cross-project interference is impossible by
+                // construction rather than by cleanup.
                 project.delete()
 
                 DeleteResult.SUCCESS

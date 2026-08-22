@@ -18,9 +18,12 @@ import uk.me.cormack.lighting7.fx.paletteRefValue
 import uk.me.cormack.lighting7.fx.parsePaletteRef
 import uk.me.cormack.lighting7.fx.resolveAssignmentValueForFixture
 import uk.me.cormack.lighting7.fx.paletteUuidOrNull
+import uk.me.cormack.lighting7.fx.ProgrammerLayer
+import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
+import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
-import uk.me.cormack.lighting7.routes.prunePresetToggleWrite
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
 
@@ -224,6 +227,88 @@ data class IncludedTargetDto(
     val lookName: String? = null,
 )
 
+/**
+ * Apply a Look to the programmer as a **layer**, on top of the stack.
+ *
+ * The busking-pad and picker gesture, and the WS twin of `POST /looks/{id}/toggle` — which stays
+ * for the desk's existing call sites. Unlike the retired preset toggle this carries the whole Look:
+ * a **bound** row lands on the fixture it names, because a layer has somewhere to put a target set.
+ */
+@Serializable
+@SerialName("programmer.addLayer")
+data class ProgrammerAddLayerInMessage(
+    val lookId: Int,
+    val targets: List<CueTargetDto> = emptyList(),
+    val propertyMask: String? = null,
+    val blendMode: String? = null,
+    val amount: Double? = null,
+    val speedMasterUuid: String? = null,
+    val rateSpeedMasterUuid: String? = null,
+    val fadeMs: Long? = null,
+) : ProgrammerInMessage()
+
+@Serializable
+@SerialName("programmer.removeLayer")
+data class ProgrammerRemoveLayerInMessage(
+    val layerId: Int,
+    val fadeMs: Long? = null,
+) : ProgrammerInMessage()
+
+/** Move a layer to [toIndex] among the non-preview layers. The whole list is renumbered. */
+@Serializable
+@SerialName("programmer.moveLayer")
+data class ProgrammerMoveLayerInMessage(
+    val layerId: Int,
+    val toIndex: Int,
+) : ProgrammerInMessage()
+
+/** Change one layer's fields. A null field means "leave alone", not "clear". */
+@Serializable
+@SerialName("programmer.patchLayer")
+data class ProgrammerPatchLayerInMessage(
+    val layerId: Int,
+    val enabled: Boolean? = null,
+    val amount: Double? = null,
+    val propertyMask: String? = null,
+    val blendMode: String? = null,
+    val targets: List<CueTargetDto>? = null,
+    val stomp: Boolean? = null,
+    val fadeMs: Long? = null,
+) : ProgrammerInMessage()
+
+/** One programmer layer as the desk sees it. */
+@Serializable
+data class ProgrammerLayerDto(
+    val layerId: Int,
+    val lookId: Int,
+    val lookName: String,
+    val sortOrder: Int,
+    val enabled: Boolean,
+    val targets: List<CueTargetDto>,
+    val propertyMask: String? = null,
+    val blendMode: String,
+    val amount: Double,
+    val stomp: Boolean,
+    val speedMasterUuid: String? = null,
+    val rateSpeedMasterUuid: String? = null,
+    /** Set when Include minted this from a cue's layer — Update's diff key. */
+    val sourceCueLayerId: Int? = null,
+    /** The Look editor's live preview. Always last, and never recorded. */
+    val isPreview: Boolean = false,
+)
+
+/**
+ * The programmer's layer stack.
+ *
+ * **Broadcast, not unicast**, for the same reason `programmer.includeTarget` is: the programmer is
+ * shared, so a second tab reordering the stack must not leave the first showing a stale order.
+ */
+@Serializable
+@SerialName("programmer.layerState")
+data class ProgrammerLayerStateOutMessage(
+    val layers: List<ProgrammerLayerDto>,
+) : ProgrammerOutMessage()
+
 @Serializable
 @SerialName("programmer.state")
 data class ProgrammerStateOutMessage(
@@ -231,6 +316,12 @@ data class ProgrammerStateOutMessage(
     val entries: List<ProgrammerEntryDto>,
     val channels: List<ProgrammerChannelDto>,
     val lastIncluded: IncludedTargetDto? = null,
+    /**
+     * The Look-layer stack, most significant last. Additive and defaulted, so a client that knows
+     * nothing about layers decodes this frame exactly as before — the layers' *values* already
+     * reach it through [entries], attributed to the `layers` owner.
+     */
+    val layers: List<ProgrammerLayerDto> = emptyList(),
 ) : ProgrammerOutMessage()
 
 /**
@@ -362,6 +453,23 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
     }
 }
 
+private fun ProgrammerLayer.toDto() = ProgrammerLayerDto(
+    layerId = layerId,
+    lookId = lookId,
+    lookName = lookName,
+    sortOrder = sortOrder,
+    enabled = enabled,
+    targets = targets,
+    propertyMask = propertyMask,
+    blendMode = blendMode,
+    amount = amount,
+    stomp = stomp,
+    speedMasterUuid = speedMasterUuid?.toString(),
+    rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+    sourceCueLayerId = sourceCueLayerId,
+    isPreview = isPreview,
+)
+
 // ── Domain dispatcher ───────────────────────────────────────────────────────
 
 suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
@@ -405,6 +513,29 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
             ProgrammerBlindStateOutMessage(state.show.programmerStore.blind)
         }
         is ProgrammerStateInMessage -> ProgrammerHandler.stateSnapshot(state)
+
+        is ProgrammerAddLayerInMessage -> ProgrammerHandler.addLayer(state, message)
+        is ProgrammerRemoveLayerInMessage -> {
+            state.show.programmerLayerStack.remove(message.layerId, message.fadeMs ?: 0)
+            ProgrammerHandler.layerState(state)
+        }
+        is ProgrammerMoveLayerInMessage -> {
+            state.show.programmerLayerStack.move(message.layerId, message.toIndex)
+            ProgrammerHandler.layerState(state)
+        }
+        is ProgrammerPatchLayerInMessage -> {
+            state.show.programmerLayerStack.patch(
+                layerId = message.layerId,
+                enabled = message.enabled,
+                amount = message.amount,
+                propertyMask = message.propertyMask,
+                blendMode = message.blendMode,
+                targets = message.targets,
+                stomp = message.stomp,
+                fadeMs = message.fadeMs ?: 0,
+            )
+            ProgrammerHandler.layerState(state)
+        }
     }
     scope.send(reply)
 }
@@ -607,15 +738,47 @@ object ProgrammerHandler {
 
         engine.clearProgrammerEntries(fixtures.map { it to propertyName }, fadeMs)
 
+        // Locate is the only owner left with bookkeeping to prune. The `preset:{id}` owners went
+        // with the toggle machinery: a Look now reaches the programmer as a layer, and
+        // `clearProgrammerEntries` deliberately leaves LAYERS slots alone — its contribution is
+        // derived state that the next recook rebuilds, so there is nothing here to keep in step.
         for ((fixtureKey, owner) in released) {
-            when {
-                owner == ProgrammerOwner.LOCATE ->
-                    state.show.locateManager.pruneWrite(fixtureKey, propertyName)
-                owner.id.startsWith("preset:") ->
-                    prunePresetToggleWrite(owner.id, fixtureKey, propertyName)
+            if (owner == ProgrammerOwner.LOCATE) {
+                state.show.locateManager.pruneWrite(fixtureKey, propertyName)
             }
         }
         return ProgrammerEntryClearedOutMessage(target.discriminator, target.key, propertyName)
+    }
+
+    /** The layer stack as the desk sees it. */
+    fun layerState(state: State): ProgrammerLayerStateOutMessage =
+        ProgrammerLayerStateOutMessage(state.show.programmerStore.layers.map { it.toDto() })
+
+    /**
+     * Add a layer for a stored Look.
+     *
+     * The uuid is looked up here rather than accepted from the client: a layer resolves its Look by
+     * uuid (int primary keys are re-minted on sync import), but the desk addresses Looks by id
+     * everywhere else, and letting a client supply both invites the two disagreeing.
+     */
+    fun addLayer(state: State, message: ProgrammerAddLayerInMessage): OutMessage {
+        val look = transaction(state.database) {
+            DaoLook.findById(message.lookId)?.let { Triple(it.id.value, it.uuid, it.name) }
+        } ?: return ProgrammerErrorOutMessage("Look ${message.lookId} not found")
+
+        state.show.programmerLayerStack.add(
+            lookId = look.first,
+            lookUuid = look.second,
+            lookName = look.third,
+            targets = message.targets,
+            propertyMask = message.propertyMask,
+            blendMode = message.blendMode ?: "OVERRIDE",
+            amount = message.amount ?: 1.0,
+            speedMasterUuid = speedMasterUuidOrNull(message.speedMasterUuid),
+            rateSpeedMasterUuid = speedMasterUuidOrNull(message.rateSpeedMasterUuid),
+            fadeMs = message.fadeMs ?: 0,
+        )
+        return layerState(state)
     }
 
     fun stateSnapshot(state: State): ProgrammerStateOutMessage {
@@ -665,6 +828,7 @@ object ProgrammerHandler {
         }.sortedWith(compareBy({ it.universe }, { it.channel }))
         return ProgrammerStateOutMessage(
             store.blind, entries, channels, includedTargetDto(state, store.lastIncludedTarget),
+            layers = store.layers.map { it.toDto() },
         )
     }
 

@@ -166,6 +166,17 @@ internal object CueComposer {
         cascade: PaletteCascade = PaletteCascade.EMPTY,
         lookRegistry: LookRegistry? = null,
         includeTimed: Set<Int> = emptySet(),
+        /**
+         * How a layer's `lookUuid` becomes a [LookSnapshot]. Defaults to [lookRegistry], which is
+         * what every cue path wants.
+         *
+         * The programmer overrides it for one case the registry cannot serve: the Look editor's
+         * **live preview** is an *unsaved* draft, so it has no row to load and no uuid the registry
+         * has ever heard of. Passing a resolver keeps that a layer like any other — composing above
+         * the real stack, blending and masking by the same rules — instead of a second write path
+         * with its own precedence.
+         */
+        resolveLook: (UUID) -> LookSnapshot? = { lookRegistry?.snapshot(it) },
     ): List<CueAssignmentResolver.Assignment> {
         val acc = LinkedHashMap<Key, Contribution>()
 
@@ -178,7 +189,7 @@ internal object CueComposer {
             .sortedBy { it.sortOrder }
 
         for ((index, layer) in contributing.withIndex()) {
-            val look = lookRegistry?.snapshot(layer.lookUuid)
+            val look = resolveLook(layer.lookUuid)
             if (look == null) {
                 logger.warn(
                     "cue {}: look '{}' ({}) could not be loaded — skipping layer",
@@ -246,6 +257,8 @@ internal object CueComposer {
         layers: List<CookLayer>,
         lookRegistry: LookRegistry?,
         includeTimed: Set<Int> = emptySet(),
+        /** As [cook]'s — see there for the one caller that overrides it. */
+        resolveLook: (UUID) -> LookSnapshot? = { lookRegistry?.snapshot(it) },
     ): List<Triple<CookLayer, LookEffectEntry, TargetRef>> {
         val out = ArrayList<Triple<CookLayer, LookEffectEntry, TargetRef>>()
         for (layer in layers.filter { it.enabled }.sortedBy { it.sortOrder }) {
@@ -253,7 +266,7 @@ internal object CueComposer {
             // Same rule as [cook]: an amount-0 layer contributes nothing at all. Without this an
             // operator who muted a layer by pulling Amount to zero would still see its effects run.
             if (layer.amount <= 0.0) continue
-            val look = lookRegistry?.snapshot(layer.lookUuid) ?: continue
+            val look = resolveLook(layer.lookUuid) ?: continue
             val layerTargets = layer.targets.map { it.target }
             for (effect in look.effects) {
                 val effectTarget = effect.target

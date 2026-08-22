@@ -164,6 +164,18 @@ class FxInstance(
      */
     var lookId: Int? = null
 
+    /**
+     * Set when this effect was spawned by a **programmer** layer, naming
+     * [ProgrammerLayer.layerId].
+     *
+     * A third id rather than reusing [lookId], because the programmer's stack may hold the same
+     * Look twice and the two have to be retracted and re-ranked independently — the same reason
+     * `CookLayer.layerId` exists beside `CookLayer.lookId`. It is also not
+     * [ProgrammerFxOrigin], whose `cueId` is non-null and read by Update to replace a cue child in
+     * place; a programmer layer belongs to no cue.
+     */
+    var programmerLayerId: Int? = null
+
     /** If this effect was applied as part of a cue, the cue ID. Null otherwise. */
     var cueId: Int? = null
 

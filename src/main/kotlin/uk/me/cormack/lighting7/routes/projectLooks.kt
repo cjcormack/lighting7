@@ -25,6 +25,9 @@ import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.isPaletteRefValue
 import uk.me.cormack.lighting7.fx.paletteRefValue
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
+import uk.me.cormack.lighting7.fx.LookRowEntry
+import uk.me.cormack.lighting7.fx.LookSnapshot
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
@@ -355,41 +358,46 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
     // **deferred** rows and effects are offered, because the pad supplies the targets and a bound
     // row would land on the wrong fixtures. A bound Look is recalled through a cue layer instead.
     //
-    // Note this stamps `FxInstance.presetId = lookId` (via `togglePresetOnTargets`, which keys its
-    // toggle bookkeeping on that field), exactly as the AI's `apply_look` already does. Harmless
-    // while nothing composes from preset applications, but it means `captureCurrentState` would
-    // reconstruct a `CuePresetApplicationDto` naming whatever `DaoFxPreset` shares the number. It
-    // goes when the pads become programmer layers.
+    // Now a **programmer layer**: the pad adds one, or removes the one it added. The request and
+    // response shapes are unchanged so the desk keeps working across this rewrite, but two things
+    // behind them are different and both are improvements.
+    //
+    // A layer carries the whole Look, so a **bound** row now lands on the fixture it names instead
+    // of being filtered out — the old path could only offer deferred rows, because it had nowhere
+    // to put a target set. And the instance is tagged `lookId` + `programmerLayerId` rather than
+    // `presetId = lookId`, which is what used to make `captureCurrentState` reconstruct a preset
+    // application naming whatever `DaoFxPreset` happened to share the number.
     post<ToggleLookResource> { resource ->
-        withProject(state, resource.parent.projectId) { project ->
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot toggle looks in project '${p.name}' - only the current project is live" },
+        ) { project ->
             val request = call.receive<TogglePresetRequest>()
             if (request.targets.isEmpty()) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("At least one target is required"))
-                return@withProject
+                return@withCurrentProject
             }
 
-            val lookData = transaction(state.database) {
-                val look = DaoLook.findById(resource.lookId) ?: return@transaction null
-                if (look.project.id != project.id) return@transaction null
-                loadLookToggleData(resource.lookId)
+            val look = transaction(state.database) {
+                DaoLook.findById(resource.lookId)
+                    ?.takeIf { it.project.id == project.id }
+                    ?.let { Triple(it.id.value, it.uuid, it.name) }
             }
-            if (lookData == null) {
+            if (look == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(LOOK_NOT_FOUND))
-                return@withProject
+                return@withCurrentProject
             }
 
             try {
-                call.respond(
-                    togglePresetOnTargets(
-                        state,
-                        resource.lookId,
-                        lookData.effects,
-                        lookData.propertyAssignments,
-                        request.targets,
-                        request.beatDivision,
-                        presetPalette = lookData.palette,
-                    )
+                val (action, effectCount) = state.show.programmerLayerStack.toggle(
+                    lookId = look.first,
+                    lookUuid = look.second,
+                    lookName = look.third,
+                    targets = request.targets.map { CueTargetDto(it.type, it.key) },
+                    beatDivisionOverride = request.beatDivision,
                 )
+                call.respond(TogglePresetResponse(action, effectCount))
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
             } catch (e: Exception) {
@@ -400,10 +408,12 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
 
     // POST /project/{id}/looks/preview — the Look editor's "live preview" toggle.
     //
-    // Whole-desired-state, so it needs no stored Look at all and delegates straight to the preview
-    // slot the preset editor used: the request carries the rows, the colour list and the targets,
-    // and an empty one collapses to a clear. That is why this is route plumbing and not a second
-    // implementation.
+    // Whole-desired-state: the request carries the rows, the colour list and the targets, and an
+    // empty one collapses to a clear. It needs no stored Look, which is exactly why the preview is
+    // a layer holding an *inline* snapshot rather than one resolved through `LookRegistry` — the
+    // draft being previewed has no row to load. Being a layer is what makes it compose above the
+    // rest of the stack under the same rules, instead of a second write path with its own
+    // precedence.
     post<LookPreviewResource> { resource ->
         withCurrentProject(
             state,
@@ -411,7 +421,11 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
             { p -> "Cannot preview looks in project '${p.name}' - only the current project can be previewed" },
         ) {
             val request = call.receive<PresetPreviewRequest>()
-            call.respond(applyPresetPreview(state, resource.parent.projectId, request))
+            val outcome = state.show.programmerLayerStack.installPreview(
+                snapshot = request.toPreviewSnapshot(),
+                targets = request.targets.map { CueTargetDto(it.type, it.key) },
+            )
+            call.respond(PresetPreviewResponse(outcome.keysRepublished))
         }
     }
 
@@ -422,10 +436,38 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
             resource.parent.projectId,
             { p -> "Cannot clear preview in project '${p.name}' - only the current project can be previewed" },
         ) {
-            clearPresetPreview(state, resource.parent.projectId)
+            state.show.programmerLayerStack.installPreview(snapshot = null)
             call.respond(HttpStatusCode.OK)
         }
     }
+}
+
+/**
+ * The editor's unsaved draft as a [LookSnapshot], for the preview layer.
+ *
+ * Every row is **deferred**: the preview request carries the targets separately, exactly as a
+ * layer does, so the rows describe *what* to assert and the layer decides *where*. An empty draft
+ * produces an empty snapshot, which [ProgrammerLayerStack.installPreview] reads as a clear.
+ */
+private fun PresetPreviewRequest.toPreviewSnapshot(): LookSnapshot? {
+    if (propertyAssignments.isEmpty() || targets.isEmpty()) return null
+    return LookSnapshot(
+        lookId = 0,
+        lookUuid = java.util.UUID(0L, 0L),
+        name = "preview",
+        editorFixtureType = null,
+        palette = palette,
+        rows = propertyAssignments.map {
+            LookRowEntry(
+                target = null,
+                propertyName = it.propertyName,
+                value = it.value,
+                fadeDurationMs = it.fadeDurationMs,
+                elementKey = it.elementKey,
+            )
+        },
+        effects = emptyList(),
+    )
 }
 
 // ─── Resources ──────────────────────────────────────────────────────────
@@ -843,59 +885,3 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
     )
 }
 
-/**
- * A Look's contents in the shape the toggle / preview surfaces consume.
- *
- * Those surfaces predate layers and address a bundle directly ("put this on these targets"), which
- * is still what a busking pad wants. Rather than duplicate their logic, this adapts a Look into the
- * generic effect-spec and property-assignment shapes `togglePresetOnTargets` already takes.
- *
- * Only **deferred** rows and effects are offered: the toggle surface supplies the targets, so a
- * bound row — which names its own — would be applied to the wrong fixtures. A bound Look is
- * therefore recalled through a cue layer or the programmer, not through toggle.
- */
-internal data class LookToggleData(
-    val effects: List<uk.me.cormack.lighting7.models.FxPresetEffectDto>,
-    val propertyAssignments: List<uk.me.cormack.lighting7.models.FxPresetPropertyAssignmentDto>,
-    val palette: List<uk.me.cormack.lighting7.fx.ExtendedColour>,
-)
-
-/** Must be called inside a transaction. Null when no such Look exists. */
-internal fun loadLookToggleData(lookId: Int): LookToggleData? {
-    val look = DaoLook.findById(lookId) ?: return null
-    return LookToggleData(
-        effects = look.effects
-            .sortedBy { it.sortOrder }
-            .filter { it.isDeferred }
-            .map { e ->
-                uk.me.cormack.lighting7.models.FxPresetEffectDto(
-                    effectType = e.effectType,
-                    category = e.category,
-                    propertyName = e.propertyName,
-                    beatDivision = e.beatDivision,
-                    blendMode = e.blendMode,
-                    distribution = e.distribution,
-                    phaseOffset = e.phaseOffset,
-                    elementMode = e.elementMode,
-                    elementFilter = e.elementFilter,
-                    stepTiming = e.stepTiming,
-                    parameters = e.parameters,
-                    speedMasterUuid = e.speedMasterUuid?.toString(),
-                    rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
-                )
-            },
-        propertyAssignments = look.rows
-            .sortedBy { it.sortOrder }
-            .filter { it.isDeferred }
-            .map { r ->
-                uk.me.cormack.lighting7.models.FxPresetPropertyAssignmentDto(
-                    propertyName = r.propertyName,
-                    value = r.value,
-                    fadeDurationMs = r.fadeDurationMs,
-                    sortOrder = r.sortOrder,
-                    elementKey = r.elementKey,
-                )
-            },
-        palette = look.palette.toPaletteColours(),
-    )
-}
