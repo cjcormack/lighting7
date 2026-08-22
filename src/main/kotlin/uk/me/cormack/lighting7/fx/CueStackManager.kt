@@ -253,6 +253,7 @@ class CueStackManager(
             instance.cueId = cueData.cueId
             instance.cueStackId = stackId
             instance.lookId = layer.lookId
+            instance.cueLayerId = layer.layerId
             fxEngine.addEffect(instance)
             effectCount++
         }
@@ -300,7 +301,7 @@ class CueStackManager(
         // reached Layer 4 on a stack GO — unlike `applyCue`, which concatenated both. Routing both
         // paths through `cook` fixes that asymmetry.
         val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, stackCascade)
-        val cueLayerRows = CueComposer.cook(
+        val cooked = CueComposer.cook(
             fixtures = state.show.fixtures,
             cueId = cueData.cueId,
             priority = cueDerivedPriority(cueData),
@@ -310,21 +311,24 @@ class CueStackManager(
             lookRegistry = state.show.lookRegistry,
         )
         val incomingStartWeight = if (useCrossfade) 0.0 else 1.0
-        if (cueLayerRows.isNotEmpty()) {
+        if (cooked.rows.isNotEmpty()) {
             fxEngine.setCueAssignments(
-                cueData.cueId, cueLayerRows, incomingStartWeight, cueStackId = stackId,
+                cueData.cueId, cooked.rows, incomingStartWeight, cueStackId = stackId,
+                stompSuppression = cooked.stompSuppression,
             )
         } else {
             fxEngine.removeCueAssignments(cueData.cueId)
         }
         // Restore outgoing to 1.0 in case a prior mid-flight crossfade left it partial.
         // `useCrossfade` already implies `outgoingCueId != null`.
-        if (useCrossfade && cueLayerRows.isNotEmpty()) {
+        if (useCrossfade && cooked.rows.isNotEmpty()) {
             fxEngine.updateCueFadeWeights(mapOf(outgoingCueId!! to 1.0))
         }
         if (cueData.stomp) {
-            val overlap = buildStompOverlapFromAssignments(state.show.fixtures, cueData)
-            fxEngine.stompForCue(cueData.cueId, overlap)
+            fxEngine.stompForCue(
+                cueData.cueId,
+                buildStompOverlap(state.show.fixtures, cueData, cooked),
+            )
         }
 
         // 4. Update active state. The GO consumed any armed standby — the next one is
@@ -349,7 +353,7 @@ class CueStackManager(
             } catch (_: Exception) {
                 EasingCurve.LINEAR
             }
-            val incomingCueId = if (cueLayerRows.isNotEmpty()) cueData.cueId else null
+            val incomingCueId = if (cooked.rows.isNotEmpty()) cueData.cueId else null
 
             val stackState = activeStacks[stackId]
             stackState?.crossfadeOutgoingCueId = outgoingCueId

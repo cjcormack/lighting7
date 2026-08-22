@@ -133,6 +133,14 @@ Also worth confirming on the rig: a layer whose Look runs a colour *effect* beat
 setting colour statically, because effects sit above static values regardless of layer order. That
 is the one place layer order does not govern, and the only cure is the layer's `stomp`.
 
+**And now the cure itself**, since `FU-LOOK-STOMP-WITHIN-CUE` landed: set `stomp` on the later
+(static) layer and confirm the effect below goes quiet while the static colour holds. Then clear it
+and confirm the effect comes back **without restarting its phase** — that is the whole reason it
+suppresses rather than removes, and a respawn would be visible as a hitch on a slow chase. Worth
+doing on the rig rather than trusting `FxEnginePipelineTest`: the test asserts the instance survives
+and paints again, not that the eye sees no step. Then repeat it on the **programmer** stack, where
+the effect being suppressed sits in the priority band that is otherwise exempt from suppression.
+
 ## `FU-MANUAL-SPEED-MASTERS-RIG`
 
 **Two masters driving one show** · **backend restart required first (new classes)** · Programmer

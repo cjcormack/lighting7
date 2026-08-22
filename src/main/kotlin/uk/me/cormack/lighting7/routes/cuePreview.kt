@@ -90,7 +90,7 @@ internal fun previewCueLook(state: State, stackId: Int, requestedCueId: Int?): P
         applyData.palette.isNotEmpty() -> applyData.palette.toPaletteColours()
         else -> engine.getStackPalette(stackId) ?: stackPalette.toPaletteColours()
     }
-    val incoming = buildCombinedCueLayerRows(state, cueId, applyData, cuePalette)
+    val incoming = buildCombinedCueLayerRows(state, cueId, applyData, cuePalette).rows
 
     // A fresh resolver, not `engine.layerResolver`: [CueAssignmentResolver.resolve] is a pure
     // function of its rows, so composing here cannot disturb what is on stage.

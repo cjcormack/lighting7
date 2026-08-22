@@ -149,7 +149,13 @@ class CueTriggerManager(
                     lookRegistry = state.show.lookRegistry,
                     includeTimed = fired.toSet(),
                 )
-                fxEngine.replaceCueAssignments(mapOf(cueId to cooked))
+                // Suppression rides along with the rows: a timed layer asserts nothing until it
+                // fires, so its arrival is exactly when a `stomp` on it must silence the layers
+                // below — and a recurring fire re-states it rather than accumulating.
+                fxEngine.replaceCueAssignments(
+                    mapOf(cueId to cooked.rows),
+                    mapOf(cueId to cooked.stompSuppression),
+                )
             }
             if (job != null) jobs.add(job)
         }
@@ -358,6 +364,7 @@ class CueTriggerManager(
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
         )
         instance.lookId = layer.lookId
+        instance.cueLayerId = layer.layerId
         instance.cueId = cueId
         instance.cueStackId = cueStackId
 

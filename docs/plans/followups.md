@@ -34,7 +34,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
 | [`FU-LOOK-MIDI-RECALL`](#fu-look-midi-recall) | Trigger | Look | an operator wants a Look on a button |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
-| [`FU-LOOK-STOMP-WITHIN-CUE`](#fu-look-stomp-within-cue) | Ready | Look | — |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
 | [`FU-LOOK-ELEMENT-ROWS`](#fu-look-element-rows) | Ready | Look | — |
 | [`FU-CUE-APPLYDATA-ONE-BUILDER`](#fu-cue-applydata-one-builder) | Ready | Cue | — |
@@ -315,39 +314,6 @@ replacing that guarantee with a bounded one. The cook step is where it would lan
 `FU-PAL-POSITIONAL-CONVERSION` waits on. If both fire, do the conversion first; it decides how many
 Looks exist.
 
-### `FU-LOOK-STOMP-WITHIN-CUE`
-
-**Per-layer `stomp` is carried but never read** · Ready · Looks-and-layers session 4, 2026-08-22
-
-`DaoCueLayers.stomp` exists, `CueLayerDto` / `ProgrammerLayerDto` / `ProgrammerLayer` / `CookLayer`
-all carry it, `programmer.patchLayer` accepts it, and six write sites round-trip it. **Nothing reads
-it.** `grep -n stomp fx/CueComposer.kt` finds the declaration and a KDoc mention and no use.
-
-It is the escape hatch for the one thing layer order cannot express: effects are Layer 3 and values
-are Layer 4, so an effect sits above a static value regardless of layer order — "layer 2 sets colour
-statically, layer 1 runs a colour effect" resolves to the effect winning. Session 4 was scoped to
-include it and deliberately dropped it, because it is engine work rather than a flag flip:
-
-1. **`FxInstance` needs a cue-layer id.** Only the programmer path stamps a per-layer id
-   (`programmerLayerId`); the three cue spawn sites stamp `cueId` + `lookId`, and `lookId` cannot
-   disambiguate one cue layering the same Look twice.
-2. **`cook` must publish a suppression set.** It is the only place that knows which properties a
-   layer asserts, and `cookEffects` knows nothing about stomp. Its four callers must agree on the
-   new signal.
-3. **Suppression, not removal.** Today's `stompForCue` *removes* the `FxInstance` and explicitly
-   excludes the stomping cue's own effects. Within-cue stomp cannot remove: disabling the stomping
-   layer or dropping its `amount` to 0 only triggers a recook, so a removed instance would be
-   unrecoverable. `ProgrammerLayerStack.syncEffects`'s classify-don't-rebuild design and
-   `FxEngine.repriorityProgrammerLayerEffects` are the precedents.
-
-Also note `buildStompOverlapFromAssignments` reads only the cue's *local* rows, so a cue whose colour
-comes entirely from a layer currently stomps nothing on colour — a pre-existing gap that this work
-should close.
-
-The UI is deliberately absent until then: `LookStack` renders `STOMP` as a read-only badge and
-`LayerHandlers` has no `onSetStomp`, because a toggle writing a field the engine ignores is worse
-than no toggle.
-
 ### `FU-LOOK-ELEMENT-ROWS`
 
 **A Look's element row composes nowhere** · Ready · Looks-and-layers correction #10, 2026-08-22
@@ -376,15 +342,15 @@ Per-layer `stomp` suppresses lower layers' *effects* on every property the layer
 the coarse version: an operator might want to stomp a layer's colour effect while leaving its dimmer
 effect running.
 
-The column landed with the layer model; the behaviour is `FU-LOOK-STOMP-WITHIN-CUE`. Judge granularity
-only after the coarse version has been used on a rig — the Layer 3/4 boundary it exists to work
+The column landed with the layer model and the coarse behaviour with `FU-LOOK-STOMP-WITHIN-CUE`.
+Judge granularity only after that has been used on a rig — the Layer 3/4 boundary it exists to work
 around may turn out to bite in one specific place rather than generally.
 
 **Trigger**: per-layer stomp proves too coarse in practice.
 
 ### `FU-CUE-APPLYDATA-ONE-BUILDER`
 
-**`CueApplyData` is constructed in two places; a new field reached only one** · Ready ·
+**`CueApplyData` is constructed in three places; a new field reached only one** · Ready ·
 Looks-and-layers session 1 review, 2026-08-21
 
 `buildCueApplyData` (`routes/projectCuesHelpers.kt`) is the documented builder, and
@@ -392,6 +358,11 @@ Looks-and-layers session 1 review, 2026-08-21
 a `layers` field and populated only the first, so **every Look layer was inert on the stack GO
 path** — the primary firing path — while the standalone apply-cue route worked. Caught in review,
 not by a test.
+
+**There is a third**, found while implementing `FU-LOOK-STOMP-WITHIN-CUE`: `AiTools.applyCue`
+(`ai/AiTools.kt`, ~line 505) hand-rolls its own, and carries a comment recording that it hit this
+exact bug — "without this the tool applies the cue with an empty layer stack". Two independent
+authors reproducing one omission is the strongest argument the entry has; count on a fourth.
 
 This is the same shape of rot `CLAUDE.md` warns about for project cloning ("never add a
 table-by-table clone path"), and the same failure mode `buildCueInput` carries a comment about on
@@ -1015,6 +986,30 @@ One line each: slug, what shipped, commit. Full narratives live in the commit me
 file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-08
+
+- `FU-LOOK-STOMP-WITHIN-CUE` — per-layer `stomp` is read. `CueComposer.cook` now returns a
+  `CookResult` rather than a bare row list, carrying `stompSuppression` (`layerId → targetKey →
+  properties`) and `assertedKeys`; `FxInstance` gained `cueLayerId` alongside `programmerLayerId`,
+  stamped at all three cue spawn sites; `FxEngine.isSuppressed` checks it per tick, **before** the
+  programmer-band exemption, since a programmer-layer effect is in that band by construction and
+  exempting it would have made programmer stomp a no-op. Suppression rather than removal, for the
+  reason the entry gave: disabling the stomping layer only triggers a recook, so a removed instance
+  would be unrecoverable — and keeping it alive means clearing a stomp restores it mid-phase.
+  `LookStack`'s STOMP badge became a toggle in the same change, in both hosts, because a control
+  writing a field the engine ignores is worse than none.
+
+  Two things were decided rather than merely implemented. **Suppression is published with the
+  rows**, as a parameter to `setCueAssignments` / `replaceCueAssignments`, so a republish cannot
+  refresh values while leaving stale suppression behind; carrying it separately would have
+  reintroduced the `CueApplyData`-two-builders shape the entry itself warns about. And the
+  **programmer half is published from `materialise`, not `syncEffects`** — the latter deliberately
+  does not rebuild on a mask, amount or order change, and all three move the suppression set.
+
+  Also closed the pre-existing gap the entry named: `buildStompOverlapFromAssignments` read the
+  cue's local rows alone, so a cue whose colour came entirely from a layer stomped nothing on
+  colour. `buildStompOverlap` unions it with `CookResult.assertedKeys` — which records the group a
+  row arrived *through* as well as the fixture, because `stompForCue` matches a group-targeted
+  effect on the group's own name and cook's rows are per-fixture by construction.
 
 - `FU-FE-LOOK-SAVE-GUARD-TEST` — covered by `LookEditor.test.tsx` (5 tests) and
   `lookSaveGuard.test.ts` (4) in looks-and-layers session 3b. The entry's "the first test here also

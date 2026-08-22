@@ -367,9 +367,7 @@ One limit has to be stated rather than designed around: **effects are Layer 3 an
 Layer 4**, so an effect sits above a static value regardless of layer order. "Layer 2 sets colour
 statically, Layer 1 runs a colour effect" resolves to the effect winning even though Layer 2 is
 later. Layer order governs values-vs-values and effects-vs-effects, not the value/effect boundary.
-The escape hatch is per-layer `stomp`; note that the existing cue-level `stomp` is *cross-cue*
-(`stompForCue` explicitly excludes the stomping cue's own effects), so within-cue stomp is new
-behaviour built on existing scaffolding rather than a flag flip.
+The escape hatch is per-layer `stomp` — see [Stomp](#stomp) for the two kinds and how they differ.
 
 ### Timed layers
 
@@ -466,9 +464,68 @@ Fade time source: cue-level fade time by default. The data model supports per-pr
 
 ## Stomp
 
+There are **two** stomps, at two scopes, and they are not variants of one mechanism. The cue-level
+one *removes* instances belonging to other cues; the layer-level one *suppresses* instances
+belonging to lower layers of the same stack. Mixing them up is the mistake to avoid: within-cue
+stomp cannot remove, for the reason spelled out below.
+
+### Cue-level stomp — cross-cue, removal
+
 A cue carries a `stomp: Boolean` (default `false`). When a stomping cue applies, the FX engine removes ad-hoc effects tagged with *other cue IDs* that target properties covered by this cue's Layer 4 assignments. This matches grandMA3's `Stomp` — a new cue cleanly takes over from in-flight phasers without chasing them.
 
 Scope: stomp only removes ad-hoc effects owned by other cues. Manual (un-cued) effects are not stomped. Effects owned by this cue itself are not stomped — they co-exist with its Layer 4.
+
+The overlap set is the union of the cue's local rows (expanded through their groups) and
+`CookResult.assertedKeys` — everything the cue's **layers** asserted, group aliases included. The
+layer half was missing until the within-cue work landed, and its absence meant a cue whose colour
+came entirely from a layer stomped nothing on colour: `buildStompOverlapFromAssignments` reads the
+cue's *local* rows alone, which was the whole of a cue's surface before the layer model and is not
+any more. `buildStompOverlap` is the union and is what callers should use.
+
+### Layer-level stomp — within-cue, suppression
+
+A layer carries its own `stomp: Boolean`. When set, it switches off the effects of every layer
+**below** it in the same stack, on every property it asserts. It is what makes the Layer 3/4 limit
+above recoverable: "layer 2 sets colour statically, layer 1 runs a colour effect" resolves to the
+effect winning, and `stomp` on layer 2 is how the operator says otherwise.
+
+Four boundaries:
+
+- **Strictly below.** A stomping layer never suppresses its own effects, nor anything above it.
+  Within one layer the Layer 3/4 order still holds — a Look with both a colour row and a colour
+  effect runs the effect.
+- **Layers only.** The cue's local rows and its ad-hoc effects belong to no layer, so nothing in the
+  stack is above them to switch them off.
+- **Coarse.** Every property the stomper asserts, not only the ones a lower layer's effect is
+  actually fighting over. Finer granularity is `FU-LOOK-STOMP-GRANULAR`, deliberately deferred until
+  the coarse version has been used on a rig.
+- **Suppression, not removal**, and this one is not a preference. Disabling the stomping layer, or
+  pulling its `amount` to zero, only triggers a *recook* — so a removed `FxInstance` would be
+  unrecoverable, and the operator could never undo a stomp. Suppression keeps the instance running,
+  so clearing the stomp brings it back mid-phase with nothing restarted.
+
+The mechanism: `CueComposer.cook` returns `CookResult.stompSuppression`, a
+`layerId → targetKey → properties` map, because only the cook knows which properties each layer
+asserted — the rows keep the winner per key, and a layer that asserted and then lost still asserted.
+It is published in the same locked mutation as the rows (`setCueAssignments` /
+`replaceCueAssignments` take it as a parameter for exactly that reason), and read per tick by
+`FxEngine.isSuppressed` against `FxInstance.cueLayerId` / `programmerLayerId`. The reset pass has
+already painted the cooked value on the property, so a skipped apply *shows* that value rather than
+freezing the effect's last frame.
+
+Three details worth knowing:
+
+- The check runs **before** the programmer-band exemption. Programmer-layer effects live in that
+  band by construction, so exempting the band would make programmer stomp a no-op.
+- The **programmer stack honours it too**, published from `ProgrammerLayerStack.materialise` rather
+  than from `syncEffects` beside the instances: `syncEffects` deliberately does not rebuild on a
+  mask, amount or order change, and all three move the suppression set.
+- **Provenance is stomp-aware**, through the same `isLayerStomped` helper the tick loops use.
+  `highestPriorityEffectByKey` skips a stomped effect *for the stomped key only*, so a
+  lower-priority effect on that key can still be reported — and `computeProvenance` /
+  `underlyingSources` therefore name the cue rather than an effect nobody can see. Keeping one
+  helper is the point: "what is painting" and "what provenance reports" have no business
+  disagreeing.
 
 ## Cue edit sessions
 

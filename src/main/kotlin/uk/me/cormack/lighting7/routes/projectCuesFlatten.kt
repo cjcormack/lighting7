@@ -210,7 +210,7 @@ private fun flattenCueLayers(
     val removeIds = toRemove.map { it.id.value }.toSet()
 
     // Cook the cue exactly as apply does, so what we write is what the rig is showing.
-    val cooked = buildCombinedCueLayerRows(state, cue.id.value, buildCueApplyData(cue))
+    val cooked = buildCombinedCueLayerRows(state, cue.id.value, buildCueApplyData(cue)).rows
 
     var rowsWritten = 0
     var maskedOut = 0

@@ -464,7 +464,7 @@ class LooksMigrationTest : RouteIntegrationTest() {
         val after = transaction(state.database) {
             val applyData = buildCueApplyData(DaoCue.findById(cueId)!!)
             CueAssignmentResolver().resolve(
-                uk.me.cormack.lighting7.routes.buildCombinedCueLayerRows(state, cueId, applyData)
+                uk.me.cormack.lighting7.routes.buildCombinedCueLayerRows(state, cueId, applyData).rows
             )
         }
 
@@ -528,7 +528,7 @@ class LooksMigrationTest : RouteIntegrationTest() {
         val after = transaction(state.database) {
             val applyData = buildCueApplyData(DaoCue.findById(cueId)!!)
             CueAssignmentResolver().resolve(
-                uk.me.cormack.lighting7.routes.buildCombinedCueLayerRows(state, cueId, applyData)
+                uk.me.cormack.lighting7.routes.buildCombinedCueLayerRows(state, cueId, applyData).rows
             )[key]
         }
         assertEquals(

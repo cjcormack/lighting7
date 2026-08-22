@@ -656,7 +656,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // re-cooks rather than appending because appending would put two contributors on one
     // (fixture, property) key, which is precisely the ambiguity cooking removes.
     val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, cascade)
-    val cueLayerRows = CueComposer.cook(
+    val cooked = CueComposer.cook(
         fixtures = state.show.fixtures,
         cueId = cueData.cueId,
         priority = priority,
@@ -665,16 +665,19 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         cascade = cascade,
         lookRegistry = state.show.lookRegistry,
     )
-    if (cueLayerRows.isNotEmpty()) {
-        engine.setCueAssignments(cueData.cueId, cueLayerRows, cueStackId = cueData.cueStackId)
+    if (cooked.rows.isNotEmpty()) {
+        engine.setCueAssignments(
+            cueData.cueId, cooked.rows,
+            cueStackId = cueData.cueStackId,
+            stompSuppression = cooked.stompSuppression,
+        )
     } else {
         // Re-applying a cue that lost its assignments must clear any stale state.
         engine.removeCueAssignments(cueData.cueId)
     }
 
     if (cueData.stomp) {
-        val overlap = buildStompOverlapFromAssignments(state.show.fixtures, cueData)
-        engine.stompForCue(cueData.cueId, overlap)
+        engine.stompForCue(cueData.cueId, buildStompOverlap(state.show.fixtures, cueData, cooked))
     }
 
     // 2. Set per-cue palette (isolated from global palette)
@@ -706,6 +709,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
         )
         instance.lookId = layer.lookId
+        instance.cueLayerId = layer.layerId
         instance.cueId = cueData.cueId
         instance.priority = priority
         engine.addEffect(instance)
@@ -771,9 +775,33 @@ internal fun stackCuePriorities(stack: DaoCueStack): Map<Int, Int> =
         .associate { it.id.value to cueDerivedPriority(stack.id.value, it.sortOrder) }
 
 /**
+ * The **cue-level** (cross-cue) stomp overlap: every `(target, property)` this cue holds, from both
+ * halves of its composition.
+ *
+ * [buildStompOverlapFromAssignments] alone reads the cue's *local* rows, which was the whole of a
+ * cue's surface before the layer model and is no longer — a cue whose colour comes entirely from a
+ * layer asserted plenty and stomped nothing. [CookResult.assertedKeys] supplies the layers' half,
+ * group aliases included, and the two are unioned rather than one replacing the other: cook emits
+ * per-fixture rows for a group-targeted *local* row, so dropping the assignment pass would lose the
+ * group keys an effect aimed at the group itself is matched on.
+ */
+internal fun buildStompOverlap(
+    fixtures: uk.me.cormack.lighting7.show.Fixtures,
+    cueData: CueApplyData,
+    cooked: CookResult,
+): Set<FxEngine.PropertyKey> {
+    val fromAssignments = buildStompOverlapFromAssignments(fixtures, cueData)
+    if (cooked.assertedKeys.isEmpty()) return fromAssignments
+    if (fromAssignments.isEmpty()) return cooked.assertedKeys
+    return fromAssignments + cooked.assertedKeys
+}
+
+/**
  * Build the stomp overlap set from a cue's property assignments. Group targets are expanded
  * to member keys so the resolver can filter ad-hoc effects owned by other cues that target
  * individual fixtures within the same group.
+ *
+ * The cue's **layers** are not visible here — see [buildStompOverlap], which is what callers want.
  */
 internal fun buildStompOverlapFromAssignments(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
@@ -952,17 +980,25 @@ internal fun buildCueAssignmentsForCue(
 internal fun republishCueLayer(state: State, cueId: Int, applyData: CueApplyData) {
     val engine = state.show.fxEngine
     val combined = buildCombinedCueLayerRows(state, cueId, applyData)
-    if (combined.isNotEmpty()) {
-        engine.setCueAssignments(cueId, combined, cueStackId = applyData.cueStackId)
+    if (combined.rows.isNotEmpty()) {
+        engine.setCueAssignments(
+            cueId, combined.rows,
+            cueStackId = applyData.cueStackId,
+            stompSuppression = combined.stompSuppression,
+        )
     } else {
         engine.removeCueAssignments(cueId)
     }
 }
 
 /**
- * The rows [republishCueLayer] would publish: the cue's layer stack cooked down with its own local
- * rows on top (timed layers don't contribute unless named in [firedTimedLookIds] — matching
+ * The cook [republishCueLayer] would publish: the cue's layer stack flattened with its own local
+ * rows on top (timed layers don't contribute unless named in [firedTimedLayerIds] — matching
  * [applyCue]).
+ *
+ * Returns the whole [CookResult], not just its rows. A caller that only wants values takes `.rows`;
+ * one that *publishes* must carry `.stompSuppression` with them, or a stomping layer's effect
+ * suppression outlives the cook that justified it.
  *
  * Split out from [republishCueLayer] so a caller that needs to rebuild several cues can publish
  * them in one pass — see `republishForLookEdit`, where publishing per cue would take the engine
@@ -986,7 +1022,7 @@ internal fun buildCombinedCueLayerRows(
     applyData: CueApplyData,
     cuePalette: List<ExtendedColour>? = null,
     firedTimedLayerIds: Set<Int>? = null,
-): List<CueAssignmentResolver.Assignment> {
+): CookResult {
     val cascade = PaletteCascade(
         cue = cuePalette ?: applyData.palette.toPaletteColours(),
         global = state.show.fxEngine.getPalette(),

@@ -199,4 +199,40 @@ class ProgrammerLayerStackEffectsTest : RouteIntegrationTest() {
         assertTrue(state.show.programmerStore.layers.isEmpty())
         assertTrue(state.show.programmerStore.isEmpty)
     }
+
+    @Test
+    fun `a stomping programmer layer publishes suppression for the layers below it`() =
+        testApplication {
+            // The programmer's half of FU-LOOK-STOMP-WITHIN-CUE. Worth its own test because the
+            // publish happens in `materialise`, not beside the instances in `syncEffects` — and
+            // because a programmer-layer effect sits in the reserved band, which is exempt from
+            // *programmer* suppression, so stomp is the only thing that can quiet it.
+            mountTestApp(state)
+            val client = jsonClient()
+            LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+            val below = client.createLook("Chase", "80")
+            val stomper = client.createLook("Hold", "200")
+
+            val lower = add(below, "hex-1")
+            val upper = add(stomper, "hex-1")
+
+            assertTrue(
+                engine.programmerStompSuppressionForTest().isEmpty(),
+                "nothing stomps until a layer says so",
+            )
+
+            stack.patch(upper.layerId, stomp = true)
+            assertEquals(
+                mapOf(lower.layerId to mapOf("hex-1" to setOf("dimmer"))),
+                engine.programmerStompSuppressionForTest(),
+            )
+
+            // And it retracts: an order change alone moves the suppression, which is why it is
+            // published from the cook rather than from the spawn/retract classifier.
+            stack.move(upper.layerId, 0)
+            assertTrue(
+                engine.programmerStompSuppressionForTest().isEmpty(),
+                "the stomper is now the bottom layer, so there is nothing below it to stomp",
+            )
+        }
 }

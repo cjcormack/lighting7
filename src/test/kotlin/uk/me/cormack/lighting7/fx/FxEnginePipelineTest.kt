@@ -843,4 +843,160 @@ class FxEnginePipelineTest {
         assertEquals(u1, swapped?.rateSpeedMasterUuid)
         assertEquals(0, swapped?.rateMasterSlot)
     }
+
+    // ─── Within-cue layer stomp (FU-LOOK-STOMP-WITHIN-CUE) ──────────────────
+
+    @Test
+    fun `a stomped layer's effect stops painting and the cue's cooked value shows through`() {
+        val rig = newRig(firstChannel = 1)
+        // Layer 4 holds 100 — the value the stomping layer asserted, which is why the cook
+        // publishes a suppression entry naming the layer beneath it.
+        rig.engine.setCueAssignments(
+            cueId = 1,
+            assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
+            stompSuppression = mapOf(7 to mapOf("hex-a" to setOf("dimmer"))),
+        )
+
+        val effect = makeStaticDimmer(value = 30u, blendMode = BlendMode.OVERRIDE).also {
+            it.cueId = 1
+            it.cueLayerId = 7
+        }
+        val id = rig.engine.addEffect(effect)
+        rig.engine.processBeatTick(tick(0))
+
+        assertEquals(
+            100u.toUByte(), rig.controller.currentValues[1],
+            "the stomped layer's effect must not paint over the cooked value",
+        )
+        assertTrue(
+            rig.engine.getActiveEffects().any { it.id == id },
+            "suppression, not removal — the instance keeps running so clearing the stomp can undo it",
+        )
+    }
+
+    @Test
+    fun `clearing the stomp brings the same instance back`() {
+        // The whole reason within-cue stomp suppresses instead of removing: disabling the stomping
+        // layer, or pulling its amount to zero, only triggers a recook — and a recook has no
+        // removed instance to bring back. Phase survives too, which a respawn would not give.
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(
+            cueId = 1,
+            assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
+            stompSuppression = mapOf(7 to mapOf("hex-a" to setOf("dimmer"))),
+        )
+        val effect = makeStaticDimmer(value = 30u, blendMode = BlendMode.OVERRIDE).also {
+            it.cueId = 1
+            it.cueLayerId = 7
+        }
+        val id = rig.engine.addEffect(effect)
+        rig.engine.processBeatTick(tick(0))
+        assertEquals(100u.toUByte(), rig.controller.currentValues[1], "stomped")
+
+        // Re-cooked with the stomp off: same rows, no suppression.
+        rig.engine.setCueAssignments(
+            cueId = 1,
+            assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
+        )
+        rig.engine.processBeatTick(tick(1))
+
+        assertEquals(30u.toUByte(), rig.controller.currentValues[1], "the effect paints again")
+        assertTrue(rig.engine.getActiveEffects().any { it.id == id }, "and it is the same instance")
+    }
+
+    @Test
+    fun `a layer's stomp leaves the cue's own ad-hoc effect running`() {
+        // A cue's ad-hoc effects belong to no layer, so nothing in the stack is above them to
+        // switch them off — they sit alongside the cue's local rows, which already beat every
+        // layer on values.
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(
+            cueId = 1,
+            assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
+            stompSuppression = mapOf(7 to mapOf("hex-a" to setOf("dimmer"))),
+        )
+
+        val adHoc = makeStaticDimmer(value = 30u, blendMode = BlendMode.OVERRIDE).also {
+            it.cueId = 1
+            // cueLayerId deliberately left null — this is the cue's own effect, not a layer's.
+        }
+        rig.engine.addEffect(adHoc)
+        rig.engine.processBeatTick(tick(0))
+
+        assertEquals(30u.toUByte(), rig.controller.currentValues[1])
+    }
+
+    @Test
+    fun `stomp is per property — the stomped layer's other effects still paint`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(
+            cueId = 1,
+            assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
+            stompSuppression = mapOf(7 to mapOf("hex-a" to setOf("dimmer"))),
+        )
+
+        val onWhite = FxInstance(
+            effect = StaticValue(90u),
+            target = SliderTarget("hex-a", "white"),
+            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            blendMode = BlendMode.OVERRIDE,
+        ).also { it.cueId = 1; it.cueLayerId = 7 }
+        rig.engine.addEffect(onWhite)
+        rig.engine.processBeatTick(tick(0))
+
+        assertEquals(
+            90u.toUByte(), rig.controller.currentValues[6],
+            "the stomper asserted dimmer only, so the same layer's white effect is untouched",
+        )
+    }
+
+    @Test
+    fun `a stomped programmer layer's effect is suppressed despite the band exemption`() {
+        // Programmer-layer effects live in the reserved band, and the band is exempt from
+        // *programmer* suppression on purpose — it modulates on top of the operator's values. Stomp
+        // is checked before that exemption, or programmer stomp could never do anything at all.
+        val rig = newRig(firstChannel = 1)
+        rig.programmerStore.put(
+            ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(100u),
+        )
+        rig.engine.setProgrammerStompSuppression(mapOf(3 to mapOf("hex-a" to setOf("dimmer"))))
+
+        val effect = makeStaticDimmer(
+            value = 30u,
+            blendMode = BlendMode.ADDITIVE,
+            priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE,
+        ).also { it.programmerLayerId = 3 }
+        rig.engine.addEffect(effect)
+        rig.engine.processBeatTick(tick(0))
+
+        assertEquals(
+            100u.toUByte(), rig.controller.currentValues[1],
+            "stomped: no ADDITIVE composition on top, despite the band exemption",
+        )
+    }
+
+    @Test
+    fun `a cue that stops drops its stomp suppression with its rows`() {
+        // The suppression's lifecycle is the cue's, which is why it is stored per cue and set in the
+        // same locked mutation as the rows. A stale entry would leave a layer's effect silenced
+        // after the cue that silenced it had gone.
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(
+            cueId = 1,
+            assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
+            stompSuppression = mapOf(7 to mapOf("hex-a" to setOf("dimmer"))),
+        )
+        val effect = makeStaticDimmer(value = 30u, blendMode = BlendMode.OVERRIDE).also {
+            it.cueId = 1
+            it.cueLayerId = 7
+        }
+        rig.engine.addEffect(effect)
+        rig.engine.processBeatTick(tick(0))
+        assertEquals(100u.toUByte(), rig.controller.currentValues[1], "stomped while the cue is live")
+
+        rig.engine.removeCueAssignments(1)
+        rig.engine.processBeatTick(tick(1))
+
+        assertEquals(30u.toUByte(), rig.controller.currentValues[1])
+    }
 }

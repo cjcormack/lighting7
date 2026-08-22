@@ -254,6 +254,44 @@ class ProgrammerLayerTest {
     }
 
     @Test
+    fun `a stomped layer's effect loses provenance to the cue it is stomped by`() {
+        // What is painting and what provenance reports come off one helper for exactly this case.
+        // Left apart, a stomped effect would still be named the winner, and the operator asking
+        // "why is this fixture this colour?" would be pointed at an effect nobody can see.
+        val rig = newRig()
+        val effectId = rig.engine.addEffect(
+            FxInstance(
+                effect = StaticValue(60u),
+                target = SliderTarget("hex-a", "dimmer"),
+                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                blendMode = BlendMode.OVERRIDE,
+            ).also { it.cueId = 10; it.cueLayerId = 4 }
+        )
+
+        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)))
+        assertEquals(
+            FxEngine.ProvenanceSource.EFFECT,
+            rig.engine.computeProvenance().first { it.propertyName == "dimmer" }.source,
+            "unstomped, the effect sits above the cue's value and owns it",
+        )
+
+        rig.engine.setCueAssignments(
+            10, listOf(dimmerAssignment(10, 100u)),
+            stompSuppression = mapOf(4 to mapOf("hex-a" to setOf("dimmer"))),
+        )
+        val stomped = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
+        assertEquals(FxEngine.ProvenanceSource.CUE, stomped.source)
+        assertNull(stomped.effectId, "and it does not name the effect it stopped reporting")
+
+        // Still running, so clearing the stomp hands provenance straight back.
+        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)))
+        assertEquals(
+            effectId,
+            rig.engine.computeProvenance().first { it.propertyName == "dimmer" }.effectId,
+        )
+    }
+
+    @Test
     fun `a programmer-band effect wins provenance over the programmer value it rides`() {
         val rig = newRig()
         rig.engine.writeProgrammerProperty(

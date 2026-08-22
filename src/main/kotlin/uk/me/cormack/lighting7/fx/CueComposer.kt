@@ -81,8 +81,13 @@ internal data class CookLayer(
  * Effects are Layer 3 and values are Layer 4, so an effect sits above a static value regardless of
  * layer order. "Layer 2 sets colour statically, Layer 1 runs a colour effect" resolves to the
  * effect winning even though Layer 2 is later. Layer order governs values-vs-values and
- * effects-vs-effects, not the value/effect boundary. The escape hatch is per-layer
- * [CookLayer.stomp].
+ * effects-vs-effects, not the value/effect boundary.
+ *
+ * The escape hatch is per-layer [CookLayer.stomp], and it works by **suppression, not removal**:
+ * [CookResult.stompSuppression] names the lower layers' `(target, property)` pairs the engine must
+ * skip painting, and the reset pass has already put the cooked value there. Removal would be
+ * unrecoverable — disabling the stomping layer, or pulling its amount to zero, only triggers a
+ * recook, and a recook has no instance left to bring back.
  *
  * See `docs/plans/completed/looks-and-layers-plan.md` §3.3 and `docs/lighting-composition-model.md`.
  */
@@ -107,6 +112,50 @@ data class CookWinner(
     val layerId: Int,
     val lookId: Int,
     val lookName: String,
+)
+
+/**
+ * Which of a layer's *own* effects a higher stomping layer has switched off:
+ * `layerId → targetKey → property names`.
+ *
+ * Read per tick by `FxEngine.isSuppressed` against an instance's `cueLayerId` /
+ * `programmerLayerId`. The key space is the layer's, not the cue's — and the two id spaces
+ * (`DaoCueLayer` row ids and `ProgrammerStore.mintLayerId`'s counter) are held in **separate** maps
+ * on the engine rather than risking a collision in one.
+ *
+ * Public only because it appears in [FxEngine]'s signatures; it is a plain `Map` alias.
+ */
+typealias LayerStompSuppression = Map<Int, Map<String, Set<String>>>
+
+/**
+ * Everything one [CueComposer.cook] produced: the Layer 4 rows, plus the two derived signals that
+ * **cannot be recovered from the rows afterwards**.
+ *
+ * Both come from the same fact — which `(target, property)` pairs each layer *asserted* — and the
+ * rows keep only the winner per key. A layer that asserted a key and then lost it to a higher layer
+ * still asserted it, and both signals depend on that:
+ *
+ * - [stompSuppression], because a stomping layer suppresses lower layers' effects on every property
+ *   it asserts, won or not.
+ * - [assertedKeys], because the *cue-level* (cross-cue) stomp overlap has to cover the whole
+ *   surface the cue holds. Before the layer model that surface simply was the cue's local rows,
+ *   which is why `buildStompOverlapFromAssignments` on its own stomped nothing on a cue whose
+ *   colour came entirely from a layer.
+ *
+ * Returning them together rather than leaving `cook` to yield rows and offering the rest through a
+ * second entry point is deliberate: a caller that publishes rows without the suppression map
+ * silently reinstates the bug this type exists to fix, and there would be nothing to notice it.
+ */
+internal data class CookResult(
+    val rows: List<CueAssignmentResolver.Assignment>,
+    /** Empty unless some contributing layer has [CookLayer.stomp] set. */
+    val stompSuppression: LayerStompSuppression,
+    /**
+     * Every `(targetKey, propertyName)` any contributing layer asserted — fixture keys, plus the
+     * key of the group a row arrived *through*, because a group-targeted effect is matched on the
+     * group's own name by [FxEngine.stompForCue] and would otherwise never overlap.
+     */
+    val assertedKeys: Set<FxEngine.PropertyKey>,
 )
 
 internal object CueComposer {
@@ -175,7 +224,7 @@ internal object CueComposer {
          * with its own precedence.
          */
         resolveLook: (UUID) -> LookSnapshot? = { lookRegistry?.snapshot(it) },
-    ): List<CueAssignmentResolver.Assignment> {
+    ): CookResult {
         val acc = LinkedHashMap<Key, Contribution>()
 
         // Indexed over the *filtered and sorted* list, so a CookWinner.index is a rank within the
@@ -186,6 +235,13 @@ internal object CueComposer {
             .filter { it.enabled && it.amount > 0.0 && (!it.isTimed || it.layerId in includeTimed) }
             .sortedBy { it.sortOrder }
 
+        // What each contributing layer actually asserted, in rank order. Rank order rather than a
+        // map keyed by layerId because "stomp" is a statement about *position*: a stomping layer
+        // switches off the layers below it, and only the ordering knows which those are. A layer
+        // whose Look failed to load is absent here, which is correct on both counts — it asserts
+        // nothing, so it neither stomps nor needs suppressing.
+        val asserted = ArrayList<LayerAssertions>(contributing.size)
+
         for ((index, layer) in contributing.withIndex()) {
             val look = resolveLook(layer.lookUuid)
             if (look == null) {
@@ -195,7 +251,9 @@ internal object CueComposer {
                 )
                 continue
             }
-            applyLayer(fixtures, cueId, layer, index, look, cascade, acc)
+            val keys = HashMap<String, MutableSet<String>>()
+            applyLayer(fixtures, cueId, layer, index, look, cascade, acc, keys)
+            asserted.add(LayerAssertions(layer.layerId, layer.stomp, keys))
         }
 
         // The local layer always wins. Fixture-level rows beat group-derived ones for the same key,
@@ -216,7 +274,7 @@ internal object CueComposer {
             )
         }
 
-        return acc.values.map { c ->
+        val rows = acc.values.map { c ->
             CueAssignmentResolver.Assignment(
                 cueId = cueId,
                 priority = priority,
@@ -233,6 +291,54 @@ internal object CueComposer {
                 layerWinner = c.winner,
             )
         }
+        return CookResult(
+            rows = rows,
+            stompSuppression = buildStompSuppression(asserted),
+            assertedKeys = asserted.flatMapTo(HashSet()) { layer ->
+                layer.keys.entries.flatMap { (targetKey, properties) ->
+                    properties.map { FxEngine.PropertyKey(targetKey, it) }
+                }
+            },
+        )
+    }
+
+    /** One contributing layer's identity, stomp flag and asserted `targetKey → properties`. */
+    private class LayerAssertions(
+        val layerId: Int,
+        val stomp: Boolean,
+        val keys: Map<String, Set<String>>,
+    )
+
+    /**
+     * Turn rank-ordered assertions into per-layer suppression: for every stomping layer, every
+     * layer **below** it loses its effects on every property the stomper asserts.
+     *
+     * Three boundaries, each deliberate:
+     *
+     * - **Strictly below.** A stomping layer does not suppress its own effects. Within one layer the
+     *   Layer 3/4 order still holds — a Look holding both a colour row and a colour effect runs the
+     *   effect — and a layer that switched off its own effect would have no way to express itself.
+     * - **Layers only.** The cue's local rows and its ad-hoc effects belong to no layer, so a layer
+     *   never stomps them. Local rows already beat every layer on values, and an ad-hoc effect sits
+     *   alongside them rather than under the stack.
+     * - **Coarse.** Every property the stomper asserts, not only the ones a lower layer's effect
+     *   happens to be fighting over. `FU-LOOK-STOMP-GRANULAR` is the finer version, deliberately
+     *   left until this one has been used on a rig.
+     */
+    private fun buildStompSuppression(asserted: List<LayerAssertions>): LayerStompSuppression {
+        if (asserted.none { it.stomp }) return emptyMap()
+        val out = HashMap<Int, MutableMap<String, MutableSet<String>>>()
+        for ((rank, stomper) in asserted.withIndex()) {
+            if (!stomper.stomp) continue
+            if (stomper.keys.isEmpty()) continue
+            for (below in asserted.subList(0, rank)) {
+                val into = out.getOrPut(below.layerId) { HashMap() }
+                for ((targetKey, properties) in stomper.keys) {
+                    into.getOrPut(targetKey) { HashSet() }.addAll(properties)
+                }
+            }
+        }
+        return out
     }
 
     /**
@@ -293,8 +399,11 @@ internal object CueComposer {
         val fixture: Fixture,
         val propertyName: String,
         val rawValue: String,
-        val isGroupOrigin: Boolean,
-    )
+        /** The group this contribution arrived through, or null when the row named the fixture. */
+        val groupKey: String?,
+    ) {
+        val isGroupOrigin: Boolean get() = groupKey != null
+    }
 
     private fun applyLayer(
         fixtures: Fixtures,
@@ -305,6 +414,12 @@ internal object CueComposer {
         look: LookSnapshot,
         baseCascade: PaletteCascade,
         acc: LinkedHashMap<Key, Contribution>,
+        /**
+         * Collects `targetKey → properties` for everything this layer actually asserted — after the
+         * mask, the property lookup and the value parse, so a masked-out or unparsable row is not
+         * recorded as an assertion. See [CookResult] for the two things that read it.
+         */
+        asserted: MutableMap<String, MutableSet<String>>,
     ) {
         val mask = try {
             parseMaskGroups(layer.propertyMask?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() })
@@ -325,7 +440,7 @@ internal object CueComposer {
         // both *supplies* targets to deferred rows and *filters* bound ones — one meaning serving
         // two jobs, and what lets the migration preserve coverage exactly.
         val layerTargets = layer.targets.map { it.target }
-        val layerFixtures: List<Pair<Fixture, Boolean>>? =
+        val layerFixtures: List<Expanded>? =
             if (layerTargets.isEmpty()) null else expandTargets(fixtures, cueId, layer, layerTargets)
 
         val pending = ArrayList<Pending>()
@@ -342,16 +457,15 @@ internal object CueComposer {
                     )
                     continue
                 }
-                for ((fixture, isGroup) in layerFixtures) {
-                    pending.add(Pending(fixture, row.propertyName, row.value, isGroup))
+                for (e in layerFixtures) {
+                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey))
                 }
             } else {
-                val isGroup = rowTarget is TargetRef.Group
                 val rowFixtures = expandTargets(fixtures, cueId, layer, listOf(rowTarget))
-                val allowed = layerFixtures?.mapTo(HashSet()) { it.first.key }
-                for ((fixture, _) in rowFixtures) {
-                    if (allowed != null && fixture.key !in allowed) continue
-                    pending.add(Pending(fixture, row.propertyName, row.value, isGroup))
+                val allowed = layerFixtures?.mapTo(HashSet()) { it.fixture.key }
+                for (e in rowFixtures) {
+                    if (allowed != null && e.fixture.key !in allowed) continue
+                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey))
                 }
             }
         }
@@ -381,6 +495,13 @@ internal object CueComposer {
                 continue
             }
 
+            // Recorded here, past every skip above, so an assertion means "this layer really put a
+            // value on that key". The group alias goes in alongside the fixture key rather than
+            // instead of it: within-cue suppression is checked per member (see
+            // `FxEngine.processGroupEffect`), the cross-cue overlap on the effect's own target.
+            asserted.getOrPut(p.fixture.key) { HashSet() }.add(canonical)
+            p.groupKey?.let { asserted.getOrPut(it) { HashSet() }.add(canonical) }
+
             val key = Key(p.fixture.key, canonical)
             val below = acc[key]?.value
             acc[key] = Contribution(
@@ -399,16 +520,24 @@ internal object CueComposer {
     }
 
     /**
-     * Expand targets to `(fixture, cameFromGroup)` pairs. Missing groups and fixtures are logged at
-     * warn and skipped — stale data must not break cue apply.
+     * One expanded target: the fixture, and the group it came through if it came through one.
+     *
+     * Carries the group's *key* rather than the old boolean because the stomp overlap needs to name
+     * it — an effect whose target is a group is matched on the group's own name.
+     */
+    private class Expanded(val fixture: Fixture, val groupKey: String?)
+
+    /**
+     * Expand targets to fixtures, remembering the originating group. Missing groups and fixtures are
+     * logged at warn and skipped — stale data must not break cue apply.
      */
     private fun expandTargets(
         fixtures: Fixtures,
         cueId: Int,
         layer: CookLayer,
         targets: List<TargetRef>,
-    ): List<Pair<Fixture, Boolean>> {
-        val out = ArrayList<Pair<Fixture, Boolean>>()
+    ): List<Expanded> {
+        val out = ArrayList<Expanded>()
         for (target in targets) {
             when (target) {
                 is TargetRef.Group -> {
@@ -423,7 +552,7 @@ internal object CueComposer {
                         logger.warn("cue {}: layer on look '{}' — group '{}' has no Fixture members — skipping", cueId, layer.lookName, target.key)
                         continue
                     }
-                    for (member in members) out.add(member to true)
+                    for (member in members) out.add(Expanded(member, target.key))
                 }
                 is TargetRef.Fixture -> {
                     val fixture = try {
@@ -432,7 +561,7 @@ internal object CueComposer {
                         logger.warn("cue {}: layer on look '{}' — fixture '{}' missing — skipping", cueId, layer.lookName, target.key)
                         continue
                     }
-                    out.add(fixture to false)
+                    out.add(Expanded(fixture, null))
                 }
             }
         }

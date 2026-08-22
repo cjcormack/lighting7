@@ -417,6 +417,11 @@ class ProgrammerLayerStack(
         store.mutateLayers { emptyList<ProgrammerLayer>() to Unit }
         previewSnapshot = null
         synchronized(effectsLock) { effectInstances.clear() }
+        // Cleared explicitly rather than left to the next recook, because this is the one mutation
+        // that deliberately doesn't recook. It would be inert either way — `mintLayerId` is
+        // monotonic for the life of the process, so no future layer can inherit a stale entry — but
+        // relying on that makes a local invariant depend on a distant one.
+        engine().setProgrammerStompSuppression(emptyMap())
     }
 
     /**
@@ -449,10 +454,17 @@ class ProgrammerLayerStack(
         return ProgrammerLayerOutcome(moved.size, fx.spawned, fx.retracted, fx.repriorised)
     }
 
-    /** Cook the stack to values and swap them into the store. No publish. */
+    /**
+     * Cook the stack to values and swap them into the store. No publish.
+     *
+     * Also republishes the stack's within-cue stomp suppression, which has to happen here rather
+     * than in [syncEffects] beside the instances it affects: only the cook knows which properties
+     * each layer asserted, and `syncEffects` deliberately does not rebuild on a mask, amount or
+     * order change — all three of which move the suppression set.
+     */
     private fun materialise(layers: List<ProgrammerLayer>): Set<CueAssignmentResolver.Key> {
         val cookLayers = layers.map { it.toCookLayer() }
-        val rows = CueComposer.cook(
+        val cooked = CueComposer.cook(
             fixtures = fixtures(),
             cueId = programmerCookCueId,
             priority = 0,
@@ -465,8 +477,9 @@ class ProgrammerLayerStack(
             lookRegistry = lookRegistry(),
             resolveLook = ::resolveLook,
         )
+        engine().setProgrammerStompSuppression(cooked.stompSuppression)
         return store.putLayerSlots(
-            rows.map { row ->
+            cooked.rows.map { row ->
                 ProgrammerStore.LayerSlotWrite(
                     fixtureKey = row.targetKey,
                     propertyName = row.propertyName,

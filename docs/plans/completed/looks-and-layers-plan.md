@@ -26,11 +26,12 @@
 > and a layer drag not respawning the effects under it. Three extensions remain unseen and are
 > listed there; the mid-crossfade Look edit is the one worth doing.
 >
-> **Two things deliberately not done**, each with a follow-up: per-layer `stomp` remains carried
-> but unread (`FU-LOOK-STOMP-WITHIN-CUE` — it needs an `FxInstance` layer id and a suppression
+> **Two things deliberately not done**, each with a follow-up. Per-layer `stomp` shipped carried
+> but unread (`FU-LOOK-STOMP-WITHIN-CUE` — it needed an `FxInstance` layer id and a suppression
 > channel out of `cook`, which is engine work rather than a flag flip, so shipping the toggle alone
-> would have been a control that does nothing); and a Look's element rows still compose nowhere
-> (`FU-LOOK-ELEMENT-ROWS`, correction #10, pre-existing).
+> would have been a control that does nothing); **that follow-up has since landed** — the engine
+> reads it and `LookStack`'s badge is a toggle, see the Completed section of `followups.md`. A
+> Look's element rows still compose nowhere (`FU-LOOK-ELEMENT-ROWS`, correction #10, pre-existing).
 >
 > **Session 4's own departures from this plan are recorded at the end of §5.**
 >

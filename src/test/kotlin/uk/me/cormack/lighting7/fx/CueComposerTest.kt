@@ -82,6 +82,7 @@ class CueComposerTest {
         amount: Double = 1.0,
         enabled: Boolean = true,
         layerId: Int = look.lookId,
+        stomp: Boolean = false,
     ) = CookLayer(
         lookId = look.lookId,
         lookUuid = look.lookUuid,
@@ -93,6 +94,7 @@ class CueComposerTest {
         blendMode = blendMode,
         amount = amount,
         layerId = layerId,
+        stomp = stomp,
     )
 
     private fun localSlider(
@@ -115,6 +117,15 @@ class CueComposerTest {
     )
 
     private fun cook(
+        fixtures: Fixtures,
+        registry: LookRegistry,
+        layers: List<CookLayer>,
+        localRows: List<CueAssignmentResolver.Assignment> = emptyList(),
+        cascade: PaletteCascade = PaletteCascade.EMPTY,
+    ) = cookFull(fixtures, registry, layers, localRows, cascade).rows
+
+    /** As [cook], but the whole [CookResult] — for the tests that assert on stomp suppression. */
+    private fun cookFull(
         fixtures: Fixtures,
         registry: LookRegistry,
         layers: List<CookLayer>,
@@ -598,13 +609,13 @@ class CueComposerTest {
 
         val beforeFire = CueComposer.cook(
             fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
-        )
+        ).rows
         assertEquals(100u.toUByte(), sliderAt(beforeFire, "hex-1"))
 
         val afterFire = CueComposer.cook(
             fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
             includeTimed = setOf(timed.lookId),
-        )
+        ).rows
         assertEquals(255u.toUByte(), sliderAt(afterFire, "hex-1"))
         val keys = afterFire.map { it.targetKey to it.propertyName }
         assertEquals(keys.size, keys.toSet().size, "firing a timed layer must not double up a key")
@@ -628,7 +639,7 @@ class CueComposerTest {
         val afterFirstFire = CueComposer.cook(
             fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
             includeTimed = setOf(first.layerId),
-        )
+        ).rows
         assertEquals(
             100u.toUByte(),
             sliderAt(afterFirstFire, "hex-1"),
@@ -638,7 +649,7 @@ class CueComposerTest {
         val afterBoth = CueComposer.cook(
             fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
             includeTimed = setOf(first.layerId, second.layerId),
-        )
+        ).rows
         assertEquals(200u.toUByte(), sliderAt(afterBoth, "hex-1"))
     }
 
@@ -807,5 +818,183 @@ class CueComposerTest {
         val rows = cook(fixtures, registry, listOf(layer(warm, sortOrder = 0)))
         assertTrue(rows.all { it.layerWinner != null }, "every layer-produced row names its layer")
         assertEquals(rows.map { it.targetKey }.distinct(), rows.map { it.targetKey })
+    }
+
+    // ─── Within-cue stomp (FU-LOOK-STOMP-WITHIN-CUE) ────────────────────
+
+    @Test
+    fun `a stomping layer suppresses the layers below it on every property it asserts`() {
+        // The escape hatch for the one thing layer order cannot express: effects are Layer 3 and
+        // values Layer 4, so a lower layer's colour effect beats a higher layer's static colour
+        // whatever the order says. `stomp` on the higher layer is how the operator says otherwise.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val chase = look("Chase", lookRow("fixture", "hex-1", "dimmer", "10"))
+        val hold = look("Hold", lookRow("fixture", "hex-1", "dimmer", "200"))
+        val registry = registryOf(fixtures, chase, hold)
+
+        val cooked = cookFull(
+            fixtures, registry,
+            listOf(
+                layer(chase, sortOrder = 0, layerId = 11),
+                layer(hold, sortOrder = 1, layerId = 12, stomp = true),
+            ),
+        )
+
+        assertEquals(
+            mapOf(11 to mapOf("hex-1" to setOf("dimmer"))),
+            cooked.stompSuppression,
+            "only the lower layer is suppressed, and only on the property the stomper asserts",
+        )
+    }
+
+    @Test
+    fun `a stomping layer does not suppress itself or anything above it`() {
+        // Strictly below. Suppressing its own effects would leave a layer no way to express
+        // itself at all; suppressing the layers above would invert the precedence rule that the
+        // whole cook exists to state.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val bottom = look("Bottom", lookRow("fixture", "hex-1", "dimmer", "10"))
+        val middle = look("Middle", lookRow("fixture", "hex-1", "dimmer", "120"))
+        val top = look("Top", lookRow("fixture", "hex-1", "dimmer", "200"))
+        val registry = registryOf(fixtures, bottom, middle, top)
+
+        val cooked = cookFull(
+            fixtures, registry,
+            listOf(
+                layer(bottom, sortOrder = 0, layerId = 21),
+                layer(middle, sortOrder = 1, layerId = 22, stomp = true),
+                layer(top, sortOrder = 2, layerId = 23),
+            ),
+        )
+
+        assertEquals(setOf(21), cooked.stompSuppression.keys)
+    }
+
+    @Test
+    fun `stomp suppression follows sortOrder, not array position`() {
+        // `sortOrder` is authoritative everywhere else in the layer model; a stomper handed to
+        // cook first but sorted last must still suppress the layer that sorts below it.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val quiet = look("Quiet", lookRow("fixture", "hex-1", "dimmer", "10"))
+        val loud = look("Loud", lookRow("fixture", "hex-1", "dimmer", "200"))
+        val registry = registryOf(fixtures, quiet, loud)
+
+        val cooked = cookFull(
+            fixtures, registry,
+            listOf(
+                layer(loud, sortOrder = 5, layerId = 32, stomp = true),
+                layer(quiet, sortOrder = 1, layerId = 31),
+            ),
+        )
+
+        assertEquals(setOf(31), cooked.stompSuppression.keys)
+    }
+
+    @Test
+    fun `a masked stomping layer only suppresses the family it still asserts`() {
+        // The mask runs before the assertion is recorded, so stomp inherits masking for free —
+        // which is what makes a colour-masked layer a colour-only stomp.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val below = look(
+            "Below",
+            lookRow("fixture", "hex-1", "dimmer", "10"),
+            lookRow("fixture", "hex-1", "colour", "#ff0000"),
+        )
+        val stomper = look(
+            "Stomper",
+            lookRow("fixture", "hex-1", "dimmer", "200"),
+            lookRow("fixture", "hex-1", "colour", "#00ff00"),
+        )
+        val registry = registryOf(fixtures, below, stomper)
+
+        val cooked = cookFull(
+            fixtures, registry,
+            listOf(
+                layer(below, sortOrder = 0, layerId = 41),
+                layer(stomper, sortOrder = 1, layerId = 42, stomp = true, propertyMask = "COLOUR"),
+            ),
+        )
+
+        assertEquals(
+            setOf("rgbColour"),
+            cooked.stompSuppression.getValue(41).getValue("hex-1"),
+            "the masked-out dimmer row asserted nothing, so it stomps nothing",
+        )
+    }
+
+    @Test
+    fun `a disabled stomping layer stomps nothing`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val below = look("Below", lookRow("fixture", "hex-1", "dimmer", "10"))
+        val stomper = look("Stomper", lookRow("fixture", "hex-1", "dimmer", "200"))
+        val registry = registryOf(fixtures, below, stomper)
+
+        val cooked = cookFull(
+            fixtures, registry,
+            listOf(
+                layer(below, sortOrder = 0, layerId = 51),
+                layer(stomper, sortOrder = 1, layerId = 52, stomp = true, enabled = false),
+            ),
+        )
+
+        assertTrue(cooked.stompSuppression.isEmpty())
+    }
+
+    @Test
+    fun `no stomping layer means no suppression map at all`() {
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val warm = look("Warm", lookRow("fixture", "hex-1", "dimmer", "200"))
+        val registry = registryOf(fixtures, warm)
+
+        assertTrue(cookFull(fixtures, registry, listOf(layer(warm, sortOrder = 0))).stompSuppression.isEmpty())
+    }
+
+    // ─── The cross-cue overlap's layer half ─────────────────────────────
+
+    @Test
+    fun `assertedKeys covers a layer's fixtures and names the group they came through`() {
+        // The gap this closes: the cue-level stomp overlap was built from local rows alone, so a
+        // cue whose colour came entirely from a layer stomped nothing on colour. A group-targeted
+        // effect is matched on the *group's* key, which cook's per-fixture rows never carry — so
+        // the alias has to be recorded here or that effect can never overlap.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val wash = look("Wash", lookRow(propertyName = "dimmer", value = "200"))
+        val registry = registryOf(fixtures, wash)
+
+        val cooked = cookFull(
+            fixtures, registry,
+            listOf(layer(wash, sortOrder = 0, targets = listOf(CueTargetDto("group", "front-wash")))),
+        )
+
+        assertEquals(
+            setOf(
+                FxEngine.PropertyKey("hex-1", "dimmer"),
+                FxEngine.PropertyKey("hex-2", "dimmer"),
+                FxEngine.PropertyKey("front-wash", "dimmer"),
+            ),
+            cooked.assertedKeys,
+        )
+    }
+
+    @Test
+    fun `assertedKeys records a key a higher layer went on to overwrite`() {
+        // Which is the reason it is a separate field rather than something read off the rows: the
+        // rows keep only the winner per key, and a layer that asserted and then lost still
+        // asserted.
+        val fixtures = fixturesWithTwoHexesInAGroup()
+        val one = look("One", lookRow(propertyName = "dimmer", value = "10"))
+        val two = look("Two", lookRow(propertyName = "dimmer", value = "200"))
+        val registry = registryOf(fixtures, one, two)
+
+        val cooked = cookFull(
+            fixtures, registry,
+            listOf(
+                layer(one, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                layer(two, sortOrder = 1, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+            ),
+        )
+
+        assertEquals(1, cooked.rows.size, "one contributor per key, as always")
+        assertEquals(setOf(FxEngine.PropertyKey("hex-1", "dimmer")), cooked.assertedKeys)
     }
 }

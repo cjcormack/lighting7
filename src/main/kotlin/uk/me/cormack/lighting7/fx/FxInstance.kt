@@ -176,6 +176,20 @@ class FxInstance(
      */
     var programmerLayerId: Int? = null
 
+    /**
+     * Set when this effect was spawned by a **cue's** Look layer, naming the `DaoCueLayer` row.
+     *
+     * A fourth id rather than making do with [lookId], for exactly the reason `CookLayer.layerId`
+     * exists: one cue may legitimately layer the same Look twice — a chase built from one Look at
+     * two delays is the obvious case — so [lookId] cannot say *which* of them spawned this
+     * instance. Within-cue stomp is a statement about one layer, so it needs the id that can.
+     *
+     * The programmer's twin is [programmerLayerId], and they are two fields rather than one because
+     * they are ids in different spaces: `DaoCueLayer` row ids and `ProgrammerStore.mintLayerId`'s
+     * in-memory counter, which will collide freely.
+     */
+    var cueLayerId: Int? = null
+
     /** If this effect was applied as part of a cue, the cue ID. Null otherwise. */
     var cueId: Int? = null
 

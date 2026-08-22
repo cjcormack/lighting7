@@ -119,15 +119,58 @@ class FxEngine(
         return suppressionCache
     }
 
+    /**
+     * Should [effect] skip painting `(fixtureKey, propertyName)` this tick?
+     *
+     * Two independent reasons, and the order matters:
+     *
+     * 1. **Within-cue / within-stack stomp** — a higher layer with `stomp` set asserts this
+     *    property, so this layer's effect is switched off on it. Checked *first*, and deliberately
+     *    outside the programmer-band exemption below: a programmer layer's effects live in that band
+     *    by construction, so exempting the band would make programmer stomp a no-op.
+     * 2. **Programmer suppression** — the programmer holds this key, so effects must not paint over
+     *    it. Band effects are exempt: they modulate on top of the programmer rather than fighting it.
+     *
+     * The reset pass ([resetActiveProperties]) has already put the layer below on the property, so a
+     * skipped apply *shows the cooked value* rather than freezing the effect's last frame. That is
+     * what makes suppression recoverable where removal would not be: the instance keeps running, and
+     * clearing the stomp brings it back with its phase intact.
+     */
     private fun isSuppressed(
         suppression: Map<String, Set<String>>,
         fixtureKey: String,
         propertyName: String,
         effect: FxInstance,
     ): Boolean {
+        if (isLayerStomped(effect, fixtureKey, propertyName)) return true
+
         if (suppression.isEmpty()) return false
         if (isProgrammerFxPriority(effect.priority)) return false
         return suppression[fixtureKey]?.contains(propertyName) == true
+    }
+
+    /**
+     * Is [effect] switched off on this key by a stomping layer above it in its own stack?
+     *
+     * Shared by the tick loops' [isSuppressed] and by [highestPriorityEffectByKey], so what is
+     * *painting* and what provenance *reports* cannot disagree. Without that sharing, a stomped
+     * effect would still be named the winner, and "why is this fixture this colour?" would answer
+     * with an effect nobody can see.
+     *
+     * Gated on both snapshots being empty first, which is the overwhelmingly common case — a
+     * stomping layer is an escape hatch, not everyday authoring — so the usual tick pays two
+     * volatile reads and no map lookups.
+     */
+    private fun isLayerStomped(effect: FxInstance, fixtureKey: String, propertyName: String): Boolean {
+        if (cueStompFlat.isEmpty() && programmerStompFlat.isEmpty()) return false
+        val cueLayerId = effect.cueLayerId
+        val programmerLayerId = effect.programmerLayerId
+        val layerStomp = when {
+            cueLayerId != null -> cueStompFlat[cueLayerId]
+            programmerLayerId != null -> programmerStompFlat[programmerLayerId]
+            else -> return false
+        }
+        return layerStomp?.get(fixtureKey)?.contains(propertyName) == true
     }
 
     private fun rebuildSortedSnapshots() {
@@ -362,6 +405,11 @@ class FxEngine(
      * Highest-priority running effect per `(fixtureKey, propertyName)`. Shared by
      * [computeProvenance] and [underlyingSources] so the two can't disagree about which
      * effect is driving a property.
+     *
+     * A **layer-stomped** effect is skipped for the key it is stomped on, and only for that key: it
+     * is running, but it is not painting there, so reporting it would name a winner the operator
+     * cannot see. Skipping per key rather than per instance is what lets a lower-priority effect on
+     * the same key be reported instead, which is the honest answer when one exists.
      */
     private fun highestPriorityEffectByKey(
         include: (FxInstance) -> Boolean = { true },
@@ -372,6 +420,7 @@ class FxEngine(
             if (!include(effect)) continue
             val propertyName = effect.target.propertyName
             for (fixtureKey in resolveEffectFixtureKeys(effect)) {
+                if (isLayerStomped(effect, fixtureKey, propertyName)) continue
                 val k = fixtureKey to propertyName
                 val current = effectByKey[k]
                 if (current == null || sortedEffectsComparator.compare(effect, current) > 0) {
@@ -551,6 +600,22 @@ class FxEngine(
     // Guarded by [cueAssignmentsLock], like the two maps above.
     private val cueStackIds = HashMap<Int, Int>()
 
+    // cueId → that cue's within-cue stomp suppression, straight off `CookResult`. Held per cue so
+    // the cue's own lifecycle clears it: a cue that stops, or is republished with a layer's stomp
+    // switched off, replaces its whole entry in the same locked mutation as its rows. Guarded by
+    // [cueAssignmentsLock].
+    private val cueStompSuppression = HashMap<Int, LayerStompSuppression>()
+
+    // The flattened `cueLayerId → targetKey → properties` the tick loops read, rebuilt whenever
+    // [cueStompSuppression] changes. Flat because `DaoCueLayer` ids are unique across every cue, so
+    // no cue id is needed to disambiguate — and the hot path must not walk one map per live cue.
+    @Volatile private var cueStompFlat: LayerStompSuppression = emptyMap()
+
+    // The programmer stack's half of the same signal, keyed by `ProgrammerLayer.layerId`. A separate
+    // field rather than merged into [cueStompFlat] because the two id spaces are unrelated — see
+    // [FxInstance.cueLayerId].
+    @Volatile private var programmerStompFlat: LayerStompSuppression = emptyMap()
+
     private val cueAssignmentsLock = Any()
 
     /**
@@ -579,17 +644,29 @@ class FxEngine(
         assignments: List<CueAssignmentResolver.Assignment>,
         weight: Double = 1.0,
         cueStackId: Int? = null,
+        /**
+         * [CookResult.stompSuppression] for this publish. Passed alongside the rows rather than set
+         * through a call of its own so the two cannot disagree: they are one cook's output, and a
+         * publish that refreshed the rows while leaving stale suppression behind would keep a
+         * layer's effects switched off after its stomper was disabled.
+         *
+         * Defaulted to empty, which is also what every non-layer caller means — a hand-built row
+         * list belongs to no layer, so nothing can stomp it.
+         */
+        stompSuppression: LayerStompSuppression = emptyMap(),
     ) {
         synchronized(cueAssignmentsLock) {
             if (assignments.isEmpty()) {
                 val removed = cueAssignments.remove(cueId) != null
                 cueFadeWeights.remove(cueId)
                 cueStackIds.remove(cueId)
+                if (cueStompSuppression.remove(cueId) != null) rebuildStompFlatLocked()
                 if (removed) republishCueAssignments()
                 return
             }
             cueAssignments[cueId] = assignments
             if (cueStackId != null) cueStackIds[cueId] = cueStackId
+            setCueStompLocked(cueId, stompSuppression)
             val clamped = weight.coerceIn(0.0, 1.0)
             if (clamped >= 1.0) {
                 cueFadeWeights.remove(cueId)
@@ -614,21 +691,35 @@ class FxEngine(
      * Cues absent from [cueAssignments] are skipped: a cue that stopped being live between the
      * caller's scan and this call has nothing to republish.
      */
-    fun replaceCueAssignments(updates: Map<Int, List<CueAssignmentResolver.Assignment>>): Int {
+    fun replaceCueAssignments(
+        updates: Map<Int, List<CueAssignmentResolver.Assignment>>,
+        /**
+         * `cueId → CookResult.stompSuppression`, for the same reason [setCueAssignments] takes one.
+         * A cue present in [updates] but absent here has its suppression **cleared**, not left
+         * alone: the caller re-cooked that cue, so an absent entry means the new cook found no
+         * stomping layer.
+         */
+        stompSuppression: Map<Int, LayerStompSuppression> = emptyMap(),
+    ): Int {
         if (updates.isEmpty()) return 0
         var replaced = 0
         synchronized(cueAssignmentsLock) {
+            var stompChanged = false
             for ((cueId, rows) in updates) {
                 if (cueId !in cueAssignments) continue
                 if (rows.isEmpty()) {
                     cueAssignments.remove(cueId)
                     // Weight and stack id intentionally survive removal here too: the cue is still
                     // mid-fade as far as CueStackManager is concerned, and it owns that lifecycle.
+                    if (cueStompSuppression.remove(cueId) != null) stompChanged = true
                 } else {
                     cueAssignments[cueId] = rows
+                    val stomp = stompSuppression[cueId] ?: emptyMap()
+                    if (setCueStompEntryLocked(cueId, stomp)) stompChanged = true
                 }
                 replaced++
             }
+            if (stompChanged) rebuildStompFlatLocked()
             if (replaced > 0) republishCueAssignments()
         }
         return replaced
@@ -733,6 +824,10 @@ class FxEngine(
                 cueAssignments.remove(cueId)
                 cueFadeWeights.remove(cueId)
                 cueStackIds.remove(cueId)
+                // Goes with the rows, as everywhere else. A cue that has emptied out asserts
+                // nothing, and a suppression entry outliving the assertions that justified it would
+                // leave a layer's effects silenced with nothing left on stage to explain why.
+                if (cueStompSuppression.remove(cueId) != null) rebuildStompFlatLocked()
             } else {
                 cueAssignments[cueId] = mutable
             }
@@ -746,6 +841,7 @@ class FxEngine(
             val removed = cueAssignments.remove(cueId) != null
             cueFadeWeights.remove(cueId)
             cueStackIds.remove(cueId)
+            if (cueStompSuppression.remove(cueId) != null) rebuildStompFlatLocked()
             if (removed) {
                 republishCueAssignments()
             }
@@ -755,6 +851,10 @@ class FxEngine(
     /** Drop every cue's Layer 4 contribution — used by [stop] / [clearAllEffects] callers. */
     fun clearAllCueAssignments() {
         synchronized(cueAssignmentsLock) {
+            if (cueStompSuppression.isNotEmpty()) {
+                cueStompSuppression.clear()
+                rebuildStompFlatLocked()
+            }
             if (cueAssignments.isEmpty() && cueFadeWeights.isEmpty()) return
             cueAssignments.clear()
             cueFadeWeights.clear()
@@ -762,6 +862,53 @@ class FxEngine(
             republishCueAssignments()
         }
     }
+
+    // ─── Within-cue stomp suppression ───────────────────────────────────
+
+    /** Store [cueId]'s entry and refresh the flat snapshot if it moved. */
+    private fun setCueStompLocked(cueId: Int, suppression: LayerStompSuppression) {
+        if (setCueStompEntryLocked(cueId, suppression)) rebuildStompFlatLocked()
+    }
+
+    /** Store [cueId]'s entry without refreshing. Returns whether anything changed. */
+    private fun setCueStompEntryLocked(cueId: Int, suppression: LayerStompSuppression): Boolean =
+        if (suppression.isEmpty()) {
+            cueStompSuppression.remove(cueId) != null
+        } else {
+            cueStompSuppression.put(cueId, suppression) != suppression
+        }
+
+    /**
+     * Flatten every live cue's per-layer suppression into the one map the tick loops read.
+     *
+     * Safe to flatten because `DaoCueLayer` ids are unique across cues — two cues can never claim
+     * the same layer id, so no key collides and no cue id is needed to disambiguate.
+     */
+    private fun rebuildStompFlatLocked() {
+        cueStompFlat = when {
+            cueStompSuppression.isEmpty() -> emptyMap()
+            cueStompSuppression.size == 1 -> cueStompSuppression.values.first()
+            else -> HashMap<Int, Map<String, Set<String>>>().apply {
+                for (perCue in cueStompSuppression.values) putAll(perCue)
+            }
+        }
+    }
+
+    /**
+     * Publish the programmer stack's within-cue stomp suppression, replacing whatever it held.
+     *
+     * Called on every recook of the stack — so, unlike the cue path, there is no removal call:
+     * an empty map *is* "nothing stomps any more".
+     */
+    fun setProgrammerStompSuppression(suppression: LayerStompSuppression) {
+        programmerStompFlat = suppression
+    }
+
+    /**
+     * Test seam for the programmer half, which has no behavioural read short of pumping a tick.
+     * The cue half is asserted end-to-end in `FxEnginePipelineTest` instead.
+     */
+    internal fun programmerStompSuppressionForTest(): LayerStompSuppression = programmerStompFlat
 
     /** Which stack [cueId]'s currently-published assignments belong to, if it named one. */
     fun cueStackIdFor(cueId: Int): Int? = synchronized(cueAssignmentsLock) { cueStackIds[cueId] }
