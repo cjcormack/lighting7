@@ -24,6 +24,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Trigger | FE | operator asks for it |
 | [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 4th surface renders `AssignmentHealth` |
 | [`FU-FE-USE-TARGET-PROPERTIES`](#fu-fe-use-target-properties) | Trigger | FE | a 6th consumer of fixture/group property lookup |
+| [`FU-FE-LOOK-WS-COMPAT-INVALIDATION`](#fu-fe-look-ws-compat-invalidation) | Trigger | FE | a stale compatibility list after another client edits the library |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
@@ -36,6 +37,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
 | [`FU-CUE-APPLYDATA-ONE-BUILDER`](#fu-cue-applydata-one-builder) | Ready | Cue | — |
+| [`FU-FE-LOOK-SAVE-GUARD-TEST`](#fu-fe-look-save-guard-test) | Ready | FE | — |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
 | [`FU-AUTH-ATTRIBUTION`](#fu-auth-attribution) | Trigger | Auth | two accounts co-author, or any `formatVersion` bump |
@@ -136,6 +138,49 @@ plus a categorised variant for surfaces that need colour/dimmer/position groupin
 
 **Trigger**: a sixth consumer, or a property-shape change that forces a multi-file edit. Today's
 implementations are stable, so pulling them together now is churn that risks visual regressions.
+
+### `FU-FE-LOOK-SAVE-GUARD-TEST`
+
+**Cover the "save before the detail loads" guard** · Ready · Looks-and-layers session 2 review,
+2026-08-22
+
+`LookEditor` seeds its draft from the `look` prop. While `useLookQuery` is in flight — or if it
+fails — an *existing* Look is presented as an empty **create** draft, but the save handler still
+branches on `editingLookId != null` and PUTs. `LookEditor` always sends `rows`, and `saveLook`
+sends every key it is given, so the PUT carries `rows: []`, which the backend reads as "clear
+them" — out from under every cue resolving through that Look. A double-click on a library row
+during a slow fetch silently emptied a Look.
+
+Fixed 2026-08-22 by throwing in both handlers (`routes/Looks.tsx`, `components/busking/BuskingView.tsx`),
+which `LookEditor` renders in its inline alert while keeping the sheet open. **The fix has no test.**
+
+**Why it's still open**: the guard lives in route-component handlers, and `lighting-react` has no
+test file for `ProjectLooks` or `BuskingView` and no `renderWithProviders`-style helper anywhere —
+component tests mock the store hooks directly (see `LayersPane.test.tsx`). So the first test here
+also establishes the harness, which is why it didn't ride along with the one-line fix. The
+invalidation half of the same review *is* covered, in `store/looks.test.ts`.
+
+Worth doing because the failure is silent and destructive: nothing errors, the sheet closes, and
+the Look is empty.
+
+### `FU-FE-LOOK-WS-COMPAT-INVALIDATION`
+
+**A remote library edit leaves compatibility lists stale** · Trigger · Looks-and-layers session 2
+review, 2026-08-22
+
+`compatibleLookIds` is derived server-side and rides on the **fixture and group summaries**, not on
+the Look. The local mutations were fixed 2026-08-22 to invalidate `Fixture` / `GroupList` alongside
+`LookList` (pinned by three tests in `store/looks.test.ts`), but `startLooksBridge` — which handles
+the `lookListChanged` socket frame — still invalidates only `Look` / `LookList`. So a Look created
+or deleted on *another* client leaves this one's `LayerPicker` disabling every head for it and
+`LookTogglePicker` not offering it at all, until something unrelated refetches.
+
+**Trigger**: someone sees it — two desks, or a desk and a tablet, with the library open on one and
+a picker open on the other. Deliberately not fixed with the local half: widening the bridge makes
+**every** connected client refetch two lists on **any** library edit, and the fixture list is one of
+the larger payloads on the wire. The cheaper shape, if it comes to it, is to invalidate the two
+lists only on the frames that can move `compatibleLookIds` (create and delete, not a rename) — which
+needs the frame to say which, and today `lookListChanged` carries no payload at all.
 
 ---
 
