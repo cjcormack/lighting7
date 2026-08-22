@@ -13,7 +13,10 @@ import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
+import uk.me.cormack.lighting7.models.CueLayerDto
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import uk.me.cormack.lighting7.testsupport.programmerChannel
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import uk.me.cormack.lighting7.testsupport.programmerValue
@@ -224,6 +227,178 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
+
+    // ─── Layers ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `a cue's layers arrive as programmer layers, not as flattened literals`() = testApplication {
+        // The gap this rewrite closes. Include used to call the preset builder and never read
+        // `cueData.layers` at all, so a cue built from layers included as *nothing* — and even once
+        // it had, flattening would have handed the operator the right output with none of the
+        // structure, leaving Update nothing to write back but literals.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val cueId = createCue(
+            client, "layered",
+            layers = listOf(
+                CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+            ),
+        )
+
+        client.include(cueId)
+
+        val layers = state.show.programmerStore.layers
+        assertEquals(1, layers.size, "the layer arrived as a layer")
+        assertEquals(warm.id, layers.single().lookId)
+        assertEquals(200u.toUByte(), programmerChannel(state, 0, 1), "and it is on stage")
+    }
+
+    @Test
+    fun `an included layer remembers the cue row it came from, for Update to diff against`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            seedHex("hex-1", 1)
+            val warm = ProgrammerRouteTestSupport.createDeferredLook(
+                client, projectId, "Warm", mapOf("dimmer" to "200"),
+            )
+            val cueId = createCue(
+                client, "layered",
+                layers = listOf(
+                    CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                ),
+            )
+
+            client.include(cueId)
+
+            assertNotNull(
+                state.show.programmerStore.layers.single().sourceCueLayerId,
+                "without this, Update cannot tell an edited layer from a newly added one",
+            )
+        }
+
+    @Test
+    fun `layer order survives the round trip into the programmer`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val bright = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Bright", mapOf("dimmer" to "200"),
+        )
+        val dim = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Dim", mapOf("dimmer" to "40"),
+        )
+        val targets = listOf(CueTargetDto("fixture", "hex-1"))
+        val cueId = createCue(
+            client, "layered",
+            layers = listOf(
+                CueLayerDto(lookId = bright.id, sortOrder = 0, targets = targets),
+                CueLayerDto(lookId = dim.id, sortOrder = 1, targets = targets),
+            ),
+        )
+
+        client.include(cueId)
+
+        assertEquals(
+            listOf(bright.id, dim.id),
+            state.show.programmerStore.layers.map { it.lookId },
+            "order is what decides the value, so it has to survive",
+        )
+        assertEquals(
+            40u.toUByte(), programmerChannel(state, 0, 1),
+            "later layer wins, exactly as it did in the cue",
+        )
+    }
+
+    @Test
+    fun `a cue's local rows still become INCLUDE slots above its layers`() = testApplication {
+        // The division of labour: layers become layers, the cue's *own* rows become INCLUDE slots —
+        // and the slots sit above the layer contribution, which is what makes Update's
+        // "only what changed" test work on them.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val cueId = createCue(
+            client, "layered",
+            rows = listOf(assignment("fixture", "hex-1", "dimmer", "90")),
+            layers = listOf(
+                CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+            ),
+        )
+
+        client.include(cueId)
+
+        assertEquals(
+            ProgrammerOwner.INCLUDE, state.show.programmerStore.get("hex-1", "dimmer")!!.owner,
+            "the local row is on top",
+        )
+        assertEquals(90u.toUByte(), programmerChannel(state, 0, 1))
+    }
+
+    @Test
+    fun `a timed layer is reported as skipped rather than fired immediately`() = testApplication {
+        // A programmer layer is always immediate — there is no trigger manager for it — so holding a
+        // delayed layer would mean firing it at once. That would put a whole chase on stage in one
+        // frame; Update leaves the cue's timed layers untouched, so nothing is lost by skipping.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val cueId = createCue(
+            client, "layered",
+            layers = listOf(
+                CueLayerDto(
+                    lookId = warm.id, sortOrder = 0,
+                    targets = listOf(CueTargetDto("fixture", "hex-1")),
+                    delayMs = 2_000L,
+                ),
+            ),
+        )
+
+        val response: ProgrammerIncludeResponse = client.include(cueId).body()
+
+        assertEquals(1, response.fxTimedSkipped)
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+        assertNull(programmerChannel(state, 0, 1), "nothing fired")
+    }
+
+    @Test
+    fun `a layer's group target is reported as a group key`() = testApplication {
+        // Real information rather than inferred: the layer names the group, where the old preset
+        // path had to cross-product property names with targets to guess.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val cueId = createCue(
+            client, "layered",
+            layers = listOf(
+                CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("group", "front-wash"))),
+            ),
+        )
+
+        val response: ProgrammerIncludeResponse = client.include(cueId).body()
+
+        assertEquals(listOf("front-wash"), response.groupKeys)
+        assertEquals(200u.toUByte(), programmerChannel(state, 0, 1))
+        assertEquals(200u.toUByte(), programmerChannel(state, 0, 13))
+    }
+
+    // ─── helpers ────────────────────────────────────────────────────────
+
     private suspend fun HttpClient.include(cueId: Int) =
         post("/api/rest/programmer/include") {
             contentType(ContentType.Application.Json)
@@ -240,7 +415,10 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         name: String,
         rows: List<CuePropertyAssignmentDto> = emptyList(),
         adHoc: List<CueAdHocEffectSpec> = emptyList(),
-    ): Int = ProgrammerRouteTestSupport.createCue(client, projectId, name, rows, adHoc)
+        layers: List<CueLayerDto> = emptyList(),
+    ): Int = ProgrammerRouteTestSupport.createCue(
+        client, projectId, name, rows, adHoc, layers = layers,
+    )
 
     private fun seedHex(key: String, startChannel: Int) =
         LocateTestSupport.seedHex(state, projectId, key, startChannel)

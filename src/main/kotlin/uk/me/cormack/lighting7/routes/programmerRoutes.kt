@@ -329,14 +329,19 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
                 "anything Update writes back."
         }
 
-        val presets = loadImmediatePresets(state, cueData)
-        val outcome = includeCueIntoProgrammer(
-            state, cueData, presets, mask, request.fadeMs ?: 0,
-        )
+        val outcome = includeCueIntoProgrammer(state, cueData, mask, request.fadeMs ?: 0)
 
-        if (outcome.entriesWritten > 0 || outcome.fxSpawned > 0) {
+        // `layersInstalled` is load-bearing here, not decorative: a cue built entirely from layers
+        // writes no INCLUDE slots and may spawn no effects, so without it the include target would
+        // never be set and Update would silently fall through to the Mode B checklist — unable to
+        // write the stack back to the cue the operator had just included.
+        if (outcome.entriesWritten > 0 || outcome.fxSpawned > 0 || outcome.layersInstalled > 0) {
             state.show.programmerStore.lastIncludedTarget = includedTargetFor(cueData)
         }
+        // The diff baseline, taken *after* the install so it records what actually landed —
+        // timed layers were dropped, so diffing against the cue's own list would report every one
+        // of them as deleted on the next Update.
+        state.show.programmerStore.includedLayerSnapshot = state.show.programmerStore.layers
 
         call.respond(
             ProgrammerIncludeResponse(
@@ -503,6 +508,13 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
 
         // Mode A writes only what changed since Include (which is what preserves palette refs
         // the operator didn't touch); Mode B writes each cue exactly the keys it was under.
+        //
+        // **Mode A also diffs the layer stack; Mode B deliberately does not.** Mode B's premise is
+        // "which cue am I sitting on top of", derived from the Layer 4 winner map — and that map
+        // cannot attribute a key to a *layer of another cue*, only to the cue as a whole. Writing
+        // the programmer's stack into a cue the operator never included would replace that cue's
+        // composition with one built for a different cue. The same reasoning the palette arm has
+        // carried since Mode B was written: it is cue-only because nothing else is derivable.
         val allSkips = ArrayList<RecordSkip>()
         val plans = cueIds.associateWith { cueId ->
             if (modeLabel == "A") {
@@ -525,6 +537,13 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
                 val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
                     ?: return@transaction null
                 val written = writeRecordingIntoCue(state, cue, recording, RecordMode.MERGE, mask)
+                if (modeLabel == "A") {
+                    writeLayerStackIntoCue(
+                        cue,
+                        state.show.programmerStore.layers,
+                        state.show.programmerStore.includedLayerSnapshot,
+                    )
+                }
                 Triple(written, cue.name, cue.cueStack.id.value)
             }
 

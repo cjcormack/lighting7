@@ -7,7 +7,10 @@ import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.paletteUuidOrNull
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoCueLayer
+import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.state.State
 
 /** One cue Update would overwrite, with a sample of the properties driving that. */
@@ -257,13 +260,122 @@ internal fun recordingForUpdate(
         state.show.fxEngine.getActiveEffects()
             .filter { FxEngine.isProgrammerFxPriority(it.priority) }
     } else emptyList()
-    val (presetApps, adHoc) = fxInstancesToCueChildren(bandEffects, mask = null, state.show.fixtures)
+    val adHoc = fxInstancesToCueChildren(bandEffects, mask = null, state.show.fixtures)
     return ProgrammerRecording(
         rows = collapsed.rows,
-        presetApplications = presetApps,
+        // Update never writes the layer stack through this path: the *structural* half of Mode A is
+        // a diff against the layers Include staged, applied directly to the cue's rows. Handing a
+        // layer list to the MERGE writer as well would append the whole stack on every Update.
+        layers = emptyList(),
+        presetApplications = emptyList(),
         adHocEffects = adHoc,
         palette = null,
         groupRowsEmitted = collapsed.groupRows,
         skipped = collapsed.skipped,
     )
+}
+
+/** What a layer-stack diff changed in the cue, for the response and the log line. */
+internal data class LayerDiffOutcome(
+    val added: Int,
+    val removed: Int,
+    val reordered: Int,
+    val retuned: Int,
+    val timedPreserved: Int,
+)
+
+/**
+ * Write the programmer's layer stack back onto [cue] — the **structural** half of Mode A Update.
+ *
+ * The value half (`changedSinceInclude`) answers "which local rows did the operator edit?" by
+ * comparing against the surviving `INCLUDE` slot. Neither question implies the other: reordering a
+ * layer changes no slot's value, and editing a row changes no layer. So Update needs both, and this
+ * is the second.
+ *
+ * The diff keys on [ProgrammerLayer.sourceCueLayerId] — the `DaoCueLayer` row Include minted the
+ * layer from. That is the only stable identity available: `layerId` is in-memory and re-minted on
+ * every Include, `lookId` cannot distinguish one Look layered twice, and array position is exactly
+ * what the operator may have just changed.
+ *
+ * Five classifications, and one deliberate non-case:
+ *
+ * - **added** — no `sourceCueLayerId`, so it was created in the programmer after the Include.
+ * - **removed** — in the baseline but not in the stack now.
+ * - **reordered** — present, but at a different index. Every surviving row is renumbered densely
+ *   from the current list, so a single move cannot leave a gap or a tie.
+ * - **retuned** — field-by-field inequality. **Not** data-class equality: `layerId` and `sortOrder`
+ *   differ by construction, so `!=` on the whole object would report every layer as changed. This is
+ *   the same trap `buildCueInput` documents on the frontend.
+ * - **timed** — a layer Include never held, because the programmer has no trigger manager. Left
+ *   exactly as it is and counted, which is what makes "Include, edit, Update" safe on a cue with a
+ *   delayed layer in it.
+ *
+ * There is no "the layer's Look changed" case, because there is no gesture that changes it: the
+ * desk removes the layer and adds another. Modelling it would be inventing a case to handle.
+ *
+ * Must be called inside a transaction.
+ */
+internal fun writeLayerStackIntoCue(
+    cue: DaoCue,
+    current: List<ProgrammerLayer>,
+    baseline: List<ProgrammerLayer>,
+): LayerDiffOutcome {
+    val live = current.filterNot { it.isPreview }
+    val storedById = cue.layers.filterNot { it.isTimed }.associateBy { it.id.value }
+    val timedPreserved = cue.layers.count { it.isTimed }
+
+    var added = 0
+    var removed = 0
+    var reordered = 0
+    var retuned = 0
+
+    // Removed: in the baseline, gone from the stack. Read from the baseline rather than from the
+    // cue's rows so a layer added to the cue by something else since the Include is left alone.
+    val survivingSourceIds = live.mapNotNull { it.sourceCueLayerId }.toSet()
+    for (gone in baseline.mapNotNull { it.sourceCueLayerId }.filterNot { it in survivingSourceIds }) {
+        storedById[gone]?.let { it.delete(); removed++ }
+    }
+
+    for ((index, layer) in live.withIndex()) {
+        val stored = layer.sourceCueLayerId?.let { storedById[it] }
+        if (stored == null) {
+            val look = DaoLook.findById(layer.lookId) ?: continue
+            DaoCueLayer.new {
+                this.cue = cue
+                this.look = look
+                this.sortOrder = index
+                this.enabled = layer.enabled
+                this.targets = layer.targets
+                this.propertyMask = layer.propertyMask
+                this.blendMode = layer.blendMode
+                this.amount = layer.amount
+                this.stomp = layer.stomp
+                this.speedMasterUuid = layer.speedMasterUuid
+                this.rateSpeedMasterUuid = layer.rateSpeedMasterUuid
+            }
+            added++
+            continue
+        }
+
+        if (stored.sortOrder != index) {
+            stored.sortOrder = index
+            reordered++
+        }
+        var moved = false
+        if (stored.enabled != layer.enabled) { stored.enabled = layer.enabled; moved = true }
+        if (stored.targets != layer.targets) { stored.targets = layer.targets; moved = true }
+        if (stored.propertyMask != layer.propertyMask) { stored.propertyMask = layer.propertyMask; moved = true }
+        if (stored.blendMode != layer.blendMode) { stored.blendMode = layer.blendMode; moved = true }
+        if (stored.amount != layer.amount) { stored.amount = layer.amount; moved = true }
+        if (stored.stomp != layer.stomp) { stored.stomp = layer.stomp; moved = true }
+        if (stored.speedMasterUuid != layer.speedMasterUuid) {
+            stored.speedMasterUuid = layer.speedMasterUuid; moved = true
+        }
+        if (stored.rateSpeedMasterUuid != layer.rateSpeedMasterUuid) {
+            stored.rateSpeedMasterUuid = layer.rateSpeedMasterUuid; moved = true
+        }
+        if (moved) retuned++
+    }
+
+    return LayerDiffOutcome(added, removed, reordered, retuned, timedPreserved)
 }

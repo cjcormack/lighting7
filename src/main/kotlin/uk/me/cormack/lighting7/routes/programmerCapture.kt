@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
+import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.paletteUuidOrNull
@@ -20,6 +21,7 @@ import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CuePresetApplicationDto
+import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -124,6 +126,17 @@ data class RecordEntry(
 /** Everything one Record source produced, ready to be written into a cue. */
 data class ProgrammerRecording(
     val rows: List<CuePropertyAssignmentDto>,
+    /**
+     * The programmer's Look-layer stack, in order — the *structure* Record saves.
+     *
+     * Taken from [uk.me.cormack.lighting7.fx.ProgrammerStore.layers] rather than reconstructed from
+     * the running effects, because the stack is the thing the operator built: it carries the blend
+     * mode, amount, mask and target set, none of which survive in an `FxInstance`.
+     *
+     * **Empty for [RecordSource.ALL], and that is the whole meaning of that source.** See
+     * `collectProgrammerRecording`.
+     */
+    val layers: List<CueLayerDto>,
     val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
     /** The live palette — captured only by [RecordSource.STAGE_SNAPSHOT]. */
@@ -249,6 +262,25 @@ internal fun collectProgrammerEntries(
 }
 
 /**
+ * A programmer layer as the cue row that would recreate it.
+ *
+ * `sourceCueLayerId` is deliberately not carried across: it names the row this layer was *included
+ * from*, which is Update's diff key, and has no meaning in a freshly written cue.
+ */
+internal fun ProgrammerLayer.toCueLayerDto() = CueLayerDto(
+    lookId = lookId,
+    sortOrder = sortOrder,
+    enabled = enabled,
+    targets = targets,
+    propertyMask = propertyMask,
+    blendMode = blendMode,
+    amount = amount,
+    stomp = stomp,
+    speedMasterUuid = speedMasterUuid?.toString(),
+    rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+)
+
+/**
  * Is [target] wholly inside [scope]? A null scope means "no restriction" and accepts everything.
  *
  * **Wholly** is the load-bearing word, and it is what makes one rule serve both directions. A
@@ -341,6 +373,10 @@ internal fun collectProgrammerRecording(
             palette = captured.palette,
             groupRowsEmitted = rows.count { it.targetType == TargetRef.Group.TYPE },
             skipped = skipped,
+            // A stage snapshot describes what is *on stage*, which is not the same as what the
+            // programmer's stack holds — the output may be coming from a live cue the operator never
+            // touched. `captureCurrentState` reconstructs layers from the running effects instead.
+            layers = captured.layers,
         )
     }
 
@@ -351,11 +387,30 @@ internal fun collectProgrammerRecording(
         state.show.fxEngine.getActiveEffects()
             .filter { FxEngine.isProgrammerFxPriority(it.priority) }
     } else emptyList()
-    val (presetApps, adHoc) = fxInstancesToCueChildren(bandEffects, mask, fixtures, scope)
+    val adHoc = fxInstancesToCueChildren(bandEffects, mask, fixtures, scope)
+
+    // **`ALL` means flatten; `TOUCHED` means save the structure.** The distinction is not a
+    // convenience — emitting layers *and* the rows they cook to would put both representations of
+    // the same keys into one cue. The composed output would be identical (cook overlays local rows
+    // last), but the cue would be permanently detached from the Look: a later Look edit would move
+    // the layer and be immediately overridden by the frozen local row. Silently losing the touring
+    // behaviour is the worst available outcome, so the two sources are kept explicitly apart.
+    //
+    // The mechanism underneath is `touched`: layer-materialised slots carry `touched = false`, so
+    // `collectProgrammerEntries(TOUCHED)` skips a key nothing local covers, while `ALL` picks it up.
+    // So the rows are already right for each source; only `layers` has to differ.
+    val layers: List<CueLayerDto> = if (source == RecordSource.ALL) {
+        emptyList()
+    } else {
+        state.show.programmerStore.layers
+            .filterNot { it.isPreview }
+            .map { it.toCueLayerDto() }
+    }
 
     return ProgrammerRecording(
         rows = collapsed.rows,
-        presetApplications = presetApps,
+        layers = layers,
+        presetApplications = emptyList(),
         adHocEffects = adHoc,
         // TOUCHED/ALL record the programmer, and the programmer holds no palette. Leaving the
         // cue's palette alone is the right default: recording a look shouldn't silently rewrite
@@ -399,8 +454,13 @@ private fun referenceFixtureFor(fixtures: Fixtures, target: TargetRef): Groupabl
  * emits so a cue recorded from the programmer and one snapshotted from the stage describe
  * their effects identically.
  *
- * Preset-derived instances collapse back into one application per preset with a de-duplicated
- * target list; everything else becomes an ad-hoc child.
+ * **Effects belonging to a programmer layer are skipped**, not collapsed into anything. The layer
+ * itself is recorded (see [ProgrammerRecording.layers]) and re-spawns its own effects when the cue
+ * fires, so emitting them here as well would put two contributors on one key — and the ad-hoc copy
+ * would be detached from the Look, so a later Look edit would no longer move it. That is the same
+ * double-representation trap [RecordSource.ALL] avoids on the value side.
+ *
+ * Everything else — a manually applied effect, a busked one — becomes an ad-hoc child.
  */
 internal fun fxInstancesToCueChildren(
     instances: List<FxInstance>,
@@ -412,12 +472,14 @@ internal fun fxInstancesToCueChildren(
      * chase into the cue would be a worse surprise than dropping the chase and saying so.
      */
     scope: Set<String>? = null,
-): Pair<List<CuePresetApplicationDto>, List<CueAdHocEffectDto>> {
-    if (instances.isEmpty()) return emptyList<CuePresetApplicationDto>() to emptyList()
-    val presetApplications = LinkedHashMap<Int, MutableList<CueTargetDto>>()
+): List<CueAdHocEffectDto> {
+    if (instances.isEmpty()) return emptyList()
     val adHocEffects = ArrayList<CueAdHocEffectDto>()
 
     for (effect in instances) {
+        // Owned by a layer: recorded as part of that layer, not as a loose child.
+        if (effect.programmerLayerId != null) continue
+
         val targetType = if (effect.isGroupEffect) TargetRef.Group.TYPE else TargetRef.Fixture.TYPE
         val targetKey = effect.target.targetKey
         val target = TargetRef.of(targetType, targetKey)
@@ -432,13 +494,7 @@ internal fun fxInstancesToCueChildren(
             if (!maskAllows(mask, group)) continue
         }
 
-        val presetId = effect.presetId
-        if (presetId != null) {
-            val targets = presetApplications.getOrPut(presetId) { mutableListOf() }
-            val dto = CueTargetDto(type = targetType, key = targetKey)
-            if (dto !in targets) targets.add(dto)
-        } else {
-            adHocEffects.add(
+        adHocEffects.add(
                 CueAdHocEffectDto(
                     targetType = targetType,
                     targetKey = targetKey,
@@ -459,14 +515,10 @@ internal fun fxInstancesToCueChildren(
                     parameters = effect.effect.parameters,
                     sortOrder = adHocEffects.size,
                 )
-            )
-        }
+        )
     }
 
-    val presetDtos = presetApplications.entries.mapIndexed { index, (presetId, targets) ->
-        CuePresetApplicationDto(presetId = presetId, targets = targets, sortOrder = index)
-    }
-    return presetDtos to adHocEffects
+    return adHocEffects
 }
 
 /**

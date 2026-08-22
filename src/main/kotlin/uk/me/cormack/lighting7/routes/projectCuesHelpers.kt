@@ -90,6 +90,16 @@ internal data class CueApplyData(
 
 internal data class CapturedState(
     val palette: List<String>,
+    /**
+     * Layers reconstructed from the running effects, one per Look, with a de-duplicated target list.
+     *
+     * Blend mode, amount and mask **cannot** be recovered from an `FxInstance` — it never carried
+     * them — so they take the DTO defaults, exactly as a `CuePresetApplicationDto` did before. A
+     * stage snapshot describes the stage, not the stack; when the operator wants the stack's own
+     * amounts and masks preserved they Record `TOUCHED`, which reads
+     * [uk.me.cormack.lighting7.fx.ProgrammerStore.layers] directly.
+     */
+    val layers: List<CueLayerDto>,
     val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
     val propertyAssignments: List<CuePropertyAssignmentDto>,
@@ -104,15 +114,19 @@ internal fun captureCurrentState(state: State): CapturedState {
     val currentPalette = state.show.fxEngine.getPalette().map { it.toSerializedString() }
     val activeEffects = state.show.fxEngine.getActiveEffects()
 
-    val presetApplications = mutableMapOf<Int, MutableList<CueTargetDto>>()
+    // Keyed by Look, not by preset: nothing stamps `presetId` any more. A Look applied twice to
+    // different targets therefore collapses into one layer covering both — which is the honest
+    // reading of a *snapshot*, since the stage cannot tell you it was two gestures.
+    val layerTargets = mutableMapOf<Int, MutableList<CueTargetDto>>()
     val adHocEffects = mutableListOf<CueAdHocEffectDto>()
 
     for (effect in activeEffects) {
         val targetType = if (effect.isGroupEffect) "group" else "fixture"
         val targetKey = effect.target.targetKey
 
-        if (effect.presetId != null) {
-            val targets = presetApplications.getOrPut(effect.presetId!!) { mutableListOf() }
+        val lookId = effect.lookId
+        if (lookId != null) {
+            val targets = layerTargets.getOrPut(lookId) { mutableListOf() }
             val target = CueTargetDto(type = targetType, key = targetKey)
             if (target !in targets) {
                 targets.add(target)
@@ -138,15 +152,16 @@ internal fun captureCurrentState(state: State): CapturedState {
         }
     }
 
-    val presetAppDtos = presetApplications.map { (presetId, targets) ->
-        CuePresetApplicationDto(presetId = presetId, targets = targets)
+    val layerDtos = layerTargets.entries.mapIndexed { index, (lookId, targets) ->
+        CueLayerDto(lookId = lookId, targets = targets, sortOrder = index)
     }
 
     val propertyAssignments = captureCueAssignments(state)
 
     return CapturedState(
         palette = currentPalette,
-        presetApplications = presetAppDtos,
+        layers = layerDtos,
+        presetApplications = emptyList(),
         adHocEffects = adHocEffects,
         propertyAssignments = propertyAssignments,
     )
@@ -1085,193 +1100,6 @@ internal fun groupHintsForTargets(
     return out
 }
 
-/**
- * Build Layer 4 rows for a preset application. Preset assignments are preset-local
- * (no target field) — the builder fans each (propertyName, value) across the supplied
- * [applyTargets], reusing the cue builder's group→member expansion and specificity tagging.
- *
- * Rows are tagged with [cueId] and [priority] so the cue's normal teardown
- * ([FxEngine.removeCueAssignments]) cleans up preset-originated rows alongside the cue's
- * own assignments. If both the applying cue and the preset assert the same
- * `(targetKey, propertyName)`, the caller concatenates the two lists and lets
- * [CueAssignmentResolver.resolve] pick the winner by [CueAssignmentResolver.Assignment.priority] —
- * callers should keep preset rows at the same priority as the cue's own rows so the sort
- * order alone decides (last-write-wins for OVERRIDE blend). Rows whose fixture / group /
- * property cannot be resolved are logged at warn and skipped — stale data must not break
- * cue apply.
- *
- * Palette refs in colour values resolve against [cascade] — see [PaletteCascade] for the
- * preset > cue > global scope rules.
- */
-internal fun buildCueAssignmentsForPreset(
-    fixtures: uk.me.cormack.lighting7.show.Fixtures,
-    cueId: Int,
-    priority: Int,
-    presetId: Int,
-    presetAssignments: List<FxPresetPropertyAssignmentDto>,
-    applyTargets: List<CueTargetDto>,
-    cascade: PaletteCascade = PaletteCascade.EMPTY,
-    lookRegistry: LookRegistry? = null,
-): List<CueAssignmentResolver.Assignment> {
-    if (presetAssignments.isEmpty() || applyTargets.isEmpty()) return emptyList()
-    val effectivePalette = cascade.effective
-    val out = ArrayList<CueAssignmentResolver.Assignment>(presetAssignments.size * applyTargets.size * 2)
-
-    for (target in applyTargets) {
-        val targetRef = target.target
-        val memberFixtures: List<Fixture>
-        val referenceFixture: Fixture
-        when (targetRef) {
-            is TargetRef.Group -> {
-                val group = try {
-                    fixtures.untypedGroup(targetRef.key)
-                } catch (_: IllegalStateException) {
-                    logger.warn("preset {} (cue {}): group '{}' missing — skipping", presetId, cueId, targetRef.key)
-                    continue
-                }
-                val members = group.fixtures.filterIsInstance<Fixture>()
-                if (members.isEmpty()) {
-                    logger.warn("preset {} (cue {}): group '{}' has no Fixture members — skipping", presetId, cueId, targetRef.key)
-                    continue
-                }
-                memberFixtures = members
-                referenceFixture = members.first()
-            }
-            is TargetRef.Fixture -> {
-                referenceFixture = try {
-                    fixtures.untypedFixture(targetRef.key)
-                } catch (_: IllegalStateException) {
-                    logger.warn("preset {} (cue {}): fixture '{}' missing — skipping", presetId, cueId, targetRef.key)
-                    continue
-                }
-                memberFixtures = emptyList()
-            }
-        }
-
-        for (assignment in presetAssignments) {
-            val canonical = canonicalPropertyName(assignment.propertyName)
-            val elementKey = assignment.elementKey
-
-            // For element-scoped assignments, look up category + composition against the element
-            // class's annotated properties so mode-dependent element types (e.g. SlenderBeam
-            // 12CH vs 14CH vs 27CH) pick up the right metadata.
-            val referenceCategoryInfo: Pair<PropertyCategory, CompositionRule>? = if (elementKey != null) {
-                val referenceElement = findElement(referenceFixture, elementKey)
-                if (referenceElement == null) {
-                    logger.warn(
-                        "preset {} (cue {}): element '{}' not found on '{}' (or members) — skipping",
-                        presetId, cueId, elementKey, targetRef.key,
-                    )
-                    null
-                } else {
-                    elementCategoryFor(referenceElement, canonical)
-                }
-            } else {
-                fixtureCategoryFor(referenceFixture, canonical)
-            }
-            val (category, override) = referenceCategoryInfo ?: run {
-                logger.warn(
-                    "preset {} (cue {}): property '{}' not on '{}'{} — skipping",
-                    presetId, cueId, assignment.propertyName, targetRef.key,
-                    if (elementKey != null) " element '$elementKey'" else "",
-                )
-                continue
-            }
-            fun row(
-                key: String,
-                isGroup: Boolean,
-                rowCategory: PropertyCategory = category,
-                rowOverride: CompositionRule = override,
-                value: CueAssignmentResolver.PropertyValue,
-                paletteUuid: java.util.UUID? = null,
-            ) = CueAssignmentResolver.Assignment(
-                cueId = cueId,
-                priority = priority,
-                fadeWeight = 1.0,
-                targetKey = key,
-                targetIsGroup = isGroup,
-                propertyName = canonical,
-                category = rowCategory,
-                compositionOverride = rowOverride,
-                value = value,
-                paletteUuid = paletteUuid,
-            )
-
-            val isGroup = memberFixtures.isNotEmpty()
-            val fanout = memberFixtures.ifEmpty { listOf(referenceFixture) }
-
-            if (isPaletteRefValue(assignment.value)) {
-                // Element-scoped refs can't resolve: palettes are fixture-shaped by construction
-                // (Record rejects element targets outright — see RecordSkipReason.ELEMENT_TARGET),
-                // so there is never an entry to find for an element key.
-                if (elementKey != null) {
-                    logger.warn(
-                        "preset {} (cue {}): palette refs are not supported on element-scoped rows " +
-                            "('{}' element '{}') — skipping",
-                        presetId, cueId, assignment.propertyName, elementKey,
-                    )
-                    continue
-                }
-                for (fixture in fanout) {
-                    // Per-member category, as in the cue builder: a mixed-type group is the case
-                    // per-fixture palettes exist for.
-                    val (memberCategory, memberOverride) = fixtureCategoryFor(fixture, canonical) ?: run {
-                        logger.warn(
-                            "preset {} (cue {}): property '{}' not on '{}' — skipping that member",
-                            presetId, cueId, assignment.propertyName, fixture.key,
-                        )
-                        continue
-                    }
-                    val resolution = resolveAssignmentValueForFixture(
-                        lookRegistry, fixture.key, canonical, memberCategory, assignment.value, effectivePalette,
-                    )
-                    val value = resolution.value ?: run {
-                        logger.warn(
-                            "preset {} (cue {}): {} — skipping {}.{}",
-                            presetId, cueId, describeAssignmentHealth(resolution.health),
-                            fixture.key, assignment.propertyName,
-                        )
-                        continue
-                    }
-                    out.add(
-                        row(
-                            fixture.key, isGroup, memberCategory, memberOverride, value,
-                            paletteUuid = resolution.paletteUuid,
-                        )
-                    )
-                }
-                continue
-            }
-
-            val parsed = CueAssignmentResolver.parseAssignmentValue(category, canonical, assignment.value, effectivePalette) ?: run {
-                logger.warn(
-                    "preset {} (cue {}): invalid value '{}' for {}.{} — skipping",
-                    presetId, cueId, assignment.value, targetRef.key, assignment.propertyName,
-                )
-                continue
-            }
-
-            if (elementKey != null) {
-                for (fixture in fanout) {
-                    val element = findElement(fixture, elementKey)
-                    if (element == null) {
-                        logger.warn(
-                            "preset {} (cue {}): member '{}' has no element '{}' — skipping that member",
-                            presetId, cueId, fixture.key, elementKey,
-                        )
-                        continue
-                    }
-                    out.add(row(element.elementKey, isGroup = isGroup, value = parsed))
-                }
-            } else if (!isGroup) {
-                out.add(row(targetRef.key, isGroup = false, value = parsed))
-            } else {
-                for (member in fanout) out.add(row(member.key, isGroup = true, value = parsed))
-            }
-        }
-    }
-    return out
-}
 
 /**
  * Resolve `elementKey` — either a full element key (`"bar-1.head-0"`) or a suffix

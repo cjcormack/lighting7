@@ -741,6 +741,154 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
+
+    // ─── The layer stack ────────────────────────────────────────────────
+
+    @Test
+    fun `TOUCHED records the layer stack as layers, not as flattened rows`() = testApplication {
+        // Record saves the *structure* the operator built. Flattening would give the cue the right
+        // output while permanently detaching it from the Look, so a later Look edit would no longer
+        // move it — the whole touring feature, lost silently.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        state.show.programmerLayerStack.add(
+            lookId = warm.id, lookUuid = java.util.UUID.fromString(warm.uuid), lookName = warm.name,
+            targets = listOf(CueTargetDto("fixture", "hex-1")),
+        )
+
+        val response: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE",
+                cueStackId = createStack(client, "s"), name = "layered",
+            )
+        ).body()
+
+        assertEquals(1, response.cue.layers.size, "the layer was saved as a layer")
+        assertEquals(warm.id, response.cue.layers.single().lookId)
+        assertTrue(
+            response.cue.propertyAssignments.isEmpty(),
+            "and not also as rows — two representations of one thing would detach the cue",
+        )
+    }
+
+    @Test
+    fun `ALL flattens the stack to rows and records no layers`() = testApplication {
+        // The other half of the same rule. "Record everything on stage" is a snapshot gesture, so
+        // it deliberately gives up the reference in exchange for capturing exactly what is lit.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        state.show.programmerLayerStack.add(
+            lookId = warm.id, lookUuid = java.util.UUID.fromString(warm.uuid), lookName = warm.name,
+            targets = listOf(CueTargetDto("fixture", "hex-1")),
+        )
+
+        val response: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE", source = "ALL",
+                cueStackId = createStack(client, "s"), name = "flattened",
+            )
+        ).body()
+
+        assertTrue(response.cue.layers.isEmpty(), "no layers")
+        assertEquals("200", response.cue.propertyAssignments.single().value, "flattened to a row")
+    }
+
+    @Test
+    fun `a local override records as a row above the layer it overrides`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        state.show.programmerLayerStack.add(
+            lookId = warm.id, lookUuid = java.util.UUID.fromString(warm.uuid), lookName = warm.name,
+            targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
+        )
+        setProgrammer("hex-1", "dimmer", "30")
+
+        val response: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE",
+                cueStackId = createStack(client, "s"), name = "mixed",
+            )
+        ).body()
+
+        assertEquals(1, response.cue.layers.size)
+        val rows = response.cue.propertyAssignments
+        assertEquals(1, rows.size, "only the operator's own edit is a row")
+        assertEquals("hex-1", rows.single().targetKey)
+        assertEquals("30", rows.single().value)
+    }
+
+    @Test
+    fun `the same Look layered twice records as two layers`() = testApplication {
+        // One cue may legitimately layer one Look twice on different targets. Collapsing by Look —
+        // which the old preset-application shape effectively did — would lose one of them.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val uuid = java.util.UUID.fromString(warm.uuid)
+        state.show.programmerLayerStack.add(
+            lookId = warm.id, lookUuid = uuid, lookName = warm.name,
+            targets = listOf(CueTargetDto("fixture", "hex-1")),
+        )
+        state.show.programmerLayerStack.add(
+            lookId = warm.id, lookUuid = uuid, lookName = warm.name,
+            targets = listOf(CueTargetDto("fixture", "hex-2")),
+        )
+
+        val response: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE",
+                cueStackId = createStack(client, "s"), name = "twice",
+            )
+        ).body()
+
+        assertEquals(2, response.cue.layers.size)
+    }
+
+    @Test
+    fun `the preview layer is never recorded`() = testApplication {
+        // It belongs to the editor sheet the operator has open, not to the look being saved.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        state.show.programmerLayerStack.installPreview(
+            snapshot = uk.me.cormack.lighting7.fx.LookSnapshot(
+                lookId = 0, lookUuid = java.util.UUID(0L, 0L), name = "preview",
+                editorFixtureType = null, palette = emptyList(),
+                rows = listOf(
+                    uk.me.cormack.lighting7.fx.LookRowEntry(null, "dimmer", "77"),
+                ),
+                effects = emptyList(),
+            ),
+            targets = listOf(CueTargetDto("fixture", "hex-1")),
+        )
+
+        val response: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE",
+                cueStackId = createStack(client, "s"), name = "no-preview",
+            )
+        ).body()
+
+        assertTrue(response.cue.layers.isEmpty(), "a preview is not content")
+    }
+
     private suspend fun HttpClient.record(request: ProgrammerRecordRequest) =
         post("/api/rest/programmer/record") {
             contentType(ContentType.Application.Json)

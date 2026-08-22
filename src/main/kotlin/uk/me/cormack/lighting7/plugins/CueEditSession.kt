@@ -12,6 +12,12 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fx.PaletteCascade
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.toPaletteColours
+import uk.me.cormack.lighting7.models.CueLayerDto
+// Explicit: `plugins` already has a private `ProgrammerLayer.toDto()`, which otherwise wins the
+// name and fails on receiver type.
+import uk.me.cormack.lighting7.routes.toDto as cueLayerToDto
+import uk.me.cormack.lighting7.models.DaoCueLayer
+import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -27,7 +33,6 @@ import uk.me.cormack.lighting7.routes.TogglePresetTarget
 import uk.me.cormack.lighting7.routes.applyCue
 import uk.me.cormack.lighting7.routes.buildCueApplyData
 import uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue
-import uk.me.cormack.lighting7.routes.buildCueAssignmentsForPreset
 import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
 import uk.me.cormack.lighting7.routes.cueDerivedPriority
 import uk.me.cormack.lighting7.routes.republishCueLayer
@@ -41,12 +46,22 @@ import java.util.concurrent.atomic.AtomicReference
  * open session at a time; a second `cueEdit.beginEdit` on the same connection replaces it.
  *
  * The snapshot is the full [CuePropertyAssignmentDto] list from the DB at the moment
- * `beginEdit` ran — used by `cueEdit.discardChanges` to restore the pre-edit state.
+ * `beginEdit` ran — used by `cueEdit.discardChanges` to restore the pre-edit state — plus the
+ * cue's layer stack, for the same purpose.
  */
 data class CueEditSessionState(
     val cueId: Int,
     val mode: CueEditMode,
     val snapshot: List<CuePropertyAssignmentDto>,
+    /**
+     * The cue's Look-layer stack at `beginEdit`, so Discard reverts a reorder too.
+     *
+     * Layer edits do **not** go through this session — they arrive as `PATCH /cues/{id}` — so
+     * without this a Discard would restore the rows and silently leave a dragged layer where the
+     * operator dropped it. Half-reverting is worse than either alternative, because the operator
+     * has been told the cue is back as it was.
+     */
+    val layerSnapshot: List<CueLayerDto> = emptyList(),
     /**
      * Stack ID when editing a cue that belongs to a cue stack. `null` for standalone cues.
      *
@@ -295,10 +310,18 @@ object CueEditSessionHandler {
         val applyData = loadCueApplyData(state, cueId)
             ?: return CueEditErrorOutMessage(cueId, "Cue not found in current project")
 
+        // Read as DTOs rather than reusing `applyData.layers`: a `CookLayer` has already dropped
+        // the timing columns Discard has to restore, and carries an in-memory `layerId` that means
+        // nothing to a re-created row.
+        val layerSnapshot = transaction(state.database) {
+            DaoCue.findById(cueId)?.layers?.sortedBy { it.sortOrder }?.map { it.cueLayerToDto() } ?: emptyList()
+        }
+
         val newSession = CueEditSessionState(
             cueId = cueId,
             mode = mode,
             snapshot = applyData.propertyAssignments,
+            layerSnapshot = layerSnapshot,
             cueStackId = applyData.cueStackId,
         )
         sessionRef.set(newSession)
@@ -572,6 +595,29 @@ object CueEditSessionHandler {
             transaction(state.database) {
                 val cue = DaoCue.findById(cueId) ?: error("Cue not found")
                 cue.propertyAssignments.forEach { it.delete() }
+                // Layers too, restored wholesale from the snapshot — the same
+                // delete-and-recreate the rows get. Recreating rather than diffing keeps Discard's
+                // contract simple: whatever happened in between, the cue ends up as it began.
+                cue.layers.forEach { it.delete() }
+                for (layer in session.layerSnapshot) {
+                    val look = DaoLook.findById(layer.lookId) ?: continue
+                    DaoCueLayer.new {
+                        this.cue = cue
+                        this.look = look
+                        sortOrder = layer.sortOrder
+                        enabled = layer.enabled
+                        targets = layer.targets
+                        propertyMask = layer.propertyMask
+                        blendMode = layer.blendMode
+                        amount = layer.amount
+                        stomp = layer.stomp
+                        speedMasterUuid = speedMasterUuidOrNull(layer.speedMasterUuid)
+                        rateSpeedMasterUuid = speedMasterUuidOrNull(layer.rateSpeedMasterUuid)
+                        delayMs = layer.delayMs
+                        intervalMs = layer.intervalMs
+                        randomWindowMs = layer.randomWindowMs
+                    }
+                }
                 for (assignment in session.snapshot) {
                     DaoCuePropertyAssignment.new {
                         this.cue = cue

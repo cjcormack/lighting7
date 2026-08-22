@@ -10,7 +10,9 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
+import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
@@ -296,6 +298,155 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 
+
+    // ─── The layer stack ────────────────────────────────────────────────
+
+    @Test
+    fun `Mode A writes back a layer added in the programmer`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val cueId = createCue(client, "c", rows = listOf(assignment("fixture", "hex-1", "dimmer", "10")))
+
+        client.include(cueId)
+        state.show.programmerLayerStack.add(
+            lookId = warm.id, lookUuid = java.util.UUID.fromString(warm.uuid), lookName = warm.name,
+            targets = listOf(CueTargetDto("fixture", "hex-1")),
+        )
+        client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
+
+        val layers = client.cueLayers(cueId)
+        assertEquals(1, layers.size)
+        assertEquals(warm.id, layers.single().lookId)
+    }
+
+    @Test
+    fun `Mode A deletes a layer the operator removed`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val cueId = createCue(
+            client, "c",
+            layers = listOf(CueLayerDto(lookId = warm.id, targets = listOf(CueTargetDto("fixture", "hex-1")))),
+        )
+
+        client.include(cueId)
+        val layerId = state.show.programmerStore.layers.single().layerId
+        state.show.programmerLayerStack.remove(layerId)
+        client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
+
+        assertTrue(client.cueLayers(cueId).isEmpty())
+    }
+
+    @Test
+    fun `Mode A writes back a reorder, densely renumbered`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val a = ProgrammerRouteTestSupport.createDeferredLook(client, projectId, "A", mapOf("dimmer" to "200"))
+        val b = ProgrammerRouteTestSupport.createDeferredLook(client, projectId, "B", mapOf("dimmer" to "40"))
+        val targets = listOf(CueTargetDto("fixture", "hex-1"))
+        val cueId = createCue(
+            client, "c",
+            layers = listOf(
+                CueLayerDto(lookId = a.id, sortOrder = 0, targets = targets),
+                CueLayerDto(lookId = b.id, sortOrder = 1, targets = targets),
+            ),
+        )
+
+        client.include(cueId)
+        val first = state.show.programmerStore.layers.first().layerId
+        state.show.programmerLayerStack.move(first, 1)
+        client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
+
+        val layers = client.cueLayers(cueId).sortedBy { it.sortOrder }
+        assertEquals(listOf(b.id, a.id), layers.map { it.lookId }, "the new order persisted")
+        assertEquals(listOf(0, 1), layers.map { it.sortOrder }, "densely renumbered, so no ties")
+    }
+
+    @Test
+    fun `Mode A writes back a retuned amount without touching identity`() = testApplication {
+        // Field-by-field, not data-class equality: `layerId` and `sortOrder` differ by construction,
+        // so `!=` on the whole object would report every layer as changed on every Update.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val cueId = createCue(
+            client, "c",
+            layers = listOf(CueLayerDto(lookId = warm.id, targets = listOf(CueTargetDto("fixture", "hex-1")))),
+        )
+
+        client.include(cueId)
+        val layerId = state.show.programmerStore.layers.single().layerId
+        state.show.programmerLayerStack.patch(layerId, amount = 0.5)
+        client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
+
+        val layer = client.cueLayers(cueId).single()
+        assertEquals(0.5, layer.amount)
+        assertEquals(warm.id, layer.lookId, "still the same Look — identity was matched, not rewritten")
+    }
+
+    @Test
+    fun `a timed layer survives an Update it was never included into`() = testApplication {
+        // Include drops timed layers because the programmer cannot fire them. Update must therefore
+        // not read their absence from the stack as a deletion — otherwise "Include, tweak, Update"
+        // would quietly strip every delayed layer from a chase.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val targets = listOf(CueTargetDto("fixture", "hex-1"))
+        val cueId = createCue(
+            client, "c",
+            layers = listOf(
+                CueLayerDto(lookId = warm.id, sortOrder = 0, targets = targets),
+                CueLayerDto(lookId = warm.id, sortOrder = 1, targets = targets, delayMs = 2_000L),
+            ),
+        )
+
+        client.include(cueId)
+        assertEquals(1, state.show.programmerStore.layers.size, "only the immediate one arrived")
+        setProgrammer("hex-1", "dimmer", "55")
+        client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
+
+        val layers = client.cueLayers(cueId)
+        assertEquals(2, layers.size, "the timed layer is still there")
+        assertNotNull(layers.firstOrNull { it.delayMs == 2_000L })
+    }
+
+    @Test
+    fun `clearing the programmer forgets the layer baseline too`() = testApplication {
+        // A baseline outliving the stack it describes would make the next Update diff against
+        // layers that no longer exist — and report every one of them as deleted.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val cueId = createCue(
+            client, "c",
+            layers = listOf(CueLayerDto(lookId = warm.id, targets = listOf(CueTargetDto("fixture", "hex-1")))),
+        )
+        client.include(cueId)
+        assertEquals(1, state.show.programmerStore.includedLayerSnapshot.size)
+
+        state.show.programmerStore.clearAll()
+
+        assertTrue(state.show.programmerStore.includedLayerSnapshot.isEmpty())
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private suspend fun HttpClient.include(cueId: Int) =
@@ -329,9 +480,13 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         name: String,
         rows: List<CuePropertyAssignmentDto> = emptyList(),
         stackId: Int? = null,
+        layers: List<CueLayerDto> = emptyList(),
     ): Int = ProgrammerRouteTestSupport.createCue(
-        client, projectId, name, rows, stackId = stackId,
+        client, projectId, name, rows, stackId = stackId, layers = layers,
     )
+
+    private suspend fun HttpClient.cueLayers(cueId: Int): List<CueLayerDto> =
+        get("/api/rest/project/$projectId/cues/$cueId").body<CueDetails>().layers
 
     private fun setProgrammer(fixtureKey: String, property: String, value: String) {
         ProgrammerHandler.set(state, TargetRef.Fixture(fixtureKey), property, value, 0)

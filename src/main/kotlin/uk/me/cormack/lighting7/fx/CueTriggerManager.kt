@@ -5,7 +5,6 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.TogglePresetTarget
-import uk.me.cormack.lighting7.routes.buildCueAssignmentsForPreset
 import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
 import uk.me.cormack.lighting7.routes.toPropertyAssignmentDtos

@@ -6,6 +6,9 @@ import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueLayerDto
+import uk.me.cormack.lighting7.models.DaoCueLayer
+import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.CuePresetApplicationDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -52,7 +55,11 @@ enum class RecordMode {
 @Serializable
 data class ProgrammerPreservedCounts(
     val triggers: Int = 0,
-    val timedPresetApplications: Int = 0,
+    /**
+     * Timed layers left untouched. Was `timedPresetApplications`; a preset application is now a
+     * layer, and Record has never touched a timed child of either kind — see the invariants above.
+     */
+    val timedLayers: Int = 0,
     val timedAdHocEffects: Int = 0,
     val outOfMaskAssignments: Int = 0,
     /** Rows left alone because they name a fixture outside the request's `targets` selection. */
@@ -107,7 +114,10 @@ internal fun createCueFromRecording(
         this.cueType = cueType.name
         this.sortOrder = sortOrder ?: ((stack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1)
     }
-    createCueChildren(cue, recording.presetApplications, recording.adHocEffects, recording.rows)
+    createCueChildren(
+        cue, recording.presetApplications, recording.adHocEffects, recording.rows,
+        layers = recording.layers,
+    )
     renumberAutoCues(stack)
 
     return CueWriteOutcome(
@@ -145,7 +155,9 @@ internal fun writeRecordingIntoCue(
     require(mode != RecordMode.CREATE) { "CREATE is handled by createCueFromRecording" }
 
     val warnings = ArrayList<String>()
-    val timedPresets = cue.presetApplications.count { it.isTimed }
+    // Timed children of either kind are never touched by Record; counted so the response can say
+    // so rather than leaving the operator to wonder why a delayed layer survived a REMOVE.
+    val timedLayerCount = cue.layers.count { it.isTimed } + cue.presetApplications.count { it.isTimed }
     val timedAdHoc = cue.adHocEffects.count { it.isTimed }
     val triggerCount = cue.triggers.count().toInt()
 
@@ -182,6 +194,11 @@ internal fun writeRecordingIntoCue(
         }
 
         RecordMode.REMOVE -> {
+            for (layer in recording.layers) {
+                cue.layers.toList()
+                    .filter { !it.isTimed && it.look.id.value == layer.lookId && it.targets == layer.targets }
+                    .forEach { it.delete() }
+            }
             val doomed = recording.rows.map { it.matchKey() }.toSet()
             for (row in cue.propertyAssignments.toList()) {
                 if (row.matchKey() in doomed) {
@@ -256,7 +273,8 @@ internal fun writeRecordingIntoCue(
 
     val fxWritten = when (mode) {
         RecordMode.MERGE -> appendFxChildren(cue, recording)
-        RecordMode.UPDATE_EXISTING -> recording.presetApplications.size + recording.adHocEffects.size
+        RecordMode.UPDATE_EXISTING ->
+            recording.layers.size + recording.presetApplications.size + recording.adHocEffects.size
         else -> 0
     }
 
@@ -269,7 +287,7 @@ internal fun writeRecordingIntoCue(
         fxWritten = fxWritten,
         preserved = ProgrammerPreservedCounts(
             triggers = triggerCount,
-            timedPresetApplications = timedPresets,
+            timedLayers = timedLayerCount,
             timedAdHocEffects = timedAdHoc,
             outOfMaskAssignments = outOfMask,
             outOfScopeAssignments = outOfScope,
@@ -287,6 +305,37 @@ internal fun writeRecordingIntoCue(
  */
 private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
     var count = 0
+
+    // Layers first, upserted on `(lookId, targets)`. Upsert rather than append for the same reason
+    // the ad-hoc branch below does: `(look, targets)` says *which* layer this is, while amount,
+    // blend and mask are what the operator may just have changed in the programmer. Appending would
+    // give a cue a second copy of the same layer on every Update, and each Record would double it.
+    val existingLayers = cue.layers.toList()
+    for (layer in recording.layers) {
+        val match = existingLayers.firstOrNull {
+            !it.isTimed && it.look.id.value == layer.lookId && it.targets == layer.targets
+        }
+        if (match != null) {
+            if (match.applyFrom(layer)) count++
+            continue
+        }
+        val look = DaoLook.findById(layer.lookId) ?: continue
+        DaoCueLayer.new {
+            this.cue = cue
+            this.look = look
+            this.sortOrder = layer.sortOrder
+            this.enabled = layer.enabled
+            this.targets = layer.targets
+            this.propertyMask = layer.propertyMask
+            this.blendMode = layer.blendMode
+            this.amount = layer.amount
+            this.stomp = layer.stomp
+            this.speedMasterUuid = speedMasterUuidOrNull(layer.speedMasterUuid)
+            this.rateSpeedMasterUuid = speedMasterUuidOrNull(layer.rateSpeedMasterUuid)
+        }
+        count++
+    }
+
     val existingApps = cue.presetApplications.toList()
     for (app in recording.presetApplications) {
         val match = existingApps.firstOrNull { !it.isTimed && it.preset.id.value == app.presetId }
@@ -335,6 +384,26 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
         count++
     }
     return count
+}
+
+/**
+ * Overwrite a stored layer's tunable fields from [dto], returning whether anything moved.
+ *
+ * `lookId` and `targets` are the identity this was matched on, so they are not written; timing is
+ * cue-owned and never touched by Record (§ the two invariants at the top of this file).
+ */
+private fun DaoCueLayer.applyFrom(dto: CueLayerDto): Boolean {
+    var changed = false
+    if (enabled != dto.enabled) { enabled = dto.enabled; changed = true }
+    if (propertyMask != dto.propertyMask) { propertyMask = dto.propertyMask; changed = true }
+    if (blendMode != dto.blendMode) { blendMode = dto.blendMode; changed = true }
+    if (amount != dto.amount) { amount = dto.amount; changed = true }
+    if (stomp != dto.stomp) { stomp = dto.stomp; changed = true }
+    val speed = speedMasterUuidOrNull(dto.speedMasterUuid)
+    if (speedMasterUuid != speed) { speedMasterUuid = speed; changed = true }
+    val rate = speedMasterUuidOrNull(dto.rateSpeedMasterUuid)
+    if (rateSpeedMasterUuid != rate) { rateSpeedMasterUuid = rate; changed = true }
+    return changed
 }
 
 /** True when the stored child already says exactly what [dto] says (ignoring cue-owned timing). */
@@ -418,6 +487,38 @@ private fun replaceImmediateFxChildren(
         if (mask != null && !maskAllows(mask, maskGroupForAdHocChild(state, effect))) continue
         effect.delete()
     }
+    // Layers, same rule as preset applications had and for the same reason: a Look can span
+    // several attribute families, so there is no single property to mask by. A masked re-record
+    // therefore leaves the layer stack alone rather than deleting more than was asked for, and a
+    // scoped one strips only the selected targets.
+    if (mask == null) {
+        for (layer in cue.layers.toList()) {
+            if (layer.isTimed) continue
+            if (scope == null) {
+                layer.delete()
+                continue
+            }
+            val kept = layer.targets.filterNot { targetInScope(state.show.fixtures, it.target, scope) }
+            if (kept.isEmpty()) layer.delete() else layer.targets = kept
+        }
+        for (layer in recording.layers) {
+            val look = DaoLook.findById(layer.lookId) ?: continue
+            DaoCueLayer.new {
+                this.cue = cue
+                this.look = look
+                this.sortOrder = layer.sortOrder
+                this.enabled = layer.enabled
+                this.targets = layer.targets
+                this.propertyMask = layer.propertyMask
+                this.blendMode = layer.blendMode
+                this.amount = layer.amount
+                this.stomp = layer.stomp
+                this.speedMasterUuid = speedMasterUuidOrNull(layer.speedMasterUuid)
+                this.rateSpeedMasterUuid = speedMasterUuidOrNull(layer.rateSpeedMasterUuid)
+            }
+        }
+    }
+
     // A preset application has no single property to mask by — a preset can carry effects
     // across several attributes — so it is only replaced when the record is unmasked. A masked
     // re-record leaves presets alone rather than deleting more than was asked for.

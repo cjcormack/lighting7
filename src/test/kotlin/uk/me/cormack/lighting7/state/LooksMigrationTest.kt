@@ -27,7 +27,6 @@ import uk.me.cormack.lighting7.models.FxPresetEffectDto
 import uk.me.cormack.lighting7.models.PaletteType
 import uk.me.cormack.lighting7.routes.buildCueApplyData
 import uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue
-import uk.me.cormack.lighting7.routes.buildCueAssignmentsForPreset
 import uk.me.cormack.lighting7.routes.toPropertyAssignmentDtos
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -417,26 +416,29 @@ class LooksMigrationTest : RouteIntegrationTest() {
             }
         }
 
-        // BEFORE: exactly what `buildCombinedCueLayerRows` did — cue rows concatenated with each
-        // immediate preset's rows, then resolved.
-        val before = transaction(state.database) {
-            val cue = DaoCue.findById(cueId)!!
-            val applyData = buildCueApplyData(cue)
-            val cascade = PaletteCascade(global = state.show.fxEngine.getPalette())
-            val preset = DaoFxPreset.findById(presetId)!!
-            val cueOwn = buildCueAssignmentsForCue(
-                state.show.fixtures, applyData, cascade, state.show.lookRegistry,
-            )
-            val presetRows = buildCueAssignmentsForPreset(
-                state.show.fixtures, cueId, applyData.let { 1 },
-                presetId, preset.toPropertyAssignmentDtos(),
-                listOf(CueTargetDto("group", "front-wash")),
-                cascade = cascade.copy(preset = listOf()),
-                lookRegistry = state.show.lookRegistry,
-            )
-            CueAssignmentResolver().resolve(cueOwn + presetRows)
-        }
-        assertTrue(before.isNotEmpty(), "the pre-migration composition must be non-trivial")
+        // BEFORE: what the old builders composed, **recorded rather than recomputed**.
+        //
+        // This used to call `buildCueAssignmentsForPreset` live. That function is gone — Include was
+        // its last caller, and a cue's composition is now the cook step — so the expected map is
+        // frozen here instead. That is the right shape for a golden test anyway: it states the old
+        // behaviour as a fact to be preserved, rather than re-deriving it from code that no longer
+        // exists and could no longer be wrong.
+        //
+        // Derived by hand from this test's own seeding, which is why it is kept small:
+        //
+        //  - the cue's own `hex-1 dimmer = 100` is **fixture-level**, so specificity drops the
+        //    group-derived preset row on the same key;
+        //  - the preset's `dimmer = 180` fans over `front-wash`, so `hex-2` — which has no
+        //    fixture-level row — takes it;
+        //  - `hex-2 colour` holds `ref:{paletteUuid}`, and a ref naming a *palette* cannot resolve
+        //    once the resolver reads Looks, so the key is **absent**. That absence is asserted
+        //    explicitly below, and its recovery is the migration's one intended addition.
+        val before = mapOf(
+            CueAssignmentResolver.Key.fixture("hex-1", "dimmer") to
+                CueAssignmentResolver.PropertyValue.Slider(100u),
+            CueAssignmentResolver.Key.fixture("hex-2", "dimmer") to
+                CueAssignmentResolver.PropertyValue.Slider(180u),
+        )
 
         migrate()
 
@@ -497,22 +499,11 @@ class LooksMigrationTest : RouteIntegrationTest() {
 
         val key = CueAssignmentResolver.Key.fixture("hex-1", "dimmer")
 
-        val before = transaction(state.database) {
-            val applyData = buildCueApplyData(DaoCue.findById(cueId)!!)
-            val preset = DaoFxPreset.findById(presetId)!!
-            val rows = buildCueAssignmentsForCue(
-                state.show.fixtures, applyData, PaletteCascade.EMPTY, state.show.lookRegistry,
-            ) + buildCueAssignmentsForPreset(
-                state.show.fixtures, cueId, 1, presetId, preset.toPropertyAssignmentDtos(),
-                listOf(CueTargetDto("fixture", "hex-1")),
-                lookRegistry = state.show.lookRegistry,
-            )
-            CueAssignmentResolver().resolve(rows)[key]
-        }
-        assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(255u), before,
-            "before: HTP max() let the brighter preset row win over the cue's own 40",
-        )
+        // BEFORE was `Slider(255u)`: the cue's own row (40) and the preset's row (255) sat at the
+        // identical priority and fadeWeight, so `composeHtp` took `max()` and the brighter preset
+        // row won. Recorded rather than recomputed — `buildCueAssignmentsForPreset` is gone, and
+        // this test's value is the *contrast*, which a literal states more plainly than a
+        // reconstruction would.
 
         migrate()
 

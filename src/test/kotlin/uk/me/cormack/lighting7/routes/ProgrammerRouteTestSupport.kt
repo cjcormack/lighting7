@@ -7,6 +7,10 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueLayerDto
+import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
+import uk.me.cormack.lighting7.models.LookEffectDto
+import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 
 /**
@@ -43,6 +47,7 @@ object ProgrammerRouteTestSupport {
         rows: List<CuePropertyAssignmentDto> = emptyList(),
         adHoc: List<CueAdHocEffectSpec> = emptyList(),
         stackId: Int? = null,
+        layers: List<CueLayerDto> = emptyList(),
     ): Int {
         val stack = stackId ?: createStack(client, projectId, "stack-for-$name")
         return client.post("/api/rest/project/$projectId/cues") {
@@ -53,10 +58,36 @@ object ProgrammerRouteTestSupport {
                     cueStackId = stack,
                     propertyAssignments = rows,
                     adHocEffects = adHoc.map { it.toDto() },
+                    layers = layers,
                 )
             )
         }.body<CueDetails>().id
     }
+
+    /**
+     * Create a Look of **deferred** rows and return it, for building layers with.
+     *
+     * Deferred because a layer supplies the targets — which is the arrangement that makes one Look
+     * reusable across cues, and the shape every layer test wants.
+     */
+    internal suspend fun createDeferredLook(
+        client: HttpClient,
+        projectId: Int,
+        name: String,
+        rows: Map<String, String>,
+        effects: List<LookEffectDto> = emptyList(),
+    ): LookDetails = client.post("/api/rest/project/$projectId/looks") {
+        contentType(ContentType.Application.Json)
+        setBody(
+            CreateLookRequest(
+                name = name,
+                rows = rows.entries.mapIndexed { index, (property, value) ->
+                    LookRowDto(DEFERRED_TARGET_TYPE, "", property, value, sortOrder = index)
+                },
+                effects = effects,
+            )
+        )
+    }.body()
 
     private fun CueAdHocEffectSpec.toDto() = CueAdHocEffectDto(
         targetType = targetType,

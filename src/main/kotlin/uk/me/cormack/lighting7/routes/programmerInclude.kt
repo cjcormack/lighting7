@@ -32,28 +32,18 @@ data class IncludeOutcome(
     val fxSpawned: Int,
     val fxAlreadyRunning: Int,
     val fxTimedSkipped: Int,
+    /**
+     * Layers installed into the programmer's stack.
+     *
+     * Reported because it is the **only** evidence that a cue made entirely of layers included
+     * anything at all: such a cue writes no INCLUDE slots and may spawn no effects, so a caller
+     * gating on `entriesWritten > 0 || fxSpawned > 0` would conclude nothing happened — and
+     * therefore never set the include target, leaving Update unable to write the stack back.
+     */
+    val layersInstalled: Int,
     val skipped: List<RecordSkip>,
     val warnings: List<String>,
 )
-
-/** A preset application resolved against the DB, so the spawn pass doesn't need a transaction. */
-internal data class IncludedPreset(
-    val presetId: Int,
-    val application: CuePresetApplicationDto,
-    val effects: List<FxPresetEffectDto>,
-    val palette: List<ExtendedColour>,
-)
-
-/** Load the immediate preset applications of [cueData] with their effects and palettes. */
-internal fun loadImmediatePresets(state: State, cueData: CueApplyData): List<IncludedPreset> =
-    transaction(state.database) {
-        cueData.presetApplications
-            .filter { it.delayMs == null && it.intervalMs == null }
-            .mapNotNull { app ->
-                val preset = DaoFxPreset.findById(app.presetId) ?: return@mapNotNull null
-                IncludedPreset(app.presetId, app, preset.effects, preset.palette.toPaletteColours())
-            }
-    }
 
 /**
  * Pull a cue's contents into the programmer as `INCLUDE`-owned entries and programmer-band FX,
@@ -67,7 +57,6 @@ internal fun loadImmediatePresets(state: State, cueData: CueApplyData): List<Inc
 internal fun includeCueIntoProgrammer(
     state: State,
     cueData: CueApplyData,
-    immediatePresets: List<IncludedPreset>,
     mask: Set<PropertyMaskGroup>?,
     fadeMs: Long,
 ): IncludeOutcome {
@@ -80,26 +69,22 @@ internal fun includeCueIntoProgrammer(
         cue = cueData.palette.toPaletteColours(),
         global = engine.getPalette(),
     )
-    val priority = cueDerivedPriority(cueData)
-
+    // **Only the cue's own rows become INCLUDE slots.** Its layers become *programmer layers*
+    // (below), which is the whole point of this rewrite: Include used to flatten a cue's
+    // composition into literals, so the operator got the right output with none of the structure —
+    // and Update then had nothing to write back but literals. Now the stack arrives intact,
+    // reorderable, and Update can diff it.
     val cueOwnRows = buildCueAssignmentsForCue(fixtures, cueData, cascade, state.show.lookRegistry)
-    val presetRows = immediatePresets.flatMap { preset ->
-        buildCueAssignmentsForPreset(
-            fixtures, cueData.cueId, priority,
-            preset.presetId, presetPropertyAssignments(state, preset.presetId),
-            preset.application.targets,
-            cascade = cascade.copy(preset = preset.palette),
-            lookRegistry = state.show.lookRegistry,
-        )
-    }
 
-    // Preset rows are concatenated after the cue's own so that, where both assert the same
-    // (fixture, property) at the same specificity, the preset wins — the order `applyCue` uses.
-    val resolved = applySpecificityForInclude(cueOwnRows + presetRows)
+    // Still needed for the local rows: `buildCueAssignmentsForCue` deliberately emits both a
+    // group-expanded member row and any direct fixture row for the same member, leaving the
+    // resolver to drop the former at compose time. The programmer has no such pass. The layer half
+    // needs nothing here — `cook` resolves its own specificity.
+    val resolved = applySpecificityForInclude(cueOwnRows)
 
-    // The builders fan group targets out to member rows and drop the group identity; recover
+    // The builder fans group targets out to member rows and drops the group identity; recover
     // it so the entries can be recorded back as a group row rather than N fixture rows.
-    val groupHints = includeGroupHints(state, cueData, immediatePresets)
+    val groupHints = includeGroupHints(state, cueData)
 
     val writes = ArrayList<FxEngine.ProgrammerPropertyWrite>(resolved.size)
     val fixtureKeys = LinkedHashSet<String>()
@@ -142,10 +127,22 @@ internal fun includeCueIntoProgrammer(
         )
     }
 
-    val fx = spawnIncludedFx(state, cueData, immediatePresets, mask, cascade)
+    // The cue's layers, as programmer layers. This spawns their effects too — the stack owns that
+    // — so `spawnIncludedFx` below is left with only the cue's *ad-hoc* children.
+    val (timedLayersSkipped, layerOutcome) = state.show.programmerLayerStack
+        .installFromCue(cueData.layers, fadeMs)
+    val layerGroupKeys = cueData.layers
+        .flatMap { it.targets }
+        .mapNotNull { (it.target as? TargetRef.Group)?.key }
+        .toSet()
+
+    val fx = spawnIncludedFx(state, cueData, mask, cascade)
     fixtureKeys += fx.coveredFixtureKeys
 
-    if (writes.isEmpty() && fx.spawned == 0 && fx.alreadyRunning == 0) {
+    val nothingIncluded = writes.isEmpty() &&
+        fx.spawned == 0 && fx.alreadyRunning == 0 &&
+        state.show.programmerStore.layers.none { !it.isPreview }
+    if (nothingIncluded) {
         warnings += "Cue '${cueData.cueName}' has nothing to include" +
             if (mask != null) " under this mask" else ""
     }
@@ -153,19 +150,17 @@ internal fun includeCueIntoProgrammer(
     return IncludeOutcome(
         entriesWritten = writes.size,
         fixtureKeys = fixtureKeys.toList().sorted(),
-        groupKeys = (groupHints.values.toSet() + fx.groupKeys).toList().sorted(),
-        fxSpawned = fx.spawned,
+        // A layer's group targets are *real* information rather than inferred, unlike the member
+        // rows' recovered hints — the layer names the group directly.
+        groupKeys = (groupHints.values.toSet() + fx.groupKeys + layerGroupKeys).toList().sorted(),
+        fxSpawned = fx.spawned + layerOutcome.effectsSpawned,
         fxAlreadyRunning = fx.alreadyRunning,
-        fxTimedSkipped = fx.timedSkipped,
+        fxTimedSkipped = fx.timedSkipped + timedLayersSkipped,
+        layersInstalled = state.show.programmerStore.layers.count { !it.isPreview },
         skipped = skipped,
         warnings = warnings,
     )
 }
-
-private fun presetPropertyAssignments(state: State, presetId: Int) =
-    transaction(state.database) {
-        DaoFxPreset.findById(presetId)?.toPropertyAssignmentDtos() ?: emptyList()
-    }
 
 /**
  * Collapse the builders' output the way the resolver would at compose time.
@@ -194,7 +189,6 @@ private fun applySpecificityForInclude(
 private fun includeGroupHints(
     state: State,
     cueData: CueApplyData,
-    immediatePresets: List<IncludedPreset>,
 ): Map<Pair<String, String>, String> {
     val fixtures = state.show.fixtures
     val out = HashMap<Pair<String, String>, String>()
@@ -211,29 +205,11 @@ private fun includeGroupHints(
         for (member in members) out.putIfAbsent(member.targetKey to property, target.key)
     }
 
-    // A preset applied to a group is group-shaped too; its property assignments carry the
-    // property names, the application carries the targets.
-    for (preset in immediatePresets) {
-        val groupTargets = preset.application.targets
-            .map { it.target }
-            .filterIsInstance<TargetRef.Group>()
-        if (groupTargets.isEmpty()) continue
-        val properties = presetPropertyAssignments(state, preset.presetId)
-            .mapNotNull { it.propertyName }
-            .map { canonicalPropertyName(it) }
-        for (groupTarget in groupTargets) {
-            val members = try {
-                fixtures.untypedGroup(groupTarget.key).fixtures
-            } catch (_: Exception) {
-                continue
-            }
-            for (member in members) {
-                for (property in properties) {
-                    out.putIfAbsent(member.targetKey to property, groupTarget.key)
-                }
-            }
-        }
-    }
+    // The preset half of this function is gone. A preset applied to a group was group-shaped too,
+    // and this had to *infer* which (member, property) pairs it covered by cross-producting the
+    // preset's property names with the application's targets — an approximation that over-claimed
+    // whenever a preset row didn't apply to every member. A layer carries its own target list, so
+    // the group shape travels with it and `ProgrammerLayerStack` needs no hint at all.
     return out
 }
 
@@ -262,7 +238,6 @@ private data class IncludedFxOutcome(
 private fun spawnIncludedFx(
     state: State,
     cueData: CueApplyData,
-    immediatePresets: List<IncludedPreset>,
     mask: Set<PropertyMaskGroup>?,
     cascade: PaletteCascade,
 ): IncludedFxOutcome {
@@ -272,8 +247,8 @@ private fun spawnIncludedFx(
     val covered = LinkedHashSet<String>()
     val groupKeys = LinkedHashSet<String>()
 
-    val timedSkipped = cueData.presetApplications.count { it.delayMs != null || it.intervalMs != null } +
-        cueData.adHocEffects.count { it.delayMs != null || it.intervalMs != null }
+    // Layers are counted by the caller, which knows which of them were timed.
+    val timedSkipped = cueData.adHocEffects.count { it.delayMs != null || it.intervalMs != null }
 
     val running = engine.getActiveEffects().filter { it.cueId == cueData.cueId }
 
@@ -344,23 +319,8 @@ private fun spawnIncludedFx(
         covered += engine.fixtureKeysCoveredBy(instance)
     }
 
-    for (preset in immediatePresets) {
-        for (target in preset.application.targets) {
-            for (presetEffect in preset.effects) {
-                spawn(
-                    presetEffect, target.target, preset.presetId,
-                    ProgrammerFxOrigin(
-                        cueData.cueId,
-                        ProgrammerFxOrigin.Kind.PRESET_APPLICATION,
-                        preset.presetId,
-                        preset.application.sortOrder,
-                    ),
-                    preset.palette,
-                )
-            }
-        }
-    }
-
+    // A cue's *layer* effects are spawned by `ProgrammerLayerStack`, which owns their lifecycle —
+    // retraction on remove, re-ranking on reorder. Only the cue's own ad-hoc children are left here.
     for (adHoc in cueData.adHocEffects.filter { it.delayMs == null && it.intervalMs == null }) {
         spawn(
             adHoc.toPresetEffectDto(), adHoc.target, null,

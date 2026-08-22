@@ -423,4 +423,13 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
     var intervalMs by DaoCueLayers.intervalMs
     var randomWindowMs by DaoCueLayers.randomWindowMs
     var uuid by DaoCueLayers.uuid
+
+    /**
+     * True when this layer fires on a timer rather than at cue apply.
+     *
+     * Mirrors `CookLayer.isTimed` and `DaoCuePresetApplication.isTimed`, and the same rule holds:
+     * `randomWindowMs` alone does **not** make a layer timed — it only jitters an interval that is
+     * already there.
+     */
+    val isTimed: Boolean get() = delayMs != null || intervalMs != null
 }

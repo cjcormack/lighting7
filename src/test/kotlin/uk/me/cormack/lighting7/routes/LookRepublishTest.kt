@@ -272,9 +272,7 @@ class LookRepublishTest : RouteIntegrationTest() {
         val cueId = applyCueReferencing("hex-1", lookUuid)
 
         val applyData = transaction(state.database) { buildCueApplyData(DaoCue.findById(cueId)!!) }
-        includeCueIntoProgrammer(
-            state, applyData, immediatePresets = emptyList(), mask = null, fadeMs = 0,
-        )
+        includeCueIntoProgrammer(state, applyData, mask = null, fadeMs = 0)
 
         val slot = state.show.programmerStore.get("hex-1", "rgbColour")!!
         assertEquals(
