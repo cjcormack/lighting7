@@ -6,11 +6,10 @@ import org.junit.Test
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerValue
-import uk.me.cormack.lighting7.fx.paletteRefValue
-import uk.me.cormack.lighting7.fx.paletteUuidOrNull
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoLook
@@ -64,7 +63,14 @@ class LookRepublishTest : RouteIntegrationTest() {
         }
     }
 
-    /** A live cue whose single row references [lookUuid] on [fixtureKey]. Returns its id. */
+    /**
+     * A live cue that depends on [lookUuid] through a **layer**, or holds a literal [hex] row when
+     * [lookUuid] is null. Returns its id.
+     *
+     * Until session 4 the dependency was a cue row whose value was `ref:{lookUuid}`. The `ref:` value
+     * grammar retired; a layer naming the Look through a real FK is what makes a cue tour, and it is
+     * what `activeCuesReferencingLook` now scans for.
+     */
     private fun applyCueReferencing(fixtureKey: String, lookUuid: UUID?, hex: String? = null): Int {
         val cueId = transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
@@ -78,12 +84,23 @@ class LookRepublishTest : RouteIntegrationTest() {
                 name = "cue-$fixtureKey"; cueStack = stack; sortOrder = 0
                 this.palette = emptyList(); cueType = CueType.STANDARD.name
             }
-            DaoCuePropertyAssignment.new {
-                this.cue = cue
-                targetType = "fixture"; targetKey = fixtureKey
-                propertyName = "colour"
-                value = lookUuid?.let { paletteRefValue(it) } ?: hex!!
-                sortOrder = 0
+            if (lookUuid == null) {
+                DaoCuePropertyAssignment.new {
+                    this.cue = cue
+                    targetType = "fixture"; targetKey = fixtureKey
+                    propertyName = "colour"
+                    value = hex!!
+                    sortOrder = 0
+                }
+            } else {
+                // Empty targets: the Look's own rows are bound to [fixtureKey], so the layer takes
+                // its coverage from them rather than supplying any.
+                DaoCueLayer.new {
+                    this.cue = cue
+                    look = DaoLook.all().single { it.uuid == lookUuid }
+                    sortOrder = 0
+                    targets = emptyList()
+                }
             }
             cue.id.value
         }
@@ -132,70 +149,10 @@ class LookRepublishTest : RouteIntegrationTest() {
 
         assertEquals(
             listOf(referencing), outcome.cuesRepublished,
-            "the DB scan must narrow to cues that actually hold a ref to this palette",
+            "the DB scan must narrow to cues that actually layer this Look",
         )
         assertTrue(literal !in outcome.cuesRepublished)
         assertEquals("#00ff00", cueColour("hex-2").value.toSerializedString(), "untouched")
-    }
-
-    @Test
-    fun `a programmer ref re-resolves and keeps its reference`() = testApplication {
-        mountTestApp(state)
-        seedHex("hex-1", startChannel = 1)
-
-        val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
-        val fixture = state.show.fixtures.untypedGroupableFixture("hex-1")
-        state.show.fxEngine.writeProgrammerProperty(
-            ProgrammerOwner.WEB, fixture, "rgbColour",
-            CueAssignmentResolver.parseAssignmentValue(
-                uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR, "rgbColour", "#ff8800",
-            )!!,
-            paletteUuid = lookUuid,
-        )
-
-        rewriteLookRows(lookUuid, mapOf("hex-1" to "#0000ff"))
-        val outcome = republishForLookEdit(state, lookUuid)
-
-        val slot = state.show.programmerStore.get("hex-1", "rgbColour")!!
-        assertEquals(lookUuid, slot.value.paletteUuidOrNull, "it is still a reference")
-        assertEquals(
-            "#0000ff",
-            (slot.value.resolved as CueAssignmentResolver.PropertyValue.Colour).value.toSerializedString(),
-            "and it now resolves to the new value",
-        )
-        assertEquals(1, outcome.programmerKeysRefreshed)
-    }
-
-    @Test
-    fun `a ref the look stops covering keeps its last value rather than vanishing`() = testApplication {
-        mountTestApp(state)
-        seedHex("hex-1", startChannel = 1)
-
-        val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
-        val fixture = state.show.fixtures.untypedGroupableFixture("hex-1")
-        state.show.fxEngine.writeProgrammerProperty(
-            ProgrammerOwner.WEB, fixture, "rgbColour",
-            CueAssignmentResolver.parseAssignmentValue(
-                uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR, "rgbColour", "#ff8800",
-            )!!,
-            paletteUuid = lookUuid,
-        )
-
-        // Drop the row entirely — the Look now covers nothing for this fixture.
-        transaction(state.database) {
-            DaoLook.all().single { it.uuid == lookUuid }.rows.forEach { it.delete() }
-        }
-        val outcome = republishForLookEdit(state, lookUuid)
-
-        val slot = state.show.programmerStore.get("hex-1", "rgbColour")!!
-        assertEquals(
-            "#ff8800",
-            (slot.value.resolved as CueAssignmentResolver.PropertyValue.Colour).value.toSerializedString(),
-            "silently dropping an operator's programmer entry mid-show would be worse than a stale value",
-        )
-        assertIs<ProgrammerValue.Ref>(slot.value, "and it stays a reference, so the sheet can mark it broken")
-        assertEquals(1, outcome.programmerKeysUncovered)
-        assertEquals(0, outcome.programmerKeysRefreshed)
     }
 
     @Test
@@ -204,13 +161,14 @@ class LookRepublishTest : RouteIntegrationTest() {
         seedHex("hex-1", startChannel = 1)
 
         val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
-        val fixture = state.show.fixtures.untypedGroupableFixture("hex-1")
-        state.show.fxEngine.writeProgrammerProperty(
-            ProgrammerOwner.WEB, fixture, "rgbColour",
-            CueAssignmentResolver.parseAssignmentValue(
-                uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR, "rgbColour", "#ff8800",
-            )!!,
-            paletteUuid = lookUuid,
+        // A programmer *layer*, which is what carries a live dependency on a Look now — this used to
+        // be a `writeProgrammerProperty(..., paletteUuid = lookUuid)` ref slot.
+        val look = transaction(state.database) {
+            DaoLook.all().single { it.uuid == lookUuid }.let { Triple(it.id.value, it.uuid, it.name) }
+        }
+        state.show.programmerLayerStack.add(
+            lookId = look.first, lookUuid = look.second, lookName = look.third,
+            targets = emptyList(),
         )
         state.show.fxEngine.setProgrammerBlind(true)
 
@@ -226,69 +184,10 @@ class LookRepublishTest : RouteIntegrationTest() {
         assertTrue(state.show.programmerStore.blind)
     }
 
-    @Test
-    fun `a cue row referencing a deleted look is skipped rather than lit white`() = testApplication {
-        mountTestApp(state)
-        seedHex("hex-1", startChannel = 1)
-
-        // The ordering hazard, end to end: the literal colour parser answers white for junk, so a
-        // ref that escaped interception would light the fixture instead of reporting a dead row.
-        val cueId = transaction(state.database) {
-            val project = DaoProject.findById(projectId)!!
-            val stack = DaoCueStack.new {
-                this.project = project
-                name = "stack"; this.palette = emptyList(); loop = false
-                type = CueStackType.STACK.name; sortOrder = 0
-            }
-            val cue = DaoCue.new {
-                this.project = project
-                name = "cue"; cueStack = stack; sortOrder = 0
-                this.palette = emptyList(); cueType = CueType.STANDARD.name
-            }
-            DaoCuePropertyAssignment.new {
-                this.cue = cue
-                targetType = "fixture"; targetKey = "hex-1"
-                propertyName = "colour"; value = paletteRefValue(UUID.randomUUID()); sortOrder = 0
-            }
-            cue.id.value
-        }
-        val applyData = transaction(state.database) { buildCueApplyData(DaoCue.findById(cueId)!!) }
-        applyCue(state, applyData, replaceAll = false)
-
-        assertEquals(
-            null,
-            state.show.fxEngine.layerResolver
-                .currentCueLayerState[CueAssignmentResolver.Key.fixture("hex-1", "rgbColour")],
-            "a dangling ref contributes nothing at all — not white",
-        )
-    }
-
-    @Test
-    fun `including a cue keeps its look reference, so a later edit still moves it`() = testApplication {
-        mountTestApp(state)
-        seedHex("hex-1", startChannel = 1)
-
-        val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
-        val cueId = applyCueReferencing("hex-1", lookUuid)
-
-        val applyData = transaction(state.database) { buildCueApplyData(DaoCue.findById(cueId)!!) }
-        includeCueIntoProgrammer(state, applyData, mask = null, fadeMs = 0)
-
-        val slot = state.show.programmerStore.get("hex-1", "rgbColour")!!
-        assertEquals(
-            lookUuid, slot.value.paletteUuidOrNull,
-            "Include must carry the reference, not just the literal it resolved to — hardening here " +
-                "would both freeze the entry against later look edits and make the next Update " +
-                "write a literal back over a row the operator never touched",
-        )
-
-        // And the reference is live: editing the palette moves the included entry.
-        rewriteLookRows(lookUuid, mapOf("hex-1" to "#0000ff"))
-        republishForLookEdit(state, lookUuid)
-        assertEquals(
-            "#0000ff",
-            (state.show.programmerStore.get("hex-1", "rgbColour")!!.value.resolved
-                as CueAssignmentResolver.PropertyValue.Colour).value.toSerializedString(),
-        )
-    }
+    // Four tests stood here and all four had the `ref:` value grammar as their subject: a programmer
+    // ref re-resolving on a Look edit, a ref the Look stopped covering keeping its last value rather
+    // than vanishing, a dangling ref row contributing nothing instead of white, and Include carrying
+    // a reference rather than hardening it. None of those states can exist now — a cue or programmer
+    // depends on a Look through a layer, and a layer that resolves to nothing simply contributes
+    // nothing. The touring behaviour they surrounded is covered above, through layers.
 }

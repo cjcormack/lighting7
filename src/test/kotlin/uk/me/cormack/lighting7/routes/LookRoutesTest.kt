@@ -18,6 +18,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
@@ -311,20 +312,20 @@ class LookRoutesTest : RouteIntegrationTest() {
             )
         }.body<LookDetails>().id
 
-        val request = TogglePresetRequest(targets = listOf(TogglePresetTarget("fixture", "hex-1")))
+        val request = ToggleLookRequest(targets = listOf(CueTargetDto("fixture", "hex-1")))
 
         val applied = client.post("${base()}/$lookId/toggle") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
         assertEquals(HttpStatusCode.OK, applied.status, applied.bodyAsText())
-        assertEquals("applied", applied.body<TogglePresetResponse>().action)
+        assertEquals("applied", applied.body<ToggleLookResponse>().action)
 
         val removed = client.post("${base()}/$lookId/toggle") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
-        assertEquals("removed", removed.body<TogglePresetResponse>().action)
+        assertEquals("removed", removed.body<ToggleLookResponse>().action)
     }
 
     @Test
@@ -341,13 +342,13 @@ class LookRoutesTest : RouteIntegrationTest() {
         // reported success would read as a dead pad.
         val empty = client.post("${base()}/$lookId/toggle") {
             contentType(ContentType.Application.Json)
-            setBody(TogglePresetRequest(targets = emptyList()))
+            setBody(ToggleLookRequest(targets = emptyList()))
         }
         assertEquals(HttpStatusCode.BadRequest, empty.status)
 
         val missing = client.post("${base()}/999999/toggle") {
             contentType(ContentType.Application.Json)
-            setBody(TogglePresetRequest(targets = listOf(TogglePresetTarget("fixture", "hex-1"))))
+            setBody(ToggleLookRequest(targets = listOf(CueTargetDto("fixture", "hex-1"))))
         }
         assertEquals(HttpStatusCode.NotFound, missing.status)
     }
@@ -366,18 +367,18 @@ class LookRoutesTest : RouteIntegrationTest() {
         val pushed = client.post("${base()}/preview") {
             contentType(ContentType.Application.Json)
             setBody(
-                PresetPreviewRequest(
+                LookPreviewRequest(
                     propertyAssignments = listOf(
-                        uk.me.cormack.lighting7.models.FxPresetPropertyAssignmentDto(
+                        LookPreviewRowDto(
                             propertyName = "dimmer", value = "128",
                         ),
                     ),
-                    targets = listOf(TogglePresetTarget("fixture", "hex-1")),
+                    targets = listOf(CueTargetDto("fixture", "hex-1")),
                 )
             )
         }
         assertEquals(HttpStatusCode.OK, pushed.status, pushed.bodyAsText())
-        assertTrue(pushed.body<PresetPreviewResponse>().writeCount > 0)
+        assertTrue(pushed.body<LookPreviewResponse>().writeCount > 0)
 
         assertEquals(HttpStatusCode.OK, client.delete("${base()}/preview").status)
     }
@@ -392,7 +393,7 @@ class LookRoutesTest : RouteIntegrationTest() {
         // future `POST /{lookId}` would shadow this route silently, so pin it.
         val resp = client.post("${base()}/preview") {
             contentType(ContentType.Application.Json)
-            setBody(PresetPreviewRequest())
+            setBody(LookPreviewRequest())
         }
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
     }

@@ -161,79 +161,14 @@ class ProgrammerRecordShapeTest {
         assertEquals(listOf("front-wash", "hex-3"), out.rows.map { it.targetKey })
     }
 
-    // ─── Palette references ────────────────────────────────────────────────
-
-    private val paletteA: java.util.UUID =
-        java.util.UUID.fromString("2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02")
-    private val paletteB: java.util.UUID =
-        java.util.UUID.fromString("9b7e2c10-4a5d-4c88-b0f3-1de4a7c93b55")
-
-    private fun refEntry(
-        key: String,
-        palette: java.util.UUID,
-        property: String = "dimmer",
-        value: Int = 100,
-        group: String? = null,
-    ) = entry(key, property, value, group).copy(paletteUuid = palette)
-
     @Test
-    fun `a recorded ref entry stores the reference, not the literal it resolved to`() {
-        // Without this, busking a palette and hitting Record silently detaches the new cue from the
-        // palette: it would store today's value and every later palette edit would skip it, because
-        // activeCuesReferencingPalette matches on the ref string.
-        val out = collapseRecordingToAssignments(listOf(refEntry("hex-1", paletteA)), fixtures())
-        assertEquals(
-            uk.me.cormack.lighting7.fx.paletteRefValue(paletteA), out.rows.single().value,
-        )
-    }
-
-    @Test
-    fun `a literal entry still stores its literal`() {
+    fun `a recorded entry stores its literal`() {
+        // What the five tests removed here used to surround. They covered `preserveRefs`: a recorded
+        // row could store `ref:{uuid}` instead of a literal, and two members resolving to the same
+        // colour from *different* palettes had to stay un-collapsed so a group row could not
+        // silently rebind one of them. The `ref:` grammar retired in session 4, so a recorded row is
+        // always a literal and value equality is the whole uniformity test.
         val out = collapseRecordingToAssignments(listOf(entry("hex-1", value = 100)), fixtures())
         assertEquals("100", out.rows.single().value)
-    }
-
-    @Test
-    fun `members referencing the same palette collapse to one group ref row`() {
-        val out = collapseRecordingToAssignments(
-            listOf(
-                refEntry("hex-1", paletteA, group = "front-wash"),
-                refEntry("hex-2", paletteA, group = "front-wash"),
-            ),
-            fixtures(),
-        )
-        assertEquals(1, out.groupRows)
-        val row = out.rows.single()
-        assertEquals("front-wash", row.targetKey)
-        assertEquals(uk.me.cormack.lighting7.fx.paletteRefValue(paletteA), row.value)
-    }
-
-    @Test
-    fun `members referencing different palettes do not collapse`() {
-        // Same resolved value, different palettes. Collapsing would emit one group row naming one
-        // of the two and silently rebind the other member to it.
-        val out = collapseRecordingToAssignments(
-            listOf(
-                refEntry("hex-1", paletteA, value = 100, group = "front-wash"),
-                refEntry("hex-2", paletteB, value = 100, group = "front-wash"),
-            ),
-            fixtures(),
-        )
-        assertEquals(0, out.groupRows, "identical values from different palettes are not uniform")
-        assertEquals(2, out.rows.size)
-        assertTrue(out.rows.all { it.targetKey.startsWith("hex-") })
-    }
-
-    @Test
-    fun `a ref and a literal with the same value do not collapse`() {
-        val out = collapseRecordingToAssignments(
-            listOf(
-                refEntry("hex-1", paletteA, value = 100, group = "front-wash"),
-                entry("hex-2", value = 100, group = "front-wash"),
-            ),
-            fixtures(),
-        )
-        assertEquals(0, out.groupRows)
-        assertEquals(2, out.rows.size)
     }
 }

@@ -1,12 +1,34 @@
 # Looks and Layers — replacing FX Presets and named Palettes
 
-> **Status: sessions 1 (backend), 2 (the Look library's frontend), 3a (the programmer as a
-> layer stack) and 3b (the programmer's frontend) landed. Session 4 remains — see §5.**
+> **Document status: COMPLETE (2026-08-22).** All five sessions landed — 1 (backend), 2 (the Look
+> library's frontend), 3a (the programmer as a layer stack), 3b (the programmer's frontend) and 4
+> (the reference-era retirement, per-layer controls, the read surface and the docs). The narrative
+> below is preserved as a session-by-session record; durable reference lives in
+> [lighting-composition-model.md](../../lighting-composition-model.md),
+> [fx-engineering.md](../../fx-engineering.md), [cues-engineering.md](../../cues-engineering.md) and
+> `lighting-react`'s `CLAUDE.md` §"Looks and layers".
 >
-> **Nothing in 3a or 3b has been exercised against a running desk.** New routes and changed classes
-> don't hot-swap into :8413, so a restart is needed and has not happened; `npm run check` is the only
-> evidence either half works. That is the first thing the next session should fix, and §9.12 lists
-> what to look at.
+> **What session 4 did.** It began by exercising 3a and 3b against a desk for the first time — a
+> second instance over a *copy* of the live database, because the real data dir is outside the
+> agent sandbox's writable set. That found two bugs no test had:
+> `computeProvenance`'s `PROGRAMMER` branch never named the winning layer (3a wired the `CUE` branch
+> and left this one, so a cell lit by a busking pad answered *the programmer*), and
+> `programmer.layerState` reached only the acting tab, because the assumption that "every layer
+> mutation also emits `provenanceState`" is false for a mutation that moves no value. Both fixed
+> and re-verified on the desk. Then: the `ref:{uuid}` value grammar retired across both repos in one
+> change; the three Make Hard routes became one flatten-layer route with the first tests any of them
+> ever had; per-layer blend and mask became editable; the four "independent" read renderers turned
+> out to be one file and now share `LayerRow`; `models/palettes.kt`, `models/fxPresets.kt` and
+> `DaoCuePresetApplications` are gone.
+>
+> **Three things deliberately not done**, each with a follow-up: per-layer `stomp` remains carried
+> but unread (`FU-LOOK-STOMP-WITHIN-CUE` — it needs an `FxInstance` layer id and a suppression
+> channel out of `cook`, which is engine work rather than a flag flip, so shipping the toggle alone
+> would have been a control that does nothing); a Look's element rows still compose nowhere
+> (`FU-LOOK-ELEMENT-ROWS`, correction #10, pre-existing); and the rig checks in §13 still need
+> hardware.
+>
+> **Session 4's own departures from this plan are recorded at the end of §5.**
 >
 > **Session 3 split into 3a (backend) and 3b (frontend) on 2026-08-22**, the same call D4 made for
 > sessions 1 and 2, and for the same reason: the programmer route surface alone is ~3,000 lines
@@ -748,6 +770,74 @@ Docs:
   `programmer-redesign-proposal.md` records its five sessions; retire superseded `FU-PAL-*`
   items and add the new ones (§8).
 
+### Session 4 — the retirement pass — **done 2026-08-22**
+
+Landed across both repos. `npm run check` green at **1003 tests**; backend green in three groups.
+
+**Nine departures from the plan, each found in the code — the last one only by driving the route
+against a desk:**
+
+1. **§4.5's "four independent read renderers" is one file.** No renderer reads `presetApplications`
+   at all — `Cue` has no such field. `RunCueCard` reaches `CueDetailContent` through
+   `RunOutputPane`, and `RunMobileCueCard` and `PromptBookCueCard` through `CueCardBody`; none of
+   the four render cue content themselves. `RunMobileCueCard` needed *zero* changes. And
+   `LayerRow` was already exported with a `readOnly` prop and a test pinning it, so the pass was a
+   ~55-line deletion plus making `handlers` optional. §10's warning that this would slip was the
+   one prediction in the plan that was simply wrong.
+2. **Flattening a *middle* layer cannot be output-preserving, and the plan didn't notice.** Local
+   rows beat every layer unconditionally, so promoting a middle layer's values would make them win
+   over the layers above — the cue would look different immediately after an operation whose whole
+   promise is that nothing changes. The route refuses a single `layerId` with 409 unless it is the
+   last enabled layer; whole-stack flatten is always safe.
+3. **The flatten route emits fixture-targeted rows only.** The old cue route could keep a group row
+   when every member resolved alike, because it rewrote a value in place without cooking. Cook's
+   output is per fixture *by construction* and a cooked key carries no group name, so re-deriving
+   one would mean guessing which of several overlapping groups to name. Pinned by a test rather
+   than left to be discovered.
+4. **There were *three* Make Hard routes, not two.** `routes/programmerMakeHard.kt` — mounted, no
+   test, and its KDoc claimed a shared WS op that does not exist — dies with the grammar too, since
+   `hardenProgrammerRefs` has nothing left to harden. Its frontend surface (`MakeHardDialog`, the
+   toolbar action, `referenceCount`, the `makeProgrammerHard` endpoint) went with it.
+5. **`FxPresetEffectDto` had to be relocated, not deleted** — the plan flagged this and it was
+   worse than stated: sixteen files use it, because it had long since stopped being preset-shaped
+   and become the shared effect wire shape. It is now `LookEffectSpec` in `models/looks.kt`.
+   `TogglePresetTarget` went the other way: field-for-field identical to `CueTargetDto`, so it
+   collapsed into it rather than being renamed.
+6. **`POST /programmer/record-palette` does not exist**, and had not for a session — only stale
+   prose in three files mentioned it. `AssignmentHealth.PaletteTypeMismatch` was likewise already
+   gone, so §1 removed two health arms rather than three.
+7. **The migration test needed the legacy schema kept alive.** `LooksMigrationTest` seeds *v4* rows,
+   so deleting `models/palettes.kt` and `models/fxPresets.kt` took its ability to construct its own
+   input. The tables now live in `src/test/.../testsupport/LegacySchema.kt`, copied verbatim
+   (column types are the point — `uuid` is a `javaUUID` blob, and reading it as text is the bug that
+   shipped), created per-test with `SchemaUtils.create`. The migration already guarded every read on
+   `sqlite_master`, so it correctly no-ops on a database that has never had them.
+8. **`cueEdit.addPresetApplication` was dead on both sides** and is deleted rather than ported to
+   layers. The frontend declared the outgoing type and never constructed it; a cue-edit session adds
+   a layer through the ordinary cue PATCH. There is deliberately no `cueEdit.addLayer` — nothing
+   asked for one.
+
+9. **A layer was unaddressable from a client, and only a desk found it.** The flatten route takes an
+   optional `layerId`, and `CueLayerDto` carried none — `lookId` is not unique (a cue may layer the
+   same Look twice) and array position is not identity when `sortOrder` is authoritative. So the
+   route's single-layer mode had no way to be *called*, while all eleven of its unit tests passed,
+   because they read the id straight from the database. `CueLayerDto` now carries a read-only `id`,
+   on the same convention as `lookName`, with a test asserting the read hands out the id the route
+   accepts. A good argument for driving a new route over the wire at least once, not only through
+   its tests.
+
+**Renames that crossed the wire**, all with their frontend halves in the same change:
+`SpeedMasterUsage.presetEffects`/`cuePresetApplications` → `lookEffects`/`cueLayers` (and the
+`SpeedMasterInUseResponse` fields with them, since the speed-master delete guard has to keep seeing
+everything that references a master); `CueStackCueEntry.presetCount` → `layerCount`;
+`ProjectSummary.fxPresetCount` → `lookCount`; `LookSummary.refRowCount` deleted;
+`ProgrammerEntry`'s five `palette*` fields deleted; `LookRefBadge` → `LookNameBadge`.
+
+**One UI inconsistency found by a test and fixed in the component rather than the test**: the
+read-only mask badge rendered the raw wire string (`[COLOUR]`) while the new editable trigger
+rendered labels (`[Colour]`). Wording one surface differently from the other would have undone the
+reason `LayerRow` is shared between them.
+
 ## 6. Migration
 
 One-shot at startup, no rollback shim.
@@ -897,14 +987,43 @@ Status as of session 1: ✅ done · ⬜ outstanding.
     `src/test/backendMock.ts` gained a **stateful** `programmerWs` holder, unlike every other bridge
     there: the programmer's consumers read `getState()` / `layers()` synchronously and then wait to
     be told it changed, so a bare callback holder would fire a notification carrying nothing.
-12. ⬜ **Against a running desk — nothing here has been.** A restart is needed (new routes and
-    changed classes don't hot-swap) and has not happened, so 3a and 3b are both unexercised. In
-    order: a **rows-only** Look lights its busking-pad ring; Program → Programmer → Layers shows the
-    stack and disable / amount / reorder move the rig; a second browser tab sees a reorder (the
-    `programmer.layerState` broadcast); Include a Look → edit on stage → Update writes back and
-    every cue layering it moves; Record makes a bound Look that lands in the library's Recorded
-    section; a layer-won cell names its Look on hover.
-13. ⬜ **On the rig** (`docs/plans/manual-validation.md`) — edit a Look while a cue depending on it
+12. ✅ **Against a running desk — done at the head of session 4, and it found two bugs.**
+
+    Run on a **second desk over a copy of the live database** —
+    `LIGHTING7_DATA_DIR=<copy> ./gradlew run --args="-port=8414"` — because the live desk's data dir
+    is outside the agent sandbox's writable set. That is a better shape than it sounds: the real
+    startup migration runs against real data, reversibly. `./gradlew run` builds `lighting-react`'s
+    `dist/` into the JAR, so the second desk serves the UI on its own port with no Vite proxy.
+    Drive the checklist over REST + WebSocket with Node 24's global `WebSocket`; two traps if you
+    redo it, both of which cost time here. curl writes the session cookie with a **`#HttpOnly_`
+    prefix**, so filtering all `#` lines drops the only cookie that matters and everything 401s.
+    And a WS client must **send `programmer.state`** to prime itself and re-send it after each
+    `provenanceState` push, because that is what the real client does — a probe that only listens
+    sees no layers and invents three bugs that aren't there.
+
+    **Confirmed working:** the migration on real data, uuids intact (`7849763a-28bd-…`, the exact
+    row the pre-fix migration turned to mojibake); a rows-only bound Look, families derived across
+    two of them; the pad's `POST /looks/{id}/toggle` applying it with `effectCount: 0` — the case
+    the old `FxInstance.presetId` ring could never see; add / patch / move / remove with the server
+    renumbering `sortOrder` in place; `blendMode` / `propertyMask` / `amount` / `stomp` all
+    round-tripping (so session 4's per-layer UI needs **no** wire work — verified live, not merely
+    from the DTOs); Include → edit on stage → Update writing back **only** the changed row
+    (`rowsWritten: 1`), so `changedSinceInclude` is right; Record producing a bound Look in the
+    library.
+
+    **Two bugs, both fixed here.** (a) `computeProvenance`'s `PROGRAMMER` branch built a bare entry,
+    so a layer-won cell answered *the programmer* and never named its Look — 3a wired the `CUE`
+    branch and left this one. Fixed via `ProgrammerStore.layerWinnerRankByKey`, decoding the rank
+    from the `LAYER_SEQ_BASE` band and reporting only keys the layer actually *won*.
+    (b) `programmer.layerState` was a unicast reply only; the assumption that "every layer mutation
+    also emits `provenanceState`" is false for a mutation that moves no value, so a layer whose
+    `targets` don't match its bound Look's rows left every other tab on a stale list. Fixed with
+    `ProgrammerStore.layersFlow`, emitted from `mutateLayers` (not `recook` — `reset()` bypasses
+    that path). Both pinned: `ProgrammerLayerTest` +2, `ProgrammerStoreTest` +5.
+
+    Not covered by this route: the live database, and DMX output — the sandbox blocks ArtNet
+    broadcast, so a second desk computes values but lights nothing. §13 still needs a rig.
+13. ⬜ **On the rig — still the only outstanding item in this plan.** (`docs/plans/manual-validation.md`) — edit a Look while a cue depending on it
     is live and confirm the change moves without re-firing the cue. That is use-case 1's payoff, and
     `FU-MANUAL-PALETTE-TOURING` records it as never yet seen on hardware. `FU-MANUAL-LAYER-PRECEDENCE`
     is the new companion check: layered intensity is later-wins, which is the change an operator is

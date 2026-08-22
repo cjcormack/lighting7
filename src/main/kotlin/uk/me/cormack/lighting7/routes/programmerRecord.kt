@@ -9,16 +9,13 @@ import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.CuePresetApplicationDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
-import uk.me.cormack.lighting7.models.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
-import uk.me.cormack.lighting7.models.DaoFxPreset
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
@@ -79,7 +76,6 @@ data class CueWriteOutcome(
 )
 
 /** A child with timing belongs to `CueTriggerManager`, not to Record. */
-private val DaoCuePresetApplication.isTimed: Boolean get() = delayMs != null || intervalMs != null
 private val DaoCueAdHocEffect.isTimed: Boolean get() = delayMs != null || intervalMs != null
 
 /** Match key for a property assignment: target plus canonical property name. */
@@ -115,7 +111,7 @@ internal fun createCueFromRecording(
         this.sortOrder = sortOrder ?: ((stack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1)
     }
     createCueChildren(
-        cue, recording.presetApplications, recording.adHocEffects, recording.rows,
+        cue, recording.adHocEffects, recording.rows,
         layers = recording.layers,
     )
     renumberAutoCues(stack)
@@ -126,7 +122,7 @@ internal fun createCueFromRecording(
         assignmentsWritten = recording.rows.size,
         assignmentsRemoved = 0,
         groupRowsEmitted = recording.groupRowsEmitted,
-        fxWritten = recording.presetApplications.size + recording.adHocEffects.size,
+        fxWritten = recording.adHocEffects.size,
         preserved = ProgrammerPreservedCounts(),
         warnings = emptyList(),
     )
@@ -157,7 +153,7 @@ internal fun writeRecordingIntoCue(
     val warnings = ArrayList<String>()
     // Timed children of either kind are never touched by Record; counted so the response can say
     // so rather than leaving the operator to wonder why a delayed layer survived a REMOVE.
-    val timedLayerCount = cue.layers.count { it.isTimed } + cue.presetApplications.count { it.isTimed }
+    val timedLayerCount = cue.layers.count { it.isTimed }
     val timedAdHoc = cue.adHocEffects.count { it.isTimed }
     val triggerCount = cue.triggers.count().toInt()
 
@@ -274,7 +270,7 @@ internal fun writeRecordingIntoCue(
     val fxWritten = when (mode) {
         RecordMode.MERGE -> appendFxChildren(cue, recording)
         RecordMode.UPDATE_EXISTING ->
-            recording.layers.size + recording.presetApplications.size + recording.adHocEffects.size
+            recording.layers.size + recording.adHocEffects.size
         else -> 0
     }
 
@@ -336,28 +332,9 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
         count++
     }
 
-    val existingApps = cue.presetApplications.toList()
-    for (app in recording.presetApplications) {
-        val match = existingApps.firstOrNull { !it.isTimed && it.preset.id.value == app.presetId }
-        if (match != null) {
-            val merged = LinkedHashSet(match.targets)
-            merged.addAll(app.targets)
-            if (merged.size != match.targets.size) {
-                match.targets = merged.toList()
-                count++
-            }
-            continue
-        }
-        val preset = DaoFxPreset.findById(app.presetId) ?: continue
-        DaoCuePresetApplication.new {
-            this.cue = cue
-            this.preset = preset
-            this.targets = app.targets
-            this.sortOrder = app.sortOrder
-        }
-        count++
-    }
-
+    // A preset-application merge loop stood here, beside the layer one above. It was already
+    // unreachable: `recording.presetApplications` has been `emptyList()` since `captureCurrentState`
+    // stopped stamping `presetId`, so it iterated nothing. Gone with `cue_preset_applications`.
     val existingAdHoc = cue.adHocEffects.toList()
     for (effect in recording.adHocEffects) {
         // Upsert, not skip-if-present. `(target, effectType, property)` identifies *which*
@@ -438,23 +415,6 @@ private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
 /** Delete the immediate FX children the recording names — [RecordMode.REMOVE]'s FX half. */
 private fun removeRecordedFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
     var removed = 0
-    for (app in recording.presetApplications) {
-        val match = cue.presetApplications.firstOrNull {
-            !it.isTimed && it.preset.id.value == app.presetId
-        } ?: continue
-        val remaining = match.targets.filterNot { it in app.targets }
-        // Only count a removal that removed something. The recording can name the same preset
-        // on a *different* target than the cue stores, in which case `remaining` is unchanged
-        // and this is a no-op — reporting it as removed would tell the operator a row went
-        // away when it didn't.
-        if (remaining.size == match.targets.size) continue
-        if (remaining.isEmpty()) {
-            match.delete()
-        } else {
-            match.targets = remaining
-        }
-        removed++
-    }
     for (effect in recording.adHocEffects) {
         val match = cue.adHocEffects.firstOrNull {
             !it.isTimed &&
@@ -519,56 +479,9 @@ private fun replaceImmediateFxChildren(
         }
     }
 
-    // A preset application has no single property to mask by — a preset can carry effects
-    // across several attributes — so it is only replaced when the record is unmasked. A masked
-    // re-record leaves presets alone rather than deleting more than was asked for.
-    if (mask == null) {
-        for (app in cue.presetApplications.toList()) {
-            if (app.isTimed) continue
-            if (scope == null) {
-                app.delete()
-                continue
-            }
-            // Scoped: only the selected targets are being re-recorded, so strip those and keep
-            // the rest. A preset the operator applied to the whole rig survives a re-record of
-            // two of its heads instead of vanishing from the other ten.
-            val remaining = app.targets.filterNot {
-                targetInScope(state.show.fixtures, it.target, scope)
-            }
-            if (remaining.isEmpty()) app.delete() else app.targets = remaining
-        }
-    }
-
-    for (app in recording.presetApplications) {
-        val preset = DaoFxPreset.findById(app.presetId) ?: continue
-        if (mask != null && cue.presetApplications.any {
-                !it.isTimed && it.preset.id.value == app.presetId
-            }
-        ) continue
-        // A group-targeted row survives a scoped record whenever part of its group sits outside
-        // the selection — and it still covers the heads that *are* inside it. Adding this row on
-        // top would leave the cue asserting the same preset twice for the overlap, and cue
-        // activation instantiates per row per target with no de-duplication, so the effect would
-        // genuinely run twice on those heads. Say so instead of stacking it, matching the
-        // group-shadow warning REMOVE already emits for property rows.
-        val shadowed = shadowingCoverage(
-            state, scope, expandTargetsToFixtureKeys(state, app.targets),
-            cue.presetApplications.filter { !it.isTimed && it.preset.id.value == app.presetId }
-                .map { it.targets },
-        )
-        if (shadowed.isNotEmpty()) {
-            warnings += "preset ${preset.name} already covers ${shadowed.joinToString()} via a " +
-                "group row the selection only partly covers — narrow the selection to the whole " +
-                "group, or remove that row"
-            continue
-        }
-        DaoCuePresetApplication.new {
-            this.cue = cue
-            this.preset = preset
-            this.targets = app.targets
-            this.sortOrder = app.sortOrder
-        }
-    }
+    // Two more preset-application blocks stood here — an unmasked-only replace sweep, and an
+    // insert loop with the same group-shadow warning the ad-hoc one below still emits. Both had
+    // layer equivalents beside them already, and both iterated an always-empty list.
     for (effect in recording.adHocEffects) {
         // Same hazard, same rule — an ad-hoc child is identified by (effectType, property).
         val shadowed = shadowingCoverage(

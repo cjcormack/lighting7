@@ -24,12 +24,9 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
-import uk.me.cormack.lighting7.models.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
-import uk.me.cormack.lighting7.models.DaoFxPreset
-import uk.me.cormack.lighting7.models.FxPresetEffectDto
+import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.routes.CueApplyData
-import uk.me.cormack.lighting7.routes.TogglePresetTarget
 import uk.me.cormack.lighting7.routes.applyCue
 import uk.me.cormack.lighting7.routes.buildCueApplyData
 import uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue
@@ -37,7 +34,6 @@ import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
 import uk.me.cormack.lighting7.routes.cueDerivedPriority
 import uk.me.cormack.lighting7.routes.republishCueLayer
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
-import uk.me.cormack.lighting7.routes.toPropertyAssignmentDtos
 import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.atomic.AtomicReference
 
@@ -126,19 +122,11 @@ data class CueEditSetModeInMessage(val cueId: Int, val mode: String) : CueEditIn
 @SerialName("cueEdit.setPalette")
 data class CueEditSetPaletteInMessage(val cueId: Int, val palette: List<String>) : CueEditInMessage()
 
-@Serializable
-@SerialName("cueEdit.addPresetApplication")
-data class CueEditAddPresetApplicationInMessage(
-    val cueId: Int,
-    val presetId: Int,
-    val targets: List<CueTargetDto>,
-    val delayMs: Long? = null,
-    val intervalMs: Long? = null,
-    val randomWindowMs: Long? = null,
-    /** Per-application speed-master override (null → each preset effect's own → master 1). */
-    val speedMasterUuid: String? = null,
-    val rateSpeedMasterUuid: String? = null,
-) : CueEditInMessage()
+// `cueEdit.addPresetApplication` stood here. It appended a `DaoCuePresetApplication` to the cue and,
+// in Live mode, spawned the preset's effects immediately. The op was **dead on both sides** before
+// session 4 deleted it: the frontend declared the outgoing type and never constructed it, and a
+// cue-edit session adds a *layer* through the ordinary cue PATCH (`LayersPane`), which is unaffected.
+// There is deliberately no `cueEdit.addLayer` replacement — nothing asked for one.
 
 @Serializable
 @SerialName("cueEdit.addAdHocEffect")
@@ -210,13 +198,6 @@ data class CueEditPaletteChangedOutMessage(
 ) : CueEditOutMessage()
 
 @Serializable
-@SerialName("cueEdit.presetApplicationAdded")
-data class CueEditPresetApplicationAddedOutMessage(
-    val cueId: Int,
-    val presetId: Int,
-) : CueEditOutMessage()
-
-@Serializable
 @SerialName("cueEdit.adHocEffectAdded")
 data class CueEditAdHocEffectAddedOutMessage(
     val cueId: Int,
@@ -268,14 +249,6 @@ suspend fun handleCueEdit(scope: SocketScope, message: CueEditInMessage) {
         }
         is CueEditSetPaletteInMessage ->
             CueEditSessionHandler.setPalette(state, ref, message.cueId, message.palette)
-        is CueEditAddPresetApplicationInMessage ->
-            CueEditSessionHandler.addPresetApplication(
-                state, ref, message.cueId,
-                message.presetId, message.targets,
-                message.delayMs, message.intervalMs, message.randomWindowMs,
-                speedMasterUuid = speedMasterUuidOrNull(message.speedMasterUuid),
-                rateSpeedMasterUuid = speedMasterUuidOrNull(message.rateSpeedMasterUuid),
-            )
         is CueEditAddAdHocEffectInMessage ->
             CueEditSessionHandler.addAdHocEffect(state, ref, message.cueId, message.effect)
     }
@@ -678,83 +651,6 @@ object CueEditSessionHandler {
     }
 
     /**
-     * Append a preset application to the cue. In Live mode also spawns the effect immediately
-     * via the same path as [applyCue], so operators see the effect on stage as soon as they
-     * add it. Timed presets (delayMs/intervalMs) are persisted but not spawned — the cue-
-     * trigger manager handles those when the cue is applied normally.
-     */
-    fun addPresetApplication(
-        state: State,
-        sessionRef: AtomicReference<CueEditSessionState?>,
-        cueId: Int,
-        presetId: Int,
-        targets: List<CueTargetDto>,
-        delayMs: Long?,
-        intervalMs: Long?,
-        randomWindowMs: Long?,
-        speedMasterUuid: java.util.UUID? = null,
-        rateSpeedMasterUuid: java.util.UUID? = null,
-    ): OutMessage {
-        val session = sessionRef.get()
-        if (session == null || session.cueId != cueId) {
-            return CueEditErrorOutMessage(cueId, "No active cueEdit session for this cue")
-        }
-
-        val shouldSpawn = session.mode == CueEditMode.LIVE && delayMs == null && intervalMs == null
-        val result = try {
-            transaction(state.database) {
-                val cue = DaoCue.findById(cueId) ?: error("Cue not found")
-                val preset = DaoFxPreset.findById(presetId) ?: error("Preset not found")
-                DaoCuePresetApplication.new {
-                    this.cue = cue
-                    this.preset = preset
-                    this.targets = targets
-                    this.delayMs = delayMs
-                    this.intervalMs = intervalMs
-                    this.randomWindowMs = randomWindowMs
-                    this.sortOrder = cue.presetApplications.count().toInt()
-                    this.speedMasterUuid = speedMasterUuid
-                    this.rateSpeedMasterUuid = rateSpeedMasterUuid
-                }
-                val applyData = if (session.mode == CueEditMode.LIVE) buildCueApplyData(cue) else null
-                val effects = if (shouldSpawn) preset.effects else null
-                applyData to effects
-            }
-        } catch (e: Exception) {
-            return CueEditErrorOutMessage(cueId, "Persist failed: ${e.message}")
-        }
-
-        val (applyData, presetEffects) = result
-        if (applyData != null) {
-            // Republish Layer 4 so the new preset's property assignments land on stage before
-            // effects spawn — effects reset-to-layer-below sees the preset-contributed baseline.
-            republishCueLayer(state, cueId, applyData)
-
-            if (presetEffects != null) {
-                for (target in targets) {
-                    val toggleTarget = TogglePresetTarget(target.target)
-                    for (presetEffect in presetEffects) {
-                        val fxTarget = try {
-                            resolveTargetForCue(state, toggleTarget, presetEffect)
-                        } catch (_: Exception) { null } ?: continue
-                        val instance = createInstanceFromPresetForCue(
-                            presetEffect, fxTarget, presetId, state, cueId,
-                            overrideSpeedMasterUuid = speedMasterUuid,
-                            overrideRateSpeedMasterUuid = rateSpeedMasterUuid,
-                        )
-                        instance.cueId = cueId
-                        instance.priority = cueDerivedPriority(applyData)
-                        state.show.fxEngine.addEffect(instance)
-                    }
-                }
-            }
-        }
-
-        state.show.fixtures.cueListChanged()
-        return CueEditPresetApplicationAddedOutMessage(cueId, presetId)
-    }
-
-    /**
      * Append an ad-hoc effect to the cue. In Live mode spawns the effect immediately
      * (immediate effects only — timed ones are persisted for [CueTriggerManager]).
      */
@@ -802,8 +698,8 @@ object CueEditSessionHandler {
         }
 
         if (applyData != null && effect.delayMs == null && effect.intervalMs == null) {
-            val target = TogglePresetTarget(effect.target)
-            val presetEffectDto = FxPresetEffectDto(
+            val target = CueTargetDto(effect.target)
+            val presetEffectDto = LookEffectSpec(
                 effectType = effect.effectType,
                 category = effect.category,
                 propertyName = effect.propertyName,

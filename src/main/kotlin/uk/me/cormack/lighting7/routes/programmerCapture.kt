@@ -16,11 +16,9 @@ import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
-import uk.me.cormack.lighting7.fx.paletteUuidOrNull
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
-import uk.me.cormack.lighting7.models.CuePresetApplicationDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -112,15 +110,6 @@ data class RecordEntry(
     val value: CueAssignmentResolver.PropertyValue,
     val sourceGroup: String?,
     val maskGroup: PropertyMaskGroup?,
-    /**
-     * Set when the winning programmer slot was a [ProgrammerValue.Ref], so the recorded row can be
-     * written back as `ref:{uuid}` rather than as the literal it happens to resolve to right now.
-     *
-     * Without this, busking a palette and hitting Record silently detaches the new cue from the
-     * palette: it would store today's colour, and editing the palette afterwards would never move
-     * it. Always null for sideband entries, which are channel-shaped and carry no palette identity.
-     */
-    val paletteUuid: UUID? = null,
 )
 
 /** Everything one Record source produced, ready to be written into a cue. */
@@ -137,7 +126,6 @@ data class ProgrammerRecording(
      * `collectProgrammerRecording`.
      */
     val layers: List<CueLayerDto>,
-    val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
     /** The live palette — captured only by [RecordSource.STAGE_SNAPSHOT]. */
     val palette: List<String>?,
@@ -179,7 +167,6 @@ internal fun collectProgrammerEntries(
         value: CueAssignmentResolver.PropertyValue,
         sourceGroup: String?,
         seq: Long,
-        paletteUuid: UUID? = null,
     ) {
         val propertyName = canonicalPropertyName(rawPropertyName)
         val mapKey = fixtureKey to propertyName
@@ -208,17 +195,14 @@ internal fun collectProgrammerEntries(
             skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MASKED_OUT)
             return
         }
-        entries[mapKey] = RecordEntry(fixtureKey, propertyName, value, sourceGroup, maskGroup, paletteUuid)
+        entries[mapKey] = RecordEntry(fixtureKey, propertyName, value, sourceGroup, maskGroup)
         seqs[mapKey] = seq
     }
 
     for (entry in store.entries()) {
         val top = entry.slots.firstOrNull() ?: continue
         if (source == RecordSource.TOUCHED && !top.touched) continue
-        accept(
-            entry.fixtureKey, entry.propertyName, top.value.resolved, top.sourceGroup, top.seq,
-            paletteUuid = top.value.paletteUuidOrNull,
-        )
+        accept(entry.fixtureKey, entry.propertyName, top.value.resolved, top.sourceGroup, top.seq)
     }
 
     // Sideband slots that a property covers can still be recorded — a raw pan/tilt drag from
@@ -354,16 +338,6 @@ internal fun collectProgrammerRecording(
         }
         return ProgrammerRecording(
             rows = renumber(rows),
-            presetApplications = if (includeFx) {
-                captured.presetApplications.mapNotNull { app ->
-                    val kept = app.targets.filter { targetInScope(fixtures, it.target, scope) }
-                    when {
-                        kept.size == app.targets.size -> app
-                        kept.isEmpty() -> null
-                        else -> app.copy(targets = kept)
-                    }
-                }
-            } else emptyList(),
             adHocEffects = if (includeFx) {
                 captured.adHocEffects.filter {
                     maskAllows(mask, maskGroupForAdHoc(fixtures, it)) &&
@@ -410,7 +384,6 @@ internal fun collectProgrammerRecording(
     return ProgrammerRecording(
         rows = collapsed.rows,
         layers = layers,
-        presetApplications = emptyList(),
         adHocEffects = adHoc,
         // TOUCHED/ALL record the programmer, and the programmer holds no palette. Leaving the
         // cue's palette alone is the right default: recording a look shouldn't silently rewrite

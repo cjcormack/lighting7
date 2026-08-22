@@ -13,12 +13,11 @@ import org.jetbrains.exposed.v1.core.Table
  * `CLAUDE.md` and `docs/sync-engineering.md`.
  */
 val ALL_TABLES: List<Table> = listOf(
-    DaoProjects, DaoScripts, DaoFxPresets, DaoFxPresetPropertyAssignments,
-    DaoPalettes, DaoPaletteEntries,
+    DaoProjects, DaoScripts,
     DaoLooks, DaoLookRows, DaoLookEffects,
     DaoSpeedMasters,
     DaoCueStacks, DaoCues,
-    DaoCuePresetApplications, DaoCueLayers,
+    DaoCueLayers,
     DaoCueAdHocEffects, DaoCuePropertyAssignments, DaoCueTriggers,
     DaoAiConversations, DaoCueSlots,
     DaoUniverseConfigs, DaoRiggings, DaoStageRegions,

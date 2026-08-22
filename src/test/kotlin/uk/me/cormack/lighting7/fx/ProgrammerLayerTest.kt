@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fx.effects.StaticValue
 import uk.me.cormack.lighting7.show.Fixtures
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -61,6 +62,14 @@ class ProgrammerLayerTest {
         category = PropertyCategory.DIMMER,
         value = CueAssignmentResolver.PropertyValue.Slider(value),
         layerWinner = layerWinner,
+    )
+
+    private fun warmLayer(layerId: Int, sortOrder: Int) = ProgrammerLayer(
+        layerId = layerId,
+        lookId = 7,
+        lookUuid = UUID.nameUUIDFromBytes("warm-wash".toByteArray()),
+        lookName = "Warm Wash",
+        sortOrder = sortOrder,
     )
 
     private fun tick(n: Long) = MasterClock.ClockTick(
@@ -297,6 +306,46 @@ class ProgrammerLayerTest {
         assertEquals(42, entry.layerId)
         assertEquals(7, entry.lookId)
         assertEquals("Warm Wash", entry.lookName)
+    }
+
+    @Test
+    fun `a PROGRAMMER provenance entry names the Look layer that won`() {
+        // The programmer half of the entry above, and it was missing until session 4: the branch
+        // built a bare PROGRAMMER entry, so a cell lit by a busking pad answered "the programmer"
+        // and the layer-aware hover the redesign exists for never appeared. Found on a desk, not by
+        // a test — which is why this one exists. The rank is decoded from the reserved seq band, so
+        // this also pins that ProgrammerStore.layerWinnerRankByKey and putLayerSlots agree.
+        val rig = newRig()
+        rig.programmerStore.mutateLayers { listOf(warmLayer(layerId = 9, sortOrder = 0)) to Unit }
+        rig.programmerStore.putLayerSlots(
+            listOf(ProgrammerStore.LayerSlotWrite("hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u), layerIndex = 0)),
+        )
+
+        val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
+        assertEquals(FxEngine.ProvenanceSource.PROGRAMMER, entry.source, "the source is still the programmer")
+        assertEquals(9, entry.layerId)
+        assertEquals(7, entry.lookId)
+        assertEquals("Warm Wash", entry.lookName)
+    }
+
+    @Test
+    fun `a local busk over a layer reports no layer, because the layer did not win`() {
+        // The restriction that makes the entry above trustworthy. A layer slot sits at the tail of
+        // its stack, so an operator's own write outranks it — and naming the Look there would tell
+        // them their value came from a Look when it came from their hand.
+        val rig = newRig()
+        rig.programmerStore.mutateLayers { listOf(warmLayer(layerId = 9, sortOrder = 0)) to Unit }
+        rig.programmerStore.putLayerSlots(
+            listOf(ProgrammerStore.LayerSlotWrite("hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u), layerIndex = 0)),
+        )
+        rig.engine.writeProgrammerProperty(
+            ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(10u),
+        )
+
+        val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
+        assertEquals(FxEngine.ProvenanceSource.PROGRAMMER, entry.source)
+        assertNull(entry.layerId, "the operator's own write won, so no layer is named")
+        assertNull(entry.lookName)
     }
 
     @Test

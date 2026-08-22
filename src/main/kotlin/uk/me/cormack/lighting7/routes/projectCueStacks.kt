@@ -536,7 +536,16 @@ data class CueStackCueEntry(
     val name: String,
     val sortOrder: Int,
     val paletteSize: Int,
-    val presetCount: Int,
+    /**
+     * How many Look layers the cue carries.
+     *
+     * Was `presetCount`, counting `cue_preset_applications` — which retired in session 4. Renamed
+     * rather than deleted because it is the count a collapsed cue row wants: a cue built entirely
+     * from layers otherwise reads as empty in the Run list. **No client reads it yet** (the
+     * frontend's `CueStackCueEntry` declares it and nothing consumes it, along with `paletteSize`
+     * and `adHocEffectCount`), so treat it as available rather than as load-bearing.
+     */
+    val layerCount: Int,
     val adHocEffectCount: Int,
     val autoAdvance: Boolean = false,
     val autoAdvanceDelayMs: Long? = null,
@@ -637,7 +646,7 @@ private fun DaoCueStack.toCueStackDetails(
             name = cue.name,
             sortOrder = cue.sortOrder,
             paletteSize = cue.palette.size,
-            presetCount = cue.presetApplications.count().toInt(),
+            layerCount = cue.layers.count().toInt(),
             adHocEffectCount = cue.adHocEffects.count().toInt(),
             autoAdvance = cue.autoAdvance,
             autoAdvanceDelayMs = cue.autoAdvanceDelayMs,

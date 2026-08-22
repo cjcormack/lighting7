@@ -12,7 +12,6 @@ import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
-import uk.me.cormack.lighting7.models.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueSlot
 import uk.me.cormack.lighting7.models.CueStackType
@@ -22,10 +21,6 @@ import uk.me.cormack.lighting7.models.DaoFixtureGroup
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMember
 import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFxDefinition
-import uk.me.cormack.lighting7.models.DaoFxPreset
-import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
-import uk.me.cormack.lighting7.models.DaoPalette
-import uk.me.cormack.lighting7.models.DaoPaletteEntry
 import uk.me.cormack.lighting7.models.DaoSpeedMaster
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
@@ -54,7 +49,6 @@ import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.sync.dto.CueTriggerJson
-import uk.me.cormack.lighting7.sync.dto.PaletteJson
 import uk.me.cormack.lighting7.sync.dto.SpeedMasterJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookAnchorJson
 import uk.me.cormack.lighting7.sync.dto.PromptBookAnnotationJson
@@ -63,7 +57,6 @@ import uk.me.cormack.lighting7.sync.dto.FixtureGroupJson
 import uk.me.cormack.lighting7.sync.dto.FixturePatchJson
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.FxDefinitionJson
-import uk.me.cormack.lighting7.sync.dto.FxPresetJson
 import uk.me.cormack.lighting7.sync.dto.ParkedChannelJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.dto.RiggingJson
@@ -230,14 +223,6 @@ class ProjectImporter(private val state: State) {
                 look.rows.forEach { it.delete() }
                 look.effects.forEach { it.delete() }
                 look.delete()
-            }
-            project.fxPresets.forEach { preset ->
-                preset.propertyAssignments.forEach { it.delete() }
-                preset.delete()
-            }
-            project.palettes.forEach { palette ->
-                palette.entries.forEach { it.delete() }
-                palette.delete()
             }
             project.speedMasters.forEach { it.delete() }
             project.fixtureGroups.forEach { group ->

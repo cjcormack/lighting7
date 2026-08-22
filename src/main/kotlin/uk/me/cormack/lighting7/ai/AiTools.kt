@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.ai
 
+import uk.me.cormack.lighting7.models.CueTargetDto
+
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
@@ -131,7 +133,7 @@ class AiTools(private val state: State) {
         if (targets != null && targets.isNotEmpty()) {
             val toggleTargets = targets.map { t ->
                 val obj = t.jsonObject
-                TogglePresetTarget(
+                CueTargetDto(
                     type = obj["type"]!!.jsonPrimitive.content,
                     key = obj["key"]!!.jsonPrimitive.content,
                 )
@@ -480,7 +482,7 @@ class AiTools(private val state: State) {
                 this.cueStack = stack
                 this.sortOrder = stack.cues.count().toInt()
             }
-            createCueChildren(newCue, emptyList(), adHocEffects, layers = layers)
+            createCueChildren(newCue, adHocEffects, layers = layers)
             newCue
         }
         state.show.fixtures.cueListChanged()
@@ -511,12 +513,6 @@ class AiTools(private val state: State) {
                 cueName = cue.name,
                 palette = cue.palette,
                 updateGlobalPalette = cue.updateGlobalPalette,
-                presetApplications = cue.presetApplications.map { app ->
-                    CuePresetApplicationDto(
-                        presetId = app.preset.id.value,
-                        targets = app.targets,
-                    )
-                },
                 // Without this the tool applies the cue with an empty layer stack — none of its
                 // Looks contribute values or spawn effects. `applyCue` reads only `layers`.
                 layers = cue.layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
@@ -721,8 +717,8 @@ class AiTools(private val state: State) {
 
     // ─── Helpers ───────────────────────────────────────────────────────────
 
-    private fun parsePresetEffect(obj: JsonObject): FxPresetEffectDto {
-        return FxPresetEffectDto(
+    private fun parsePresetEffect(obj: JsonObject): LookEffectSpec {
+        return LookEffectSpec(
             effectType = obj["effectType"]!!.jsonPrimitive.content,
             category = obj["category"]!!.jsonPrimitive.content,
             propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull,

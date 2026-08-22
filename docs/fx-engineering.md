@@ -1100,10 +1100,20 @@ deletes the layers with it.
 
 The "create from current state" operation captures the live FX engine state:
 
-1. Effects with a non-null `presetId` (now a look id) are grouped by Look, collecting their targets
-   into cue layer rows.
-2. Effects with a null `presetId` are stored as individual `CueAdHocEffect` rows with all effect
-   fields captured.
+1. Effects with a non-null `lookId` are grouped **by Look**, collecting their targets into cue layer
+   rows. A Look applied twice to different targets therefore collapses into one layer covering both
+   — the honest reading of a *snapshot*, since the stage cannot tell you it was two gestures.
+2. Effects with a null `lookId` are stored as individual `CueAdHocEffect` rows with all effect fields
+   captured.
+
+Two things a snapshot **cannot** recover, because an `FxInstance` never carried them: a layer's
+`blendMode`, `amount` and `propertyMask`, which take their DTO defaults. When the operator wants the
+stack's own amounts and masks preserved they Record `TOUCHED`, which reads `ProgrammerStore.layers`
+directly rather than reconstructing from the stage.
+
+This used to key on `FxInstance.presetId`. Nothing stamps that field any more — session 3a added a
+separate `lookId` precisely because the two are ids in *different* tables, and reading `presetId` as
+a look id would reconstruct a cue naming whatever `DaoFxPreset` happened to share the number.
 
 ### Related Files
 

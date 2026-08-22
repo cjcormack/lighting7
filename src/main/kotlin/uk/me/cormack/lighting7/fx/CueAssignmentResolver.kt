@@ -7,21 +7,28 @@ import java.awt.Color
 import java.util.UUID
 
 /**
- * Scoped palette cascade for resolving colour palette refs (`"P1"`, `"P2"`, …) in Layer 4
+ * Scoped palette cascade for resolving positional colour refs (`"P1"`, `"P2"`, …) in Layer 4
  * assignment values. [effective] picks the most specific scope with a non-empty palette:
- * [preset] > [cue] > [global]. All empty → palette refs fall through to the static colour
+ * [look] > [cue] > [global]. All empty → positional refs fall through to the static colour
  * parser (invalid hex → white).
  *
- * Cue-originated rows leave [preset] empty; preset-originated rows populate all three.
+ * This is the **positional** ordered colour list — a third, unrelated thing that was also once
+ * called a palette, and the only thing the word means now. It survived the looks-and-layers merge
+ * untouched; see `docs/lighting-composition-model.md` §"Relationship to the positional palette".
+ *
+ * [look] was called `preset` until session 4. Only the name changed: `CueComposer.cook` has
+ * populated it from a Look's own `palette` column since session 1, which is what keeps the
+ * most-specific scope alive now that FX presets are gone. A cue's own rows leave it empty; a row
+ * coming from a layer fills it in with that layer's Look's list.
  */
 data class PaletteCascade(
-    val preset: List<ExtendedColour> = emptyList(),
+    val look: List<ExtendedColour> = emptyList(),
     val cue: List<ExtendedColour> = emptyList(),
     val global: List<ExtendedColour> = emptyList(),
 ) {
     val effective: List<ExtendedColour>
         get() = when {
-            preset.isNotEmpty() -> preset
+            look.isNotEmpty() -> look
             cue.isNotEmpty() -> cue
             else -> global
         }
@@ -76,20 +83,9 @@ class CueAssignmentResolver {
         val value: PropertyValue,
         val moveInDark: Boolean = false,
         /**
-         * Set when [value] came from resolving a named-palette reference for this row's fixture.
-         *
-         * Composition ignores it — a resolved reference composes exactly like the literal it
-         * resolved to. It exists so consumers that lift these rows *back* into the programmer
-         * (Include, the FX-preset toggle) can store a [ProgrammerValue.Ref] rather than a
-         * [ProgrammerValue.Hard], which is what keeps a later palette edit moving them and stops
-         * Update silently hardening a reference the operator never touched.
-         */
-        val paletteUuid: UUID? = null,
-        /**
          * Which Look layer produced [value], when a layer did — see [CookWinner].
          *
-         * Composition ignores it completely, exactly as it ignores [paletteUuid]: this is an
-         * attribution, not an input. Two consumers read it, and both need the *winning* layer
+         * Composition ignores it completely: this is an attribution, not an input. Two consumers read it, and both need the *winning* layer
          * rather than the set of layers that touched the key:
          *
          * - provenance, so "why is this fixture this colour?" can answer *Warm Wash* instead of

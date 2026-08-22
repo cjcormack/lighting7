@@ -5,7 +5,6 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
-import uk.me.cormack.lighting7.fx.paletteUuidOrNull
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.models.DaoCue
@@ -91,11 +90,12 @@ internal fun changedSinceInclude(
         val included = store.valueFor(ProgrammerOwner.INCLUDE, entry.fixtureKey, entry.propertyName)
             // New since Include — the operator adding a fixture to the cue.
             ?: return@filter true
-        // Reference identity *and* value, tested independently. A value-only test would write an
-        // untouched ref back and harden it, because a ref resolves to exactly the literal it was
-        // included as. A ref-only test would drop an explicit Make Hard, which leaves the literal
-        // identical and must still persist.
-        included.paletteUuidOrNull != entry.paletteUuid || included.resolved != entry.value
+        // A plain value comparison since the `ref:` grammar retired. It used to also compare
+        // reference *identity*, because a ref resolves to exactly the literal it was included as, so
+        // a value-only test would write an untouched ref back and harden it. Nothing can hold a
+        // reference now, and the surviving half of the mechanism — an INCLUDE slot outliving later
+        // writes, so an untouched positional `"P1"` row stays `"P1"` — is unaffected.
+        included.resolved != entry.value
     }
     return changed to skips
 }
@@ -267,7 +267,6 @@ internal fun recordingForUpdate(
         // a diff against the layers Include staged, applied directly to the cue's rows. Handing a
         // layer list to the MERGE writer as well would append the whole stack on every Update.
         layers = emptyList(),
-        presetApplications = emptyList(),
         adHocEffects = adHoc,
         palette = null,
         groupRowsEmitted = collapsed.groupRows,

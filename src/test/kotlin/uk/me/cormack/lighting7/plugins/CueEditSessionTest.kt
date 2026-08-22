@@ -125,24 +125,15 @@ class CueEditSessionTest {
     }
 
     @Test
-    fun `setPalette addPresetApplication addAdHocEffect round-trip`() {
+    fun `setPalette and addAdHocEffect round-trip`() {
+        // `cueEdit.addPresetApplication` was decoded here too. The op was deleted in session 4 —
+        // dead on both sides: the frontend declared the outgoing type and never sent it, and a
+        // cue-edit session adds a *layer* through the ordinary cue PATCH.
         val setPalette = json.decodeFromString<InMessage>(
             """{"type":"cueEdit.setPalette","cueId":1,"palette":["#ff0000","#00ff00"]}"""
         )
         val decodedPalette = assertIs<CueEditSetPaletteInMessage>(setPalette)
         assertEquals(listOf("#ff0000", "#00ff00"), decodedPalette.palette)
-
-        val addPreset = json.decodeFromString<InMessage>(
-            """{
-                "type":"cueEdit.addPresetApplication",
-                "cueId":1,
-                "presetId":42,
-                "targets":[{"type":"fixture","key":"hex-1"}]
-            }"""
-        )
-        val decodedPreset = assertIs<CueEditAddPresetApplicationInMessage>(addPreset)
-        assertEquals(42, decodedPreset.presetId)
-        assertEquals(1, decodedPreset.targets.size)
     }
 
     @Test

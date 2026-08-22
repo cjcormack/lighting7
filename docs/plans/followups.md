@@ -34,9 +34,10 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
 | [`FU-LOOK-MIDI-RECALL`](#fu-look-midi-recall) | Trigger | Look | an operator wants a Look on a button |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
+| [`FU-LOOK-STOMP-WITHIN-CUE`](#fu-look-stomp-within-cue) | Ready | Look | — |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
+| [`FU-LOOK-ELEMENT-ROWS`](#fu-look-element-rows) | Ready | Look | — |
 | [`FU-CUE-APPLYDATA-ONE-BUILDER`](#fu-cue-applydata-one-builder) | Ready | Cue | — |
-| [`FU-FE-LOOK-SAVE-GUARD-TEST`](#fu-fe-look-save-guard-test) | Ready | FE | — |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
 | [`FU-AUTH-ATTRIBUTION`](#fu-auth-attribution) | Trigger | Auth | two accounts co-author, or any `formatVersion` bump |
@@ -137,34 +138,6 @@ plus a categorised variant for surfaces that need colour/dimmer/position groupin
 
 **Trigger**: a sixth consumer, or a property-shape change that forces a multi-file edit. Today's
 implementations are stable, so pulling them together now is churn that risks visual regressions.
-
-### `FU-FE-LOOK-SAVE-GUARD-TEST`
-
-**Cover the "save before the detail loads" guard** · Ready · Looks-and-layers session 2 review,
-2026-08-22
-
-`LookEditor` seeds its draft from the `look` prop. While `useLookQuery` is in flight — or if it
-fails — an *existing* Look is presented as an empty **create** draft, but the save handler still
-branches on `editingLookId != null` and PUTs. `LookEditor` always sends `rows`, and `saveLook`
-sends every key it is given, so the PUT carries `rows: []`, which the backend reads as "clear
-them" — out from under every cue resolving through that Look. A double-click on a library row
-during a slow fetch silently emptied a Look.
-
-Fixed 2026-08-22 by throwing in both handlers (`routes/Looks.tsx`, `components/busking/BuskingView.tsx`),
-which `LookEditor` renders in its inline alert while keeping the sheet open. **The fix has no test.**
-
-**Why it's still open**: the guard lives in route-component handlers, and `lighting-react` has no
-test file for `ProjectLooks` or `BuskingView` and no `renderWithProviders`-style helper anywhere —
-component tests mock the store hooks directly (see `LayersPane.test.tsx`). So the first test here
-also establishes the harness, which is why it didn't ride along with the one-line fix. The
-invalidation half of the same review *is* covered, in `store/looks.test.ts`.
-
-Worth doing because the failure is silent and destructive: nothing errors, the sheet closes, and
-the Look is empty.
-
----
-
-## Speed masters
 
 ### `FU-SPEED-SURFACE-TAP-LED`
 
@@ -342,6 +315,59 @@ replacing that guarantee with a bounded one. The cook step is where it would lan
 `FU-PAL-POSITIONAL-CONVERSION` waits on. If both fire, do the conversion first; it decides how many
 Looks exist.
 
+### `FU-LOOK-STOMP-WITHIN-CUE`
+
+**Per-layer `stomp` is carried but never read** · Ready · Looks-and-layers session 4, 2026-08-22
+
+`DaoCueLayers.stomp` exists, `CueLayerDto` / `ProgrammerLayerDto` / `ProgrammerLayer` / `CookLayer`
+all carry it, `programmer.patchLayer` accepts it, and six write sites round-trip it. **Nothing reads
+it.** `grep -n stomp fx/CueComposer.kt` finds the declaration and a KDoc mention and no use.
+
+It is the escape hatch for the one thing layer order cannot express: effects are Layer 3 and values
+are Layer 4, so an effect sits above a static value regardless of layer order — "layer 2 sets colour
+statically, layer 1 runs a colour effect" resolves to the effect winning. Session 4 was scoped to
+include it and deliberately dropped it, because it is engine work rather than a flag flip:
+
+1. **`FxInstance` needs a cue-layer id.** Only the programmer path stamps a per-layer id
+   (`programmerLayerId`); the three cue spawn sites stamp `cueId` + `lookId`, and `lookId` cannot
+   disambiguate one cue layering the same Look twice.
+2. **`cook` must publish a suppression set.** It is the only place that knows which properties a
+   layer asserts, and `cookEffects` knows nothing about stomp. Its four callers must agree on the
+   new signal.
+3. **Suppression, not removal.** Today's `stompForCue` *removes* the `FxInstance` and explicitly
+   excludes the stomping cue's own effects. Within-cue stomp cannot remove: disabling the stomping
+   layer or dropping its `amount` to 0 only triggers a recook, so a removed instance would be
+   unrecoverable. `ProgrammerLayerStack.syncEffects`'s classify-don't-rebuild design and
+   `FxEngine.repriorityProgrammerLayerEffects` are the precedents.
+
+Also note `buildStompOverlapFromAssignments` reads only the cue's *local* rows, so a cue whose colour
+comes entirely from a layer currently stomps nothing on colour — a pre-existing gap that this work
+should close.
+
+The UI is deliberately absent until then: `LookStack` renders `STOMP` as a read-only badge and
+`LayerHandlers` has no `onSetStomp`, because a toggle writing a field the engine ignores is worse
+than no toggle.
+
+### `FU-LOOK-ELEMENT-ROWS`
+
+**A Look's element row composes nowhere** · Ready · Looks-and-layers correction #10, 2026-08-22
+
+`DaoLookRows.elementKey` exists, the migration carries element rows across, and
+`RichProjectFixture` seeds one — but `CueComposer.applyLayer` drops every element row, and
+`buildCueAssignmentsForCue` has no element path either. So a Look holding a per-element value
+(one pixel of a bar, one head of a multi-head fixture) round-trips through the library, the sync
+export and the editor, and then contributes nothing when a cue layers it.
+
+**Pre-existing, not a session-3 regression** — the same gap existed for palette entries — and
+recorded explicitly rather than left as an implied capability, which is what §3.1 currently reads
+as. Cue *ad-hoc effects* do have an element path (`elementMode` / `elementFilter`), so the vocabulary
+exists; it is the static-row half that was never wired.
+
+**Decide before implementing**: whether a deferred element row is even meaningful. An element key
+identifies a sub-part of a *specific* fixture geometry, so a deferred row carrying one is asking to
+be applied to whatever the layer targets — which may not have that element. The bound case is
+unambiguous and is probably the whole of it.
+
 ### `FU-LOOK-STOMP-GRANULAR`
 
 **Finer-grained within-cue stomp** · Trigger · Looks-and-layers §8
@@ -350,7 +376,7 @@ Per-layer `stomp` suppresses lower layers' *effects* on every property the layer
 the coarse version: an operator might want to stomp a layer's colour effect while leaving its dimmer
 effect running.
 
-The column landed with the layer model; the behaviour is the retirement-pass item. Judge granularity
+The column landed with the layer model; the behaviour is `FU-LOOK-STOMP-WITHIN-CUE`. Judge granularity
 only after the coarse version has been used on a rig — the Layer 3/4 boundary it exists to work
 around may turn out to bite in one specific place rather than generally.
 
@@ -990,6 +1016,13 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-08
 
+- `FU-FE-LOOK-SAVE-GUARD-TEST` — covered by `LookEditor.test.tsx` (5 tests) and
+  `lookSaveGuard.test.ts` (4) in looks-and-layers session 3b. The entry's "the first test here also
+  establishes the harness" was the accurate part of it: the harness is mocked store hooks, per
+  `LayersPane.test.tsx`, and once that was written the guard was cheap. Session 3b also found the
+  *reason* the guard was needed was worse than recorded — RTK Query's `data` falls back to the
+  previous argument's result while a new one is in flight, so editing Look A then opening Look B
+  handed the editor A's rows under B's id, and Update would have written A's rows into B.
 - `FU-FE-LOOK-WS-COMPAT-INVALIDATION` — `startLooksBridge` now invalidates `Fixture`/`GroupList`
   alongside `Look`/`LookList`, so a Look created, copied or deleted on another client is offered
   here immediately instead of being invisible to `LayerPicker` and `LookTogglePicker` until

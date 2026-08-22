@@ -1,13 +1,13 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.models.CueTargetDto
+
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.routes.TogglePresetTarget
 import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
-import uk.me.cormack.lighting7.routes.toPropertyAssignmentDtos
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.ConcurrentHashMap
@@ -137,7 +137,7 @@ class CueTriggerManager(
                 }
 
                 val localRows = uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue(
-                    state.show.fixtures, cueData, baseCascade, state.show.lookRegistry,
+                    state.show.fixtures, cueData, baseCascade,
                 )
                 val cooked = CueComposer.cook(
                     fixtures = state.show.fixtures,
@@ -349,7 +349,7 @@ class CueTriggerManager(
     ) {
         val effectSpec = lookEffect.toEffectSpec()
         val fxTarget = try {
-            resolveTargetForCue(state, TogglePresetTarget(target), effectSpec)
+            resolveTargetForCue(state, CueTargetDto(target), effectSpec)
         } catch (_: Exception) { null } ?: return
 
         val instance = createInstanceFromPresetForCue(
@@ -374,8 +374,8 @@ class CueTriggerManager(
         cueStackId: Int?,
         effectIds: MutableList<Long>,
     ) {
-        val toggleTarget = TogglePresetTarget(effect.target)
-        val presetEffect = FxPresetEffectDto(
+        val toggleTarget = CueTargetDto(effect.target)
+        val presetEffect = LookEffectSpec(
             effectType = effect.effectType,
             category = effect.category,
             propertyName = effect.propertyName,

@@ -22,8 +22,6 @@ import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.toPaletteColours
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
-import uk.me.cormack.lighting7.fx.isPaletteRefValue
-import uk.me.cormack.lighting7.fx.paletteRefValue
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.fx.LookRowEntry
 import uk.me.cormack.lighting7.fx.LookSnapshot
@@ -32,8 +30,6 @@ import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoLookEffects
@@ -253,7 +249,6 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         error = "This look is still used by ${outcome.usage.describe()}",
                         code = CODE_LOOK_IN_USE,
                         layerCount = outcome.usage.layerCount,
-                        refRowCount = outcome.usage.refRowCount,
                         cueIds = outcome.usage.cueIds,
                         cueNames = outcome.usage.cueNames,
                     ),
@@ -373,7 +368,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
             resource.parent.projectId,
             { p -> "Cannot toggle looks in project '${p.name}' - only the current project is live" },
         ) { project ->
-            val request = call.receive<TogglePresetRequest>()
+            val request = call.receive<ToggleLookRequest>()
             if (request.targets.isEmpty()) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("At least one target is required"))
                 return@withCurrentProject
@@ -397,7 +392,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     targets = request.targets.map { CueTargetDto(it.type, it.key) },
                     beatDivisionOverride = request.beatDivision,
                 )
-                call.respond(TogglePresetResponse(action, effectCount))
+                call.respond(ToggleLookResponse(action, effectCount))
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
             } catch (e: Exception) {
@@ -420,12 +415,12 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
             resource.parent.projectId,
             { p -> "Cannot preview looks in project '${p.name}' - only the current project can be previewed" },
         ) {
-            val request = call.receive<PresetPreviewRequest>()
+            val request = call.receive<LookPreviewRequest>()
             val outcome = state.show.programmerLayerStack.installPreview(
                 snapshot = request.toPreviewSnapshot(),
                 targets = request.targets.map { CueTargetDto(it.type, it.key) },
             )
-            call.respond(PresetPreviewResponse(outcome.keysRepublished))
+            call.respond(LookPreviewResponse(outcome.keysRepublished))
         }
     }
 
@@ -449,7 +444,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
  * layer does, so the rows describe *what* to assert and the layer decides *where*. An empty draft
  * produces an empty snapshot, which [ProgrammerLayerStack.installPreview] reads as a clear.
  */
-private fun PresetPreviewRequest.toPreviewSnapshot(): LookSnapshot? {
+private fun LookPreviewRequest.toPreviewSnapshot(): LookSnapshot? {
     if (propertyAssignments.isEmpty() || targets.isEmpty()) return null
     return LookSnapshot(
         lookId = 0,
@@ -469,6 +464,65 @@ private fun PresetPreviewRequest.toPreviewSnapshot(): LookSnapshot? {
         effects = emptyList(),
     )
 }
+
+// ─── Toggle and preview wire shapes ─────────────────────────────────────
+//
+// These lived in `routes/projectFxPresets.kt` as `TogglePresetRequest` / `TogglePresetResponse` /
+// `PresetPreviewRequest` / `PresetPreviewResponse`, kept behind after that file's route function was
+// unmounted precisely so the desk would not have to change across the Looks rewrite. Session 4
+// deleted the file; the shapes moved here and took Look names. **Every JSON field name is
+// unchanged**, so this is a Kotlin-side rename only and no client had to move with it.
+//
+// `TogglePresetTarget` did *not* come with them: it was field-for-field identical to
+// [CueTargetDto], down to the `TargetRef` constructor and accessor, so it collapsed into it rather
+// than being renamed. One target DTO, not two.
+
+/** Body of `POST /looks/{id}/toggle` — apply the Look as a programmer layer, or remove it. */
+@Serializable
+internal data class ToggleLookRequest(
+    val targets: List<CueTargetDto>,
+    val beatDivision: Double? = null,
+)
+
+@Serializable
+internal data class ToggleLookResponse(
+    /** `"applied"` or `"removed"`. */
+    val action: String,
+    val effectCount: Int,
+)
+
+/**
+ * One row of an **unsaved** Look draft, for the editor's live preview.
+ *
+ * Deliberately not [LookRowDto]: that one requires a `targetType` / `targetKey`, and a preview
+ * request carries its targets separately — exactly as a layer does — so its rows say *what* to
+ * assert and the request says *where*. The wire field is still called `propertyAssignments`, which
+ * is what the desk sends.
+ */
+@Serializable
+internal data class LookPreviewRowDto(
+    val propertyName: String,
+    val value: String,
+    val fadeDurationMs: Long? = null,
+    val elementKey: String? = null,
+    val sortOrder: Int = 0,
+)
+
+/**
+ * Complete desired state for the project's preview slot — replaces any prior preview writes.
+ * Empty `targets` (or `propertyAssignments`) collapses to a clear.
+ */
+@Serializable
+internal data class LookPreviewRequest(
+    val propertyAssignments: List<LookPreviewRowDto> = emptyList(),
+    val palette: List<String> = emptyList(),
+    val targets: List<CueTargetDto> = emptyList(),
+)
+
+@Serializable
+internal data class LookPreviewResponse(
+    val writeCount: Int,
+)
 
 // ─── Resources ──────────────────────────────────────────────────────────
 
@@ -516,13 +570,8 @@ internal data class LookDto(
     val hasDeferredRows: Boolean,
     val editorFixtureType: String? = null,
     val preview: List<String>,
-    /** How many cue layers reference this Look. Gates delete together with [refRowCount]. */
+    /** How many cue layers reference this Look. Gates delete. */
     val layerCount: Int,
-    /**
-     * How many cue rows still hold a `ref:{uuid}` naming this Look. Counted separately because it
-     * is a different reference mechanism on its way out, but it gates delete just the same.
-     */
-    val refRowCount: Int = 0,
 )
 
 @Serializable
@@ -538,7 +587,6 @@ internal data class LookDetails(
     val rows: List<LookRowDto> = emptyList(),
     val effects: List<LookEffectDto> = emptyList(),
     val layerCount: Int,
-    val refRowCount: Int = 0,
     val usedByCueIds: List<Int> = emptyList(),
     val usedByCueNames: List<String> = emptyList(),
 )
@@ -559,7 +607,6 @@ internal data class LookInUseResponse(
     val error: String,
     val code: String,
     val layerCount: Int,
-    val refRowCount: Int = 0,
     val cueIds: List<Int>,
     val cueNames: List<String>,
 )
@@ -605,63 +652,44 @@ private val lookJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = tru
 /**
  * How many cue layers reference a Look, and which cues they belong to.
  *
- * A layer references its Look through a real FK column, so that half is a plain indexed query
- * rather than the palette era's exact-equality scan over opaque `value` text. The scan survives for
- * [refRowCount] only: until the `ref:` grammar is retired, a cue row may still name a Look by uuid,
- * and `republishForLookEdit`'s [activeCuesReferencingLook] counts those. The delete guard has to see
- * the same references the republish does, or a Look reported as "used by nothing" is deleted out
- * from under a cue that still resolves through it.
+ * A layer references its Look through a real FK column, so this is one plain indexed query. Until
+ * session 4 there was a second half — an exact-equality scan over opaque `value` text for rows
+ * holding `ref:{uuid}` — inherited from the palette era and counted separately as `refRowCount`. It
+ * retired with the grammar. The delete guard must keep seeing exactly what `republishForLookEdit`'s
+ * [activeCuesReferencingLook] sees, or a Look reported as "used by nothing" gets deleted out from
+ * under a cue that still resolves through it; both are now the same single FK query.
  */
 internal data class LookUsage(
     val layerCount: Int,
-    val refRowCount: Int,
     val cueIds: List<Int>,
     val cueNames: List<String>,
 ) {
-    val total: Int get() = layerCount + refRowCount
+    val total: Int get() = layerCount
 
     fun describe(): String {
-        val parts = buildList {
-            if (layerCount > 0) add("$layerCount cue layer(s)")
-            if (refRowCount > 0) add("$refRowCount cue row reference(s)")
-        }
-        if (parts.isEmpty()) return "nothing"
-        val what = parts.joinToString(" and ")
+        if (layerCount == 0) return "nothing"
+        val what = "$layerCount cue layer(s)"
         return if (cueNames.isEmpty()) what else "$what in ${cueNames.joinToString(", ")}"
     }
 }
 
 /** Must be called inside a transaction. */
 internal fun lookUsage(lookId: Int): LookUsage =
-    lookUsageFor(listOf(lookId))[lookId] ?: LookUsage(0, 0, emptyList(), emptyList())
+    lookUsageFor(listOf(lookId))[lookId] ?: LookUsage(0, emptyList(), emptyList())
 
 /** Batched form for a list response — one query instead of one per Look. */
 internal fun lookUsageFor(lookIds: Collection<Int>): Map<Int, LookUsage> {
     if (lookIds.isEmpty()) return emptyMap()
     val ids = lookIds.toList()
-    val looks = DaoLook.find { DaoLooks.id inList ids }.associateBy { it.id.value }
     val layersByLook = DaoCueLayer.find { DaoCueLayers.look inList ids }
         .toList()
         .groupBy { it.look.id.value }
 
-    // The `ref:{uuid}` half. Batched by building the value set once rather than one query per Look.
-    val refValueToLook = looks.values.associate { paletteRefValue(it.uuid) to it.id.value }
-    val refCuesByLook = HashMap<Int, MutableList<DaoCue>>()
-    if (refValueToLook.isNotEmpty()) {
-        DaoCuePropertyAssignment
-            .find { DaoCuePropertyAssignments.value inList refValueToLook.keys.toList() }
-            .forEach { row ->
-                refValueToLook[row.value]?.let { refCuesByLook.getOrPut(it) { mutableListOf() }.add(row.cue) }
-            }
-    }
-
     return ids.associateWith { lookId ->
         val layers = layersByLook[lookId].orEmpty()
-        val refRows = refCuesByLook[lookId].orEmpty()
-        val cues = (layers.map { it.cue } + refRows).distinctBy { it.id.value }
+        val cues = layers.map { it.cue }.distinctBy { it.id.value }
         LookUsage(
             layerCount = layers.size,
-            refRowCount = refRows.size,
             cueIds = cues.map { it.id.value }.sorted(),
             cueNames = cues.map { it.name }.sorted(),
         )
@@ -669,10 +697,22 @@ internal fun lookUsageFor(lookIds: Collection<Int>): Map<Int, LookUsage> {
 }
 
 /**
+ * The value prefix a Look row may never start with.
+ *
+ * Spelled out here rather than imported, because the module that used to own it — `fx/PaletteRef.kt`
+ * — is gone, and the point of [validateLookRows]'s check is to survive exactly that.
+ */
+private const val LOOK_ROW_REFERENCE_PREFIX = "ref:"
+
+/**
  * Reject rows a Look must never hold. Returns the problem, or null when every row is acceptable.
  *
- * The `ref:` rejection is what keeps **Looks from nesting**, so resolving a reference can never
- * recurse — the same write-boundary guarantee `validatePaletteEntries` gave palettes.
+ * The `ref:` rejection is what keeps **Looks from nesting**, so resolution can never recurse, and it
+ * **must outlive the grammar it names**. Nothing authors a `ref:` any more — the parser, the
+ * resolver and every producer retired in session 4 — but this is a *write boundary*, and the value
+ * it guards is free text a client supplies. It is deliberately an inlined shape check rather than a
+ * call into a shared parser, so that deleting the last reader of the grammar cannot quietly delete
+ * the guarantee `FU-LOOK-NESTED` rests on. `LookRoutesTest` pins it.
  */
 internal fun validateLookRows(rows: List<LookRowDto>): String? {
     for (row in rows) {
@@ -681,7 +721,7 @@ internal fun validateLookRows(rows: List<LookRowDto>): String? {
         }
         if (row.propertyName.isBlank()) return "Row property name must not be blank"
         if (row.value.isBlank()) return "Row value must not be blank"
-        if (isPaletteRefValue(row.value)) {
+        if (row.value.trimStart().startsWith(LOOK_ROW_REFERENCE_PREFIX, ignoreCase = true)) {
             return "A look row must hold a literal, not a reference — looks do not nest"
         }
     }
@@ -825,7 +865,6 @@ private fun DaoLook.toSummaryDto(state: State, usage: LookUsage?): LookDto {
             .take(LOOK_PREVIEW_SIZE)
             .map { it.key },
         layerCount = resolvedUsage.layerCount,
-        refRowCount = resolvedUsage.refRowCount,
     )
 }
 
@@ -879,7 +918,6 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                 )
             },
         layerCount = usage.layerCount,
-        refRowCount = usage.refRowCount,
         usedByCueIds = usage.cueIds,
         usedByCueNames = usage.cueNames,
     )

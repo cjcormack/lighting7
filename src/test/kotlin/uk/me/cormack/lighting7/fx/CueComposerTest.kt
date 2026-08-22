@@ -101,7 +101,6 @@ class CueComposerTest {
         value: UByte,
         targetIsGroup: Boolean = false,
         moveInDark: Boolean = false,
-        paletteUuid: UUID? = null,
     ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
@@ -113,7 +112,6 @@ class CueComposerTest {
         compositionOverride = CompositionRule.UNSET,
         value = CueAssignmentResolver.PropertyValue.Slider(value),
         moveInDark = moveInDark,
-        paletteUuid = paletteUuid,
     )
 
     private fun cook(
@@ -501,23 +499,20 @@ class CueComposerTest {
     // ─── What the local pass must carry through ─────────────────────────
 
     @Test
-    fun `cook preserves moveInDark and paletteUuid on local rows`() {
-        // Cook must not launder these: moveInDark drives the resolver's cross-cue arming pre-pass,
-        // and paletteUuid is what lets Include lift a row back as a reference rather than hardening
-        // it. Both are invisible to composition, so only a test keeps them alive.
+    fun `cook preserves moveInDark on local rows`() {
+        // Cook must not launder this: moveInDark drives the resolver's cross-cue arming pre-pass and
+        // is invisible to composition, so only a test keeps it alive. It used to check `paletteUuid`
+        // alongside — the field that let Include lift a row back as a reference rather than
+        // hardening it — which retired with the `ref:` grammar in session 4.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val paletteUuid = UUID.randomUUID()
         val rows = cook(
             fixtures,
             registryOf(fixtures),
             layers = emptyList(),
-            localRows = listOf(
-                localSlider("hex-1", value = 0u, moveInDark = true, paletteUuid = paletteUuid),
-            ),
+            localRows = listOf(localSlider("hex-1", value = 0u, moveInDark = true)),
         )
         val row = rows.single()
         assertEquals(true, row.moveInDark)
-        assertEquals(paletteUuid, row.paletteUuid)
         assertEquals(0u.toUByte(), assertIs<CueAssignmentResolver.PropertyValue.Slider>(row.value).value)
     }
 

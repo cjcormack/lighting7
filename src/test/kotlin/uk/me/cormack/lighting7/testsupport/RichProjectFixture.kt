@@ -16,7 +16,6 @@ import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoLookRow
-import uk.me.cormack.lighting7.models.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueSlot
 import uk.me.cormack.lighting7.models.DaoCueStack
@@ -25,12 +24,6 @@ import uk.me.cormack.lighting7.models.DaoFixtureGroup
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMember
 import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFxDefinition
-import uk.me.cormack.lighting7.models.DaoFxPreset
-import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
-import uk.me.cormack.lighting7.models.DaoPalette
-import uk.me.cormack.lighting7.models.DaoPaletteEntry
-import uk.me.cormack.lighting7.models.PaletteType
-import uk.me.cormack.lighting7.fx.paletteRefValue
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoPromptBook
@@ -42,7 +35,7 @@ import uk.me.cormack.lighting7.models.DaoSpeedMaster
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
-import uk.me.cormack.lighting7.models.FxPresetEffectDto
+import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.models.PromptBookRectDto
 import uk.me.cormack.lighting7.models.TriggerType
 import uk.me.cormack.lighting7.scripts.ScriptType
@@ -320,15 +313,11 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         propertyName = "position"; value = "120,64"; sortOrder = 1
         moveInDark = true
     }
-    // A Look reference, stored as `ref:{uuid}` in the opaque value column. This is the row that
-    // proves the reference survives a clone: ExportUuidRemapper mints a fresh uuid for the Look
-    // and must rewrite this string to match, so the clone's row points at the clone's Look rather
-    // than at the original's (or at nothing). The grammar is retired with the programmer rewrite;
-    // until then this is the only remaining producer.
-    DaoCuePropertyAssignment.new {
-        cue = cue1; targetType = "fixture"; targetKey = "hex-2"
-        propertyName = "colour"; value = paletteRefValue(boundLook.uuid); sortOrder = 2
-    }
+    // There used to be a third row here holding `ref:{boundLook.uuid}`, seeded to prove
+    // ExportUuidRemapper rewrote the reference on a clone. The `ref:` value grammar retired in
+    // session 4 and a cue row can only hold a literal, so the case no longer exists to cover —
+    // a cue depends on a Look through a `DaoCueLayer` FK now, and the two layers below are what
+    // exercise the clone path.
     DaoCueAdHocEffect.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"
         effectType = "Pulse"; category = "dimmer"; beatDivision = 0.5

@@ -5,7 +5,6 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.ExtendedColour
@@ -13,11 +12,6 @@ import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
-import uk.me.cormack.lighting7.fx.isPaletteRefValue
-import uk.me.cormack.lighting7.fx.paletteRefValue
-import uk.me.cormack.lighting7.fx.parsePaletteRef
-import uk.me.cormack.lighting7.fx.resolveAssignmentValueForFixture
-import uk.me.cormack.lighting7.fx.paletteUuidOrNull
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -38,10 +32,6 @@ sealed class ProgrammerInMessage : InMessage()
  * [CueAssignmentResolver.PropertyValue.serialize]): `"0".."255"` for sliders and settings,
  * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) or a positional palette ref (`"P1"`) for colours,
  * `"pan,tilt"` for `position`.
- *
- * [value] may also be a **named-palette reference** (`"ref:{paletteUuid}"`) for any property. That
- * form resolves per fixture, so on a group each member can land on a different literal; members the
- * palette doesn't cover are skipped rather than given a neighbour's value.
  *
  * [sourceGroup] is for clients that fan a group-scoped gesture out to member fixtures rather
  * than sending `targetType: "group"` — a group virtual dimmer over heterogeneous members, a
@@ -163,27 +153,16 @@ data class ProgrammerEntryDto(
     val targetKey: String,
     val propertyName: String,
     /**
-     * The canonical literal, or `ref:{paletteUuid}` when this entry references a named palette —
-     * the same grammar a stored cue assignment uses, so one client-side parser covers both.
+     * The canonical literal — the same grammar a stored cue assignment uses, so one client-side
+     * parser covers both.
+     *
+     * Until session 4 this could instead be `ref:{paletteUuid}`, with five sibling fields
+     * (`resolvedValue`, `paletteUuid`, `paletteId`, `paletteName`, `paletteResolved`) describing
+     * what it pointed at and whether that still covered this target. The `ref:` value grammar
+     * retired with them; a layer with a `propertyMask` is what expresses "this property comes from
+     * that Look" now, and the programmer reports its layer stack separately.
      */
     val value: String,
-    /**
-     * For a `ref:` entry, the literal it currently resolves to **for this target and property**.
-     * Null otherwise. Per-target rather than per-palette, which is load-bearing for position
-     * palettes where every head legitimately reads differently.
-     */
-    val resolvedValue: String? = null,
-    /** Set on a `ref:` entry: the referenced palette's identity and name, denormalised. */
-    val paletteUuid: String? = null,
-    val paletteId: Int? = null,
-    val paletteName: String? = null,
-    val paletteType: String? = null,
-    /**
-     * False when the palette still exists but no longer covers this target — the entry keeps its
-     * last resolved value (silently dropping an operator's programmer entry mid-show is worse)
-     * and the sheet marks it broken.
-     */
-    val paletteResolved: Boolean? = null,
     val owner: String,
     val touched: Boolean,
     val sourceGroup: String? = null,
@@ -207,21 +186,20 @@ data class ProgrammerChannelDto(
  */
 @Serializable
 data class IncludedTargetDto(
-    /** `CUE`, `PALETTE` or `LOOK`, and which of the id/name sets below is populated. */
+    /** `CUE` or `LOOK`, and which of the id/name sets below is populated. */
     val kind: String,
     /** Null unless [kind] is `CUE`. */
     val cueId: Int? = null,
     val cueStackId: Int? = null,
     val cueName: String? = null,
     val cueNumber: String? = null,
-    /** Null unless [kind] is `PALETTE`. */
-    val paletteId: Int? = null,
-    val paletteName: String? = null,
-    val paletteType: String? = null,
     /**
-     * Null unless [kind] is `LOOK`. The client keys "Update is not available for this target" off
-     * this arm: Update still writes back through the palette tables, so a Look include is one-way
-     * until the record rewrite lands.
+     * Null unless [kind] is `LOOK`.
+     *
+     * There were three `palette*` fields beside these, for a `PALETTE` kind that retired with the
+     * palette tables in session 4. The KDoc here used to say a Look include was one-way "until the
+     * record rewrite lands" — it landed in session 3a, so Update writes a Look back through
+     * `updateIncludedLook`.
      */
     val lookId: Int? = null,
     val lookName: String? = null,
@@ -393,15 +371,6 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
             null
         }
     }
-    val palette = target.paletteId?.let { paletteId ->
-        try {
-            transaction(state.database) {
-                DaoPalette.findById(paletteId)?.let { it.name to it.type }
-            }
-        } catch (_: Exception) {
-            null
-        }
-    }
     val lookName = target.lookId?.let { lookId ->
         try {
             transaction(state.database) {
@@ -417,20 +386,27 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
         cueStackId = target.cueStackId,
         cueName = cue?.first,
         cueNumber = cue?.second,
-        paletteId = target.paletteId,
-        paletteName = palette?.first,
-        paletteType = palette?.second,
         lookId = target.lookId,
         lookName = lookName,
     )
 }
 
-/** Stream provenance snapshots to the connection. Replay(1) delivers the latest on connect. */
+/**
+ * Stream provenance, include-target and layer-stack snapshots to the connection. Replay(1) on all
+ * three delivers the latest on connect.
+ */
 fun setupProgrammerSubscriptions(scope: SocketScope) {
     // StateFlow replays its current value, so a tab opened mid-show sees the live include
     // target immediately rather than only after the next Include.
     scope.subscribe(scope.state.show.programmerStore.lastIncludedTargetFlow) { target ->
         scope.send(ProgrammerIncludeTargetOutMessage(includedTargetDto(scope.state, target)))
+    }
+    // The layer stack is shared state, so every tab gets every change — not only the tab that made
+    // it, which is all the unicast reply from `handleProgrammer` covers. Without this, a mutation
+    // that moved no value (a layer whose targets don't match its bound Look's rows asserts nothing)
+    // pushed no `provenanceState` either, and other tabs kept a stale layer list indefinitely.
+    scope.subscribe(scope.state.show.programmerStore.layersFlow) { layers ->
+        scope.send(ProgrammerLayerStateOutMessage(layers.map { it.toDto() }))
     }
     scope.subscribe(scope.state.show.fxEngine.provenanceFlow) { entries ->
         scope.send(
@@ -564,91 +540,11 @@ object ProgrammerHandler {
         fadeMs: Long,
         sourceGroup: String? = null,
     ): OutMessage {
-        // A named-palette reference resolves *per fixture*, so it can't go through the
-        // single-typed-value path: on a group each member may legitimately get a different
-        // literal, which is the entire reason palette entries are per-fixture.
-        if (isPaletteRefValue(value)) {
-            return setPaletteRef(state, target, propertyName, value, fadeMs, sourceGroup)
-        }
         val typed = parseValue(state, target, propertyName, value)
             ?: return ProgrammerErrorOutMessage(
                 "Value '$value' doesn't parse for ${target.discriminator} '${target.key}' property '$propertyName'"
             )
         return setTyped(state, target, propertyName, typed, fadeMs, sourceGroup)
-    }
-
-    /**
-     * Write a named-palette reference as programmer entries, resolving it per fixture.
-     *
-     * Members the palette doesn't cover are **skipped, not fabricated** — copying one head's
-     * value onto another is exactly what per-fixture entries exist to prevent. An error comes back
-     * only when *nothing* resolved, so applying a partially-covering palette to a broad selection
-     * does the part it can and reports the rest.
-     */
-    private fun setPaletteRef(
-        state: State,
-        target: TargetRef,
-        propertyName: String,
-        value: String,
-        fadeMs: Long,
-        sourceGroup: String?,
-    ): OutMessage {
-        val paletteUuid = parsePaletteRef(value)
-            ?: return ProgrammerErrorOutMessage("Malformed palette reference '$value'")
-        if (state.show.lookRegistry.snapshot(paletteUuid) == null) {
-            return ProgrammerErrorOutMessage("Palette $paletteUuid not found")
-        }
-
-        val fixtures: List<GroupableFixture> = when (target) {
-            is TargetRef.Fixture -> listOfNotNull(
-                runCatching { state.show.fixtures.untypedGroupableFixture(target.key) }.getOrNull()
-                    ?: return ProgrammerErrorOutMessage("Unknown fixture '${target.key}'"),
-            )
-            is TargetRef.Group -> runCatching {
-                state.show.fixtures.untypedGroup(target.key).fixtures.filterIsInstance<Fixture>()
-            }.getOrNull() ?: return ProgrammerErrorOutMessage("Unknown group '${target.key}'")
-        }
-
-        val groupName = when (target) {
-            is TargetRef.Group -> target.key
-            is TargetRef.Fixture -> validateSourceGroup(state, sourceGroup, target.key)
-        }
-
-        val writes = fixtures.mapNotNull { fixture ->
-            val category = if (propertyName.equals("position", ignoreCase = true)) {
-                uk.me.cormack.lighting7.fixture.PropertyCategory.OTHER
-            } else {
-                PropertyChannelWriter.resolveProperty(fixture, propertyName)?.category
-            } ?: return@mapNotNull null
-            val resolution = resolveAssignmentValueForFixture(
-                state.show.lookRegistry, fixture.targetKey, canonicalPropertyName(propertyName),
-                category, value, state.show.fxEngine.getPalette(),
-            )
-            val resolved = resolution.value ?: return@mapNotNull null
-            uk.me.cormack.lighting7.fx.FxEngine.ProgrammerPropertyWrite(
-                fixture, propertyName, resolved, sourceGroup = groupName, paletteUuid = paletteUuid,
-            )
-        }
-
-        if (writes.isEmpty()) {
-            return ProgrammerErrorOutMessage(
-                "Palette $paletteUuid covers no '$propertyName' value for " +
-                    "${target.discriminator} '${target.key}'"
-            )
-        }
-
-        val landed = state.show.fxEngine
-            .writeProgrammerProperties(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
-            .any { it.isNotEmpty() }
-        if (!landed) {
-            return ProgrammerErrorOutMessage(
-                "Property '$propertyName' resolved no channels on ${target.discriminator} '${target.key}'"
-            )
-        }
-        // Report the *reference*, not the literal: the client shows a ref badge off this value.
-        return ProgrammerEntryChangedOutMessage(
-            target.discriminator, target.key, propertyName, value,
-        )
     }
 
     /** Write a typed value as a WEB programmer entry and report the stored form. */
@@ -785,31 +681,10 @@ object ProgrammerHandler {
         val store = state.show.programmerStore
         val entries = store.entries().map { entry ->
             val top = entry.slots.first()
-            val paletteUuid = top.value.paletteUuidOrNull
-            val palette = paletteUuid?.let { state.show.lookRegistry.snapshot(it) }
             ProgrammerEntryDto(
                 targetKey = entry.fixtureKey,
                 propertyName = entry.propertyName,
-                value = if (paletteUuid == null) {
-                    top.value.resolved.serialize()
-                } else {
-                    paletteRefValue(paletteUuid)
-                },
-                resolvedValue = if (paletteUuid == null) null else top.value.resolved.serialize(),
-                paletteUuid = paletteUuid?.toString(),
-                paletteId = palette?.lookId,
-                paletteName = palette?.name,
-                // A Look declares no attribute type — its families are derived from its rows, and
-                // one may span several. Nothing sensible to report here any more.
-                paletteType = null,
-                paletteResolved = if (paletteUuid == null) {
-                    null
-                } else {
-                    palette != null &&
-                        state.show.lookRegistry.literalFor(
-                            paletteUuid, entry.fixtureKey, entry.propertyName,
-                        ) != null
-                },
+                value = top.value.resolved.serialize(),
                 owner = top.owner.id,
                 touched = top.touched,
                 sourceGroup = top.sourceGroup,

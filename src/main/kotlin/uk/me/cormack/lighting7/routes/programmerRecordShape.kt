@@ -4,7 +4,6 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
-import uk.me.cormack.lighting7.fx.paletteRefValue
 
 /** The result of collapsing a recording into cue assignment rows. */
 data class CollapsedAssignments(
@@ -38,17 +37,6 @@ data class CollapsedAssignments(
 internal fun collapseRecordingToAssignments(
     entries: List<RecordEntry>,
     fixtures: Fixtures,
-    /**
-     * Whether a recorded row may store `ref:{uuid}` when the programmer slot was a reference.
-     *
-     * True for cues — that is what keeps "busk a palette, Record a cue" attached to the palette.
-     * **False for palettes**, which hold literals only: an entry holding a reference would make
-     * resolution recursive, and it is rejected at the entry write boundary anyway. Recording a
-     * palette from a selection that is itself referencing one therefore captures what is on stage
-     * now, which is the sensible reading of the gesture; the route reports how many refs that
-     * flattened.
-     */
-    preserveRefs: Boolean = true,
 ): CollapsedAssignments {
     if (entries.isEmpty()) return CollapsedAssignments(emptyList(), 0, emptyList())
 
@@ -80,12 +68,12 @@ internal fun collapseRecordingToAssignments(
         if (members.all { (it.key to propertyName) in covered }) continue
 
         val first = byKey[members.first().key to propertyName] ?: continue
-        // Compare palette identity as well as value. Two members resolving to the same colour
-        // from *different* palettes are not uniform: collapsing them would emit one group row
-        // referencing one of the two palettes, silently rebinding half the members.
+        // Value equality is the whole test now. It used to also compare palette identity, because
+        // two members resolving to the same colour from *different* palettes were not uniform and
+        // collapsing them would emit one group row referencing one of the two, silently rebinding
+        // half the members. With the `ref:` grammar gone a row carries no identity beyond its value.
         val uniform = members.all { member ->
-            val entry = byKey[member.key to propertyName]
-            entry?.value == first.value && entry?.paletteUuid == first.paletteUuid
+            byKey[member.key to propertyName]?.value == first.value
         }
         if (!uniform) continue
 
@@ -94,7 +82,7 @@ internal fun collapseRecordingToAssignments(
                 targetType = TargetRef.Group.TYPE,
                 targetKey = groupKey,
                 propertyName = propertyName,
-                value = first.recordedValue(preserveRefs),
+                value = first.value.serialize(),
                 sortOrder = emitted.size,
             )
         )
@@ -109,7 +97,7 @@ internal fun collapseRecordingToAssignments(
                 targetType = TargetRef.Fixture.TYPE,
                 targetKey = entry.fixtureKey,
                 propertyName = entry.propertyName,
-                value = entry.recordedValue(preserveRefs),
+                value = entry.value.serialize(),
                 sortOrder = emitted.size,
             )
         )
@@ -118,14 +106,9 @@ internal fun collapseRecordingToAssignments(
     return CollapsedAssignments(emitted, groupRows, emptyList())
 }
 
-/**
- * The string a recorded row stores: the palette reference when the entry came from one, else the
- * literal.
- *
- * This is what keeps "busk a palette, Record a cue" attached to the palette. Serialising the
- * resolved literal instead would store today's value and leave the cue permanently detached — every
- * later palette edit would skip it, because `activeCuesReferencingPalette` matches on the ref
- * string.
- */
-private fun RecordEntry.recordedValue(preserveRefs: Boolean): String =
-    paletteUuid?.takeIf { preserveRefs }?.let { paletteRefValue(it) } ?: value.serialize()
+// A recorded row stores the serialized literal, full stop. There used to be a `recordedValue`
+// helper here choosing between that and `ref:{uuid}`, with a `preserveRefs` flag threaded from every
+// caller — true for cues (to keep "busk a palette, Record a cue" attached to the palette) and false
+// for palettes and Looks (whose rows must hold literals or resolution would recurse). The `ref:`
+// grammar retired in session 4 and a layer is what attaches a cue to a Look now, so every caller
+// wanted the same answer and the flag went with the helper.

@@ -41,7 +41,6 @@ internal fun Route.routeApiRestProgrammer(state: State) {
             call.respond(ProgrammerClearAllResponse(cleared.entryCount, cleared.effectsCleared))
         }
 
-        post<ProgrammerMakeHardResource> { handleProgrammerMakeHard(state) }
         post<ProgrammerRecordResource> { handleProgrammerRecord(state) }
         post<ProgrammerRecordLookResource> { handleProgrammerRecordLook(state) }
         post<ProgrammerIncludeResource> { handleProgrammerInclude(state) }

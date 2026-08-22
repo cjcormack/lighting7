@@ -290,7 +290,7 @@ class FxInstance(
     /**
      * Speed master this BEAT effect subscribes to, as the persisted master **uuid**
      * (null → master 1). Uuid rather than int id so a stored reference survives clone and
-     * import — see `FxPresetEffectDto.speedMasterUuid`. The engine resolves it to
+     * import — see `LookEffectSpec.speedMasterUuid`. The engine resolves it to
      * [speedMasterSlot] at add/update time and re-resolves when the bank's membership
      * changes; a uuid the bank no longer knows resolves to master 1.
      */

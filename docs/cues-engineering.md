@@ -115,10 +115,9 @@ Writing the *programmer* into a cue lives outside this namespace, under
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/programmer/record` | Write the programmer into a cue (`CREATE`/`MERGE`/`REMOVE`/`UPDATE_EXISTING`, optional I/P/C/B mask) |
-| POST | `/programmer/include` | Load a cue's assignments + FX (or a palette's entries) into the programmer for editing |
-| POST | `/programmer/record-palette` | Record the programmer into a named palette, masked by its type |
-| POST | `/programmer/make-hard` | Replace the programmer's palette references with literals |
-| POST | `/project/{id}/cues/{cueId}/make-hard` | Replace a stored cue's palette references with literals |
+| POST | `/programmer/include` | Load a cue's layers + rows + FX, or a Look's rows, into the programmer for editing |
+| POST | `/programmer/record-look` | Record the programmer into a Look — `CREATE`/`MERGE`/`REMOVE`/`UPDATE_EXISTING`, with an explicit I/P/C/B mask |
+| POST | `/project/{id}/cues/{cueId}/flatten` | Detach a cue from the library: write the cooked layer stack as local rows and delete the layers |
 | POST | `/project/{id}/looks` … `/looks/{lookId}` | Look CRUD, banked by derived attribute family; delete guarded by `LOOK_IN_USE` |
 | POST | `/programmer/update` | Write programmer edits back — to the include target, or to cues named from the Mode B checklist |
 
@@ -274,9 +273,18 @@ The `fxState` WebSocket message now includes `cueId` on each effect in `activeEf
 - `src/store/restApi.ts` — `CueList` added to tag types
 
 ### UI Components
-- `src/routes/Cues.tsx` — Main route with list, create, edit, delete, apply, stop, replace-all, copy-palette-to-global, duplicate, copy. Active cues show coloured left border and a stop button.
+
+Cues are authored in the **Program** view (`/projects/:projectId/program`), not in a route of their
+own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
+
+- `src/routes/ProgramPage.tsx` — the show: an ordered list of stacks, drilling into
+  `/program/stacks/:stackId?cue=:cueId`
+- `src/components/runner/program/CueCardEditor/` — the cue editor's panes (`CuePropsPane`,
+  `TargetsPane`, `LayersPane`)
+- `src/components/cues/CueDetailContent.tsx` — the read-only body, and **the whole cue read
+  surface**: the Run card reaches it through `RunOutputPane`, and the mobile runner and the Prompt
+  Book rail through `CueCardBody`
 - `src/components/cues/CopyCueDialog.tsx` — Copy to another project
-- `src/components/cues/CueForm.tsx` — Create/edit with palette, presets, ad-hoc effects, and `updateGlobalPalette` toggle
 
 ### Navigation
 - Cues nav item in `ProjectSwitcher.tsx` (visible for all projects)
@@ -298,21 +306,29 @@ The system prompt describes:
 - Active effects display includes `cueId` for each effect
 - The distinction between global palette (ad-hoc effects) and per-cue palettes
 
-## Assignment values: the third form
+## Assignment values: two forms, not three
 
-A `cue_property_assignments.value` (and its `look_rows` twin, which accepts literals only) holds one of:
+A `cue_property_assignments.value` (and its `look_rows` twin) holds one of:
 
 1. a **literal** in the canonical `CueAssignmentResolver.PropertyValue.serialize()` grammar — `"200"`,
    `"#rrggbb[;wN;aN;uvN]"`, `"pan,tilt"`;
 2. a **positional palette ref** — `"P1"`, `"P2"`, `"P*"` — indexing the ordered colour list scoped
-   global → stack → cue (`PaletteCascade`), colour-only;
-3. a **named-palette reference** — `"ref:{paletteUuid}"` — resolved per fixture against the
-   `Palette` entity.
+   global → stack → cue (`PaletteCascade`), colour-only.
 
-Form 3 is the one that survives an edit: changing the palette moves every live look that references
-it. See `docs/lighting-composition-model.md` §"Named palettes (references)" for resolution,
-republish and hardening semantics, and why the `ref:` check must precede the literal parser.
+There was a third: `"ref:{paletteUuid}"`, resolved per fixture against the `Palette` entity, and it
+was the form that survived an edit — changing the palette moved every live cue referencing it. It
+**retired in session 4** of the looks-and-layers plan. That capability did not go with it; it moved
+up a level, from a value to a **`DaoCueLayer`**, which names its Look through a real FK. The layer is
+strictly better for the job: an FK cannot be half-rewritten by an import, the delete guard is an
+indexed query rather than a scan over opaque text, and a `propertyMask` expresses "only this cue's
+colour comes from Warm" without needing a reference per row.
 
-The reference stores the palette's **uuid** rather than its int id because int primary keys never
-appear in the sync export and are re-minted on import, while `ExportUuidRemapper` rewrites uuids
-across the whole export — including ones embedded in an opaque `value` string.
+Two things that outlived the grammar, both deliberately. `validateLookRows` still rejects a
+`ref:`-shaped value at the Look write boundary — that rejection *is* the no-nesting guarantee, so it
+survives as an inlined shape check with its own local constant. And `StateMigrations` still folds
+`ref:` rows from a v4 database into layers; that `removePrefix("ref:")` is the upgrade path.
+
+Note what the reference got right, because a layer inherits it: it stored the Look's **uuid** rather
+than its int id, since int primary keys never appear in the sync export and are re-minted on import.
+A layer's `lookId` is an int, which is safe only because it is a real foreign key the importer
+rewrites — `uuid` is still the only thing that may appear *inside* a value.

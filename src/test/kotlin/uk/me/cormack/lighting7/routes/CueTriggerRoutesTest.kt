@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.routes
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
-import uk.me.cormack.lighting7.models.CuePresetApplicationDto
+import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueTriggerDto
 import uk.me.cormack.lighting7.models.CueTriggerDetailDto
@@ -103,65 +103,61 @@ class CueTriggerRoutesTest {
         assertEquals(dto, deserialized)
     }
 
-    // ─── CuePresetApplicationDto with timing ────────────────────────────
+    // ─── CueLayerDto with timing ────────────────────────────────────────
+    //
+    // Three `CuePresetApplicationDto` round-trip tests stood here, one per timing shape. That DTO
+    // retired with `cue_preset_applications` in session 4; `CueLayerDto` carries the same three
+    // timing fields and is what a cue's children are made of now, so the coverage moved rather than
+    // being dropped.
 
     @Test
-    fun `CuePresetApplicationDto immediate round-trips correctly`() {
-        val dto = CuePresetApplicationDto(
-            presetId = 1,
-            targets = listOf(CueTargetDto("group", "wash")),
-        )
-        val serialized = json.encodeToString(dto)
-        val deserialized = json.decodeFromString<CuePresetApplicationDto>(serialized)
+    fun `CueLayerDto immediate round-trips correctly`() {
+        val dto = CueLayerDto(lookId = 1, targets = listOf(CueTargetDto("group", "wash")))
+        val deserialized = json.decodeFromString<CueLayerDto>(json.encodeToString(dto))
         assertEquals(dto, deserialized)
         assertNull(deserialized.delayMs)
         assertNull(deserialized.intervalMs)
     }
 
     @Test
-    fun `CuePresetApplicationDto delayed round-trips correctly`() {
-        val dto = CuePresetApplicationDto(
-            presetId = 5,
+    fun `CueLayerDto delayed round-trips correctly`() {
+        val dto = CueLayerDto(
+            lookId = 5,
             targets = listOf(CueTargetDto("fixture", "hex-1")),
             delayMs = 2000,
             sortOrder = 1,
         )
-        val serialized = json.encodeToString(dto)
-        val deserialized = json.decodeFromString<CuePresetApplicationDto>(serialized)
+        val deserialized = json.decodeFromString<CueLayerDto>(json.encodeToString(dto))
         assertEquals(dto, deserialized)
         assertEquals(2000L, deserialized.delayMs)
         assertNull(deserialized.intervalMs)
     }
 
     @Test
-    fun `CuePresetApplicationDto recurring round-trips correctly`() {
-        val dto = CuePresetApplicationDto(
-            presetId = 3,
+    fun `CueLayerDto recurring round-trips correctly`() {
+        val dto = CueLayerDto(
+            lookId = 3,
             targets = listOf(CueTargetDto("group", "uv-bars")),
             intervalMs = 40000,
             randomWindowMs = 5000,
             sortOrder = 2,
         )
-        val serialized = json.encodeToString(dto)
-        val deserialized = json.decodeFromString<CuePresetApplicationDto>(serialized)
+        val deserialized = json.decodeFromString<CueLayerDto>(json.encodeToString(dto))
         assertEquals(dto, deserialized)
         assertEquals(40000L, deserialized.intervalMs)
         assertEquals(5000L, deserialized.randomWindowMs)
     }
 
-    // ─── NewCue with triggers and timed presets ─────────────────────────
+    // ─── NewCue with triggers and timed layers ──────────────────────────
 
     @Test
     fun `NewCue with script triggers round-trips correctly`() {
         val newCue = NewCue(
             name = "Show Cue",
-            presetApplications = listOf(
-                CuePresetApplicationDto(
-                    presetId = 1,
-                    targets = listOf(CueTargetDto("group", "wash")),
-                ),
-                CuePresetApplicationDto(
-                    presetId = 3,
+            layers = listOf(
+                CueLayerDto(lookId = 1, targets = listOf(CueTargetDto("group", "wash"))),
+                CueLayerDto(
+                    lookId = 3,
                     targets = listOf(CueTargetDto("fixture", "uv-strip-1")),
                     intervalMs = 40000,
                     randomWindowMs = 5000,
@@ -183,17 +179,16 @@ class CueTriggerRoutesTest {
                 ),
             ),
         )
-        val serialized = json.encodeToString(newCue)
-        val deserialized = json.decodeFromString<NewCue>(serialized)
-        assertEquals(2, deserialized.presetApplications.size)
+        val deserialized = json.decodeFromString<NewCue>(json.encodeToString(newCue))
+        assertEquals(2, deserialized.layers.size)
         assertEquals(2, deserialized.triggers.size)
         assertEquals("RECURRING", deserialized.triggers[0].triggerType)
         assertEquals("DEACTIVATION", deserialized.triggers[1].triggerType)
         assertEquals(40000L, deserialized.triggers[0].intervalMs)
-        // Second preset has timing
-        assertEquals(40000L, deserialized.presetApplications[1].intervalMs)
-        // First preset is immediate
-        assertNull(deserialized.presetApplications[0].intervalMs)
+        // Second layer has timing
+        assertEquals(40000L, deserialized.layers[1].intervalMs)
+        // First layer is immediate
+        assertNull(deserialized.layers[0].intervalMs)
     }
 
     @Test

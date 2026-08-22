@@ -230,15 +230,6 @@ internal fun Route.routeApiRestProjects(state: State) {
                     look.effects.forEach { it.delete() }
                     look.delete()
                 }
-                project.fxPresets.forEach { preset ->
-                    preset.propertyAssignments.forEach { it.delete() }
-                    preset.delete()
-                }
-                // Entries before palettes, for the same no-ON-DELETE-cascade reason.
-                project.palettes.forEach { palette ->
-                    palette.entries.forEach { it.delete() }
-                    palette.delete()
-                }
                 project.fixtureGroups.forEach { group ->
                     group.members.forEach { it.delete() }
                     group.delete()
@@ -377,7 +368,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                 CloneProjectResponse(
                     project = newProject.toDetailDto(),
                     scriptsCloned = newProject.scripts.count().toInt(),
-                    presetsCloned = newProject.fxPresets.count().toInt(),
+                    looksCloned = newProject.looks.count().toInt(),
                     cuesCloned = newProject.cues.count().toInt(),
                     cueStacksCloned = newProject.cueStacks.count().toInt(),
                     recordsCloned = result.recordsCloned,
@@ -415,7 +406,8 @@ data class ProjectDetailDto(
     val description: String?,
     val isCurrent: Boolean,
     val scriptCount: Int,
-    val fxPresetCount: Int,
+    /** Was `fxPresetCount`, over the retired `fx_presets`. */
+    val lookCount: Int,
     val cueCount: Int,
     val cueStackCount: Int,
     val stageWidthM: Double? = null,
@@ -451,7 +443,8 @@ data class CloneProjectRequest(
 data class CloneProjectResponse(
     val project: ProjectDetailDto,
     val scriptsCloned: Int,
-    val presetsCloned: Int,
+    /** Was `presetsCloned`, over the retired `fx_presets`. */
+    val looksCloned: Int,
     val cuesCloned: Int,
     val cueStacksCloned: Int = 0,
     /** Total records copied across every synced table — patches, groups, universes, cue children, … */
@@ -477,7 +470,7 @@ private fun DaoProject.toDetailDto() = ProjectDetailDto(
     description = description,
     isCurrent = isCurrent,
     scriptCount = scripts.count().toInt(),
-    fxPresetCount = fxPresets.count().toInt(),
+    lookCount = looks.count().toInt(),
     cueCount = cues.count().toInt(),
     cueStackCount = cueStacks.count().toInt(),
     stageWidthM = stageWidthM,

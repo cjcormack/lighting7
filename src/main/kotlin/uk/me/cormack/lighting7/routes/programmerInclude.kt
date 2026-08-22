@@ -16,10 +16,9 @@ import uk.me.cormack.lighting7.fx.toPaletteColours
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
-import uk.me.cormack.lighting7.models.CuePresetApplicationDto
-import uk.me.cormack.lighting7.models.DaoFxPreset
-import uk.me.cormack.lighting7.models.FxPresetEffectDto
+import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.State
 
 private val logger = LoggerFactory.getLogger("uk.me.cormack.lighting7.routes.programmerInclude")
@@ -74,7 +73,7 @@ internal fun includeCueIntoProgrammer(
     // composition into literals, so the operator got the right output with none of the structure —
     // and Update then had nothing to write back but literals. Now the stack arrives intact,
     // reorderable, and Update can diff it.
-    val cueOwnRows = buildCueAssignmentsForCue(fixtures, cueData, cascade, state.show.lookRegistry)
+    val cueOwnRows = buildCueAssignmentsForCue(fixtures, cueData, cascade)
 
     // Still needed for the local rows: `buildCueAssignmentsForCue` deliberately emits both a
     // group-expanded member row and any direct fixture row for the same member, leaving the
@@ -100,11 +99,6 @@ internal fun includeCueIntoProgrammer(
         writes += FxEngine.ProgrammerPropertyWrite(
             fixture, row.propertyName, row.value,
             sourceGroup = groupHints[row.targetKey to canonicalPropertyName(row.propertyName)],
-            // Carry the reference, not just the literal it resolved to. Including a cue to look at
-            // or tweak it must not silently harden its palette refs — that would both stop a later
-            // palette edit moving the cue and make the next Update write literals back over rows
-            // the operator never touched.
-            paletteUuid = row.paletteUuid,
         )
         fixtureKeys += row.targetKey
     }
@@ -253,7 +247,7 @@ private fun spawnIncludedFx(
     val running = engine.getActiveEffects().filter { it.cueId == cueData.cueId }
 
     fun spawn(
-        presetEffect: FxPresetEffectDto,
+        presetEffect: LookEffectSpec,
         target: TargetRef,
         presetId: Int?,
         origin: ProgrammerFxOrigin,
@@ -297,7 +291,7 @@ private fun spawnIncludedFx(
         }
 
         val fxTarget = try {
-            resolveTargetForCue(state, TogglePresetTarget(target), presetEffect)
+            resolveTargetForCue(state, CueTargetDto(target), presetEffect)
         } catch (_: Exception) {
             null
         } ?: return
@@ -336,7 +330,7 @@ private fun spawnIncludedFx(
 }
 
 /** Ad-hoc children and preset effects share a shape; this is the adapter `applyCue` also uses. */
-internal fun CueAdHocEffectDto.toPresetEffectDto() = FxPresetEffectDto(
+internal fun CueAdHocEffectDto.toPresetEffectDto() = LookEffectSpec(
     effectType = effectType,
     category = category,
     propertyName = propertyName,

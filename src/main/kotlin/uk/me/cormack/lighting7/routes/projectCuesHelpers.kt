@@ -1,6 +1,8 @@
 @file:OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.models.CueTargetDto
+
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import org.jetbrains.exposed.v1.dao.with
@@ -68,7 +70,6 @@ internal data class CueApplyData(
     val cueName: String,
     val palette: List<String>,
     val updateGlobalPalette: Boolean,
-    val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
     /**
      * The cue's ordered Look composition, resolved far enough for [CueComposer.cook] — the Look's
@@ -94,13 +95,12 @@ internal data class CapturedState(
      * Layers reconstructed from the running effects, one per Look, with a de-duplicated target list.
      *
      * Blend mode, amount and mask **cannot** be recovered from an `FxInstance` — it never carried
-     * them — so they take the DTO defaults, exactly as a `CuePresetApplicationDto` did before. A
+     * them — so they take the DTO defaults, exactly as the retired `CuePresetApplicationDto` did. A
      * stage snapshot describes the stage, not the stack; when the operator wants the stack's own
      * amounts and masks preserved they Record `TOUCHED`, which reads
      * [uk.me.cormack.lighting7.fx.ProgrammerStore.layers] directly.
      */
     val layers: List<CueLayerDto>,
-    val presetApplications: List<CuePresetApplicationDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
     val propertyAssignments: List<CuePropertyAssignmentDto>,
 )
@@ -161,7 +161,6 @@ internal fun captureCurrentState(state: State): CapturedState {
     return CapturedState(
         palette = currentPalette,
         layers = layerDtos,
-        presetApplications = emptyList(),
         adHocEffects = adHocEffects,
         propertyAssignments = propertyAssignments,
     )
@@ -322,18 +321,6 @@ internal fun buildCueApplyData(cue: DaoCue): CueApplyData = CueApplyData(
     cueName = cue.name,
     palette = cue.palette,
     updateGlobalPalette = cue.updateGlobalPalette,
-    presetApplications = cue.presetApplications.sortedBy { it.sortOrder }.map { app ->
-        CuePresetApplicationDto(
-            presetId = app.preset.id.value,
-            targets = app.targets,
-            delayMs = app.delayMs,
-            intervalMs = app.intervalMs,
-            randomWindowMs = app.randomWindowMs,
-            sortOrder = app.sortOrder,
-            speedMasterUuid = app.speedMasterUuid?.toString(),
-            rateSpeedMasterUuid = app.rateSpeedMasterUuid?.toString(),
-        )
-    },
     adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
     layers = cue.layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
     propertyAssignments = cue.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
@@ -391,6 +378,7 @@ internal fun DaoCueLayer.toDto() = CueLayerDto(
     intervalMs = intervalMs,
     randomWindowMs = randomWindowMs,
     lookName = look.name,
+    id = id.value,
 )
 
 /** Convert a DaoCuePropertyAssignment entity to its DTO form. Health defaults to [AssignmentHealth.Ok]. */
@@ -411,18 +399,14 @@ internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
  */
 private fun DaoCuePropertyAssignment.toDtoWithHealth(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
-    lookRegistry: LookRegistry?,
 ): CuePropertyAssignmentDto {
     val base = toDto()
-    val targetHealth = PersistedFixtureReferenceValidator.validateTargetedReference(
-        fixtures, base.target, base.propertyName,
-    )
-    // A dead target subsumes a dead reference — reporting "palette has no entry for hex-9" when
-    // hex-9 itself is gone from the patch names the wrong problem.
-    if (targetHealth != AssignmentHealth.Ok) return base.copy(health = targetHealth)
+    // Only the *target* is checkable now. Until session 4 a row's value could be a `ref:{uuid}`,
+    // and this also reported whether the referenced Look covered the target; with the grammar gone
+    // a row's value is always a literal, so there is no second reference to validate.
     return base.copy(
-        health = validatePaletteReference(
-            fixtures, lookRegistry, base.target, base.propertyName, base.value,
+        health = PersistedFixtureReferenceValidator.validateTargetedReference(
+            fixtures, base.target, base.propertyName,
         ),
     )
 }
@@ -454,28 +438,16 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
  * Convert a DaoCue entity to CueDetails API response. Property-assignment rows are tagged
  * with [AssignmentHealth] by resolving each `(targetType, targetKey, propertyName)` against
  * [fixtures] — dead references surface in the UI with markers (Phase 6) rather than
- * silently dropping at apply time. A row holding a `ref:` is additionally checked against
- * [lookRegistry], so a dead or non-covering palette reference is marked the same way.
+ * silently dropping at apply time.
+ *
+ * There was a `lookRegistry` parameter beside [fixtures], for the second check a row's *value* used
+ * to need: a `ref:{uuid}` was validated against the Look it named. The `ref:` grammar retired in
+ * session 4, so a row's value is always a literal and its target is the only thing left to check.
  */
 internal fun DaoCue.toCueDetails(
     isCurrentProject: Boolean,
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
-    /** Null skips named-palette health; rows still get target/property health. */
-    lookRegistry: LookRegistry? = null,
 ): CueDetails {
-    val presetDetails = presetApplications.sortedBy { it.sortOrder }.map { app ->
-        CuePresetApplicationDetail(
-            presetId = app.preset.id.value,
-            presetName = app.preset.name,
-            targets = app.targets,
-            delayMs = app.delayMs,
-            intervalMs = app.intervalMs,
-            randomWindowMs = app.randomWindowMs,
-            sortOrder = app.sortOrder,
-            speedMasterUuid = app.speedMasterUuid?.toString(),
-            rateSpeedMasterUuid = app.rateSpeedMasterUuid?.toString(),
-        )
-    }
     val triggerDetails = this.triggers.sortedBy { it.sortOrder }.map { trigger ->
         CueTriggerDetailDto(
             triggerType = trigger.triggerType.name,
@@ -488,12 +460,11 @@ internal fun DaoCue.toCueDetails(
         )
     }
     val assignmentDetails = this.propertyAssignments.sortedBy { it.sortOrder }
-        .map { it.toDtoWithHealth(fixtures, lookRegistry) }
+        .map { it.toDtoWithHealth(fixtures) }
     return CueDetails(
         id = this.id.value,
         name = this.name,
         palette = this.palette,
-        presetApplications = presetDetails,
         layers = this.layers.sortedBy { it.sortOrder }.map { it.toDto() },
         adHocEffects = this.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
         propertyAssignments = assignmentDetails,
@@ -519,15 +490,14 @@ internal fun DaoCue.toCueDetails(
 /** Create child layer, ad-hoc effect, property assignment, and trigger entities for a cue. */
 internal fun createCueChildren(
     cue: DaoCue,
-    presetApplications: List<CuePresetApplicationDto>,
     adHocEffects: List<CueAdHocEffectDto>,
     propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     triggers: List<CueTriggerDto> = emptyList(),
     layers: List<CueLayerDto> = emptyList(),
 ) {
     for (layer in layers) {
-        // A layer naming a Look that no longer exists is dropped rather than failing the write,
-        // matching how a preset application handled a deleted preset.
+        // A layer naming a Look that no longer exists is dropped rather than failing the write —
+        // the rule a preset application used for a deleted preset, kept when that table went.
         val look = DaoLook.findById(layer.lookId) ?: continue
         DaoCueLayer.new {
             this.cue = cue
@@ -544,20 +514,6 @@ internal fun createCueChildren(
             this.delayMs = layer.delayMs
             this.intervalMs = layer.intervalMs
             this.randomWindowMs = layer.randomWindowMs
-        }
-    }
-    for (app in presetApplications) {
-        val preset = DaoFxPreset.findById(app.presetId) ?: continue
-        DaoCuePresetApplication.new {
-            this.cue = cue
-            this.preset = preset
-            this.targets = app.targets
-            this.delayMs = app.delayMs
-            this.intervalMs = app.intervalMs
-            this.randomWindowMs = app.randomWindowMs
-            this.sortOrder = app.sortOrder
-            this.speedMasterUuid = speedMasterUuidOrNull(app.speedMasterUuid)
-            this.rateSpeedMasterUuid = speedMasterUuidOrNull(app.rateSpeedMasterUuid)
         }
     }
     for (effect in adHocEffects) {
@@ -627,7 +583,6 @@ internal fun createCueChildren(
  */
 internal fun deleteCueChildren(cue: DaoCue) {
     cue.layers.forEach { it.delete() }
-    cue.presetApplications.forEach { it.delete() }
     cue.adHocEffects.forEach { it.delete() }
     cue.propertyAssignments.forEach { it.delete() }
     cue.triggers.forEach { it.delete() }
@@ -700,7 +655,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // CueTriggerManager, which at fire time re-cooks this cue with the fired layer included. It
     // re-cooks rather than appending because appending would put two contributors on one
     // (fixture, property) key, which is precisely the ambiguity cooking removes.
-    val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, cascade, state.show.lookRegistry)
+    val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, cascade)
     val cueLayerRows = CueComposer.cook(
         fixtures = state.show.fixtures,
         cueId = cueData.cueId,
@@ -742,7 +697,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     )) {
         val effectSpec = lookEffect.toEffectSpec()
         val fxTarget = try {
-            resolveTargetForCue(state, TogglePresetTarget(target), effectSpec)
+            resolveTargetForCue(state, CueTargetDto(target), effectSpec)
         } catch (_: Exception) { null } ?: continue
 
         val instance = createInstanceFromPresetForCue(
@@ -760,8 +715,8 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // 4. Apply immediate ad-hoc effects
     // (Timed ad-hoc effects with delayMs/intervalMs are handled by CueTriggerManager)
     for (adHoc in cueData.adHocEffects.filter { it.delayMs == null && it.intervalMs == null }) {
-        val target = TogglePresetTarget(adHoc.target)
-        val presetEffectDto = FxPresetEffectDto(
+        val target = CueTargetDto(adHoc.target)
+        val presetEffectDto = LookEffectSpec(
             effectType = adHoc.effectType,
             category = adHoc.category,
             propertyName = adHoc.propertyName,
@@ -883,17 +838,17 @@ internal fun fixtureCategoryFor(
  * Assignments whose fixture, group, or property cannot be resolved are logged at warn and
  * skipped — missing data must not break cue apply.
  *
- * A row whose value is a named-palette reference (`ref:{uuid}`) resolves **per member** against
- * [lookRegistry], taking each member's *own* property category rather than the reference
- * fixture's: a palette is per-fixture by construction, and a mixed-type group is exactly the case
- * it exists to serve. Literal rows keep the single parse before the fanout, so the common path
- * pays nothing for this. A ref that doesn't resolve skips only the members it can't resolve.
+ * There used to be a per-member branch here: a row whose value was `ref:{uuid}` resolved **once per
+ * target fixture**, taking each member's *own* property category rather than the reference fixture's,
+ * because a palette is per-fixture by construction and a mixed-type group is exactly the case it
+ * existed to serve. The `ref:` grammar retired in session 4, so every row is a literal and one parse
+ * against the reference fixture serves the whole target — which is what the "literal rows keep the
+ * single parse before the fanout" fast path always was.
  */
 internal fun buildCueAssignmentsForCue(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
     cueData: CueApplyData,
     cascade: PaletteCascade = PaletteCascade.EMPTY,
-    lookRegistry: LookRegistry? = null,
 ): List<CueAssignmentResolver.Assignment> {
     if (cueData.propertyAssignments.isEmpty()) return emptyList()
     val priority = cueDerivedPriority(cueData)
@@ -946,7 +901,6 @@ internal fun buildCueAssignmentsForCue(
             category: PropertyCategory,
             override: CompositionRule,
             value: CueAssignmentResolver.PropertyValue,
-            paletteUuid: java.util.UUID? = null,
         ) = CueAssignmentResolver.Assignment(
             cueId = cueData.cueId,
             priority = priority,
@@ -958,35 +912,12 @@ internal fun buildCueAssignmentsForCue(
             compositionOverride = override,
             value = value,
             moveInDark = assignment.moveInDark,
-            paletteUuid = paletteUuid,
         )
 
-        if (isPaletteRefValue(assignment.value)) {
-            for (fixture in targetFixtures) {
-                val (category, override) = fixtureCategoryFor(fixture, canonical) ?: run {
-                    logger.warn("cue {}: property '{}' not found on '{}' — skipping", cueData.cueId, assignment.propertyName, fixture.key)
-                    continue
-                }
-                val resolution = resolveAssignmentValueForFixture(
-                    lookRegistry, fixture.key, canonical, category, assignment.value, effectivePalette,
-                )
-                val value = resolution.value ?: run {
-                    logger.warn(
-                        "cue {}: {} — skipping {}.{}",
-                        cueData.cueId, describeAssignmentHealth(resolution.health), fixture.key, assignment.propertyName,
-                    )
-                    continue
-                }
-                out.add(
-                    row(
-                        fixture.key, isGroup = memberKeys.isNotEmpty(), category, override, value,
-                        paletteUuid = resolution.paletteUuid,
-                    )
-                )
-            }
-            continue
-        }
-
+        // Until session 4 a per-fixture branch sat here: a value of `ref:{uuid}` had to be resolved
+        // against the referenced Look *once per target fixture*, because a reference resolves per
+        // head. A row's value is always a literal now, so one parse against the reference fixture
+        // serves the whole target.
         val (category, override) = fixtureCategoryFor(referenceFixture, canonical) ?: run {
             logger.warn("cue {}: property '{}' not found on '{}' — skipping", cueData.cueId, assignment.propertyName, target.key)
             continue
@@ -1060,7 +991,7 @@ internal fun buildCombinedCueLayerRows(
         cue = cuePalette ?: applyData.palette.toPaletteColours(),
         global = state.show.fxEngine.getPalette(),
     )
-    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, applyData, cascade, state.show.lookRegistry)
+    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, applyData, cascade)
     return CueComposer.cook(
         fixtures = state.show.fixtures,
         cueId = cueId,
@@ -1143,8 +1074,8 @@ private fun findElementPropertyAnnotation(element: FixtureElement<*>, name: Stri
 
 internal fun resolveTargetForCue(
     state: State,
-    target: TogglePresetTarget,
-    presetEffect: FxPresetEffectDto,
+    target: CueTargetDto,
+    presetEffect: LookEffectSpec,
 ): FxTarget? {
     return when (target.target) {
         is TargetRef.Group -> {
@@ -1164,7 +1095,7 @@ internal fun resolveTargetForCue(
 }
 
 internal fun resolvePresetEffectPropertyForCue(
-    presetEffect: FxPresetEffectDto,
+    presetEffect: LookEffectSpec,
     capabilities: List<String>,
 ): String? {
     return when (presetEffect.category) {
@@ -1177,7 +1108,7 @@ internal fun resolvePresetEffectPropertyForCue(
 }
 
 private fun resolvePresetEffectPropertyForFixtureInCue(
-    presetEffect: FxPresetEffectDto,
+    presetEffect: LookEffectSpec,
 ): String? {
     return when (presetEffect.category) {
         "dimmer" -> "dimmer"
@@ -1253,7 +1184,7 @@ internal fun categoryFromPropertyName(propertyName: String): String {
  * Create an FxInstance from preset effect data for cue application.
  */
 internal fun createInstanceFromPresetForCue(
-    presetEffect: FxPresetEffectDto,
+    presetEffect: LookEffectSpec,
     fxTarget: FxTarget,
     presetId: Int?,
     state: State,
@@ -1283,7 +1214,7 @@ internal fun createInstanceFromPresetForCue(
  * own palette instead.
  */
 internal fun createInstanceFromPreset(
-    presetEffect: FxPresetEffectDto,
+    presetEffect: LookEffectSpec,
     fxTarget: FxTarget,
     presetId: Int?,
     state: State,

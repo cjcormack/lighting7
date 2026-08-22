@@ -195,7 +195,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                     cueType = cueType,
                 )
                 val cue = DaoCue.findById(outcome.cueId)!!
-                Result(outcome, cue.toCueDetails(true, state.show.fixtures, state.show.lookRegistry), stack.id.value) to null
+                Result(outcome, cue.toCueDetails(true, state.show.fixtures), stack.id.value) to null
             } else {
                 val cue = DaoCue.findById(request.cueId!!)
                     ?: return@transaction null to "Cue not found"
@@ -203,7 +203,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                     return@transaction null to "Cue belongs to a different project"
                 }
                 val outcome = writeRecordingIntoCue(state, cue, recording, mode, mask, scope)
-                Result(outcome, cue.toCueDetails(true, state.show.fixtures, state.show.lookRegistry), cue.cueStack.id.value) to null
+                Result(outcome, cue.toCueDetails(true, state.show.fixtures), cue.cueStack.id.value) to null
             }
         }
 
@@ -249,9 +249,8 @@ private fun defaultRecordedCueName(stack: DaoCueStack): String =
 @Serializable
 internal data class ProgrammerIncludeRequest(
     val projectId: String = "current",
-    /** Exactly one of [cueId] / [paletteId] / [lookId]. */
+    /** Exactly one of [cueId] / [lookId]. */
     val cueId: Int? = null,
-    val paletteId: Int? = null,
     val lookId: Int? = null,
     val mask: List<String>? = null,
     val includeFx: Boolean = true,
@@ -260,12 +259,11 @@ internal data class ProgrammerIncludeRequest(
 
 @Serializable
 internal data class ProgrammerIncludeResponse(
-    /** `CUE`, `PALETTE` or `LOOK`. */
+    /** `CUE` or `LOOK`. */
     val kind: String = "CUE",
     /** Null unless a cue was included. */
     val cueId: Int? = null,
     val cueStackId: Int? = null,
-    val paletteId: Int? = null,
     val lookId: Int? = null,
     /**
      * The included thing's name. Named `name` rather than `cueName` because it is now any of
@@ -292,19 +290,15 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
-    if (listOfNotNull(request.cueId, request.paletteId, request.lookId).size != 1) {
+    if (listOfNotNull(request.cueId, request.lookId).size != 1) {
         return call.respond(
             HttpStatusCode.BadRequest,
-            ErrorResponse("Include needs exactly one of cueId, paletteId or lookId"),
+            ErrorResponse("Include needs exactly one of cueId or lookId"),
         )
     }
 
     if (request.lookId != null) {
         return handleIncludeLook(state, request, mask)
-    }
-
-    if (request.paletteId != null) {
-        return handleIncludePalette(state, request, mask)
     }
 
     withCurrentProject(state, request.projectId, { p ->
@@ -387,24 +381,13 @@ internal data class ProgrammerUpdateResult(
     val republishedLive: Boolean,
 )
 
-/** Mode A written back into a palette rather than a cue. */
-@Serializable
-internal data class ProgrammerPaletteUpdateResult(
-    val paletteId: Int,
-    val paletteName: String,
-    val paletteType: String,
-    val entriesWritten: Int,
-    /** What the re-resolve moved: live consumers of the palette. */
-    val programmerKeysRefreshed: Int,
-    val cuesRepublished: List<Int>,
-)
-
 /**
  * Mode A written back into a Look rather than a cue.
  *
- * Separate from [ProgrammerPaletteUpdateResult] rather than replacing it: the palette arm is still
- * mounted and retires with its tables in session 4, and the two write through different code into
- * different tables. Collapsing them would make one field mean two destinations.
+ * There was a `ProgrammerPaletteUpdateResult` beside this, kept separate rather than merged because
+ * the two wrote through different code into different tables and collapsing them would have made one
+ * field mean two destinations. The palette one retired with its tables in session 4, so this is the
+ * only non-cue destination left.
  */
 @Serializable
 internal data class ProgrammerLookUpdateResult(
@@ -423,11 +406,10 @@ internal data class ProgrammerUpdateResponse(
     val mode: String,
     val results: List<ProgrammerUpdateResult> = emptyList(),
     /**
-     * Set when Mode A's include target was a palette. A separate field rather than a nullable
-     * `cueId` on [ProgrammerUpdateResult], so existing clients reading `results` are unaffected.
+     * Set when Mode A's include target was a Look. A separate field rather than a nullable `cueId` on
+     * [ProgrammerUpdateResult], so clients reading `results` are unaffected — the shape a retired
+     * `paletteResult` field established beside it.
      */
-    val paletteResult: ProgrammerPaletteUpdateResult? = null,
-    /** Set when Mode A's include target was a Look. See [ProgrammerLookUpdateResult]. */
     val lookResult: ProgrammerLookUpdateResult? = null,
     val checklist: ProgrammerUpdateChecklistDto? = null,
     val skipped: List<ProgrammerSkipDto> = emptyList(),
@@ -471,17 +453,14 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
 
         val modeLabel = if (request.targets != null) "B" else "A"
 
-        // Mode A into a palette. Mode B stays cue-only on purpose: its premise is "which cue am I
-        // sitting on top of", answered from the Layer 4 winner map — and a palette is not in the
-        // output cascade at all, so there is no palette equivalent to derive.
-        if (modeLabel == "A" && includeTarget!!.kind == IncludedTarget.Kind.PALETTE) {
-            updateIncludedPalette(state, project, includeTarget, mask)
-            return@withCurrentProject
-        }
-
-        // Mode A into a Look — the round trip Include-a-Look used to be refused for, because the
-        // only write-back path led into the palette tables. Handled before the `cueId!!` below,
-        // which is null for a Look target.
+        // Mode A into a Look. Handled before the `cueId!!` below, which is null for a Look target.
+        //
+        // There was a palette arm beside this one, taken first. It wrote back through the palette
+        // tables, and Mode B stayed cue-only on purpose: Mode B's premise is "which cue am I sitting
+        // on top of", answered from the Layer 4 winner map, and a palette was never in the output
+        // cascade at all so there was no equivalent to derive. Both went with the tables in session
+        // 4; a Look *is* in the cascade, through the layer that applies it, so Mode B needs no
+        // special case for it either.
         if (modeLabel == "A" && includeTarget!!.kind == IncludedTarget.Kind.LOOK) {
             updateIncludedLook(state, project, includeTarget, mask)
             return@withCurrentProject

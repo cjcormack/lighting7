@@ -12,7 +12,7 @@ import org.jetbrains.exposed.v1.core.isNull
 import org.slf4j.LoggerFactory
 import kotlinx.serialization.json.Json
 import uk.me.cormack.lighting7.models.CueType
-import uk.me.cormack.lighting7.models.FxPresetEffectDto
+import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStacks
 import uk.me.cormack.lighting7.models.DaoCues
@@ -690,8 +690,8 @@ private fun uuidOrNull(value: String?): UUID? =
  * Lenient on purpose (`ignoreUnknownKeys`): the blob accumulated fields over the preset era, and a
  * migration that throws on an unrecognised one would take startup down over a field nobody reads.
  */
-private fun parseLegacyPresetEffects(raw: String): List<FxPresetEffectDto> =
-    runCatching { legacyEffectJson.decodeFromString<List<FxPresetEffectDto>>(raw) }
+private fun parseLegacyPresetEffects(raw: String): List<LookEffectSpec> =
+    runCatching { legacyEffectJson.decodeFromString<List<LookEffectSpec>>(raw) }
         .getOrElse {
             logger.warn("Looks migration: could not parse a preset's effects blob — skipping its effects: {}", it.message)
             emptyList()

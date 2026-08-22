@@ -4,7 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import uk.me.cormack.lighting7.fx.AssignmentHealth
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
-import uk.me.cormack.lighting7.models.CuePresetApplicationDto
+import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import kotlin.test.Test
@@ -42,28 +42,31 @@ class CueRoutesTest {
         assertEquals("hex-1", deserialized.key)
     }
 
-    // ─── CuePresetApplicationDto ─────────────────────────────────────────
+    // ─── CueLayerDto ─────────────────────────────────────────────────────
+    //
+    // Was `CuePresetApplicationDto`, which retired with `cue_preset_applications` in session 4.
+    // `CueLayerDto` is the cue child that names a library entity now, so the coverage moved here.
 
     @Test
-    fun `CuePresetApplicationDto serialization round-trips with multiple targets`() {
-        val dto = CuePresetApplicationDto(
-            presetId = 42,
+    fun `CueLayerDto serialization round-trips with multiple targets`() {
+        val dto = CueLayerDto(
+            lookId = 42,
             targets = listOf(
                 CueTargetDto(type = "group", key = "front-wash"),
                 CueTargetDto(type = "fixture", key = "hex-1"),
             )
         )
-        val serialized = json.encodeToString(dto)
-        val deserialized = json.decodeFromString<CuePresetApplicationDto>(serialized)
+        val deserialized = json.decodeFromString<CueLayerDto>(json.encodeToString(dto))
         assertEquals(dto, deserialized)
         assertEquals(2, deserialized.targets.size)
     }
 
     @Test
-    fun `CuePresetApplicationDto supports empty targets list`() {
-        val dto = CuePresetApplicationDto(presetId = 1, targets = emptyList())
-        val serialized = json.encodeToString(dto)
-        val deserialized = json.decodeFromString<CuePresetApplicationDto>(serialized)
+    fun `CueLayerDto supports empty targets, meaning the look's own`() {
+        // Not "no targets, so it does nothing": an empty set means the Look's bound rows decide
+        // where the layer lands. That is the distinction `LayerRow` renders as "look's own targets".
+        val dto = CueLayerDto(lookId = 1, targets = emptyList())
+        val deserialized = json.decodeFromString<CueLayerDto>(json.encodeToString(dto))
         assertEquals(0, deserialized.targets.size)
     }
 
@@ -197,11 +200,8 @@ class CueRoutesTest {
         val newCue = NewCue(
             name = "Test Cue",
             palette = listOf("#ff0000", "#00ff00;w128", "#0000ff"),
-            presetApplications = listOf(
-                CuePresetApplicationDto(
-                    presetId = 1,
-                    targets = listOf(CueTargetDto("group", "front-wash")),
-                ),
+            layers = listOf(
+                CueLayerDto(lookId = 1, targets = listOf(CueTargetDto("group", "front-wash"))),
             ),
             adHocEffects = listOf(
                 CueAdHocEffectDto(
@@ -227,7 +227,7 @@ class CueRoutesTest {
     fun `NewCue defaults to empty collections`() {
         val newCue = NewCue(name = "Minimal Cue")
         assertEquals(emptyList(), newCue.palette)
-        assertEquals(emptyList(), newCue.presetApplications)
+        assertEquals(emptyList(), newCue.layers)
         assertEquals(emptyList(), newCue.adHocEffects)
         assertEquals(emptyList(), newCue.propertyAssignments)
     }
@@ -255,10 +255,10 @@ class CueRoutesTest {
             id = 1,
             name = "Blue Wash",
             palette = listOf("#0000ff"),
-            presetApplications = listOf(
-                CuePresetApplicationDetail(
-                    presetId = 5,
-                    presetName = "Slow Pulse",
+            layers = listOf(
+                CueLayerDto(
+                    lookId = 5,
+                    lookName = "Slow Pulse",
                     targets = listOf(CueTargetDto("group", "front-wash")),
                 ),
             ),
@@ -277,7 +277,6 @@ class CueRoutesTest {
             id = 1,
             name = "Read Only",
             palette = emptyList(),
-            presetApplications = emptyList(),
             adHocEffects = emptyList(),
             canEdit = false,
             canDelete = false,
@@ -287,15 +286,18 @@ class CueRoutesTest {
     }
 
     @Test
-    fun `CuePresetApplicationDetail with null preset name`() {
-        val detail = CuePresetApplicationDetail(
-            presetId = 99,
-            presetName = null,
+    fun `CueLayerDto with no resolved look name`() {
+        // Was `CuePresetApplicationDetail with null preset name`. Same property, same reason: the
+        // DTO denormalises the library entity's name on read, and a null means "the row survives,
+        // the name could not be resolved" rather than "there is no layer". Note there is no separate
+        // detail type — `CueLayerDto` carries `lookName`, populated server-side and ignored on write.
+        val detail = CueLayerDto(
+            lookId = 99,
+            lookName = null,
             targets = listOf(CueTargetDto("group", "movers")),
         )
-        assertNull(detail.presetName)
-        val serialized = json.encodeToString(detail)
-        val deserialized = json.decodeFromString<CuePresetApplicationDetail>(serialized)
+        assertNull(detail.lookName)
+        val deserialized = json.decodeFromString<CueLayerDto>(json.encodeToString(detail))
         assertEquals(detail, deserialized)
     }
 
@@ -342,20 +344,20 @@ class CueRoutesTest {
     // ─── Complex scenario ────────────────────────────────────────────────
 
     @Test
-    fun `complex cue with multiple presets and ad-hoc effects serializes correctly`() {
+    fun `complex cue with multiple layers and ad-hoc effects serializes correctly`() {
         val newCue = NewCue(
             name = "Full Show Look",
             palette = listOf("#ff0000;w255", "#00ff00", "#0000ff;w128", "#ffffff"),
-            presetApplications = listOf(
-                CuePresetApplicationDto(
-                    presetId = 1,
+            layers = listOf(
+                CueLayerDto(
+                    lookId = 1,
                     targets = listOf(
                         CueTargetDto("group", "front-wash"),
                         CueTargetDto("group", "back-wash"),
                     ),
                 ),
-                CuePresetApplicationDto(
-                    presetId = 2,
+                CueLayerDto(
+                    lookId = 2,
                     targets = listOf(
                         CueTargetDto("fixture", "mover-1"),
                         CueTargetDto("fixture", "mover-2"),
@@ -398,9 +400,9 @@ class CueRoutesTest {
         val deserialized = json.decodeFromString<NewCue>(serialized)
         assertEquals(newCue, deserialized)
         assertEquals(4, deserialized.palette.size)
-        assertEquals(2, deserialized.presetApplications.size)
+        assertEquals(2, deserialized.layers.size)
         assertEquals(2, deserialized.adHocEffects.size)
-        assertEquals(2, deserialized.presetApplications[0].targets.size)
+        assertEquals(2, deserialized.layers[0].targets.size)
         assertEquals(4, deserialized.adHocEffects[0].parameters.size)
     }
 }

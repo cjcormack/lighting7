@@ -61,7 +61,7 @@ data class LookRowDto(
 
 /**
  * One stored Look effect. Unifies the two near-identical shapes it replaces:
- * [FxPresetEffectDto] (target-less, and a JSON blob column purely to avoid DDL) and
+ * [LookEffectSpec] (target-less, and a JSON blob column purely to avoid DDL) and
  * [CueAdHocEffectDto] (targeted, real columns). This gets real columns *and* the deferred-target
  * convention, so one shape serves both.
  *
@@ -83,9 +83,9 @@ data class LookEffectDto(
     val elementFilter: String? = null,
     val stepTiming: Boolean? = null,
     val parameters: Map<String, String> = emptyMap(),
-    /** Speed master uuid (null → master 1). Uuid, not int id — see [FxPresetEffectDto.speedMasterUuid]. */
+    /** Speed master uuid (null → master 1). Uuid, not int id — see [LookEffectSpec.speedMasterUuid]. */
     val speedMasterUuid: String? = null,
-    /** Wall-clock rate master (null → unscaled). See [FxPresetEffectDto.rateSpeedMasterUuid]. */
+    /** Wall-clock rate master (null → unscaled). See [LookEffectSpec.rateSpeedMasterUuid]. */
     val rateSpeedMasterUuid: String? = null,
     val sortOrder: Int = 0,
 ) {
@@ -135,7 +135,7 @@ object DaoLooks : IntIdTable("looks") {
      * A third, unrelated thing historically also called "palette": it parameterises *effects*
      * rather than describing a look, and it survives this merge untouched. Keeping the column here
      * means [uk.me.cormack.lighting7.fx.PaletteCascade]'s most-specific scope becomes
-     * `look > cue > global` rather than being lost. See `looks-and-layers-plan.md` §7.
+     * `look > cue > global` rather than being lost. See `docs/plans/completed/looks-and-layers-plan.md` §7.
      */
     val palette = json<List<String>>("palette", Json).default(emptyList())
     val uuid = javaUUID("uuid").autoGenerate()
@@ -238,6 +238,50 @@ object DaoLookEffects : IntIdTable("look_effects") {
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 }
+
+/**
+ * One effect as the FX engine is asked to spawn it — **the shared effect wire shape**, not a
+ * Look-only type despite where it lives.
+ *
+ * Read by `CueStackManager`, `CueTriggerManager`, `CueEditSession`, `FxInstance`,
+ * `ProgrammerLayerStack`, `projectLooks`, `programmerInclude`, `AiTools` and the sync DTOs: anything
+ * that turns a stored effect row into a running one goes through this.
+ *
+ * It was called `LookEffectSpec` and lived in `models/fxPresets.kt`, where it *started* as a
+ * preset's target-less effect stored as a JSON blob purely to avoid DDL. By the time FX presets were
+ * retired in session 4 it had long since become the common currency, so it moved here and was
+ * renamed rather than deleted with its old home — deleting it would have broken eight subsystems
+ * that have nothing to do with presets. `DaoLookEffects` gave its fields real columns; this is still
+ * the shape they are handed on in.
+ */
+@Serializable
+data class LookEffectSpec(
+    val effectType: String,
+    val category: String,
+    val propertyName: String? = null,
+    val beatDivision: Double,
+    val blendMode: String,
+    val distribution: String,
+    val phaseOffset: Double = 0.0,
+    val elementMode: String? = null,
+    val elementFilter: String? = null,
+    val stepTiming: Boolean? = null,
+    val parameters: Map<String, String> = emptyMap(),
+    /**
+     * Speed master this effect subscribes to, as the master's **uuid** (null → master 1).
+     * A uuid rather than an int id for the same reason palette refs are:
+     * [uk.me.cormack.lighting7.sync.ExportUuidRemapper] rewrites uuid occurrences across the
+     * whole export text — including inside this JSON blob column — so the reference survives
+     * clone and import where an int PK would dangle.
+     */
+    val speedMasterUuid: String? = null,
+    /**
+     * Wall-clock rate master (null → unscaled). Only WALL_CLOCK effects read it; it sits
+     * alongside [speedMasterUuid] rather than replacing it, so an effect that changes
+     * timing source keeps both assignments. Uuid, not int id — same import rule.
+     */
+    val rateSpeedMasterUuid: String? = null,
+)
 
 class DaoLookEffect(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoLookEffect>(DaoLookEffects)

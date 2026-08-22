@@ -279,6 +279,22 @@ class FxEngine(
             keys
         }
 
+        // Which programmer layer won each key it covers, so a programmer-won cell can name
+        // *Warm Wash* rather than just "the programmer" — the same answer the cue branch below
+        // gives from `cueLayerLayerWinners`. Ranks are resolved against the live layer list, and
+        // `getOrNull` guards the window where the stack shrank after its slots were materialised.
+        val programmerLayers = programmerStore.layers
+        val programmerLayerWinners: Map<CueAssignmentResolver.Key, ProgrammerLayer> =
+            if (programmerStore.blind) {
+                emptyMap()
+            } else {
+                buildMap {
+                    for ((key, rank) in programmerStore.layerWinnerRankByKey()) {
+                        programmerLayers.getOrNull(rank)?.let { put(key, it) }
+                    }
+                }
+            }
+
         val effectByKey = highestPriorityEffectByKey()
 
         val cueLayerState = layerResolver.currentCueLayerState
@@ -309,8 +325,15 @@ class FxEngine(
 
             val entry = when {
                 parked -> ProvenanceEntry(key.targetKey, key.propertyName, ProvenanceSource.PARKED)
-                programmerActive && (effect == null || !bandEffect) ->
-                    ProvenanceEntry(key.targetKey, key.propertyName, ProvenanceSource.PROGRAMMER)
+                programmerActive && (effect == null || !bandEffect) -> {
+                    val layer = programmerLayerWinners[key]
+                    ProvenanceEntry(
+                        key.targetKey, key.propertyName, ProvenanceSource.PROGRAMMER,
+                        layerId = layer?.layerId,
+                        lookId = layer?.lookId,
+                        lookName = layer?.lookName,
+                    )
+                }
                 effect != null -> ProvenanceEntry(
                     key.targetKey, key.propertyName, ProvenanceSource.EFFECT,
                     cueId = effect.cueId, cueStackId = effect.cueStackId, effectId = effect.id,
@@ -857,12 +880,11 @@ class FxEngine(
         sourceGroup: String? = null,
         absorbSideband: Boolean = true,
         fadeMs: Long = 0,
-        paletteUuid: UUID? = null,
     ): List<PropertyChannelResolver.ChannelWrite> {
         val writes = PropertyChannelWriter.resolve(fixture, propertyName, value)
         if (writes.isEmpty()) return writes
         programmerStore.putValue(
-            owner, fixture.targetKey, propertyName, programmerValueOf(value, paletteUuid), touched, sourceGroup,
+            owner, fixture.targetKey, propertyName, ProgrammerValue.Hard(value), touched, sourceGroup,
         )
         if (absorbSideband) absorbSidebandUnder(writes)
         synchronized(cueAssignmentsLock) {
@@ -872,14 +894,7 @@ class FxEngine(
         return writes
     }
 
-    /**
-     * Group overload — fan out to every member, tagging slots with the group name (§7.1).
-     *
-     * Deliberately takes **no** `paletteUuid`: one value applied to every member is the opposite of
-     * what a palette reference means, since a palette resolves per fixture. A caller writing a
-     * reference to a group resolves it per member and calls [writeProgrammerProperties] with a
-     * per-entry `paletteUuid` — see `ProgrammerHandler.setPaletteRef`.
-     */
+    /** Group overload — fan out to every member, tagging slots with the group name (§7.1). */
     fun writeProgrammerGroupProperty(
         owner: ProgrammerOwner,
         group: FixtureGroup<*>,
@@ -938,11 +953,6 @@ class FxEngine(
         val value: CueAssignmentResolver.PropertyValue,
         /** Group name when this entry came from a group control, else null (§7.1). */
         val sourceGroup: String? = null,
-        /**
-         * Set when [value] came from resolving a named-palette reference for this fixture, so the
-         * stored slot remembers the reference instead of only its current literal.
-         */
-        val paletteUuid: UUID? = null,
     )
 
     /**
@@ -972,7 +982,7 @@ class FxEngine(
                 owner,
                 write.fixture.targetKey,
                 write.propertyName,
-                programmerValueOf(write.value, write.paletteUuid),
+                ProgrammerValue.Hard(write.value),
                 touched,
                 write.sourceGroup,
             )
@@ -1241,8 +1251,8 @@ class FxEngine(
      * for the uncovered keys this publish writes.
      */
     /**
-     * Republish programmer keys whose stored values were rewritten *in place* — a palette edit
-     * re-resolving its [ProgrammerValue.Ref] slots, or Make Hard.
+     * Republish programmer keys whose stored values were rewritten *in place* — today, a Look edit
+     * re-cooking the programmer's layer stack.
      *
      * The public door onto [publishCascadeForKeys] for callers that mutated
      * [ProgrammerStore] directly rather than through a `writeProgrammer*` entry point, and so

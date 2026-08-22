@@ -33,24 +33,25 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     .orderBy(DaoCues.name to SortOrder.ASC)
                     .with(
                         DaoCue::layers,
-                        DaoCue::presetApplications,
                         DaoCue::adHocEffects,
                         DaoCue::propertyAssignments,
                         DaoCue::triggers,
                         DaoCue::cueStack,
-                        DaoCuePresetApplication::preset,
                         DaoCueTrigger::script,
                     )
-                    .map { it.toCueDetails(isCurrentProject, state.show.fixtures, state.show.lookRegistry) }
+                    .map { it.toCueDetails(isCurrentProject, state.show.fixtures) }
             }
             call.respond(cues)
         }
     }
 
-    // POST /{projectId}/cues - Create new cue (current project only)
-    post<MakeCueHardResource> { resource ->
-        handleMakeCueHard(state, resource.cueId, resource.force)
+    // POST /{projectId}/cues/{cueId}/flatten — mounted above the bare POST so the more specific
+    // path matches first.
+    post<FlattenCueLayersResource> { resource ->
+        handleFlattenCueLayers(state, resource.parent.projectId, resource.cueId, resource.force)
     }
+
+    // POST /{projectId}/cues - Create new cue (current project only)
 
     post<ProjectCuesResource> { resource ->
         withCurrentProject(
@@ -98,7 +99,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 }
                 createCueChildren(
                     cue,
-                    newCue.presetApplications,
                     newCue.adHocEffects,
                     newCue.propertyAssignments,
                     newCue.triggers,
@@ -106,7 +106,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 )
                 // A cue created without a number gets one derived from where it landed.
                 renumberAutoCues(stack)
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.lookRegistry) to null
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures) to null
             }
             val (cueDetails, error) = result
             if (error != null || cueDetails == null) {
@@ -126,7 +126,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val cue = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
-                cue.toCueDetails(isCurrentProject, state.show.fixtures, state.show.lookRegistry)
+                cue.toCueDetails(isCurrentProject, state.show.fixtures)
             }
 
             if (cue != null) {
@@ -176,7 +176,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 deleteCueChildren(cue)
                 createCueChildren(
                     cue,
-                    updatedData.presetApplications,
                     updatedData.adHocEffects,
                     updatedData.propertyAssignments,
                     updatedData.triggers,
@@ -184,7 +183,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 )
 
                 if (numberChanged) renumberAutoCues(cue.cueStack)
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.lookRegistry)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
             if (cueDetails != null) {
@@ -198,7 +197,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
     // PATCH /{projectId}/cues/{cueId} - Partial update of cue fields (current project only)
     // Only fields present in the JSON body are updated; absent fields are left unchanged.
-    // Children arrays (presetApplications, adHocEffects, triggers) are replaced wholesale when present.
+    // Children arrays (layers, adHocEffects, propertyAssignments, triggers) are replaced wholesale when present.
     patch<ProjectCueResource> { resource ->
         withCurrentProject(
             state,
@@ -231,17 +230,13 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if ("stomp" in body) cue.stomp = body["stomp"]!!.jsonPrimitive.boolean
 
                 // Children arrays — replace wholesale when present
-                val hasPresets = "presetApplications" in body
                 val hasLayers = "layers" in body
                 val hasEffects = "adHocEffects" in body
                 val hasAssignments = "propertyAssignments" in body
                 val hasTriggers = "triggers" in body
 
-                if (hasPresets || hasLayers || hasEffects || hasAssignments || hasTriggers) {
+                if (hasLayers || hasEffects || hasAssignments || hasTriggers) {
                     val json = Json { ignoreUnknownKeys = true }
-                    val presets = if (hasPresets)
-                        json.decodeFromJsonElement<List<CuePresetApplicationDto>>(body["presetApplications"]!!)
-                    else null
                     val effects = if (hasEffects)
                         json.decodeFromJsonElement<List<CueAdHocEffectDto>>(body["adHocEffects"]!!)
                     else null
@@ -257,14 +252,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
                     // Delete only the children being replaced
                     if (hasLayers) cue.layers.forEach { it.delete() }
-                    if (hasPresets) cue.presetApplications.forEach { it.delete() }
                     if (hasEffects) cue.adHocEffects.forEach { it.delete() }
                     if (hasAssignments) cue.propertyAssignments.forEach { it.delete() }
                     if (hasTriggers) cue.triggers.forEach { it.delete() }
 
                     createCueChildren(
                         cue,
-                        presets ?: emptyList(),
                         effects ?: emptyList(),
                         assignments ?: emptyList(),
                         triggers ?: emptyList(),
@@ -273,7 +266,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 }
 
                 if (numberChanged) renumberAutoCues(cue.cueStack)
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, state.show.lookRegistry)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
             if (cueDetails != null) {
@@ -383,19 +376,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     delayMs = layer.delayMs
                     intervalMs = layer.intervalMs
                     randomWindowMs = layer.randomWindowMs
-                }
-            }
-            for (app in sourceCue.presetApplications) {
-                DaoCuePresetApplication.new {
-                    cue = newCue
-                    preset = app.preset
-                    targets = app.targets
-                    delayMs = app.delayMs
-                    intervalMs = app.intervalMs
-                    randomWindowMs = app.randomWindowMs
-                    sortOrder = app.sortOrder
-                    speedMasterUuid = app.speedMasterUuid
-                    rateSpeedMasterUuid = app.rateSpeedMasterUuid
                 }
             }
             for (assignment in sourceCue.propertyAssignments) {
@@ -541,21 +521,9 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot read state for project '${p.name}' - only the current project is supported" },
         ) { _ ->
             val captured = captureCurrentState(state)
-
-            // Resolve preset names from DB
-            val presetDetails = transaction(state.database) {
-                captured.presetApplications.map { app ->
-                    CuePresetApplicationDetail(
-                        presetId = app.presetId,
-                        presetName = DaoFxPreset.findById(app.presetId)?.name,
-                        targets = app.targets,
-                    )
-                }
-            }
-
             call.respond(CueCurrentStateResponse(
                 palette = captured.palette,
-                presetApplications = presetDetails,
+                layers = captured.layers,
                 adHocEffects = captured.adHocEffects,
             ))
         }
@@ -586,7 +554,6 @@ data class CueCurrentStateResource(val parent: ProjectCuesResource)
 data class NewCue(
     val name: String,
     val palette: List<String> = emptyList(),
-    val presetApplications: List<CuePresetApplicationDto> = emptyList(),
     val layers: List<CueLayerDto> = emptyList(),
     val adHocEffects: List<CueAdHocEffectDto> = emptyList(),
     val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
@@ -609,7 +576,6 @@ data class CueDetails(
     val id: Int,
     val name: String,
     val palette: List<String>,
-    val presetApplications: List<CuePresetApplicationDetail>,
     /** The cue's ordered Look composition, in `sortOrder`. */
     val layers: List<CueLayerDto> = emptyList(),
     val adHocEffects: List<CueAdHocEffectDto>,
@@ -633,20 +599,6 @@ data class CueDetails(
     val canDelete: Boolean,
 )
 
-@Serializable
-data class CuePresetApplicationDetail(
-    val presetId: Int,
-    val presetName: String?,
-    val targets: List<CueTargetDto>,
-    val delayMs: Long? = null,
-    val intervalMs: Long? = null,
-    val randomWindowMs: Long? = null,
-    val sortOrder: Int = 0,
-    /** Per-application speed-master override (null → each preset effect's own → master 1). */
-    val speedMasterUuid: String? = null,
-    /** Per-application wall-clock rate-master override (null → each preset effect's own). */
-    val rateSpeedMasterUuid: String? = null,
-)
 
 @Serializable
 data class CopyCueRequest(
@@ -672,7 +624,14 @@ data class ApplyCueResponse(
 @Serializable
 data class CueCurrentStateResponse(
     val palette: List<String>,
-    val presetApplications: List<CuePresetApplicationDetail>,
+    /**
+     * The stage's Look layers, one per Look with a de-duplicated target list.
+     *
+     * Was `presetApplications: List<CuePresetApplicationDetail>`, reconstructed from each running
+     * effect's `presetId`. Nothing stamps `presetId` any more — `captureCurrentState` keys on
+     * `lookId` instead — so the field was already always empty before session 4 deleted the DTO.
+     */
+    val layers: List<CueLayerDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
 )
 

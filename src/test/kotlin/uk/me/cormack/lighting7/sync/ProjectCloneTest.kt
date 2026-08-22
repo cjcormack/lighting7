@@ -5,8 +5,6 @@ import org.jetbrains.exposed.v1.core.eq
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import uk.me.cormack.lighting7.fx.isPaletteRefValue
-import uk.me.cormack.lighting7.fx.paletteRefValue
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
@@ -133,22 +131,25 @@ class ProjectCloneTest {
                 "clone must mint a fresh look identity",
             )
 
-            // The interesting half: the reference lives inside an *opaque value string*, so only
-            // ExportUuidRemapper's text substitution can rewire it. A clone whose row still named
-            // the source's look would resolve against the wrong project — or against nothing.
-            val refRows = clone.cues
-                .flatMap { it.propertyAssignments }
-                .filter { isPaletteRefValue(it.value) }
-            assertEquals(1, refRows.size, "expected the fixture's single ref'd cue row in the clone")
-            assertEquals(
-                paletteRefValue(cloneLook.uuid), refRows.single().value,
-                "clone's cue row must reference the clone's look, not the source's",
+            // A cue's dependency on a Look is a `DaoCueLayer` FK, so the clone's layers must name
+            // the clone's Look. Until session 4 this also checked a cue *row* whose opaque value
+            // string held `ref:{uuid}`, rewired by ExportUuidRemapper's text substitution; the
+            // `ref:` grammar retired and the FK is the only path left — which is the structural win
+            // of the merge, since an FK cannot be half-rewritten.
+            val clonedLayerLookIds = clone.cues.flatMap { it.layers }.map { it.look.id.value }.toSet()
+            assertTrue(
+                clonedLayerLookIds.isNotEmpty(),
+                "expected the fixture's cue layers in the clone",
+            )
+            assertTrue(
+                clone.looks.map { it.id.value }.containsAll(clonedLayerLookIds),
+                "every cloned layer must name a look in the clone, not in the source",
             )
 
-            // Look rows themselves can never hold a reference — `validateLookRows` rejects one at
-            // the write boundary, which is what keeps looks from nesting.
+            // Look rows hold literals only — `validateLookRows` rejects a `ref:`-shaped value at the
+            // write boundary, and that rejection is what keeps looks from nesting.
             assertTrue(
-                clone.looks.flatMap { it.rows.toList() }.none { isPaletteRefValue(it.value) },
+                clone.looks.flatMap { it.rows.toList() }.none { it.value.startsWith("ref:") },
                 "looks hold literals only",
             )
         }

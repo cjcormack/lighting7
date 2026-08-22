@@ -273,6 +273,66 @@ A is the right choice — equivalent safety with much less machinery. B is genui
 
 ---
 
+## Area 6 — Composing a cue *from* library entries (grandMA3 Recipes)
+
+Added after the fact. The survey above compared how consoles *resolve* competing values; it did not
+ask how a cue is **built** from a library, which is the question the looks-and-layers work turned out
+to be answering. The closest prior art is grandMA3's **Recipes**, and it matches the design closely
+enough to be worth consulting for edge cases rather than merely cited.
+
+### What a Recipe is
+
+A grandMA3 cue can store, instead of (or alongside) hard values, a list of **recipe lines**. Each line
+is a combination of:
+
+| Recipe column | Our equivalent |
+|---|---|
+| Group | `DaoCueLayer.targets` |
+| Preset | `DaoCueLayer.look` |
+| Phaser | the Look's `DaoLookEffects` |
+| Amount / Fade / Delay | `amount`, and the layer's timing fields |
+| Attribute filter (via the preset's type) | `propertyMask` |
+
+The console **cooks** those lines into values when the cue is applied, and **re-cooks** when a
+referenced preset changes — which is exactly the touring behaviour `republishForLookEdit` provides,
+and exactly the reason both need a per-key "one contributor" invariant before the resolver runs.
+
+### Where we agree, and it's reassuring
+
+- **Cooking rather than per-line priorities.** MA3 resolves a recipe to values, it does not hand each
+  line to the merge engine. Our §3.3 reached the same conclusion from a different direction: HTP
+  ignores priority except on exact value ties, so per-layer priorities would have given ordered
+  override for colour and left dimmer on `max()`.
+- **A line's group supplies targets to a target-less preset.** Same rule as a deferred Look row
+  taking its targets from the layer.
+- **Order within the cue matters, and later wins.** Our within-cue LTP flip is not an invention.
+- **Amount is a per-line mix**, not a master.
+
+### Where we differ, deliberately
+
+- **We keep the cue's own rows as an implicit last layer.** MA3 lets recipe lines and hard values
+  coexist in one cue but resolves them by attribute-level precedence rather than by a declared "local
+  always wins". Ours is the simpler statement and it is what `CueComposer.cook`'s unconditional local
+  overlay implements.
+- **We have no per-line attribute *transform*.** MA3 recipes can carry a value offset per line;
+  `propertyMask` only includes or excludes. `FU-LOOK-PERPROP-BLEND` is the nearest open item.
+- **Our layers do not nest.** MA3 presets can reference other presets in some modes. `FU-LOOK-NESTED`
+  is where that would land, and `validateLookRows` is the guard that keeps the door shut until then.
+
+### Edge cases worth stealing next time this area is touched
+
+Three MA3 behaviours we have not modelled and would need answers for if operators ask:
+
+1. **"Unfold" / bake-out per line** — MA3 can convert one recipe line to hard values in place. Our
+   flatten route is whole-stack or last-layer only, for the precedence reason in
+   §"Hardening — flattening a layer"; MA3 sidesteps that by resolving hard values and recipes with
+   attribute-level precedence instead.
+2. **A recipe line whose preset is empty for some fixtures of its group** — MA3 leaves those fixtures
+   uncovered rather than substituting a neighbour's value, which is the same call `cook` makes.
+3. **Selective re-cook** — MA3 re-cooks only the cues a changed preset actually feeds.
+   `activeCuesReferencingLook`'s indexed FK query is our version, and it is now the *only* path since
+   the `ref:` text scan retired.
+
 ## Sources
 
 - ETC EOS — HTP/LTP and priority: [community thread](https://community.etcconnect.com/control_consoles/eos-family-consoles/f/eos-family/22783/prioity-htp-ltp), [v2.6.0 Operations Supplement](https://enlx.co.uk/wptemp/wp-content/uploads/2024/05/EosFamily_v2.6.0_OperationsManualSupplement_RevD.pdf), [v2.0 manual p308](https://www.manualsdir.com/manuals/559089/etc-eos-titanium-eos-and-gio-v200.html?page=308)
@@ -285,3 +345,4 @@ A is the right choice — equivalent safety with much less machinery. B is genui
 - Chamsys MagicQ — Playback priority / Programmer: [Programmer docs](https://secure.chamsys.co.uk/docs/magicq/manual/programmer.html), [Advanced cue stack options](https://secure.chamsys.co.uk/docs/magicq/manual/advanced_cue_stacks.html), [Concepts](https://secure.chamsys.co.uk/help/documentation/magicq/concepts.html)
 - Avolites Titan — Priority / HTP/LTP / Release: [Playback Options](https://manual.avolites.com/docs/cues/playback-options/), [Cue Playback](https://manual.avolites.com/docs/cues/cue-playback/), [Pearl Expert Titan manual p120](https://www.manualslib.com/manual/763134/Avolites-Pearl-Expert-Titan.html?page=120)
 - Crossfade / move-in-dark / per-attribute timing: [Avolites Cue Timing](https://manual.avolites.com/docs/cues/cue-timing/), [On Stage Lighting cue timing](https://www.onstagelighting.co.uk/console-programming/lighting-cue-timing/), [ETC Control Philosophy white paper](https://www.etcconnect.com/uploadedFiles/Main_Site/Documents/Public/White_Papers/White_Paper_Control_Philosophy_revA.pdf), [ETC Out of Control blog — LED transitions](https://blog.etcconnect.com/2017/06/out-of-control-cue-transitions-leds)
+- grandMA3 — Recipes: [Recipes help](https://help.malighting.com/grandMA3/2.0/HTML/recipes.html), [Cue recipe columns](https://help.malighting.com/grandMA3/2.3/HTML/sheet_recipe.html), [preset referencing thread](https://forum.malighting.com/forum/thread/4969-stomp-phaser-with-different-executor/)

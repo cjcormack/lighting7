@@ -74,10 +74,10 @@ internal data class LookRecordOutcome(
  * - MERGE upserts the recorded rows and leaves everything else alone — the console re-record.
  * - REMOVE deletes the rows the recording names, values ignored.
  *
- * Recorded values are always literals. A programmer entry that was itself a reference is flattened
- * by [collapseRecordingToAssignments]'s `preserveRefs = false`, because a Look row holding a
- * reference would make resolution recursive — the guarantee `validateLookRows` enforces at the write
- * boundary and `FU-LOOK-NESTED` depends on.
+ * Recorded values are always literals — the programmer has held nothing else since the `ref:`
+ * grammar retired. `validateLookRows` still rejects a `ref:`-shaped value at the write boundary as
+ * an inlined shape check, because that rejection *is* the non-recursion guarantee `FU-LOOK-NESTED`
+ * depends on.
  *
  * Must be called inside a transaction.
  */
@@ -237,8 +237,11 @@ internal data class ProgrammerRecordLookResponse(
     val rowsRemoved: Int,
     val groupRowsEmitted: Int,
     /**
-     * Programmer entries that were themselves references — flattened, since Looks don't nest.
-     * Retires with the `ref:` grammar in session 4; until then it is real and worth reporting.
+     * Always 0. Counted programmer entries that were themselves `ref:{uuid}` references and so had
+     * to be flattened, since Looks don't nest. The `ref:` grammar retired in session 4 and the
+     * programmer can no longer hold one; the field stays on the wire so a client reading it doesn't
+     * break, and because "how many references did this record flatten?" is a question a future
+     * nested-Look feature (`FU-LOOK-NESTED`) would ask again.
      */
     val refsFlattened: Int,
     val skipped: List<ProgrammerSkipDto>,
@@ -296,8 +299,7 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
         }
 
         val (entries, skips) = collectProgrammerEntries(state, source, mask, targets = scope)
-        val collapsed = collapseRecordingToAssignments(entries, state.show.fixtures, preserveRefs = false)
-        val refsFlattened = entries.count { it.paletteUuid != null }
+        val collapsed = collapseRecordingToAssignments(entries, state.show.fixtures)
         val inRemit = lookRowInRemit(state.show.fixtures, mask, scope)
 
         val outcome = transaction(state.database) {
@@ -321,8 +323,8 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
             DaoLook.findById(outcome.lookId)!!.toDetailsDto(state)
         }
         logger.info(
-            "record-look {} '{}': {} written, {} removed, {} group row(s), {} ref(s) flattened",
-            mode, details.name, outcome.written, outcome.removed, collapsed.groupRows, refsFlattened,
+            "record-look {} '{}': {} written, {} removed, {} group row(s)",
+            mode, details.name, outcome.written, outcome.removed, collapsed.groupRows,
         )
         call.respond(
             ProgrammerRecordLookResponse(
@@ -331,7 +333,7 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
                 rowsWritten = outcome.written,
                 rowsRemoved = outcome.removed,
                 groupRowsEmitted = collapsed.groupRows,
-                refsFlattened = refsFlattened,
+                refsFlattened = 0,
                 skipped = skips.map { it.toDto() },
                 programmerKeysRefreshed = republish.programmerKeysRefreshed,
                 cuesRepublished = republish.cuesRepublished,
@@ -406,7 +408,7 @@ internal suspend fun RoutingContext.updateIncludedLook(
     }
 
     val (changed, skips) = changedSinceInclude(state, mask)
-    val collapsed = collapseRecordingToAssignments(changed, state.show.fixtures, preserveRefs = false)
+    val collapsed = collapseRecordingToAssignments(changed, state.show.fixtures)
 
     val outcome = transaction(state.database) {
         // MERGE never deletes, so the remit predicate is never consulted; passing "nothing is in

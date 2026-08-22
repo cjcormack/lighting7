@@ -6,25 +6,25 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.ProgrammerValue
-import uk.me.cormack.lighting7.fx.canonicalPropertyName
-import uk.me.cormack.lighting7.fx.paletteRefValue
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLooks
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 
 private val logger = LoggerFactory.getLogger("lookRepublish")
 
-/** What a palette edit moved. Reported back so a route can tell the operator. */
+/** What a Look edit moved. Reported back so a route can tell the operator. */
 internal data class LookRepublishOutcome(
     /** Programmer keys whose resolved value changed and were re-transmitted. */
     val programmerKeysRefreshed: Int,
-    /** Programmer ref slots the palette no longer covers — kept at their last value. */
+    /**
+     * Always 0 since the `ref:` grammar retired, and kept as a field rather than removed because it
+     * is on the wire (`ProgrammerLookUpdateResult`). A layer that stops covering a key loses its
+     * slot on the recook instead, which is a value change rather than a partial failure — there is
+     * no longer a state where the programmer holds a reference the Look cannot answer.
+     */
     val programmerKeysUncovered: Int,
     val cuesRepublished: List<Int>,
     val activeCuesScanned: Int,
@@ -39,19 +39,18 @@ internal data class LookRepublishOutcome(
  * **Order of operations matters and is not interchangeable:**
  *
  * 1. Invalidate the registry, before anything reads through it.
- * 2. Re-resolve the programmer's [ProgrammerValue.Ref] slots — *without publishing yet*.
+ * 2. Re-cook the programmer's layer stack — *without publishing yet*.
  * 3. Rebuild and replace the affected cues' rows in one [uk.me.cormack.lighting7.fx.FxEngine.replaceCueAssignments].
  * 4. Publish the programmer keys, then emit provenance.
  *
  * Step 2 has to precede step 3 because [uk.me.cormack.lighting7.fx.FxEngine.publishCueLayerToControllers]
- * composes the programmer *over* the cue layer via `LayerResolver.fallbackFor`. With stale
- * `Ref.resolved` values still in the store, every key covered by both layers would transmit the old
- * value and be corrected a frame later — a visible flicker on exactly the fixtures the operator is
- * editing.
+ * composes the programmer *over* the cue layer via `LayerResolver.fallbackFor`. With stale layer
+ * slots still in the store, every key covered by both layers would transmit the old value and be
+ * corrected a frame later — a visible flicker on exactly the fixtures the operator is editing.
  *
- * A reference slot the Look no longer covers **keeps its last resolved value** rather than being
- * dropped. Silently vanishing an operator's programmer entry mid-show is worse than a stale value
- * the sheet marks as broken.
+ * Before session 4 step 2 also re-resolved per-slot `ref:` values, and had to decide what to do
+ * about a reference the edited Look no longer covered. The layer stack has no such case: a key the
+ * cooked stack stops naming simply loses its layer slot and whatever is underneath shows through.
  */
 internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOutcome {
     val engine = state.show.fxEngine
@@ -60,35 +59,10 @@ internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOu
     // 1. Drop the cached expansion first, so every read below sees the new contents.
     registry.invalidate(lookUuid)
 
-    // 2. Re-resolve programmer refs in place. No publish yet — see the KDoc.
-    var uncovered = 0
-    val rewrittenKeys = state.show.programmerStore.rewriteSlotValues { fixtureKey, propertyName, slot ->
-        val ref = slot.value as? ProgrammerValue.Ref ?: return@rewriteSlotValues null
-        if (ref.paletteUuid != lookUuid) return@rewriteSlotValues null
-
-        val literal = registry.literalFor(lookUuid, fixtureKey, propertyName)
-        if (literal == null) {
-            uncovered++
-            return@rewriteSlotValues null
-        }
-        // Reuse the value already stored to learn the shape we must parse back into: the slot's
-        // resolved value came from this property, so its category is settled.
-        val reparsed = reparseLike(slot.value.resolved, propertyName, literal)
-        if (reparsed == null) {
-            logger.warn(
-                "look {}: row '{}' for {}.{} does not parse — leaving the programmer slot as it was",
-                lookUuid, literal, fixtureKey, propertyName,
-            )
-            null
-        } else {
-            ProgrammerValue.Ref(lookUuid, reparsed)
-        }
-    }
-
-    // 2.5 Re-cook the programmer's layer stack, if any of its layers name this Look. Before
-    //     step 3 for exactly the reason step 2 is: `publishCueLayerToControllers` composes the
-    //     programmer *over* the cue layer, so stale layer slots would transmit the old value and be
-    //     corrected a frame later — a visible flicker on the very fixtures being edited.
+    // 2. Re-cook the programmer's layer stack, if any of its layers name this Look. Before
+    //    step 3, and that order is load-bearing: `publishCueLayerToControllers` composes the
+    //    programmer *over* the cue layer, so stale layer slots would transmit the old value and be
+    //    corrected a frame later — a visible flicker on the very fixtures being edited.
     val layerKeys = state.show.programmerLayerStack.recookIfReferences(lookUuid)
 
     // 3. Rebuild the live cues that depend on this Look, then one republish for all of them.
@@ -109,7 +83,7 @@ internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOu
     //    emits provenance itself, but only when it has keys — so cover the empty case here rather
     //    than emitting twice when it doesn't. (emitProvenanceUpdate coalesces, so a double call is
     //    harmless in a running engine; being exact keeps the intent readable.)
-    val programmerKeys = rewrittenKeys + layerKeys
+    val programmerKeys = layerKeys
     if (programmerKeys.isEmpty()) {
         engine.emitProvenanceUpdate()
     } else {
@@ -117,27 +91,23 @@ internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOu
     }
 
     logger.info(
-        "look {} edited: {} programmer key(s) refreshed ({} from layers), {} uncovered, " +
-            "{} of {} active cue(s) republished",
-        lookUuid, programmerKeys.size, layerKeys.size, uncovered, republished, activeCueIds.size,
+        "look {} edited: {} programmer layer key(s) refreshed, {} of {} active cue(s) republished",
+        lookUuid, programmerKeys.size, republished, activeCueIds.size,
     )
     return LookRepublishOutcome(
-        programmerKeysRefreshed = rewrittenKeys.size,
-        programmerKeysUncovered = uncovered,
+        programmerKeysRefreshed = programmerKeys.size,
+        programmerKeysUncovered = 0,
         cuesRepublished = rebuilt.keys.toList(),
         activeCuesScanned = activeCueIds.size,
     )
 }
 
 /**
- * Which of [activeCueIds] depend on [lookUuid] — through a layer, or through a local row whose value
- * is exactly `ref:{lookUuid}`.
+ * Which of [activeCueIds] depend on [lookUuid] — now only ever through a layer.
  *
- * The layer half is a plain **indexed FK query**, which is the structural win of the merge: a layer
- * references its Look through a real column, where the palette era could only scan opaque `value`
- * text for an exact string match. The `ref:` half survives only until the grammar is retired, and
- * keeps exact equality rather than a `LIKE` prefix — a prefix match becomes a latent bug the moment
- * the reference form grows a suffix.
+ * A plain **indexed FK query**, which is the structural win of the merge: a layer references its
+ * Look through a real column, where the palette era could only scan opaque `value` text for an
+ * exact string match. That second scan retired with the `ref:` grammar in session 4.
  */
 internal fun activeCuesReferencingLook(
     state: State,
@@ -145,24 +115,16 @@ internal fun activeCuesReferencingLook(
     activeCueIds: Set<Int>,
 ): Set<Int> {
     if (activeCueIds.isEmpty()) return emptySet()
-    val refValue = paletteRefValue(lookUuid)
     return transaction(state.database) {
         val look = DaoLook.find { DaoLooks.uuid eq lookUuid }.firstOrNull()
 
-        val viaLayers = if (look == null) {
-            emptyList()
+        if (look == null) {
+            emptySet()
         } else {
             DaoCueLayer.find {
                 (DaoCueLayers.cue inList activeCueIds.toList()) and (DaoCueLayers.look eq look.id)
-            }.map { it.cue.id.value }
+            }.map { it.cue.id.value }.toSet()
         }
-
-        val viaLocalRefs = DaoCuePropertyAssignment.find {
-            (DaoCuePropertyAssignments.cue inList activeCueIds.toList()) and
-                (DaoCuePropertyAssignments.value eq refValue)
-        }.map { it.cue.id.value }
-
-        (viaLayers + viaLocalRefs).toSet()
     }
 }
 
@@ -177,26 +139,4 @@ internal fun rebuildCueLayerRows(state: State, cueId: Int): List<CueAssignmentRe
         uk.me.cormack.lighting7.models.DaoCue.findById(cueId)?.let { buildCueApplyData(it) }
     } ?: return null
     return buildCombinedCueLayerRows(state, cueId, applyData)
-}
-
-/**
- * Reparse [literal] into the same [CueAssignmentResolver.PropertyValue] shape as [like].
- *
- * A programmer slot doesn't remember the property's `PropertyCategory`, but it does hold a value of
- * the right shape — which is all the parser dispatch actually needs, and it avoids a patch lookup
- * per slot. `position` is the one case the property name decides.
- */
-private fun reparseLike(
-    like: CueAssignmentResolver.PropertyValue,
-    propertyName: String,
-    literal: String,
-): CueAssignmentResolver.PropertyValue? {
-    val category = when (like) {
-        is CueAssignmentResolver.PropertyValue.Colour -> uk.me.cormack.lighting7.fixture.PropertyCategory.COLOUR
-        is CueAssignmentResolver.PropertyValue.Setting -> uk.me.cormack.lighting7.fixture.PropertyCategory.SETTING
-        is CueAssignmentResolver.PropertyValue.Position,
-        is CueAssignmentResolver.PropertyValue.Slider,
-        -> uk.me.cormack.lighting7.fixture.PropertyCategory.DIMMER
-    }
-    return CueAssignmentResolver.parseAssignmentValue(category, canonicalPropertyName(propertyName), literal)
 }

@@ -22,29 +22,15 @@ data class CueTargetDto(
     val target: TargetRef get() = TargetRef.of(type, key)
 }
 
-@Serializable
-data class CuePresetApplicationDto(
-    val presetId: Int,
-    val targets: List<CueTargetDto>,
-    val delayMs: Long? = null,
-    val intervalMs: Long? = null,
-    val randomWindowMs: Long? = null,
-    val sortOrder: Int = 0,
-    /**
-     * Per-application speed-master override, as the master's uuid (null → each preset
-     * effect's own [FxPresetEffectDto.speedMasterUuid] → master 1).
-     */
-    val speedMasterUuid: String? = null,
-    /** Per-application wall-clock rate-master override (null → the effect's own). */
-    val rateSpeedMasterUuid: String? = null,
-)
 
 /**
  * One line of a cue's ordered Look composition. Wire shape of [DaoCueLayers]; see its KDoc for
  * what [targets] and [propertyMask] mean.
  *
- * [lookId] is the int PK for API traffic, matching [CuePresetApplicationDto.presetId]'s precedent;
- * sync carries the Look's uuid instead.
+ * [lookId] is the int PK for API traffic — the same choice `CuePresetApplicationDto.presetId` made
+ * before it retired with `cue_preset_applications` in session 4, and safe for the same reason: it is
+ * a real foreign key the importer rewrites. Sync carries the Look's uuid instead, because a uuid is
+ * the only form that survives *inside* an opaque value.
  */
 @Serializable
 data class CueLayerDto(
@@ -67,6 +53,19 @@ data class CueLayerDto(
      * fetch. Ignored on write — mirroring how `health` is read-only on the assignment DTOs.
      */
     val lookName: String? = null,
+    /**
+     * The `DaoCueLayer` row id, on read only — the same read-only convention as [lookName].
+     *
+     * Needed because a layer is otherwise **unaddressable from a client**: `lookId` is not unique
+     * (one cue may layer the same Look twice at two delays) and array position is not identity when
+     * `sortOrder` is authoritative. `POST /{projectId}/cues/{cueId}/flatten` takes an optional
+     * `layerId`, and without this its single-layer mode had no way to be called — found by driving
+     * the route against a desk rather than by its unit tests, which read the id from the database.
+     *
+     * Ignored on write, and absent from `buildCueInput`'s field-by-field rebuild for the same reason
+     * `lookName` is: a PATCH that echoed an id back would invite the server to trust it as identity.
+     */
+    val id: Int? = null,
 )
 
 /**
@@ -121,9 +120,9 @@ data class CueAdHocEffectDto(
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
     val sortOrder: Int = 0,
-    /** Speed master uuid (null → master 1). Uuid, not int id — see [FxPresetEffectDto.speedMasterUuid]. */
+    /** Speed master uuid (null → master 1). Uuid, not int id — see [LookEffectSpec.speedMasterUuid]. */
     val speedMasterUuid: String? = null,
-    /** Wall-clock rate master (null → unscaled). See [FxPresetEffectDto.rateSpeedMasterUuid]. */
+    /** Wall-clock rate master (null → unscaled). See [LookEffectSpec.rateSpeedMasterUuid]. */
     val rateSpeedMasterUuid: String? = null,
 ) {
     val target: TargetRef get() = TargetRef.of(targetType, targetKey)
@@ -191,45 +190,10 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var cueType by DaoCues.cueType
     var stomp by DaoCues.stomp
     var uuid by DaoCues.uuid
-    val presetApplications by DaoCuePresetApplication referrersOn DaoCuePresetApplications.cue
     val layers by DaoCueLayer referrersOn DaoCueLayers.cue
     val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue
     val propertyAssignments by DaoCuePropertyAssignment referrersOn DaoCuePropertyAssignments.cue
     val triggers by DaoCueTrigger referrersOn DaoCueTriggers.cue
-}
-
-// ─── Cue Preset Applications table ─────────────────────────────────────
-
-object DaoCuePresetApplications : IntIdTable("cue_preset_applications") {
-    val cue = reference("cue_id", DaoCues)
-    val preset = reference("preset_id", DaoFxPresets)
-    val targets = json<List<CueTargetDto>>("targets", Json)
-    val delayMs = long("delay_ms").nullable()
-    val intervalMs = long("interval_ms").nullable()
-    val randomWindowMs = long("random_window_ms").nullable()
-    val sortOrder = integer("sort_order").default(0)
-    /**
-     * Per-application speed-master override (null → the preset effect's own
-     * [FxPresetEffectDto.speedMasterUuid] → master 1).
-     */
-    val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
-    val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
-    val uuid = javaUUID("uuid").autoGenerate()
-}
-
-class DaoCuePresetApplication(id: EntityID<Int>) : IntEntity(id) {
-    companion object : IntEntityClass<DaoCuePresetApplication>(DaoCuePresetApplications)
-
-    var cue by DaoCue referencedOn DaoCuePresetApplications.cue
-    var preset by DaoFxPreset referencedOn DaoCuePresetApplications.preset
-    var targets by DaoCuePresetApplications.targets
-    var delayMs by DaoCuePresetApplications.delayMs
-    var intervalMs by DaoCuePresetApplications.intervalMs
-    var randomWindowMs by DaoCuePresetApplications.randomWindowMs
-    var sortOrder by DaoCuePresetApplications.sortOrder
-    var speedMasterUuid by DaoCuePresetApplications.speedMasterUuid
-    var rateSpeedMasterUuid by DaoCuePresetApplications.rateSpeedMasterUuid
-    var uuid by DaoCuePresetApplications.uuid
 }
 
 // ─── Cue Ad-Hoc Effects table ──────────────────────────────────────────
@@ -334,7 +298,7 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
  * One line of a cue's ordered Look composition — "apply this Look, over these targets, in this
  * position in the stack".
  *
- * Directly supersedes [DaoCuePresetApplications], which was already the ordered per-cue
+ * Directly superseded `DaoCuePresetApplications` (deleted in session 4), which was already the ordered per-cue
  * application list carrying `sortOrder`, the timing triple and speed-master overrides. This is an
  * extension of that table rather than a new concept beside it.
  *
@@ -344,7 +308,7 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
  * `(targetType, targetKey, propertyName)` with no layer dimension and keeps working unchanged; and
  * it gives surface and cue-edit writes an unambiguous destination.
  *
- * See `docs/plans/looks-and-layers-plan.md` §3.2 and `fx/CueComposer.kt` for how a stack of these
+ * See `docs/plans/completed/looks-and-layers-plan.md` §3.2 and `fx/CueComposer.kt` for how a stack of these
  * is flattened to one contributor per (fixture, property) before the resolver sees it.
  */
 object DaoCueLayers : IntIdTable("cue_layers") {
@@ -427,7 +391,7 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
     /**
      * True when this layer fires on a timer rather than at cue apply.
      *
-     * Mirrors `CookLayer.isTimed` and `DaoCuePresetApplication.isTimed`, and the same rule holds:
+     * Mirrors `CookLayer.isTimed`, and the same rule holds:
      * `randomWindowMs` alone does **not** make a layer timed — it only jitters an interval that is
      * already there.
      */

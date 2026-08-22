@@ -227,6 +227,11 @@ Fixture authors can override the category default per-property via `@FixtureProp
 
 ### Resolution algorithm
 
+**Each active cue contributes exactly one value per (fixture, property).** That is an invariant, not
+an incidental property: the cook step (see "Looks and layers" below) reduces a cue's whole layer
+stack plus its own rows to one contributor before the resolver ever sees it. So everything below is
+about composing *across* cues.
+
 For each (fixture, property) pair:
 
 1. Collect all active cues contributing an assignment to this pair. A group-level cue assignment expands to its members. A fixture-level assignment wins over a group-level assignment for the same property (**specificity rule**).
@@ -235,6 +240,30 @@ For each (fixture, property) pair:
    - `LTP`: take the assignment from the highest-priority contributor, where priority is cue-stack position for stacked cues and activation time for standalone cues.
    - `HTP`: take the `max` of all contributors' values, each scaled by its cue's current fade weight (see Crossfade below).
 4. Convert the resolved property value to channel values using the fixture's patch. Colour as hex, dimmer as 0–255 or 0–1, settings as enum string, pan/tilt as the native unit.
+
+#### What ties used to do, and why the record needs correcting
+
+Before the cook step, a cue's own rows and all its immediate FX presets' rows were concatenated and
+given the **identical** `priority` and `fadeWeight`. The result was a rule nobody chose:
+
+- **LTP resolved first-encountered-wins**, not last. `composeLtp` uses `maxWithOrNull`, whose
+  contract is "the first element having the largest value", so an incumbent was replaced only on a
+  strict `>`. Cue-own beat preset, and among several presets the *earlier* `sortOrder` won — the
+  reverse of what `sortOrder` implies.
+- **HTP ignored ordering entirely** and took `max()`. A cue asserting `dimmer=100` over a preset
+  asserting `180` resolved to 180; neither overrode the other.
+- **No mid-fade cross-blending.** Both rows were scaled by the same per-cue weight, so weights never
+  diverged within a cue and the `winner.fadeWeight >= 1.0` early return fired: one row won outright
+  and the other was discarded.
+- And it was **untested** — every multi-contributor case in `CueAssignmentResolverTest` used distinct
+  priorities, so the exact-tie path never ran.
+
+`buildCueAssignmentsForPreset`'s KDoc claimed the opposite — "the sort order alone decides
+(last-write-wins for OVERRIDE blend)". That described the *FX* layer, which is a genuine
+last-applied-wins sequential fold, and two mechanisms in one `applyCue` were doing opposite things.
+The cook step replaced all of it with **one rule for every category: later layers win, and the cue's
+own rows win over all of them**. Across cues, HTP still governs intensity — which is the pairing an
+operator is most likely to be surprised by, and why `FU-MANUAL-LAYER-PRECEDENCE` exists.
 
 ### Fade weight
 
@@ -254,8 +283,10 @@ serve both of the jobs its predecessors split between them: a bound Look behaves
 edit it and every cue layering it moves — while a fully-deferred one behaves like a preset, a
 bundle you point at whatever you like.
 
-A Look's rows hold **literals only**. A row holding a `ref:` is rejected at the write boundary, so
-**Looks do not nest** and resolution can never recurse.
+A Look's rows hold **literals only**. A row holding a `ref:`-shaped value is rejected at the write
+boundary, so **Looks do not nest** and resolution can never recurse. The `ref:` *value grammar* itself
+retired in session 4 — nothing can author one — but that rejection stays, as an inlined shape check,
+because it is the guarantee rather than a consequence of one.
 
 There is deliberately **no stored attribute type**. Which families a Look touches is derived from
 its rows via `maskGroupForProperty`, so the library banks by family the way the per-type palette
@@ -368,19 +399,43 @@ match.
 A reference whose Look stops covering it keeps its last resolved value rather than vanishing; a
 disappearing programmer entry mid-show is worse than a stale one the sheet marks broken.
 
-### Hardening
+### Hardening — flattening a layer
 
-**Make Hard** replaces references with the literals they currently resolve to. The awkward case it
-used to have is *gone*: an FX preset row was target-*less*, so hardening it could not resolve "per
-target" at all, and the two obvious ways to invent a target set were both wrong — the union of
-today's applications stopped being true the moment the preset was applied somewhere new, and asking
-the operator for one asked them to answer for applications that did not exist yet. A layer always
-has a target set, so flattening a layer into local rows is now a well-posed operation.
+`POST /{projectId}/cues/{cueId}/flatten` detaches a cue from the library: it writes the composed
+result as the cue's own local rows and deletes the layers that produced it. It replaces three Make
+Hard routes — one per cue, one per FX preset, one programmer-wide — none of which had a single test.
+
+The awkward case they had is *gone*. An FX preset row was target-*less*, so hardening it could not
+resolve "per target" at all, and both ways to invent a target set were wrong: the union of today's
+applications stopped being true the moment the preset was applied somewhere new, and asking the
+operator asked them to answer for applications that did not exist yet. A layer always has a target
+set.
+
+Three properties of the flatten route, each of which looks like a loss and is not:
+
+- **What gets written is the cooked value, not the layer's rows.** Cook has already applied blend,
+  `amount`, `propertyMask` and group expansion and reduced the stack to one value per (fixture,
+  property), so flattening is "write down what cook computed". That is what makes it
+  output-preserving.
+- **Rows come out fixture-targeted, never group-targeted.** The old cue route could keep a group row
+  when every member happened to resolve alike, because it rewrote a value in place without cooking.
+  Cook's output is per fixture *by construction* — that invariant is the point of it — and a cooked
+  key carries no group name, so re-deriving one would mean guessing which of several overlapping
+  groups to name.
+- **A Look row's `fadeDurationMs` does not survive.** It never reached the stage either: cook carries
+  no per-row fade, so a layered row's fade is already not honoured. Flattening preserves the cue's
+  *actual* behaviour, which is the guarantee that matters. `moveInDark` does survive, because it
+  lives on the cue's own rows and those are untouched.
+
+**A single layer can only be flattened when it is the last enabled one.** Local rows beat every
+layer unconditionally, so promoting a middle layer's values to local rows would make them win over
+the layers *above* it — the cue would look different immediately after an operation whose whole
+promise is that nothing changes. The route refuses that with a 409 rather than silently reordering.
 
 One detail survives from the old implementation: the category for a row's property comes from
 `fixtureCategoryFor`, not a direct property-catalogue lookup, because `position` is a synthetic
 pan/tilt pair with no `@FixtureProperty` of its own. Looking the name up directly answers null and
-reports every POSITION reference as unresolvable.
+reports every POSITION row as unresolvable.
 
 ### Relationship to the positional palette
 

@@ -67,7 +67,7 @@ class CueStackRoutesTest {
             name = "Opening Look",
             sortOrder = 0,
             paletteSize = 3,
-            presetCount = 2,
+            layerCount = 2,
             adHocEffectCount = 1,
         )
         val serialized = json.encodeToString(entry)
@@ -88,8 +88,8 @@ class CueStackRoutesTest {
             type = "STACK",
             label = null,
             cues = listOf(
-                CueStackCueEntry(id = 10, name = "Scene 1", sortOrder = 0, paletteSize = 2, presetCount = 1, adHocEffectCount = 0),
-                CueStackCueEntry(id = 11, name = "Scene 2", sortOrder = 1, paletteSize = 0, presetCount = 0, adHocEffectCount = 3, fadeDurationMs = 1500, fadeCurve = "CUBIC_IN_OUT"),
+                CueStackCueEntry(id = 10, name = "Scene 1", sortOrder = 0, paletteSize = 2, layerCount = 1, adHocEffectCount = 0),
+                CueStackCueEntry(id = 11, name = "Scene 2", sortOrder = 1, paletteSize = 0, layerCount = 0, adHocEffectCount = 3, fadeDurationMs = 1500, fadeCurve = "CUBIC_IN_OUT"),
             ),
             activeCueId = 10,
             standbyCueId = null,
@@ -265,7 +265,7 @@ class CueStackRoutesTest {
             name = "Scene with Fade",
             sortOrder = 0,
             paletteSize = 3,
-            presetCount = 2,
+            layerCount = 2,
             adHocEffectCount = 1,
             autoAdvance = true,
             autoAdvanceDelayMs = 10000,
@@ -289,7 +289,7 @@ class CueStackRoutesTest {
                 name = "Cue ${i + 1}",
                 sortOrder = i,
                 paletteSize = if (i == 0) 3 else 0,
-                presetCount = 1,
+                layerCount = 1,
                 adHocEffectCount = i,
                 autoAdvance = i < 4,  // all except last auto-advance
                 autoAdvanceDelayMs = if (i < 4) 5000L else null,
@@ -331,7 +331,7 @@ class CueStackRoutesTest {
             name = "Scene 14",
             sortOrder = 5,
             paletteSize = 3,
-            presetCount = 2,
+            layerCount = 2,
             adHocEffectCount = 1,
             cueNumber = "14A",
             notes = "Sarah enters p34",
@@ -351,7 +351,7 @@ class CueStackRoutesTest {
             name = "Scene 4 marker",
             sortOrder = 6,
             paletteSize = 0,
-            presetCount = 0,
+            layerCount = 0,
             adHocEffectCount = 0,
             cueType = "MARKER",
         )
@@ -369,7 +369,7 @@ class CueStackRoutesTest {
             name = "Test",
             sortOrder = 0,
             paletteSize = 0,
-            presetCount = 0,
+            layerCount = 0,
             adHocEffectCount = 0,
         )
         assertEquals("STANDARD", entry.cueType)
@@ -399,8 +399,8 @@ class CueStackRoutesTest {
     fun `SortByNumberResponse serialization round-trips`() {
         val response = SortByNumberResponse(
             updatedCues = listOf(
-                CueStackCueEntry(id = 1, name = "Cue 1", sortOrder = 0, paletteSize = 0, presetCount = 0, adHocEffectCount = 0, cueNumber = "1"),
-                CueStackCueEntry(id = 2, name = "Cue 2", sortOrder = 1, paletteSize = 0, presetCount = 0, adHocEffectCount = 0, cueNumber = "2"),
+                CueStackCueEntry(id = 1, name = "Cue 1", sortOrder = 0, paletteSize = 0, layerCount = 0, adHocEffectCount = 0, cueNumber = "1"),
+                CueStackCueEntry(id = 2, name = "Cue 2", sortOrder = 1, paletteSize = 0, layerCount = 0, adHocEffectCount = 0, cueNumber = "2"),
             ),
             pinnedCount = 1,
             nullNumberCount = 0,

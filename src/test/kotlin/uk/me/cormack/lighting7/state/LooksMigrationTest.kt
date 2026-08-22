@@ -2,32 +2,32 @@ package uk.me.cormack.lighting7.state
 
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.PaletteCascade
-import uk.me.cormack.lighting7.fx.paletteRefValue
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
-import uk.me.cormack.lighting7.models.DaoCuePresetApplication
+import uk.me.cormack.lighting7.testsupport.DaoCuePresetApplication
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
-import uk.me.cormack.lighting7.models.DaoFxPreset
-import uk.me.cormack.lighting7.models.DaoFxPresetPropertyAssignment
+import uk.me.cormack.lighting7.testsupport.DaoFxPreset
+import uk.me.cormack.lighting7.testsupport.DaoFxPresetPropertyAssignment
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLooks
-import uk.me.cormack.lighting7.models.DaoPalette
-import uk.me.cormack.lighting7.models.DaoPaletteEntry
+import uk.me.cormack.lighting7.testsupport.DaoPalette
+import uk.me.cormack.lighting7.testsupport.DaoPaletteEntry
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoSpeedMaster
-import uk.me.cormack.lighting7.models.FxPresetEffectDto
-import uk.me.cormack.lighting7.models.PaletteType
+import uk.me.cormack.lighting7.models.LookEffectSpec
+import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.routes.buildCueApplyData
 import uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue
-import uk.me.cormack.lighting7.routes.toPropertyAssignmentDtos
+import uk.me.cormack.lighting7.testsupport.LegacySchema
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import java.util.UUID
@@ -53,6 +53,24 @@ import kotlin.test.assertTrue
  */
 class LooksMigrationTest : RouteIntegrationTest() {
 
+    /**
+     * The pre-migration `ref:{uuid}` value form, spelled out locally.
+     *
+     * The production helper (`fx/PaletteRef.kt`) is gone: the grammar retired in session 4. This
+     * test seeds a **v4 database** and asserts the migration folds those rows into layers, so it
+     * needs to write the old form even though nothing can produce one any more. That is exactly why
+     * `StateMigrations`' own `removePrefix("ref:")` is an upgrade path rather than dead code.
+     */
+    private fun refValue(uuid: java.util.UUID): String = "ref:$uuid"
+
+    /**
+     * Build the pre-v5 schema. Called by every test before it seeds, because those tables are no
+     * longer in `ALL_TABLES` — session 4 deleted them, so `RouteIntegrationTest`'s fresh database
+     * does not have them and the migration (which guards on `sqlite_master`) would correctly no-op.
+     */
+    @Before
+    fun createLegacySchema() = transaction(state.database) { LegacySchema.createLegacyTables() }
+
     private fun migrate() = transaction(state.database) { migratePresetsAndPalettesToLooks() }
 
     private fun project() = DaoProject.findById(projectId)!!
@@ -69,7 +87,7 @@ class LooksMigrationTest : RouteIntegrationTest() {
             val palette = DaoPalette.new {
                 this.project = project()
                 this.name = name
-                this.type = PaletteType.COLOUR.name
+                this.type = PropertyMaskGroup.COLOUR.name
                 this.notes = "seeded"
                 this.sortOrder = 3
             }
@@ -105,7 +123,7 @@ class LooksMigrationTest : RouteIntegrationTest() {
             this.fixtureType = fixtureType
             this.palette = listOf("#ff8800")
             this.effects = if (!withEffect) emptyList() else listOf(
-                FxPresetEffectDto(
+                LookEffectSpec(
                     effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                     beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                     phaseOffset = 0.25, stepTiming = true,
@@ -168,7 +186,7 @@ class LooksMigrationTest : RouteIntegrationTest() {
         val hostile = UUID.fromString("ffeeddcc-bbaa-4998-8877-665544332211")
         transaction(state.database) {
             DaoPalette.new {
-                this.project = project(); name = "Hostile"; type = PaletteType.COLOUR.name
+                this.project = project(); name = "Hostile"; type = PropertyMaskGroup.COLOUR.name
                 uuid = hostile
             }
         }
@@ -321,11 +339,11 @@ class LooksMigrationTest : RouteIntegrationTest() {
             // covers.
             DaoCuePropertyAssignment.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                propertyName = "colour"; value = paletteRefValue(paletteUuid); sortOrder = 0
+                propertyName = "colour"; value = refValue(paletteUuid); sortOrder = 0
             }
             DaoCuePropertyAssignment.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-2"
-                propertyName = "colour"; value = paletteRefValue(paletteUuid); sortOrder = 1
+                propertyName = "colour"; value = refValue(paletteUuid); sortOrder = 1
             }
             // A literal row must be left completely alone.
             DaoCuePropertyAssignment.new {
@@ -406,7 +424,7 @@ class LooksMigrationTest : RouteIntegrationTest() {
             }
             DaoCuePropertyAssignment.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-2"
-                propertyName = "colour"; value = paletteRefValue(paletteUuid); sortOrder = 1
+                propertyName = "colour"; value = refValue(paletteUuid); sortOrder = 1
             }
             DaoCuePresetApplication.new {
                 this.cue = cue

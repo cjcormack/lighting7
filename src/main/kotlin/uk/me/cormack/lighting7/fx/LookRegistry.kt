@@ -282,7 +282,7 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
 /**
  * A Look effect as the generic effect spec the instance factories consume.
  *
- * [uk.me.cormack.lighting7.models.FxPresetEffectDto] already serves as that shared vehicle rather
+ * [uk.me.cormack.lighting7.models.LookEffectSpec] already serves as that shared vehicle rather
  * than as anything preset-specific — a cue's ad-hoc effect is converted *into* it before spawning
  * too — so bridging here keeps `createInstanceFromPreset` and `resolveTargetForCue` untouched. The
  * type gets its final, non-preset name when `models/fxPresets.kt` is deleted and it has to move
@@ -291,7 +291,7 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
  * The target is deliberately dropped: it is the caller's business, because a deferred effect's
  * target comes from the layer rather than from the effect.
  */
-internal fun LookEffectEntry.toEffectSpec() = uk.me.cormack.lighting7.models.FxPresetEffectDto(
+internal fun LookEffectEntry.toEffectSpec() = uk.me.cormack.lighting7.models.LookEffectSpec(
     effectType = effectType,
     category = category,
     propertyName = propertyName,

@@ -84,7 +84,7 @@ internal data class CookLayer(
  * effects-vs-effects, not the value/effect boundary. The escape hatch is per-layer
  * [CookLayer.stomp].
  *
- * See `docs/plans/looks-and-layers-plan.md` §3.3 and `docs/lighting-composition-model.md`.
+ * See `docs/plans/completed/looks-and-layers-plan.md` §3.3 and `docs/lighting-composition-model.md`.
  */
 /**
  * Which layer produced a cooked row, for the consumers that need to name it rather than just use
@@ -123,7 +123,6 @@ internal object CueComposer {
         val compositionOverride: CompositionRule,
         val value: CueAssignmentResolver.PropertyValue,
         val moveInDark: Boolean = false,
-        val paletteUuid: UUID? = null,
         /** Which layer last wrote this key. Null once a local row has overlaid it. */
         val winner: CookWinner? = null,
     )
@@ -134,8 +133,7 @@ internal object CueComposer {
      * Cook [layers] and [localRows] into one contributor per (fixture, property).
      *
      * [localRows] are the cue's own Layer 4 rows, already built by `buildCueAssignmentsForCue` —
-     * so they arrive with `moveInDark`, resolved `ref:` values and their `paletteUuid`, and group
-     * expansion already applied. They are overlaid **last and unconditionally**: the local layer
+     * so they arrive with `moveInDark` and group expansion already applied. They are overlaid **last and unconditionally**: the local layer
      * always wins.
      *
      * Timed layers ([CookLayer.isTimed]) are excluded here and contribute at fire time, matching
@@ -212,7 +210,6 @@ internal object CueComposer {
                 compositionOverride = row.compositionOverride,
                 value = row.value,
                 moveInDark = row.moveInDark,
-                paletteUuid = row.paletteUuid,
                 // Explicitly null: a local row belongs to no layer, and leaving a layer's winner
                 // in place here would report the overwritten layer as the reason for the value.
                 winner = null,
@@ -233,7 +230,6 @@ internal object CueComposer {
                 compositionOverride = c.compositionOverride,
                 value = c.value,
                 moveInDark = c.moveInDark,
-                paletteUuid = c.paletteUuid,
                 layerWinner = c.winner,
             )
         }
@@ -319,9 +315,11 @@ internal object CueComposer {
         val blendMode = parseLayerBlendMode(layer.blendMode, layer.lookName, cueId)
         val amount = layer.amount.coerceIn(0.0, 1.0)
 
-        // The Look's own positional colour list is the most specific cascade scope, replacing what
-        // was the FX preset's. A Look row's literal may itself be "P1".
-        val effectivePalette = baseCascade.copy(preset = look.palette.toPaletteColours()).effective
+        // The Look's own positional colour list is the most specific cascade scope, which is what
+        // `PaletteCascade.look` is (called `preset` until session 4 — the name lagged the merge).
+        // A Look row's literal may itself be "P1", which is why the cascade has to be threaded
+        // through here at all rather than resolved once per cue.
+        val effectivePalette = baseCascade.copy(look = look.palette.toPaletteColours()).effective
 
         // Expand the layer's target set once. Null means "unrestricted"; non-empty means the layer
         // both *supplies* targets to deferred rows and *filters* bound ones — one meaning serving

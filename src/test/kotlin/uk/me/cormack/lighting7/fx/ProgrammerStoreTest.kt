@@ -315,121 +315,79 @@ class ProgrammerStoreTest {
         assertEquals(40, store.size)
     }
 
-    // ─── Palette references ────────────────────────────────────────────────
+    // ─── The layer stack: broadcast flow and winner ranks ────────────────────
 
-    private val paletteA: java.util.UUID =
-        java.util.UUID.fromString("2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02")
-    private val paletteB: java.util.UUID =
-        java.util.UUID.fromString("9b7e2c10-4a5d-4c88-b0f3-1de4a7c93b55")
+    private fun layer(layerId: Int, sortOrder: Int) = ProgrammerLayer(
+        layerId = layerId,
+        lookId = 7,
+        lookUuid = java.util.UUID.nameUUIDFromBytes("warm".toByteArray()),
+        lookName = "Warm",
+        sortOrder = sortOrder,
+    )
 
     @Test
-    fun `a Ref reads through resolved exactly like a Hard`() {
-        // The property every hot read path depends on: nothing on the tick loop branches on which
-        // variant it has.
+    fun `mutateLayers publishes the new stack to layersFlow`() {
+        // `replay = 1`, so the cache *is* what a newly-subscribing socket will be sent. Asserting
+        // on it keeps this test free of coroutine scheduling.
         val store = ProgrammerStore()
-        store.putValue(web, "hex-1", "dimmer", ProgrammerValue.Ref(paletteA, slider(180)))
-        assertEquals(180u.toUByte(), store.topSlider("hex-1", "dimmer"))
-        assertEquals(paletteA, store.get("hex-1", "dimmer")?.value?.paletteUuidOrNull)
+        assertTrue(store.layersFlow.replayCache.isEmpty(), "nothing published before the first change")
+
+        store.mutateLayers { listOf(layer(1, 0)) to Unit }
+
+        assertEquals(listOf(layer(1, 0)), store.layersFlow.replayCache.last())
     }
 
     @Test
-    fun `a Hard value reports no palette`() {
+    fun `clearing the stack publishes the empty list`() {
+        // `ProgrammerLayerStack.reset` bypasses the recook path entirely, which is why the flow
+        // lives here and not there: a hook on recook would let one tab clear the programmer while
+        // every other tab carried on drawing the stack.
         val store = ProgrammerStore()
-        store.put(web, "hex-1", "dimmer", slider(180))
-        assertNull(store.get("hex-1", "dimmer")?.value?.paletteUuidOrNull)
+        store.mutateLayers { listOf(layer(1, 0)) to Unit }
+        store.mutateLayers { emptyList<ProgrammerLayer>() to Unit }
+
+        assertEquals(emptyList(), store.layersFlow.replayCache.last(), "the clear is broadcast too")
     }
 
     @Test
-    fun `programmerValueOf wraps by whether a palette was involved`() {
-        assertEquals(ProgrammerValue.Hard(slider(10)), programmerValueOf(slider(10), null))
-        assertEquals(ProgrammerValue.Ref(paletteA, slider(10)), programmerValueOf(slider(10), paletteA))
+    fun `a mutation that returns its input list publishes nothing`() {
+        // The reference-inequality guard. `move` to the index a layer already occupies returns
+        // `current` untouched, and waking every connected tab for that is pure noise.
+        val store = ProgrammerStore()
+        store.mutateLayers { current -> current to Unit }
+        assertTrue(store.layersFlow.replayCache.isEmpty(), "a no-op mutation is not an event")
     }
 
     @Test
-    fun `rewriteSlotValues re-resolves refs and reports only changed keys`() {
+    fun `layerWinnerRankByKey decodes the rank a layer slot was stamped with`() {
         val store = ProgrammerStore()
-        store.putValue(web, "hex-1", "dimmer", ProgrammerValue.Ref(paletteA, slider(100)))
-        store.putValue(web, "hex-2", "dimmer", ProgrammerValue.Ref(paletteB, slider(100)))
-        store.put(web, "hex-3", "dimmer", slider(100))
-
-        val changed = store.rewriteSlotValues { _, _, slot ->
-            val ref = slot.value as? ProgrammerValue.Ref ?: return@rewriteSlotValues null
-            if (ref.paletteUuid != paletteA) null else ProgrammerValue.Ref(paletteA, slider(200))
-        }
-
-        assertEquals(setOf(CueAssignmentResolver.Key.fixture("hex-1", "dimmer")), changed)
-        assertEquals(200u.toUByte(), store.topSlider("hex-1", "dimmer"))
-        assertEquals(100u.toUByte(), store.topSlider("hex-2", "dimmer"), "another palette is untouched")
-        assertEquals(100u.toUByte(), store.topSlider("hex-3", "dimmer"), "a literal is untouched")
-    }
-
-    @Test
-    fun `rewriteSlotValues preserves owner, touched, sourceGroup and seq`() {
-        // seq preservation is load-bearing: it arbitrates a property entry against a sideband slot
-        // covering the same channel, so bumping it here would let a palette edit outrank a *newer*
-        // raw channel write and silently change what Record captures. touched and sourceGroup
-        // matter because neither a re-resolve nor a harden is an operator edit.
-        val store = ProgrammerStore()
-        store.putValue(
-            locate, "hex-1", "dimmer", ProgrammerValue.Ref(paletteA, slider(100)),
-            touched = false, sourceGroup = "front-wash",
+        store.putLayerSlots(
+            listOf(
+                ProgrammerStore.LayerSlotWrite("hex-1", "dimmer", slider(200), layerIndex = 0),
+                ProgrammerStore.LayerSlotWrite("hex-1", "white", slider(50), layerIndex = 3),
+            ),
         )
-        val before = store.get("hex-1", "dimmer")!!
 
-        store.rewriteSlotValues { _, _, _ -> ProgrammerValue.Ref(paletteA, slider(200)) }
-
-        val after = store.get("hex-1", "dimmer")!!
-        assertEquals(before.owner, after.owner)
-        assertEquals(before.touched, after.touched)
-        assertEquals(before.sourceGroup, after.sourceGroup)
-        assertEquals(before.seq, after.seq, "seq must survive a re-resolve")
-        assertEquals(200u.toUByte(), store.topSlider("hex-1", "dimmer"))
+        val ranks = store.layerWinnerRankByKey()
+        assertEquals(0, ranks[CueAssignmentResolver.Key.fixture("hex-1", "dimmer")])
+        assertEquals(3, ranks[CueAssignmentResolver.Key.fixture("hex-1", "white")], "the band survives a gap")
     }
 
     @Test
-    fun `hardening a ref bumps the epoch even though no value moved`() {
-        // Make Hard changes slot identity without changing the resolved value, so `changed` is
-        // empty — but epoch-cached consumers still have to re-read.
+    fun `layerWinnerRankByKey omits a key a local write took from the layer`() {
+        // The contract that makes provenance's layer attribution honest: a layer slot sits at the
+        // tail, so an operator's own write outranks it and the layer must stop claiming the key.
         val store = ProgrammerStore()
-        store.putValue(web, "hex-1", "dimmer", ProgrammerValue.Ref(paletteA, slider(100)))
-        val epochBefore = store.epoch
-
-        val changed = store.rewriteSlotValues { _, _, slot ->
-            (slot.value as? ProgrammerValue.Ref)?.let { ProgrammerValue.Hard(it.resolved) }
-        }
-
-        assertTrue(changed.isEmpty(), "the resolved value did not move, so nothing needs republishing")
-        assertTrue(store.epoch > epochBefore, "but the store did mutate")
-        assertNull(store.get("hex-1", "dimmer")?.value?.paletteUuidOrNull, "the ref is gone")
-        assertEquals(100u.toUByte(), store.topSlider("hex-1", "dimmer"), "the value stayed put")
-    }
-
-    @Test
-    fun `rewriteSlotValues rewrites slots below the winner too`() {
-        // A ref under a later literal write must still re-resolve: releasing the literal reveals
-        // it, and it would otherwise reveal a stale value.
-        val store = ProgrammerStore()
-        store.putValue(locate, "hex-1", "dimmer", ProgrammerValue.Ref(paletteA, slider(100)))
-        store.put(web, "hex-1", "dimmer", slider(50))
-
-        store.rewriteSlotValues { _, _, slot ->
-            (slot.value as? ProgrammerValue.Ref)?.let { ProgrammerValue.Ref(paletteA, slider(200)) }
-        }
-
-        assertEquals(50u.toUByte(), store.topSlider("hex-1", "dimmer"), "the winner is unaffected")
-        assertEquals(
-            slider(200),
-            (store.valueFor(locate, "hex-1", "dimmer") as ProgrammerValue.Ref).resolved,
-            "the buried ref re-resolved",
+        store.putLayerSlots(
+            listOf(ProgrammerStore.LayerSlotWrite("hex-1", "dimmer", slider(200), layerIndex = 0)),
         )
-    }
+        assertTrue(CueAssignmentResolver.Key.fixture("hex-1", "dimmer") in store.layerWinnerRankByKey())
 
-    @Test
-    fun `rewriteSlotValues leaves everything alone when the transform declines`() {
-        val store = ProgrammerStore()
-        store.put(web, "hex-1", "dimmer", slider(100))
-        val epochBefore = store.epoch
-        assertTrue(store.rewriteSlotValues { _, _, _ -> null }.isEmpty())
-        assertEquals(epochBefore, store.epoch, "a no-op sweep must not bump the epoch")
+        store.put(web, "hex-1", "dimmer", slider(10))
+
+        assertFalse(
+            CueAssignmentResolver.Key.fixture("hex-1", "dimmer") in store.layerWinnerRankByKey(),
+            "the busk won, so the layer is no longer the winner",
+        )
     }
 }

@@ -8,7 +8,7 @@ import uk.me.cormack.lighting7.fx.EffectMode
 import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.FxPresetEffectDto
+import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.models.PromptBookRectDto
 import uk.me.cormack.lighting7.models.TriggerType
 import uk.me.cormack.lighting7.scripts.ScriptType
@@ -90,26 +90,7 @@ data class FxDefinitionJson(
     val timingSource: TimingSource = TimingSource.BEAT,
 )
 
-@Serializable
-data class FxPresetPropertyAssignmentJson(
-    val uuid: String,
-    val propertyName: String,
-    val value: String,
-    val fadeDurationMs: Long? = null,
-    val sortOrder: Int = 0,
-    val elementKey: String? = null,
-)
 
-@Serializable
-data class FxPresetJson(
-    val uuid: String,
-    val name: String,
-    val fixtureType: String,
-    val description: String? = null,
-    val effects: List<FxPresetEffectDto> = emptyList(),
-    val palette: List<String> = emptyList(),
-    val propertyAssignments: List<FxPresetPropertyAssignmentJson> = emptyList(),
-)
 
 @Serializable
 data class LookRowJson(
@@ -172,34 +153,7 @@ data class LookJson(
     val effects: List<LookEffectJson> = emptyList(),
 )
 
-@Serializable
-data class PaletteEntryJson(
-    val uuid: String,
-    val targetType: String,
-    val targetKey: String,
-    val propertyName: String,
-    val value: String,
-    val sortOrder: Int = 0,
-)
 
-/**
- * Named palette — portable show content, entries embedded inline.
- *
- * Nothing here needs reference remapping: entries address fixtures and groups by *key*, the
- * same as cue assignments do. Conversely, a cue or preset assignment that references this
- * palette stores `ref:{uuid}` in its opaque `value` string, and [uk.me.cormack.lighting7.sync.ExportUuidRemapper]
- * rewrites that occurrence along with this record's own `uuid` — which is why the reference is
- * a uuid rather than an int id.
- */
-@Serializable
-data class PaletteJson(
-    val uuid: String,
-    val name: String,
-    val type: String,
-    val notes: String? = null,
-    val sortOrder: Int = 0,
-    val entries: List<PaletteEntryJson> = emptyList(),
-)
 
 /**
  * Speed master — portable show content. The exported [bpm] is the master's starting tempo
@@ -333,25 +287,10 @@ data class CuePropertyAssignmentJson(
     val moveInDark: Boolean = false,
 )
 
-@Serializable
-data class CuePresetApplicationJson(
-    val uuid: String,
-    val cueUuid: String,
-    val presetUuid: String,
-    val targets: List<CueTargetDto> = emptyList(),
-    val delayMs: Long? = null,
-    val intervalMs: Long? = null,
-    val randomWindowMs: Long? = null,
-    val sortOrder: Int = 0,
-    /** Per-application speed-master override, remapped by ExportUuidRemapper like any uuid. */
-    val speedMasterUuid: String? = null,
-    /** Per-application wall-clock rate-master override; same remapping. */
-    val rateSpeedMasterUuid: String? = null,
-)
 
 /**
- * One line of a cue's ordered Look composition. Its own top-level folder, the way
- * [CuePresetApplicationJson] was — a cue child that points at a second entity, so it cannot be
+ * One line of a cue's ordered Look composition. Its own top-level folder, the way the retired
+ * `CuePresetApplicationJson` was — a cue child that points at a second entity, so it cannot be
  * embedded in either one.
  */
 @Serializable

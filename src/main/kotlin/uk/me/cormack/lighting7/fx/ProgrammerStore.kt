@@ -1,7 +1,11 @@
 package uk.me.cormack.lighting7.fx
 
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import java.util.UUID
@@ -82,49 +86,25 @@ value class ProgrammerOwner(val id: String) {
 /**
  * A value held by the programmer.
  *
- * Both variants carry a concrete [resolved] value, so every read path — including
+ * Carries a concrete [resolved] value, so every read path — including
  * [FxTarget.composeProgrammerOver] and `fallbackFromProgrammer` on the 50 Hz tick — reads
- * `.resolved` without caring which it has. A [Ref] additionally remembers *where* its value came
- * from, which is what lets Record write a reference back out and Update leave an untouched one
- * alone instead of silently hardening it.
+ * `.resolved`.
+ *
+ * **Why this is still a sealed interface with one arm.** It had a second, [Ref], holding a
+ * `ref:{uuid}` named-palette reference plus the literal it currently resolved to; the `ref:` value
+ * grammar retired in session 4 of the looks-and-layers plan, and a layer with a `propertyMask` is
+ * what replaces it. The shape is left alone because the arm's *reason* has not gone away — a value
+ * that remembers where it came from is exactly what nested Looks (`FU-LOOK-NESTED`) would need —
+ * and collapsing it to a bare typealias would make reintroducing one a change to every read site
+ * rather than a new arm.
  */
 sealed interface ProgrammerValue {
     /** The concrete value the entry contributes to the cascade. */
     val resolved: CueAssignmentResolver.PropertyValue
 
-    /** A literal value, not derived from any palette. */
+    /** A literal value. */
     data class Hard(override val resolved: CueAssignmentResolver.PropertyValue) : ProgrammerValue
-
-    /**
-     * A named-palette reference plus the literal it currently resolves to *for this fixture and
-     * property* (per-fixture, which is the whole point of a palette — a position palette's value
-     * for one head is meaningless on another).
-     *
-     * The resolved value is cached rather than looked up per read: the alternative is a palette
-     * lookup inside the tick loop. The cost of caching is that a palette edit must re-resolve
-     * these slots and republish — see `routes/paletteRepublish.kt`, which is the mechanism the
-     * whole feature rests on.
-     */
-    data class Ref(
-        val paletteUuid: UUID,
-        override val resolved: CueAssignmentResolver.PropertyValue,
-    ) : ProgrammerValue
 }
-
-/** The palette this value references, or null when it is a literal. */
-val ProgrammerValue.paletteUuidOrNull: UUID?
-    get() = (this as? ProgrammerValue.Ref)?.paletteUuid
-
-/**
- * Wrap a resolved value as a [ProgrammerValue.Ref] when it came from [paletteUuid], else as a
- * [ProgrammerValue.Hard]. Keeps the "did this come from a palette?" branch in one place rather
- * than at each of the engine's write entry points.
- */
-fun programmerValueOf(
-    value: CueAssignmentResolver.PropertyValue,
-    paletteUuid: UUID?,
-): ProgrammerValue =
-    if (paletteUuid == null) ProgrammerValue.Hard(value) else ProgrammerValue.Ref(paletteUuid, value)
 
 /**
  * What Include last pulled into the programmer, and therefore what Update writes back to
@@ -371,12 +351,52 @@ class ProgrammerStore {
      * nothing inside `FxEngine` calls back into the stack. Cooking must happen *outside* this lock
      * anyway, because `loadLookSnapshot` opens its own transaction.
      */
-    fun <T> mutateLayers(transform: (List<ProgrammerLayer>) -> Pair<List<ProgrammerLayer>, T>): Pair<List<ProgrammerLayer>, T> =
-        synchronized(layersLock) {
-            val (next, extra) = transform(layers)
+    fun <T> mutateLayers(transform: (List<ProgrammerLayer>) -> Pair<List<ProgrammerLayer>, T>): Pair<List<ProgrammerLayer>, T> {
+        var changed = false
+        val result = synchronized(layersLock) {
+            val previous = layers
+            val (next, extra) = transform(previous)
             layers = next
+            changed = next !== previous
             next to extra
         }
+        // Emitted outside the lock: a subscriber must never run while `layersLock` is held, or the
+        // documented lock order (layersLock -> cueAssignmentsLock) stops being the only one.
+        if (changed) _layersFlow.tryEmit(result.first)
+        return result
+    }
+
+    /**
+     * Flow of full layer-stack snapshots, for broadcasting to every connected client.
+     *
+     * Emitted from [mutateLayers] rather than from `ProgrammerLayerStack.recook`, because
+     * `mutateLayers` is the *only* place the list changes: `reset()` deliberately bypasses the
+     * recook path, so a hook there would silently miss a full programmer clear — one tab clearing
+     * would leave every other tab still drawing the stack.
+     *
+     * Why this exists at all, given that a layer mutation usually also moves values and so pushes
+     * `provenanceState` (which the client answers with a `programmer.state` refetch): *usually* is
+     * not always. A layer whose `targets` don't match its bound Look's rows asserts nothing, so
+     * adding, reordering or disabling it changes no value, emits no provenance, and left every other
+     * tab showing a stale layer list until something unrelated moved. Verified on a desk before this
+     * flow existed. Layer-list changes and value changes are different events and need different
+     * signals.
+     *
+     * `replay = 1` so a tab opening mid-show is sent the current stack on connect rather than only
+     * after the next mutation — the same reason `lastIncludedTargetFlow` replays.
+     *
+     * Reference inequality is the emit guard, which exactly skips the no-op mutations that return
+     * their input list unchanged (`move` to the index a layer already occupies). Identical *content*
+     * still emits; the client compares its own signature before waking the pads.
+     */
+    private val _layersFlow = MutableSharedFlow<List<ProgrammerLayer>>(
+        replay = 1,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /** Flow of full layer-stack snapshots for WebSocket broadcasting. */
+    val layersFlow: SharedFlow<List<ProgrammerLayer>> = _layersFlow.asSharedFlow()
 
     private val epochCounter = AtomicLong(0)
 
@@ -406,7 +426,7 @@ class ProgrammerStore {
 
     /**
      * As [put], but for a caller that already has a [ProgrammerValue] — i.e. one writing a
-     * [ProgrammerValue.Ref]. [put] stays the common door so the many literal call sites don't
+     * a non-default [ProgrammerValue] arm. [put] stays the common door so the many literal call sites don't
      * have to name the wrapper.
      */
     fun putValue(
@@ -688,64 +708,41 @@ class ProgrammerStore {
         }
     }
 
+    /**
+     * For every property key whose **winning** slot is a [ProgrammerOwner.LAYERS] contribution, the
+     * rank of the layer that wrote it.
+     *
+     * The rank is recovered from the slot's reserved `seq` band rather than stored a second time:
+     * [putLayerSlots] stamps `LAYER_SEQ_BASE + layerIndex` precisely so layer slots stay *mutually*
+     * ordered by rank, which makes the rank readable back. The decode belongs here rather than in
+     * the caller because [LAYER_SEQ_BASE] is this class's invariant, and a second site
+     * reconstructing ranks from raw `seq` values is a second site to get the band arithmetic wrong.
+     *
+     * Only *winning* slots are reported, and that restriction is the whole contract. A layer slot
+     * sits at the tail of its stack, so any local busk over the same key outranks it; naming the
+     * layer for such a key would tell the operator their colour came from a Look when it came from
+     * their own hand. Keys won by `web`, `surface`, `flash`, `locate`, `unpark` or park are absent.
+     *
+     * Cold path — provenance recomputes on layer events, never per frame.
+     */
+    fun layerWinnerRankByKey(): Map<CueAssignmentResolver.Key, Int> = buildMap {
+        for ((fixtureKey, byProperty) in properties) {
+            for ((propertyName, holder) in byProperty) {
+                val top = holder.top
+                if (top.owner != ProgrammerOwner.LAYERS) continue
+                put(
+                    CueAssignmentResolver.Key.fixture(fixtureKey, propertyName),
+                    (top.seq - LAYER_SEQ_BASE).toInt(),
+                )
+            }
+        }
+    }
+
     /** Snapshot of every sideband entry. Cold path. */
     fun channelEntries(): List<ChannelEntryView> = buildList {
         for ((packed, holder) in channels) {
             add(ChannelEntryView(unpackUniverse(packed), unpackChannel(packed), holder.all()))
         }
-    }
-
-    /**
-     * Rewrite slot *values* in place, leaving every other property of each slot alone. Returns the
-     * keys whose winning value actually changed, so the caller can republish only those.
-     *
-     * [transform] receives `(fixtureKey, propertyName, slot)` and answers a replacement value, or
-     * null to leave that slot as it is. Used to re-resolve [ProgrammerValue.Ref] slots after a
-     * palette edit, and to harden them (Make Hard).
-     *
-     * **[Slot.seq] is preserved deliberately.** Re-resolving a reference is not a new operator
-     * write. `seq` is what arbitrates a property entry against a channel-sideband slot covering the
-     * same channel, so bumping it here would let a palette edit quietly outrank a *newer* raw
-     * channel drag — changing which value Record captures, for a reason no operator could see.
-     * [touched] and [sourceGroup] survive for the same reason: neither a re-resolve nor a harden
-     * is an edit, and Record and the Update checklist read both.
-     */
-    fun rewriteSlotValues(
-        transform: (fixtureKey: String, propertyName: String, slot: Slot) -> ProgrammerValue?,
-    ): Set<CueAssignmentResolver.Key> {
-        val changed = HashSet<CueAssignmentResolver.Key>()
-        // Tracked separately from [changed]: hardening a ref replaces the slot without moving its
-        // resolved value, so there is nothing to republish but the store *has* mutated and
-        // epoch-cached consumers must re-read.
-        var mutated = false
-        for ((fixtureKey, byProperty) in properties) {
-            for (propertyName in byProperty.keys) {
-                byProperty.computeIfPresent(propertyName) { _, holder ->
-                    val before = holder.top.value.resolved
-                    var any = false
-                    val rewritten = holder.all().map { slot ->
-                        val next = transform(fixtureKey, propertyName, slot)
-                        if (next == null || next == slot.value) {
-                            slot
-                        } else {
-                            any = true
-                            Slot(slot.owner, next, slot.touched, slot.sourceGroup, slot.seq)
-                        }
-                    }
-                    if (!any) return@computeIfPresent holder
-                    mutated = true
-                    val next = if (rewritten.size == 1) Single(rewritten[0]) else Stack(rewritten)
-                    if (next.top.value.resolved != before) {
-                        changed.add(CueAssignmentResolver.Key.fixture(fixtureKey, propertyName))
-                    }
-                    next
-                }
-            }
-        }
-        // One bump for the whole sweep: per-tick consumers cache on `epoch` and only need to know
-        // that *something* moved.
-        if (mutated) bumpEpoch()
-        return changed
     }
 
     /** The (fixture, property) keys currently holding at least one slot. Cold path. */

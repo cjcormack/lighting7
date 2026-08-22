@@ -1,6 +1,8 @@
 @file:OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.models.CueTargetDto
+
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
@@ -154,18 +156,6 @@ class CueStackManager(
                 cueName = cue.name,
                 palette = cue.palette,
                 updateGlobalPalette = cue.updateGlobalPalette,
-                presetApplications = cue.presetApplications.sortedBy { it.sortOrder }.map { app ->
-                    CuePresetApplicationDto(
-                        presetId = app.preset.id.value,
-                        targets = app.targets,
-                        delayMs = app.delayMs,
-                        intervalMs = app.intervalMs,
-                        randomWindowMs = app.randomWindowMs,
-                        sortOrder = app.sortOrder,
-                        speedMasterUuid = app.speedMasterUuid?.toString(),
-                        rateSpeedMasterUuid = app.rateSpeedMasterUuid?.toString(),
-                    )
-                },
                 adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
                 // Load-bearing: `cookEffects` and `cook` below both read `cueData.layers`, so
                 // omitting this makes every Look layer inert on the stack GO path — the primary
@@ -252,7 +242,7 @@ class CueStackManager(
         )) {
             val effectSpec = lookEffect.toEffectSpec()
             val fxTarget = try {
-                resolveTargetForCue(state, TogglePresetTarget(target), effectSpec)
+                resolveTargetForCue(state, CueTargetDto(target), effectSpec)
             } catch (_: Exception) { null } ?: continue
 
             val instance = createInstanceForStack(
@@ -269,8 +259,8 @@ class CueStackManager(
 
         // Apply immediate ad-hoc effects
         for (adHoc in immediateAdHoc) {
-            val target = TogglePresetTarget(adHoc.target)
-            val presetEffectDto = FxPresetEffectDto(
+            val target = CueTargetDto(adHoc.target)
+            val presetEffectDto = LookEffectSpec(
                 effectType = adHoc.effectType,
                 category = adHoc.category,
                 propertyName = adHoc.propertyName,
@@ -309,7 +299,7 @@ class CueStackManager(
         // `buildCueAssignmentsForCue` *alone*, so an immediate preset's property assignments never
         // reached Layer 4 on a stack GO — unlike `applyCue`, which concatenated both. Routing both
         // paths through `cook` fixes that asymmetry.
-        val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, stackCascade, state.show.lookRegistry)
+        val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, stackCascade)
         val cueLayerRows = CueComposer.cook(
             fixtures = state.show.fixtures,
             cueId = cueData.cueId,
@@ -854,7 +844,7 @@ class CueStackManager(
      * Create an FxInstance for a stack cue, using the stack palette for resolution.
      */
     private fun createInstanceForStack(
-        presetEffect: FxPresetEffectDto,
+        presetEffect: LookEffectSpec,
         fxTarget: FxTarget,
         presetId: Int?,
         state: State,

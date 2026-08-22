@@ -3,7 +3,6 @@ package uk.me.cormack.lighting7.fx
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.routes.TogglePresetTarget
 import uk.me.cormack.lighting7.routes.createInstanceFromPreset
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
 import uk.me.cormack.lighting7.show.Fixtures
@@ -566,16 +565,22 @@ class ProgrammerLayerStack(
         val spec = effect.toEffectSpec()
             .let { if (beatDivisionOverride == null) it else it.copy(beatDivision = beatDivisionOverride) }
         val fxTarget = try {
-            resolveTargetForCue(st, TogglePresetTarget(target), spec)
+            resolveTargetForCue(st, CueTargetDto(target), spec)
         } catch (_: Exception) {
             null
         } ?: return null
 
         // Snapshot suppliers, as Include uses: a programmer layer is not a live cue, so the
-        // cue-scoped palette supplier has nothing to resolve against. The Look's own colour list is
-        // the most specific scope and falls back to the global one.
-        val snapshot = lookPalette.takeIf { it.isNotEmpty() }?.toPaletteColours()
-            ?: engine().getPalette()
+        // cue-scoped palette supplier has nothing to resolve against.
+        //
+        // Built through [PaletteCascade] rather than an ad-hoc `?:` so this path and the cue path
+        // (`CueComposer.applyLayer`) cannot drift on what "most specific scope" means. Same answer
+        // either way — the Look's own colour list, falling back to the global one — but expressed
+        // once.
+        val snapshot = PaletteCascade(
+            look = lookPalette.toPaletteColours(),
+            global = engine().getPalette(),
+        ).effective
         val instance = try {
             createInstanceFromPreset(
                 spec, fxTarget, presetId = null, state = st,

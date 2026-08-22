@@ -20,9 +20,9 @@ import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.MasterClock
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueLayers
+import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
-import uk.me.cormack.lighting7.models.DaoCuePresetApplication
-import uk.me.cormack.lighting7.models.DaoCuePresetApplications
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoSpeedMaster
 import uk.me.cormack.lighting7.models.DaoSpeedMasters
@@ -230,9 +230,9 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                         error = "Speed master is referenced by ${outcome.usage.describe()}",
                         code = CODE_SPEED_MASTER_IN_USE,
                         referenceCount = outcome.usage.total,
-                        presetEffectCount = outcome.usage.presetEffects,
+                        lookEffectCount = outcome.usage.lookEffects,
                         cueAdHocEffectCount = outcome.usage.cueAdHocEffects,
-                        cuePresetApplicationCount = outcome.usage.cuePresetApplications,
+                        cueLayerCount = outcome.usage.cueLayers,
                         cueIds = outcome.usage.cueIds,
                     ),
                 )
@@ -294,27 +294,29 @@ data class SpeedMasterInUseResponse(
     val error: String,
     val code: String,
     val referenceCount: Int,
-    val presetEffectCount: Int,
+    /** Effects stored on a Look. Was `presetEffectCount`, over `fx_presets`. */
+    val lookEffectCount: Int,
     val cueAdHocEffectCount: Int,
-    val cuePresetApplicationCount: Int,
+    /** Per-layer speed-master overrides. Was `cuePresetApplicationCount`. */
+    val cueLayerCount: Int,
     val cueIds: List<Int>,
 )
 
 /** Persisted references to one speed master. Live FX instances are excluded — they rebind to master 1. */
 internal data class SpeedMasterUsage(
-    val presetEffects: Int,
+    /** Effects stored on a **Look** (`DaoLookEffects`). Was `presetEffects`. */
+    val lookEffects: Int,
     val cueAdHocEffects: Int,
-    val cuePresetApplications: Int,
+    /** Per-layer speed-master overrides (`DaoCueLayers`). Was `cuePresetApplications`. */
+    val cueLayers: Int,
     val cueIds: List<Int>,
 ) {
-    val total: Int get() = presetEffects + cueAdHocEffects + cuePresetApplications
+    val total: Int get() = lookEffects + cueAdHocEffects + cueLayers
 
     fun describe(): String = buildList {
-        if (presetEffects > 0) add("$presetEffects preset effect${if (presetEffects == 1) "" else "s"}")
+        if (lookEffects > 0) add("$lookEffects look effect${if (lookEffects == 1) "" else "s"}")
         if (cueAdHocEffects > 0) add("$cueAdHocEffects cue effect${if (cueAdHocEffects == 1) "" else "s"}")
-        if (cuePresetApplications > 0) {
-            add("$cuePresetApplications cue preset application${if (cuePresetApplications == 1) "" else "s"}")
-        }
+        if (cueLayers > 0) add("$cueLayers cue layer${if (cueLayers == 1) "" else "s"}")
     }.joinToString(" and ")
 
     companion object {
@@ -348,14 +350,22 @@ internal fun speedMasterUsageFor(
     // Both roles count. A master referenced only as a wall-clock *rate* master is just as
     // much in use as one an effect runs on, and counting only the latter would let the
     // delete guard wave through a master that a look still depends on.
-    val presetEffectCounts = mutableMapOf<UUID, Int>()
-    project.fxPresets.forEach { preset ->
-        preset.effects.forEach { effect ->
-            val referenced = listOfNotNull(
-                effect.speedMasterUuid?.let { uuidStrings[it] },
-                effect.rateSpeedMasterUuid?.let { uuidStrings[it] },
-            ).distinct()
-            referenced.forEach { presetEffectCounts.merge(it, 1, Int::plus) }
+    //
+    // Reads `DaoLookEffects` through `project.looks`, where it read `project.fxPresets` and their
+    // JSON `effects` blob until session 4. Same question, better shape: a look effect's masters are
+    // real nullable columns rather than fields inside an opaque blob, so this could be a query
+    // rather than a scan — kept as a scan only because the Look count per project is small and the
+    // rows are already loaded by the referrer.
+    val lookEffectCounts = mutableMapOf<UUID, Int>()
+    project.looks.forEach { look ->
+        look.effects.forEach { effect ->
+            // Compared as UUIDs, not strings. `DaoLookEffects` gave these real `javaUUID` columns;
+            // the preset era stored them as strings inside a JSON blob, which is why the old code
+            // went through `uuidStrings`.
+            val referenced = listOfNotNull(effect.speedMasterUuid, effect.rateSpeedMasterUuid)
+                .distinct()
+                .filter { it in uuidSet }
+            referenced.forEach { lookEffectCounts.merge(it, 1, Int::plus) }
         }
     }
 
@@ -381,21 +391,21 @@ internal fun speedMasterUsageFor(
                 (DaoCueAdHocEffects.rateSpeedMasterUuid inList uuidSet)
         }
         .byMaster({ it.speedMasterUuid }, { it.rateSpeedMasterUuid }, { it.cue.id.value })
-    val presetAppRows = DaoCuePresetApplication
+    val layerRows = DaoCueLayer
         .find {
-            (DaoCuePresetApplications.speedMasterUuid inList uuidSet) or
-                (DaoCuePresetApplications.rateSpeedMasterUuid inList uuidSet)
+            (DaoCueLayers.speedMasterUuid inList uuidSet) or
+                (DaoCueLayers.rateSpeedMasterUuid inList uuidSet)
         }
         .byMaster({ it.speedMasterUuid }, { it.rateSpeedMasterUuid }, { it.cue.id.value })
 
     return uuidSet.associateWith { uuid ->
         val adHocCues = adHocRows[uuid] ?: emptyList()
-        val presetAppCues = presetAppRows[uuid] ?: emptyList()
+        val layerCues = layerRows[uuid] ?: emptyList()
         SpeedMasterUsage(
-            presetEffects = presetEffectCounts[uuid] ?: 0,
+            lookEffects = lookEffectCounts[uuid] ?: 0,
             cueAdHocEffects = adHocCues.size,
-            cuePresetApplications = presetAppCues.size,
-            cueIds = (adHocCues + presetAppCues).distinct().sorted(),
+            cueLayers = layerCues.size,
+            cueIds = (adHocCues + layerCues).distinct().sorted(),
         )
     }
 }
