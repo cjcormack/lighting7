@@ -1,6 +1,7 @@
 # Desk simplification — the Programmer as a place, Templates as a thing
 
-> **Document status: PROPOSED (2026-08-23).** Three sessions.
+> **Document status: IN PROGRESS (2026-08-23).** Four sessions — Session 2 split, as §8
+> anticipated. **1 and 2a have shipped**; **2b** (the Run/Show merge) and **3** (Templates) have not.
 >
 > **The design is committed alongside this plan** at
 > [`desk-simplification-design/`](desk-simplification-design/INDEX.md) — sixteen artboards drawn
@@ -26,9 +27,52 @@
 > [programmer-redesign-proposal.md](completed/programmer-redesign-proposal.md) and the §Navigation
 > Registry note in `lighting-react`'s `CLAUDE.md` about there being no `programmer` nav entry.
 >
-> **Amended 2026-08-23.** Session 1 is implemented but **not yet committed and not yet desk-passed**
-> — treat its section below as a record of intent, and the four departures listed here as the record
-> of what was actually built. Session 2 absorbed the **Run/Show merge** — one
+> **Amended 2026-08-23 (second amendment).** **Session 2 split at the §8 seam.** 2a — the
+> programmer stack — shipped as `lighting-react` `53be4fc` and `lighting7` `3110c21`; **2b, the
+> Run/Show merge under the Prompt Book's lock, is untouched** and is what a fresh session should
+> pick up. Everything in §Session 2 below about scopes, layers-in-place, Record-with-effects and the
+> cue read surface is **built**; everything under §"Run and Show become one view" is **not**.
+>
+> Read the sections below as the record of *intent*. Six departures are what was actually built:
+>
+> 1. **The cue read surface is not `FixturesListContainer`.** `CueValueGrid` borrows the four cell
+>    components instead. Mounting the real container in a cue card would bring a filter, checkboxes
+>    and a drag-select marquee that mean nothing about a cue; its selection is Redux-scoped and there
+>    are only three scopes, so a cue card would either clobber the programmer's or need a fourth
+>    nothing acts on; and a stack of expanded cards would mount several copies of a
+>    several-hundred-row virtualized table. A cue needs the value *language*, not the spreadsheet.
+> 2. **`CuePropsPane` survived, relocated** into `CuePropertiesSheet` — it is the properties drawer.
+>    It was never what was wrong with the three-pane editor; deleting a working per-field autosaving
+>    form to retype the same dozen fields into a sheet would have been churn.
+> 3. **A third backend route was needed**, unlisted here: `POST /looks/{id}/absorb-effects`, so
+>    `+ Effect` with a layer focused can *move* a running band effect into that Look. Folding it into
+>    `record-look` would rewrite the Look's values as a side effect of adding a chase to it.
+> 4. **The client-side `cueEdit` session was left in place.** Nothing provides `EditorContextValue`'s
+>    `cue` arm any more, but the backend protocol is live — so the `409 CUE_EDIT_SESSION_OPEN`
+>    handling is *not* dead — and **2b is what decides whether an unlocked cue row gets editable
+>    cells back**. Stripping fifteen branches across five hooks in the change that made them
+>    unreachable, possibly to restore them one session later, was not worth the risk. Reasoning is in
+>    `EditorContext.tsx`; if 2b settles on read-only for good, that arm and `api/cueEditWsApi.ts` are
+>    the deletion.
+> 5. **An un-busked Local cell shows an em-dash but its editor opens at the live value.** Asked and
+>    settled with the operator. §3 says Local shows "what you set and nothing else", which is right
+>    about the *display* and would have made busking start from zero; the split keeps both.
+> 6. **`show-mode-engineering.md` was only half-rewritten**, behind a banner naming which half. Its
+>    Run and transport sections are what 2b rewrites wholesale, and correcting them now would mean
+>    writing them twice.
+>
+> Two follow-ups came out of 2a: [`FU-FE-CUEGRID-PER-CELL-LAYER`](followups.md#fu-fe-cuegrid-per-cell-layer)
+> and [`FU-PROG-FOCUS-PREVIEW-LAYER`](followups.md#fu-prog-focus-preview-layer).
+>
+> **2a has not had a desk pass.** It was verified in a browser. The three checks that need a rig are
+> in §7: phase survival on a layer drag while a chase runs, whether the layer-scope save cadence is
+> tolerable, and a second tab seeing the stack change. Two defects in 2a were browser-only failures
+> that a fully green suite reported as working — `pointer-events` inherits, and `fireEvent.click`
+> does no hit-testing — so treat a green suite here as weaker evidence than usual.
+>
+> **Amended 2026-08-23 (first amendment).** Session 1 is implemented but **not yet committed and not
+> yet desk-passed** — treat its section below as a record of intent, and the four departures listed
+> here as the record of what was actually built. Session 2 absorbed the **Run/Show merge** — one
 > view governed by the Prompt Book's lock — which §5 had deferred as a separate conversation. The
 > reasoning is in Session 2 §"Run and Show become one view"; §5's entry is struck through rather
 > than deleted, because the argument it makes is still the right one to answer. Session 1 took four
@@ -203,6 +247,9 @@ backend at all.
 
 ### Session 1 — the Programmer becomes a place
 
+> **Shipped** as `lighting-react` `66c99c3`. Still no desk pass. Four departures, in the first
+> amendment above.
+
 **Outcome.** There is a Programmer view. Program is Show. The tabs are gone, you can always see what
 you are editing, the actions are legible, you can drag a selection across cells, and the show bar
 survives a narrow window.
@@ -255,6 +302,16 @@ bar still offers every master.
 ---
 
 ### Session 2 — the stack is the editor
+
+> **Split, and half shipped.** **2a** — everything in this section *except* §"Run and Show become
+> one view" — is built (`lighting-react` `53be4fc`, `lighting7` `3110c21`). **2b** is that subsection
+> alone, plus the rules under it that mention the lock, and is the next session. The split is the one
+> §8 describes, and the order is fixed: 2b merges onto 2a's read-only cue surface.
+>
+> What 2a added beyond what is written below, because it turned out to be needed: `LayerRowNotices`
+> (deferred and per-element Look rows are named rather than silently missing), `AddToTargetsButton`
+> (the only way a layer widens — a marquee must never do it), and `UnsetCellMark` with the
+> `placeholder` prop on all four cell components (departure 5 above).
 
 **Outcome.** One programmer session is enough to compose a scene. You add looks, edit them in place,
 reorder them, promote what you busked into a new one, and record a mixture of values and effects into
@@ -516,22 +573,27 @@ found two bugs on a desk that no test had, both in exactly this area (a provenan
 named the winning layer, and a layer frame that reached only the acting tab). Assume that pattern
 holds.
 
-Per session, on a live desk:
+Per session, on a live desk. **Neither S1's nor S2a's desk pass has been done** — both shipped on
+browser verification alone, and 2a specifically had two defects that a green suite called working.
 
 1. **S1** — busk, read the source strip, drag-select a block, Record. Resize to 380px and confirm
    every master is still reachable.
-2. **S2** — three looks and an effect in one session; retune a look mid-scene and watch the stage;
+2. **S2a** — three looks and an effect in one session; retune a look mid-scene and watch the stage;
    drag a layer while the effect runs and confirm the phase survives; record values + effects into
-   one Look; confirm a second tab sees the stack change.
+   one Look; confirm a second tab sees the stack change *and* that the scope falls back when a layer
+   goes. Then the two that only a rig can answer: whether the layer-scope save cadence (~2 writes a
+   second, so the rig **steps** rather than glides) is tolerable — if it is not, the answer is a
+   bound-row preview channel, not a faster PUT, because `LookPreviewRequest` is deferred-only — and
+   whether landing in Local rather than on the cook reads right at the desk.
 
-   Then the merge, which is the half that can hurt a running show. With the show **running**: try to
+3. **S2b** — the merge, which is the half that can hurt a running show. With the show **running**: try to
    drag a cue and fail; confirm no `cueEdit` session opens on the live cue across a stack switch;
    press `L`, edit, press GO, and confirm it re-locked itself; leave it unlocked and idle and watch
    the countdown re-lock it. With the show **stopped**: confirm it is simply editable, with no lock
    chrome anywhere. Then a phone: confirm it is locked and cannot be unlocked. Finally switch stacks
    from the tab strip while a cue fades, and confirm the fade animates *and* the marker does not
    jitter — that is the two-cursor rule, and it is the one that will be got wrong.
-3. **S3** — one colour template across three different fixture types at once; retune it and watch
+4. **S3** — one colour template across three different fixture types at once; retune it and watch
    every tracking layer move.
 
 New routes, classes or fields need a **restart** — the backend hot-swaps changed handler bodies but
@@ -554,10 +616,16 @@ it should be said plainly that it also moves show-critical playback into an auth
 mechanism rather than something invented here, and that the two hard parts are both nameable and
 neither is about editing.
 
-If Session 2 has to split, the seam is clean and runs between the two halves: **2a the programmer
-stack** (scopes, layers-in-place, Record with effects) and **2b the merge** (one view, the lock,
-Run's tab strip in the drill-down). 2a is what the plan originally promised and stands alone; 2b
-needs 2a's read-only grid to merge *onto*, so the order is fixed. Do not attempt 2b first.
+**Session 2 did split, on exactly this seam**: **2a the programmer stack** (scopes,
+layers-in-place, Record with effects) and **2b the merge** (one view, the lock, Run's tab strip in
+the drill-down). 2a shipped and stands alone, as predicted; 2b needs 2a's read-only grid to merge
+*onto*, so the order was and is fixed.
+
+One thing 2b should know that 2a learned: **there are still no tests for `ShowPage`, `StackDetail`,
+`ShowOverview`, `ProgramView` or `CueCardEditor`**, so `?cue=` deep-link behaviour has no safety net
+— and "Deep links survive" is one of 2b's own rules. 2a did not close that gap because it only
+changed what an expanded card *renders*, not how a cue is addressed; 2b changes the addressing, so
+the coverage is worth writing first rather than last.
 
 If the three sessions have to become two, the honest cut is still **Session 3's second half** — ship
 colour resolution and leave position and beam type-scoped, with the beam exclusions already written

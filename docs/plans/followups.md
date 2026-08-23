@@ -37,6 +37,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
 | [`FU-LOOK-ELEMENT-ROWS`](#fu-look-element-rows) | Ready | Look | — |
 | [`FU-CUE-APPLYDATA-ONE-BUILDER`](#fu-cue-applydata-one-builder) | Ready | Cue | — |
+| [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
+| [`FU-PROG-FOCUS-PREVIEW-LAYER`](#fu-prog-focus-preview-layer) | Ready | Prog | — |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
 | [`FU-AUTH-ATTRIBUTION`](#fu-auth-attribution) | Trigger | Auth | two accounts co-author, or any `formatVersion` bump |
@@ -1001,6 +1003,58 @@ The plan defers to cue-authoring's "reject-second-`beginEdit`" conflict resoluti
 test covers two WS connections racing on `beginEdit` for surface routing.
 
 **Unblock by**: confirming the exact semantics with cue-authoring, then adding the test.
+
+### `FU-FE-CUEGRID-PER-CELL-LAYER`
+
+**A cue row fed by two layers shows no layer at all** · Trigger · desk-simplification session 2a,
+2026-08-23
+
+`CueValueGrid.layerFor` collapses a whole row to one name — `names.size === 1 ? name : null` — so a
+head whose colour came from *Warm Wash* and whose dimmer came from *Half Up* renders **no** `Layers`
+glyph, exactly like a head no layer touched. Zero and two are the same answer, and the more
+interesting case is the one that disappears.
+
+The programmer's own grid does not have this problem: it marks **per cell** and has a `mixed` state
+for a cell more than one layer contributed to (`CellLayer.mixed`, drawn muted). The cue grid marks
+per row because that is where there was space at `h-8` with the name column already truncating.
+
+The fix is per-cell attribution — `buildStaticRows` already returns `layerByKey` keyed by
+`(target, property)`, so the data is there; it is the row-level `layerFor` and the single glyph in
+the name cell that throw it away. Either move the glyph into the cell (as the programmer does) or
+give the row a "2 looks" marker.
+
+**Not the paired-slider bug it was first reported as.** A review flagged this as "a position paired
+from two axis sliders never picks up the glyph"; that is wrong. `resolutionPropertyNames` yields
+`['pan','tilt']` for such a cell and the cook names those same two properties, so they match. The
+real loss is the multi-layer row.
+
+**Trigger**: an operator reads a cue drawn from two looks and concludes neither is involved. On a
+show whose cues each layer one look, this never fires.
+
+### `FU-PROG-FOCUS-PREVIEW-LAYER`
+
+**The grid can be focused on the Look editor's preview layer** · Ready · desk-simplification session
+2a, 2026-08-23
+
+`ProgrammerScope.focusLayer` guards against a `layerId` that is not in the programmer's stack —
+because `ProvenanceEntry.layerId` is present for a *cue's* layers too — by testing membership in
+`useProgrammerLayersQuery()`. That query returns the **unfiltered** stack, preview layer included;
+`ProgrammerLookStack` filters `isPreview` out locally for display. So the guard admits the preview
+layer.
+
+**It is reachable, not theoretical.** The preview layer asserts real values, so it can win a key and
+be named in provenance — and clicking that cell in Output scope then focuses it. The grid would show
+the Look editor's *unsaved draft* as though it were a composed layer, and a layer-scope edit would
+`PUT` the Look the editor is mid-draft on. `ProgrammerScopeBand` and `LookRowStoreProvider` both look
+the layer up unfiltered too, so both would happily name it.
+
+Nothing was observed doing this — the preview layer only exists while the Look editor is open, and
+its rows usually lose to the local values above them — which is why this is Ready rather than a bug
+fixed on the spot.
+
+**Fix**: filter `isPreview` in `focusLayer`'s membership test, and in the two lookups that resolve a
+focused layer for display. The filtered list is the one every other consumer already uses; the
+unfiltered query is the outlier.
 
 ---
 
