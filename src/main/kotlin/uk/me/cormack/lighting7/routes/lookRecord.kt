@@ -11,6 +11,9 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fx.ElementFilter
+import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
@@ -19,6 +22,7 @@ import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.fx.parseMaskGroups
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoProject
@@ -227,6 +231,22 @@ internal data class ProgrammerRecordLookRequest(
      * programmer happens to hold, which is almost never what "Warm Amber" is meant to mean.
      */
     val targets: List<CueTargetDto>? = null,
+    /**
+     * Running programmer-band effects to fold into the Look, by [FxInstance.id].
+     *
+     * **Explicit ids rather than an `includeFx` flag**, unlike `POST /programmer/record`. An
+     * effect is a thing an operator ticks: "the colour chase belongs in this look, the tilt sine
+     * was just me looking at it" is a per-effect judgement, and a boolean cannot express it.
+     *
+     * A ticked effect is **moved**, not copied — it is removed from the programmer band, because
+     * the layer this Look is applied through starts running it immediately and two copies would
+     * beat against each other. An effect left out keeps running exactly as it was: leaving one out
+     * of a Look is not the same as stopping it.
+     *
+     * Timing does not travel. `DaoLookEffects` has no delay/interval columns by design — timing
+     * belongs to the layer applying the Look, so it is per-use rather than baked in.
+     */
+    val effectIds: List<Long> = emptyList(),
 )
 
 @Serializable
@@ -245,6 +265,8 @@ internal data class ProgrammerRecordLookResponse(
      */
     val refsFlattened: Int,
     val skipped: List<ProgrammerSkipDto>,
+    /** Programmer-band effects folded into the Look, and so removed from the band. */
+    val effectsWritten: Int = 0,
     /** Set when the Look was already live: what the re-resolve moved. */
     val programmerKeysRefreshed: Int = 0,
     val cuesRepublished: List<Int> = emptyList(),
@@ -302,6 +324,11 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
         val collapsed = collapseRecordingToAssignments(entries, state.show.fixtures)
         val inRemit = lookRowInRemit(state.show.fixtures, mask, scope)
 
+        // Resolved before the transaction, because it reads the engine rather than the DB — and
+        // resolved by id rather than re-derived, so a chase that started between the operator
+        // ticking it and pressing Record cannot be swept in.
+        val bandEffects = programmerBandEffectsById(state, request.effectIds)
+
         val outcome = transaction(state.database) {
             val look = existing ?: DaoLook.new {
                 this.project = project
@@ -311,8 +338,15 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
                     DaoLook.find { DaoLooks.project eq project.id }.maxOfOrNull { it.sortOrder } ?: -1
                     ) + 1
             }
-            writeRecordingIntoLook(look, collapsed, mode, inRemit)
+            val written = writeRecordingIntoLook(look, collapsed, mode, inRemit)
+            writeLookEffects(look, bandEffects, mode)
+            written
         }
+
+        // Only once the rows are committed: the layer applying this Look starts running these the
+        // moment it is added, so removing them first would leave a gap, and removing them after a
+        // failed write would stop an effect the operator still has.
+        for (effect in bandEffects) state.show.fxEngine.removeEffect(effect.id)
 
         // Re-resolve and republish: a re-record of a layered Look must move its consumers, exactly
         // as an edit does.
@@ -323,8 +357,9 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
             DaoLook.findById(outcome.lookId)!!.toDetailsDto(state)
         }
         logger.info(
-            "record-look {} '{}': {} written, {} removed, {} group row(s)",
+            "record-look {} '{}': {} written, {} removed, {} group row(s), {} effect(s)",
             mode, details.name, outcome.written, outcome.removed, collapsed.groupRows,
+            bandEffects.size,
         )
         call.respond(
             ProgrammerRecordLookResponse(
@@ -335,10 +370,85 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
                 groupRowsEmitted = collapsed.groupRows,
                 refsFlattened = 0,
                 skipped = skips.map { it.toDto() },
+                effectsWritten = bandEffects.size,
                 programmerKeysRefreshed = republish.programmerKeysRefreshed,
                 cuesRepublished = republish.cuesRepublished,
             )
         )
+    }
+}
+
+/**
+ * The programmer-band effects the operator ticked, in the order they were asked for.
+ *
+ * Filtered to the **programmer band** rather than trusting the ids outright: a client holding a
+ * stale effect list could otherwise name a cue's effect and quietly tear it out of a running cue.
+ * An id that no longer resolves is dropped silently — the effect has already stopped, which is the
+ * outcome the operator was heading for anyway.
+ *
+ * Effects owned by a Look *layer* are skipped too. They belong to that Look already; recording
+ * them into a second one would duplicate a running instance rather than move it, and the operator
+ * never authored them here.
+ */
+internal fun programmerBandEffectsById(state: State, ids: List<Long>): List<FxInstance> {
+    if (ids.isEmpty()) return emptyList()
+    val byId = state.show.fxEngine.getActiveEffects().associateBy { it.id }
+    return ids.mapNotNull { id ->
+        val effect = byId[id] ?: return@mapNotNull null
+        if (!FxEngine.isProgrammerFxPriority(effect.priority)) return@mapNotNull null
+        if (effect.programmerLayerId != null) return@mapNotNull null
+        effect
+    }
+}
+
+/**
+ * Write running effects into a Look as [DaoLookEffect] rows.
+ *
+ * Mirrors `fxInstancesToCueChildren`, which does the same job for a cue's ad-hoc children — the
+ * field-by-field shape is the same because [LookEffectDto] was unified with `CueAdHocEffectDto`
+ * for exactly this reason. Two differences, both deliberate:
+ *
+ * - **the tempo travels**: `speedMasterUuid` / `rateSpeedMasterUuid` are carried, so a look
+ *   recorded off master 2 still follows master 2 wherever it is applied;
+ * - **the timing does not**: there is nowhere to put it. Delay, interval and random window live on
+ *   the layer, so a busked "fire after 3s" becomes the layer's delay rather than the Look's.
+ *
+ * A group-targeted instance stays group-targeted. That keeps the Look reusable in the way the
+ * operator built it: a chase over "SL Wash" is about the group, not about four heads that happened
+ * to be in it.
+ */
+internal fun writeLookEffects(look: DaoLook, effects: List<FxInstance>, mode: RecordMode) {
+    // CREATE and UPDATE_EXISTING replace the Look's contents, so their effects go with the rows —
+    // otherwise a re-record would accumulate a second copy of every chase. MERGE adds.
+    if (mode == RecordMode.CREATE || mode == RecordMode.UPDATE_EXISTING) {
+        look.effects.forEach { it.delete() }
+    }
+    if (effects.isEmpty()) return
+    var nextSort = (look.effects.maxOfOrNull { it.sortOrder } ?: -1) + 1
+    for (effect in effects) {
+        DaoLookEffect.new {
+            this.look = look
+            targetType = if (effect.isGroupEffect) TargetRef.Group.TYPE else TargetRef.Fixture.TYPE
+            targetKey = effect.target.targetKey
+            effectType = effect.effect.name.replace(" ", "")
+            category = categoryFromPropertyName(effect.target.propertyName)
+            propertyName = effect.target.propertyName
+            beatDivision = effect.timing.beatDivision
+            blendMode = effect.blendMode.name
+            distribution = effect.distributionStrategy.javaClass.simpleName
+            phaseOffset = effect.phaseOffset
+            elementMode = if (effect.isGroupEffect) effect.elementMode.name else null
+            elementFilter = if (effect.elementFilter != ElementFilter.ALL) {
+                effect.elementFilter.name
+            } else null
+            stepTiming = if (effect.stepTiming != effect.effect.defaultStepTiming) {
+                effect.stepTiming
+            } else null
+            parameters = effect.effect.parameters
+            speedMasterUuid = effect.speedMasterUuid
+            rateSpeedMasterUuid = effect.rateSpeedMasterUuid
+            sortOrder = nextSort++
+        }
     }
 }
 

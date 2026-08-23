@@ -17,10 +17,14 @@ import uk.me.cormack.lighting7.state.State
  *   entries and the channel sideband) back to the layers below. The WS `programmer.clearAll`
  *   op is the same operation.
  * - `record` / `include` / `update` are the authoring loop.
- * - `make-hard` replaces the programmer's palette references with the literals they currently
- *   resolve to — the explicit escape hatch from reference-preserving Update.
  * - `record-look` records the programmer into a Look — the gesture that creates a *bound* Look.
- *   Masked by an explicit `mask`, because a Look has no type to imply one.
+ *   Masked by an explicit `mask`, because a Look has no type to imply one, and optionally moving
+ *   running programmer-band effects in by id.
+ *
+ * A `make-hard` route stood here too, replacing the programmer's palette references with the
+ * literals they resolved to. It went with the `ref:` grammar itself: there are no value-level
+ * references left to harden, and "promote a layer's values into local rows" is
+ * `POST /cues/{id}/flatten`.
  *
  * Why these three are REST rather than `programmer.*` WS ops, unlike every other programmer
  * operation: they all need a *structured reply* — the created cue, the fixture keys to select,
