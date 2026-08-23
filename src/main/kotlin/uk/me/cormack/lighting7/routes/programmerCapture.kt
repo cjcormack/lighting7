@@ -252,7 +252,9 @@ internal fun collectProgrammerEntries(
  * from*, which is Update's diff key, and has no meaning in a freshly written cue.
  */
 internal fun ProgrammerLayer.toCueLayerDto() = CueLayerDto(
-    lookId = lookId,
+    // Exactly one, from the source's own kind — the DTO's write contract.
+    lookId = source.id.takeUnless { source.isTemplate },
+    templateId = source.id.takeIf { source.isTemplate },
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,

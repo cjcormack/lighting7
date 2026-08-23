@@ -341,13 +341,11 @@ internal fun buildCueApplyData(cue: DaoCue): CueApplyData = CueApplyData(
 
 /**
  * Resolve a stored cue layer into the composer's input shape. Must run inside a transaction — it
- * dereferences the layer's Look for its uuid and name.
+ * dereferences the layer's Look or template for its uuid and name.
  */
 internal fun DaoCueLayer.toCookLayer() = CookLayer(
     layerId = id.value,
-    lookId = look.id.value,
-    lookUuid = look.uuid,
-    lookName = look.name,
+    source = source,
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,
@@ -364,7 +362,8 @@ internal fun DaoCueLayer.toCookLayer() = CookLayer(
 
 /** Wire form of a stored cue layer. Must run inside a transaction. */
 internal fun DaoCueLayer.toDto() = CueLayerDto(
-    lookId = look.id.value,
+    lookId = look?.id?.value,
+    templateId = template?.id?.value,
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,
@@ -377,7 +376,7 @@ internal fun DaoCueLayer.toDto() = CueLayerDto(
     delayMs = delayMs,
     intervalMs = intervalMs,
     randomWindowMs = randomWindowMs,
-    lookName = look.name,
+    source = source.toDto(),
     id = id.value,
 )
 
@@ -487,6 +486,62 @@ internal fun DaoCue.toCueDetails(
     )
 }
 
+/**
+ * A cue layer's referent, resolved for the write path: exactly one field is non-null.
+ *
+ * A tiny type rather than a `Pair<DaoLook?, DaoTemplate?>` so the exactly-one rule is stated once
+ * where it is established, instead of at each of the two assignments that consume it.
+ */
+internal class ResolvedLayerSource private constructor(
+    val look: DaoLook?,
+    val template: DaoTemplate?,
+) {
+    companion object {
+        fun ofLook(look: DaoLook) = ResolvedLayerSource(look, null)
+        fun ofTemplate(template: DaoTemplate) = ResolvedLayerSource(null, template)
+    }
+}
+
+/**
+ * Which record a [CueLayerDto] names, or null when it names none, both, or something deleted.
+ *
+ * Must run inside a transaction.
+ */
+internal fun resolveCueLayerSource(layer: CueLayerDto): ResolvedLayerSource? {
+    val lookId = layer.lookId
+    val templateId = layer.templateId
+    if ((lookId == null) == (templateId == null)) return null
+    return if (lookId != null) {
+        DaoLook.findById(lookId)?.let { ResolvedLayerSource.ofLook(it) }
+    } else {
+        DaoTemplate.findById(templateId!!)?.let { ResolvedLayerSource.ofTemplate(it) }
+    }
+}
+
+/**
+ * The same resolution the other way round: a [LayerSource] already in hand back to the rows a cue
+ * layer stores. Used where the layer being written came from the *programmer* rather than off the
+ * wire, so its source is resolved already and only the entities are missing.
+ *
+ * Must run inside a transaction.
+ */
+internal fun resolveLayerSourceRecords(source: LayerSource): ResolvedLayerSource? = when (source.kind) {
+    LayerSourceKind.LOOK -> DaoLook.findById(source.id)?.let { ResolvedLayerSource.ofLook(it) }
+    LayerSourceKind.TEMPLATE -> DaoTemplate.findById(source.id)?.let { ResolvedLayerSource.ofTemplate(it) }
+}
+
+/**
+ * Does this stored layer apply the same record [dto] names?
+ *
+ * The identity half of Record's `(source, targets)` upsert key. Comparing **both** columns rather
+ * than one id is what stops a Look and a template that happen to share an int PK from matching each
+ * other — two tables, two id spaces, and Record would otherwise overwrite the wrong layer.
+ *
+ * Must run inside a transaction.
+ */
+internal fun DaoCueLayer.appliesSameSourceAs(dto: CueLayerDto): Boolean =
+    look?.id?.value == dto.lookId && template?.id?.value == dto.templateId
+
 /** Create child layer, ad-hoc effect, property assignment, and trigger entities for a cue. */
 internal fun createCueChildren(
     cue: DaoCue,
@@ -496,12 +551,16 @@ internal fun createCueChildren(
     layers: List<CueLayerDto> = emptyList(),
 ) {
     for (layer in layers) {
-        // A layer naming a Look that no longer exists is dropped rather than failing the write —
-        // the rule a preset application used for a deleted preset, kept when that table went.
-        val look = DaoLook.findById(layer.lookId) ?: continue
+        // A layer naming a record that no longer exists is dropped rather than failing the write —
+        // the rule a preset application used for a deleted preset, kept when that table went. The
+        // same drop covers the malformed shapes (both ids, or neither): `resolveWriteSource` returns
+        // null and this layer simply does not appear, which is what the DTO's exactly-one-of
+        // contract means at the write boundary.
+        val resolved = resolveCueLayerSource(layer) ?: continue
         DaoCueLayer.new {
             this.cue = cue
-            this.look = look
+            this.look = resolved.look
+            this.template = resolved.template
             this.sortOrder = layer.sortOrder
             this.enabled = layer.enabled
             this.targets = layer.targets
@@ -664,6 +723,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         localRows = localRows,
         cascade = cascade,
         lookRegistry = state.show.lookRegistry,
+        templateRegistry = state.show.templateRegistry,
     )
     if (cooked.rows.isNotEmpty()) {
         engine.setCueAssignments(
@@ -708,7 +768,8 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
         )
-        instance.lookId = layer.lookId
+        // Only a Look can own an effect (D7); `cookEffects` never yields a template layer here.
+        instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }
         instance.cueLayerId = layer.layerId
         instance.cueId = cueData.cueId
         instance.priority = priority
@@ -841,15 +902,27 @@ internal fun buildStompOverlapFromAssignments(
  * Handles the synthetic aliases the target-resolution code already understands:
  * `"position"` (paired PAN+TILT), `"colour"` / `"color"` / `"rgbColour"` (RGB+W/A/UV bundle).
  * For these names [fixture] is consulted only to verify the capability exists.
+ *
+ * **The exact name is tried before the canonical one**, and that ordering is a fix rather than a
+ * micro-optimisation. [canonicalPropertyName] rewrites `colour` → `rgbColour` unconditionally, but
+ * the Martin MAC 250's colour *wheel* is a property literally named `colour` — so a stored row for
+ * it resolved to nothing and was dropped with a "property not on fixture" warning, on every cook.
+ * That hit any recorded Look holding a wheel colour, and it is what a colour template would have hit
+ * on every wheel-only head in the rig. Exact-first is safe because no fixture declares both names.
  */
 internal fun fixtureCategoryFor(
     fixture: Fixture,
     propertyName: String,
 ): Pair<PropertyCategory, CompositionRule>? {
-    val canonical = canonicalPropertyName(propertyName)
-    if (canonical.equals("position", ignoreCase = true)) {
+    if (propertyName.equals("position", ignoreCase = true)) {
         // Synthetic compound of PAN + TILT. Composition defaults to the PAN category's rule;
         // any override on the pan property is honoured.
+        val panProp = fixture.fixtureProperty("pan")
+        return panProp?.let { it.category to it.composition } ?: (PropertyCategory.PAN to CompositionRule.UNSET)
+    }
+    fixture.fixtureProperty(propertyName)?.let { return it.category to it.composition }
+    val canonical = canonicalPropertyName(propertyName)
+    if (canonical.equals("position", ignoreCase = true)) {
         val panProp = fixture.fixtureProperty("pan")
         return panProp?.let { it.category to it.composition } ?: (PropertyCategory.PAN to CompositionRule.UNSET)
     }
@@ -1036,6 +1109,7 @@ internal fun buildCombinedCueLayerRows(
         localRows = cueOwn,
         cascade = cascade,
         lookRegistry = state.show.lookRegistry,
+        templateRegistry = state.show.templateRegistry,
         includeTimed = firedTimedLayerIds ?: state.cueTriggerManager.firedTimedLayerIds(cueId),
     )
 }

@@ -25,9 +25,11 @@ const val DEFERRED_TARGET_TYPE: String = "deferred"
 /**
  * One stored Look row: "for this target, this property is this value".
  *
- * Supersedes both [PaletteEntryDto] (which was always target-bound) and
- * [FxPresetPropertyAssignmentDto] (which was always target-less) — [targetType] of
- * [DEFERRED_TARGET_TYPE] is what unifies them, so a Look can hold both kinds of row at once.
+ * **Always bound.** A Look row names a fixture or a group; [DEFERRED_TARGET_TYPE] is rejected at the
+ * write boundary. Until session 3 a deferred row was how a Look served as a template — that job
+ * moved to [DaoTemplates], which is a better home for it (one family, an intent per row, resolved
+ * per head) and which is why the discriminator survives here only for *effects*, where a deferred
+ * target still means "fan over the layer's targets".
  *
  * [value] is always a **literal** in the canonical
  * [uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.serialize] grammar. **Looks do
@@ -120,17 +122,6 @@ object DaoLooks : IntIdTable("looks") {
     val sortOrder = integer("sort_order").default(0)
 
     /**
-     * Which fixture type the *form editor* builds a synthetic fixture for, when authoring a Look
-     * whose rows are deferred. An editor affordance, not a data constraint: a synthetic fixture is
-     * the only way to author values for targets that don't exist yet, which is why the hint earns
-     * its keep. Null for a Look recorded from the programmer, whose rows name real targets.
-     *
-     * Inherited from `DaoFxPresets.fixtureType`, which was non-null and part of the identity
-     * index. It is neither here — a Look is identified by (project, name) alone.
-     */
-    val editorFixtureType = varchar("editor_fixture_type", 255).nullable()
-
-    /**
      * The **positional** colour list (`P1` / `P2` / `P*`), inherited from `DaoFxPresets.palette`.
      * A third, unrelated thing historically also called "palette": it parameterises *effects*
      * rather than describing a look, and it survives this merge untouched. Keeping the column here
@@ -156,7 +147,6 @@ class DaoLook(id: EntityID<Int>) : IntEntity(id) {
     var name by DaoLooks.name
     var notes by DaoLooks.notes
     var sortOrder by DaoLooks.sortOrder
-    var editorFixtureType by DaoLooks.editorFixtureType
     var palette by DaoLooks.palette
     var uuid by DaoLooks.uuid
     val rows by DaoLookRow referrersOn DaoLookRows.look

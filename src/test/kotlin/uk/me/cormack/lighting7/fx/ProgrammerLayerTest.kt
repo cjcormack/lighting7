@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.fx.LayerSource
+import uk.me.cormack.lighting7.fx.LayerSourceKind
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.PropertyCategory
@@ -64,11 +66,11 @@ class ProgrammerLayerTest {
         layerWinner = layerWinner,
     )
 
+    private val warmWashUuid: UUID = UUID.nameUUIDFromBytes("warm-wash".toByteArray())
+
     private fun warmLayer(layerId: Int, sortOrder: Int) = ProgrammerLayer(
         layerId = layerId,
-        lookId = 7,
-        lookUuid = UUID.nameUUIDFromBytes("warm-wash".toByteArray()),
-        lookName = "Warm Wash",
+        source = LayerSource.look(7, warmWashUuid, "Warm Wash"),
         sortOrder = sortOrder,
     )
 
@@ -335,15 +337,16 @@ class ProgrammerLayerTest {
         val rig = newRig()
         rig.engine.setCueAssignments(
             10,
-            listOf(dimmerAssignment(10, 100u, CookWinner(index = 1, layerId = 42, lookId = 7, lookName = "Warm Wash"))),
+            listOf(dimmerAssignment(10, 100u, CookWinner(index = 1, layerId = 42, source = LayerSource.look(7, warmWashUuid, "Warm Wash")))),
             cueStackId = 7,
         )
 
         val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
         assertEquals(FxEngine.ProvenanceSource.CUE, entry.source, "the source is still the cue")
         assertEquals(42, entry.layerId)
-        assertEquals(7, entry.lookId)
-        assertEquals("Warm Wash", entry.lookName)
+        assertEquals(7, entry.layerSource?.id)
+        assertEquals("Warm Wash", entry.layerSource?.name)
+        assertEquals(LayerSourceKind.LOOK, entry.layerSource?.kind)
     }
 
     @Test
@@ -362,8 +365,8 @@ class ProgrammerLayerTest {
         val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
         assertEquals(FxEngine.ProvenanceSource.PROGRAMMER, entry.source, "the source is still the programmer")
         assertEquals(9, entry.layerId)
-        assertEquals(7, entry.lookId)
-        assertEquals("Warm Wash", entry.lookName)
+        assertEquals(7, entry.layerSource?.id)
+        assertEquals("Warm Wash", entry.layerSource?.name)
     }
 
     @Test
@@ -383,7 +386,7 @@ class ProgrammerLayerTest {
         val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
         assertEquals(FxEngine.ProvenanceSource.PROGRAMMER, entry.source)
         assertNull(entry.layerId, "the operator's own write won, so no layer is named")
-        assertNull(entry.lookName)
+        assertNull(entry.layerSource)
     }
 
     @Test
@@ -396,7 +399,7 @@ class ProgrammerLayerTest {
         val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
         assertEquals(FxEngine.ProvenanceSource.CUE, entry.source)
         assertNull(entry.layerId)
-        assertNull(entry.lookName)
+        assertNull(entry.layerSource)
     }
 
     @Test

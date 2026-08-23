@@ -737,6 +737,7 @@ class State(val config: ApplicationConfig) {
         override fun controllersChanged() {}
         override fun fixturesChanged() = refreshActiveProjectBindingHealth()
         override fun lookListChanged() {}
+        override fun templateListChanged() {}
         override fun speedMasterListChanged() {}
         override fun cueListChanged() = refreshActiveProjectBindingHealth()
         override fun cueStackListChanged() = refreshActiveProjectBindingHealth()

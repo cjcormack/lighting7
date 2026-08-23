@@ -255,8 +255,14 @@ class FxEngine(
          * different kinds of event.
          */
         val layerId: Int? = null,
-        val lookId: Int? = null,
-        val lookName: String? = null,
+        /**
+         * What that layer applies — a Look or a template, with its id, uuid and name.
+         *
+         * One value rather than the `lookId`/`lookName` pair it replaces: a layer's referent became
+         * polymorphic in session 3, and a field called `lookName` holding a template's name would
+         * be a lie the compiler could not find.
+         */
+        val layerSource: LayerSource? = null,
     )
 
     // Conflated: recomputed on layer events only (programmer mutation, cue republish,
@@ -373,8 +379,7 @@ class FxEngine(
                     ProvenanceEntry(
                         key.targetKey, key.propertyName, ProvenanceSource.PROGRAMMER,
                         layerId = layer?.layerId,
-                        lookId = layer?.lookId,
-                        lookName = layer?.lookName,
+                        layerSource = layer?.source,
                     )
                 }
                 effect != null -> ProvenanceEntry(
@@ -389,8 +394,7 @@ class FxEngine(
                         cueId = winningCueId,
                         cueStackId = winningCueId?.let { cueStackIdFor(it) },
                         layerId = layer?.layerId,
-                        lookId = layer?.lookId,
-                        lookName = layer?.lookName,
+                        layerSource = layer?.source,
                     )
                 }
                 else -> continue

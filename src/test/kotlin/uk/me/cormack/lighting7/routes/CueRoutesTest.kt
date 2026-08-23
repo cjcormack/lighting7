@@ -258,7 +258,6 @@ class CueRoutesTest {
             layers = listOf(
                 CueLayerDto(
                     lookId = 5,
-                    lookName = "Slow Pulse",
                     targets = listOf(CueTargetDto("group", "front-wash")),
                 ),
             ),
@@ -290,13 +289,13 @@ class CueRoutesTest {
         // Was `CuePresetApplicationDetail with null preset name`. Same property, same reason: the
         // DTO denormalises the library entity's name on read, and a null means "the row survives,
         // the name could not be resolved" rather than "there is no layer". Note there is no separate
-        // detail type — `CueLayerDto` carries `lookName`, populated server-side and ignored on write.
+        // detail type — `CueLayerDto` carries `source`, populated server-side and ignored on write.
         val detail = CueLayerDto(
             lookId = 99,
-            lookName = null,
+            source = null,
             targets = listOf(CueTargetDto("group", "movers")),
         )
-        assertNull(detail.lookName)
+        assertNull(detail.source)
         val deserialized = json.decodeFromString<CueLayerDto>(json.encodeToString(detail))
         assertEquals(detail, deserialized)
     }

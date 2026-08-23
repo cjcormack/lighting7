@@ -26,6 +26,15 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v6: templates become their own entity — a `templates/` folder, and `CueLayerJson.lookUuid`
+    // becomes optional beside a new `templateUuid`. `minReader` stays at **5**, deliberately: a v5
+    // repo has no `templates/` folder (the importer reads a missing directory as empty) and every
+    // one of its cue layers carries a `lookUuid`, so a v5 archive still imports exactly as before.
+    // Only the writer's version moves, which is what makes a v5 install refuse a v6 repo — where a
+    // cue layer may carry `templateUuid` alone, and a v5 reader would take `lookUuid`'s null
+    // straight into `UUID.fromString` (a Java platform type, so no compile-time stop) and fail with
+    // an NPE naming nothing.
+    //
     // v5: FX presets and named palettes collapse into `looks/`, and `cuePresetApplications/`
     // becomes `cueLayers/`. `minReader` jumps to 5 because `CuePresetApplicationJson.presetUuid`
     // — a required field — is gone: an older reader would fail to parse a v5 repo rather than
@@ -39,7 +48,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 5,
+    val formatVersion: Int = 6,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -145,8 +154,6 @@ data class LookJson(
     val name: String,
     val notes: String? = null,
     val sortOrder: Int = 0,
-    /** Synthetic-fixture form-editor hint; only meaningful for a Look with deferred rows. */
-    val editorFixtureType: String? = null,
     /** The positional colour list (`P1` / `P2`), not the Look's own rows. */
     val palette: List<String> = emptyList(),
     val rows: List<LookRowJson> = emptyList(),
@@ -154,6 +161,46 @@ data class LookJson(
 )
 
 
+
+/**
+ * One template row: a target (or none) and the intent it holds.
+ *
+ * Carries its own [uuid] like [LookRowJson] does, so a re-export of unchanged data is byte-identical
+ * and the sync engine sees no change — a regenerated uuid per export would make every snapshot a
+ * diff.
+ */
+@Serializable
+data class TemplateRowJson(
+    val uuid: String,
+    /** `deferred` for a generic row, `fixture` for a per-fixture one. Never `group`. */
+    val targetType: String,
+    val targetKey: String,
+    val propertyName: String,
+    /** A `TemplateIntent` in serialised form — `#FF9D4A;policy=extract`, `pct:75`, `deg:45,12.5`. */
+    val value: String,
+    val sortOrder: Int = 0,
+)
+
+/**
+ * A template — portable show content, rows embedded inline.
+ *
+ * Rows address fixtures by *key*, the same as a Look's do, so nothing inside needs reference
+ * remapping; the record's own `uuid` matters because a cue layer points at it.
+ *
+ * There is deliberately **no family field and no fixture type**. The family is derived from the
+ * rows (and validated to be exactly one at the write boundary), and a template has no fixture type
+ * by design — the values are intents resolved per head at cook. Both would be second sources of
+ * truth for something the rows already say.
+ */
+@Serializable
+data class TemplateJson(
+    val uuid: String,
+    val name: String,
+    val notes: String? = null,
+    val sortOrder: Int = 0,
+    val fadeDurationMs: Long? = null,
+    val rows: List<TemplateRowJson> = emptyList(),
+)
 
 /**
  * Speed master — portable show content. The exported [bpm] is the master's starting tempo
@@ -289,15 +336,20 @@ data class CuePropertyAssignmentJson(
 
 
 /**
- * One line of a cue's ordered Look composition. Its own top-level folder, the way the retired
+ * One line of a cue's ordered layer composition. Its own top-level folder, the way the retired
  * `CuePresetApplicationJson` was — a cue child that points at a second entity, so it cannot be
  * embedded in either one.
+ *
+ * **Exactly one of [lookUuid] / [templateUuid]** is set: a layer applies a Look or a template. Both
+ * are uuids rather than ids for the usual reason — int PKs are re-minted on import, and
+ * [uk.me.cormack.lighting7.sync.ExportUuidRemapper] rewrites uuid occurrences across the export.
  */
 @Serializable
 data class CueLayerJson(
     val uuid: String,
     val cueUuid: String,
-    val lookUuid: String,
+    val lookUuid: String? = null,
+    val templateUuid: String? = null,
     val sortOrder: Int = 0,
     val enabled: Boolean = true,
     val targets: List<CueTargetDto> = emptyList(),

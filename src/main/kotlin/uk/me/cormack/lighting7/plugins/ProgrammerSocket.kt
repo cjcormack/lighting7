@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.ExtendedColour
+import uk.me.cormack.lighting7.fx.LayerSourceDto
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
@@ -18,6 +19,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
+import uk.me.cormack.lighting7.routes.resolveLayerSource
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
 
@@ -215,7 +217,9 @@ data class IncludedTargetDto(
 @Serializable
 @SerialName("programmer.addLayer")
 data class ProgrammerAddLayerInMessage(
-    val lookId: Int,
+    /** Exactly one of [lookId] / [templateId]. */
+    val lookId: Int? = null,
+    val templateId: Int? = null,
     val targets: List<CueTargetDto> = emptyList(),
     val propertyMask: String? = null,
     val blendMode: String? = null,
@@ -258,8 +262,8 @@ data class ProgrammerPatchLayerInMessage(
 @Serializable
 data class ProgrammerLayerDto(
     val layerId: Int,
-    val lookId: Int,
-    val lookName: String,
+    /** What this layer applies — a Look or a template. */
+    val source: LayerSourceDto,
     val sortOrder: Int,
     val enabled: Boolean,
     val targets: List<CueTargetDto>,
@@ -340,8 +344,12 @@ data class ProvenanceEntryDto(
      * keeps reading `source` exactly as before. See `FxEngine.ProvenanceEntry`.
      */
     val layerId: Int? = null,
-    val lookId: Int? = null,
-    val lookName: String? = null,
+    /**
+     * What that layer applies. One nested value rather than the `lookId`/`lookName` pair it
+     * replaces, because a layer can now apply a template and a field called `lookName` holding a
+     * template's name is a lie no compiler can catch.
+     */
+    val layerSource: LayerSourceDto? = null,
 )
 
 /**
@@ -420,8 +428,7 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
                         cueStackId = it.cueStackId,
                         effectId = it.effectId,
                         layerId = it.layerId,
-                        lookId = it.lookId,
-                        lookName = it.lookName,
+                        layerSource = it.layerSource?.toDto(),
                     )
                 },
             )
@@ -431,8 +438,7 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
 
 private fun ProgrammerLayer.toDto() = ProgrammerLayerDto(
     layerId = layerId,
-    lookId = lookId,
-    lookName = lookName,
+    source = source.toDto(),
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,
@@ -651,21 +657,20 @@ object ProgrammerHandler {
         ProgrammerLayerStateOutMessage(state.show.programmerStore.layers.map { it.toDto() })
 
     /**
-     * Add a layer for a stored Look.
+     * Add a layer for a stored Look or template.
      *
-     * The uuid is looked up here rather than accepted from the client: a layer resolves its Look by
-     * uuid (int primary keys are re-minted on sync import), but the desk addresses Looks by id
+     * The uuid is looked up here rather than accepted from the client: a layer resolves its source by
+     * uuid (int primary keys are re-minted on sync import), but the desk addresses both by id
      * everywhere else, and letting a client supply both invites the two disagreeing.
      */
     fun addLayer(state: State, message: ProgrammerAddLayerInMessage): OutMessage {
-        val look = transaction(state.database) {
-            DaoLook.findById(message.lookId)?.let { Triple(it.id.value, it.uuid, it.name) }
-        } ?: return ProgrammerErrorOutMessage("Look ${message.lookId} not found")
+        val source = resolveLayerSource(state, message.lookId, message.templateId)
+            ?: return ProgrammerErrorOutMessage(
+                "programmer.addLayer needs exactly one of lookId / templateId, naming a record that exists",
+            )
 
         state.show.programmerLayerStack.add(
-            lookId = look.first,
-            lookUuid = look.second,
-            lookName = look.third,
+            source = source,
             targets = message.targets,
             propertyMask = message.propertyMask,
             blendMode = message.blendMode ?: "OVERRIDE",

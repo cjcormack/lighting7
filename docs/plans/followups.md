@@ -36,6 +36,10 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
 | [`FU-LOOK-ELEMENT-ROWS`](#fu-look-element-rows) | Ready | Look | — |
+| [`FU-TMPL-VIRTUAL-DIMMER`](#fu-tmpl-virtual-dimmer) | Ready | Tmpl | — |
+| [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Tmpl | two heads whose strobe rates need to match |
+| [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
+| [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a two-wheel head's second wheel is wanted |
 | [`FU-CUE-APPLYDATA-ONE-BUILDER`](#fu-cue-applydata-one-builder) | Ready | Cue | — |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
 | [`FU-PROG-FOCUS-PREVIEW-LAYER`](#fu-prog-focus-preview-layer) | Ready | Prog | — |
@@ -373,6 +377,70 @@ Judge granularity only after that has been used on a rig — the Layer 3/4 bound
 around may turn out to bite in one specific place rather than generally.
 
 **Trigger**: per-layer stomp proves too coarse in practice.
+
+### `FU-TMPL-VIRTUAL-DIMMER`
+
+**An intensity template on a head with no dimmer** · Ready · desk-simplification §Session 3, 2026-08-23
+
+`BeamColour.dc.html` promises that "a head with no dimmer takes it as a virtual dimmer over its
+colour emitters — the existing virtual-dimmer path". **There is no such path on the backend.** The
+only virtual dimmer is a *group* gesture the client fans out to members (see
+`plugins/ProgrammerSocket`'s doc comment), and `hooks/useVirtualDimmer.ts` is a front-end scaling of
+RGB. So `TemplateResolver` reports `Unsupported("no dimmer")` and the editor's resolves-to panel shows
+it, which is honest but leaves a real gap: a colour-only PAR takes no part in "Half Up".
+
+The work is a `Percent` arm for a `WithColour`-but-not-`WithDimmer` head that scales the emitters the
+way `useVirtualDimmer` does, server-side so the panel and the cook agree. The awkward part is
+*composition*: a virtual dimmer writes the colour channels, so an intensity template and a colour
+template on the same head would fight over the same bytes — which is a real question about what the
+mask means, not an implementation detail.
+
+**Ready**: no gate, and the resolver is the one place it lands.
+
+### `FU-TMPL-STROBE-HZ`
+
+**Strobe as a rate rather than a percentage** · Trigger · desk-simplification §Session 3, 2026-08-23
+
+`BeamColour.dc.html` calls Hz "the only unit two fixtures agree on", and it is right — but nothing in
+this codebase's fixture definitions declares a Hz range for a strobe channel the way
+`@FixtureProperty(degMin=, degMax=)` declares a pan range. A `hz:` intent would have nothing to
+resolve against and would be inventing a curve per head, so strobe is a percentage of each head's own
+channel (`TemplateIntent` records this).
+
+The work is annotation before code: `hzMin`/`hzMax` on the strobe properties that have a documented
+range, then a `Hertz` arm in the grammar and the resolver, with heads lacking the annotation reported
+as degraded rather than guessed at.
+
+**Trigger**: two heads on one rig whose strobes need to visibly match. Until then the percentage is
+no worse than what a per-fixture value gave.
+
+### `FU-TMPL-WHEEL-PREVIEWS`
+
+**A wheel snap is only as good as its `colourPreview`** · Trigger · desk-simplification §Session 3, 2026-08-23
+
+`TemplateResolver.nearestColourSlot` picks a wheel slot by ΔE76 against
+`DmxFixtureColourSettingValue.colourPreview`, and those values are documented in the fixture
+definitions themselves as "best-effort approximations for the UI" (`RobeColorSpot575Fixture`). The
+number the editor shows is therefore "how close the desk *believes* it got", which is the right thing
+to show — but a badly annotated wheel will snap confidently to the wrong slot.
+
+The work is a measurement pass over the wheel fixtures, not code.
+
+**Trigger**: a colour template that snaps visibly wrong on a wheel head. The ΔE in the panel is how
+you would notice.
+
+### `FU-TMPL-SECOND-COLOUR-WHEEL`
+
+**A two-wheel head's second colour wheel is unreachable** · Trigger · desk-simplification §Session 3, 2026-08-23
+
+`resolveCell` shows the *first* wheel only (its own doc records the cut), and
+`TemplateResolver.resolveColour` picks the first COLOUR-category setting for the same reason. The Robe
+ColorSpot 575 has two, so its second wheel takes no part in a colour template — nor in the grid.
+
+Not obviously worth fixing: a colour template asks "be this colour", and answering it on two wheels at
+once is a mixing problem the fixture's own manual barely addresses.
+
+**Trigger**: an operator asks for the second wheel by name.
 
 ### `FU-CUE-APPLYDATA-ONE-BUILDER`
 

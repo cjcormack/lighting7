@@ -273,17 +273,36 @@ Each active cue has a fade weight in `[0, 1]` tracking its crossfade progress. D
 
 Interaction with cue-edit sessions: when a client holds an active `cueEdit` session, surface fader writes route into the cue's Layer 4 property assignments (via `cueEdit.setProperty`) rather than the programmer. See [Cue edit sessions](#cue-edit-sessions) below.
 
-## Looks and layers
+## Looks, templates and layers
 
-A **Look** is a named, reusable bundle of property values and effects — one library entity
-replacing what used to be two (FX presets and named palettes). A **Layer** applies one Look inside
-a cue, at a declared position in that cue's stack.
+A **Look** is a named, reusable bundle of property values and effects over *named fixtures*. A
+**Template** is a named value for exactly *one attribute family*, with no targets of its own. A
+**Layer** applies either, inside a cue at a declared position in that cue's stack — `DaoCueLayers`
+carries two nullable FKs (`look_id` / `template_id`) with exactly one set, and `DaoCueLayer.source`
+is the only reader.
 
-A Look's rows are either **bound** (naming their own fixture or group) or **deferred** (taking
-their targets from the layer that applies them). That single distinction is what lets one entity
-serve both of the jobs its predecessors split between them: a bound Look behaves like a palette —
-edit it and every cue layering it moves — while a fully-deferred one behaves like a preset, a
-bundle you point at whatever you like.
+These were one entity until session 3, distinguished by the row's targeting mode: a **bound** row
+named its own fixture, a **deferred** one took its targets from the applying layer, and one entity
+served both of its predecessors' jobs. What forced the split is the most useful kind of template — a
+focus position, where eight heads aimed at one spot hold eight *different* pan/tilts, so its rows are
+bound and `hasDeferredRows` could not tell it from a recorded Look.
+
+**A Look row is now always bound**, and `validateLookRows` refuses `deferred`. A Look **effect** may
+still be deferred, because fanning an effect over the layer's targets is a different thing from
+holding a value for nobody — and it is what makes a Look usable from a busking pad.
+
+**A template row holds an intent, not a literal**: a colour plus a white/amber policy, a level or
+beam role as a percentage of each head's own range, a position in degrees. `fx/TemplateIntent.kt`
+owns the grammar; `fx/TemplateResolver.kt` is the **single** implementation that turns one into
+channels, and it is asked by all three consumers — `CueComposer.applyLayer` at cook,
+`POST /templates/{id}/apply` for the click gesture, and `POST /templates/resolve` for the editor's
+resolves-to panel. Two of those exist server-side *because* it must be one implementation: an editor
+that computed its own ΔE would promise what the rig does not do.
+
+A template's property vocabulary is **closed** (`TemplateProperty`), which is where "a template
+cannot carry a gobo" lives: slotted roles are per-model, so they are refused by name and live in a
+recorded Look, which names a head and can hold anything that head has. A template also holds no
+effects at all (D7) and no positional colour list — it is not a `PaletteCascade` scope.
 
 A Look's rows hold **literals only**. A row holding a `ref:`-shaped value is rejected at the write
 boundary, so **Looks do not nest** and resolution can never recurse. The `ref:` *value grammar* itself

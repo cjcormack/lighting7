@@ -23,6 +23,20 @@ interface FixturesChangeListener {
      * invalidates the one Look directly rather than dropping every expansion.
      */
     fun lookListChanged()
+
+    /**
+     * A template was created, renamed or deleted.
+     *
+     * A separate signal from [lookListChanged] rather than one "library changed" event, because the
+     * two have different consequences: a Look list change invalidates every *expansion* in
+     * `LookRegistry` (a Look's group rows are flattened against the patch), while a template list
+     * change invalidates only the template cache, which holds nothing patch-shaped. Folding them
+     * would make each edit drop the other's cache for no reason.
+     *
+     * A template's *contents* changing goes through `republishForTemplateEdit` instead, which
+     * invalidates the one template directly.
+     */
+    fun templateListChanged()
     fun speedMasterListChanged()
     fun cueListChanged()
     fun cueStackListChanged()
@@ -287,6 +301,12 @@ class Fixtures {
     fun lookListChanged() {
         changeListeners.forEach {
             it.lookListChanged()
+        }
+    }
+
+    fun templateListChanged() {
+        changeListeners.forEach {
+            it.templateListChanged()
         }
     }
 

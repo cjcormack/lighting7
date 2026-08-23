@@ -55,7 +55,6 @@ data class LookSnapshot(
     val lookId: Int,
     val lookUuid: UUID,
     val name: String,
-    val editorFixtureType: String?,
     /** The positional colour list (`P1` / `P2`), feeding [PaletteCascade]'s most-specific scope. */
     val palette: List<String>,
     /** Rows in `sortOrder`. */
@@ -231,7 +230,6 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
             lookId = look.id.value,
             lookUuid = look.uuid,
             name = look.name,
-            editorFixtureType = look.editorFixtureType,
             palette = look.palette,
             rows = look.rows
                 .orderBy(DaoLookRows.sortOrder to SortOrder.ASC)

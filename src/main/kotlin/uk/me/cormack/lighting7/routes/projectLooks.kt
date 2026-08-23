@@ -18,6 +18,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fx.LayerSource
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.toPaletteColours
@@ -128,7 +129,6 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     this.sortOrder = request.sortOrder
                         ?: ((DaoLook.find { DaoLooks.project eq project.id }
                             .maxOfOrNull { it.sortOrder } ?: -1) + 1)
-                    this.editorFixtureType = request.editorFixtureType
                     this.palette = request.palette
                 }
                 createLookChildren(look, request.rows, request.effects)
@@ -168,9 +168,6 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 }
                 if ("notes" in body) look.notes = body["notes"].nullableString()
                 body["sortOrder"].nullableInt()?.let { look.sortOrder = it }
-                if ("editorFixtureType" in body) {
-                    look.editorFixtureType = body["editorFixtureType"].nullableString()
-                }
                 if ("palette" in body) {
                     look.palette = lookJson.decodeFromJsonElement<List<String>>(body["palette"]!!)
                 }
@@ -284,7 +281,6 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     this.notes = source.notes
                     this.sortOrder = (DaoLook.find { DaoLooks.project eq target.id }
                         .maxOfOrNull { it.sortOrder } ?: -1) + 1
-                    this.editorFixtureType = source.editorFixtureType
                     this.palette = source.palette
                 }
                 // Fresh uuids on every child: a copy is a new entity, and reusing the source's
@@ -386,9 +382,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
 
             try {
                 val (action, effectCount) = state.show.programmerLayerStack.toggle(
-                    lookId = look.first,
-                    lookUuid = look.second,
-                    lookName = look.third,
+                    source = LayerSource.look(look.first, look.second, look.third),
                     targets = request.targets.map { CueTargetDto(it.type, it.key) },
                     beatDivisionOverride = request.beatDivision,
                 )
@@ -450,7 +444,6 @@ private fun LookPreviewRequest.toPreviewSnapshot(): LookSnapshot? {
         lookId = 0,
         lookUuid = java.util.UUID(0L, 0L),
         name = "preview",
-        editorFixtureType = null,
         palette = palette,
         rows = propertyAssignments.map {
             LookRowEntry(
@@ -566,9 +559,16 @@ internal data class LookDto(
     val rowCount: Int,
     val effectCount: Int,
     val targetCount: Int,
-    /** True when any row or effect is deferred, i.e. takes its targets from the layer. */
-    val hasDeferredRows: Boolean,
-    val editorFixtureType: String? = null,
+    /**
+     * True when any **effect** takes its targets from the layer applying this Look rather than
+     * naming one.
+     *
+     * Rows can no longer be deferred at all — session 3 moved that half of the entity out to
+     * templates — so this is now only ever about effects, where a deferred target still means "fan
+     * over whatever the layer points at". It stays because a fully-deferred Look asserts nothing
+     * without a layer's targets, which is worth being able to see in the library.
+     */
+    val hasDeferredEffects: Boolean,
     val preview: List<String>,
     /** How many cue layers reference this Look. Gates delete. */
     val layerCount: Int,
@@ -582,7 +582,6 @@ internal data class LookDetails(
     val notes: String? = null,
     val sortOrder: Int,
     val families: List<String>,
-    val editorFixtureType: String? = null,
     val palette: List<String> = emptyList(),
     val rows: List<LookRowDto> = emptyList(),
     val effects: List<LookEffectDto> = emptyList(),
@@ -596,7 +595,6 @@ internal data class CreateLookRequest(
     val name: String,
     val notes: String? = null,
     val sortOrder: Int? = null,
-    val editorFixtureType: String? = null,
     val palette: List<String> = emptyList(),
     val rows: List<LookRowDto> = emptyList(),
     val effects: List<LookEffectDto> = emptyList(),
@@ -683,7 +681,10 @@ internal fun lookUsageFor(lookIds: Collection<Int>): Map<Int, LookUsage> {
     val ids = lookIds.toList()
     val layersByLook = DaoCueLayer.find { DaoCueLayers.look inList ids }
         .toList()
-        .groupBy { it.look.id.value }
+        // `look` is nullable now (a layer may name a template instead), but this query already
+        // filtered on it, so every row here has one. `mapNotNull`-style defensiveness would only
+        // hide a contradiction between the filter and the grouping.
+        .groupBy { it.look!!.id.value }
 
     return ids.associateWith { lookId ->
         val layers = layersByLook[lookId].orEmpty()
@@ -716,8 +717,19 @@ private const val LOOK_ROW_REFERENCE_PREFIX = "ref:"
  */
 internal fun validateLookRows(rows: List<LookRowDto>): String? {
     for (row in rows) {
-        if (row.targetType != DEFERRED_TARGET_TYPE && TargetRef.ofOrNull(row.targetType, row.targetKey) == null) {
-            return "Unknown target type '${row.targetType}' — expected 'fixture', 'group' or '$DEFERRED_TARGET_TYPE'"
+        // **A Look row is always bound.** The deferred half of this entity became a template in
+        // session 3, and a deferred row here would now be a second, weaker way to express one: no
+        // family constraint, no intent resolution, and invisible to `/templates`. Refusing it at the
+        // write boundary is what makes "a Look names its own fixtures" true rather than customary.
+        //
+        // A Look *effect* may still be deferred — see `validateLookEffects` — because fanning an
+        // effect over the layer's targets is a different thing from holding a value for nobody.
+        if (row.targetType == DEFERRED_TARGET_TYPE) {
+            return "A look row must name its own fixture or group. A value you point at a selection " +
+                "is a template — create one in the template library instead."
+        }
+        if (TargetRef.ofOrNull(row.targetType, row.targetKey) == null) {
+            return "Unknown target type '${row.targetType}' — expected 'fixture' or 'group'"
         }
         if (row.propertyName.isBlank()) return "Row property name must not be blank"
         if (row.value.isBlank()) return "Row value must not be blank"
@@ -790,22 +802,13 @@ private fun createLookChildren(
 /**
  * The attribute families a Look touches, derived from its rows.
  *
- * A bound row is classified against its own target; a deferred row has no fixture to ask, so it
- * falls back to the editor hint's synthetic fixture where one exists. A row that resolves nowhere
- * simply contributes no family rather than guessing — the library would rather under-bank a broken
- * Look than file it under the wrong attribute.
+ * Each row is classified against its own target. A row that resolves nowhere simply contributes no
+ * family rather than guessing — the library would rather under-bank a broken Look than file it under
+ * the wrong attribute.
  */
 private fun DaoLook.derivedFamilies(state: State): List<String> {
     val fixtures = state.show.fixtures
     val families = LinkedHashSet<PropertyMaskGroup>()
-
-    // A deferred row names no fixture, so it is classified against any *patched* fixture of the
-    // editor type. That is a real fixture rather than a synthetic one — the backend has no
-    // synthetic-fixture builder, only the editor does — so a Look whose declared type isn't
-    // patched anywhere contributes no family rather than guessing.
-    val deferredReference by lazy(LazyThreadSafetyMode.NONE) {
-        editorFixtureType?.let { type -> fixtures.fixtures.firstOrNull { it.typeKey == type } }
-    }
 
     for (row in rows) {
         val canonical = canonicalPropertyName(row.propertyName)
@@ -813,7 +816,10 @@ private fun DaoLook.derivedFamilies(state: State): List<String> {
             is TargetRef.Fixture -> runCatching { fixtures.untypedFixture(target.key) }.getOrNull()
             is TargetRef.Group -> runCatching { fixtures.untypedGroup(target.key) }.getOrNull()
                 ?.fixtures?.filterIsInstance<uk.me.cormack.lighting7.fixture.Fixture>()?.firstOrNull()
-            null -> deferredReference
+            // A row with no target contributes no family. It cannot happen for data this version
+            // wrote — a Look row is always bound — and a row left by an older database has nothing
+            // to classify it against now that the editor hint is gone.
+            null -> null
         } ?: continue
         maskGroupForProperty(fixture, canonical)?.let { families.add(it) }
     }
@@ -855,9 +861,8 @@ private fun DaoLook.toSummaryDto(state: State, usage: LookUsage?): LookDto {
         families = derivedFamilies(state),
         rowCount = rowList.size,
         effectCount = effectList.size,
-        targetCount = rowList.filterNot { it.isDeferred }.map { it.targetKey }.distinct().size,
-        hasDeferredRows = rowList.any { it.isDeferred } || effectList.any { it.isDeferred },
-        editorFixtureType = editorFixtureType,
+        targetCount = rowList.map { it.targetKey }.distinct().size,
+        hasDeferredEffects = effectList.any { it.isDeferred },
         preview = rowList.groupingBy { it.value }
             .eachCount()
             .entries
@@ -878,7 +883,6 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
         notes = notes,
         sortOrder = sortOrder,
         families = derivedFamilies(state),
-        editorFixtureType = editorFixtureType,
         palette = palette,
         // Sorted in memory, not via `orderBy`: `derivedFamilies` above already iterates the
         // referrer collection, and Exposed refuses to order a SizedIterable once it is loaded.

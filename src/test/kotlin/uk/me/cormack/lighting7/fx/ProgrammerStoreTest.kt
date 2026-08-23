@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.fx.LayerSource
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -319,9 +320,7 @@ class ProgrammerStoreTest {
 
     private fun layer(layerId: Int, sortOrder: Int) = ProgrammerLayer(
         layerId = layerId,
-        lookId = 7,
-        lookUuid = java.util.UUID.nameUUIDFromBytes("warm".toByteArray()),
-        lookName = "Warm",
+        source = LayerSource.look(7, java.util.UUID.nameUUIDFromBytes("warm".toByteArray()), "Warm"),
         sortOrder = sortOrder,
     )
 

@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.fx.LayerSource
+import uk.me.cormack.lighting7.fx.TemplateRegistry
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
@@ -51,6 +53,9 @@ class ProgrammerLayerStackTest {
         val stack = ProgrammerLayerStack(
             fixtures = { fixtures },
             lookRegistry = { registry },
+            // Nothing in these tests layers a template, and a `TemplateRegistry` with a loader that
+            // answers null is exactly what "there are none" means to the cook.
+            templateRegistry = { TemplateRegistry(loader = { null }) },
             engine = { engine },
             store = store,
             // No effects in these looks, so nothing ever reaches the spawn path.
@@ -66,7 +71,6 @@ class ProgrammerLayerStackTest {
             lookId = name.hashCode(),
             lookUuid = uuid,
             name = name,
-            editorFixtureType = null,
             palette = emptyList(),
             rows = listOf(
                 LookRowEntry(target = null, propertyName = "dimmer", value = dimmer.toString()),
@@ -81,7 +85,6 @@ class ProgrammerLayerStackTest {
         lookId = 0,
         lookUuid = UUID(0L, 0L),
         name = "preview",
-        editorFixtureType = null,
         palette = emptyList(),
         rows = listOf(
             LookRowEntry(target = null, propertyName = "dimmer", value = dimmer.toString()),
@@ -91,9 +94,7 @@ class ProgrammerLayerStackTest {
 
     private fun Rig.add(name: String, dimmer: Int, vararg fixtureKeys: String) =
         stack.add(
-            lookId = name.hashCode(),
-            lookUuid = look(name, dimmer),
-            lookName = name,
+            source = LayerSource.look(name.hashCode(), look(name, dimmer), name),
             targets = fixtureKeys.map { CueTargetDto("fixture", it) },
         ).first
 
@@ -204,7 +205,7 @@ class ProgrammerLayerStackTest {
     @Test
     fun `editing a Look moves the layers that name it, and only those`() {
         val rig = newRig()
-        val warmUuid = rig.add("Warm", 200, "hex-1").lookUuid
+        val warmUuid = rig.add("Warm", 200, "hex-1").source.uuid
         rig.add("Cool", 40, "hex-2")
 
         // The registry is map-backed, so an "edit" is a replacement plus an invalidation — the same
@@ -357,11 +358,11 @@ class ProgrammerLayerStackTest {
         val uuid = rig.look("Warm", 200)
         val targets = listOf(CueTargetDto("fixture", "hex-1"))
 
-        val applied = rig.stack.toggle("Warm".hashCode(), uuid, "Warm", targets)
+        val applied = rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), targets)
         assertEquals("applied", applied.first)
         assertEquals(200, rig.valueOf("hex-1"))
 
-        val removed = rig.stack.toggle("Warm".hashCode(), uuid, "Warm", targets)
+        val removed = rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), targets)
         assertEquals("removed", removed.first)
         assertNull(rig.valueOf("hex-1"))
     }
@@ -373,11 +374,11 @@ class ProgrammerLayerStackTest {
         val rig = newRig()
         val uuid = rig.look("Warm", 200)
 
-        rig.stack.toggle("Warm".hashCode(), uuid, "Warm", listOf(CueTargetDto("fixture", "hex-1")))
-        rig.stack.toggle("Warm".hashCode(), uuid, "Warm", listOf(CueTargetDto("fixture", "hex-2")))
+        rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), listOf(CueTargetDto("fixture", "hex-1")))
+        rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), listOf(CueTargetDto("fixture", "hex-2")))
         assertEquals(2, rig.store.layers.size)
 
-        rig.stack.toggle("Warm".hashCode(), uuid, "Warm", listOf(CueTargetDto("fixture", "hex-1")))
+        rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), listOf(CueTargetDto("fixture", "hex-1")))
 
         assertEquals(1, rig.store.layers.size)
         assertNull(rig.valueOf("hex-1"))
@@ -391,6 +392,6 @@ class ProgrammerLayerStackTest {
         val targets = listOf(CueTargetDto("fixture", "hex-1"))
         rig.stack.installPreview(draft(12), targets = targets)
 
-        assertEquals("applied", rig.stack.toggle("Warm".hashCode(), uuid, "Warm", targets).first)
+        assertEquals("applied", rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), targets).first)
     }
 }

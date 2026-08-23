@@ -12,7 +12,7 @@ import java.util.UUID
 private val logger = LoggerFactory.getLogger("ProgrammerLayerStack")
 
 /**
- * One Look applied to the programmer, at a declared position in its stack.
+ * One Look or template applied to the programmer, at a declared position in its stack.
  *
  * The in-memory twin of `DaoCueLayer`, minus the three timing columns: there is no trigger manager
  * for the programmer and a programmer layer is always immediate. Include drops a cue's timed layers
@@ -21,9 +21,8 @@ private val logger = LoggerFactory.getLogger("ProgrammerLayerStack")
 data class ProgrammerLayer(
     /** In-memory identity from [ProgrammerStore.mintLayerId]. **Not** a `DaoCueLayer` id. */
     val layerId: Int,
-    val lookId: Int,
-    val lookUuid: UUID,
-    val lookName: String,
+    /** What this layer applies — see [LayerSource]. */
+    val source: LayerSource,
     val sortOrder: Int,
     val enabled: Boolean = true,
     val targets: List<CueTargetDto> = emptyList(),
@@ -55,9 +54,7 @@ data class ProgrammerLayer(
     val isPreview: Boolean = false,
 ) {
     internal fun toCookLayer() = CookLayer(
-        lookId = lookId,
-        lookUuid = lookUuid,
-        lookName = lookName,
+        source = source,
         sortOrder = sortOrder,
         enabled = enabled,
         targets = targets,
@@ -120,6 +117,7 @@ data class ProgrammerLayerOutcome(
 class ProgrammerLayerStack(
     private val fixtures: () -> Fixtures,
     private val lookRegistry: () -> LookRegistry,
+    private val templateRegistry: () -> TemplateRegistry,
     private val engine: () -> FxEngine,
     private val store: ProgrammerStore,
     /**
@@ -185,9 +183,7 @@ class ProgrammerLayerStack(
 
     /** Append a layer to the top of the stack. */
     fun add(
-        lookId: Int,
-        lookUuid: UUID,
-        lookName: String,
+        source: LayerSource,
         targets: List<CueTargetDto> = emptyList(),
         propertyMask: String? = null,
         blendMode: String = "OVERRIDE",
@@ -200,9 +196,7 @@ class ProgrammerLayerStack(
     ): Pair<ProgrammerLayer, ProgrammerLayerOutcome> {
         val layer = ProgrammerLayer(
             layerId = store.mintLayerId(),
-            lookId = lookId,
-            lookUuid = lookUuid,
-            lookName = lookName,
+            source = source,
             sortOrder = 0, // renumbered below
             targets = targets,
             propertyMask = propertyMask,
@@ -222,33 +216,32 @@ class ProgrammerLayerStack(
     }
 
     /**
-     * The busking pad's gesture: put this Look on these targets, or take it off again.
+     * The busking pad's gesture: put this Look or template on these targets, or take it off again.
      *
-     * "Already on" means **a non-preview layer with the same Look and the same target set** — the
+     * "Already on" means **a non-preview layer with the same source and the same target set** — the
      * pad's own reading, and the one that lets the same Look sit on two different target sets as two
-     * independently-toggleable pads. Returns `"applied"`/`"removed"` and how many effects moved,
-     * which is the contract `togglePresetOnTargets` had and the pads still read.
+     * independently-toggleable pads. Matching on the whole [LayerSource] rather than on an id is
+     * what keeps a Look and a template that happen to share an int PK from cancelling each other.
+     * Returns `"applied"`/`"removed"` and how many effects moved, which is the contract
+     * `togglePresetOnTargets` had and the pads still read.
      *
-     * Note a rows-only Look reports `0` either way: it spawns no effects. That was true before this
-     * rewrite too, and it is why the pads' active ring cannot be driven from the effect list alone.
+     * Note a rows-only Look reports `0` either way, and a **template always does**: neither spawns
+     * effects. That was true before this rewrite too, and it is why the pads' active ring cannot be
+     * driven from the effect list alone.
      */
     fun toggle(
-        lookId: Int,
-        lookUuid: UUID,
-        lookName: String,
+        source: LayerSource,
         targets: List<CueTargetDto>,
         beatDivisionOverride: Double? = null,
     ): Pair<String, Int> {
         val existing = store.layers.firstOrNull {
-            !it.isPreview && it.lookId == lookId && it.targets == targets
+            !it.isPreview && it.source == source && it.targets == targets
         }
         return if (existing != null) {
             "removed" to remove(existing.layerId).effectsRetracted
         } else {
             "applied" to add(
-                lookId = lookId,
-                lookUuid = lookUuid,
-                lookName = lookName,
+                source = source,
                 targets = targets,
                 beatDivisionOverride = beatDivisionOverride,
             ).second.effectsSpawned
@@ -330,9 +323,7 @@ class ProgrammerLayerStack(
             val installed = immediate.sortedBy { it.sortOrder }.map { layer ->
                 ProgrammerLayer(
                     layerId = store.mintLayerId(),
-                    lookId = layer.lookId,
-                    lookUuid = layer.lookUuid,
-                    lookName = layer.lookName,
+                    source = layer.source,
                     sortOrder = 0, // renumbered below
                     enabled = layer.enabled,
                     targets = layer.targets,
@@ -390,9 +381,10 @@ class ProgrammerLayerStack(
             previewSnapshot = snapshot
             val preview = ProgrammerLayer(
                 layerId = existing?.layerId ?: store.mintLayerId(),
-                lookId = snapshot.lookId,
-                lookUuid = previewLookUuid,
-                lookName = snapshot.name,
+                // Always a LOOK: the preview slot exists for an *unsaved Look draft*, which is why
+                // it carries the sentinel uuid `resolveLook` special-cases. A template's editor has
+                // no rig preview — its "resolves to" panel is a computation, not a stage write.
+                source = LayerSource.look(snapshot.lookId, previewLookUuid, snapshot.name),
                 sortOrder = 0,
                 targets = targets,
                 propertyMask = propertyMask,
@@ -439,9 +431,12 @@ class ProgrammerLayerStack(
      * removing an *effect* on a Look does not reach layers already applied — value edits tour, effect
      * edits need the layer re-added.
      */
-    fun recookIfReferences(lookUuid: UUID): Set<CueAssignmentResolver.Key> {
+    fun recookIfReferences(sourceUuid: UUID): Set<CueAssignmentResolver.Key> {
         val layers = store.layers
-        if (layers.none { it.lookUuid == lookUuid }) return emptySet()
+        // Matched on the uuid alone rather than on (kind, uuid): uuids are random and unique across
+        // both tables, so a caller republishing after an edit does not have to say which kind of
+        // thing it edited. The template path uses this unchanged.
+        if (layers.none { it.source.uuid == sourceUuid }) return emptySet()
         return materialise(layers)
     }
 
@@ -475,6 +470,7 @@ class ProgrammerLayerStack(
             // tell the operator's own edits from the stack's output.
             localRows = emptyList(),
             lookRegistry = lookRegistry(),
+            templateRegistry = templateRegistry(),
             resolveLook = ::resolveLook,
         )
         engine().setProgrammerStompSuppression(cooked.stompSuppression)
@@ -537,7 +533,7 @@ class ProgrammerLayerStack(
                 repriorities[existing] = priority
                 continue
             }
-            val palette = resolveLook(layer.lookUuid)?.palette ?: emptyList()
+            val palette = resolveLook(layer.source.uuid)?.palette ?: emptyList()
             val override = byLayerId[layer.layerId]?.beatDivisionOverride
             val id = spawn(layer, effect, target, priority, palette, override) ?: continue
             effectInstances[key] = id
@@ -605,14 +601,16 @@ class ProgrammerLayerStack(
         } catch (e: Exception) {
             logger.warn(
                 "programmer layer '{}': effect '{}' could not be created — {}",
-                layer.lookName, effect.effectType, e.message,
+                layer.source.name, effect.effectType, e.message,
             )
             return null
         }
         // `presetId` stays null on purpose. The toggle route used to pass the *Look* id there,
         // which made `captureCurrentState` reconstruct a preset application naming whatever
         // `DaoFxPreset` shared the number. `lookId` and `programmerLayerId` are the honest fields.
-        instance.lookId = layer.lookId
+        // Only a Look can own an effect (D7), so only a Look id belongs here — a template layer
+        // never reaches `spawn` because a template holds no effects to spawn.
+        instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }
         instance.programmerLayerId = layer.layerId
         instance.priority = priority
         return engine().addEffect(instance)

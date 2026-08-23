@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fx.LayerSource
 import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
@@ -167,7 +168,7 @@ class LookRepublishTest : RouteIntegrationTest() {
             DaoLook.all().single { it.uuid == lookUuid }.let { Triple(it.id.value, it.uuid, it.name) }
         }
         state.show.programmerLayerStack.add(
-            lookId = look.first, lookUuid = look.second, lookName = look.third,
+            source = LayerSource.look(look.first, look.second, look.third),
             targets = emptyList(),
         )
         state.show.fxEngine.setProgrammerBlind(true)

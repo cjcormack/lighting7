@@ -12,6 +12,8 @@ import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLooks
+import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 
@@ -54,29 +56,56 @@ internal data class LookRepublishOutcome(
  * about a reference the edited Look no longer covered. The layer stack has no such case: a key the
  * cooked stack stops naming simply loses its layer slot and whatever is underneath shows through.
  */
-internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOutcome {
+internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOutcome =
+    republishForSourceEdit(
+        state,
+        lookUuid,
+        kind = "look",
+        invalidate = { state.show.lookRegistry.invalidate(lookUuid) },
+        referencing = { activeCueIds -> activeCuesReferencingLook(state, lookUuid, activeCueIds) },
+    )
+
+/**
+ * The template counterpart, and the reason this body is shared rather than copied: retuning a
+ * template has to move every cue layering it *and* the programmer's own stack, by exactly the same
+ * four-step order, or the flicker step 2 exists to prevent comes back on one of the two paths.
+ *
+ * Only two things differ — which cache to drop, and which FK column to search — so those are the
+ * two parameters.
+ */
+internal fun republishForTemplateEdit(state: State, templateUuid: UUID): LookRepublishOutcome =
+    republishForSourceEdit(
+        state,
+        templateUuid,
+        kind = "template",
+        invalidate = { state.show.templateRegistry.invalidate(templateUuid) },
+        referencing = { activeCueIds -> activeCuesReferencingTemplate(state, templateUuid, activeCueIds) },
+    )
+
+private fun republishForSourceEdit(
+    state: State,
+    sourceUuid: UUID,
+    kind: String,
+    invalidate: () -> Unit,
+    referencing: (Set<Int>) -> Set<Int>,
+): LookRepublishOutcome {
     val engine = state.show.fxEngine
-    val registry = state.show.lookRegistry
 
-    // 1. Drop the cached expansion first, so every read below sees the new contents.
-    registry.invalidate(lookUuid)
+    // 1. Drop the cached snapshot first, so every read below sees the new contents.
+    invalidate()
 
-    // 2. Re-cook the programmer's layer stack, if any of its layers name this Look. Before
+    // 2. Re-cook the programmer's layer stack, if any of its layers name this record. Before
     //    step 3, and that order is load-bearing: `publishCueLayerToControllers` composes the
     //    programmer *over* the cue layer, so stale layer slots would transmit the old value and be
     //    corrected a frame later — a visible flicker on the very fixtures being edited.
-    val layerKeys = state.show.programmerLayerStack.recookIfReferences(lookUuid)
+    val layerKeys = state.show.programmerLayerStack.recookIfReferences(sourceUuid)
 
-    // 3. Rebuild the live cues that depend on this Look, then one republish for all of them.
+    // 3. Rebuild the live cues that depend on this record, then one republish for all of them.
     val activeCueIds = engine.activeCueAssignmentIds()
-    val referencing = if (activeCueIds.isEmpty()) {
-        emptySet()
-    } else {
-        activeCuesReferencingLook(state, lookUuid, activeCueIds)
-    }
+    val referencingCues = if (activeCueIds.isEmpty()) emptySet() else referencing(activeCueIds)
     val rebuilt = LinkedHashMap<Int, List<CueAssignmentResolver.Assignment>>()
     val rebuiltStomp = LinkedHashMap<Int, LayerStompSuppression>()
-    for (cueId in referencing) {
+    for (cueId in referencingCues) {
         val cooked = rebuildCueLayerRows(state, cueId) ?: continue
         rebuilt[cueId] = cooked.rows
         // Carried per cue, and *always* — including when it is empty. An edit that deleted the rows
@@ -99,8 +128,8 @@ internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOu
     }
 
     logger.info(
-        "look {} edited: {} programmer layer key(s) refreshed, {} of {} active cue(s) republished",
-        lookUuid, programmerKeys.size, republished, activeCueIds.size,
+        "{} {} edited: {} programmer layer key(s) refreshed, {} of {} active cue(s) republished",
+        kind, sourceUuid, programmerKeys.size, republished, activeCueIds.size,
     )
     return LookRepublishOutcome(
         programmerKeysRefreshed = programmerKeys.size,
@@ -133,6 +162,25 @@ internal fun activeCuesReferencingLook(
                 (DaoCueLayers.cue inList activeCueIds.toList()) and (DaoCueLayers.look eq look.id)
             }.map { it.cue.id.value }.toSet()
         }
+    }
+}
+
+/**
+ * Which of [activeCueIds] depend on [templateUuid]. The same indexed-FK query as
+ * [activeCuesReferencingLook], on the other column.
+ */
+internal fun activeCuesReferencingTemplate(
+    state: State,
+    templateUuid: UUID,
+    activeCueIds: Set<Int>,
+): Set<Int> {
+    if (activeCueIds.isEmpty()) return emptySet()
+    return transaction(state.database) {
+        val template = DaoTemplate.find { DaoTemplates.uuid eq templateUuid }.firstOrNull()
+            ?: return@transaction emptySet()
+        DaoCueLayer.find {
+            (DaoCueLayers.cue inList activeCueIds.toList()) and (DaoCueLayers.template eq template.id)
+        }.map { it.cue.id.value }.toSet()
     }
 }
 

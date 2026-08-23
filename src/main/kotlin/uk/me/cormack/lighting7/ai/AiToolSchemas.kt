@@ -78,7 +78,6 @@ internal val createLookTool = AnthropicToolDef(
         put("properties", buildJsonObject {
             put("name", buildJsonObject { put("type", "string"); put("description", "Look name") })
             put("description", buildJsonObject { put("type", "string"); put("description", "Optional notes") })
-            put("editorFixtureType", buildJsonObject { put("type", "string"); put("description", "Required typeKey the look's effects are authored against. An editor hint, not a constraint: the look's targets come from the layer that applies it.") })
             put("effects", buildJsonObject {
                 put("type", "array")
                 put("items", lookEffectSchema)
@@ -89,7 +88,7 @@ internal val createLookTool = AnthropicToolDef(
                 put("items", targetSchema)
             })
         })
-        put("required", buildJsonArray { add("name"); add("editorFixtureType"); add("effects") })
+        put("required", buildJsonArray { add("name"); add("effects") })
     }
 )
 

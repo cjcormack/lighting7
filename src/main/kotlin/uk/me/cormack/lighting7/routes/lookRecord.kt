@@ -163,9 +163,11 @@ internal fun writeRecordingIntoLook(
  * **false** — "leave alone" — matching [maskGroupForRow]'s documented reading for the destructive
  * `UPDATE_EXISTING` pass: a row we cannot classify is a row we must not delete.
  *
- * A **deferred** row is only ever in remit when there is no scope at all. A deferred row has no
- * target, so no selection can be said to name it, and deleting one because the operator re-recorded
- * two fixtures would silently strip the template half of a Look.
+ * A row with **no target** is never in remit. Session 3 made a Look row always bound — the deferred
+ * half became [uk.me.cormack.lighting7.models.DaoTemplates] — so this arm only ever sees a row left
+ * behind by an older database, and "leave alone" is the one safe thing to do with a row this code
+ * can no longer classify. It used to be classifiable, against the Look's `editorFixtureType`, and
+ * that column is gone.
  */
 internal fun lookRowInRemit(
     fixtures: Fixtures,
@@ -174,24 +176,13 @@ internal fun lookRowInRemit(
 ): (DaoLookRow) -> Boolean = { row ->
     val target = row.target
     if (target == null) {
-        scope == null && maskAllows(mask, deferredRowMaskGroup(fixtures, row))
+        false
     } else if (!targetInScope(fixtures, target, scope)) {
         false
     } else {
         val fixture = referenceFixtureOf(fixtures, target)
         fixture != null && maskAllows(mask, maskGroupForProperty(fixture, row.propertyName))
     }
-}
-
-/**
- * The mask group of a deferred row, resolved against the Look's `editorFixtureType` if the patch
- * happens to hold one of those. Null — "don't touch" — when it doesn't, which is the safe answer:
- * a deferred row's property may not exist on any patched head at all.
- */
-private fun deferredRowMaskGroup(fixtures: Fixtures, row: DaoLookRow): PropertyMaskGroup? {
-    val typeKey = row.look.editorFixtureType ?: return null
-    val fixture = fixtures.fixtures.firstOrNull { it.typeKey == typeKey } ?: return null
-    return maskGroupForProperty(fixture, row.propertyName)
 }
 
 private fun referenceFixtureOf(fixtures: Fixtures, target: TargetRef): GroupableFixture? = try {

@@ -66,6 +66,7 @@ riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v
 stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
 fixtureGroups/{uuid}.json      # members embedded inline
 looks/{uuid}.json              # rows and effects embedded inline
+templates/{uuid}.json          # rows embedded inline; one attribute family each (v6+)
 speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default
 fxDefinitions/{uuid}.json
 cueSlots/{uuid}.json
@@ -171,7 +172,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 5`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 6`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -188,7 +189,24 @@ project whose cues had lost their composition entirely, which is worse than refu
 
 Note the gate lives in **two compiled-in constants** (`SUPPORTED_FORMAT_VERSION` and
 `MIN_SUPPORTED_FORMAT_VERSION` in `ProjectImporter.kt`), not in the DTO. `FormatVersionJson.minReader`
-is *written* but never read by the importer, so bumping the DTO alone leaves the gate wide open.
+is *written* but never read by the importer, so bumping the DTO alone leaves the gate wide open. It
+also cuts the other way, and session 3 proved it: bumping the DTO to 6 while `SUPPORTED` stayed at 5
+made the importer **refuse its own export**, which surfaced as every clone and round-trip test failing
+with an `ImportError`. Move both, or neither.
+
+### Version 6 — templates as their own entity
+
+**v6 is the worked example of a one-directional break.** Templates got their own tables, so the
+export gained a `templates/` folder and `CueLayerJson.lookUuid` became *optional* beside a new
+`templateUuid` — exactly one of the two is set.
+
+Only `formatVersion` moved; **`minReader` deliberately stayed at 5**. A v5 repo still imports
+unchanged: it has no `templates/` folder (a missing directory reads as empty) and every one of its cue
+layers carries a `lookUuid`. What the bump buys is the *other* direction — a v5 install must refuse a
+v6 repo, where a cue layer may carry `templateUuid` alone and a v5 reader would take `lookUuid`'s null
+straight into `UUID.fromString`. That is a **Java platform type**, so Kotlin permits the null with no
+compile-time stop and it fails as a bare NPE naming nothing. The importer's own null check is written
+out longhand for that reason.
 
 ### Version 2 — FOH stage geometry
 

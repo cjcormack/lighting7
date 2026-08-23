@@ -252,7 +252,11 @@ class CueStackManager(
             )
             instance.cueId = cueData.cueId
             instance.cueStackId = stackId
-            instance.lookId = layer.lookId
+            // Only a Look can own an effect, so only a Look id belongs in this field.
+            // `cookEffects` already skips template layers, which makes this structurally
+            // unreachable rather than merely unlikely — stated because the alternative writes
+            // a template id into a field named `lookId`.
+            instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }
             instance.cueLayerId = layer.layerId
             fxEngine.addEffect(instance)
             effectCount++
@@ -309,6 +313,7 @@ class CueStackManager(
             localRows = localRows,
             cascade = stackCascade,
             lookRegistry = state.show.lookRegistry,
+            templateRegistry = state.show.templateRegistry,
         )
         val incomingStartWeight = if (useCrossfade) 0.0 else 1.0
         if (cooked.rows.isNotEmpty()) {

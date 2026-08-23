@@ -239,7 +239,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         val cueId = createCue(
@@ -253,7 +253,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
 
         val layers = state.show.programmerStore.layers
         assertEquals(1, layers.size, "the layer arrived as a layer")
-        assertEquals(warm.id, layers.single().lookId)
+        assertEquals(warm.id, layers.single().source.id)
         assertEquals(200u.toUByte(), programmerChannel(state, 0, 1), "and it is on stage")
     }
 
@@ -263,7 +263,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             mountTestApp(state)
             val client = jsonClient()
             seedHex("hex-1", 1)
-            val warm = ProgrammerRouteTestSupport.createDeferredLook(
+            val warm = ProgrammerRouteTestSupport.createLookBoundTo(
                 client, projectId, "Warm", mapOf("dimmer" to "200"),
             )
             val cueId = createCue(
@@ -286,10 +286,10 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val bright = ProgrammerRouteTestSupport.createDeferredLook(
+        val bright = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Bright", mapOf("dimmer" to "200"),
         )
-        val dim = ProgrammerRouteTestSupport.createDeferredLook(
+        val dim = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Dim", mapOf("dimmer" to "40"),
         )
         val targets = listOf(CueTargetDto("fixture", "hex-1"))
@@ -305,7 +305,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
 
         assertEquals(
             listOf(bright.id, dim.id),
-            state.show.programmerStore.layers.map { it.lookId },
+            state.show.programmerStore.layers.map { it.source.id },
             "order is what decides the value, so it has to survive",
         )
         assertEquals(
@@ -322,7 +322,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         val cueId = createCue(
@@ -350,7 +350,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         val cueId = createCue(
@@ -380,8 +380,12 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         seedHex("hex-1", 1)
         seedHex("hex-2", 13)
         LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        // The row names the **group**, which is what makes the group key real information rather
+        // than something Include had to infer. A Look row may target a group; only a template's may
+        // not, because a template names no targets of its own at all.
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
+            targetKey = "front-wash", targetType = "group",
         )
         val cueId = createCue(
             client, "layered",

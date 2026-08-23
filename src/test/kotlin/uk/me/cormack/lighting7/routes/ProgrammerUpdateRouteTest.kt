@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fx.LayerSource
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -306,14 +307,14 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         val cueId = createCue(client, "c", rows = listOf(assignment("fixture", "hex-1", "dimmer", "10")))
 
         client.include(cueId)
         state.show.programmerLayerStack.add(
-            lookId = warm.id, lookUuid = java.util.UUID.fromString(warm.uuid), lookName = warm.name,
+            source = LayerSource.look(warm.id, java.util.UUID.fromString(warm.uuid), warm.name),
             targets = listOf(CueTargetDto("fixture", "hex-1")),
         )
         client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
@@ -328,7 +329,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         val cueId = createCue(
@@ -349,8 +350,8 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val a = ProgrammerRouteTestSupport.createDeferredLook(client, projectId, "A", mapOf("dimmer" to "200"))
-        val b = ProgrammerRouteTestSupport.createDeferredLook(client, projectId, "B", mapOf("dimmer" to "40"))
+        val a = ProgrammerRouteTestSupport.createLookBoundTo(client, projectId, "A", mapOf("dimmer" to "200"))
+        val b = ProgrammerRouteTestSupport.createLookBoundTo(client, projectId, "B", mapOf("dimmer" to "40"))
         val targets = listOf(CueTargetDto("fixture", "hex-1"))
         val cueId = createCue(
             client, "c",
@@ -366,7 +367,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
 
         val layers = client.cueLayers(cueId).sortedBy { it.sortOrder }
-        assertEquals(listOf(b.id, a.id), layers.map { it.lookId }, "the new order persisted")
+        assertEquals(listOf(b.id, a.id), layers.map { it.source!!.id }, "the new order persisted")
         assertEquals(listOf(0, 1), layers.map { it.sortOrder }, "densely renumbered, so no ties")
     }
 
@@ -377,7 +378,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         val cueId = createCue(
@@ -392,7 +393,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
 
         val layer = client.cueLayers(cueId).single()
         assertEquals(0.5, layer.amount)
-        assertEquals(warm.id, layer.lookId, "still the same Look — identity was matched, not rewritten")
+        assertEquals(warm.id, layer.source!!.id, "still the same Look — identity was matched, not rewritten")
     }
 
     @Test
@@ -403,7 +404,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         val targets = listOf(CueTargetDto("fixture", "hex-1"))
@@ -432,7 +433,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         val cueId = createCue(

@@ -13,16 +13,15 @@ import java.util.UUID
 private val logger = LoggerFactory.getLogger("CueComposer")
 
 /**
- * One line of a cue's Look composition, resolved far enough to compose: the Look's identity plus
+ * One line of a cue's layer composition, resolved far enough to compose: what the layer applies plus
  * the layer's own operating parameters.
  *
- * Carries [lookUuid] alongside [lookId] so [LookRegistry] — which is uuid-keyed — needs no second
- * DB hit at apply time.
+ * [source] carries the uuid alongside the int id so [LookRegistry] and [TemplateRegistry] — both
+ * uuid-keyed — need no second DB hit at apply time, and carries the *kind* because a layer can apply
+ * either a Look or a template and the two resolve differently.
  */
 internal data class CookLayer(
-    val lookId: Int,
-    val lookUuid: UUID,
-    val lookName: String,
+    val source: LayerSource,
     val sortOrder: Int = 0,
     val enabled: Boolean = true,
     val targets: List<CueTargetDto> = emptyList(),
@@ -38,15 +37,15 @@ internal data class CookLayer(
     /**
      * This *layer's* row id, which is what the fired-timed-layer set is keyed on.
      *
-     * Distinct from [lookId] because one cue may legitimately layer the same Look twice — a chase
-     * built from one Look at two delays is the obvious case. Keying the fired set on [lookId] would
-     * make firing either of them include both, so the second layer's contribution would appear at
-     * the first layer's delay.
+     * Distinct from `source.id` because one cue may legitimately layer the same Look twice — a
+     * chase built from one Look at two delays is the obvious case. Keying the fired set on the
+     * source id would make firing either of them include both, so the second layer's contribution
+     * would appear at the first layer's delay.
      *
-     * Defaults to [lookId] purely so a hand-built [CookLayer] in a test stays a one-liner; every
+     * Defaults to `source.id` purely so a hand-built [CookLayer] in a test stays a one-liner; every
      * real layer comes from `DaoCueLayer.toCookLayer`, which passes the row id.
      */
-    val layerId: Int = lookId,
+    val layerId: Int = source.id,
 ) {
     /** True when this layer fires on a timer rather than at cue apply. */
     val isTimed: Boolean get() = delayMs != null || intervalMs != null
@@ -110,8 +109,8 @@ internal data class CookLayer(
 data class CookWinner(
     val index: Int,
     val layerId: Int,
-    val lookId: Int,
-    val lookName: String,
+    /** What the winning layer applies — a Look or a template, named. */
+    val source: LayerSource,
 )
 
 /**
@@ -212,10 +211,11 @@ internal object CueComposer {
         localRows: List<CueAssignmentResolver.Assignment>,
         cascade: PaletteCascade = PaletteCascade.EMPTY,
         lookRegistry: LookRegistry? = null,
+        templateRegistry: TemplateRegistry? = null,
         includeTimed: Set<Int> = emptySet(),
         /**
-         * How a layer's `lookUuid` becomes a [LookSnapshot]. Defaults to [lookRegistry], which is
-         * what every cue path wants.
+         * How a LOOK layer's `source.uuid` becomes a [LookSnapshot]. Defaults to [lookRegistry],
+         * which is what every cue path wants.
          *
          * The programmer overrides it for one case the registry cannot serve: the Look editor's
          * **live preview** is an *unsaved* draft, so it has no row to load and no uuid the registry
@@ -224,6 +224,15 @@ internal object CueComposer {
          * with its own precedence.
          */
         resolveLook: (UUID) -> LookSnapshot? = { lookRegistry?.snapshot(it) },
+        /**
+         * How a TEMPLATE layer's `source.uuid` becomes a [TemplateSnapshot].
+         *
+         * Separate from [resolveLook] rather than one polymorphic resolver, so the live-preview
+         * override above keeps working untouched: it substitutes an unsaved *Look*, and folding the
+         * two would make every caller of that override state a template resolver it has no opinion
+         * about.
+         */
+        resolveTemplate: (UUID) -> TemplateSnapshot? = { templateRegistry?.snapshot(it) },
     ): CookResult {
         val acc = LinkedHashMap<Key, Contribution>()
 
@@ -243,16 +252,16 @@ internal object CueComposer {
         val asserted = ArrayList<LayerAssertions>(contributing.size)
 
         for ((index, layer) in contributing.withIndex()) {
-            val look = resolveLook(layer.lookUuid)
-            if (look == null) {
+            val content = resolveContent(layer.source, resolveLook, resolveTemplate)
+            if (content == null) {
                 logger.warn(
-                    "cue {}: look '{}' ({}) could not be loaded — skipping layer",
-                    cueId, layer.lookName, layer.lookUuid,
+                    "cue {}: {} '{}' ({}) could not be loaded — skipping layer",
+                    cueId, layer.source.kind, layer.source.name, layer.source.uuid,
                 )
                 continue
             }
             val keys = HashMap<String, MutableSet<String>>()
-            applyLayer(fixtures, cueId, layer, index, look, cascade, acc, keys)
+            applyLayer(fixtures, cueId, layer, index, content, cascade, acc, keys)
             asserted.add(LayerAssertions(layer.layerId, layer.stomp, keys))
         }
 
@@ -368,7 +377,10 @@ internal object CueComposer {
             // Same rule as [cook]: an amount-0 layer contributes nothing at all. Without this an
             // operator who muted a layer by pulling Amount to zero would still see its effects run.
             if (layer.amount <= 0.0) continue
-            val look = resolveLook(layer.lookUuid) ?: continue
+            // Templates hold no effects at all (D7 — effects live in a Look or on a cue), so a
+            // template layer contributes nothing here rather than being resolved and found empty.
+            if (layer.source.isTemplate) continue
+            val look = resolveLook(layer.source.uuid) ?: continue
             val layerTargets = layer.targets.map { it.target }
             for (effect in look.effects) {
                 val effectTarget = effect.target
@@ -376,7 +388,7 @@ internal object CueComposer {
                     if (layerTargets.isEmpty()) {
                         logger.warn(
                             "cue {}: look '{}' has a deferred effect but its layer names no targets — skipping",
-                            cueId, layer.lookName,
+                            cueId, layer.source.name,
                         )
                         continue
                     }
@@ -393,6 +405,52 @@ internal object CueComposer {
     }
 
     // ─── One layer ──────────────────────────────────────────────────────
+
+    /**
+     * What a layer actually applies, once resolved.
+     *
+     * The two arms differ in one place only — how a row's stored string becomes a value — which is
+     * why they share [applyLayer] rather than getting a composer each. Everything else about a layer
+     * (targets supplying deferred rows and filtering bound ones, mask, blend, amount, stomp,
+     * specificity, assertion recording) is identical, and duplicating it is how the two would drift.
+     */
+    private sealed interface LayerContent {
+        /** Rows in `sortOrder`, in the shape [applyLayer] consumes. */
+        val rows: List<SourceRow>
+
+        /** A Look: literals, plus its own positional colour list as the cascade's narrowest scope. */
+        class OfLook(val look: LookSnapshot) : LayerContent {
+            override val rows: List<SourceRow> = look.rows.map {
+                SourceRow(it.target, it.propertyName, it.value, it.elementKey)
+            }
+        }
+
+        /** A template: [TemplateIntent]s, resolved per head by [TemplateResolver]. */
+        class OfTemplate(val template: TemplateSnapshot) : LayerContent {
+            // A template has no element rows by construction — the column does not exist — so the
+            // element skip in `applyLayer` simply never fires for this arm.
+            override val rows: List<SourceRow> = template.rows.map {
+                SourceRow(it.target, it.propertyName, it.value, elementKey = null)
+            }
+        }
+    }
+
+    /** One stored row, whichever kind of source it came from. */
+    private class SourceRow(
+        val target: TargetRef?,
+        val propertyName: String,
+        val value: String,
+        val elementKey: String?,
+    )
+
+    private fun resolveContent(
+        source: LayerSource,
+        resolveLook: (UUID) -> LookSnapshot?,
+        resolveTemplate: (UUID) -> TemplateSnapshot?,
+    ): LayerContent? = when (source.kind) {
+        LayerSourceKind.LOOK -> resolveLook(source.uuid)?.let { LayerContent.OfLook(it) }
+        LayerSourceKind.TEMPLATE -> resolveTemplate(source.uuid)?.let { LayerContent.OfTemplate(it) }
+    }
 
     /** A single (fixture, property) contribution a layer wants to make, before blending. */
     private class Pending(
@@ -411,7 +469,7 @@ internal object CueComposer {
         layer: CookLayer,
         /** Rank among the contributing layers — see [CookWinner.index]. */
         layerIndex: Int,
-        look: LookSnapshot,
+        content: LayerContent,
         baseCascade: PaletteCascade,
         acc: LinkedHashMap<Key, Contribution>,
         /**
@@ -424,17 +482,22 @@ internal object CueComposer {
         val mask = try {
             parseMaskGroups(layer.propertyMask?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() })
         } catch (e: IllegalArgumentException) {
-            logger.warn("cue {}: layer on look '{}' has an unparsable mask — treating as unmasked: {}", cueId, layer.lookName, e.message)
+            logger.warn("cue {}: layer on '{}' has an unparsable mask — treating as unmasked: {}", cueId, layer.source.name, e.message)
             null
         }
-        val blendMode = parseLayerBlendMode(layer.blendMode, layer.lookName, cueId)
+        val blendMode = parseLayerBlendMode(layer.blendMode, layer.source.name, cueId)
         val amount = layer.amount.coerceIn(0.0, 1.0)
 
         // The Look's own positional colour list is the most specific cascade scope, which is what
         // `PaletteCascade.look` is (called `preset` until session 4 — the name lagged the merge).
         // A Look row's literal may itself be "P1", which is why the cascade has to be threaded
         // through here at all rather than resolved once per cue.
-        val effectivePalette = baseCascade.copy(look = look.palette.toPaletteColours()).effective
+        // A template has no positional colour list of its own — it is not a `PaletteCascade` scope —
+        // so a template layer composes against the cue's and the global one unchanged.
+        val effectivePalette = when (content) {
+            is LayerContent.OfLook -> baseCascade.copy(look = content.look.palette.toPaletteColours()).effective
+            is LayerContent.OfTemplate -> baseCascade.effective
+        }
 
         // Expand the layer's target set once. Null means "unrestricted"; non-empty means the layer
         // both *supplies* targets to deferred rows and *filters* bound ones — one meaning serving
@@ -444,7 +507,7 @@ internal object CueComposer {
             if (layerTargets.isEmpty()) null else expandTargets(fixtures, cueId, layer, layerTargets)
 
         val pending = ArrayList<Pending>()
-        for (row in look.rows) {
+        for (row in content.rows) {
             // Element-scoped rows are handled by the caller-side element path; they never reach the
             // per-fixture accumulator because an element is not a (fixture, property) key.
             if (row.elementKey != null) continue
@@ -452,8 +515,9 @@ internal object CueComposer {
             if (rowTarget == null) {
                 if (layerFixtures == null) {
                     logger.warn(
-                        "cue {}: look '{}' has a deferred row for '{}' but its layer names no targets — skipping",
-                        cueId, look.name, row.propertyName,
+                        "cue {}: {} '{}' has a row for '{}' that takes its targets from the layer, " +
+                            "but the layer names none — skipping",
+                        cueId, layer.source.kind, layer.source.name, row.propertyName,
                     )
                     continue
                 }
@@ -470,27 +534,64 @@ internal object CueComposer {
             }
         }
 
-        // Group-origin contributions first, then fixture-origin, so a Look holding both a group row
-        // and a fixture row for one member resolves fixture-wins — the same rule
+        // Group-origin contributions first, then fixture-origin, so a source holding both a group
+        // row and a fixture row for one member resolves fixture-wins — the same rule
         // [LookRegistry.expand] applies. `sortedBy` is stable, so row order survives within each
         // bucket.
         for (p in pending.sortedBy { if (it.isGroupOrigin) 0 else 1 }) {
-            val canonical = canonicalPropertyName(p.propertyName)
+            // A template row resolves per head **first**, because resolution is what decides which
+            // property carries the value on this head — the MAC 250's colour is a wheel called
+            // `colour`, which `canonicalPropertyName` rewrites to `rgbColour` and then misses. So
+            // the resolved name is what the mask, the category lookup and the accumulator key use.
+            val resolved: TemplateResolver.Resolution? = when (content) {
+                is LayerContent.OfLook -> null
+                is LayerContent.OfTemplate -> {
+                    val intent = parseTemplateIntent(p.rawValue)
+                    if (intent == null) {
+                        logger.warn(
+                            "cue {}: template '{}' — '{}' is not an intent for {}.{} — skipping",
+                            cueId, layer.source.name, p.rawValue, p.fixture.key, p.propertyName,
+                        )
+                        continue
+                    }
+                    val resolution = TemplateResolver.resolve(p.fixture, p.propertyName, intent)
+                    if (!resolution.isSupported) {
+                        // **Debug, not warn.** A head that cannot take the intent is the normal
+                        // case for a template pointed at a mixed rig — a PAR with no pan is not a
+                        // fault, and warning per head per cook would bury the real problems. The
+                        // editor's "resolves to" panel is where an operator is told, before saving.
+                        logger.debug(
+                            "cue {}: template '{}' — {} cannot take {} ({})",
+                            cueId, layer.source.name, p.fixture.key, p.propertyName, resolution.note,
+                        )
+                        continue
+                    }
+                    resolution
+                }
+            }
+            // **Not canonicalised for a template.** `TemplateResolver` already answered with the
+            // head's own property name, and canonicalising it would undo exactly the work it did:
+            // `canonicalPropertyName("colour")` is `"rgbColour"`, so the MAC 250's colour *wheel*
+            // would be looked up under a name it does not have and the head would silently drop out
+            // of every colour template. The Look path still canonicalises, because a stored Look row
+            // may spell the property any of the three ways.
+            val canonical = resolved?.propertyName ?: canonicalPropertyName(p.propertyName)
             if (mask != null && !maskAllows(mask, maskGroupForProperty(p.fixture, canonical))) continue
             val categoryInfo = uk.me.cormack.lighting7.routes.fixtureCategoryFor(p.fixture, canonical)
             if (categoryInfo == null) {
                 logger.warn(
-                    "cue {}: look '{}' — property '{}' not on '{}' — skipping",
-                    cueId, look.name, p.propertyName, p.fixture.key,
+                    "cue {}: {} '{}' — property '{}' not on '{}' — skipping",
+                    cueId, layer.source.kind, layer.source.name, p.propertyName, p.fixture.key,
                 )
                 continue
             }
             val (category, override) = categoryInfo
-            val incoming = CueAssignmentResolver.parseAssignmentValue(category, canonical, p.rawValue, effectivePalette)
+            val incoming = resolved?.value
+                ?: CueAssignmentResolver.parseAssignmentValue(category, canonical, p.rawValue, effectivePalette)
             if (incoming == null) {
                 logger.warn(
-                    "cue {}: look '{}' — invalid value '{}' for {}.{} — skipping",
-                    cueId, look.name, p.rawValue, p.fixture.key, p.propertyName,
+                    "cue {}: {} '{}' — invalid value '{}' for {}.{} — skipping",
+                    cueId, layer.source.kind, layer.source.name, p.rawValue, p.fixture.key, p.propertyName,
                 )
                 continue
             }
@@ -514,7 +615,7 @@ internal object CueComposer {
                 // The *last* layer to write a key owns it, blend mode notwithstanding: a MAX layer
                 // that kept the value beneath still decided the outcome, so it is the honest answer
                 // to "why is this fixture like this?".
-                winner = CookWinner(layerIndex, layer.layerId, layer.lookId, layer.lookName),
+                winner = CookWinner(layerIndex, layer.layerId, layer.source),
             )
         }
     }
@@ -544,12 +645,12 @@ internal object CueComposer {
                     val group = try {
                         fixtures.untypedGroup(target.key)
                     } catch (_: IllegalStateException) {
-                        logger.warn("cue {}: layer on look '{}' — group '{}' missing — skipping", cueId, layer.lookName, target.key)
+                        logger.warn("cue {}: layer on '{}' — group '{}' missing — skipping", cueId, layer.source.name, target.key)
                         continue
                     }
                     val members = group.fixtures.filterIsInstance<Fixture>()
                     if (members.isEmpty()) {
-                        logger.warn("cue {}: layer on look '{}' — group '{}' has no Fixture members — skipping", cueId, layer.lookName, target.key)
+                        logger.warn("cue {}: layer on '{}' — group '{}' has no Fixture members — skipping", cueId, layer.source.name, target.key)
                         continue
                     }
                     for (member in members) out.add(Expanded(member, target.key))
@@ -558,7 +659,7 @@ internal object CueComposer {
                     val fixture = try {
                         fixtures.untypedFixture(target.key)
                     } catch (_: IllegalStateException) {
-                        logger.warn("cue {}: layer on look '{}' — fixture '{}' missing — skipping", cueId, layer.lookName, target.key)
+                        logger.warn("cue {}: layer on '{}' — fixture '{}' missing — skipping", cueId, layer.source.name, target.key)
                         continue
                     }
                     out.add(Expanded(fixture, null))
@@ -596,9 +697,9 @@ internal object CueComposer {
      * declaring a near-identical second enum. `ADDITIVE` therefore comes along for free; the
      * plan's four modes are the subset the UI offers.
      */
-    private fun parseLayerBlendMode(raw: String, lookName: String, cueId: Int): BlendMode =
+    private fun parseLayerBlendMode(raw: String, sourceName: String, cueId: Int): BlendMode =
         BlendMode.entries.firstOrNull { it.name.equals(raw.trim(), ignoreCase = true) } ?: run {
-            logger.warn("cue {}: layer on look '{}' has unknown blend mode '{}' — using OVERRIDE", cueId, lookName, raw)
+            logger.warn("cue {}: layer on '{}' has unknown blend mode '{}' — using OVERRIDE", cueId, sourceName, raw)
             BlendMode.OVERRIDE
         }
 

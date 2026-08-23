@@ -17,6 +17,8 @@ import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoLookEffects
 import uk.me.cormack.lighting7.models.DaoLookRows
 import uk.me.cormack.lighting7.models.DaoLooks
+import uk.me.cormack.lighting7.models.DaoTemplateRows
+import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMembers
 import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.DaoFixturePatches
@@ -105,6 +107,8 @@ class SyncCoverageTest {
         DaoFxDefinitions to Disposition.Portable("fxDefinitions"),
         DaoLooks to Disposition.Portable("looks"),
         DaoLookRows to Disposition.Portable("looks", "rows"),
+        DaoTemplates to Disposition.Portable("templates"),
+        DaoTemplateRows to Disposition.Portable("templates", "rows"),
         DaoLookEffects to Disposition.Portable("looks", "effects"),
         // Five `Excluded` dispositions stood here and just below — `DaoFxPresets`,
         // `DaoFxPresetPropertyAssignments`, `DaoPalettes`, `DaoPaletteEntries` and

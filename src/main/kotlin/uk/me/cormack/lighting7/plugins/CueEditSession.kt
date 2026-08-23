@@ -34,6 +34,7 @@ import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
 import uk.me.cormack.lighting7.routes.cueDerivedPriority
 import uk.me.cormack.lighting7.routes.republishCueLayer
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
+import uk.me.cormack.lighting7.routes.resolveCueLayerSource
 import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.atomic.AtomicReference
 
@@ -573,10 +574,11 @@ object CueEditSessionHandler {
                 // contract simple: whatever happened in between, the cue ends up as it began.
                 cue.layers.forEach { it.delete() }
                 for (layer in session.layerSnapshot) {
-                    val look = DaoLook.findById(layer.lookId) ?: continue
+                    val resolved = resolveCueLayerSource(layer) ?: continue
                     DaoCueLayer.new {
                         this.cue = cue
-                        this.look = look
+                        this.look = resolved.look
+                        this.template = resolved.template
                         sortOrder = layer.sortOrder
                         enabled = layer.enabled
                         targets = layer.targets

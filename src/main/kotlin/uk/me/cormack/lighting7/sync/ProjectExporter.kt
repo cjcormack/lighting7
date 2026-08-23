@@ -13,6 +13,8 @@ import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.LookEffectJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.sync.dto.LookRowJson
+import uk.me.cormack.lighting7.sync.dto.TemplateJson
+import uk.me.cormack.lighting7.sync.dto.TemplateRowJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
@@ -61,6 +63,7 @@ import java.util.UUID
  * /stageRegions/{uuid}.json
  * /fixtureGroups/{uuid}.json       -- members embedded inline
  * /looks/{uuid}.json               -- rows and effects embedded inline
+ * /templates/{uuid}.json           -- rows embedded inline
  * /speedMasters/{uuid}.json
  * /fxDefinitions/{uuid}.json
  * /cueSlots/{uuid}.json
@@ -322,10 +325,31 @@ class ProjectExporter(private val state: State) {
                     name = l.name,
                     notes = l.notes,
                     sortOrder = l.sortOrder,
-                    editorFixtureType = l.editorFixtureType,
                     palette = l.palette,
                     rows = rows,
                     effects = effects,
+                )
+            }
+
+            count += writeAll(targetDir, "templates", project.templates.toList(), TemplateJson.serializer(), { it.uuid }, liveKeys) { t ->
+                TemplateJson(
+                    uuid = t.uuid.toString(),
+                    name = t.name,
+                    notes = t.notes,
+                    sortOrder = t.sortOrder,
+                    fadeDurationMs = t.fadeDurationMs,
+                    rows = t.rows
+                        .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
+                        .map { r ->
+                            TemplateRowJson(
+                                uuid = r.uuid.toString(),
+                                targetType = r.targetType,
+                                targetKey = r.targetKey,
+                                propertyName = r.propertyName,
+                                value = r.value,
+                                sortOrder = r.sortOrder,
+                            )
+                        },
                 )
             }
 
@@ -480,7 +504,8 @@ class ProjectExporter(private val state: State) {
                     CueLayerJson(
                         uuid = l.uuid.toString(),
                         cueUuid = cueUuid,
-                        lookUuid = l.look.uuid.toString(),
+                        lookUuid = l.look?.uuid?.toString(),
+                        templateUuid = l.template?.uuid?.toString(),
                         sortOrder = l.sortOrder,
                         enabled = l.enabled,
                         targets = l.targets,

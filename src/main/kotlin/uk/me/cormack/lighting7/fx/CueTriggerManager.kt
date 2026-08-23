@@ -147,6 +147,7 @@ class CueTriggerManager(
                     localRows = localRows,
                     cascade = baseCascade,
                     lookRegistry = state.show.lookRegistry,
+                    templateRegistry = state.show.templateRegistry,
                     includeTimed = fired.toSet(),
                 )
                 // Suppression rides along with the rows: a timed layer asserts nothing until it
@@ -363,7 +364,11 @@ class CueTriggerManager(
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
         )
-        instance.lookId = layer.lookId
+        // Only a Look can own an effect, so only a Look id belongs in this field.
+        // `cookEffects` already skips template layers, which makes this structurally
+        // unreachable rather than merely unlikely — stated because the alternative writes a
+        // template id into a field named `lookId`.
+        instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }
         instance.cueLayerId = layer.layerId
         instance.cueId = cueId
         instance.cueStackId = cueStackId

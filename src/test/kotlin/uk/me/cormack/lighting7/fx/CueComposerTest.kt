@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.fx.LayerSource
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.PropertyCategory
@@ -61,7 +62,6 @@ class CueComposerTest {
         lookId = name.hashCode(),
         lookUuid = UUID.nameUUIDFromBytes(name.toByteArray()),
         name = name,
-        editorFixtureType = null,
         palette = palette,
         rows = rows.toList(),
         effects = emptyList(),
@@ -84,9 +84,7 @@ class CueComposerTest {
         layerId: Int = look.lookId,
         stomp: Boolean = false,
     ) = CookLayer(
-        lookId = look.lookId,
-        lookUuid = look.lookUuid,
-        lookName = look.name,
+        source = LayerSource.look(look.lookId, look.lookUuid, look.name),
         sortOrder = sortOrder,
         enabled = enabled,
         targets = targets,
@@ -147,7 +145,7 @@ class CueComposerTest {
         propertyName: String = "dimmer",
     ): String? {
         val row = single { it.targetKey == targetKey && it.propertyName == propertyName }
-        return row.layerWinner?.let { "${it.lookName}@${it.index}" }
+        return row.layerWinner?.let { "${it.source.name}@${it.index}" }
     }
 
     private fun sliderAt(
@@ -662,7 +660,6 @@ class CueComposerTest {
             lookId = 55,
             lookUuid = UUID.nameUUIDFromBytes("muted".toByteArray()),
             name = "Muted",
-            editorFixtureType = null,
             palette = emptyList(),
             rows = emptyList(),
             effects = listOf(

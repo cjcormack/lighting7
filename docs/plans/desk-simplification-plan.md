@@ -1,7 +1,51 @@
 # Desk simplification — the Programmer as a place, Templates as a thing
 
-> **Document status: IN PROGRESS (2026-08-23).** Four sessions — Session 2 split, as §8
-> anticipated. **1, 2a and 2b have shipped**; **3** (Templates) has not.
+> **Document status: ALL SESSIONS BUILT (2026-08-23).** Four sessions — Session 2 split, as §8
+> anticipated. **1, 2a, 2b and 3 have all shipped.** No session has had a desk pass; §7 is the
+> outstanding list.
+>
+> **Amended 2026-08-23 (fourth amendment) — 3 is built, and it took the entity split §Session 3
+> declined.** `desk-simplification-design/TwoThings` argues "one backend table, two front doors —
+> `hasDeferredRows` plus 'exactly one family' already separates them", and that does not survive
+> contact with the design's own best example: a **per-fixture** template (eight heads aimed at one
+> spot) has only *bound* rows, which is exactly a recorded Look's shape, so `/looks` and `/templates`
+> would have listed the same record. Templates are their own tables (`templates`, `template_rows`),
+> a layer's referent is polymorphic, and the split *removed* work rather than adding it:
+> `editorFixtureType`, `LookEditor`'s synthetic-fixture grid, `LookDraftContext`, `LookLivePreview`,
+> `syntheticFixture.ts`, `EditorContextValue`'s `look` arm and the type gate in `compatibleIdsFor`
+> all went with it. All four families shipped in one session rather than the 3a/3b split §Sizing
+> offered.
+>
+> **Nine departures from what §Session 3 says below.**
+>
+> 1. **Two entities, not one table with a flag** — above.
+> 2. **A layer's `lookId`/`lookUuid`/`lookName` became one `LayerSource`**, rather than a `sourceKind`
+>    added beside them. The smaller diff leaves a field called `lookName` holding a template's name,
+>    which no compiler can find; collapsing the three made every reader visit exactly once.
+> 3. **`hasDeferredRows` became `hasDeferredEffects`.** A Look *row* can no longer be deferred at all
+>    (`validateLookRows` refuses it), but a deferred **effect** is still meaningful — it is what makes
+>    a Look eligible for a busking pad — so the flag narrowed rather than disappeared.
+> 4. **Strobe is a percentage, not Hz.** `BeamColour` calls Hz "the only unit two fixtures agree on",
+>    and nothing in the fixture definitions declares a Hz range, so a `hz:` intent would have had
+>    nothing to resolve against. Recorded as `FU-TMPL-STROBE-HZ`.
+> 5. **An intensity template on a dimmerless head reports `Unsupported`.** The "existing
+>    virtual-dimmer path" `BeamColour` promises does not exist server-side. `FU-TMPL-VIRTUAL-DIMMER`.
+> 6. **No CMY.** There is no such head in this rig and no `WithCyan` trait; the third colour type here
+>    is the *wheel*, which is the harder and more useful case, and it snaps by ΔE76 with the number
+>    shown.
+> 7. **A latent bug was found and fixed on the way**: `fixtureCategoryFor` canonicalised before
+>    looking up, so `colour` became `rgbColour` and the MAC 250's colour *wheel* — a property literally
+>    named `colour` — resolved to nothing and was dropped with a warn on every cook. That hit any
+>    recorded Look holding a wheel colour, and it is what every colour template would have hit. Exact
+>    name first, canonical second.
+> 8. **The pre-v5 preset migration narrowed.** A preset's target-less *value* rows cannot become Look
+>    rows any more, so `migratePresetsAndPalettesToLooks` brings its **effects** across and logs the
+>    values. `LooksMigrationTest` asserts the loss explicitly rather than dropping the case.
+> 9. **The busking pads take both kinds** and lost their create affordance: neither entity is authored
+>    from a pad grid. `/fx-busking` is off-nav and URL-only, which is why this was cheap.
+>
+> Also fixed in passing: Cmd+K's "New FX Preset" pointed at `/presets?action=new`, a route retired two
+> sessions ago. It is "New Template" now.
 >
 > **The design is committed alongside this plan** at
 > [`desk-simplification-design/`](desk-simplification-design/INDEX.md) — sixteen artboards drawn
@@ -548,6 +592,8 @@ drag or open a `cueEdit` session.
 
 ### Session 3 — Templates
 
+> **Shipped.** Nine departures, in the fourth amendment above. Still no desk pass — §7.4 stands.
+
 **Outcome.** Templates are their own library and their own thing: one family each, no fixture type,
 applied to a selection by click or as a tracking layer by ⌥click. A colour works on any head with
 colour, resolved per head, with the resolution visible before you save.
@@ -681,8 +727,26 @@ browser verification alone, and 2a specifically had two defects that a green sui
 
    The `cueEdit` check is retired: no client-side session exists to open. That is a *structural*
    guarantee now rather than a behavioural one — the arm and its API module are deleted.
-4. **S3** — one colour template across three different fixture types at once; retune it and watch
-   every tracking layer move.
+4. **S3** — the checks only a rig can answer, and this session has more of them than the others
+   because resolution is per head:
+
+   - **One colour template across three colour types at once** — an RGBWA hex, a white-only head and
+     the MAC 250's *wheel* — and each should read as the same colour. The wheel is the one to judge by
+     eye: the editor's ΔE says how close the desk believes it got, and only the rig says whether that
+     belief is right (`FU-TMPL-WHEEL-PREVIEWS` is where a bad annotation would land).
+   - **Retune it and watch every tracking layer move**, in a cue and in the programmer's own stack.
+     That is `republishForTemplateEdit`, and it is the touring feature.
+   - **The two gestures are visibly different**: click, then retune — the busked values must *not*
+     move. ⌥click, then retune — they must.
+   - **A position template in degrees across two heads with different ranges** (Shehds tilts 0–270°,
+     MAC 250 0–257°): the same degrees must land on different DMX, and a clamp must be reported in the
+     panel *and* true on stage.
+   - **The white/amber policy on a head that has both**: extract should look brighter and cleaner than
+     RGB-only at the same hue, which is the whole claim.
+   - **A beam template says out loud that it cannot carry a gobo** — the disabled rows with their
+     reasons, rather than the property simply being absent.
+   - **New from selection** on heads that agree, then on heads that differ: the first must come out
+     *Generic*, the second *Per fixture*, and the toast says which.
 
 New routes, classes or fields need a **restart** — the backend hot-swaps changed handler bodies but
 not new surface area, and the desk may be driving a live rig. Ask first. Anything that fails a desk

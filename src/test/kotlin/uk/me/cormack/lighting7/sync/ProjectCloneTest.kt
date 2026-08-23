@@ -136,7 +136,7 @@ class ProjectCloneTest {
             // string held `ref:{uuid}`, rewired by ExportUuidRemapper's text substitution; the
             // `ref:` grammar retired and the FK is the only path left — which is the structural win
             // of the merge, since an FK cannot be half-rewritten.
-            val clonedLayerLookIds = clone.cues.flatMap { it.layers }.map { it.look.id.value }.toSet()
+            val clonedLayerLookIds = clone.cues.flatMap { it.layers }.mapNotNull { it.look?.id?.value }.toSet()
             assertTrue(
                 clonedLayerLookIds.isNotEmpty(),
                 "expected the fixture's cue layers in the clone",

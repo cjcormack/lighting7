@@ -47,11 +47,10 @@ class LookRoutesTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = "dim-50",
                     notes = "dimmer at 50%",
-                    editorFixtureType = "hex-fixture",
                     palette = listOf("#ff8800"),
                     rows = listOf(
                         LookRowDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = "hex-1",
                             propertyName = "dimmer", value = "128", fadeDurationMs = 750L,
                         ),
                     ),
@@ -68,7 +67,6 @@ class LookRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.Created, createResp.status, createResp.bodyAsText())
         val created = createResp.body<LookDetails>()
         assertEquals("dim-50", created.name)
-        assertEquals("hex-fixture", created.editorFixtureType)
         assertEquals(listOf("#ff8800"), created.palette)
         assertEquals("128", created.rows.single().value)
         assertEquals(750L, created.rows.single().fadeDurationMs)
@@ -79,7 +77,7 @@ class LookRoutesTest : RouteIntegrationTest() {
         val summary = list.single { it.id == lookId }
         assertEquals(1, summary.rowCount)
         assertEquals(1, summary.effectCount)
-        assertTrue(summary.hasDeferredRows, "every row was authored deferred")
+        assertTrue(summary.hasDeferredEffects, "every row was authored deferred")
 
         val fetched = client.get("${base()}/$lookId").body<LookDetails>()
         assertEquals("dimmer", fetched.rows.single().propertyName)
@@ -92,11 +90,11 @@ class LookRoutesTest : RouteIntegrationTest() {
                     put("name", "dim-75")
                     put("rows", buildJsonArray {
                         add(buildJsonObject {
-                            put("targetType", DEFERRED_TARGET_TYPE); put("targetKey", "")
+                            put("targetType", "fixture"); put("targetKey", "hex-1")
                             put("propertyName", "dimmer"); put("value", "192")
                         })
                         add(buildJsonObject {
-                            put("targetType", DEFERRED_TARGET_TYPE); put("targetKey", "")
+                            put("targetType", "fixture"); put("targetKey", "hex-1")
                             put("propertyName", "uv"); put("value", "64")
                         })
                     })
@@ -294,10 +292,9 @@ class LookRoutesTest : RouteIntegrationTest() {
             setBody(
                 CreateLookRequest(
                     name = "Pulse",
-                    editorFixtureType = "hex-fixture",
                     rows = listOf(
                         LookRowDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = "hex-1",
                             propertyName = "dimmer", value = "200",
                         ),
                     ),
@@ -447,10 +444,9 @@ class LookRoutesTest : RouteIntegrationTest() {
             setBody(
                 CreateLookRequest(
                     name = "Template",
-                    editorFixtureType = "hex-fixture",
                     rows = listOf(
                         LookRowDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = "hex-1",
                             propertyName = "dimmer", value = "180",
                         ),
                     ),

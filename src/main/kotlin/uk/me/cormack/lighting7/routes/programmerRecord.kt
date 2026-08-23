@@ -192,7 +192,7 @@ internal fun writeRecordingIntoCue(
         RecordMode.REMOVE -> {
             for (layer in recording.layers) {
                 cue.layers.toList()
-                    .filter { !it.isTimed && it.look.id.value == layer.lookId && it.targets == layer.targets }
+                    .filter { !it.isTimed && it.appliesSameSourceAs(layer) && it.targets == layer.targets }
                     .forEach { it.delete() }
             }
             val doomed = recording.rows.map { it.matchKey() }.toSet()
@@ -302,23 +302,24 @@ internal fun writeRecordingIntoCue(
 private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
     var count = 0
 
-    // Layers first, upserted on `(lookId, targets)`. Upsert rather than append for the same reason
-    // the ad-hoc branch below does: `(look, targets)` says *which* layer this is, while amount,
+    // Layers first, upserted on `(source, targets)`. Upsert rather than append for the same reason
+    // the ad-hoc branch below does: `(source, targets)` says *which* layer this is, while amount,
     // blend and mask are what the operator may just have changed in the programmer. Appending would
     // give a cue a second copy of the same layer on every Update, and each Record would double it.
     val existingLayers = cue.layers.toList()
     for (layer in recording.layers) {
         val match = existingLayers.firstOrNull {
-            !it.isTimed && it.look.id.value == layer.lookId && it.targets == layer.targets
+            !it.isTimed && it.appliesSameSourceAs(layer) && it.targets == layer.targets
         }
         if (match != null) {
             if (match.applyFrom(layer)) count++
             continue
         }
-        val look = DaoLook.findById(layer.lookId) ?: continue
+        val resolved = resolveCueLayerSource(layer) ?: continue
         DaoCueLayer.new {
             this.cue = cue
-            this.look = look
+            this.look = resolved.look
+            this.template = resolved.template
             this.sortOrder = layer.sortOrder
             this.enabled = layer.enabled
             this.targets = layer.targets
@@ -462,10 +463,11 @@ private fun replaceImmediateFxChildren(
             if (kept.isEmpty()) layer.delete() else layer.targets = kept
         }
         for (layer in recording.layers) {
-            val look = DaoLook.findById(layer.lookId) ?: continue
+            val resolved = resolveCueLayerSource(layer) ?: continue
             DaoCueLayer.new {
                 this.cue = cue
-                this.look = look
+                this.look = resolved.look
+                this.template = resolved.template
                 this.sortOrder = layer.sortOrder
                 this.enabled = layer.enabled
                 this.targets = layer.targets

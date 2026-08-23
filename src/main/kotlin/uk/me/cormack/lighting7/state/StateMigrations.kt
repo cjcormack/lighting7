@@ -306,8 +306,9 @@ private fun JdbcTransaction.columnExists(table: String, column: String): Boolean
  *
  * Mapping:
  * - each palette → a Look; entries → rows with concrete targets
- * - each preset → a Look; property assignments → rows marked `deferred`; the `effects` JSON blob →
- *   real `look_effects` rows; `fixture_type` → `editor_fixture_type`; `palette` carried over
+ * - each preset → a Look carrying its **effects** (as `look_effects` rows marked `deferred`, which
+ *   still means "fan over the layer's targets") and its `palette`. Its target-less *property
+ *   assignments* are **dropped with a warning** — see the note in the presets arm below.
  * - each cue preset application → a cue layer, carrying `sortOrder`, the timing triple and both
  *   speed-master overrides
  * - each cue assignment whose value is `ref:{uuid}` → folded into **one** layer per (cue, Look),
@@ -402,9 +403,9 @@ internal fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
             if (palUuid in lookIdByUuid) continue
             val name = uniqueName(pal.projectId, pal.name)
             exec(
-                "INSERT INTO looks (project_id, name, notes, sort_order, editor_fixture_type, palette, uuid) " +
+                "INSERT INTO looks (project_id, name, notes, sort_order, palette, uuid) " +
                     "VALUES (${pal.projectId}, ${sqlText(name)}, ${sqlText(pal.notes)}, ${nextSortOrder(pal.projectId)}, " +
-                    "NULL, '[]', ${sqlUuid(palUuid)})"
+                    "'[]', ${sqlUuid(palUuid)})"
             )
             val lookId = lastInsertRowId() ?: continue
             lookIdByUuid[palUuid] = lookId
@@ -418,7 +419,22 @@ internal fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
         }
     }
 
-    // ── Presets → deferred Looks ────────────────────────────────────────────
+    // ── Presets → Looks carrying their effects ──────────────────────────────
+    //
+    // Session 3 narrowed what this arm can produce, and the narrowing is deliberate rather than a
+    // regression. A preset was target-less values *plus* effects with a declared fixture type — and
+    // post-split those are two different entities: the values are a template (one family, an intent
+    // per row, resolved per head) and the effects belong to a Look. One source record cannot become
+    // both here without inventing a name for the second, guessing which family its values are in,
+    // and converting DMX literals to intents with no fixture to convert them against.
+    //
+    // So the effects come across, because they are the substantive half and a `deferred` *effect* is
+    // still exactly what it was. The property assignments are counted and logged rather than
+    // written: a deferred Look *row* is refused at the write boundary now, and writing one anyway
+    // would seed a database with data no editor can reach and the next save would reject.
+    //
+    // The uuid is still preserved, so the `cue_preset_applications` arm below still finds its Look
+    // and every existing reference still resolves.
     if (tableExists("fx_presets")) {
         data class Preset(val id: Int, val projectId: Int, val name: String, val description: String?, val fixtureType: String, val effects: String, val palette: String, val uuid: UUID?)
         val presets = mutableListOf<Preset>()
@@ -441,23 +457,29 @@ internal fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
             if (presetUuid in lookIdByUuid) continue
             val name = uniqueName(preset.projectId, preset.name)
             exec(
-                "INSERT INTO looks (project_id, name, notes, sort_order, editor_fixture_type, palette, uuid) " +
+                "INSERT INTO looks (project_id, name, notes, sort_order, palette, uuid) " +
                     "VALUES (${preset.projectId}, ${sqlText(name)}, ${sqlText(preset.description)}, " +
-                    "${nextSortOrder(preset.projectId)}, ${sqlText(preset.fixtureType)}, " +
+                    "${nextSortOrder(preset.projectId)}, " +
                     "${sqlText(preset.palette)}, ${sqlUuid(presetUuid)})"
             )
             val lookId = lastInsertRowId() ?: continue
             lookIdByUuid[presetUuid] = lookId
 
-            // A preset row was target-*less*, so every one becomes deferred: its targets come from
-            // the layer that applies the Look, which is exactly what a preset application supplied.
-            exec(
-                "INSERT INTO look_rows (look_id, target_type, target_key, property_name, value, " +
-                    "fade_duration_ms, element_key, sort_order, uuid) " +
-                    "SELECT $lookId, 'deferred', '', property_name, value, fade_duration_ms, " +
-                    "element_key, sort_order, uuid FROM fx_preset_property_assignments " +
-                    "WHERE preset_id = ${preset.id}"
-            )
+            // The target-less value rows, counted and reported rather than written. See the arm's
+            // header for why they cannot become Look rows any more; a `${preset.fixtureType}` preset
+            // whose values matter should be re-authored as a template.
+            var droppedAssignments = 0
+            exec("SELECT COUNT(*) AS n FROM fx_preset_property_assignments WHERE preset_id = ${preset.id}") { rs ->
+                if (rs.next()) droppedAssignments = rs.getInt("n")
+            }
+            if (droppedAssignments > 0) {
+                logger.warn(
+                    "Looks migration: preset '{}' had {} target-less value row(s), which are now a " +
+                        "template rather than a look — its effects were migrated, the values were not. " +
+                        "Re-create them at /templates (they were authored for '{}').",
+                    preset.name, droppedAssignments, preset.fixtureType,
+                )
+            }
 
             // The effects blob becomes real rows. Uuids are minted here because the blob never had
             // any — the effects lived inside the preset's own record, so sync only ever saw the

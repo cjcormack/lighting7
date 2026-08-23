@@ -293,13 +293,11 @@ class AiService(
         val looks = transaction(state.database) {
             DaoLook.find { DaoLooks.project eq project.id }
                 .map { look ->
-                    val binding = if (look.editorFixtureType != null) {
-                        "deferred, authored for ${look.editorFixtureType}"
-                    } else {
-                        "bound to its own targets"
-                    }
+                    // No binding note any more: a Look's rows are always bound to their own targets
+                    // (session 3 moved the deferred half out to templates), so saying so per Look
+                    // would restate the type rather than describe the record.
                     "${look.name} (id=${look.id.value}, ${look.rows.count()} rows, " +
-                        "${look.effects.count()} effects, $binding)"
+                        "${look.effects.count()} effects)"
                 }
         }
         if (looks.isNotEmpty()) {

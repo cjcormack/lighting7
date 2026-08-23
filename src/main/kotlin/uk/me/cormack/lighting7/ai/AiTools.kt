@@ -81,9 +81,6 @@ class AiTools(private val state: State) {
     private fun executeCreateLook(input: JsonObject): ToolExecutionResult {
         val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
         val notes = input["description"]?.jsonPrimitive?.contentOrNull
-        val editorFixtureType = input["editorFixtureType"]?.jsonPrimitive?.contentOrNull
-            ?: return errorResult("Missing 'editorFixtureType'")
-        if (editorFixtureType.isBlank()) return errorResult("'editorFixtureType' cannot be blank")
         val effectsArray = input["effects"]?.jsonArray ?: return errorResult("Missing 'effects'")
 
         val effects = effectsArray.map { parsePresetEffect(it.jsonObject) }
@@ -93,7 +90,6 @@ class AiTools(private val state: State) {
             val created = DaoLook.new {
                 this.name = name
                 this.notes = notes
-                this.editorFixtureType = editorFixtureType
                 this.project = project
                 this.sortOrder = (DaoLook.find { DaoLooks.project eq project.id }
                     .maxOfOrNull { it.sortOrder } ?: -1) + 1
@@ -139,9 +135,11 @@ class AiTools(private val state: State) {
                 )
             }
             val (_, effectCount) = state.show.programmerLayerStack.toggle(
-                lookId = lookId,
-                lookUuid = transaction(state.database) { look.uuid },
-                lookName = name,
+                source = LayerSource.look(
+                    lookId,
+                    transaction(state.database) { look.uuid },
+                    name,
+                ),
                 targets = toggleTargets.map { CueTargetDto(it.type, it.key) },
             )
             appliedCount = effectCount
@@ -180,9 +178,7 @@ class AiTools(private val state: State) {
         // Same programmer layer the busking pads add — so the AI and the pads toggle the *same*
         // thing, rather than two mechanisms that each think they own the Look.
         val result = state.show.programmerLayerStack.toggle(
-            lookId = lookId,
-            lookUuid = look.first,
-            lookName = look.second,
+            source = LayerSource.look(lookId, look.first, look.second),
             targets = targets,
             beatDivisionOverride = beatDivision,
         )
@@ -340,16 +336,13 @@ class AiTools(private val state: State) {
                 val project = state.projectManager.currentProject
                 val looks = transaction(state.database) {
                     DaoLook.find { DaoLooks.project eq project.id }
-                        .map { Triple(it.id.value, it.name, it.editorFixtureType) }
+                        .map { it.id.value to it.name }
                 }
                 put("looks", buildJsonArray {
-                    for ((id, name, editorFixtureType) in looks) {
+                    for ((id, name) in looks) {
                         addJsonObject {
                             put("id", id)
                             put("name", name)
-                            // Null means the look is bound — its rows name their own targets — so a
-                            // layer applying it needs no targets of its own.
-                            editorFixtureType?.let { put("editorFixtureType", it) }
                         }
                     }
                 })

@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.fx.LayerSource
 import io.ktor.client.call.body
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -42,15 +43,22 @@ class ProgrammerLayerStackEffectsTest : RouteIntegrationTest() {
         .filter { FxEngine.isProgrammerFxPriority(it.priority) }
         .sortedBy { it.id }
 
+    /**
+     * A Look with one **bound** row and one deferred effect.
+     *
+     * The row is bound to `hex-1` — every test here seeds exactly that — because a Look row may no
+     * longer be deferred: session 3 moved the deferred half of the entity out to templates, and the
+     * write boundary refuses one. The *effect* stays deferred, which is the shape these tests are
+     * actually about: it fans over whatever targets the layer names.
+     */
     private suspend fun io.ktor.client.HttpClient.createLook(name: String, dimmer: String): LookDetails =
         post("/api/rest/project/$projectId/looks") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreateLookRequest(
                     name = name,
-                    editorFixtureType = "hex",
                     rows = listOf(
-                        LookRowDto(DEFERRED_TARGET_TYPE, "", "dimmer", dimmer),
+                        LookRowDto("fixture", "hex-1", "dimmer", dimmer),
                     ),
                     effects = listOf(
                         LookEffectDto(
@@ -64,9 +72,7 @@ class ProgrammerLayerStackEffectsTest : RouteIntegrationTest() {
         }.body()
 
     private fun add(look: LookDetails, vararg fixtureKeys: String) = stack.add(
-        lookId = look.id,
-        lookUuid = UUID.fromString(look.uuid),
-        lookName = look.name,
+        source = LayerSource.look(look.id, UUID.fromString(look.uuid), look.name),
         targets = fixtureKeys.map { CueTargetDto("fixture", it) },
     ).first
 

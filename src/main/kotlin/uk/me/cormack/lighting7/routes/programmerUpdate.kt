@@ -338,10 +338,11 @@ internal fun writeLayerStackIntoCue(
     for ((index, layer) in live.withIndex()) {
         val stored = layer.sourceCueLayerId?.let { storedById[it] }
         if (stored == null) {
-            val look = DaoLook.findById(layer.lookId) ?: continue
+            val resolved = resolveLayerSourceRecords(layer.source) ?: continue
             DaoCueLayer.new {
                 this.cue = cue
-                this.look = look
+                this.look = resolved.look
+                this.template = resolved.template
                 this.sortOrder = index
                 this.enabled = layer.enabled
                 this.targets = layer.targets

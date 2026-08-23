@@ -7,6 +7,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fx.LayerSourceDto
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
@@ -47,13 +48,13 @@ data class CookedRowDto(
     /** `"0".."255"`, `"#rrggbb;w128"`, or `"pan,tilt"` — `PropertyValue.serialize()`. */
     val value: String,
     /**
-     * The Look layer that won this key, when one did. Null for the cue's **own** rows, which belong
-     * to no layer — the same convention `CueAssignmentResolver.Assignment.layerWinner` uses, and the
+     * The layer that won this key, when one did. Null for the cue's **own** rows, which belong to no
+     * layer — the same convention `CueAssignmentResolver.Assignment.layerWinner` uses, and the
      * distinction the grid draws as "the cue set this" versus "Warm Wash set this".
      */
     val layerId: Int? = null,
-    val lookId: Int? = null,
-    val lookName: String? = null,
+    /** What that layer applies — a Look or a template, named. */
+    val layerSource: LayerSourceDto? = null,
 )
 
 @Serializable
@@ -89,8 +90,7 @@ internal fun Route.routeApiRestCueCooked(state: State) {
                             propertyName = row.propertyName,
                             value = row.value.serialize(),
                             layerId = row.layerWinner?.layerId,
-                            lookId = row.layerWinner?.lookId,
-                            lookName = row.layerWinner?.lookName,
+                            layerSource = row.layerWinner?.source?.toDto(),
                         )
                     },
                 ),

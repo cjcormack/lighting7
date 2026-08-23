@@ -183,7 +183,7 @@ class CueFlattenRouteTest : RouteIntegrationTest() {
         assertEquals(1, body.rowsWritten)
         assertEquals(1, body.layersRemoved)
         val remaining = transaction(state.database) {
-            DaoCue.findById(cueId)!!.layers.map { it.look.name }
+            DaoCue.findById(cueId)!!.layers.map { it.source.name }
         }
         assertEquals(listOf("Lower"), remaining, "only the named layer went")
     }

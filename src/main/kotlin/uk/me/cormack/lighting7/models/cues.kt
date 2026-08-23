@@ -8,6 +8,8 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.json.json
 import org.jetbrains.exposed.v1.core.java.javaUUID
+import uk.me.cormack.lighting7.fx.LayerSource
+import uk.me.cormack.lighting7.fx.LayerSourceDto
 import uk.me.cormack.lighting7.fx.AssignmentHealth
 
 // ─── DTOs (used for API serialization) ──────────────────────────────────
@@ -34,7 +36,15 @@ data class CueTargetDto(
  */
 @Serializable
 data class CueLayerDto(
-    val lookId: Int,
+    /**
+     * What this layer applies: **exactly one** of [lookId] / [templateId] on write.
+     *
+     * Two ids rather than a `(kind, id)` pair because that is what a client has in hand — it picked
+     * a row out of one library or the other — and because a request naming both is then a shape
+     * error the route can refuse rather than a discriminator it has to trust.
+     */
+    val lookId: Int? = null,
+    val templateId: Int? = null,
     val sortOrder: Int = 0,
     val enabled: Boolean = true,
     val targets: List<CueTargetDto> = emptyList(),
@@ -49,10 +59,11 @@ data class CueLayerDto(
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
     /**
-     * Look name, populated server-side on read so a cue card can label the layer without a second
-     * fetch. Ignored on write — mirroring how `health` is read-only on the assignment DTOs.
+     * What the layer applies, resolved server-side on read so a cue card can label it without a
+     * second fetch: kind, id, uuid and name. Ignored on write — mirroring how `health` is read-only
+     * on the assignment DTOs, and the reason [lookId] / [templateId] are still the write fields.
      */
-    val lookName: String? = null,
+    val source: LayerSourceDto? = null,
     /**
      * The `DaoCueLayer` row id, on read only — the same read-only convention as [lookName].
      *
@@ -63,7 +74,7 @@ data class CueLayerDto(
      * the route against a desk rather than by its unit tests, which read the id from the database.
      *
      * Ignored on write, and absent from `buildCueInput`'s field-by-field rebuild for the same reason
-     * `lookName` is: a PATCH that echoed an id back would invite the server to trust it as identity.
+     * [source] is: a PATCH that echoed an id back would invite the server to trust it as identity.
      */
     val id: Int? = null,
 )
@@ -313,7 +324,17 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
  */
 object DaoCueLayers : IntIdTable("cue_layers") {
     val cue = reference("cue_id", DaoCues)
-    val look = reference("look_id", DaoLooks)
+
+    /**
+     * What this layer applies: **exactly one** of [look] / [template] is set.
+     *
+     * Two nullable FKs rather than a `(kind, uuid)` pair, because the FKs are what make a layer
+     * pointing at a deleted record impossible and what let `LOOK_IN_USE` / `TEMPLATE_IN_USE` be a
+     * count rather than a scan. The invariant is enforced at the write boundary and asserted by
+     * [DaoCueLayer.source], which is the only reader — nothing else dereferences either column.
+     */
+    val look = reference("look_id", DaoLooks).nullable()
+    val template = reference("template_id", DaoTemplates).nullable()
     val sortOrder = integer("sort_order").default(0)
     val enabled = bool("enabled").default(true)
 
@@ -373,7 +394,8 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoCueLayer>(DaoCueLayers)
 
     var cue by DaoCue referencedOn DaoCueLayers.cue
-    var look by DaoLook referencedOn DaoCueLayers.look
+    var look by DaoLook optionalReferencedOn DaoCueLayers.look
+    var template by DaoTemplate optionalReferencedOn DaoCueLayers.template
     var sortOrder by DaoCueLayers.sortOrder
     var enabled by DaoCueLayers.enabled
     var targets by DaoCueLayers.targets
@@ -387,6 +409,29 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
     var intervalMs by DaoCueLayers.intervalMs
     var randomWindowMs by DaoCueLayers.randomWindowMs
     var uuid by DaoCueLayers.uuid
+
+    /**
+     * What this layer applies, with the exactly-one-set invariant checked.
+     *
+     * A `check` rather than a nullable return: a layer that names neither (or both) is a row that
+     * cannot be composed at all, and every caller would have to invent a behaviour for it. Failing
+     * loudly at the one place that dereferences the columns is how that stays a write-boundary bug
+     * rather than a silent hole in a cue.
+     *
+     * Must run inside a transaction — it dereferences the FK for its uuid and name.
+     */
+    val source: LayerSource get() {
+        val look = look
+        val template = template
+        check((look == null) != (template == null)) {
+            "cue layer ${id.value} names ${if (look == null) "neither a look nor a template" else "both a look and a template"}"
+        }
+        return if (look != null) {
+            LayerSource.look(look.id.value, look.uuid, look.name)
+        } else {
+            LayerSource.template(template!!.id.value, template.uuid, template.name)
+        }
+    }
 
     /**
      * True when this layer fires on a timer rather than at cue apply.

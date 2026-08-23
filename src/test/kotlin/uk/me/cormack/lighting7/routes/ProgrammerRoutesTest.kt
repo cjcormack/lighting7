@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fx.LayerSource
 import io.ktor.client.call.body
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -98,13 +99,13 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
             setBody(
                 CreateLookRequest(
                     name = "Strobe off",
-                    rows = listOf(LookRowDto(DEFERRED_TARGET_TYPE, "", "strobe", "0")),
+                    rows = listOf(LookRowDto("fixture", "hex-clr", "strobe", "0")),
                 )
             )
         }.body<LookDetails>()
         val targets = listOf(CueTargetDto("fixture", "hex-clr"))
         state.show.programmerLayerStack.toggle(
-            look.id, java.util.UUID.fromString(look.uuid), look.name, targets,
+            LayerSource.look(look.id, java.util.UUID.fromString(look.uuid), look.name), targets,
         )
 
         assertTrue(state.show.programmerStore.size > 0)
@@ -127,7 +128,7 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         // cleared values back onto the stage by itself.
         assertTrue(state.show.programmerStore.layers.isEmpty(), "the stack was cleared too")
         val (action, _) = state.show.programmerLayerStack.toggle(
-            look.id, java.util.UUID.fromString(look.uuid), look.name, targets,
+            LayerSource.look(look.id, java.util.UUID.fromString(look.uuid), look.name), targets,
         )
         assertEquals("applied", action)
     }

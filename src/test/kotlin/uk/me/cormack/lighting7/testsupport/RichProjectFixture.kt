@@ -13,6 +13,8 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCueLayer
+import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoLookRow
@@ -243,30 +245,19 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         propertyName = "position"; value = "120,64"; sortOrder = 2
     }
 
-    // A *deferred* look — rows and effects taking their targets from the layer, the shape an FX
-    // preset migrated into. `editorFixtureType` is the surviving remnant of the preset's
-    // `fixtureType`, now an editor hint rather than a data constraint.
-    val deferredLook = DaoLook.new {
+    // An **effects-only** look, the shape an FX preset migrated into. Its rows would once have been
+    // deferred too; session 3 moved that half of the entity out to `templates` (see the template
+    // below), so what survives here is the effect — where a deferred target still means "fan over
+    // whatever the layer points at".
+    val effectsLook = DaoLook.new {
         this.project = project
         name = "warm-pulse"
         notes = "warm pulse"
         sortOrder = 1
-        editorFixtureType = "hex-fixture"
         palette = listOf("#ff8800")
     }
-    DaoLookRow.new {
-        look = deferredLook; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
-        propertyName = "dimmer"; value = "200"; sortOrder = 0
-        fadeDurationMs = 750L
-    }
-    // Element-scoped, so the element path survives the round trip.
-    DaoLookRow.new {
-        look = deferredLook; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
-        propertyName = "colour"; value = "#ff8800"; sortOrder = 1
-        elementKey = "head-1"
-    }
     DaoLookEffect.new {
-        look = deferredLook; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
+        look = effectsLook; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
         effectType = "Pulse"; category = "dimmer"; propertyName = "dimmer"
         beatDivision = 0.5; blendMode = "OVERRIDE"; distribution = "LINEAR"
         phaseOffset = 0.25
@@ -279,6 +270,37 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
         sortOrder = 0
+    }
+
+    // A **generic** template: one deferred row, one family, an intent rather than a literal. This is
+    // the half of the old deferred look that is not a look at all.
+    val colourTemplate = DaoTemplate.new {
+        this.project = project
+        name = "amber-key"
+        notes = "warm key light"
+        sortOrder = 0
+        fadeDurationMs = 1_500L
+    }
+    DaoTemplateRow.new {
+        template = colourTemplate; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
+        propertyName = "rgbColour"; value = "#ff9d4a;policy=extract"; sortOrder = 0
+    }
+
+    // A **per-fixture** template — a focus position, where each head holds its own degrees. Seeded
+    // as well as the generic one because the two row shapes are the case the library labels
+    // *Generic* / *Per fixture*, and a copier that handles one and not the other must be caught.
+    val positionTemplate = DaoTemplate.new {
+        this.project = project
+        name = "downstage-centre"
+        sortOrder = 1
+    }
+    DaoTemplateRow.new {
+        template = positionTemplate; targetType = "fixture"; targetKey = "hex-1"
+        propertyName = "position"; value = "deg:12,-8"; sortOrder = 0
+    }
+    DaoTemplateRow.new {
+        template = positionTemplate; targetType = "fixture"; targetKey = "hex-2"
+        propertyName = "position"; value = "deg:-14,-8"; sortOrder = 1
     }
 
     // 2 cue stacks, 3 cues, with property assignments + ad-hoc + preset apps + triggers
@@ -338,7 +360,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // A timed layer over the deferred look — the shape a timed preset application migrated into,
     // carrying all three timing fields plus both speed-master overrides.
     DaoCueLayer.new {
-        cue = cue1; look = deferredLook
+        cue = cue1; look = effectsLook
         targets = listOf(CueTargetDto("group", "front-wash"))
         sortOrder = 2
         delayMs = 250L
@@ -346,6 +368,14 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         randomWindowMs = 125L
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
+    }
+    // A layer applying a **template** rather than a look, so the polymorphic referent is exercised
+    // on both arms — an export or clone that carried only `look_id` would lose this one silently.
+    DaoCueLayer.new {
+        cue = cue1; template = colourTemplate
+        targets = listOf(CueTargetDto("fixture", "hex-2"))
+        sortOrder = 4
+        propertyMask = "COLOUR"
     }
     // A second layer exercising every field the first leaves at its default: disabled, masked,
     // non-OVERRIDE blend, partial amount, stomp.

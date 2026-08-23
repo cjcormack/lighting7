@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fx.LayerSource
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -109,7 +110,7 @@ class ProgrammerOwnershipCollisionTest : RouteIntegrationTest() {
                     name = "Warm",
                     rows = listOf(
                         uk.me.cormack.lighting7.models.LookRowDto(
-                            uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE, "", "dimmer", "120",
+                            "fixture", "hex-layer", "dimmer", "120",
                         ),
                     ),
                 )
@@ -117,9 +118,7 @@ class ProgrammerOwnershipCollisionTest : RouteIntegrationTest() {
         }.body<LookDetails>()
 
         val (layer, _) = state.show.programmerLayerStack.add(
-            lookId = look.id,
-            lookUuid = java.util.UUID.fromString(look.uuid),
-            lookName = look.name,
+            source = LayerSource.look(look.id, java.util.UUID.fromString(look.uuid), look.name),
             targets = listOf(uk.me.cormack.lighting7.models.CueTargetDto("fixture", "hex-layer")),
         )
         assertEquals(120u.toUByte(), programmerChannel(state, 0, 1), "the layer asserted the dimmer")

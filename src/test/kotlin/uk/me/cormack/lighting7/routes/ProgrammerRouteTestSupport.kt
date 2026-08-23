@@ -65,24 +65,29 @@ object ProgrammerRouteTestSupport {
     }
 
     /**
-     * Create a Look of **deferred** rows and return it, for building layers with.
+     * Create a Look whose rows are **bound** to [targetKey], and return it, for building layers with.
      *
-     * Deferred because a layer supplies the targets — which is the arrangement that makes one Look
-     * reusable across cues, and the shape every layer test wants.
+     * This was `createLookBoundTo`, and the rename is the session-3 split showing up in the tests: a
+     * Look row can no longer be deferred at all — a value you point at a selection is a *template*
+     * now — so a layer's targets **filter** these rows rather than supplying them. Every caller seeds
+     * `hex-1`, which is why that is the default.
      */
-    internal suspend fun createDeferredLook(
+    internal suspend fun createLookBoundTo(
         client: HttpClient,
         projectId: Int,
         name: String,
         rows: Map<String, String>,
         effects: List<LookEffectDto> = emptyList(),
+        targetKey: String = "hex-1",
+        /** `fixture` or `group` — a *Look* row may name either; only a template may not. */
+        targetType: String = "fixture",
     ): LookDetails = client.post("/api/rest/project/$projectId/looks") {
         contentType(ContentType.Application.Json)
         setBody(
             CreateLookRequest(
                 name = name,
                 rows = rows.entries.mapIndexed { index, (property, value) ->
-                    LookRowDto(DEFERRED_TARGET_TYPE, "", property, value, sortOrder = index)
+                    LookRowDto(targetType, targetKey, property, value, sortOrder = index)
                 },
                 effects = effects,
             )

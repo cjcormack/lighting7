@@ -65,6 +65,7 @@ class GlobalScalerState(
         override fun controllersChanged() { reattach() }
         override fun fixturesChanged() { refreshClassification() }
         override fun lookListChanged() {}
+        override fun templateListChanged() {}
         override fun speedMasterListChanged() {}
         override fun cueListChanged() {}
         override fun cueStackListChanged() {}

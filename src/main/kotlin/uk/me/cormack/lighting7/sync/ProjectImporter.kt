@@ -44,6 +44,9 @@ import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
+import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoTemplateRow
+import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
@@ -70,8 +73,15 @@ import java.util.UUID
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
+// v6 gave templates their own entity: a `templates/` folder, and `CueLayerJson.lookUuid` optional
+// beside a new `templateUuid`. Only SUPPORTED moves — **MIN deliberately stays at 5**, because a v5
+// repo still imports unchanged (no `templates/` folder reads as empty, and every v5 cue layer names a
+// `lookUuid`). Moving SUPPORTED is what makes a v5 install refuse a v6 repo, where a cue layer may
+// carry `templateUuid` alone and a v5 reader would take `lookUuid`'s null straight into
+// `UUID.fromString` — a Java platform type, so no compile-time stop — and fail with a bare NPE.
+//
 // v5 collapsed FX presets and named palettes into `looks/`, and `cuePresetApplications/` into
-// `cueLayers/`. MIN jumps to 5 with it: a v4 repo's `cuePresetApplications` records name a
+// `cueLayers/`. MIN jumped to 5 with it: a v4 repo's `cuePresetApplications` records name a
 // `presetUuid` that no longer resolves to anything, and there is no in-place upgrade — reading one
 // would import a project whose cues had lost their composition entirely, which is worse than
 // refusing it. Bumping both is therefore deliberate, not an oversight.
@@ -83,7 +93,7 @@ import kotlin.io.path.isDirectory
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 5
+internal const val SUPPORTED_FORMAT_VERSION = 6
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -297,6 +307,7 @@ class ProjectImporter(private val state: State) {
         val scriptMap = importScripts(sourceDir, project)
         importFxDefinitions(sourceDir, project)
         val lookMap = importLooks(sourceDir, project)
+        val templateMap = importTemplates(sourceDir, project)
         importSpeedMasters(sourceDir, project)
         val universeMap = importUniverseConfigs(sourceDir, project)
         val riggingMap = importRiggings(sourceDir, project)
@@ -306,7 +317,7 @@ class ProjectImporter(private val state: State) {
         val cueStackMap = importCueStacks(sourceDir, project)
         val cueMap = importCues(sourceDir, project, cueStackMap)
         importCuePropertyAssignments(sourceDir, cueMap)
-        importCueLayers(sourceDir, cueMap, lookMap)
+        importCueLayers(sourceDir, cueMap, lookMap, templateMap)
         importCueAdHocEffects(sourceDir, cueMap)
         importCueTriggers(sourceDir, cueMap, scriptMap)
         importLegacyShowOrder(sourceDir, project, cueStackMap)
@@ -378,7 +389,6 @@ class ProjectImporter(private val state: State) {
                 name = l.name
                 notes = l.notes
                 sortOrder = l.sortOrder
-                editorFixtureType = l.editorFixtureType
                 palette = l.palette
                 this.uuid = uuid
             }
@@ -658,23 +668,72 @@ class ProjectImporter(private val state: State) {
         }
     }
 
+    private fun importTemplates(dir: Path, project: DaoProject): Map<UUID, DaoTemplate> =
+        readDir(dir.resolve("templates")) { json ->
+            val t = canonicalDecode(TemplateJson.serializer(), json)
+            val uuid = UUID.fromString(t.uuid)
+            val dao = DaoTemplate.new {
+                this.project = project
+                name = t.name
+                notes = t.notes
+                sortOrder = t.sortOrder
+                fadeDurationMs = t.fadeDurationMs
+                this.uuid = uuid
+            }
+            t.rows.forEach { r ->
+                DaoTemplateRow.new {
+                    template = dao
+                    targetType = r.targetType
+                    targetKey = r.targetKey
+                    propertyName = r.propertyName
+                    value = r.value
+                    sortOrder = r.sortOrder
+                    this.uuid = UUID.fromString(r.uuid)
+                }
+            }
+            uuid to dao
+        }
+
     private fun importCueLayers(
         dir: Path,
         cueMap: Map<UUID, DaoCue>,
         lookMap: Map<UUID, DaoLook>,
+        templateMap: Map<UUID, DaoTemplate>,
     ) {
         readDir(dir.resolve("cueLayers")) { json ->
             val l = canonicalDecode(CueLayerJson.serializer(), json)
             val cueUuid = UUID.fromString(l.cueUuid)
-            val lookUuid = UUID.fromString(l.lookUuid)
             val cue = cueMap[cueUuid]
                 ?: throw ImportError.invalidArchive("Cue layer ${l.uuid} references unknown cue $cueUuid")
-            val look = lookMap[lookUuid]
-                ?: throw ImportError.invalidArchive("Cue layer ${l.uuid} references unknown look $lookUuid")
+            // Exactly one referent, checked explicitly. `UUID.fromString` takes a Java platform
+            // type, so a null slips straight through it and fails later as an NPE with no archive
+            // context — the reason this is a `when` over the two nullable fields rather than a
+            // `fromString` on whichever one happens to be set.
+            val lookUuidRaw = l.lookUuid
+            val templateUuidRaw = l.templateUuid
+            if ((lookUuidRaw == null) == (templateUuidRaw == null)) {
+                throw ImportError.invalidArchive(
+                    "Cue layer ${l.uuid} must name exactly one of lookUuid / templateUuid",
+                )
+            }
+            var look: DaoLook? = null
+            var template: DaoTemplate? = null
+            if (lookUuidRaw != null) {
+                val lookUuid = UUID.fromString(lookUuidRaw)
+                look = lookMap[lookUuid]
+                    ?: throw ImportError.invalidArchive("Cue layer ${l.uuid} references unknown look $lookUuid")
+            } else {
+                val templateUuid = UUID.fromString(templateUuidRaw)
+                template = templateMap[templateUuid]
+                    ?: throw ImportError.invalidArchive(
+                        "Cue layer ${l.uuid} references unknown template $templateUuid",
+                    )
+            }
             val uuid = UUID.fromString(l.uuid)
             DaoCueLayer.new {
                 this.cue = cue
                 this.look = look
+                this.template = template
                 sortOrder = l.sortOrder
                 enabled = l.enabled
                 targets = l.targets

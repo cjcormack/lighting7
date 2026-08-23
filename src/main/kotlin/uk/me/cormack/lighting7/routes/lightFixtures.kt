@@ -107,14 +107,13 @@ internal fun inferLookCapabilities(categories: List<String>): Set<String> {
 /**
  * What compatibility filtering needs to know about one Look.
  *
- * [editorFixtureType] is null for a **bound** Look. That is not missing data — a bound Look names
- * its own targets, so "is this compatible with that fixture?" is a question about the Look's rows
- * rather than about a declared type, and [compatibleIdsFor] excludes bound Looks from type
- * filtering entirely rather than guessing.
+ * Just the effect categories now. There was an `editorFixtureType` beside them, and dropping it is
+ * D6: compatibility is **capability-only** — "can this head mix a colour at all", never "was this
+ * authored against that model". The type gate is what made one colour need one Look per fixture
+ * type, and it went with the column when templates became their own entity.
  */
 internal data class LookCompatibilityInfo(
     val id: Int,
-    val editorFixtureType: String?,
     val effectCategories: List<String>,
 )
 
@@ -134,29 +133,27 @@ internal fun loadLookCompatibilityInfos(state: State, projectId: Int): List<Look
         looks.map { look ->
             LookCompatibilityInfo(
                 id = look.id.value,
-                editorFixtureType = look.editorFixtureType,
                 effectCategories = categoriesByLook[look.id.value].orEmpty(),
             )
         }
     }
 
 /**
- * The ids of Looks offerable for a target with these [allowedTypeKeys] and [capabilities].
+ * The ids of Looks offerable for a target with these [capabilities].
  *
- * A **deferred** Look is filtered on its [LookCompatibilityInfo.editorFixtureType], exactly as a
- * preset was filtered on `fixtureType`. A **bound** Look is not type-filtered at all: it already
- * names the fixtures it applies to, so the question is moot — and excluding it would hide every
- * Look recorded from the programmer from the pickers.
+ * **Capability-only** (D6). There used to be a type gate here as well — a deferred Look was refused
+ * unless its `editorFixtureType` was the target's own type, exactly as an FX preset was — and that
+ * gate is the whole reason "Amber Key" authored against a MAC Aura was refused to the LED bar beside
+ * it. It is gone with the column: what remains is the honest question, whether the head can do the
+ * thing at all. An effect needing colour is still no use on a fixture that cannot mix one.
  *
- * Capability filtering still applies to both: an effect needing colour is no use on a fixture that
- * cannot mix one.
+ * `allowedTypeKeys` went with it. Every caller passed the target's own type(s) and nothing else
+ * reads them, so keeping the parameter would only preserve the shape of a filter that no longer
+ * exists.
  */
 internal fun List<LookCompatibilityInfo>.compatibleIdsFor(
-    allowedTypeKeys: Set<String>,
     capabilities: Set<String>,
 ): List<Int> = filter { look ->
-    val declaredType = look.editorFixtureType
-    if (declaredType != null && declaredType !in allowedTypeKeys) return@filter false
     inferLookCapabilities(look.effectCategories).all { it in capabilities }
 }.map { it.id }
 
@@ -173,7 +170,7 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                     is DmxFixture -> fixture.detectCapabilities().toSet()
                     else -> emptySet()
                 }
-                val compatibleIds = looks.compatibleIdsFor(setOf(fixture.typeKey), capabilities)
+                val compatibleIds = looks.compatibleIdsFor(capabilities)
                 fixture.details(fixtures, compatibleIds)
             })
         }

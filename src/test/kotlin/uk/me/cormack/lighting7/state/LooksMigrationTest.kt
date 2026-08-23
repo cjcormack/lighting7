@@ -234,8 +234,8 @@ class LooksMigrationTest : RouteIntegrationTest() {
         val paletteUuid = seedPalette("Warm Amber", listOf(Triple("fixture", "hex-1", "#ff8800")))
         transaction(state.database) {
             exec(
-                "INSERT INTO looks (project_id, name, notes, sort_order, editor_fixture_type, palette, uuid) " +
-                    "VALUES ($projectId, 'Warm Amber', NULL, 0, NULL, '[]', 'not-a-blob-uuid')"
+                "INSERT INTO looks (project_id, name, notes, sort_order, palette, uuid) " +
+                    "VALUES ($projectId, 'Warm Amber', NULL, 0, '[]', 'not-a-blob-uuid')"
             )
         }
         assertTrue("text" in uuidStorageTypes("looks"), "precondition: a text-uuid row exists")
@@ -254,7 +254,7 @@ class LooksMigrationTest : RouteIntegrationTest() {
     // ─── The mapping ────────────────────────────────────────────────────
 
     @Test
-    fun `a palette becomes a bound Look and a preset a deferred one`() {
+    fun `a palette becomes a bound Look, and a preset brings its effects across without its values`() {
         seedPalette(
             "Warm Amber",
             listOf(Triple("fixture", "hex-1", "#ff8800"), Triple("group", "front-wash", "#ffaa44")),
@@ -265,22 +265,21 @@ class LooksMigrationTest : RouteIntegrationTest() {
 
         transaction(state.database) {
             val bound = DaoLook.all().single { it.name == "Warm Amber" }
-            assertNull(bound.editorFixtureType, "a palette carried no fixture type")
             assertEquals(2, bound.rows.count())
             assertTrue(bound.rows.none { it.isDeferred }, "palette entries named their own targets")
             assertEquals(setOf("hex-1", "front-wash"), bound.rows.map { it.targetKey }.toSet())
 
-            val deferred = DaoLook.all().single { it.name == "warm-pulse" }
-            assertEquals("hex", deferred.editorFixtureType, "fixtureType survives as an editor hint")
-            assertEquals(listOf("#ff8800"), deferred.palette, "the positional colour list carries over")
-            val row = deferred.rows.single()
-            assertTrue(row.isDeferred, "a preset row was target-less, so it becomes deferred")
-            assertEquals(DEFERRED_TARGET_TYPE, row.targetType)
-            assertEquals("180", row.value)
-            assertEquals(750L, row.fadeDurationMs)
+            val fromPreset = DaoLook.all().single { it.name == "warm-pulse" }
+            assertEquals(listOf("#ff8800"), fromPreset.palette, "the positional colour list carries over")
+            // **The preset's target-less value rows do not come across, and that is the contract
+            // since session 3.** A deferred Look row is refused at the write boundary now — a value
+            // you point at a selection is a template — so the migration logs those rows rather than
+            // seeding data no editor can reach and the next save would reject. Its *effects* do come
+            // across, because a deferred effect still means "fan over the layer's targets".
+            assertEquals(0, fromPreset.rows.count(), "a preset's values are a template, not look rows")
 
             // The effects JSON blob becomes real rows, including its speed-master references.
-            val effect = deferred.effects.single()
+            val effect = fromPreset.effects.single()
             assertTrue(effect.isDeferred)
             assertEquals("Pulse", effect.effectType)
             assertEquals(0.25, effect.phaseOffset)
@@ -312,7 +311,7 @@ class LooksMigrationTest : RouteIntegrationTest() {
 
         transaction(state.database) {
             val layer = DaoCue.findById(cueId)!!.layers.single()
-            assertEquals("warm-pulse", layer.look.name)
+            assertEquals("warm-pulse", layer.source.name)
             assertEquals(listOf(CueTargetDto("group", "front-wash")), layer.targets)
             assertEquals(250L, layer.delayMs)
             assertEquals(500L, layer.intervalMs)
@@ -357,7 +356,7 @@ class LooksMigrationTest : RouteIntegrationTest() {
         transaction(state.database) {
             val cue = DaoCue.findById(cueId)!!
             val layer = cue.layers.single()
-            assertEquals("Warm Amber", layer.look.name)
+            assertEquals("Warm Amber", layer.source.name)
             assertEquals(
                 setOf("hex-1", "hex-2"), layer.targets.map { it.key }.toSet(),
                 "targets are exactly the fixtures the refs named, not everything the Look covers",
@@ -446,8 +445,12 @@ class LooksMigrationTest : RouteIntegrationTest() {
         //
         //  - the cue's own `hex-1 dimmer = 100` is **fixture-level**, so specificity drops the
         //    group-derived preset row on the same key;
-        //  - the preset's `dimmer = 180` fans over `front-wash`, so `hex-2` — which has no
-        //    fixture-level row — takes it;
+        //  - the preset's `dimmer = 180` fanned over `front-wash`, so `hex-2` — which has no
+        //    fixture-level row — used to take it. **Session 3 ends that**: a preset's target-less
+        //    value rows cannot become Look rows any more (a value pointed at a selection is a
+        //    *template*), so the migration logs them and moves on. It is asserted as a loss below
+        //    rather than quietly dropped from this map, because it is the one thing the migration
+        //    stopped preserving and a reader of this test needs to see it;
         //  - `hex-2 colour` holds `ref:{paletteUuid}`, and a ref naming a *palette* cannot resolve
         //    once the resolver reads Looks, so the key is **absent**. That absence is asserted
         //    explicitly below, and its recovery is the migration's one intended addition.
@@ -457,6 +460,9 @@ class LooksMigrationTest : RouteIntegrationTest() {
             CueAssignmentResolver.Key.fixture("hex-2", "dimmer") to
                 CueAssignmentResolver.PropertyValue.Slider(180u),
         )
+
+        /** The one key the migration no longer preserves — see the note above. */
+        val presetValueKey = CueAssignmentResolver.Key.fixture("hex-2", "dimmer")
 
         migrate()
 
@@ -468,13 +474,19 @@ class LooksMigrationTest : RouteIntegrationTest() {
             )
         }
 
-        // Nothing lost, nothing altered.
+        // Nothing altered, and nothing lost **except** the preset's own target-less value.
         for ((key, value) in before) {
+            if (key == presetValueKey) continue
             assertEquals(
                 value, after[key],
                 "coverage preservation: $key must compose to the same value after migration",
             )
         }
+        assertNull(
+            after[presetValueKey],
+            "a preset's target-less value is a template now, so the migration does not carry it — " +
+                "its effects still come across, and the operator re-creates the value at /templates",
+        )
 
         // And the one addition, named explicitly so a future change to it fails here.
         val colourKey = CueAssignmentResolver.Key.fixture("hex-2", "rgbColour")
@@ -487,8 +499,8 @@ class LooksMigrationTest : RouteIntegrationTest() {
         assertEquals(java.awt.Color(255, 136, 0), recovered.value.color, "#ff8800, per the palette")
 
         assertEquals(
-            before.keys + colourKey, after.keys,
-            "the recovered colour is the *only* difference — no key appears from nowhere",
+            before.keys - presetValueKey + colourKey, after.keys,
+            "the recovered colour is the only *addition* — no key appears from nowhere",
         )
     }
 

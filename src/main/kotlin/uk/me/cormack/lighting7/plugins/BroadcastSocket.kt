@@ -27,6 +27,18 @@ sealed class BroadcastOutMessage : OutMessage()
 @SerialName("lookListChanged")
 data object LookListChangedOutMessage : BroadcastOutMessage()
 
+/**
+ * A template was created, renamed or deleted.
+ *
+ * Its own message rather than a reuse of [LookListChangedOutMessage], for the same reason the
+ * backend signals are separate: the two invalidate different client caches, and one message would
+ * make every Look edit re-read the template library and vice versa. Contents changes ride the
+ * provenance / layer-state frames the edit itself produces.
+ */
+@Serializable
+@SerialName("templateListChanged")
+data object TemplateListChangedOutMessage : BroadcastOutMessage()
+
 @Serializable
 @SerialName("cueListChanged")
 data object CueListChangedOutMessage : BroadcastOutMessage()
@@ -148,6 +160,7 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         }
 
         override fun lookListChanged() = fire(LookListChangedOutMessage)
+        override fun templateListChanged() = fire(TemplateListChangedOutMessage)
         override fun cueListChanged() = fire(CueListChangedOutMessage)
         override fun cueStackListChanged() = fire(CueStackListChangedOutMessage)
         override fun cueSlotListChanged() = fire(CueSlotListChangedOutMessage)

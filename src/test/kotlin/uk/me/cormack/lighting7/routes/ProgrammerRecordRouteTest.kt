@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fx.LayerSource
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -752,11 +753,11 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         state.show.programmerLayerStack.add(
-            lookId = warm.id, lookUuid = java.util.UUID.fromString(warm.uuid), lookName = warm.name,
+            source = LayerSource.look(warm.id, java.util.UUID.fromString(warm.uuid), warm.name),
             targets = listOf(CueTargetDto("fixture", "hex-1")),
         )
 
@@ -782,11 +783,11 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         state.show.programmerLayerStack.add(
-            lookId = warm.id, lookUuid = java.util.UUID.fromString(warm.uuid), lookName = warm.name,
+            source = LayerSource.look(warm.id, java.util.UUID.fromString(warm.uuid), warm.name),
             targets = listOf(CueTargetDto("fixture", "hex-1")),
         )
 
@@ -807,11 +808,11 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         seedHex("hex-1", 1)
         seedHex("hex-2", 13)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         state.show.programmerLayerStack.add(
-            lookId = warm.id, lookUuid = java.util.UUID.fromString(warm.uuid), lookName = warm.name,
+            source = LayerSource.look(warm.id, java.util.UUID.fromString(warm.uuid), warm.name),
             targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
         )
         setProgrammer("hex-1", "dimmer", "30")
@@ -838,16 +839,16 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         seedHex("hex-1", 1)
         seedHex("hex-2", 13)
-        val warm = ProgrammerRouteTestSupport.createDeferredLook(
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
         val uuid = java.util.UUID.fromString(warm.uuid)
         state.show.programmerLayerStack.add(
-            lookId = warm.id, lookUuid = uuid, lookName = warm.name,
+            source = LayerSource.look(warm.id, uuid, warm.name),
             targets = listOf(CueTargetDto("fixture", "hex-1")),
         )
         state.show.programmerLayerStack.add(
-            lookId = warm.id, lookUuid = uuid, lookName = warm.name,
+            source = LayerSource.look(warm.id, uuid, warm.name),
             targets = listOf(CueTargetDto("fixture", "hex-2")),
         )
 
@@ -870,7 +871,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         state.show.programmerLayerStack.installPreview(
             snapshot = uk.me.cormack.lighting7.fx.LookSnapshot(
                 lookId = 0, lookUuid = java.util.UUID(0L, 0L), name = "preview",
-                editorFixtureType = null, palette = emptyList(),
+                palette = emptyList(),
                 rows = listOf(
                     uk.me.cormack.lighting7.fx.LookRowEntry(null, "dimmer", "77"),
                 ),
