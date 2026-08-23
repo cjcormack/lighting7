@@ -1,0 +1,190 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885);
+      --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067);
+      --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .btn { display:inline-flex; align-items:center; gap:5px; height:27px; padding:0 10px;
+      border-radius:6px; border:1px solid var(--bd); background:transparent; color:var(--fg);
+      font-size:11.5px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:600; }
+    .btn.sm { height:23px; font-size:10.5px; padding:0 7px; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .h2 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:var(--mfg); margin:0; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .zlab { font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--mfg); }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px; padding:1px 6px;
+      font-size:10px; line-height:1.5; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); }
+    .badge.sec { background:var(--muted); }
+    .box { border-radius:8px; border:1px solid var(--bd); background:var(--card); }
+    .bh { display:flex; align-items:center; gap:7px; padding:7px 10px; border-bottom:1px solid var(--bd);
+      font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; }
+    .row { display:flex; align-items:center; gap:8px; padding:7px 10px; border-bottom:1px solid var(--bd); font-size:11.5px; }
+    .row:last-child { border-bottom:0; }
+    .fx { color:oklch(0.606 0.25 292.717); }
+  </style>
+</helmet>
+
+<div class="app" style="width:1020px; height:660px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); padding:22px; display:flex; flex-direction:column; gap:15px; overflow:hidden;">
+
+  <div>
+    <div style="font-size:17px; font-weight:650; letter-spacing:-0.01em;">Adding an effect &mdash; the scope decides where it lands</div>
+    <p class="cap" style="margin-top:4px; font-size:12px;">There is no per-layer effect list, and I am not proposing one. <span class="mono" style="color:oklch(0.985 0 0);">CueLayer</span> carries no effects &mdash; only overrides. So <b style="color:oklch(0.985 0 0); font-weight:600;">+ Effect</b> follows the same rule as a value edit: it goes wherever the focused scope&rsquo;s values go.</p>
+  </div>
+
+  <!-- THE RULE -->
+  <div style="display:flex; gap:12px; flex:0 0 auto;">
+
+    <div class="box" style="flex:1; min-width:0; border-color:oklch(0.45 0.16 300);">
+      <div class="bh" style="color:oklch(0.82 0.11 305); border-color:oklch(0.45 0.16 300);">
+        <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg>
+        Focused: a layer</div>
+      <div style="padding:10px;">
+        <p class="cap" style="color:oklch(0.985 0 0);">Goes into <b>the Look</b>, as a <span class="mono">LookEffect</span>.</p>
+        <p class="cap" style="margin-top:5px;">It travels with the Look, so every other layer applying it starts running the effect too. Same consequence as editing its values &mdash; so the same guard fires:</p>
+        <div style="display:flex; gap:5px; margin-top:8px; flex-wrap:wrap;">
+          <span class="btn sm" style="border-color:oklch(0.769 0.188 70.08); color:oklch(0.828 0.189 84.429);">All 9 layers</span>
+          <span class="btn pri sm">Duplicate for this cue</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="box" style="flex:1; min-width:0; border-color:oklch(0.623 0.214 259.815);">
+      <div class="bh" style="color:oklch(0.707 0.165 254.624); border-color:oklch(0.623 0.214 259.815);">
+        <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        Focused: Local values</div>
+      <div style="padding:10px;">
+        <p class="cap" style="color:oklch(0.985 0 0);">Goes on <b>the cue</b>, as a <span class="mono">CueAdHocEffect</span>.</p>
+        <p class="cap" style="margin-top:5px;">Local has no Look to put it in, and that is exactly right: an effect you want <i>here only</i> belongs to the cue. This is the &ldquo;just this once&rdquo; path &mdash; no shared-edit question to answer.</p>
+        <p class="cap" style="margin-top:5px;">Before the cue exists it is a programmer-band effect, and Record writes it into <span class="mono">adHocEffects</span>.</p>
+      </div>
+    </div>
+
+    <div class="box" style="flex:1; min-width:0;">
+      <div class="bh" style="color:oklch(0.705 0.015 286.067);">
+        <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+        Focused: Output</div>
+      <div style="padding:10px;">
+        <p class="cap" style="color:oklch(0.985 0 0);"><b>+ Effect is disabled.</b></p>
+        <p class="cap" style="margin-top:5px;">Output is the cook &mdash; a read of what every entry produced together. It owns nothing, so there is nowhere for a new effect to go. The button&rsquo;s tooltip says so and names the two places that can take one.</p>
+        <p class="cap" style="margin-top:5px;">Same reason the Output scope cannot take a value edit. One rule, consistently applied, rather than a special case for effects.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHAT A LAYER CAN OVERRIDE -->
+  <div style="flex:1; min-height:0; display:flex; gap:14px;">
+
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:7px;">
+      <p class="h2">What a layer <i style="text-transform:none; letter-spacing:0; font-weight:400;">can</i> change about an effect it does not own</p>
+      <div class="box" style="flex:1; min-height:0;">
+        <div class="row">
+          <span class="mono" style="flex:0 0 auto; width:152px; color:oklch(0.82 0.11 305);">speedMasterUuid</span>
+          <span style="flex:1;">Which tempo bus its beats come from.</span>
+          <span class="badge out" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">BEAT only</span>
+        </div>
+        <div class="row">
+          <span class="mono" style="flex:0 0 auto; width:152px; color:oklch(0.82 0.11 305);">rateSpeedMasterUuid</span>
+          <span style="flex:1;">Scales a wall-clock effect&rsquo;s cycle.</span>
+          <span class="badge out" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">WALL_CLOCK only</span>
+        </div>
+        <div class="row">
+          <span class="mono" style="flex:0 0 auto; width:152px;">amount</span>
+          <span style="flex:1;">Mix of the whole layer over what is beneath it.</span>
+        </div>
+        <div class="row">
+          <span class="mono" style="flex:0 0 auto; width:152px;">propertyMask</span>
+          <span style="flex:1;">Which families the layer asserts at all.</span>
+        </div>
+        <div class="row">
+          <span class="mono" style="flex:0 0 auto; width:152px;">stomp</span>
+          <span style="flex:1;">Suppresses effects <i>below</i> this layer.</span>
+          <span class="badge out" style="flex:0 0 auto; color:oklch(0.828 0.189 84.429); border-color:oklch(0.555 0.163 48.998);">reversible</span>
+        </div>
+        <div class="row">
+          <span class="mono" style="flex:0 0 auto; width:152px;">enabled</span>
+          <span style="flex:1;">Off takes the layer&rsquo;s effects with it.</span>
+        </div>
+      </div>
+      <p class="cap">These are already on <span class="mono" style="color:oklch(0.985 0 0);">CueLayer</span> today &mdash; nothing new to add. The comment on <span class="mono">speedMasterUuid</span> spells the fallback out: <span class="mono">null &rarr; each Look effect&rsquo;s own &rarr; master 1</span>. That is the whole per-use story: <b style="color:oklch(0.985 0 0);">one definition, many tempos</b>.</p>
+    </div>
+
+    <div style="width:392px; flex:0 0 auto; display:flex; flex-direction:column; gap:7px; min-height:0;">
+      <p class="h2">In the layer&rsquo;s own panel</p>
+      <div class="box" style="flex:1; min-height:0; display:flex; flex-direction:column;">
+        <div class="bh" style="color:oklch(0.82 0.11 305); border-color:oklch(0.45 0.16 300);">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg>
+          Layer 2 &middot; Storm Wash</div>
+        <div style="padding:10px; display:flex; flex-direction:column; gap:9px;">
+
+          <div>
+            <span class="zlab">Effects in this Look</span>
+            <div style="margin-top:5px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); overflow:hidden;">
+              <div style="display:flex; align-items:center; gap:7px; padding:7px 9px; font-size:11.5px;">
+                <span style="width:6px; height:6px; border-radius:999px; background:oklch(0.606 0.25 292.717); flex:0 0 auto;"></span>
+                <span style="font-weight:500;">Colour Chase</span>
+                <span class="badge out mono" style="color:oklch(0.705 0.015 286.067);">&rarr; rgbColour</span>
+                <span style="flex:1;"></span>
+                <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; margin-top:6px;">
+              <span class="btn sm">
+                <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add effect</span>
+              <span class="cap" style="font-size:9.5px;">&rarr; into Storm Wash</span>
+            </div>
+          </div>
+
+          <div style="height:1px; background:oklch(0.274 0.006 286.033);"></div>
+
+          <div>
+            <span class="zlab" style="color:oklch(0.82 0.11 305);">This layer&rsquo;s overrides</span>
+            <div style="display:flex; flex-direction:column; gap:7px; margin-top:6px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:11px; width:74px; flex:0 0 auto; color:oklch(0.705 0.015 286.067);">Tempo</span>
+                <span class="btn sm" style="flex:1; justify-content:space-between;">M2 &middot; Chases
+                  <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:11px; width:74px; flex:0 0 auto; color:oklch(0.705 0.015 286.067);">Amount</span>
+                <span style="position:relative; height:5px; flex:1; border-radius:999px; background:oklch(0.274 0.006 286.033); overflow:hidden;"><span style="position:absolute; inset-block:0; left:0; width:100%; border-radius:999px; background:oklch(0.623 0.214 259.815);"></span></span>
+                <span class="mono num" style="font-size:11px; width:32px; text-align:right; color:oklch(0.705 0.015 286.067);">100%</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:11px; width:74px; flex:0 0 auto; color:oklch(0.705 0.015 286.067);">Asserts</span>
+                <span class="btn sm" style="flex:1; justify-content:space-between;">Colour
+                  <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:11px; width:74px; flex:0 0 auto; color:oklch(0.705 0.015 286.067);">Stomp</span>
+                <span class="btn sm" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">off</span>
+                <span class="cap" style="font-size:9.5px; flex:1;">nothing below to suppress</span>
+              </div>
+            </div>
+          </div>
+
+          <p class="cap" style="font-size:10px;">Two sections, deliberately not one list: the top edits the <b style="color:oklch(0.985 0 0);">Look</b> and reaches every cue using it; the bottom edits <b style="color:oklch(0.985 0 0);">this layer</b> and reaches nothing else. A single flat panel would hide which of those you were about to do.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

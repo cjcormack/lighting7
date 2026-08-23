@@ -1,0 +1,225 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885);
+      --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067);
+      --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .btn { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px;
+      border-radius:6px; border:1px solid var(--bd); background:transparent; color:var(--fg);
+      font-size:11.5px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:600; }
+    .btn.sm { height:24px; font-size:10.5px; padding:0 8px; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .h2 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:var(--mfg); margin:0; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .zlab { font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--mfg); }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px; padding:1px 6px;
+      font-size:10px; line-height:1.5; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); }
+    .badge.sec { background:var(--muted); }
+    .f-int { border:1px solid oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429); background:oklch(0.279 0.077 45.635); }
+    .f-col { border:1px solid oklch(0.45 0.16 300); color:oklch(0.82 0.11 305); background:oklch(0.27 0.09 302); }
+    /* mini grid */
+    .mg { border-radius:6px; border:1px solid var(--bd); overflow:hidden; }
+    .mgh { display:grid; font-size:9px; font-weight:600; text-transform:uppercase;
+      letter-spacing:0.05em; color:var(--mfg); border-bottom:1px solid var(--bd); }
+    .mgh > div { padding:4px 6px; }
+    .mr { display:grid; height:26px; align-items:center; border-bottom:1px solid var(--bd); font-size:11px; }
+    .mr:last-child { border-bottom:0; }
+    .mr > div { padding:0 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cellx { display:flex; align-items:center; gap:5px; height:20px; margin:0 3px; padding:0 4px;
+      border-radius:3px; box-sizing:border-box; }
+    .sw { width:12px; height:12px; border-radius:3px; border:1px solid var(--bd); flex:0 0 auto; }
+    .o-prog { box-shadow: inset 0 0 0 1px var(--pri); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .o-look { box-shadow: inset 0 0 0 1px oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.35); }
+    .o-cue  { box-shadow: inset 0 0 0 1px oklch(0.685 0.169 237.323 / 0.4); }
+    .o-base { opacity:0.5; }
+    .inert { opacity:0.3; }
+    .box { border-radius:8px; border:1px solid var(--bd); background:var(--card); }
+    .bh { display:flex; align-items:center; gap:7px; padding:7px 10px; border-bottom:1px solid var(--bd);
+      font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; }
+  </style>
+</helmet>
+
+<div class="app" style="width:1180px; height:940px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); padding:22px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+
+  <div>
+    <div style="font-size:17px; font-weight:650; letter-spacing:-0.01em;">One session: compose, then edit in place</div>
+    <p class="cap" style="margin-top:4px; font-size:12px;">You never leave the programmer to build a Look, and you never leave it to change one. The grid has a <b style="color:oklch(0.985 0 0); font-weight:600;">scope</b>, and the stack is how you move it.</p>
+  </div>
+
+  <!-- THREE SCOPES -->
+  <div>
+    <p class="h2" style="margin-bottom:8px;">Three scopes, one grid</p>
+    <div style="display:flex; gap:12px;">
+
+      <!-- Output -->
+      <div class="box" style="flex:1; min-width:0;">
+        <div class="bh" style="color:oklch(0.705 0.015 286.067);">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+          Output <span class="badge out" style="font-weight:500; letter-spacing:0; text-transform:none;">read-only</span></div>
+        <div style="padding:9px;">
+          <div class="mg">
+            <div class="mgh" style="grid-template-columns:1fr 62px 62px;"><div>Fixture</div><div>Dim</div><div>Colour</div></div>
+            <div class="mr" style="grid-template-columns:1fr 62px 62px;"><div>SL Wash 1</div>
+              <div><span class="cellx o-prog"><span class="mono num" style="font-size:10px;">82%</span></span></div>
+              <div><span class="cellx o-look"><span class="sw" style="background:#ff9d4a;"></span></span></div></div>
+            <div class="mr" style="grid-template-columns:1fr 62px 62px;"><div>SL Wash 2</div>
+              <div><span class="cellx o-prog"><span class="mono num" style="font-size:10px;">82%</span></span></div>
+              <div><span class="cellx o-look"><span class="sw" style="background:#ff9d4a;"></span></span></div></div>
+            <div class="mr" style="grid-template-columns:1fr 62px 62px;"><div>Mover 1</div>
+              <div><span class="cellx o-cue"><span class="mono num" style="font-size:10px;">40%</span></span></div>
+              <div><span class="cellx o-base"><span class="sw" style="background:#fff;"></span></span></div></div>
+          </div>
+          <p class="cap" style="margin-top:7px; font-size:10.5px;">The cook. Every fixture, every column, tinted by <i>which</i> entry won &mdash; this is where the ownership colours earn their keep. Click a tinted cell to jump the scope to its owner.</p>
+        </div>
+      </div>
+
+      <!-- Local -->
+      <div class="box" style="flex:1; min-width:0; border-color:oklch(0.623 0.214 259.815);">
+        <div class="bh" style="color:oklch(0.707 0.165 254.624); border-color:oklch(0.623 0.214 259.815);">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+          Local values <span class="badge out" style="font-weight:500; letter-spacing:0; text-transform:none; border-color:oklch(0.623 0.214 259.815); color:oklch(0.707 0.165 254.624);">yours</span></div>
+        <div style="padding:9px;">
+          <div class="mg">
+            <div class="mgh" style="grid-template-columns:1fr 62px 62px;"><div>Fixture</div><div>Dim</div><div>Colour</div></div>
+            <div class="mr" style="grid-template-columns:1fr 62px 62px;"><div>SL Wash 1</div>
+              <div><span class="cellx o-prog"><span class="mono num" style="font-size:10px;">82%</span></span></div>
+              <div><span class="cellx inert"><span class="mono" style="font-size:10px;">&mdash;</span></span></div></div>
+            <div class="mr" style="grid-template-columns:1fr 62px 62px;"><div>SL Wash 2</div>
+              <div><span class="cellx o-prog"><span class="mono num" style="font-size:10px;">82%</span></span></div>
+              <div><span class="cellx inert"><span class="mono" style="font-size:10px;">&mdash;</span></span></div></div>
+            <div class="mr" style="grid-template-columns:1fr 62px 62px;"><div>Mover 1</div>
+              <div><span class="cellx inert"><span class="mono" style="font-size:10px;">&mdash;</span></span></div>
+              <div><span class="cellx inert"><span class="mono" style="font-size:10px;">&mdash;</span></span></div></div>
+          </div>
+          <p class="cap" style="margin-top:7px; font-size:10.5px;">What <i>you</i> set, and nothing else &mdash; so &ldquo;what will Record take?&rdquo; is a scope you can look at rather than a colour you have to trust. Top of the stack: it beats every layer.</p>
+        </div>
+      </div>
+
+      <!-- Layer -->
+      <div class="box" style="flex:1; min-width:0; border-color:oklch(0.45 0.16 300);">
+        <div class="bh" style="color:oklch(0.82 0.11 305); border-color:oklch(0.45 0.16 300);">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg>
+          Layer 4 &middot; Amber Key</div>
+        <div style="padding:9px;">
+          <div class="mg">
+            <div class="mgh" style="grid-template-columns:1fr 62px 62px;"><div>Fixture</div><div class="inert">Dim</div><div style="color:oklch(0.82 0.11 305);">Colour</div></div>
+            <div class="mr" style="grid-template-columns:1fr 62px 62px;"><div>SL Wash 1</div>
+              <div class="inert"><span class="cellx"><span class="mono" style="font-size:10px;">&mdash;</span></span></div>
+              <div><span class="cellx o-look"><span class="sw" style="background:#ff9d4a;"></span></span></div></div>
+            <div class="mr" style="grid-template-columns:1fr 62px 62px;"><div>SL Wash 2</div>
+              <div class="inert"><span class="cellx"><span class="mono" style="font-size:10px;">&mdash;</span></span></div>
+              <div><span class="cellx o-look"><span class="sw" style="background:#ff9d4a;"></span></span></div></div>
+            <div class="mr inert" style="grid-template-columns:1fr 62px 62px; opacity:0.34;"><div>Mover 1</div>
+              <div><span class="cellx"><span class="mono" style="font-size:10px;">&mdash;</span></span></div>
+              <div><span class="cellx"><span class="mono" style="font-size:10px;">&mdash;</span></span></div></div>
+          </div>
+          <p class="cap" style="margin-top:7px; font-size:10.5px;">Columns outside the layer&rsquo;s mask go inert, and fixtures outside its targets dim out &mdash; so the mask and the target list are things you <i>see</i> rather than fields you open a popover to read.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROMOTE -->
+  <div>
+    <p class="h2" style="margin-bottom:8px;">Building a Look without leaving &mdash; promote what you busked</p>
+    <div style="display:flex; align-items:center; gap:11px;">
+
+      <div class="box" style="flex:1; min-width:0;">
+        <div class="bh" style="color:oklch(0.707 0.165 254.624);">1 &middot; select in Local</div>
+        <div style="padding:9px;">
+          <div class="mg" style="position:relative;">
+            <div class="mgh" style="grid-template-columns:1fr 58px 58px;"><div>Fixture</div><div>Dim</div><div>Colour</div></div>
+            <div class="mr" style="grid-template-columns:1fr 58px 58px;"><div>SL Wash 1</div><div><span class="cellx o-prog"><span class="mono num" style="font-size:10px;">82%</span></span></div><div><span class="cellx o-prog"><span class="sw" style="background:#ff9d4a;"></span></span></div></div>
+            <div class="mr" style="grid-template-columns:1fr 58px 58px;"><div>SL Wash 2</div><div><span class="cellx o-prog"><span class="mono num" style="font-size:10px;">82%</span></span></div><div><span class="cellx o-prog"><span class="sw" style="background:#ff9d4a;"></span></span></div></div>
+            <div style="position:absolute; left:calc(100% - 122px); top:22px; width:118px; height:52px; border:1.5px dashed oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.14); border-radius:3px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <svg style="width:20px;height:20px;color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+
+      <div class="box" style="width:284px; flex:0 0 auto; border-color:oklch(0.623 0.214 259.815);">
+        <div class="bh" style="color:oklch(0.707 0.165 254.624); border-color:oklch(0.623 0.214 259.815);">2 &middot; make it a layer</div>
+        <div style="padding:10px;">
+          <div style="font-size:11.5px; font-weight:500; margin-bottom:4px;">Name</div>
+          <div style="display:flex; align-items:center; height:30px; padding:0 9px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); font-size:12px; box-sizing:border-box;">Warm Key</div>
+          <div style="display:flex; align-items:center; gap:6px; margin-top:9px; flex-wrap:wrap;">
+            <span class="zlab">Keep</span>
+            <span class="badge f-col">Colour 2</span>
+            <span class="badge out inert" style="opacity:0.4;">Intensity 2</span>
+          </div>
+          <p class="cap" style="margin-top:7px; font-size:10px;">Masked to what you picked, so the level you busked stays local.</p>
+          <div style="display:flex; gap:6px; margin-top:9px;">
+            <span class="btn sm" style="flex:1; justify-content:center;">Cancel</span>
+            <span class="btn pri sm" style="flex:1; justify-content:center;">Make layer</span>
+          </div>
+        </div>
+      </div>
+
+      <svg style="width:20px;height:20px;color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+
+      <div class="box" style="flex:1; min-width:0; border-color:oklch(0.45 0.16 300);">
+        <div class="bh" style="color:oklch(0.82 0.11 305); border-color:oklch(0.45 0.16 300);">3 &middot; it is in the stack</div>
+        <div style="padding:9px; display:flex; flex-direction:column; gap:5px;">
+          <div style="display:flex; align-items:center; gap:6px; padding:6px 7px; border-radius:6px; border:1px solid oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.12); font-size:11px;">
+            <span style="flex:1; font-weight:600;">Local values</span><span class="cap" style="font-size:9.5px;">2 left</span></div>
+          <div style="display:flex; align-items:center; gap:6px; padding:6px 7px; border-radius:6px; border:1px solid oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.55); font-size:11px;">
+            <span class="badge sec mono" style="background:oklch(0.45 0.16 300); color:oklch(0.141 0.005 285.823);">5</span>
+            <span style="flex:1; font-weight:600;">Warm Key</span><span class="badge f-col">Colour</span></div>
+          <div style="display:flex; align-items:center; gap:6px; padding:6px 7px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); font-size:11px;">
+            <span class="badge sec mono">4</span><span style="flex:1;">Amber Key</span></div>
+          <p class="cap" style="margin-top:2px; font-size:10px;">Saved to the library and applied here in one step. Record then writes it as a <i>layer</i>, not as flattened values.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <span style="flex:1;"></span>
+
+  <!-- TWO GUARDS -->
+  <div style="display:flex; gap:12px; flex:0 0 auto;">
+
+    <!-- shared edit -->
+    <div style="flex:1; min-width:0; border-radius:8px; border:1px solid oklch(0.555 0.163 48.998); background:oklch(0.279 0.077 45.635 / 0.42); padding:11px 13px;">
+      <div style="display:flex; align-items:center; gap:7px; margin-bottom:6px;">
+        <svg class="ico" style="color:oklch(0.828 0.189 84.429);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h0"/></svg>
+        <span style="font-size:12px; font-weight:600;">Editing a Look edits it everywhere</span></div>
+      <p class="cap" style="color:oklch(0.985 0 0);">This is the cost of composing in place, and it must be said at the moment of the edit, not in a tooltip. The first change to a Look used by other cues asks once:</p>
+      <div style="display:flex; gap:7px; margin-top:9px; flex-wrap:wrap;">
+        <span class="btn" style="border-color:oklch(0.769 0.188 70.08); color:oklch(0.828 0.189 84.429);">Change all 9 layers</span>
+        <span class="btn pri">Duplicate for this cue</span>
+        <span class="btn">Cancel</span>
+      </div>
+      <p class="cap" style="margin-top:7px; font-size:10px;">Duplicate is the primary: retuning one cue is the common intent, and the destructive reading of &ldquo;just edit it&rdquo; is the one an operator cannot undo across nine cues. A Look used by nothing else skips the question entirely.</p>
+    </div>
+
+    <!-- reorder -->
+    <div style="flex:1; min-width:0; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:11px 13px;">
+      <div style="display:flex; align-items:center; gap:7px; margin-bottom:6px;">
+        <svg class="ico" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg>
+        <span style="font-size:12px; font-weight:600;">Reordering mid-session must not restart phase</span></div>
+      <p class="cap">Dragging a layer while a chase is running has to keep the chase where it is. The programmer stack already gets this right &mdash; <span class="mono" style="color:oklch(0.985 0 0);">ProgrammerLookStack</span> deliberately does <i>not</i> renumber <span class="mono">sortOrder</span> client-side the way the cue path does, because the server renumbers and re-ranks the running effects in place.</p>
+      <p class="cap" style="margin-top:7px;">Which matters more now than it did: with composition happening live, a drag is a normal authoring gesture rather than a rare one. Any new reorder affordance &mdash; keyboard, the Output-cell jump, promote-into-position &mdash; has to route through the same op.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885);
+      --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067);
+      --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:36px; padding:0 14px;
+      border-radius:6px; border:1px solid var(--bd); background:transparent; color:var(--fg);
+      font-size:13px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:600; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico20 { width:20px; height:20px; flex:0 0 auto; }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px; padding:1px 6px;
+      font-size:10px; line-height:1.5; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); }
+    .badge.sec { background:var(--muted); }
+    .lab { display:block; font-size:12px; font-weight:500; margin-bottom:5px; }
+    .inp { display:flex; align-items:center; height:36px; padding:0 11px; border-radius:6px;
+      border:1px solid var(--bd); background:transparent; font-size:13px; box-sizing:border-box; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .fam { display:flex; flex-direction:column; align-items:center; gap:6px; padding:11px 6px;
+      border-radius:8px; border:1px solid var(--bd); background:var(--card); flex:1;
+      font-size:11.5px; font-weight:600; }
+    .fam.on { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302);
+      color:oklch(0.86 0.11 305); box-shadow:inset 0 0 0 1px oklch(0.45 0.16 300); }
+    .seg { display:inline-flex; align-items:center; gap:5px; border-radius:6px; padding:5px 10px;
+      font-size:11.5px; font-weight:600; color:var(--mfg); }
+    .seg.on { background:var(--muted); color:var(--fg); }
+    .rrow { display:grid; grid-template-columns:158px 34px 1fr; align-items:center; gap:10px;
+      padding:8px 0; border-bottom:1px solid var(--bd); }
+    .rrow:last-child { border-bottom:0; }
+    .chip { display:inline-flex; align-items:center; gap:5px; border-radius:5px; padding:2px 7px;
+      font-size:10.5px; border:1px solid var(--bd); }
+  </style>
+</helmet>
+
+<div class="app" style="width:1080px; height:760px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); display:flex; overflow:hidden;">
+
+  <!-- left: rationale -->
+  <div style="width:352px; flex:0 0 auto; padding:22px; border-right:1px solid oklch(0.274 0.006 286.033); display:flex; flex-direction:column; gap:16px; background:oklch(0.176 0.005 285.9);">
+    <div>
+      <div style="font-size:16px; font-weight:650; letter-spacing:-0.01em;">Templates: one family, no fixture type</div>
+      <p class="cap" style="margin-top:5px;">Brief items 8 and 9. Today a template <i>requires</i> an <span class="mono" style="color:oklch(0.985 0 0);">editorFixtureType</span> &mdash; that is what resolves the property descriptors the value grid is built from, so &ldquo;pick a mode&rdquo; is a required field before you can set a colour.</p>
+    </div>
+
+    <div style="border-radius:8px; border:1px dashed oklch(0.414 0.112 45.904); background:oklch(0.279 0.077 45.635 / 0.35); padding:10px 12px;">
+      <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.828 0.189 84.429); margin-bottom:4px;">What that costs today</div>
+      <p class="cap" style="color:oklch(0.985 0 0);">&ldquo;Amber Key&rdquo; authored against a MAC Aura is offered to Auras and refused to the LED bars beside them &mdash; the pickers filter on <span class="mono">compatibleLookIds</span>, computed from the type. One colour, one template per fixture type.</p>
+    </div>
+
+    <div>
+      <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.705 0.015 286.067); margin-bottom:6px;">The swap</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; gap:9px; align-items:flex-start;">
+          <span style="width:18px; height:18px; border-radius:5px; background:oklch(0.274 0.006 286.033); display:grid; place-items:center; font-size:10px; font-weight:700; flex:0 0 auto;">1</span>
+          <p class="cap" style="color:oklch(0.985 0 0);">The family is chosen <b>first</b> and is the template&rsquo;s identity, not a badge derived afterwards.</p>
+        </div>
+        <div style="display:flex; gap:9px; align-items:flex-start;">
+          <span style="width:18px; height:18px; border-radius:5px; background:oklch(0.274 0.006 286.033); display:grid; place-items:center; font-size:10px; font-weight:700; flex:0 0 auto;">2</span>
+          <p class="cap" style="color:oklch(0.985 0 0);">The editor is <b>family-native</b> &mdash; a colour picker, a pan/tilt pad, one level &mdash; not a descriptor-driven property list. So no synthetic fixture, and no mode to resolve it against.</p>
+        </div>
+        <div style="display:flex; gap:9px; align-items:flex-start;">
+          <span style="width:18px; height:18px; border-radius:5px; background:oklch(0.274 0.006 286.033); display:grid; place-items:center; font-size:10px; font-weight:700; flex:0 0 auto;">3</span>
+          <p class="cap" style="color:oklch(0.985 0 0);">The stored value is an <b>intent</b>, resolved per fixture when the layer cooks. <span class="mono">compatibleLookIds</span> becomes capability-only: does this head have colour at all.</p>
+        </div>
+      </div>
+    </div>
+
+    <span style="flex:1;"></span>
+
+    <div style="border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:10px 12px;">
+      <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.705 0.015 286.067); margin-bottom:4px;">Known cost</div>
+      <p class="cap">Intensity, Position and Colour have cross-type names. <b style="color:oklch(0.828 0.189 84.429);">Beam does not</b> &mdash; gobo and colour-wheel <i>slots</i> are per-type, which is exactly why the mask has four families rather than twenty-two categories. See the Beam &amp; colour artboard for how far this goes and where it stops.</p>
+    </div>
+  </div>
+
+  <!-- right: the sheet -->
+  <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+    <div style="display:flex; align-items:center; gap:10px; padding:18px 20px 14px; flex:0 0 auto;">
+      <div style="flex:1;">
+        <div style="font-size:16px; font-weight:600;">New template</div>
+        <p class="cap" style="margin-top:2px;">Takes its fixtures from the layer that applies it.</p>
+      </div>
+      <svg class="ico20" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </div>
+
+    <div style="flex:1; min-height:0; overflow:hidden; padding:0 20px; display:flex; flex-direction:column; gap:16px;">
+
+      <!-- step 1: family -->
+      <div>
+        <span class="lab">Attribute family <span style="color:oklch(0.705 0.015 286.067); font-weight:400;">&mdash; one only</span></span>
+        <div style="display:flex; gap:8px;">
+          <div class="fam">
+            <svg class="ico20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>
+            Intensity</div>
+          <div class="fam">
+            <svg class="ico20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9 3 12l3 3M18 9l3 3-3 3"/></svg>
+            Position</div>
+          <div class="fam on">
+            <svg class="ico20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="9.5" r="1"/><circle cx="15" cy="9.5" r="1"/><circle cx="9.5" cy="15" r="1"/></svg>
+            Colour</div>
+          <div class="fam">
+            <svg class="ico20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3.6 7.5l16.8 9M3.6 16.5l16.8-9"/></svg>
+            Beam</div>
+        </div>
+      </div>
+
+      <!-- name -->
+      <div style="display:grid; grid-template-columns:1fr 128px; gap:10px;">
+        <div><span class="lab">Name</span><div class="inp">Amber Key</div></div>
+        <div><span class="lab">Fade</span><div class="inp mono num" style="justify-content:space-between;">1.5s
+          <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div></div>
+      </div>
+
+      <!-- family-native editor -->
+      <div style="display:flex; gap:14px;">
+        <div style="flex:0 0 auto;">
+          <span class="lab">Colour</span>
+          <div style="width:168px; height:118px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, #ff9d4a); position:relative;">
+            <span style="position:absolute; left:118px; top:34px; width:18px; height:18px; border-radius:999px; border:2px solid #fff; box-shadow:0 2px 4px rgba(0,0,0,0.35); box-sizing:border-box;"></span>
+          </div>
+          <div style="width:168px; height:12px; border-radius:6px; margin-top:12px; background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00); position:relative;">
+            <span style="position:absolute; left:12px; top:-4px; width:18px; height:18px; border-radius:999px; border:2px solid #fff; box-shadow:0 2px 4px rgba(0,0,0,0.35); box-sizing:border-box;"></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:7px; margin-top:11px;">
+            <span style="width:26px; height:26px; border-radius:5px; border:1px solid oklch(0.274 0.006 286.033); background:#ff9d4a; flex:0 0 auto;"></span>
+            <div class="inp mono" style="flex:1; height:30px; font-size:12px;">#FF9D4A</div>
+          </div>
+        </div>
+
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:10px;">
+          <div>
+            <span class="lab">White / amber handling <span style="color:oklch(0.705 0.015 286.067); font-weight:400;">&mdash; on heads that have those channels</span></span>
+            <nav style="display:inline-flex; align-items:center; gap:2px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:2px;">
+              <span class="seg on">Extract</span>
+              <span class="seg">Additive</span>
+              <span class="seg">RGB only</span>
+            </nav>
+            <p class="cap" style="margin-top:5px;"><b style="color:oklch(0.985 0 0);">Extract</b> pulls <span class="mono">min(r,g,b)</span> into the white/amber emitters &mdash; brighter and cleaner, and the sensible default for a wash. <b style="color:oklch(0.985 0 0);">Additive</b> drives them alongside RGB. <b style="color:oklch(0.985 0 0);">RGB only</b> leaves them at zero, for when a rig is being matched to camera.</p>
+          </div>
+
+          <div>
+            <span class="lab">Resolves to</span>
+            <div style="border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:4px 11px;">
+              <div class="rrow">
+                <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">LED Bar &mdash; RGB</span>
+                <span style="width:26px; height:20px; border-radius:4px; border:1px solid oklch(0.274 0.006 286.033); background:#ff9d4a;"></span>
+                <span style="display:flex; gap:4px; flex-wrap:wrap;">
+                  <span class="chip mono">R 255</span><span class="chip mono">G 157</span><span class="chip mono">B 74</span></span>
+              </div>
+              <div class="rrow">
+                <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">MAC Aura &mdash; RGBW</span>
+                <span style="width:26px; height:20px; border-radius:4px; border:1px solid oklch(0.274 0.006 286.033); background:#ff9d4a;"></span>
+                <span style="display:flex; gap:4px; flex-wrap:wrap;">
+                  <span class="chip mono">R 255</span><span class="chip mono">G 121</span><span class="chip mono">B 0</span>
+                  <span class="chip mono" style="border-color:oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429);">W 74</span></span>
+              </div>
+              <div class="rrow">
+                <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Wash 300 &mdash; RGBWA&#8239;+&#8239;UV</span>
+                <span style="width:26px; height:20px; border-radius:4px; border:1px solid oklch(0.274 0.006 286.033); background:#ff9d4a;"></span>
+                <span style="display:flex; gap:4px; flex-wrap:wrap;">
+                  <span class="chip mono">R 214</span><span class="chip mono">G 88</span><span class="chip mono">B 0</span>
+                  <span class="chip mono" style="border-color:oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429);">A 168</span>
+                  <span class="chip mono">W 0</span><span class="chip mono">UV 0</span></span>
+              </div>
+              <div class="rrow">
+                <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Profile 700 &mdash; CMY</span>
+                <span style="width:26px; height:20px; border-radius:4px; border:1px solid oklch(0.274 0.006 286.033); background:#f79f52;"></span>
+                <span style="display:flex; gap:4px; flex-wrap:wrap;">
+                  <span class="chip mono">C 0</span><span class="chip mono">M 98</span><span class="chip mono">Y 181</span></span>
+              </div>
+              <div class="rrow">
+                <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:oklch(0.705 0.015 286.067);">PAR 64 &mdash; wheel only</span>
+                <span style="width:26px; height:20px; border-radius:4px; border:1px solid oklch(0.555 0.163 48.998); background:#f0913e;"></span>
+                <span style="display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
+                  <span class="chip mono" style="border-color:oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429);">Slot 4 &mdash; nearest</span>
+                  <span class="cap">&Delta;E 6.2</span></span>
+              </div>
+            </div>
+            <p class="cap" style="margin-top:5px;">Live against the patch, so &ldquo;usable on any fixture with colour support&rdquo; is something you can <i>read</i> before saving &mdash; including where it degrades. A head with no colour at all simply does not appear.</p>
+          </div>
+        </div>
+      </div>
+
+      <span style="flex:1;"></span>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px; padding:14px 20px; border-top:1px solid oklch(0.274 0.006 286.033); flex:0 0 auto;">
+      <span class="btn" style="color:oklch(0.704 0.191 22.216); border-color:transparent;">Delete</span>
+      <span style="flex:1;"></span>
+      <span class="btn">Cancel</span>
+      <span class="btn pri">Create template</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

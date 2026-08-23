@@ -1,0 +1,191 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885);
+      --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067);
+      --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .btn { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px;
+      border-radius:6px; border:1px solid var(--bd); background:transparent; color:var(--fg);
+      font-size:11.5px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:600; }
+    .btn.sm { height:23px; font-size:10.5px; padding:0 7px; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .h2 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:var(--mfg); margin:0; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .zlab { font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--mfg); }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px; padding:1px 6px;
+      font-size:10px; line-height:1.5; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); }
+    .badge.sec { background:var(--muted); }
+    .f-int { border:1px solid oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429); background:oklch(0.279 0.077 45.635); }
+    .f-pos { border:1px solid oklch(0.379 0.146 265.522); color:oklch(0.809 0.105 251.813); background:oklch(0.282 0.091 267.935); }
+    .f-col { border:1px solid oklch(0.45 0.16 300); color:oklch(0.82 0.11 305); background:oklch(0.27 0.09 302); }
+    .box { border-radius:8px; border:1px solid var(--bd); background:var(--card); }
+    .cb { width:14px; height:14px; flex:0 0 auto; border-radius:3px; border:1px solid oklch(0.45 0.01 286);
+      background:transparent; box-sizing:border-box; position:relative; }
+    .cb.on { background:var(--pri); border-color:var(--pri); }
+    .cb.on::after { content:""; position:absolute; left:3.5px; top:1px; width:4px; height:7px;
+      border-right:2px solid oklch(0.21 0.006 285.885); border-bottom:2px solid oklch(0.21 0.006 285.885);
+      transform:rotate(40deg); }
+    .step { display:flex; gap:9px; align-items:flex-start; }
+    .sn { width:19px; height:19px; border-radius:5px; background:var(--muted); display:grid;
+      place-items:center; font-size:10px; font-weight:700; flex:0 0 auto; }
+    .seg { display:inline-flex; align-items:center; gap:5px; border-radius:6px; padding:5px 10px;
+      font-size:11px; font-weight:600; color:var(--mfg); }
+    .seg.on { background:var(--muted); color:var(--fg); }
+  </style>
+</helmet>
+
+<div class="app" style="width:1020px; height:780px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); padding:22px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+
+  <div>
+    <div style="font-size:17px; font-weight:650; letter-spacing:-0.01em;">Building a shared Look out of values <i>and</i> effects</div>
+    <p class="cap" style="margin-top:4px; font-size:12px;">Busk it, then name it. The values and the effect are in two different places while you work &mdash; Local, and the programmer&rsquo;s effect band &mdash; and <b style="color:oklch(0.985 0 0); font-weight:600;">Record</b> is what gathers both into one Look.</p>
+  </div>
+
+  <div style="flex:1; min-height:0; display:flex; gap:14px;">
+
+    <!-- LEFT: the two paths -->
+    <div style="width:392px; flex:0 0 auto; display:flex; flex-direction:column; gap:12px; min-height:0;">
+
+      <div>
+        <p class="h2" style="margin-bottom:7px;">Path 1 &mdash; busk first <span style="text-transform:none; letter-spacing:0; font-weight:400; color:oklch(0.792 0.209 151.711);">(recommended)</span></p>
+        <div style="display:flex; flex-direction:column; gap:9px;">
+          <div class="step"><span class="sn">1</span>
+            <p class="cap" style="color:oklch(0.985 0 0);">Focus <b>Local</b>. Select your heads and set the values &mdash; colour, level, position.</p></div>
+          <div class="step"><span class="sn">2</span>
+            <p class="cap" style="color:oklch(0.985 0 0);">Add the effect. With Local focused it lands in the <b>programmer band</b>, not in any Look &mdash; nothing to name yet.</p></div>
+          <div class="step"><span class="sn">3</span>
+            <p class="cap" style="color:oklch(0.985 0 0);"><b>Record &rarr; A new Look.</b> Tick the values and the effects that belong in it. &rarr;</p></div>
+          <div class="step"><span class="sn">4</span>
+            <p class="cap" style="color:oklch(0.985 0 0);">The Look is created and <b>immediately becomes a layer</b> at the top of your stack. What you ticked leaves Local; what you didn&rsquo;t stays yours.</p></div>
+        </div>
+      </div>
+
+      <div style="height:1px; background:oklch(0.274 0.006 286.033);"></div>
+
+      <div>
+        <p class="h2" style="margin-bottom:7px;">Path 2 &mdash; declare first</p>
+        <p class="cap"><b style="color:oklch(0.985 0 0);">+ Look &rarr; New empty</b> puts an empty Look in the stack. Focus it, and every value and effect you author goes straight in, because the scope <i>is</i> the Look. No gathering step.</p>
+        <p class="cap" style="margin-top:6px;">Better when you already know it is shared and want to see it composited against the layers beneath as you build. Worse when you are still finding the look on the rig &mdash; which is most of the time, hence the default.</p>
+      </div>
+
+      <span style="flex:1;"></span>
+
+      <!-- two things that surprise -->
+      <div style="border-radius:8px; border:1px dashed oklch(0.414 0.112 45.904); background:oklch(0.279 0.077 45.635 / 0.35); padding:10px 12px;">
+        <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.828 0.189 84.429); margin-bottom:5px;">Two things that do not travel</div>
+        <p class="cap" style="color:oklch(0.985 0 0);"><b>Delay and interval.</b> <span class="mono">LookEffect</span> has no timing fields &mdash; timing belongs to the layer. A busked effect&rsquo;s &ldquo;fire after 3s&rdquo; becomes the <i>layer&rsquo;s</i> delay, so it is per-use, not baked into the Look.</p>
+        <p class="cap" style="margin-top:6px; color:oklch(0.985 0 0);"><b>Your local overrides.</b> If you busked a colour on top of a layer that was already asserting one, only your value records &mdash; the sheet counts what <i>Local</i> holds, not the cook.</p>
+      </div>
+    </div>
+
+    <!-- RIGHT: the sheet -->
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;">
+      <div class="box" style="flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden;">
+
+        <div style="display:flex; align-items:center; gap:9px; padding:13px 14px 11px; flex:0 0 auto;">
+          <div style="flex:1;">
+            <div style="font-size:14.5px; font-weight:600;">Record as a new Look</div>
+            <p class="cap" style="margin-top:2px;">From 12 local values and 2 running effects.</p>
+          </div>
+          <svg class="ico" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </div>
+
+        <div style="flex:1; min-height:0; padding:0 14px; display:flex; flex-direction:column; gap:11px; overflow:hidden;">
+
+          <div>
+            <span style="font-size:11.5px; font-weight:500; display:block; margin-bottom:5px;">Name</span>
+            <div style="display:flex; align-items:center; height:33px; padding:0 10px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); font-size:12.5px; box-sizing:border-box;">Storm Wash</div>
+          </div>
+
+          <div>
+            <span style="font-size:11.5px; font-weight:500; display:block; margin-bottom:5px;">Fixtures</span>
+            <nav style="display:inline-flex; align-items:center; gap:2px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:2px;">
+              <span class="seg on">Keep these 4 heads</span>
+              <span class="seg">Take from the layer</span>
+            </nav>
+            <p class="cap" style="margin-top:5px; font-size:10.5px;">Keep them &mdash; a Look is a state over named heads, and that is what makes it reusable across cues. &ldquo;Take from the layer&rdquo; makes it a template instead, and is greyed once you have more than one family.</p>
+          </div>
+
+          <!-- VALUES -->
+          <div>
+            <div style="display:flex; align-items:center; gap:7px; margin-bottom:6px;">
+              <span class="zlab">Values</span>
+              <span class="badge sec num">12</span>
+              <span style="flex:1;"></span>
+              <span class="cap" style="font-size:9.5px;">counts are what Local holds</span>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:7px;">
+              <span style="display:inline-flex; align-items:center; gap:6px; border-radius:6px; border:1px solid oklch(0.555 0.163 48.998); background:oklch(0.279 0.077 45.635); padding:5px 9px; font-size:11.5px;">
+                <span class="cb on"></span>Intensity <span class="mono num" style="color:oklch(0.828 0.189 84.429);">4</span></span>
+              <span style="display:inline-flex; align-items:center; gap:6px; border-radius:6px; border:1px solid oklch(0.45 0.16 300); background:oklch(0.27 0.09 302); padding:5px 9px; font-size:11.5px;">
+                <span class="cb on"></span>Colour <span class="mono num" style="color:oklch(0.82 0.11 305);">8</span></span>
+              <span style="display:inline-flex; align-items:center; gap:6px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); padding:5px 9px; font-size:11.5px; opacity:0.5;">
+                <span class="cb"></span>Position <span class="mono num">0</span></span>
+              <span style="display:inline-flex; align-items:center; gap:6px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); padding:5px 9px; font-size:11.5px; opacity:0.5;">
+                <span class="cb"></span>Beam <span class="mono num">0</span></span>
+            </div>
+          </div>
+
+          <!-- EFFECTS — the part that was missing -->
+          <div>
+            <div style="display:flex; align-items:center; gap:7px; margin-bottom:6px;">
+              <span class="zlab" style="color:oklch(0.606 0.25 292.717);">Effects</span>
+              <span class="badge sec num">2</span>
+              <span style="flex:1;"></span>
+              <span class="cap" style="font-size:9.5px;">tempo travels, timing does not</span>
+            </div>
+            <div style="border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); overflow:hidden;">
+              <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid oklch(0.274 0.006 286.033); font-size:11.5px;">
+                <span class="cb on"></span>
+                <span style="width:6px; height:6px; border-radius:999px; background:oklch(0.606 0.25 292.717); flex:0 0 auto;"></span>
+                <span style="font-weight:500;">Colour Chase</span>
+                <span class="badge out mono" style="color:oklch(0.705 0.015 286.067);">&rarr; rgbColour</span>
+                <span style="flex:1;"></span>
+                <span class="badge out mono">M2 &middot; 1/4</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:11.5px; opacity:0.55;">
+                <span class="cb"></span>
+                <span style="width:6px; height:6px; border-radius:999px; background:oklch(0.606 0.25 292.717); flex:0 0 auto;"></span>
+                <span>Slow Sine</span>
+                <span class="badge out mono" style="color:oklch(0.705 0.015 286.067);">&rarr; tilt</span>
+                <span style="flex:1;"></span>
+                <span class="badge out mono">wall &middot; 8.0s</span>
+              </div>
+            </div>
+            <p class="cap" style="margin-top:5px; font-size:10.5px;">Unticked effects stay in the programmer band and keep running &mdash; leaving one out is not the same as stopping it. That distinction is why these are checkboxes and not a &ldquo;take everything&rdquo; toggle.</p>
+          </div>
+
+          <div style="border-radius:6px; border:1px solid oklch(0.393 0.095 152.535); background:oklch(0.266 0.065 152.934 / 0.4); padding:9px 11px;">
+            <div class="cap" style="color:oklch(0.985 0 0); font-size:10.5px;"><b>After recording:</b> &ldquo;Storm Wash&rdquo; is in the library, applied here as <b>layer 4</b>, masked to Intensity + Colour. Its Colour Chase moves into the Look. Slow Sine and your 0 position values stay local.</div>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px; padding:12px 14px; border-top:1px solid oklch(0.274 0.006 286.033); flex:0 0 auto;">
+          <span class="cap" style="flex:1; font-size:10px;">Selection defaults <b style="color:oklch(0.985 0 0);">on</b> here, unlike a Look template &mdash; a state you busked usually is the Look.</span>
+          <span class="btn">Cancel</span>
+          <span class="btn pri">Record Look</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

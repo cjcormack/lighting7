@@ -1,0 +1,163 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885);
+      --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067);
+      --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .h2 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em;
+      color:var(--mfg); margin:0; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .box { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:10px 12px; }
+    .chip { display:inline-flex; align-items:center; gap:5px; border-radius:5px; padding:2px 7px;
+      font-size:10.5px; border:1px solid var(--bd); white-space:nowrap; }
+    .ok { border-color:oklch(0.393 0.095 152.535); color:oklch(0.792 0.209 151.711);
+      background:oklch(0.266 0.065 152.934); }
+    .no { border-color:oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429);
+      background:oklch(0.279 0.077 45.635); }
+    .th { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em;
+      color:var(--mfg); padding:6px 10px; }
+    .td { padding:8px 10px; font-size:11.5px; border-top:1px solid var(--bd); vertical-align:top; }
+    .arrow { color:var(--mfg); flex:0 0 auto; }
+  </style>
+</helmet>
+
+<div class="app" style="width:1000px; height:830px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); padding:24px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+
+  <div>
+    <div style="font-size:17px; font-weight:650; letter-spacing:-0.01em;">Making a template type-agnostic: how far it goes, and where it stops</div>
+    <p class="cap" style="margin-top:4px; font-size:12px;">The brief flags RGB vs RGBW as needing thought. It is the easy half. The hard half is Beam &mdash; and the honest answer is that Beam is only <i>partly</i> cross-type, so the design says so out loud rather than pretending.</p>
+  </div>
+
+  <!-- THE MODEL -->
+  <div>
+    <p class="h2" style="margin-bottom:7px;">The model &mdash; store intent, resolve at cook</p>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="box" style="width:212px; flex:0 0 auto; border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.5);">
+        <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.82 0.11 305); margin-bottom:5px;">Stored on the template</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="width:22px; height:22px; border-radius:5px; border:1px solid oklch(0.274 0.006 286.033); background:#ff9d4a; flex:0 0 auto;"></span>
+          <span class="mono" style="font-size:12px; font-weight:600;">#FF9D4A</span>
+        </div>
+        <p class="cap" style="margin-top:6px;">One row, <span class="mono">targetType: deferred</span>, plus a policy: <span class="mono" style="color:oklch(0.985 0 0);">white: extract</span>. No channel numbers, no fixture type.</p>
+      </div>
+
+      <svg style="width:22px;height:22px;" class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+
+      <div class="box" style="width:196px; flex:0 0 auto;">
+        <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.705 0.015 286.067); margin-bottom:5px;">The layer names targets</div>
+        <div style="display:flex; flex-wrap:wrap; gap:4px;">
+          <span class="chip">SL Wash</span><span class="chip">Movers</span><span class="chip">PAR L</span>
+        </div>
+        <p class="cap" style="margin-top:6px;">A deferred row takes its fixtures from here &mdash; unchanged from today.</p>
+      </div>
+
+      <svg style="width:22px;height:22px;" class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+
+      <div class="box" style="flex:1; min-width:0; border-color:oklch(0.393 0.095 152.535); background:oklch(0.266 0.065 152.934 / 0.35);">
+        <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.792 0.209 151.711); margin-bottom:5px;">Resolved per head, at cook</div>
+        <div style="display:flex; flex-wrap:wrap; gap:4px;">
+          <span class="chip mono">RGB &rarr; 255,157,74</span>
+          <span class="chip mono">RGBW &rarr; 255,121,0,W74</span>
+          <span class="chip mono">CMY &rarr; 0,98,181</span>
+          <span class="chip mono no">wheel &rarr; slot 4</span>
+        </div>
+        <p class="cap" style="margin-top:6px;">The write path already skips channels a member does not have &mdash; <span class="mono" style="color:oklch(0.985 0 0);">ColourCell</span> asks each resolution for <span class="mono">whiteChannel</span> / <span class="mono">amberChannel</span> / <span class="mono">uvChannel</span> today. This makes that per-head negotiation the <i>rule</i> rather than a special case in one cell editor.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- THE TABLE -->
+  <div style="flex:1; min-height:0; display:flex; flex-direction:column; gap:7px;">
+    <p class="h2">What each family can promise across fixture types</p>
+
+    <div style="border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); overflow:hidden;">
+      <div style="display:grid; grid-template-columns:112px 1fr 168px 1.15fr; background:oklch(0.21 0.006 285.885);">
+        <div class="th">Family</div><div class="th">Stored intent</div><div class="th">Cross-type?</div><div class="th">Degrades how</div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:112px 1fr 168px 1.15fr;">
+        <div class="td"><span class="chip" style="border-color:oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429); background:oklch(0.279 0.077 45.635);">Intensity</span></div>
+        <div class="td"><span class="mono">level: 0&ndash;100%</span></div>
+        <div class="td"><span class="chip ok">Fully</span></div>
+        <div class="td cap">A head with no dimmer takes it as a virtual dimmer over its colour emitters &mdash; the existing virtual-dimmer path.</div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:112px 1fr 168px 1.15fr;">
+        <div class="td"><span class="chip" style="border-color:oklch(0.379 0.146 265.522); color:oklch(0.809 0.105 251.813); background:oklch(0.282 0.091 267.935);">Position</span></div>
+        <div class="td"><span class="mono">pan&deg;, tilt&deg;</span> &mdash; degrees, not DMX</div>
+        <div class="td"><span class="chip ok">Fully</span></div>
+        <div class="td cap">Clamped to each head&rsquo;s own pan/tilt range, and the clamp is reported. Fixed heads are skipped.</div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:112px 1fr 168px 1.15fr;">
+        <div class="td"><span class="chip" style="border-color:oklch(0.45 0.16 300); color:oklch(0.82 0.11 305); background:oklch(0.27 0.09 302);">Colour</span></div>
+        <div class="td"><span class="mono">hex</span> + white/amber policy</div>
+        <div class="td"><span class="chip ok">Fully</span></div>
+        <div class="td cap">Additive, subtractive and wheel-only heads all resolve. A wheel snaps to nearest slot and the &Delta;E is shown, so a bad match is visible before it is saved.</div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:112px 1fr 168px 1.15fr; background:oklch(0.279 0.077 45.635 / 0.22);">
+        <div class="td"><span class="chip" style="border-color:oklch(0.393 0.095 152.535); color:oklch(0.792 0.209 151.711); background:oklch(0.266 0.065 152.934);">Beam</span></div>
+        <div class="td">
+          <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:5px;">
+            <span class="chip mono ok">zoom&nbsp;%</span><span class="chip mono ok">focus&nbsp;%</span>
+            <span class="chip mono ok">iris&nbsp;%</span><span class="chip mono ok">frost&nbsp;%</span>
+            <span class="chip mono ok">strobe&nbsp;Hz</span><span class="chip mono ok">prism&nbsp;on/off</span>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:4px;">
+            <span class="chip mono no">gobo slot</span><span class="chip mono no">colour-wheel slot</span>
+            <span class="chip mono no">*_macro</span><span class="chip mono no">setting</span>
+          </div>
+        </div>
+        <div class="td"><span class="chip no">Only the normalised half</span></div>
+        <div class="td cap"><b style="color:oklch(0.985 0 0);">Continuous roles</b> are cross-type as a 0&ndash;100% of each head&rsquo;s own range &mdash; and strobe as Hz, which is the only unit two fixtures agree on. <b style="color:oklch(0.828 0.189 84.429);">Slotted properties are not</b>: &ldquo;gobo 3&rdquo; is a different pattern on every model, so a template cannot carry it without lying.</div>
+      </div>
+    </div>
+
+    <!-- the escape hatch -->
+    <div style="display:flex; gap:12px; margin-top:2px;">
+      <div class="box" style="flex:1; border-color:oklch(0.379 0.146 265.522); background:oklch(0.282 0.091 267.935 / 0.4);">
+        <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.809 0.105 251.813); margin-bottom:5px;">So where do slotted properties live?</div>
+        <p class="cap" style="color:oklch(0.985 0 0);">In a <b>recorded look</b> &mdash; which names its own fixtures and can therefore hold anything those fixtures have, gobo slots included. Nothing is lost by dropping the type from templates; the type-specific case moves to the entity that already carries a type by naming a head.</p>
+        <p class="cap" style="margin-top:5px;">That also makes the two kinds mean something distinct at last: a template is a <i>rule</i> (&ldquo;be amber&rdquo;), a recorded look is a <i>fact</i> (&ldquo;these heads were like this&rdquo;).</p>
+      </div>
+      <div class="box" style="flex:1;">
+        <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.705 0.015 286.067); margin-bottom:5px;">In the Beam editor, said out loud</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; align-items:center; gap:9px;">
+            <span style="font-size:11.5px; width:52px; flex:0 0 auto;">Zoom</span>
+            <span style="position:relative; height:5px; flex:1; border-radius:999px; background:oklch(0.274 0.006 286.033); overflow:hidden;"><span style="position:absolute; inset-block:0; left:0; width:14%; border-radius:999px; background:oklch(0.792 0.209 151.711);"></span></span>
+            <span class="mono num" style="font-size:11px; color:oklch(0.705 0.015 286.067); width:34px; text-align:right;">14%</span></div>
+          <div style="display:flex; align-items:center; gap:9px;">
+            <span style="font-size:11.5px; width:52px; flex:0 0 auto;">Focus</span>
+            <span style="position:relative; height:5px; flex:1; border-radius:999px; background:oklch(0.274 0.006 286.033); overflow:hidden;"><span style="position:absolute; inset-block:0; left:0; width:70%; border-radius:999px; background:oklch(0.792 0.209 151.711);"></span></span>
+            <span class="mono num" style="font-size:11px; color:oklch(0.705 0.015 286.067); width:34px; text-align:right;">70%</span></div>
+          <div style="display:flex; align-items:center; gap:9px; opacity:0.5;">
+            <span style="font-size:11.5px; width:52px; flex:0 0 auto;">Gobo</span>
+            <span style="flex:1; font-size:11px; color:oklch(0.705 0.015 286.067);">&mdash; not available on a template</span>
+            <svg class="ico12" style="color:oklch(0.828 0.189 84.429);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v.01M11 12h1v4h1"/></svg></div>
+        </div>
+        <p class="cap" style="margin-top:7px;">The disabled row stays visible with its reason on hover, rather than the property simply being absent &mdash; an operator looking for gobo needs to learn <i>where</i> it lives, not conclude the desk cannot do it.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

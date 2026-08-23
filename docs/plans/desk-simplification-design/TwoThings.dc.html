@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885);
+      --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067);
+      --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico18 { width:18px; height:18px; flex:0 0 auto; }
+    .h2 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:var(--mfg); margin:0; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px; padding:1px 6px;
+      font-size:10px; line-height:1.5; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); }
+    .th { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em;
+      color:var(--mfg); padding:7px 11px; }
+    .td { padding:9px 11px; font-size:11.5px; border-top:1px solid var(--bd); }
+    .tmpl { color:oklch(0.82 0.11 305); }
+    .look { color:oklch(0.792 0.209 151.711); }
+    .chip { display:inline-flex; align-items:center; gap:5px; border-radius:5px; padding:2px 7px;
+      font-size:10.5px; border:1px solid var(--bd); white-space:nowrap; }
+    .card { border-radius:10px; border:1px solid var(--bd); background:var(--card); padding:13px 15px; }
+  </style>
+</helmet>
+
+<div class="app" style="width:1020px; height:880px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); padding:24px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+
+  <div>
+    <div style="font-size:17px; font-weight:650; letter-spacing:-0.01em;">Two things, not one thing with a flag</div>
+    <p class="cap" style="margin-top:4px; font-size:12px;">Round&nbsp;1 called a template &ldquo;a Look whose rows are deferred&rdquo; &mdash; which is the <i>data model</i> talking, not a design. They do different jobs at different altitudes, so they get different names, different verbs and different pages.</p>
+  </div>
+
+  <!-- THE TWO CARDS -->
+  <div style="display:flex; gap:14px; flex:0 0 auto;">
+    <div class="card" style="flex:1; min-width:0; border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.35);">
+      <div style="display:flex; align-items:center; gap:9px;">
+        <span style="width:30px; height:30px; border-radius:8px; background:oklch(0.45 0.16 300); color:oklch(0.141 0.005 285.823); display:grid; place-items:center; flex:0 0 auto;">
+          <svg class="ico18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg></span>
+        <div>
+          <div style="font-size:15px; font-weight:650;">Template</div>
+          <div class="cap tmpl" style="font-size:10.5px;">composes <b>values</b></div></div>
+      </div>
+      <p class="cap" style="margin-top:10px; color:oklch(0.985 0 0);">A named value for <b>one</b> attribute family. &ldquo;Amber Key&rdquo;. &ldquo;Half Up&rdquo;. &ldquo;Downstage Centre&rdquo;.</p>
+      <p class="cap" style="margin-top:6px;">You point at cells and apply it. It is the desk&rsquo;s palette: the vocabulary you build everything else out of.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:10px;">
+        <span class="chip tmpl" style="border-color:oklch(0.45 0.16 300);">one family</span>
+        <span class="chip">no targets</span>
+        <span class="chip">no order</span>
+        <span class="chip">no timing</span>
+        <span class="chip">authored</span>
+      </div>
+    </div>
+
+    <div class="card" style="flex:1; min-width:0; border-color:oklch(0.393 0.095 152.535); background:oklch(0.266 0.065 152.934 / 0.35);">
+      <div style="display:flex; align-items:center; gap:9px;">
+        <span style="width:30px; height:30px; border-radius:8px; background:oklch(0.723 0.219 149.579); color:oklch(0.141 0.005 285.823); display:grid; place-items:center; flex:0 0 auto;">
+          <svg class="ico18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg></span>
+        <div>
+          <div style="font-size:15px; font-weight:650;">Look</div>
+          <div class="cap look" style="font-size:10.5px;">composes <b>cues</b></div></div>
+      </div>
+      <p class="cap" style="margin-top:10px; color:oklch(0.985 0 0);">A named <b>state</b> over named fixtures, across any families. &ldquo;Ghost Entrance&rdquo;. &ldquo;Act 1 Opening&rdquo;.</p>
+      <p class="cap" style="margin-top:6px;">You add it to a stack as a layer. It is a piece of the show, and it may have been built out of templates.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:10px;">
+        <span class="chip look" style="border-color:oklch(0.393 0.095 152.535);">any families</span>
+        <span class="chip">own targets</span>
+        <span class="chip">order &middot; mask &middot; amount</span>
+        <span class="chip">timing &middot; stomp</span>
+        <span class="chip">recorded</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div style="flex:1; min-height:0; display:flex; flex-direction:column; gap:7px;">
+    <p class="h2">Which means every verb splits cleanly</p>
+    <div style="border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); overflow:hidden;">
+      <div style="display:grid; grid-template-columns:132px 1fr 1fr; background:oklch(0.21 0.006 285.885);">
+        <div class="th"></div><div class="th tmpl">Template</div><div class="th look">Look</div>
+      </div>
+      <div style="display:grid; grid-template-columns:132px 1fr 1fr;">
+        <div class="td" style="color:oklch(0.705 0.015 286.067);">Created by</div>
+        <div class="td"><b>New template</b>, or &ldquo;new from selection&rdquo; on the strip. Authored in a family-native editor.</div>
+        <div class="td"><b>Record</b> from the programmer, or <b>Make layer</b> on a selection. Never hand-authored.</div>
+      </div>
+      <div style="display:grid; grid-template-columns:132px 1fr 1fr;">
+        <div class="td" style="color:oklch(0.705 0.015 286.067);">Applied by</div>
+        <div class="td">Clicking it with cells selected &rarr; values. <span class="mono">&#8997;</span>click &rarr; a layer that tracks it.</div>
+        <div class="td">Adding it to the stack as a layer. Only ever a layer.</div>
+      </div>
+      <div style="display:grid; grid-template-columns:132px 1fr 1fr;">
+        <div class="td" style="color:oklch(0.705 0.015 286.067);">Lives at</div>
+        <div class="td"><span class="mono">/templates</span> &mdash; sidebar entry, family filter</div>
+        <div class="td"><span class="mono">/looks</span> &mdash; sidebar entry, no filter needed</div>
+      </div>
+      <div style="display:grid; grid-template-columns:132px 1fr 1fr;">
+        <div class="td" style="color:oklch(0.705 0.015 286.067);">Edited by</div>
+        <div class="td">Its own small editor &mdash; a colour, a level, a pan/tilt pad. Nothing else to set.</div>
+        <div class="td">Focusing its layer in the programmer. The grid <i>is</i> the editor.</div>
+      </div>
+      <div style="display:grid; grid-template-columns:132px 1fr 1fr;">
+        <div class="td" style="color:oklch(0.705 0.015 286.067);">Busking pad</div>
+        <div class="td">Yes &mdash; a pad per template is a palette bank, which is what pads are for.</div>
+        <div class="td">Yes &mdash; toggles the layer on and off.</div>
+      </div>
+    </div>
+
+    <!-- what this costs -->
+    <div style="display:flex; gap:12px; margin-top:4px;">
+      <div style="flex:1; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:11px 13px;">
+        <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.705 0.015 286.067); margin-bottom:5px;">One backend table, two front doors</div>
+        <p class="cap">Nothing here needs a second entity server-side. <span class="mono" style="color:oklch(0.985 0 0);">hasDeferredRows</span> plus &ldquo;exactly one family&rdquo; already separates them, and a layer already names either by FK. What changes is that the client stops showing one library with two sections and starts showing the two things people actually think in.</p>
+        <p class="cap" style="margin-top:6px;">The one real backend ask is the <b style="color:oklch(0.985 0 0);">single-family constraint</b> on templates, enforced at the write boundary beside <span class="mono">validateLookRows</span> &mdash; which is also where <span class="mono">FU-LOOK-NESTED</span>&rsquo;s <span class="mono">ref:</span> rejection already lives.</p>
+      </div>
+      <div style="flex:1; border-radius:8px; border:1px dashed oklch(0.414 0.112 45.904); background:oklch(0.279 0.077 45.635 / 0.35); padding:11px 13px;">
+        <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.828 0.189 84.429); margin-bottom:5px;">Migration is the awkward part</div>
+        <p class="cap" style="color:oklch(0.985 0 0);">Existing deferred Looks spanning two families are neither thing. They cannot become templates (single-family) and should not silently become Looks (no targets of their own, so they would assert nothing).</p>
+        <p class="cap" style="margin-top:6px;">Proposal: <b style="color:oklch(0.985 0 0);">split them on migration</b>, one template per family, named <span class="mono">&lt;name&gt; (colour)</span> / <span class="mono">&lt;name&gt; (position)</span>, and rewrite each referring layer into one layer per part in the same stack position. Order is preserved because the parts do not overlap by mask. Worth confirming how many in your show would actually split &mdash; if it is a handful, doing it by hand beats writing the migration.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

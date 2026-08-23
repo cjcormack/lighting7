@@ -1,0 +1,331 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885);
+      --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067);
+      --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px;
+      border-radius:6px; border:1px solid var(--bd); background:transparent; color:var(--fg);
+      font-size:12px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:600; }
+    .btn.sm { height:26px; font-size:11px; padding:0 8px; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .zlab { font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--mfg); }
+    .vr { width:1px; align-self:stretch; background:var(--bd); }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px; padding:1px 6px;
+      font-size:10px; line-height:1.5; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); }
+    .badge.sec { background:var(--muted); }
+    .f-int { border:1px solid oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429); background:oklch(0.279 0.077 45.635); }
+    .f-pos { border:1px solid oklch(0.379 0.146 265.522); color:oklch(0.809 0.105 251.813); background:oklch(0.282 0.091 267.935); }
+    .f-col { border:1px solid oklch(0.45 0.16 300); color:oklch(0.82 0.11 305); background:oklch(0.27 0.09 302); }
+    .f-bea { border:1px solid oklch(0.393 0.095 152.535); color:oklch(0.792 0.209 151.711); background:oklch(0.266 0.065 152.934); }
+    /* stack rail entries */
+    .se { display:flex; align-items:center; gap:7px; padding:7px 8px; border-radius:6px;
+      border:1px solid transparent; font-size:12px; box-sizing:border-box; }
+    .se.on { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.55);
+      box-shadow:inset 0 0 0 1px oklch(0.45 0.16 300); }
+    .se.local { border-color:oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .se.idle { border-color:var(--bd); background:var(--card); }
+    .ord { display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px;
+      border-radius:4px; background:var(--muted); font-size:9.5px; font-weight:700; flex:0 0 auto; }
+    /* grid */
+    .gh { font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em;
+      color:var(--mfg); padding:6px 6px; }
+    .row { height:36px; border-bottom:1px solid var(--bd); font-size:14px; display:grid; align-items:center; }
+    .cw { position:relative; height:100%; min-width:0; padding:2px 0; box-sizing:border-box; }
+    .ci { display:flex; align-items:center; gap:6px; height:100%; padding:0 6px; border-radius:4px; box-sizing:border-box; }
+    .sw { width:16px; height:16px; flex:0 0 auto; border-radius:4px; border:1px solid var(--bd); }
+    .cval { font-size:12px; color:var(--mfg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .inert { opacity:0.3; }
+    .own-look { box-shadow: inset 0 0 0 1px oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.35); }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .tchip { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px;
+      border-radius:6px; border:1px solid var(--bd); background:var(--card); font-size:11.5px;
+      box-sizing:border-box; white-space:nowrap; }
+  </style>
+</helmet>
+
+<div class="app" style="width:1460px; height:940px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); display:flex; flex-direction:column; overflow:hidden;">
+
+  <!-- source strip -->
+  <div style="display:flex; align-items:center; gap:10px; padding:9px 16px; flex:0 0 auto; border-bottom:1px solid oklch(0.379 0.146 265.522); background:oklch(0.282 0.091 267.935 / 0.55);">
+    <span class="zlab" style="color:oklch(0.809 0.105 251.813);">Editing</span>
+    <span class="mono" style="font-size:14px; font-weight:700;">Q4</span>
+    <span style="font-size:14px; font-weight:600;">Warm Wash</span>
+    <span style="font-size:12px; color:oklch(0.809 0.105 251.813);">Act 1 &middot; cue 4 of 14</span>
+    <span class="badge" style="border:1px solid oklch(0.555 0.163 48.998); background:oklch(0.279 0.077 45.635); color:oklch(0.828 0.189 84.429);">
+      <span style="width:5px;height:5px;border-radius:999px;background:oklch(0.828 0.189 84.429);"></span>4 changes not written back</span>
+    <span style="flex:1;"></span>
+    <span class="btn pri">Update Q4</span><span class="btn">Revert</span>
+  </div>
+
+  <!-- action bar -->
+  <div style="display:flex; align-items:center; gap:11px; padding:8px 16px; flex:0 0 auto; border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885 / 0.5);">
+    <span class="zlab">Stage</span>
+    <span class="btn">Clear &middot; 2s</span><span class="btn">Blind</span>
+    <span class="vr" style="height:22px;"></span>
+    <span class="zlab">Load</span>
+    <span class="btn">Include&hellip;</span>
+    <span class="vr" style="height:22px;"></span>
+    <span class="zlab">Save</span>
+    <span class="btn pri">Record &#9662;</span>
+    <span style="flex:1;"></span>
+    <span class="btn">Groups</span><span class="btn">Columns &#9662;</span>
+  </div>
+
+  <!-- body -->
+  <div style="flex:1; min-height:0; display:flex;">
+
+    <!-- STACK RAIL - two bands -->
+    <div style="width:322px; flex:0 0 auto; border-right:1px solid oklch(0.274 0.006 286.033); display:flex; flex-direction:column; background:oklch(0.176 0.005 285.9);">
+
+      <div style="padding:11px 11px 7px; flex:0 0 auto;">
+        <span class="zlab">Showing</span>
+        <div style="display:inline-flex; align-items:center; gap:2px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:2px; margin-top:5px; width:100%; box-sizing:border-box;">
+          <span style="flex:1; text-align:center; border-radius:6px; padding:4px 0; font-size:11px; font-weight:600; color:oklch(0.705 0.015 286.067);">Output</span>
+          <span style="flex:1; text-align:center; border-radius:6px; padding:4px 0; font-size:11px; font-weight:600; background:oklch(0.274 0.006 286.033);">One layer</span>
+        </div>
+      </div>
+
+      <div style="flex:1; min-height:0; padding:0 11px; display:flex; flex-direction:column; gap:5px;">
+
+        <!-- VALUES BAND -->
+        <div style="display:flex; align-items:center; gap:6px; padding:5px 0 1px;">
+          <span class="zlab" style="color:oklch(0.707 0.165 254.624);">Values</span>
+          <span class="badge sec num">4</span>
+          <span style="flex:1;"></span>
+          <span class="cap" style="font-size:9.5px;">top wins</span>
+        </div>
+
+        <div class="se local">
+          <svg class="ico12" style="color:oklch(0.623 0.214 259.815);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+          <span style="flex:1; min-width:0;">
+            <span style="font-weight:600; display:block;">Local values</span>
+            <span class="cap" style="font-size:9.5px; color:oklch(0.707 0.165 254.624);">12 values &middot; yours &middot; beats every layer</span>
+          </span>
+          <span class="btn sm" style="flex:0 0 auto; height:22px; font-size:10px; padding:0 6px;">Make layer</span>
+        </div>
+
+        <!-- layer 3, focused, stomping -->
+        <div class="se on">
+          <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+          <span class="ord" style="background:oklch(0.45 0.16 300); color:oklch(0.141 0.005 285.823);">3</span>
+          <span style="flex:1; min-width:0;">
+            <span style="font-weight:600; display:flex; align-items:center; gap:5px;">Amber Key
+              <span class="badge f-col">Colour</span></span>
+            <span class="cap" style="font-size:9.5px;">Look &middot; SL Wash &middot; 100%</span>
+          </span>
+          <span class="badge" style="flex:0 0 auto; border:1px solid oklch(0.555 0.163 48.998); background:oklch(0.279 0.077 45.635); color:oklch(0.828 0.189 84.429);" title="Stomping: suppresses the effects of every layer below, on Colour">
+            <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v-2a4 4 0 0 1 8 0v6"/><path d="M12 8V6a4 4 0 0 1 8 0v4"/></svg>stomp</span>
+        </div>
+
+        <!-- layer 2 -->
+        <div class="se idle">
+          <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+          <span class="ord">2</span>
+          <span style="flex:1; min-width:0;">
+            <span style="font-weight:600; display:flex; align-items:center; gap:5px;">Storm Wash
+              <span class="badge f-col">Colour</span></span>
+            <span class="cap" style="font-size:9.5px; display:flex; align-items:center; gap:4px;">Look &middot; SL Wash &middot; 100%
+              <svg style="width:10px;height:10px;color:oklch(0.606 0.25 292.717);flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg>1 effect</span>
+          </span>
+          <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+        </div>
+
+        <!-- layer 1, a template as a tracking layer -->
+        <div class="se idle">
+          <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+          <span class="ord">1</span>
+          <span style="flex:1; min-width:0;">
+            <span style="font-weight:600; display:flex; align-items:center; gap:5px;">
+              <svg class="ico12" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg>
+              Half Up
+              <span class="badge f-int">Intensity</span></span>
+            <span class="cap" style="font-size:9.5px;">Template &middot; All heads &middot; 60%</span>
+          </span>
+          <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+        </div>
+
+        <!-- THE BAND BOUNDARY -->
+        <div style="margin:5px -11px 1px; padding:6px 11px; background:oklch(0.279 0.077 45.635 / 0.4); border-top:1px solid oklch(0.555 0.163 48.998); border-bottom:1px solid oklch(0.555 0.163 48.998);">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <svg class="ico12" style="color:oklch(0.828 0.189 84.429);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5"/><path d="m5 12 7 7 7-7"/></svg>
+            <span class="zlab" style="color:oklch(0.828 0.189 84.429);">Every value above beats every effect below</span>
+          </div>
+          <p class="cap" style="margin-top:3px; font-size:9.5px;">Dragging cannot change that &mdash; effects are their own band. <b style="color:oklch(0.985 0 0);">Stomp</b> on a layer is the override.</p>
+        </div>
+
+        <!-- EFFECTS BAND -->
+        <div style="display:flex; align-items:center; gap:6px; padding:2px 0 1px;">
+          <span class="zlab" style="color:oklch(0.606 0.25 292.717);">Effects</span>
+          <span class="badge sec num">2</span>
+        </div>
+
+        <div class="se idle" style="opacity:0.62; border-style:dashed;">
+          <svg class="ico12" style="color:oklch(0.606 0.25 292.717);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg>
+          <span style="flex:1; min-width:0;">
+            <span style="font-weight:600;">Colour Chase</span>
+            <span class="cap" style="font-size:9.5px;">in <b style="color:oklch(0.985 0 0);">Storm Wash</b> &middot; layer 2 &middot; M2 &middot; 1/4</span>
+          </span>
+          <span class="badge" style="flex:0 0 auto; border:1px solid oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429);">stomped</span>
+        </div>
+
+        <div class="se idle">
+          <svg class="ico12" style="color:oklch(0.606 0.25 292.717);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg>
+          <span style="flex:1; min-width:0;">
+            <span style="font-weight:600;">Slow Sine</span>
+            <span class="cap" style="font-size:9.5px;">on <b style="color:oklch(0.985 0 0);">this cue</b> &middot; ad-hoc &middot; wall &middot; 8.0s</span>
+          </span>
+          <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </div>
+
+        <p class="cap" style="margin-top:3px; font-size:10px;">An effect is never <i>on</i> a layer &mdash; it is in a <b style="color:oklch(0.985 0 0);">Look</b> (and travels with it) or on <b style="color:oklch(0.985 0 0);">the cue</b>. The layer overrides its tempo, amount and mask, and can stomp the ones beneath.</p>
+      </div>
+
+      <div style="padding:10px 11px; border-top:1px solid oklch(0.274 0.006 286.033); display:flex; gap:6px; flex:0 0 auto;">
+        <span class="btn sm" style="flex:1; justify-content:center;">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Look</span>
+        <span class="btn sm" style="flex:1; justify-content:center;">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Template</span>
+        <span class="btn sm" style="flex:1; justify-content:center;">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Effect</span>
+      </div>
+    </div>
+
+    <!-- ══ GRID, SCOPED TO THE FOCUSED ENTRY ══ -->
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+
+      <!-- scope band — the one piece of chrome that changes -->
+      <div style="display:flex; align-items:center; gap:10px; padding:9px 14px; flex:0 0 auto; border-bottom:1px solid oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.4);">
+        <svg class="ico" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg>
+        <span class="zlab" style="color:oklch(0.82 0.11 305);">Editing layer 3</span>
+        <span style="font-size:14px; font-weight:600;">Amber Key</span>
+        <span class="badge f-col">Colour</span>
+        <span class="badge out" style="color:oklch(0.828 0.189 84.429); border-color:oklch(0.555 0.163 48.998); background:oklch(0.279 0.077 45.635);">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h0"/></svg>
+          shared &mdash; 8 other layers use it</span>
+        <span style="flex:1;"></span>
+        <span class="btn sm">Duplicate for this cue</span>
+        <span class="btn sm">Targets&hellip;</span>
+        <span class="btn sm">Mask &#9662;</span>
+      </div>
+
+      <!-- contextual template strip -->
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 14px; flex:0 0 auto; border-bottom:1px solid oklch(0.274 0.006 286.033);">
+        <span class="zlab">Colour templates</span>
+        <span class="tchip"><span class="sw" style="width:13px; height:13px; background:#ff9d4a;"></span>Amber Key</span>
+        <span class="tchip"><span class="sw" style="width:13px; height:13px; background:#5aa2ff;"></span>Steel Blue</span>
+        <span class="tchip"><span class="sw" style="width:13px; height:13px; background:#fff3d6;"></span>Warm White</span>
+        <span class="tchip"><span class="sw" style="width:13px; height:13px; background:#d16bff;"></span>Lavender</span>
+        <span class="tchip"><span class="sw" style="width:13px; height:13px; background:#e8622a;"></span>Sunset</span>
+        <span class="cap" style="font-size:10px;">click to set &middot; <span class="mono">&#8997;</span>click to add as a layer</span>
+        <span style="flex:1;"></span>
+        <span class="cap" style="font-size:10px;">filtered to the focused layer&rsquo;s family</span>
+      </div>
+
+      <!-- selection bar -->
+      <div style="display:flex; align-items:center; gap:9px; padding:6px 14px; flex:0 0 auto; border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.623 0.214 259.815 / 0.09);">
+        <svg class="ico" style="color:oklch(0.623 0.214 259.815);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        <span style="font-size:12px; font-weight:600;">3 cells</span>
+        <span class="cap">Colour, in Amber Key &mdash; setting one sets all three</span>
+        <span style="flex:1;"></span>
+        <span class="btn sm">Locate</span><span class="btn sm">Fan &#9662;</span><span class="btn sm">Deselect</span>
+      </div>
+
+      <!-- grid -->
+      <div style="flex:1; min-height:0; padding:11px 14px 14px; display:flex; flex-direction:column; gap:8px;">
+        <div style="flex:1; min-height:0; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); overflow:hidden; display:flex; flex-direction:column; position:relative;">
+
+          <div style="display:grid; grid-template-columns:236px repeat(5, minmax(96px,1fr)); border-bottom:1px solid oklch(0.274 0.006 286.033); flex:0 0 auto;">
+            <div class="gh" style="padding-left:10px;">Fixture</div>
+            <div class="gh inert">Dimmer</div>
+            <div class="gh" style="color:oklch(0.82 0.11 305);">Colour</div>
+            <div class="gh inert">Position</div>
+            <div class="gh inert">Gobo</div>
+            <div class="gh inert">Zoom</div>
+          </div>
+
+          <div style="flex:1; min-height:0; position:relative; overflow:hidden;">
+            <div style="height:26px; display:flex; align-items:center; padding:0 10px; border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.3);">
+              <span style="font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em; color:oklch(0.705 0.015 286.067);">SL Wash &mdash; this layer&rsquo;s targets</span>
+            </div>
+
+            <div class="row" style="grid-template-columns:236px repeat(5, minmax(96px,1fr));">
+              <div style="display:flex; align-items:center; gap:6px; padding:0 10px; height:100%;"><span style="flex:1;">SL Wash 1</span></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci own-look"><span class="sw" style="background:#ff9d4a;"></span><span class="cval mono">#FF9D4A</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+            </div>
+            <div class="row" style="grid-template-columns:236px repeat(5, minmax(96px,1fr));">
+              <div style="display:flex; align-items:center; gap:6px; padding:0 10px; height:100%;"><span style="flex:1;">SL Wash 2</span></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci own-look"><span class="sw" style="background:#ff9d4a;"></span><span class="cval mono">#FF9D4A</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+            </div>
+            <div class="row" style="grid-template-columns:236px repeat(5, minmax(96px,1fr));">
+              <div style="display:flex; align-items:center; gap:6px; padding:0 10px; height:100%;"><span style="flex:1;">SL Wash 3</span></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci own-look"><span class="sw" style="background:#ffb066;"></span><span class="cval mono">#FFB066</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+            </div>
+            <div class="row" style="grid-template-columns:236px repeat(5, minmax(96px,1fr));">
+              <div style="display:flex; align-items:center; gap:6px; padding:0 10px; height:100%;"><span style="flex:1;">SL Wash 4</span></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci own-look"><span class="sw" style="background:#ff9d4a;"></span><span class="cval mono">#FF9D4A</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci inert"><span class="cval">&mdash;</span></div></div>
+            </div>
+
+            <!-- rows the layer does not reach -->
+            <div style="height:26px; display:flex; align-items:center; gap:8px; padding:0 10px; border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.3);">
+              <span style="font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em; color:oklch(0.705 0.015 286.067);">Not targeted by this layer</span>
+              <span class="btn sm" style="height:18px; font-size:9.5px; padding:0 6px;">Add to targets</span>
+            </div>
+            <div class="row inert" style="grid-template-columns:236px repeat(5, minmax(96px,1fr)); opacity:0.34;">
+              <div style="display:flex; align-items:center; gap:6px; padding:0 10px; height:100%;"><span style="flex:1;">Mover 1</span></div>
+              <div class="cw"><div class="ci"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci"><span class="cval">&mdash;</span></div></div>
+              <div class="cw"><div class="ci"><span class="cval">&mdash;</span></div></div>
+            </div>
+
+            <!-- marquee on the colour column -->
+            <div style="position:absolute; left:411px; top:26px; width:173px; height:108px; border:1.5px dashed oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.13); border-radius:4px; pointer-events:none;">
+              <span style="position:absolute; left:-1.5px; top:-1.5px; width:7px; height:7px; background:oklch(0.623 0.214 259.815); border-radius:1px;"></span>
+              <span style="position:absolute; right:-1.5px; bottom:-1.5px; width:7px; height:7px; background:oklch(0.623 0.214 259.815); border-radius:1px;"></span>
+            </div>
+          </div>
+        </div>
+
+        <p class="cap" style="flex:0 0 auto;">Same grid, same cell editors, same drag-select as your own values &mdash; only the band above it and the dimmed columns change. That is what makes a Look <i>feel</i> local: it is not a different editor, it is the same one pointed somewhere else.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

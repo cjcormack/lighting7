@@ -1,0 +1,485 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+
+    .app {
+      --bg: oklch(0.141 0.005 285.823);
+      --fg: oklch(0.985 0 0);
+      --card: oklch(0.21 0.006 285.885);
+      --muted: oklch(0.274 0.006 286.033);
+      --mfg: oklch(0.705 0.015 286.067);
+      --bd: oklch(0.274 0.006 286.033);
+      --pri: oklch(0.623 0.214 259.815);
+      --prifg: oklch(0.21 0.006 285.885);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, "Apple Color Emoji", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+      "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+
+    /* shadcn Button, size="sm" = h-8, text-xs */
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px;
+      border-radius:6px; border:1px solid var(--bd); background:transparent; color:var(--fg);
+      font-size:12px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:var(--prifg); font-weight:600; }
+    .btn.off { color:var(--mfg); opacity:0.45; }
+    .btn.warn { background:oklch(0.769 0.188 70.08); border-color:oklch(0.769 0.188 70.08);
+      color:#fff; font-weight:600; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+
+    /* toolbar zone label */
+    .zlab { font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em;
+      color:var(--mfg); }
+    .vr { width:1px; align-self:stretch; background:var(--bd); }
+
+    /* Section (paneChrome) */
+    .sec-h { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600;
+      text-transform:uppercase; letter-spacing:0.03em; color:var(--mfg); }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px;
+      padding:1px 6px; font-size:10px; line-height:1.5; white-space:nowrap; }
+    .badge.sec { background:var(--muted); color:var(--fg); }
+    .badge.out { border:1px solid var(--bd); color:var(--fg); }
+
+    /* grid */
+    .gridhead { font-size:11px; font-weight:500; text-transform:uppercase;
+      letter-spacing:0.05em; color:var(--mfg); padding:6px 6px; }
+    .row { height:36px; border-bottom:1px solid var(--bd); font-size:14px; display:grid;
+      align-items:center; }
+    .namecell { display:flex; align-items:center; gap:6px; padding:0 8px; height:100%;
+      background:var(--bg); position:relative; }
+    .cellwrap { position:relative; height:100%; min-width:0; padding:2px 0; box-sizing:border-box; }
+    .cellin { display:flex; align-items:center; gap:6px; height:100%; padding:0 6px;
+      border-radius:4px; box-sizing:border-box; }
+    .bar { position:relative; height:6px; min-width:24px; flex:1; overflow:hidden;
+      border-radius:999px; background:var(--muted); }
+    .barfill { position:absolute; inset-block:0; border-radius:999px; background:var(--pri); }
+    .pct { width:48px; flex:0 0 auto; text-align:right; font-size:12px; color:var(--mfg); }
+    .sw { width:16px; height:16px; flex:0 0 auto; border-radius:4px;
+      border:1px solid var(--bd); overflow:hidden; }
+    .cval { font-size:12px; color:var(--mfg); overflow:hidden; text-overflow:ellipsis;
+      white-space:nowrap; }
+    .cb { width:14px; height:14px; flex:0 0 auto; border-radius:3px; border:1px solid oklch(0.45 0.01 286);
+      background:transparent; box-sizing:border-box; }
+    .cb.on { background:var(--pri); border-color:var(--pri); }
+
+    /* ownership rings — mirrors ownershipCellClass() exactly */
+    .own-prog   { box-shadow: inset 0 0 0 1px var(--pri); background:oklch(0.623 0.214 259.815 / 0.10); }
+    .own-progq  { box-shadow: inset 0 0 0 1px oklch(0.623 0.214 259.815 / 0.40); }
+    .own-effect { box-shadow: inset 0 0 0 1px oklch(0.606 0.25 292.717 / 0.50); }
+    .own-cue    { box-shadow: inset 0 0 0 1px oklch(0.685 0.169 237.323 / 0.40); }
+    .own-base   { opacity: 0.55; }
+    .own-park   { box-shadow: inset 0 0 0 1px oklch(0.769 0.188 70.08); background:oklch(0.769 0.188 70.08 / 0.15); }
+    .own-mixed  { border:1px dashed oklch(0.623 0.214 259.815 / 0.55); }
+
+    .layglyph { position:absolute; bottom:3px; right:3px; width:10px; height:10px;
+      color:var(--mfg); pointer-events:none; }
+
+    /* layer row */
+    .layrow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; border-radius:6px;
+      border:1px solid var(--bd); background:var(--card); padding:7px; font-size:12px; }
+  </style>
+</helmet>
+
+<div class="app" style="width:1440px; height:900px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); display:flex; flex-direction:column; overflow:hidden;">
+
+  <!-- ══ Row 1 · ShowHeader ══════════════════════════════════════════ -->
+  <div style="display:flex; align-items:center; gap:12px; padding:16px; flex:0 0 auto;">
+    <div style="flex:1; min-width:0; display:flex; align-items:center; gap:7px; font-size:14px; color:oklch(0.705 0.015 286.067);">
+      <span>Hamlet &mdash; Rev C</span>
+      <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+      <span style="color:oklch(0.985 0 0); font-weight:600;">Programmer</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; flex:0 0 auto;">
+      <span class="badge" style="border:1px solid oklch(0.393 0.095 152.535); background:oklch(0.266 0.065 152.934); color:oklch(0.792 0.209 151.711); font-size:10px; padding:2px 7px;">
+        <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Saved
+      </span>
+      <!-- ViewSwitcher: gains a fourth pill, Programmer -->
+      <nav style="display:inline-flex; align-items:center; gap:2px; border-radius:10px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:2px;">
+        <span style="display:inline-flex; align-items:center; gap:6px; border-radius:6px; padding:4px 10px; font-size:12px; font-weight:600; background:oklch(0.274 0.006 286.033); color:oklch(0.985 0 0);">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h4v14H4z"/><path d="M16 5h4v14h-4z"/></svg>Programmer</span>
+        <span style="display:inline-flex; align-items:center; gap:6px; border-radius:6px; padding:4px 10px; font-size:12px; font-weight:600; color:oklch(0.705 0.015 286.067);">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 10h20"/><path d="M4 10v9h16v-9"/><path d="M8 5h8l1 5H7Z"/></svg>Show</span>
+        <span style="display:inline-flex; align-items:center; gap:6px; border-radius:6px; padding:4px 10px; font-size:12px; font-weight:600; color:oklch(0.705 0.015 286.067);">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4l14 8-14 8Z"/></svg>Run</span>
+        <span style="display:inline-flex; align-items:center; gap:6px; border-radius:6px; padding:4px 10px; font-size:12px; font-weight:600; color:oklch(0.705 0.015 286.067);">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 18.5Z"/></svg>Prompt Book</span>
+      </nav>
+      <button class="btn" style="border-color:oklch(0.704 0.191 22.216); background:oklch(0.704 0.191 22.216); color:oklch(0.985 0 0); font-weight:600;">
+        <svg class="ico" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>Stop</button>
+      <span style="width:12px; height:12px; border-radius:999px; background:oklch(0.723 0.219 149.579); box-shadow:0 0 6px oklch(0.723 0.219 149.579); flex:0 0 auto; margin-left:4px;"></span>
+    </div>
+  </div>
+
+  <!-- ══ Row 2 · ShowBar ═════════════════════════════════════════════ -->
+  <div style="display:flex; align-items:stretch; gap:8px; padding:8px 16px; border-bottom:1px solid oklch(0.274 0.006 286.033); flex:0 0 auto;">
+    <div style="display:flex; flex-direction:column; gap:1px; align-items:flex-start; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:6px 12px; flex:0 0 auto;">
+      <span style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:oklch(0.705 0.015 286.067);">Blackout</span>
+      <span class="mono" style="font-size:18px; font-weight:700; letter-spacing:0.05em; line-height:1;">DBO</span>
+    </div>
+    <div style="display:flex; align-items:stretch; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); overflow:hidden; flex:0 0 auto;">
+      <div style="display:flex; flex-direction:column; gap:1px; padding:6px 12px;">
+        <span style="display:flex; align-items:center; gap:4px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:oklch(0.705 0.015 286.067);">
+          <span style="width:6px; height:6px; border-radius:999px; background:oklch(0.623 0.214 259.815); flex:0 0 auto;"></span>M1 &middot; BPM</span>
+        <span class="mono num" style="font-size:18px; font-weight:700; line-height:1;">124</span>
+      </div>
+      <div style="display:flex; align-items:center; padding:0 12px; border-left:1px solid oklch(0.274 0.006 286.033); font-size:12px; font-weight:700; letter-spacing:0.08em;">TAP</div>
+    </div>
+    <!-- masters: one tile, horizontal rail (see the ShowBar artboard) -->
+    <div style="display:flex; align-items:stretch; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); overflow:hidden; flex:0 0 auto;">
+      <div style="display:flex; align-items:center; gap:2px; padding:0 4px; border-right:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.35);">
+        <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885);">M2</span>
+        <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; color:oklch(0.705 0.015 286.067);">M3</span>
+        <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; color:oklch(0.705 0.015 286.067);">M4</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:1px; padding:6px 12px;">
+        <span style="display:flex; align-items:center; gap:4px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:oklch(0.705 0.015 286.067);">
+          <span style="width:6px; height:6px; border-radius:999px; background:oklch(0.623 0.214 259.815); flex:0 0 auto;"></span>M2 &middot; Chases</span>
+        <span class="mono num" style="font-size:18px; font-weight:700; line-height:1;">96</span>
+      </div>
+      <div style="display:flex; align-items:center; padding:0 12px; border-left:1px solid oklch(0.274 0.006 286.033); font-size:12px; font-weight:700; letter-spacing:0.08em;">TAP</div>
+    </div>
+    <!-- live state -->
+    <div style="flex:1; display:flex; align-items:center; gap:14px; min-width:0; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:6px 12px;">
+      <span style="font-size:14px; font-weight:500; flex:0 0 auto;">Act 1</span>
+      <span style="color:oklch(0.705 0.015 286.067 / 0.4); flex:0 0 auto;">&middot;</span>
+      <span style="width:22px; height:22px; border-radius:999px; display:grid; place-items:center; background:oklch(0.266 0.065 152.934); border:1px solid oklch(0.393 0.095 152.535); color:oklch(0.792 0.209 151.711); flex:0 0 auto;">
+        <svg style="width:10px;height:10px;" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8Z"/></svg></span>
+      <span class="mono" style="font-size:14px; font-weight:700; color:oklch(0.792 0.209 151.711); flex:0 0 auto;">Q4</span>
+      <span style="font-size:14px; font-weight:500;">Warm Wash</span>
+      <svg class="ico" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+      <span style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:oklch(0.705 0.015 286.067); flex:0 0 auto;">Next</span>
+      <span class="mono" style="font-size:12px; font-weight:700; color:oklch(0.707 0.165 254.624); flex:0 0 auto;">Q5</span>
+      <span style="font-size:12px; color:oklch(0.705 0.015 286.067);">Sunset Fade</span>
+      <span style="flex:1;"></span>
+    </div>
+    <div style="display:flex; align-items:stretch; gap:8px; flex:0 0 auto;">
+      <div style="display:flex; align-items:center; padding:0 20px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); font-size:14px; font-weight:600; letter-spacing:0.05em;">&#9664; BACK</div>
+      <div style="display:flex; align-items:center; justify-content:center; padding:0 32px; min-width:120px; border-radius:6px; background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885); font-size:16px; font-weight:700; letter-spacing:0.16em; box-shadow:0 6px 14px oklch(0.623 0.214 259.815 / 0.35);">GO</div>
+    </div>
+  </div>
+
+  <!-- ══ Row 3 · SOURCE STRIP — brief item 4 ═════════════════════════ -->
+  <div style="display:flex; align-items:center; gap:10px; padding:9px 16px; flex:0 0 auto; border-bottom:1px solid oklch(0.379 0.146 265.522); background:oklch(0.282 0.091 267.935 / 0.55);">
+    <svg class="ico" style="color:oklch(0.809 0.105 251.813);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
+    <span style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:oklch(0.809 0.105 251.813); flex:0 0 auto;">Editing</span>
+    <span class="mono" style="font-size:14px; font-weight:700; flex:0 0 auto;">Q4</span>
+    <span style="font-size:14px; font-weight:600; flex:0 0 auto;">Warm Wash</span>
+    <span style="font-size:12px; color:oklch(0.809 0.105 251.813); flex:0 0 auto;">Act 1 &middot; cue 4 of 14</span>
+    <span class="badge" style="border:1px solid oklch(0.555 0.163 48.998); background:oklch(0.279 0.077 45.635); color:oklch(0.828 0.189 84.429); flex:0 0 auto;">
+      <span style="width:5px; height:5px; border-radius:999px; background:oklch(0.828 0.189 84.429);"></span>3 changes not written back
+    </span>
+    <span style="flex:1;"></span>
+    <button class="btn pri" style="flex:0 0 auto;">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M4 4h16"/></svg>Update Q4</button>
+    <button class="btn" style="flex:0 0 auto;">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>Revert</button>
+    <button class="btn" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">Detach</button>
+  </div>
+
+  <!-- ══ Row 4 · ACTION BAR — brief item 2 ═══════════════════════════ -->
+  <div style="display:flex; align-items:center; gap:12px; padding:9px 16px; flex:0 0 auto; border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885 / 0.5);">
+
+    <div style="display:flex; flex-direction:column; gap:4px;">
+      <span class="zlab">Stage</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <div style="display:flex; align-items:stretch; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); overflow:hidden; height:32px;">
+          <span style="display:inline-flex; align-items:center; gap:6px; padding:0 10px; font-size:12px; font-weight:500;">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 21-4-4 11-11 4 4-8 8"/><path d="M11 21h10"/></svg>Clear</span>
+          <span class="mono" style="display:inline-flex; align-items:center; gap:4px; padding:0 8px; border-left:1px solid oklch(0.274 0.006 286.033); font-size:11px; color:oklch(0.705 0.015 286.067); background:oklch(0.274 0.006 286.033 / 0.4);">2s
+            <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+        </div>
+        <button class="btn">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.9 4.24A9 9 0 0 1 21 12s-3 6-9 6a9 9 0 0 1-2.1-.24"/><path d="M6.6 6.6A13 13 0 0 0 3 12s3 6 9 6"/><path d="m2 2 20 20"/></svg>Blind</button>
+      </div>
+    </div>
+
+    <div class="vr"></div>
+
+    <div style="display:flex; flex-direction:column; gap:4px;">
+      <span class="zlab">Load</span>
+      <button class="btn">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>Include&hellip;</button>
+    </div>
+
+    <div class="vr"></div>
+
+    <div style="display:flex; flex-direction:column; gap:4px;">
+      <span class="zlab">Save</span>
+      <div style="display:flex; align-items:stretch; border-radius:6px; overflow:hidden; height:32px; background:oklch(0.623 0.214 259.815);">
+        <span style="display:inline-flex; align-items:center; gap:6px; padding:0 12px; font-size:12px; font-weight:600; color:oklch(0.21 0.006 285.885);">
+          <svg class="ico" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="7"/></svg>Record</span>
+        <span style="display:inline-flex; align-items:center; padding:0 7px; border-left:1px solid oklch(0.21 0.006 285.885 / 0.25); color:oklch(0.21 0.006 285.885);">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></span>
+      </div>
+    </div>
+
+    <span style="flex:1;"></span>
+
+    <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+      <span class="zlab">Sheet</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <button class="btn" style="background:oklch(0.274 0.006 286.033);">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg>Groups</button>
+        <button class="btn">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/></svg>Columns
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Row 5 · SELECTION BAR (only while something is selected) ═════ -->
+  <div style="display:flex; align-items:center; gap:10px; padding:7px 16px; flex:0 0 auto; border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.623 0.214 259.815 / 0.09);">
+    <svg class="ico" style="color:oklch(0.623 0.214 259.815);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+    <span style="font-size:12px; font-weight:600;">4 fixtures</span>
+    <span style="color:oklch(0.705 0.015 286.067 / 0.5);">&middot;</span>
+    <span style="font-size:12px; font-weight:600; color:oklch(0.707 0.165 254.624);">8 cells</span>
+    <span style="font-size:12px; color:oklch(0.705 0.015 286.067);">Colour, Position &mdash; edit once, applies to all</span>
+    <span style="flex:1;"></span>
+    <button class="btn" style="height:26px; font-size:11px;">Locate</button>
+    <button class="btn" style="height:26px; font-size:11px;">Highlight</button>
+    <button class="btn" style="height:26px; font-size:11px;">Fan
+      <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button class="btn" style="height:26px; font-size:11px; color:oklch(0.705 0.015 286.067);">Deselect</button>
+  </div>
+
+  <!-- ══ Row 6 · BODY: grid + rail ═══════════════════════════════════ -->
+  <div style="flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px 16px;">
+
+    <!-- ── value grid ───────────────────────────────────────────── -->
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:8px;">
+      <div style="flex:1; min-height:0; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); overflow:hidden; position:relative; display:flex; flex-direction:column;">
+
+        <!-- header -->
+        <div style="display:grid; grid-template-columns:260px repeat(6, minmax(96px,1fr)); border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.141 0.005 285.823); flex:0 0 auto;">
+          <div class="gridhead" style="padding-left:10px;">Fixture</div>
+          <div class="gridhead">Dimmer</div>
+          <div class="gridhead" style="color:oklch(0.985 0 0);">Colour</div>
+          <div class="gridhead" style="color:oklch(0.985 0 0);">Position</div>
+          <div class="gridhead">Gobo</div>
+          <div class="gridhead">Zoom</div>
+          <div class="gridhead">Strobe</div>
+        </div>
+
+        <div style="flex:1; min-height:0; position:relative; overflow:hidden;">
+
+          <!-- group divider -->
+          <div style="height:26px; display:flex; align-items:center; padding:0 10px; border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.3);">
+            <span style="font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em; color:oklch(0.705 0.015 286.067);">Stage Left Wash</span>
+          </div>
+
+          <!-- row 1 -->
+          <div class="row" style="grid-template-columns:260px repeat(6, minmax(96px,1fr));">
+            <div class="namecell"><span class="cb on"></span><span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">SL Wash 1</span></div>
+            <div class="cellwrap"><div class="cellin own-prog"><span class="bar"><span class="barfill" style="left:0; width:82%;"></span></span><span class="pct mono num">82%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-prog"><span class="sw" style="background:#ff9d4a;"></span><span class="cval mono num">255,157,74</span></div>
+              <svg class="layglyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg></div>
+            <div class="cellwrap"><div class="cellin own-cue"><span class="sw" style="position:relative; background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:9px; top:5px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">18&deg;,&minus;7&deg;</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Open</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="bar"><span class="barfill" style="left:0; width:40%;"></span></span><span class="pct mono num">40%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Off</span></div></div>
+          </div>
+
+          <!-- row 2 -->
+          <div class="row" style="grid-template-columns:260px repeat(6, minmax(96px,1fr));">
+            <div class="namecell"><span class="cb on"></span><span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">SL Wash 2</span></div>
+            <div class="cellwrap"><div class="cellin own-prog"><span class="bar"><span class="barfill" style="left:0; width:82%;"></span></span><span class="pct mono num">82%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-prog"><span class="sw" style="background:#ff9d4a;"></span><span class="cval mono num">255,157,74</span></div>
+              <svg class="layglyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg></div>
+            <div class="cellwrap"><div class="cellin own-cue"><span class="sw" style="position:relative; background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:9px; top:5px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">21&deg;,&minus;7&deg;</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Open</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="bar"><span class="barfill" style="left:0; width:40%;"></span></span><span class="pct mono num">40%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Off</span></div></div>
+          </div>
+
+          <!-- row 3 · effect-owned colour -->
+          <div class="row" style="grid-template-columns:260px repeat(6, minmax(96px,1fr));">
+            <div class="namecell"><span class="cb on"></span><span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">SL Wash 3</span></div>
+            <div class="cellwrap"><div class="cellin own-prog"><span class="bar"><span class="barfill" style="left:0; width:82%;"></span></span><span class="pct mono num">82%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-effect"><span class="sw" style="background:#d16bff;"></span><span class="cval mono num">209,107,255</span></div></div>
+            <div class="cellwrap"><div class="cellin own-cue"><span class="sw" style="position:relative; background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:9px; top:5px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">24&deg;,&minus;7&deg;</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Open</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="bar"><span class="barfill" style="left:0; width:40%;"></span></span><span class="pct mono num">40%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Off</span></div></div>
+          </div>
+
+          <!-- row 4 · selected, mixed -->
+          <div class="row" style="grid-template-columns:260px repeat(6, minmax(96px,1fr));">
+            <div class="namecell"><span class="cb on"></span><span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">SL Wash 4</span></div>
+            <div class="cellwrap"><div class="cellin own-prog"><span class="bar"><span class="barfill" style="left:0; width:82%;"></span></span><span class="pct mono num">82%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-prog own-mixed"><span class="sw" style="background:linear-gradient(90deg,#ff9d4a,#d16bff);"></span><span class="cval">Mixed</span></div></div>
+            <div class="cellwrap"><div class="cellin own-cue"><span class="sw" style="position:relative; background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:9px; top:5px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">27&deg;,&minus;7&deg;</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Open</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="bar"><span class="barfill" style="left:0; width:40%;"></span></span><span class="pct mono num">40%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Off</span></div></div>
+          </div>
+
+          <!-- divider -->
+          <div style="height:26px; display:flex; align-items:center; padding:0 10px; border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.3);">
+            <span style="font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em; color:oklch(0.705 0.015 286.067);">Movers &mdash; Upstage Truss</span>
+          </div>
+
+          <!-- row 5 -->
+          <div class="row" style="grid-template-columns:260px repeat(6, minmax(96px,1fr));">
+            <div class="namecell"><span class="cb"></span>
+              <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+              <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Mover 1</span>
+              <span class="badge sec" style="flex:0 0 auto; padding:0 5px;">4</span></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="bar"><span class="barfill" style="left:0; width:0%;"></span></span><span class="pct mono num">0%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="sw" style="background:#ffffff;"></span><span class="cval mono num">255,255,255</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="sw" style="position:relative; background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:7px; top:7px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">0&deg;,0&deg;</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Open</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="bar"><span class="barfill" style="left:0; width:12%;"></span></span><span class="pct mono num">12%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Off</span></div></div>
+          </div>
+
+          <!-- row 6 · parked -->
+          <div class="row" style="grid-template-columns:260px repeat(6, minmax(96px,1fr));">
+            <div class="namecell"><span class="cb"></span>
+              <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+              <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Mover 2</span>
+              <span class="badge sec" style="flex:0 0 auto; padding:0 5px;">4</span></div>
+            <div class="cellwrap"><div class="cellin own-park"><span class="bar"><span class="barfill" style="left:0; width:100%; background:oklch(0.769 0.188 70.08);"></span></span><span class="pct mono num" style="color:oklch(0.828 0.189 84.429);">100%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="sw" style="background:#ffffff;"></span><span class="cval mono num">255,255,255</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="sw" style="position:relative; background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:7px; top:7px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">0&deg;,0&deg;</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Open</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="bar"><span class="barfill" style="left:0; width:12%;"></span></span><span class="pct mono num">12%</span></div></div>
+            <div class="cellwrap"><div class="cellin own-base"><span class="cval">Off</span></div></div>
+          </div>
+
+          <!-- ── DRAG MARQUEE — brief item 3 ───────────────────── -->
+          <div style="position:absolute; left:383px; top:27px; width:243px; height:144px; border:1.5px dashed oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.13); border-radius:4px; pointer-events:none;">
+            <span style="position:absolute; left:-1.5px; top:-1.5px; width:7px; height:7px; background:oklch(0.623 0.214 259.815); border-radius:1px;"></span>
+            <span style="position:absolute; right:-1.5px; bottom:-1.5px; width:7px; height:7px; background:oklch(0.623 0.214 259.815); border-radius:1px;"></span>
+          </div>
+          <!-- floating scope chip, follows the pointer -->
+          <div style="position:absolute; left:634px; top:150px; display:flex; align-items:center; gap:7px; padding:5px 9px; border-radius:6px; background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885); font-size:11px; font-weight:700; box-shadow:0 6px 18px oklch(0.141 0.005 285.823 / 0.6); pointer-events:none;">
+            <span class="mono num">8 cells</span>
+            <span style="opacity:0.55;">&middot;</span>
+            <span>4 &times; Colour, Position</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ownership legend -->
+      <div style="display:flex; align-items:center; gap:14px; flex:0 0 auto; padding:0 2px; font-size:10.5px; color:oklch(0.705 0.015 286.067);">
+        <span style="font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em;">Owned by</span>
+        <span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:13px; height:13px; border-radius:3px; box-shadow:inset 0 0 0 1px oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.1);"></span>You &mdash; Record takes this</span>
+        <span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:13px; height:13px; border-radius:3px; box-shadow:inset 0 0 0 1px oklch(0.685 0.169 237.323 / 0.4);"></span>Cue</span>
+        <span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:13px; height:13px; border-radius:3px; box-shadow:inset 0 0 0 1px oklch(0.606 0.25 292.717 / 0.5);"></span>Effect</span>
+        <span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:13px; height:13px; border-radius:3px; box-shadow:inset 0 0 0 1px oklch(0.769 0.188 70.08); background:oklch(0.769 0.188 70.08 / 0.15);"></span>Parked</span>
+        <span style="display:inline-flex; align-items:center; gap:5px; opacity:0.62;"><span style="width:13px; height:13px; border-radius:3px; background:oklch(0.274 0.006 286.033);"></span>Nothing asserts it</span>
+        <span style="flex:1;"></span>
+        <span style="display:inline-flex; align-items:center; gap:5px;">
+          <svg style="width:11px;height:11px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg>
+          came from a Look layer</span>
+      </div>
+    </div>
+
+    <!-- ── right rail: layers + FX, no tabs ─────────────────────── -->
+    <div style="width:404px; flex:0 0 auto; display:flex; flex-direction:column; gap:10px; min-height:0;">
+
+      <!-- Layers -->
+      <div style="flex:1.4; min-height:0; display:flex; flex-direction:column; gap:6px;">
+        <div class="sec-h">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg>
+          <span>Layers</span>
+          <span class="badge sec">3</span>
+          <span style="flex:1;"></span>
+          <span style="display:inline-flex; align-items:center; gap:2px; font-size:11px; font-weight:500; text-transform:none; letter-spacing:0; color:oklch(0.985 0 0);">
+            <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add</span>
+        </div>
+        <p style="margin:0; font-size:11px; line-height:1.4; color:oklch(0.705 0.015 286.067);">Later layers win, for every attribute &mdash; intensity included. Across cues, HTP still governs intensity.</p>
+
+        <div style="display:flex; flex-direction:column; gap:6px; overflow:hidden;">
+          <!-- layer 3 -->
+          <div class="layrow">
+            <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+            <span class="badge sec mono" style="flex:0 0 auto;">3</span>
+            <span class="badge out" style="flex:0 0 auto; gap:5px;">
+              <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg>Amber Key</span>
+            <span class="badge out" style="flex:0 0 auto;">Colour</span>
+            <span class="badge out" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">[Colour]</span>
+            <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:5px; background:oklch(0.274 0.006 286.033); flex:0 0 auto;">
+              <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v-2a4 4 0 0 1 8 0v6"/><path d="M12 8V6a4 4 0 0 1 8 0v4"/></svg></span>
+            <span class="badge out" style="flex:0 0 auto;">SL Wash</span>
+            <span style="flex:1;"></span>
+            <span class="mono num" style="font-size:11px; color:oklch(0.705 0.015 286.067); flex:0 0 auto;">100%</span>
+            <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+            <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </div>
+          <!-- layer 2 -->
+          <div class="layrow">
+            <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+            <span class="badge sec mono" style="flex:0 0 auto;">2</span>
+            <span class="badge out" style="flex:0 0 auto; gap:5px;">
+              <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg>Truss Fan</span>
+            <span class="badge out" style="flex:0 0 auto;">Position</span>
+            <span class="badge out" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">look&rsquo;s own targets</span>
+            <span style="flex:1;"></span>
+            <span class="mono num" style="font-size:11px; color:oklch(0.705 0.015 286.067); flex:0 0 auto;">100%</span>
+            <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+            <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </div>
+          <!-- layer 1, disabled -->
+          <div class="layrow" style="opacity:0.6;">
+            <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+            <span class="badge sec mono" style="flex:0 0 auto;">1</span>
+            <span class="badge out" style="flex:0 0 auto; gap:5px;">
+              <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg>House Wash</span>
+            <span class="badge out" style="flex:0 0 auto;">Intensity</span>
+            <span style="flex:1;"></span>
+            <span class="mono num" style="font-size:11px; color:oklch(0.705 0.015 286.067); flex:0 0 auto;">60%</span>
+            <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>
+            <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- FX -->
+      <div style="flex:1; min-height:0; display:flex; flex-direction:column; gap:6px; border-top:1px solid oklch(0.274 0.006 286.033); padding-top:10px;">
+        <div class="sec-h">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg>
+          <span>FX running</span>
+          <span class="badge sec">2</span>
+          <span style="flex:1;"></span>
+          <span style="display:inline-flex; align-items:center; gap:2px; font-size:11px; font-weight:500; text-transform:none; letter-spacing:0; color:oklch(0.985 0 0);">
+            <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Add</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div class="layrow">
+            <span style="width:6px; height:6px; border-radius:999px; background:oklch(0.606 0.25 292.717); flex:0 0 auto;"></span>
+            <span style="font-weight:500;">Colour Chase</span>
+            <span class="badge out mono" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">&rarr; rgbColour</span>
+            <span style="flex:1;"></span>
+            <span class="badge out mono" style="flex:0 0 auto;">M2 &middot; 1/4</span>
+            <span class="badge sec" style="flex:0 0 auto; background:oklch(0.606 0.25 292.717 / 0.2); color:oklch(0.809 0.105 251.813);">programmer</span>
+          </div>
+          <div class="layrow">
+            <span style="width:6px; height:6px; border-radius:999px; background:oklch(0.606 0.25 292.717); flex:0 0 auto;"></span>
+            <span style="font-weight:500;">Slow Sine</span>
+            <span class="badge out mono" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">&rarr; tilt</span>
+            <span style="flex:1;"></span>
+            <span class="badge out mono" style="flex:0 0 auto;">wall &middot; 8.0s</span>
+            <span class="badge sec" style="flex:0 0 auto;">cue</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

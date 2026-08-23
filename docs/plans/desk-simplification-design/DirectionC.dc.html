@@ -1,0 +1,138 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .dir { --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .navrow { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:6px;
+      font-size:12px; color:var(--mfg); }
+    .navrow.on { background:oklch(0.274 0.006 286.033); color:oklch(0.985 0 0); font-weight:600; }
+    .navrow.neu { color:oklch(0.792 0.209 151.711); font-weight:600; }
+    .navrow.gone { opacity:0.3; text-decoration:line-through; }
+    .glyph { width:14px; height:14px; flex:0 0 auto; }
+    .zone { border:1px solid var(--bd); border-radius:8px; background:oklch(0.21 0.006 285.885);
+      display:flex; flex-direction:column; overflow:hidden; }
+    .zhead { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em;
+      color:var(--mfg); padding:6px 9px; border-bottom:1px solid var(--bd);
+      background:oklch(0.19 0.006 285.9); }
+    .zbody { flex:1; padding:9px; display:flex; flex-direction:column; gap:6px; }
+    .lo { height:7px; border-radius:3px; background:oklch(0.3 0.006 286); }
+    .lo.w70 { width:70%; } .lo.w45 { width:45%; } .lo.w88 { width:88%; }
+    .cell { height:16px; border-radius:3px; background:oklch(0.3 0.006 286); }
+    .tag { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--bd);
+      border-radius:999px; padding:1px 7px; font-size:9.5px; color:var(--mfg); }
+  </style>
+</helmet>
+
+<div class="dir" style="width:860px; height:600px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); padding:22px 24px; display:flex; flex-direction:column; gap:14px;">
+
+  <div style="display:flex; align-items:flex-start; gap:12px;">
+    <div style="width:26px; height:26px; border-radius:7px; display:grid; place-items:center; flex:0 0 auto; background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885); font-size:12px; font-weight:800;">C</div>
+    <div style="min-width:0;">
+      <div style="font-size:17px; font-weight:650; letter-spacing:-0.01em; line-height:1.2;">The programmer <i>is</i> the cue editor</div>
+      <div style="font-size:12px; color:oklch(0.705 0.015 286.067); margin-top:3px;">Direction A, plus one further step: opening a cue <b style="color:oklch(0.985 0 0); font-weight:600;">Includes</b> it rather than expanding a second editor. There is one place values are edited, so a cue and the programmer cannot look different &mdash; they are the same screen.</div>
+    </div>
+  </div>
+
+  <div style="flex:1; min-height:0; display:flex; border:1px solid oklch(0.274 0.006 286.033); border-radius:10px; overflow:hidden; background:oklch(0.21 0.006 285.885);">
+
+    <div style="width:132px; flex:0 0 auto; border-right:1px solid oklch(0.274 0.006 286.033); padding:9px 7px; display:flex; flex-direction:column; gap:1px; background:oklch(0.176 0.005 285.9);">
+      <div style="font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.705 0.015 286.067); padding:3px 8px 5px;">Live</div>
+      <div class="navrow"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 12.5 12 7l9.5 5.5L12 18Z"/><path d="M2.5 17 12 22.5 21.5 17"/></svg>Stage</div>
+      <div class="navrow on"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h4v14H4z"/><path d="M16 5h4v14h-4z"/></svg>Programmer</div>
+      <div class="navrow"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 10h20"/><path d="M4 10v9h16v-9"/><path d="M8 5h8l1 5H7Z"/></svg>Show</div>
+      <div class="navrow"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4l14 8-14 8Z"/></svg>Run</div>
+      <div class="navrow"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 18.5Z"/></svg>Prompt Book</div>
+      <div style="height:9px;"></div>
+      <div style="font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.705 0.015 286.067); padding:3px 8px 5px;">Program</div>
+      <div class="navrow"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Looks</div>
+      <div class="navrow"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Speed Masters</div>
+    </div>
+
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+      <!-- the source strip: the whole idea -->
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 11px; border-bottom:1px solid oklch(0.379 0.146 265.522); background:oklch(0.282 0.091 267.935);">
+        <svg style="width:13px;height:13px;flex:0 0 auto;color:oklch(0.809 0.105 251.813);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
+        <span style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.809 0.105 251.813);">Editing</span>
+        <span class="mono" style="font-size:12px; font-weight:700; color:oklch(0.985 0 0);">Q4</span>
+        <span style="font-size:12px; font-weight:600; color:oklch(0.985 0 0);">Warm Wash</span>
+        <span style="font-size:10.5px; color:oklch(0.809 0.105 251.813);">&middot; Act 1</span>
+        <span class="tag" style="border-color:oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429); background:oklch(0.279 0.077 45.635);">3 unsaved</span>
+        <span style="flex:1;"></span>
+        <span class="tag" style="border-color:oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885); font-weight:700;">Update Q4</span>
+        <span class="tag">Revert</span>
+      </div>
+
+      <div style="flex:1; min-height:0; display:flex;">
+        <!-- cue rail: navigation only -->
+        <div style="width:118px; flex:0 0 auto; border-right:1px solid oklch(0.274 0.006 286.033); display:flex; flex-direction:column; background:oklch(0.19 0.006 285.9);">
+          <div style="font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.705 0.015 286.067); padding:7px 9px 5px;">Act 1</div>
+          <div style="flex:1; padding:0 6px; display:flex; flex-direction:column; gap:2px;">
+            <div style="display:flex; gap:6px; align-items:center; padding:4px 6px; border-radius:5px;"><span class="mono" style="font-size:9.5px; color:oklch(0.705 0.015 286.067); width:18px;">Q3</span><div class="lo w70"></div></div>
+            <div style="display:flex; gap:6px; align-items:center; padding:4px 6px; border-radius:5px; background:oklch(0.282 0.091 267.935); border:1px solid oklch(0.379 0.146 265.522);"><span class="mono" style="font-size:9.5px; color:oklch(0.809 0.105 251.813); width:18px; font-weight:700;">Q4</span><div class="lo w88" style="background:oklch(0.42 0.12 262);"></div></div>
+            <div style="display:flex; gap:6px; align-items:center; padding:4px 6px; border-radius:5px;"><span class="mono" style="font-size:9.5px; color:oklch(0.705 0.015 286.067); width:18px;">Q5</span><div class="lo w45"></div></div>
+            <div style="display:flex; gap:6px; align-items:center; padding:4px 6px; border-radius:5px;"><span class="mono" style="font-size:9.5px; color:oklch(0.705 0.015 286.067); width:18px;">Q6</span><div class="lo w70"></div></div>
+          </div>
+          <div style="padding:7px 8px; border-top:1px solid oklch(0.274 0.006 286.033); font-size:9px; color:oklch(0.705 0.015 286.067); line-height:1.35;">Click to load.<br>No <span style="text-decoration:line-through;">Add&nbsp;Cue</span>.</div>
+        </div>
+
+        <!-- one editing surface -->
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+          <div style="display:flex; align-items:center; gap:6px; padding:7px 11px; border-bottom:1px solid oklch(0.274 0.006 286.033);">
+            <span class="tag">Clear</span><span class="tag">Blind</span>
+            <span style="width:1px; height:12px; background:oklch(0.274 0.006 286.033);"></span>
+            <span class="tag">Include</span>
+            <span style="flex:1;"></span>
+            <span class="tag" style="border-color:oklch(0.623 0.214 259.815); color:oklch(0.623 0.214 259.815);">Record &#9662;</span>
+          </div>
+          <div style="flex:1; min-height:0; display:flex; gap:7px; padding:8px;">
+            <div class="zone" style="flex:2;">
+              <div class="zhead">Values &mdash; drag to select</div>
+              <div class="zbody" style="gap:5px; position:relative;">
+                <div style="display:grid; grid-template-columns:66px repeat(4,1fr); gap:5px;"><div class="lo w70"></div><div class="lo"></div><div class="lo"></div><div class="lo"></div><div class="lo"></div></div>
+                <div style="display:grid; grid-template-columns:66px repeat(4,1fr); gap:5px;"><div class="lo w88"></div><div class="cell" style="background:oklch(0.34 0.09 260);"></div><div class="cell" style="background:oklch(0.34 0.09 260);"></div><div class="cell"></div><div class="cell"></div></div>
+                <div style="display:grid; grid-template-columns:66px repeat(4,1fr); gap:5px;"><div class="lo w70"></div><div class="cell" style="background:oklch(0.34 0.09 260);"></div><div class="cell" style="background:oklch(0.34 0.09 260);"></div><div class="cell"></div><div class="cell"></div></div>
+                <div style="display:grid; grid-template-columns:66px repeat(4,1fr); gap:5px;"><div class="lo w45"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+                <div style="position:absolute; left:70px; top:22px; width:158px; height:52px; border:1.5px dashed oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.14); border-radius:4px;"></div>
+              </div>
+            </div>
+            <div style="flex:1; display:flex; flex-direction:column; gap:7px; min-width:0;">
+              <div class="zone" style="flex:1;">
+                <div class="zhead">Layers</div>
+                <div class="zbody" style="gap:5px;"><div class="lo w88"></div><div class="lo w70"></div><div class="lo w88"></div></div>
+              </div>
+              <div class="zone" style="flex:0.8;">
+                <div class="zhead">FX</div>
+                <div class="zbody" style="gap:5px;"><div class="lo w70"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:10px; align-items:stretch;">
+    <div style="flex:1; border:1px solid oklch(0.393 0.095 152.535); background:oklch(0.266 0.065 152.934); border-radius:8px; padding:8px 10px;">
+      <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.792 0.209 151.711); margin-bottom:3px;">For</div>
+      <div style="font-size:11.5px; line-height:1.42; color:oklch(0.985 0 0);">Answers items 1, 4, 5 and 6 with one move, and deletes the three-pane cue editor &mdash; <span class="mono">CuePropsPane</span>, <span class="mono">TargetsPane</span> and <span class="mono">LayersPane</span>&rsquo;s two arrangements &mdash; along with the second <span class="mono">LayerRow</span> host and the &ldquo;Add Cue&rdquo; path.</div>
+    </div>
+    <div style="flex:1; border:1px solid oklch(0.414 0.112 45.904); background:oklch(0.279 0.077 45.635); border-radius:8px; padding:8px 10px;">
+      <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.828 0.189 84.429); margin-bottom:3px;">Against</div>
+      <div style="font-size:11.5px; line-height:1.42; color:oklch(0.985 0 0);">The biggest change, and it hands the programmer &mdash; a <i>shared</i> object &mdash; a second job. Two operators cannot edit two cues at once, and cue metadata (number, notes, hooks, fade) has no home in a value grid, so it needs a properties drawer beside it.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

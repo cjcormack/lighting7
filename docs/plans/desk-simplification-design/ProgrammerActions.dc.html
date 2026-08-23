@@ -1,0 +1,210 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885);
+      --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067);
+      --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      --prifg:oklch(0.21 0.006 285.885);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px;
+      border-radius:6px; border:1px solid var(--bd); background:transparent; color:var(--fg);
+      font-size:12px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:var(--prifg); font-weight:600; }
+    .btn.dis { color:var(--mfg); opacity:0.4; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .zlab { font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--mfg); }
+    .vr { width:1px; align-self:stretch; background:var(--bd); }
+    .h2 { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em;
+      color:var(--mfg); margin:0; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .strip { display:flex; align-items:center; gap:9px; padding:8px 11px; border-radius:8px;
+      border:1px solid var(--bd); font-size:12px; }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px; padding:1px 6px;
+      font-size:10px; line-height:1.5; white-space:nowrap; }
+    .menu { border-radius:8px; border:1px solid var(--bd); background:oklch(0.21 0.006 285.885);
+      padding:4px; box-shadow:0 12px 30px oklch(0.141 0.005 285.823 / 0.65); width:238px; }
+    .mi { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:5px; font-size:12px; }
+    .mi.on { background:var(--muted); }
+    .mi .sub { display:block; font-size:10px; color:var(--mfg); font-weight:400; }
+  </style>
+</helmet>
+
+<div class="app" style="width:820px; height:1000px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); padding:24px; display:flex; flex-direction:column; gap:20px; overflow:hidden;">
+
+  <div>
+    <div style="font-size:17px; font-weight:650; letter-spacing:-0.01em;">Actions, and what the programmer is holding</div>
+    <p class="cap" style="margin-top:4px; font-size:12px;">Brief items 2 and 4. Today seven identical <span class="mono">variant=&quot;outline&quot; size=&quot;sm&quot;</span> buttons sit in one row and the included cue is named only inside Update&rsquo;s tooltip.</p>
+  </div>
+
+  <!-- BEFORE -->
+  <div>
+    <p class="h2" style="margin-bottom:7px;">Today &mdash; seven peers, no hierarchy</p>
+    <div style="display:flex; align-items:center; gap:8px; padding:10px; border-radius:8px; border:1px dashed oklch(0.414 0.112 45.904); background:oklch(0.279 0.077 45.635 / 0.4);">
+      <span class="btn">Clear</span>
+      <span class="btn mono" style="width:88px; justify-content:space-between;">Snap
+        <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+      <span class="btn">Blind</span>
+      <span class="vr" style="height:20px;"></span>
+      <span class="btn">Record</span>
+      <span class="btn">Record look</span>
+      <span class="btn">Include</span>
+      <span class="btn">Update</span>
+    </div>
+    <p class="cap" style="margin-top:6px;">Nothing says which of these <i>writes</i> and which merely <i>stages</i>; &ldquo;Record&rdquo; and &ldquo;Record look&rdquo; read as a pair when they are two destinations for one act; and below <span class="mono">sm</span> the last four vanish into an overflow kebab.</p>
+  </div>
+
+  <!-- AFTER: zoned bar -->
+  <div>
+    <p class="h2" style="margin-bottom:7px;">Proposed &mdash; three zones, labelled</p>
+    <div style="display:flex; align-items:center; gap:12px; padding:10px; border-radius:8px; border:1px solid oklch(0.393 0.095 152.535); background:oklch(0.266 0.065 152.934 / 0.35);">
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <span class="zlab">Stage</span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div style="display:flex; align-items:stretch; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); overflow:hidden; height:32px;">
+            <span style="display:inline-flex; align-items:center; gap:6px; padding:0 10px; font-size:12px; font-weight:500;">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 21-4-4 11-11 4 4-8 8"/><path d="M11 21h10"/></svg>Clear</span>
+            <span class="mono" style="display:inline-flex; align-items:center; gap:4px; padding:0 8px; border-left:1px solid oklch(0.274 0.006 286.033); font-size:11px; color:oklch(0.705 0.015 286.067); background:oklch(0.274 0.006 286.033 / 0.4);">2s
+              <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+          </div>
+          <span class="btn">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.9 4.24A9 9 0 0 1 21 12s-3 6-9 6a9 9 0 0 1-2.1-.24"/><path d="M6.6 6.6A13 13 0 0 0 3 12s3 6 9 6"/><path d="m2 2 20 20"/></svg>Blind</span>
+        </div>
+      </div>
+      <div class="vr" style="height:44px;"></div>
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <span class="zlab">Load</span>
+        <span class="btn">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>Include&hellip;</span>
+      </div>
+      <div class="vr" style="height:44px;"></div>
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <span class="zlab">Save</span>
+        <div style="display:flex; align-items:stretch; border-radius:6px; overflow:hidden; height:32px; background:oklch(0.623 0.214 259.815);">
+          <span style="display:inline-flex; align-items:center; gap:6px; padding:0 12px; font-size:12px; font-weight:600; color:oklch(0.21 0.006 285.885);">
+            <svg class="ico" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="7"/></svg>Record</span>
+          <span style="display:inline-flex; align-items:center; padding:0 7px; border-left:1px solid oklch(0.21 0.006 285.885 / 0.25); color:oklch(0.21 0.006 285.885);">
+            <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></span>
+        </div>
+      </div>
+    </div>
+    <p class="cap" style="margin-top:6px;"><b style="color:oklch(0.985 0 0); font-weight:600;">Stage</b> changes what the rig is doing right now. <b style="color:oklch(0.985 0 0); font-weight:600;">Load</b> is the only way in, and the only one never disabled. <b style="color:oklch(0.985 0 0); font-weight:600;">Save</b> is one primary button with a destination menu &mdash; and Update moves out of here entirely, onto the source strip, beside the thing it would write to.</p>
+  </div>
+
+  <!-- Record menu -->
+  <div style="display:flex; gap:18px; align-items:flex-start;">
+    <div>
+      <p class="h2" style="margin-bottom:7px;">Record &rarr;</p>
+      <div class="menu">
+        <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.705 0.015 286.067); padding:5px 8px 3px;">Write 12 values into</div>
+        <div class="mi on"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M4 4h16"/></svg><span style="font-weight:600;">Q4 Warm Wash<span class="sub">Update the cue you are editing</span></span></div>
+        <div class="mi"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span>A new cue after Q4<span class="sub">Act 1 &middot; becomes Q4.5</span></span></div>
+        <div class="mi"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg><span>A new Look<span class="sub">Names its own fixtures</span></span></div>
+        <div style="height:1px; background:oklch(0.274 0.006 286.033); margin:4px 0;"></div>
+        <div class="mi"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/></svg><span>An existing cue&hellip;<span class="sub">Pick from any stack</span></span></div>
+      </div>
+      <p class="cap" style="margin-top:6px; width:238px;">One act, four destinations &mdash; so &ldquo;Record look&rdquo; stops being a sibling button. The mask and fixture-selection controls stay in the sheet each destination opens.</p>
+    </div>
+
+    <div style="flex:1; min-width:0;">
+      <p class="h2" style="margin-bottom:7px;">Source strip &mdash; five states</p>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+
+        <!-- empty -->
+        <div class="strip" style="background:oklch(0.21 0.006 285.885 / 0.5); color:oklch(0.705 0.015 286.067);">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+          <span>Programmer is empty. <span style="color:oklch(0.985 0 0);">Include</span> a cue or a Look, or start busking.</span>
+        </div>
+
+        <!-- cue, clean -->
+        <div class="strip" style="border-color:oklch(0.379 0.146 265.522); background:oklch(0.282 0.091 267.935 / 0.5);">
+          <span class="zlab" style="color:oklch(0.809 0.105 251.813);">Editing</span>
+          <span class="mono" style="font-weight:700;">Q4</span><span style="font-weight:600;">Warm Wash</span>
+          <span style="font-size:11px; color:oklch(0.809 0.105 251.813);">Act 1</span>
+          <span style="flex:1;"></span>
+          <span class="badge" style="border:1px solid oklch(0.393 0.095 152.535); background:oklch(0.266 0.065 152.934); color:oklch(0.792 0.209 151.711);">in sync</span>
+          <span class="btn dis" style="height:26px; font-size:11px;">Update</span>
+        </div>
+
+        <!-- cue, dirty -->
+        <div class="strip" style="border-color:oklch(0.379 0.146 265.522); background:oklch(0.282 0.091 267.935 / 0.5);">
+          <span class="zlab" style="color:oklch(0.809 0.105 251.813);">Editing</span>
+          <span class="mono" style="font-weight:700;">Q4</span><span style="font-weight:600;">Warm Wash</span>
+          <span style="flex:1;"></span>
+          <span class="badge" style="border:1px solid oklch(0.555 0.163 48.998); background:oklch(0.279 0.077 45.635); color:oklch(0.828 0.189 84.429);">
+            <span style="width:5px;height:5px;border-radius:999px;background:oklch(0.828 0.189 84.429);"></span>3 changes</span>
+          <span class="btn pri" style="height:26px; font-size:11px;">Update Q4</span>
+          <span class="btn" style="height:26px; font-size:11px;">Revert</span>
+        </div>
+
+        <!-- look -->
+        <div class="strip" style="border-color:oklch(0.379 0.146 265.522); background:oklch(0.282 0.091 267.935 / 0.5);">
+          <span class="zlab" style="color:oklch(0.809 0.105 251.813);">Editing</span>
+          <svg class="ico12" style="color:oklch(0.809 0.105 251.813);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+          <span style="font-weight:600;">Amber Key</span>
+          <span class="badge" style="border:1px solid oklch(0.274 0.006 286.033);">Look &middot; Colour</span>
+          <span style="flex:1;"></span>
+          <span class="badge" style="border:1px solid oklch(0.555 0.163 48.998); background:oklch(0.279 0.077 45.635); color:oklch(0.828 0.189 84.429);">1 change</span>
+          <span class="btn pri" style="height:26px; font-size:11px;">Update Look</span>
+          <span class="btn" style="height:26px; font-size:11px;">Revert</span>
+        </div>
+
+        <!-- busked, no source -->
+        <div class="strip" style="border-color:oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885 / 0.5);">
+          <span class="zlab">Busking</span>
+          <span style="color:oklch(0.705 0.015 286.067);">No source &mdash; 12 values, nothing to update</span>
+          <span style="flex:1;"></span>
+          <span class="btn pri" style="height:26px; font-size:11px;">Record&hellip;</span>
+        </div>
+
+        <!-- conflict -->
+        <div class="strip" style="border-color:oklch(0.555 0.163 48.998); background:oklch(0.279 0.077 45.635 / 0.55);">
+          <svg class="ico" style="color:oklch(0.828 0.189 84.429);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h0"/></svg>
+          <span>Q4 changed on another desk since you included it.</span>
+          <span style="flex:1;"></span>
+          <span class="btn" style="height:26px; font-size:11px;">Compare</span>
+          <span class="btn" style="height:26px; font-size:11px; border-color:oklch(0.769 0.188 70.08); color:oklch(0.828 0.189 84.429);">Overwrite</span>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:7px;">The strip is always present &mdash; empty is a state, not an absence &mdash; so &ldquo;what am I editing?&rdquo; never needs a hover. It sits above the action bar because it is the noun those verbs act on.</p>
+    </div>
+  </div>
+
+  <div style="flex:1;"></div>
+
+  <!-- narrow -->
+  <div>
+    <p class="h2" style="margin-bottom:7px;">At phone width the zones stack, nothing hides</p>
+    <div style="width:360px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); overflow:hidden;">
+      <div style="display:flex; align-items:center; gap:7px; padding:7px 9px; border-bottom:1px solid oklch(0.379 0.146 265.522); background:oklch(0.282 0.091 267.935 / 0.5); font-size:11px;">
+        <span class="mono" style="font-weight:700;">Q4</span><span style="font-weight:600;">Warm Wash</span>
+        <span style="flex:1;"></span>
+        <span class="badge" style="border:1px solid oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429);">3</span>
+        <span class="btn pri" style="height:24px; font-size:10px; padding:0 8px;">Update</span>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; padding:8px 9px;">
+        <span class="btn" style="height:28px; font-size:11px;">Clear &middot; 2s</span>
+        <span class="btn" style="height:28px; font-size:11px;">Blind</span>
+        <span class="btn" style="height:28px; font-size:11px;">Include</span>
+        <span class="btn pri" style="height:28px; font-size:11px;">Record &#9662;</span>
+      </div>
+    </div>
+    <p class="cap" style="margin-top:6px;">All four stay on the surface, wrapping if they must rather than collapsing into a kebab &mdash; the loop the programmer exists for should not be behind a <span class="mono">MoreHorizontal</span> on the surface most likely to be used standing up.</p>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

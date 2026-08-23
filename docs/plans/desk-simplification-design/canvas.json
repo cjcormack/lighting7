@@ -1,0 +1,200 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "1 · Directions"
+    },
+    {
+      "id": "page-2",
+      "name": "2 · The build"
+    },
+    {
+      "id": "page-3",
+      "name": "3 · Layers & templates"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "DirectionA.dc.html",
+      "title": "A · Siblings",
+      "page": "page-1",
+      "x": 0,
+      "y": 0,
+      "w": 860,
+      "h": 600
+    },
+    {
+      "file": "DirectionB.dc.html",
+      "title": "B · One Desk",
+      "page": "page-1",
+      "x": 1020,
+      "y": 0,
+      "w": 860,
+      "h": 600
+    },
+    {
+      "file": "DirectionC.dc.html",
+      "title": "C · Chosen",
+      "page": "page-1",
+      "x": 2040,
+      "y": 0,
+      "w": 860,
+      "h": 600
+    },
+    {
+      "file": "Main.dc.html",
+      "title": "Programmer",
+      "page": "page-2",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "ProgrammerActions.dc.html",
+      "title": "Actions & source state",
+      "page": "page-2",
+      "x": 1600,
+      "y": 0,
+      "w": 820,
+      "h": 1000
+    },
+    {
+      "file": "Show.dc.html",
+      "title": "Show",
+      "page": "page-2",
+      "x": 0,
+      "y": 1160,
+      "w": 1200,
+      "h": 780
+    },
+    {
+      "file": "ShowBar.dc.html",
+      "title": "Show bar at four widths",
+      "page": "page-2",
+      "x": 1360,
+      "y": 1160,
+      "w": 1400,
+      "h": 900
+    },
+    {
+      "file": "LookLibrary.dc.html",
+      "title": "Look library",
+      "page": "page-2",
+      "x": 0,
+      "y": 2220,
+      "w": 1080,
+      "h": 760
+    },
+    {
+      "file": "TemplateEditor.dc.html",
+      "title": "Template editor",
+      "page": "page-2",
+      "x": 1240,
+      "y": 2220,
+      "w": 1080,
+      "h": 760
+    },
+    {
+      "file": "BeamColour.dc.html",
+      "title": "Beam & colour across types",
+      "page": "page-2",
+      "x": 2480,
+      "y": 2220,
+      "w": 1000,
+      "h": 830
+    },
+    {
+      "file": "Stack.dc.html",
+      "title": "The stack is the editor",
+      "page": "page-3",
+      "x": 0,
+      "y": 0,
+      "w": 1460,
+      "h": 940
+    },
+    {
+      "file": "StackScopes.dc.html",
+      "title": "Scopes, promote, guards",
+      "page": "page-3",
+      "x": 1620,
+      "y": 0,
+      "w": 1180,
+      "h": 940
+    },
+    {
+      "file": "Templates.dc.html",
+      "title": "Applying a template",
+      "page": "page-3",
+      "x": 0,
+      "y": 1100,
+      "w": 1400,
+      "h": 880
+    },
+    {
+      "file": "TwoThings.dc.html",
+      "title": "Looks vs Templates",
+      "page": "page-3",
+      "x": 1560,
+      "y": 1100,
+      "w": 1020,
+      "h": 880
+    },
+    {
+      "file": "AddEffect.dc.html",
+      "title": "Adding an effect",
+      "page": "page-3",
+      "x": 2740,
+      "y": 1100,
+      "w": 1020,
+      "h": 660
+    },
+    {
+      "file": "RecordLook.dc.html",
+      "title": "Values + FX into one Look",
+      "page": "page-3",
+      "x": 0,
+      "y": 2140,
+      "w": 1020,
+      "h": 780
+    }
+  ],
+  "annotations": [
+    {
+      "id": "note-directions",
+      "page": "page-1",
+      "x": 0,
+      "y": -250,
+      "w": 620,
+      "text": "Three readings of \"the programmer should possibly be a different view\".\n\nC is chosen: opening a cue Includes it, so the programmer IS the cue editor. A and B are kept for the record.\n\nAll three drop the Values / Layers / FX tabs — that follows from giving the programmer room, whichever structure wins."
+    },
+    {
+      "id": "note-build",
+      "page": "page-2",
+      "x": 0,
+      "y": -270,
+      "w": 660,
+      "text": "Direction C at the app's real density — same tokens, same control heights, same ownership ring colours as ownershipCellClass().\n\nTop row: the Programmer, and its action bar / source-strip states.\nMiddle: the Show view, and the show bar at four widths.\nBottom: the Look library, the template editor, and how colour resolves across fixture types.\n\nPage 3 supersedes the layer and template thinking here — read it after this.\n\nDark-only on purpose: this is read at a desk in a blacked-out room."
+    },
+    {
+      "id": "note-cueshape",
+      "page": "page-2",
+      "x": -560,
+      "y": 1160,
+      "w": 480,
+      "text": "Brief item 6 — the cue reads like the programmer.\n\nThe collapsed row carries a compressed strip of the cue's cooked output in the grid's own language: swatches for colour, bars for level. Expanded, it is the same grid and the same LayerRow, drawn read-only.\n\nSo there is no second cue editor to drift — CuePropsPane, TargetsPane and LayersPane's two arrangements all go."
+    },
+    {
+      "id": "note-round2",
+      "page": "page-3",
+      "x": 0,
+      "y": -320,
+      "w": 700,
+      "text": "Round 2, answering all four notes at once - because they turned out to be one.\n\nRound 1 defined a template as \"a Look whose rows are deferred\", which is the data model talking, not a design. Split properly: a TEMPLATE composes values (one family, applied to a selection), a LOOK composes cues (any families, applied as a layer). That is what the missing New button was really about - it belongs on /templates, not /looks.\n\nAnd the grid gets a SCOPE. Local values are just the top of the stack, so focusing a layer points the same grid at that Look. No jumping between library and cue.\n\nBottom row answers the two effect questions: where a new effect lands, and how a mixed values+FX Look gets built.\n\nStart top-left."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-3"
+  }
+}

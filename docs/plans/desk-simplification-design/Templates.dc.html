@@ -1,0 +1,236 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885);
+      --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067);
+      --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .btn { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px;
+      border-radius:6px; border:1px solid var(--bd); background:transparent; color:var(--fg);
+      font-size:11.5px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:600; }
+    .btn.sm { height:24px; font-size:10.5px; padding:0 8px; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .h2 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:var(--mfg); margin:0; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .zlab { font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--mfg); }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px; padding:1px 6px;
+      font-size:10px; line-height:1.5; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); }
+    .badge.sec { background:var(--muted); }
+    .f-int { border:1px solid oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429); background:oklch(0.279 0.077 45.635); }
+    .f-pos { border:1px solid oklch(0.379 0.146 265.522); color:oklch(0.809 0.105 251.813); background:oklch(0.282 0.091 267.935); }
+    .f-col { border:1px solid oklch(0.45 0.16 300); color:oklch(0.82 0.11 305); background:oklch(0.27 0.09 302); }
+    .f-bea { border:1px solid oklch(0.393 0.095 152.535); color:oklch(0.792 0.209 151.711); background:oklch(0.266 0.065 152.934); }
+    .mg { border-radius:6px; border:1px solid var(--bd); overflow:hidden; }
+    .mgh { display:grid; font-size:9px; font-weight:600; text-transform:uppercase;
+      letter-spacing:0.05em; color:var(--mfg); border-bottom:1px solid var(--bd); }
+    .mgh > div { padding:4px 6px; }
+    .mr { display:grid; height:26px; align-items:center; border-bottom:1px solid var(--bd); font-size:11px; }
+    .mr:last-child { border-bottom:0; }
+    .mr > div { padding:0 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cellx { display:flex; align-items:center; gap:5px; height:20px; margin:0 3px; padding:0 4px;
+      border-radius:3px; box-sizing:border-box; }
+    .sw { width:12px; height:12px; border-radius:3px; border:1px solid var(--bd); flex:0 0 auto; }
+    .o-prog { box-shadow: inset 0 0 0 1px var(--pri); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .o-look { box-shadow: inset 0 0 0 1px oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.35); }
+    .inert { opacity:0.32; }
+    .box { border-radius:8px; border:1px solid var(--bd); background:var(--card); }
+    .bh { display:flex; align-items:center; gap:7px; padding:7px 10px; border-bottom:1px solid var(--bd);
+      font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; }
+    .tchip { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px;
+      border-radius:6px; border:1px solid var(--bd); background:var(--card); font-size:11.5px;
+      box-sizing:border-box; white-space:nowrap; }
+    .lrow { display:flex; align-items:center; gap:8px; padding:9px 11px; min-height:50px;
+      box-sizing:border-box; border-bottom:1px solid var(--bd); }
+    .lrow:last-child { border-bottom:0; }
+    .kbd { display:inline-block; border-radius:4px; border:1px solid var(--bd);
+      background:var(--muted); padding:0 5px; font-size:10px; }
+  </style>
+</helmet>
+
+<div class="app" style="width:1400px; height:880px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); padding:22px; display:flex; flex-direction:column; gap:15px; overflow:hidden;">
+
+  <div>
+    <div style="font-size:17px; font-weight:650; letter-spacing:-0.01em;">Applying a template to a value</div>
+    <p class="cap" style="margin-top:4px; font-size:12px;">A template is a named value for one attribute family. It has no order, no amount, no timing and no targets of its own &mdash; it is applied to a <b style="color:oklch(0.985 0 0); font-weight:600;">selection</b>, and there are two gestures because there are two things you might mean.</p>
+  </div>
+
+  <div style="flex:1; min-height:0; display:flex; gap:15px;">
+
+    <!-- ══ LEFT: the two gestures ══ -->
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:13px;">
+
+      <!-- the strip -->
+      <div>
+        <p class="h2" style="margin-bottom:7px;">The strip follows the selection</p>
+        <div class="box" style="padding:9px 11px;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span class="zlab" style="color:oklch(0.82 0.11 305);">Colour</span>
+            <span class="tchip" style="border-color:oklch(0.45 0.16 300);"><span class="sw" style="background:#ff9d4a;"></span>Amber Key</span>
+            <span class="tchip"><span class="sw" style="background:#5aa2ff;"></span>Steel Blue</span>
+            <span class="tchip"><span class="sw" style="background:#fff3d6;"></span>Warm White</span>
+            <span class="tchip"><span class="sw" style="background:#d16bff;"></span>Lavender</span>
+            <span class="tchip" style="border-style:dashed; color:oklch(0.705 0.015 286.067);">
+              <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New from selection</span>
+          </div>
+          <p class="cap" style="margin-top:8px;">Select colour cells and only colour templates are offered &mdash; the family of the selection <i>is</i> the filter, so there is no picker to open and no family dropdown to get wrong. The last chip records what you have selected as a new template, which is how the library fills up without anyone visiting it.</p>
+        </div>
+      </div>
+
+      <!-- gesture 1 -->
+      <div class="box" style="flex:1; min-height:0; display:flex; flex-direction:column;">
+        <div class="bh" style="color:oklch(0.707 0.165 254.624);">
+          <span class="kbd mono">click</span> set values &mdash; hard, no dependency</div>
+        <div style="padding:10px; display:flex; gap:11px; align-items:center; flex:1; min-height:0;">
+          <div style="flex:1; min-width:0;">
+            <span class="zlab">Before &mdash; Local</span>
+            <div class="mg" style="margin-top:5px;">
+              <div class="mgh" style="grid-template-columns:1fr 66px;"><div>Fixture</div><div>Colour</div></div>
+              <div class="mr" style="grid-template-columns:1fr 66px;"><div>SL Wash 1</div><div><span class="cellx inert"><span class="mono" style="font-size:10px;">&mdash;</span></span></div></div>
+              <div class="mr" style="grid-template-columns:1fr 66px;"><div>SL Wash 2</div><div><span class="cellx inert"><span class="mono" style="font-size:10px;">&mdash;</span></span></div></div>
+            </div>
+          </div>
+          <svg style="width:18px;height:18px;color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <div style="flex:1; min-width:0;">
+            <span class="zlab" style="color:oklch(0.707 0.165 254.624);">After &mdash; your values</span>
+            <div class="mg" style="margin-top:5px; border-color:oklch(0.623 0.214 259.815);">
+              <div class="mgh" style="grid-template-columns:1fr 66px;"><div>Fixture</div><div>Colour</div></div>
+              <div class="mr" style="grid-template-columns:1fr 66px;"><div>SL Wash 1</div><div><span class="cellx o-prog"><span class="sw" style="background:#ff9d4a;"></span><span class="mono" style="font-size:9.5px;">hard</span></span></div></div>
+              <div class="mr" style="grid-template-columns:1fr 66px;"><div>SL Wash 2</div><div><span class="cellx o-prog"><span class="sw" style="background:#ff9d4a;"></span><span class="mono" style="font-size:9.5px;">hard</span></span></div></div>
+            </div>
+          </div>
+        </div>
+        <p class="cap" style="padding:0 10px 10px; font-size:10.5px;">Literals in <b style="color:oklch(0.985 0 0);">Local</b>. Retuning the template later does <i>not</i> move them. This is the busking gesture &mdash; fast, and the reason the retired <span class="mono">ref:</span> grammar is not missed here.</p>
+      </div>
+
+      <!-- gesture 2 -->
+      <div class="box" style="flex:1; min-height:0; display:flex; flex-direction:column; border-color:oklch(0.45 0.16 300);">
+        <div class="bh" style="color:oklch(0.82 0.11 305); border-color:oklch(0.45 0.16 300);">
+          <span class="kbd mono">&#8997;</span>click, or drag onto the stack &mdash; a layer that tracks it</div>
+        <div style="padding:10px; display:flex; gap:11px; align-items:center; flex:1; min-height:0;">
+          <div style="flex:1; min-width:0;">
+            <span class="zlab" style="color:oklch(0.82 0.11 305);">A new layer appears</span>
+            <div style="display:flex; flex-direction:column; gap:5px; margin-top:5px;">
+              <div style="display:flex; align-items:center; gap:6px; padding:6px 7px; border-radius:6px; border:1px solid oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.55); font-size:11px;">
+                <span class="badge sec mono" style="background:oklch(0.45 0.16 300); color:oklch(0.141 0.005 285.823);">5</span>
+                <svg class="ico12" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg>
+                <span style="flex:1; font-weight:600;">Amber Key</span>
+                <span class="badge f-col">Colour</span>
+                <span class="mono num" style="font-size:10px; color:oklch(0.705 0.015 286.067);">100%</span></div>
+              <p class="cap" style="font-size:10px;">Targets are the fixtures you had selected. Masked to Colour, because that is the template&rsquo;s family.</p>
+            </div>
+          </div>
+          <svg style="width:18px;height:18px;color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <div style="flex:1; min-width:0;">
+            <span class="zlab">Retune the template &rarr; every layer moves</span>
+            <div class="mg" style="margin-top:5px;">
+              <div class="mgh" style="grid-template-columns:1fr 66px;"><div>Fixture</div><div>Colour</div></div>
+              <div class="mr" style="grid-template-columns:1fr 66px;"><div>SL Wash 1</div><div><span class="cellx o-look"><span class="sw" style="background:#ffb066;"></span></span></div></div>
+              <div class="mr" style="grid-template-columns:1fr 66px;"><div>SL Wash 2</div><div><span class="cellx o-look"><span class="sw" style="background:#ffb066;"></span></span></div></div>
+            </div>
+          </div>
+        </div>
+        <p class="cap" style="padding:0 10px 10px; font-size:10.5px;">The layer is the dependency mechanism &mdash; it already is, for Looks. So &ldquo;a colour I can change everywhere later&rdquo; and &ldquo;a colour I want right now&rdquo; are two gestures on one chip rather than two kinds of template.</p>
+      </div>
+    </div>
+
+    <!-- ══ RIGHT: the library + the per-fixture case ══ -->
+    <div style="width:582px; flex:0 0 auto; display:flex; flex-direction:column; gap:13px; min-height:0;">
+
+      <!-- library -->
+      <div class="box" style="flex:1; min-height:0; display:flex; flex-direction:column;">
+        <div style="display:flex; align-items:center; gap:10px; padding:12px 13px 10px; flex:0 0 auto;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:15px; font-weight:650; letter-spacing:-0.01em;">Templates</div>
+            <p class="cap" style="margin-top:2px;">Named values you build looks and cues out of. One family each.</p>
+          </div>
+          <span class="btn pri" style="flex:0 0 auto; height:32px; font-size:12px;">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New template</span>
+        </div>
+
+        <div style="padding:0 13px 10px; flex:0 0 auto;">
+          <nav style="display:inline-flex; align-items:center; gap:2px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:2px;">
+            <span style="border-radius:6px; padding:4px 10px; font-size:11px; font-weight:600; background:oklch(0.274 0.006 286.033);">All <span class="badge sec num" style="margin-left:3px;">18</span></span>
+            <span style="border-radius:6px; padding:4px 10px; font-size:11px; font-weight:600; color:oklch(0.705 0.015 286.067);">Intensity <span class="num">4</span></span>
+            <span style="border-radius:6px; padding:4px 10px; font-size:11px; font-weight:600; color:oklch(0.705 0.015 286.067);">Position <span class="num">5</span></span>
+            <span style="border-radius:6px; padding:4px 10px; font-size:11px; font-weight:600; color:oklch(0.705 0.015 286.067);">Colour <span class="num">7</span></span>
+            <span style="border-radius:6px; padding:4px 10px; font-size:11px; font-weight:600; color:oklch(0.705 0.015 286.067);">Beam <span class="num">2</span></span>
+          </nav>
+        </div>
+
+        <div style="flex:1; min-height:0; padding:0 13px 13px;">
+          <div style="border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); overflow:hidden;">
+            <div class="lrow">
+              <span class="sw" style="width:20px; height:20px; background:#ff9d4a;"></span>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:12.5px; font-weight:500;">Amber Key</div>
+                <div class="cap" style="margin-top:1px; font-size:10px;">Generic &middot; any fixture with colour</div></div>
+              <span class="badge f-col" style="flex:0 0 auto;">Colour</span>
+              <span class="badge out num" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">9 layers</span>
+              <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </div>
+            <div class="lrow">
+              <span style="width:20px; height:20px; border-radius:3px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033); position:relative; flex:0 0 auto;">
+                <span style="position:absolute; left:5px; top:11px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span>
+                <span style="position:absolute; left:11px; top:6px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span>
+                <span style="position:absolute; left:14px; top:12px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:12.5px; font-weight:500;">Downstage Centre</div>
+                <div class="cap" style="margin-top:1px; font-size:10px; color:oklch(0.809 0.105 251.813);">Per fixture &middot; 8 heads aimed at one spot</div></div>
+              <span class="badge f-pos" style="flex:0 0 auto;">Position</span>
+              <span class="badge out num" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">12 layers</span>
+              <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </div>
+            <div class="lrow">
+              <span style="width:20px; height:20px; border-radius:3px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033); position:relative; overflow:hidden; flex:0 0 auto;">
+                <span style="position:absolute; left:0; bottom:0; width:100%; height:50%; background:oklch(0.828 0.189 84.429);"></span></span>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:12.5px; font-weight:500;">Half Up</div>
+                <div class="cap" style="margin-top:1px; font-size:10px;">Generic &middot; any fixture with a dimmer</div></div>
+              <span class="badge f-int" style="flex:0 0 auto;">Intensity</span>
+              <span class="badge out num" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">21 layers</span>
+              <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </div>
+            <div class="lrow">
+              <span style="width:20px; height:20px; border-radius:3px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033); position:relative; overflow:hidden; flex:0 0 auto;">
+                <span style="position:absolute; left:0; bottom:0; width:100%; height:14%; background:oklch(0.792 0.209 151.711);"></span></span>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:12.5px; font-weight:500;">Tight &amp; Sharp</div>
+                <div class="cap" style="margin-top:1px; font-size:10px;">Generic &middot; zoom 14% &middot; focus 70%</div></div>
+              <span class="badge f-bea" style="flex:0 0 auto;">Beam</span>
+              <span class="badge out num" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">2 layers</span>
+              <svg class="ico12" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- per-fixture -->
+      <div style="border-radius:8px; border:1px solid oklch(0.379 0.146 265.522); background:oklch(0.282 0.091 267.935 / 0.4); padding:11px 13px; flex:0 0 auto;">
+        <div style="display:flex; align-items:center; gap:7px; margin-bottom:6px;">
+          <svg class="ico" style="color:oklch(0.809 0.105 251.813);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9 3 12l3 3M18 9l3 3-3 3"/></svg>
+          <span style="font-size:12px; font-weight:600;">Not every template is one value</span></div>
+        <p class="cap" style="color:oklch(0.985 0 0);">A focus position is the counter-example, and it is one of the most useful things on a desk: eight heads aimed at the same spot on stage hold eight <i>different</i> pan/tilt pairs. So a template is <b>generic</b> (one value, any head) or <b>per fixture</b> (recorded from where the heads actually are) &mdash; the row says which.</p>
+        <p class="cap" style="margin-top:6px;">This is the existing deferred/bound row split, kept as an internal detail rather than promoted to two library sections. Applying a per-fixture template to a head it has no entry for simply asserts nothing for that head, and the strip greys it.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

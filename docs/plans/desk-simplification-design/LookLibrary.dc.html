@@ -1,0 +1,197 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885);
+      --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067);
+      --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px;
+      border-radius:6px; border:1px solid var(--bd); background:transparent; color:var(--fg);
+      font-size:12px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:600; }
+    .btn.sm { height:26px; font-size:11px; padding:0 8px; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px; padding:1px 6px;
+      font-size:10px; line-height:1.5; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); }
+    .badge.sec { background:var(--muted); }
+    .f-int { border:1px solid oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429); background:oklch(0.279 0.077 45.635); }
+    .f-pos { border:1px solid oklch(0.379 0.146 265.522); color:oklch(0.809 0.105 251.813); background:oklch(0.282 0.091 267.935); }
+    .f-col { border:1px solid oklch(0.45 0.16 300); color:oklch(0.82 0.11 305); background:oklch(0.27 0.09 302); }
+    .f-bea { border:1px solid oklch(0.393 0.095 152.535); color:oklch(0.792 0.209 151.711); background:oklch(0.266 0.065 152.934); }
+    .lrow { display:flex; align-items:center; gap:8px; padding:10px 12px; min-height:56px;
+      box-sizing:border-box; border-bottom:1px solid var(--bd); }
+    .lrow:last-child { border-bottom:0; }
+    .sw { width:15px; height:15px; border-radius:3px; border:1px solid var(--bd); flex:0 0 auto; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    /* the mini output strip — a Look previews in the grid's own language */
+    .prev { display:flex; align-items:flex-end; gap:2px; height:20px; flex:0 0 auto; }
+    .csw { width:5px; height:20px; border-radius:1.5px; }
+    .lvl { width:5px; border-radius:1.5px; background:var(--pri); }
+  </style>
+</helmet>
+
+<div class="app" style="width:1080px; height:760px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); display:flex; flex-direction:column; overflow:hidden;">
+
+  <!-- header -->
+  <div style="padding:16px 20px 12px; flex:0 0 auto;">
+    <div style="display:flex; align-items:flex-start; gap:14px;">
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:12px; color:oklch(0.705 0.015 286.067); display:flex; align-items:center; gap:6px;">
+          Hamlet &mdash; Rev C <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg> Looks</div>
+        <div style="font-size:18px; font-weight:650; letter-spacing:-0.01em; margin-top:3px;">Looks</div>
+        <p class="cap" style="margin-top:3px;">Named states over named fixtures, applied to a cue as layers. Every one is <b style="color:oklch(0.985 0 0); font-weight:600;">recorded</b> &mdash; from the programmer, or by promoting a selection with <span class="mono">Make layer</span>. There is no hand-authored Look, which is why this page has no New button.</p>
+      </div>
+      <span class="btn pri" style="flex:0 0 auto;">
+        <svg class="ico" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="7"/></svg>Record from programmer</span>
+    </div>
+  </div>
+
+  <!-- pointer to templates -->
+  <div style="margin:0 20px 12px; flex:0 0 auto; display:flex; align-items:center; gap:10px; border-radius:8px; border:1px solid oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.35); padding:9px 12px;">
+    <svg class="ico" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg>
+    <span style="font-size:12px;">Looking for <b style="font-weight:600;">Amber Key</b> or <b style="font-weight:600;">Downstage Centre</b>? Those are <b style="font-weight:600;">templates</b> &mdash; single-family values you set cells with.</span>
+    <span style="flex:1;"></span>
+    <span class="btn sm">Templates
+      <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span>
+  </div>
+
+  <!-- search / sort -->
+  <div style="display:flex; align-items:center; gap:10px; padding:0 20px 12px; flex:0 0 auto;">
+    <span class="badge out" style="color:oklch(0.705 0.015 286.067); height:26px; padding:0 9px;">
+      <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>Search looks</span>
+    <span style="flex:1;"></span>
+    <span class="cap">12 looks &middot; sorted by last used</span>
+  </div>
+
+  <!-- body -->
+  <div style="flex:1; min-height:0; overflow:hidden; padding:0 20px 20px; display:flex; flex-direction:column; gap:12px;">
+
+    <div style="border-radius:10px; border:1px solid oklch(0.274 0.006 286.033); overflow:hidden;">
+
+      <div class="lrow">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:500;">Act 1 Opening State</div>
+          <div class="cap" style="margin-top:2px;">14 fixtures &middot; 38 values &middot; built from 3 templates</div>
+        </div>
+        <span class="prev">
+          <span class="csw" style="background:#ff9d4a;"></span><span class="csw" style="background:#5aa2ff;"></span>
+          <span class="csw" style="background:#d16bff;"></span><span class="csw" style="background:#fff3d6;"></span>
+          <span style="width:4px;"></span>
+          <span class="lvl" style="height:17px;"></span><span class="lvl" style="height:17px;"></span>
+          <span class="lvl" style="height:11px;"></span><span class="lvl" style="height:4px; background:oklch(0.274 0.006 286.033);"></span>
+        </span>
+        <span class="badge f-int" style="flex:0 0 auto;">Intensity</span>
+        <span class="badge f-col" style="flex:0 0 auto;">Colour</span>
+        <span class="badge f-pos" style="flex:0 0 auto;">Position</span>
+        <span class="badge out num" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 3v3M18 3v3"/></svg>4 cues</span>
+        <svg class="ico" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      </div>
+
+      <div class="lrow">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:500;">Ghost Entrance</div>
+          <div class="cap" style="margin-top:2px;">4 fixtures &middot; 11 values</div>
+        </div>
+        <span class="prev">
+          <span class="csw" style="background:#3d5a8a;"></span><span class="csw" style="background:#2a3f63;"></span>
+          <span class="csw" style="background:#3d5a8a;"></span><span class="csw" style="background:#1e2d47;"></span>
+          <span style="width:4px;"></span>
+          <span class="lvl" style="height:8px;"></span><span class="lvl" style="height:8px;"></span>
+          <span class="lvl" style="height:5px;"></span><span class="lvl" style="height:4px; background:oklch(0.274 0.006 286.033);"></span>
+        </span>
+        <span class="badge f-col" style="flex:0 0 auto;">Colour</span>
+        <span class="badge f-bea" style="flex:0 0 auto;">Beam</span>
+        <span class="badge out num" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 3v3M18 3v3"/></svg>2 cues</span>
+        <svg class="ico" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      </div>
+
+      <div class="lrow" style="background:oklch(0.274 0.006 286.033 / 0.25);">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:500; display:flex; align-items:center; gap:7px;">Warm Key
+            <span class="badge" style="border:1px solid oklch(0.379 0.146 265.522); color:oklch(0.809 0.105 251.813); background:oklch(0.282 0.091 267.935);">
+              <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h4v14H4z"/><path d="M16 5h4v14h-4z"/></svg>in the programmer now</span></div>
+          <div class="cap" style="margin-top:2px;">4 fixtures &middot; 4 values &middot; promoted from a selection</div>
+        </div>
+        <span class="prev">
+          <span class="csw" style="background:#ff9d4a;"></span><span class="csw" style="background:#ff9d4a;"></span>
+          <span class="csw" style="background:#ffb066;"></span><span class="csw" style="background:#ff9d4a;"></span>
+        </span>
+        <span class="badge f-col" style="flex:0 0 auto;">Colour</span>
+        <span class="badge out num" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 3v3M18 3v3"/></svg>1 cue</span>
+        <svg class="ico" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      </div>
+
+      <div class="lrow">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:500;">Storm Wash</div>
+          <div class="cap" style="margin-top:2px;">9 fixtures &middot; 24 values &middot; 1 effect</div>
+        </div>
+        <span class="prev">
+          <span class="csw" style="background:#8fa8c4;"></span><span class="csw" style="background:#6d87a6;"></span>
+          <span class="csw" style="background:#8fa8c4;"></span><span class="csw" style="background:#54708f;"></span>
+          <span style="width:4px;"></span>
+          <span class="lvl" style="height:20px;"></span><span class="lvl" style="height:14px;"></span>
+          <span class="lvl" style="height:20px;"></span><span class="lvl" style="height:9px;"></span>
+        </span>
+        <span class="badge f-int" style="flex:0 0 auto;">Intensity</span>
+        <span class="badge f-col" style="flex:0 0 auto;">Colour</span>
+        <span class="badge out num" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 3v3M18 3v3"/></svg>3 cues</span>
+        <svg class="ico" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      </div>
+
+      <div class="lrow">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:500;">Curtain Warmers</div>
+          <div class="cap" style="margin-top:2px;">6 fixtures &middot; 12 values</div>
+        </div>
+        <span class="prev">
+          <span class="csw" style="background:#ffc98a;"></span><span class="csw" style="background:#ffc98a;"></span>
+          <span class="csw" style="background:#ffb96a;"></span><span class="csw" style="background:#ffc98a;"></span>
+          <span style="width:4px;"></span>
+          <span class="lvl" style="height:13px;"></span><span class="lvl" style="height:13px;"></span>
+          <span class="lvl" style="height:13px;"></span><span class="lvl" style="height:13px;"></span>
+        </span>
+        <span class="badge f-int" style="flex:0 0 auto;">Intensity</span>
+        <span class="badge f-col" style="flex:0 0 auto;">Colour</span>
+        <span class="badge out num" style="flex:0 0 auto; color:oklch(0.705 0.015 286.067);">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 3v3M18 3v3"/></svg>7 cues</span>
+        <svg class="ico" style="color:oklch(0.705 0.015 286.067); flex:0 0 auto;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      </div>
+    </div>
+
+    <span style="flex:1;"></span>
+
+    <div style="display:flex; gap:12px; flex:0 0 auto;">
+      <div style="flex:1; border-radius:8px; border:1px solid oklch(0.393 0.095 152.535); background:oklch(0.266 0.065 152.934 / 0.35); padding:9px 11px;">
+        <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.792 0.209 151.711); margin-bottom:3px;">The row previews like a cue row</div>
+        <p class="cap" style="color:oklch(0.985 0 0);">Swatches for colour, bars for level &mdash; the same compressed strip the Show view draws on a cue. A Look and a cue are the same kind of thing at different scales, so they should read alike here too.</p>
+      </div>
+      <div style="flex:1; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:9px 11px;">
+        <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.705 0.015 286.067); margin-bottom:3px;">No family filter here</div>
+        <p class="cap">A Look spans families by nature, so filtering by one would hide most of them from most filters. The filter belongs on <span class="mono" style="color:oklch(0.985 0 0);">/templates</span>, where a family is an exact partition. Row menu still carries Edit in programmer, Duplicate, Copy to project, Delete.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

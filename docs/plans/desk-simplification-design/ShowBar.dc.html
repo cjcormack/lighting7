@@ -1,0 +1,213 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885);
+      --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067);
+      --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .h2 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em;
+      color:var(--mfg); margin:0; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .wlabel { display:inline-flex; align-items:center; gap:6px; font-size:9px; font-weight:700;
+      text-transform:uppercase; letter-spacing:0.1em; color:var(--mfg); }
+    /* tiles */
+    .tile { display:flex; flex-direction:column; gap:1px; align-items:flex-start; flex:0 0 auto;
+      border-radius:6px; border:1px solid var(--bd); background:var(--card); padding:6px 12px; }
+    .tlab { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em;
+      color:var(--mfg); display:flex; align-items:center; gap:4px; white-space:nowrap; }
+    .tval { font-size:18px; font-weight:700; line-height:1; }
+    .tap { display:flex; align-items:center; padding:0 12px; border-left:1px solid var(--bd);
+      font-size:12px; font-weight:700; letter-spacing:0.08em; }
+    .beat { width:6px; height:6px; border-radius:999px; background:var(--pri); flex:0 0 auto; }
+    .go { display:flex; align-items:center; justify-content:center; border-radius:6px;
+      background:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:700;
+      letter-spacing:0.16em; flex:0 0 auto; }
+    .back { display:flex; align-items:center; border-radius:6px; border:1px solid var(--bd); box-sizing:border-box;
+      font-weight:600; letter-spacing:0.05em; flex:0 0 auto; white-space:nowrap; }
+    .bar { display:flex; align-items:stretch; gap:8px; padding:8px 12px;
+      border:1px solid var(--bd); border-radius:8px; background:oklch(0.141 0.005 285.823);
+      box-sizing:border-box; }
+    .live { flex:1; display:flex; align-items:center; gap:10px; min-width:0; border-radius:6px;
+      border:1px solid var(--bd); background:var(--card); padding:6px 12px; }
+    .pip { width:22px; height:22px; border-radius:999px; display:grid; place-items:center;
+      background:oklch(0.266 0.065 152.934); border:1px solid oklch(0.393 0.095 152.535);
+      color:oklch(0.792 0.209 151.711); flex:0 0 auto; }
+    .warn { border:1px dashed oklch(0.555 0.163 48.998); border-radius:8px;
+      background:oklch(0.279 0.077 45.635 / 0.35); }
+    .ok { border-color:oklch(0.393 0.095 152.535); }
+  </style>
+</helmet>
+
+<div class="app" style="width:1400px; height:900px; box-sizing:border-box; background:oklch(0.141 0.005 285.823); color:oklch(0.985 0 0); padding:24px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+
+  <div>
+    <div style="font-size:17px; font-weight:650; letter-spacing:-0.01em;">The show bar as it narrows</div>
+    <p class="cap" style="margin-top:4px; font-size:12px;">Brief item 7. The bar collapses on its own <span class="mono">@container</span> width, not the viewport &mdash; correct, since the sidebar insets the content region. What goes wrong is <i>what</i> it does when it runs out of room: it deletes information.</p>
+  </div>
+
+  <!-- THE COLLISION -->
+  <div class="warn" style="padding:12px 14px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <svg class="ico" style="color:oklch(0.828 0.189 84.429);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h0"/></svg>
+      <span style="font-size:12px; font-weight:600;">Two thresholds fire at 560px in opposite directions</span>
+    </div>
+    <div style="display:flex; gap:20px;">
+      <div style="flex:1;">
+        <p class="cap"><span class="mono" style="color:oklch(0.985 0 0);">SpeedMastersStrip</span> hides its tile <b style="color:oklch(0.985 0 0);">below</b> <span class="mono">@[560px]</span>. The live-state block appears <b style="color:oklch(0.985 0 0);">above</b> <span class="mono">@[560px]</span>. So in the 560&ndash;900px band both are on screen at once, alongside DBO, M1&nbsp;+&nbsp;TAP, the programmer tile, and BACK&nbsp;+&nbsp;GO at <span class="mono">min-w-[92px]</span> &mdash; roughly 470px of <span class="mono">shrink-0</span>. The live block is <span class="mono">flex-1 min-w-0</span>, so it takes the whole shortfall and the cue number clips while nominally &ldquo;visible&rdquo;.</p>
+      </div>
+      <div style="flex:1;">
+        <p class="cap">Two more, from the same family: <span class="mono" style="color:oklch(0.985 0 0);">ProgrammerIndicator</span>&rsquo;s <span class="mono">@[760px]</span> queries resolve against whatever container it lands in &mdash; in <span class="mono">RunMobile</span> there is none, so they would never match. And <span class="mono">useNarrowContainer</span> defaults to <span class="mono">narrow&nbsp;=&nbsp;true</span>, so every mount paints the phone bar for one frame.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- THE LADDER -->
+  <p class="h2">Proposed &mdash; wrap, then consolidate; never delete</p>
+
+  <div style="flex:1; min-height:0; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+
+    <!-- 1240 -->
+    <div>
+      <div class="wlabel" style="margin-bottom:5px;">&ge; 1000px &mdash; one row, every master its own tile</div>
+      <div class="bar ok" style="width:1240px;">
+        <div class="tile"><span class="tlab">Blackout</span><span class="tval mono" style="letter-spacing:0.05em;">DBO</span></div>
+        <div style="display:flex; align-items:stretch; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); overflow:hidden; flex:0 0 auto;">
+          <div style="display:flex; flex-direction:column; gap:1px; padding:6px 12px;"><span class="tlab"><span class="beat"></span>M1 &middot; BPM</span><span class="tval mono num">124</span></div>
+          <span class="tap">TAP</span></div>
+        <div style="display:flex; align-items:stretch; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); overflow:hidden; flex:0 0 auto;">
+          <div style="display:flex; flex-direction:column; gap:1px; padding:6px 12px;"><span class="tlab"><span class="beat"></span>M2 &middot; Chases</span><span class="tval mono num">96</span></div>
+          <span class="tap">TAP</span></div>
+        <div style="display:flex; align-items:stretch; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); overflow:hidden; flex:0 0 auto;">
+          <div style="display:flex; flex-direction:column; gap:1px; padding:6px 12px;"><span class="tlab"><span class="beat"></span>M3 &middot; Slow</span><span class="tval mono num">48</span></div>
+          <span class="tap">TAP</span></div>
+        <div class="live">
+          <span class="pip"><svg style="width:10px;height:10px;" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8Z"/></svg></span>
+          <span class="mono" style="font-size:14px; font-weight:700; color:oklch(0.792 0.209 151.711);">Q4</span>
+          <span style="font-size:14px; font-weight:500;">Warm Wash</span>
+          <svg class="ico" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <span class="mono" style="font-size:12px; font-weight:700; color:oklch(0.707 0.165 254.624);">Q5</span>
+          <span style="font-size:12px; color:oklch(0.705 0.015 286.067);">Sunset Fade</span>
+          <span style="flex:1;"></span></div>
+        <span class="back" style="padding:0 20px; font-size:14px;">&#9664; BACK</span>
+        <span class="go" style="padding:0 32px; min-width:120px; font-size:16px;">GO</span>
+      </div>
+    </div>
+
+    <!-- 880 -->
+    <div>
+      <div class="wlabel" style="margin-bottom:5px;">700&ndash;999px &mdash; masters consolidate into one tile with a rail; nothing is lost</div>
+      <div class="bar ok" style="width:880px;">
+        <div class="tile"><span class="tlab">Blackout</span><span class="tval mono" style="letter-spacing:0.05em;">DBO</span></div>
+        <div style="display:flex; align-items:stretch; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); overflow:hidden; flex:0 0 auto;">
+          <div style="display:flex; align-items:center; gap:2px; padding:0 4px; border-right:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.35);">
+            <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885);">M1</span>
+            <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; color:oklch(0.705 0.015 286.067);">2</span>
+            <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; color:oklch(0.705 0.015 286.067);">3</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:1px; padding:6px 12px;"><span class="tlab"><span class="beat"></span>M1 &middot; BPM</span><span class="tval mono num">124</span></div>
+          <span class="tap">TAP</span></div>
+        <div class="live">
+          <span class="pip"><svg style="width:10px;height:10px;" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8Z"/></svg></span>
+          <span class="mono" style="font-size:14px; font-weight:700; color:oklch(0.792 0.209 151.711);">Q4</span>
+          <span style="font-size:13px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Warm Wash</span>
+          <svg class="ico" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <span class="mono" style="font-size:12px; font-weight:700; color:oklch(0.707 0.165 254.624);">Q5</span>
+          <span style="flex:1;"></span></div>
+        <span class="back" style="padding:0 16px; font-size:13px;">&#9664; BACK</span>
+        <span class="go" style="padding:0 26px; min-width:100px; font-size:15px;">GO</span>
+      </div>
+      <p class="cap" style="margin-top:5px;">The rail now starts at <b style="color:oklch(0.985 0 0);">M1</b> rather than M2, so the tile speaks for the whole bank and the separate M1 tile is gone. That is what frees the ~200px the collision was fighting over &mdash; and it removes the split brain where the ShowBar owned master 1 and the strip owned the rest.</p>
+    </div>
+
+    <!-- 640 -->
+    <div>
+      <div class="wlabel" style="margin-bottom:5px;">440&ndash;699px &mdash; two rows: transport keeps its own line</div>
+      <div style="width:640px; border:1px solid oklch(0.393 0.095 152.535); border-radius:8px; background:oklch(0.141 0.005 285.823); box-sizing:border-box;">
+        <div style="display:flex; align-items:stretch; gap:8px; padding:8px 12px;">
+          <div class="tile" style="padding:5px 10px;"><span class="tlab">Blackout</span><span class="tval mono" style="font-size:15px; letter-spacing:0.05em;">DBO</span></div>
+          <div style="display:flex; align-items:stretch; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); overflow:hidden; flex:0 0 auto;">
+            <div style="display:flex; align-items:center; gap:2px; padding:0 3px; border-right:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.35);">
+              <span style="border-radius:4px; padding:1px 4px; font-size:8.5px; font-weight:700; background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885);">M1</span>
+              <span style="border-radius:4px; padding:1px 4px; font-size:8.5px; font-weight:700; color:oklch(0.705 0.015 286.067);">2</span>
+              <span style="border-radius:4px; padding:1px 4px; font-size:8.5px; font-weight:700; color:oklch(0.705 0.015 286.067);">3</span></div>
+            <div style="display:flex; flex-direction:column; gap:1px; padding:5px 10px;"><span class="tlab"><span class="beat"></span>M1</span><span class="tval mono num" style="font-size:15px;">124</span></div>
+            <span class="tap" style="padding:0 10px; font-size:11px;">TAP</span></div>
+          <div class="live" style="padding:5px 10px; gap:8px;">
+            <span class="pip" style="width:18px; height:18px;"><svg style="width:8px;height:8px;" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8Z"/></svg></span>
+            <span class="mono" style="font-size:13px; font-weight:700; color:oklch(0.792 0.209 151.711);">Q4</span>
+            <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Warm Wash</span>
+            <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+            <span class="mono" style="font-size:11px; font-weight:700; color:oklch(0.707 0.165 254.624);">Q5</span>
+            <span style="flex:1;"></span></div>
+        </div>
+        <div style="display:flex; align-items:stretch; gap:8px; padding:0 12px 8px;">
+          <span class="back" style="padding:0 18px; height:40px; font-size:13px;">&#9664; BACK</span>
+          <span class="go" style="flex:1; height:40px; font-size:16px;">GO</span>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:5px;">Wrapping rather than dropping is the whole change. GO gets <i>wider</i> as the bar narrows instead of shrinking to <span class="mono">min-w-[80px]</span>, which is the right way round for a control pressed in the dark.</p>
+    </div>
+
+    <!-- 380 -->
+    <div>
+      <div class="wlabel" style="margin-bottom:5px;">&lt; 440px &mdash; meters become one chip and a popover</div>
+      <div style="display:flex; gap:14px; align-items:flex-start;">
+        <div style="width:380px; border:1px solid oklch(0.393 0.095 152.535); border-radius:8px; background:oklch(0.141 0.005 285.823); box-sizing:border-box;">
+          <div style="display:flex; align-items:center; gap:6px; padding:7px 10px;">
+            <span style="display:inline-flex; align-items:center; gap:5px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:5px 9px; font-size:11px; font-weight:700; letter-spacing:0.06em;">DBO</span>
+            <span style="display:inline-flex; align-items:center; gap:5px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:5px 9px; font-size:11px;">
+              <span class="beat"></span><span class="mono num" style="font-weight:700;">124</span>
+              <span style="color:oklch(0.705 0.015 286.067); font-size:10px;">+2</span>
+              <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+            <span style="flex:1; min-width:0; display:flex; align-items:center; gap:6px; justify-content:flex-end;">
+              <span class="mono" style="font-size:13px; font-weight:700; color:oklch(0.792 0.209 151.711);">Q4</span>
+              <svg class="ico12" style="color:oklch(0.705 0.015 286.067);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+              <span class="mono" style="font-size:12px; font-weight:700; color:oklch(0.707 0.165 254.624);">Q5</span></span>
+          </div>
+          <div style="display:flex; gap:8px; padding:0 10px 10px;">
+            <span class="back" style="padding:0 16px; height:52px; font-size:13px;">&#9664;</span>
+            <span class="go" style="flex:1; height:52px; font-size:22px;">GO</span>
+          </div>
+        </div>
+
+        <!-- popover -->
+        <div style="width:230px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:8px; box-shadow:0 12px 30px oklch(0.141 0.005 285.823 / 0.65);">
+          <div style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:oklch(0.705 0.015 286.067); padding:2px 4px 6px;">Speed masters</div>
+          <div style="display:flex; align-items:center; gap:7px; padding:6px 4px; border-radius:5px; background:oklch(0.274 0.006 286.033);">
+            <span class="beat"></span><span style="font-size:11px; font-weight:600; flex:1;">M1 &middot; Global</span>
+            <span class="mono num" style="font-size:13px; font-weight:700;">124</span>
+            <span style="font-size:10px; font-weight:700; letter-spacing:0.06em; border:1px solid oklch(0.274 0.006 286.033); border-radius:4px; padding:2px 6px;">TAP</span></div>
+          <div style="display:flex; align-items:center; gap:7px; padding:6px 4px; border-radius:5px;">
+            <span class="beat"></span><span style="font-size:11px; flex:1;">M2 &middot; Chases</span>
+            <span class="mono num" style="font-size:13px; font-weight:700;">96</span>
+            <span style="font-size:10px; font-weight:700; letter-spacing:0.06em; border:1px solid oklch(0.274 0.006 286.033); border-radius:4px; padding:2px 6px;">TAP</span></div>
+          <div style="display:flex; align-items:center; gap:7px; padding:6px 4px; border-radius:5px;">
+            <span style="width:6px;height:6px;border-radius:999px;border:1px solid oklch(0.705 0.015 286.067 / 0.4);"></span>
+            <span style="font-size:11px; flex:1;">M3 &middot; Slow</span>
+            <span class="mono num" style="font-size:13px; font-weight:700;">48</span>
+            <span style="font-size:10px; font-weight:700; letter-spacing:0.06em; border:1px solid oklch(0.274 0.006 286.033); border-radius:4px; padding:2px 6px;">TAP</span></div>
+        </div>
+
+        <p class="cap" style="flex:1; max-width:300px;">The <span class="mono" style="color:oklch(0.985 0 0);">+2</span> on the chip is what today&rsquo;s ladder cannot say: masters exist and you cannot see them. Tapping opens every master with its own TAP, so the phone loses <i>layout</i>, not capability &mdash; and <span class="mono">compact</span>, the prop that exists because <span class="mono">RunMobile</span> has no <span class="mono">@container</span> ancestor, stops being needed.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
