@@ -27,7 +27,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
-| [`FU-PROG-PER-USER`](#fu-prog-per-user) | Trigger | Prog | a second operator programming the same show |
+| [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
 | [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
 | [`FU-PAL-POSITIONAL-CONVERSION`](#fu-pal-positional-conversion) | Trigger | Pal | a show maintains the same colours in both forms |
@@ -193,20 +193,44 @@ express it as separate instances.
 
 ### `FU-PROG-PER-USER`
 
-**Per-user programmers** · Trigger · Programmer redesign §5 decision 2, promoted 2026-08-14
+**Per-user programmers** · **Rejected — decision record, do not re-propose** · promoted from the
+programmer redesign 2026-08-14, decided 2026-08-23 while scoping the desk-simplification Session 2
 
-`ProgrammerStore` is a **single shared programmer** — a locked decision for a solo-operator
-system, and why two browser tabs see each other's edits (the `provenanceState` broadcast tells
-the second tab to re-read `programmer.state`). MA3 gives each user their own.
+`ProgrammerStore` is a **single shared programmer**, and after review that is the *intended*
+design rather than a solo-operator compromise. **One state, shared by every client: a second
+device is a second window onto one desk, not a second seat.** Someone signing in elsewhere should
+see exactly what the desk sees and be able to edit it. MA3 gives each user their own; this desk
+deliberately does not.
 
-The store is keyed so the change is mechanical rather than structural: `Slot` already carries a
-`ProgrammerOwner`, and a user dimension is another key component beside `(target, propertyName)`.
-The expensive half is everywhere the programmer is *read* as a singleton — the blind gate, Clear,
-Record/Include/Update, provenance colouring, the `programmer.*` fan-out — plus a merge rule for
-two users holding the same property.
+That was decided with the desk-simplification plan's D2 (the programmer becomes the only cue
+editor) and D11 (Run and Show merge) already in hand, which are the two changes that raise the
+stakes — so the decision was taken against the *higher* stakes, not the old ones.
 
-**Trigger**: two people programming one show at once — a second operator on a tablet whose edits
-must not appear on the first's stage.
+**Two corrections to the original entry, recorded so the economics are not re-derived wrongly:**
+
+1. **"Mechanical rather than structural" was false.** `ProgrammerOwner` is not a spare user
+   dimension — it is a subsystem identity with a *release contract* ("owners with a release path
+   must clear with the same owner they put with — that is the whole contract"), and nine
+   `owner ==` identity comparisons in `src/main` depend on its current shape. Keying by
+   `web:{userId}` would give per-user slots inside one shared stack, not per-user programmers.
+2. **The expensive half was misidentified.** It is not the singleton *reads* — most of those are
+   cold paths with an obvious caller, and `SocketScope.user` already carries the identity on every
+   frame. It is `LayerResolver.fallbackFor`, the single 50 Hz read, which returns **one** value per
+   (fixture, property) because DMX is one byte per channel. The rig cannot show the union, so
+   somebody must win, and nothing expresses that: HTP would reverse the locked "programmer wins HTP
+   categories too" decision, and `Slot.seq` bands are the only extensible axis — one whose own doc
+   warns that ties resolve *inconsistently* across the four `composeProgrammerOver` overrides.
+
+Also unanswered, and unanswerable without inventing policy: which user owns a write from a **MIDI
+fader, a flash button, Locate, the unpark hand-down, the AI tools or the `updateChannel` shim** —
+none of which has a session. And `ProgrammerLayerStack` (625 lines) has no per-user story at all;
+`putLayerSlots` is a full-map set-difference over one shared property map.
+
+**If this is ever re-opened**, the cheap 80% is not per-user stores. It is per-user **blind** plus
+per-user slots: at most one user is live, so the merge rule never has to exist. The per-recipient
+fan-out that would need is already demonstrated in eight lines by `ownAccountChanged`
+(`plugins/MachineSocket.kt`). The house precedent for the other direction is `cueEdit`, which
+chose **exclusion over merging** — one session per project, everyone else gets a 409.
 
 ### `FU-PROG-STAGED-CLEAR`
 

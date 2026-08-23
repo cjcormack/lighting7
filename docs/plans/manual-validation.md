@@ -10,6 +10,7 @@ as a one-line row.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-DESK-S1`](#fu-manual-desk-s1) | the Programmer view, the show-bar ladder and drag-select survive a real desk | Desk simplification S1, 2026-08-23 |
 | [`FU-MANUAL-EDITOR-INPROCESS`](#fu-manual-editor-inprocess) | in-process editor compiles don't stutter live output | KCS retire, 2026-08-18 |
 | [`FU-MANUAL-SPEED-MASTERS-RIG`](#fu-manual-speed-masters-rig) | two masters drive one show — **restart required first** | Programmer S5, 2026-08-14 |
 | [`FU-MANUAL-UPDATE-APPLY`](#fu-manual-update-apply) | the in-app update upgrades in place — now unblocked | Windows updates, 2026-08-17 |
@@ -21,6 +22,48 @@ as a one-line row.
 | [`FU-MANUAL-RUN-STATE-TWO-SESSIONS`](#fu-manual-run-state-two-sessions) | desk, tablet and MIDI surface agree on what GO fires | Server-owned Next, 2026-08-20 |
 
 ---
+
+## `FU-MANUAL-DESK-S1`
+
+**The Programmer as a place, at real widths** · from desk simplification Session 1, 2026-08-23
+
+Session 1 is almost entirely in the category automated tests cannot judge. jsdom applies **no CSS**,
+so every container query is invisible to it — and a *missing* `@container` ancestor is equally
+invisible, which means the six switcher hosts converted here have no safety net at all.
+`getBoundingClientRect` returns zeros, so the marquee's geometry is only covered where it was kept
+pure. And one browser cannot show a stale second tab. Everything below is chosen for that gap.
+
+**Widths.** Drag the window through 1240 → 1000 → 880 → 700 → 640 → 440 → 380, with the sidebar
+expanded, collapsed, and with a side panel open. Nothing may be *deleted* — only re-arranged — and
+GO must get **wider** as the bar narrows. Then the two ends of the master ladder: a one-master show
+should be byte-for-byte the width it is today, and a four-master show must not crush the live-state
+block (this one already failed once by eye, which is why the tile collapses on count as well as
+width). Below 440 the meters chip's popover must reach every master with its own TAP.
+
+**The programmer.** Busk, read the source strip, drag-select a block of colour cells, set them in
+one gesture, Record — without meeting a tab or a tooltip. Confirm the floating scope chip **tracks
+the cursor** (it is portalled out of the workspace precisely because a container makes itself the
+containing block for `fixed`, so a regression here puts it ~150px adrift). Drag past one viewport of
+rows and confirm the list auto-scrolls and keeps extending while the pointer is held still. Confirm
+the popover's "Applying to N" agrees with what the rig does, and that a marquee crossing Colour and
+Position writes **only** the colour. Finally, give the layer stack enough layers to overflow and
+confirm the rail scrolls rather than running off the page.
+
+**The source strip's honesty.** Include a cue, edit, then **reload mid-edit**. The strip must show
+the cue's identity with **no change badge** and Update still enabled — never "in sync". That claim
+is the one thing in this band that costs a cue if it is wrong.
+
+**Master 1.** It is click-to-edit for the first time. Type, Escape, type, Enter — then open
+`/speed-masters` and confirm the **stored** default did not move. Only the live tempo may change.
+
+**Run, which must not regress.** Hard-reload Run on a wide window and watch for a flash of the
+mobile layout. With eight stacks, scroll the tab strip, then change stack from a second tab and
+confirm the strip scrolls to it. On a `QS1-3.2.10` stack, check a collapsed cue's note lines up
+under the name at all three header arms. And confirm the card's new `contain: layout` has not
+trapped a floating layer — every tooltip and popover inside a cue card should still escape it.
+
+**If anything here fails**, promote it to a `FU-` item in [`followups.md`](followups.md) rather than
+fixing inline — Session 2 is already the largest of the three.
 
 ## `FU-MANUAL-RUN-STATE-TWO-SESSIONS`
 

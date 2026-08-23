@@ -62,7 +62,10 @@ room.
 ## What to read for each session
 
 - **Session 1** — `Main`, `ProgrammerActions`, `ShowBar`. Plus `DirectionC` for why the view splits.
-- **Session 2** — `Stack`, `StackScopes`, `RecordLook`, `AddEffect`, `Show`.
+- **Session 2** — `Stack`, `StackScopes`, `RecordLook`, `AddEffect`, `Show`. **These predate the
+  Run/Show merge** that Session 2 absorbed on 2026-08-23: they draw Show as one of four views, with
+  Run still beside it, and no lock anywhere. Read them for the cue surface and the stack, not for the
+  view count or the chrome around it — the plan's Session 2 is the authority there.
 - **Session 3** — `Templates`, `TemplateEditor`, `TwoThings`, `BeamColour`, `LookLibrary`.
 
 ## Reading them

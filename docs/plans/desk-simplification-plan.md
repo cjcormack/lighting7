@@ -25,6 +25,17 @@
 > Supersedes the "programmer surfaces" half of
 > [programmer-redesign-proposal.md](completed/programmer-redesign-proposal.md) and the §Navigation
 > Registry note in `lighting-react`'s `CLAUDE.md` about there being no `programmer` nav entry.
+>
+> **Amended 2026-08-23.** Session 1 is implemented but **not yet committed and not yet desk-passed**
+> — treat its section below as a record of intent, and the four departures listed here as the record
+> of what was actually built. Session 2 absorbed the **Run/Show merge** — one
+> view governed by the Prompt Book's lock — which §5 had deferred as a separate conversation. The
+> reasoning is in Session 2 §"Run and Show become one view"; §5's entry is struck through rather
+> than deleted, because the argument it makes is still the right one to answer. Session 1 took four
+> decisions that differ from what is drawn below: `/program` became `/show` (a path rename, not
+> just a label), the masters tile collapses on **count as well as width**, the source strip's change
+> count is a per-tab baseline that degrades to *no badge* rather than a false "in sync", and the
+> conflict state and Detach were cut as unreachable without a backend.
 
 ---
 
@@ -65,6 +76,12 @@ visible at once, no tabs. *(design: `DirectionC`, chosen over two alternatives k
 **D2 — Opening a cue Includes it.** There is one place values are edited, so a cue and the
 programmer cannot look different: they are the same screen. The three-pane cue editor goes.
 
+**Include goes live, and Blind is the operator's deliberate pre-step** *(settled 2026-08-23)*. The
+desk does not infer blind, auto-blind on open, or make reading a cue a special case — that is the
+console convention, and it matches the busking-first stance the composition model already takes
+elsewhere: predictability beats a desk quietly deciding what reaches the rig. The cost is a
+placement requirement, not a behaviour one — see the rule in Session 2.
+
 **D3 — Local values are the top of the stack.** Not a separate concept beside it. The engine already
 works this way — `ProgrammerLookStack`'s precedence note says "the values you set yourself win over
 all of them" — so this is a presentation change that makes an existing truth visible.
@@ -96,6 +113,21 @@ their create buttons — none of them is a captured state.
 
 **D10 — Dark-first.** These surfaces are read at a desk in a blacked-out room. Existing tokens
 cover it; no new palette.
+
+**D12 — One programmer, shared by every client.** *(Taken 2026-08-23, with D2 and D11 already in
+hand.)* A second device is a **second window onto one desk, not a second seat**: whoever signs in
+elsewhere sees exactly what the desk sees and can edit it. Concurrent authorship is not a scenario
+this desk designs for, so there is no merge rule to invent and no per-user store — the rig shows one
+value per property because DMX has one byte per channel, and "whose?" is a question worth never
+having to answer. [`FU-PROG-PER-USER`](followups.md#fu-prog-per-user) is Rejected, with the two
+places its cost estimate was wrong recorded there.
+
+**D11 — Run and Show are one view, separated by a lock rather than a route.** *(Taken 2026-08-23,
+after Session 1.)* The distinction between them was never a destination, it was whether a stray
+click can change the show — which is a mode, and one the Prompt Book already models well. Three
+views remain: Programmer · Show · Prompt Book. The lock is shared with the Prompt Book and stays
+**client-local**: it is a stray-click guard, not access control, and the backend has no notion of
+it. *(Reasoning in Session 2.)*
 
 ---
 
@@ -229,7 +261,15 @@ reorder them, promote what you busked into a new one, and record a mixture of va
 a Look — without leaving. The cue read surface becomes the same grid, and the three-pane cue editor
 is deleted.
 
-**What changes on screen** *(design: `Stack`, `StackScopes`, `RecordLook`, `AddEffect`, `Show`)*
+**And Run and Show become one view**, governed by the Prompt Book's lock. That was §5's
+"separate conversation" until it became clear it is the *same* conversation: this session already
+rebuilds Show's cue read surface as a read-only grid, and Run's three panes already *are* a
+read-only cue surface. Doing both is building it twice and throwing one away. See
+§"Run and Show become one view" below.
+
+**What changes on screen** *(design: `Stack`, `StackScopes`, `RecordLook`, `AddEffect`, `Show`.
+Note the artboards predate the merge — they draw Show alone, so read them for the cue surface and
+not for the view count.)*
 
 - **The scope switcher**: Output / Local / one layer. Focusing a stack entry points the grid at it.
   Clicking a tinted cell in Output jumps the scope to whichever entry won it — which is what finally
@@ -265,8 +305,86 @@ is deleted.
 - **"Add Cue" and "New Look" are gone.** Recording is the only way in. Show's stack header offers
   *Record into Act 1* instead.
 
+**Run and Show become one view**
+
+`/run` folds into `/show` and the pill count drops to three: Programmer · Show · Prompt Book.
+
+The split was justified in `show-mode-engineering.md` on three grounds, two of which have already
+lapsed — `ShowHeader` now renders identical Start/Stop and live-dot chrome on both views, which *is*
+the conditional-header duplication the split existed to avoid, and **Show has had a fully working GO
+transport for some time**, so "Run is where you fire cues" was already false. What remains is one
+real distinction, and it is a *mode*, not a destination: whether a stray click can change the show.
+
+That is exactly what the Prompt Book's lock already expresses, and it is derived rather than toggled:
+
+```
+locked = !canEdit || (isShowActive && lockRequested)
+```
+
+A stopped show is simply editable, with none of the editing chrome; starting the show re-arms the
+lock so a session begun while stopped cannot carry into a running one; **GO re-locks immediately**;
+and a two-minute idle re-lock gives ten seconds of visible countdown and a "Stay unlocked" escape.
+`L` toggles it. Adopt that rule wholesale — the same hook, one shared lock across Show and the
+Prompt Book, because "I am in a fix-it session" is one fact about the operator and one GO should end
+it everywhere.
+
+**Keep the lock client-local.** The backend has no notion of it and no route refuses a write on its
+account, so a second client can edit a "locked" book today. It is a stray-click guard, not access
+control, and dressing it as permission would be worse than not having it. The one thing ANDed in
+front of it, `canEdit`, is not a role either — the backend computes it as `isCurrentProject`.
+
+**The lock changes what you can do, not what things look like.** Two layouts under one switch would
+be two views with extra steps. So both levels survive in both modes:
+
+| | Locked (default while running) | Unlocked (default while stopped) |
+|---|---|---|
+| `/show` | the stack list, read-only | the same list, plus reorder / create / rename / delete |
+| `/show/stacks/:id` | one stack's cues, **gaining Run's tab strip** for its siblings | the same, plus drag, inline edit, the editor |
+| A cue row | Run's anatomy: state pip, fade chrome, click to arm standby | the same row, plus its editable cells |
+| Transport | Space / Backspace live | shortcuts off — the operator is typing |
+| Phone | `RunMobile` | — mobile is always locked |
+
+Deleting the duplication is most of the work. The two sides render the same information twice in
+fourteen places; `PaneShell`, `TabButton` and the lazy full-cue-fetch block are near-identical
+copies, and the two `PaletteBar`s disagree (see §6).
+
+**Two hard parts, neither of them about editing.** First, **two notions of the active stack**: Show
+follows the server playhead, while Run owns a local browse cursor that fires `goToStack` +
+`deactivateCueStack` behind a manual-switch guard — `useShowTransport` says outright that Run
+"deliberately does NOT use this ... different code, not duplication". Reconciling those two is the
+session's real risk, and it has nothing to do with the lock. Second, the two views hold **different
+active-cue cursors on purpose** — Show reads the server's so the marker does not jitter during a
+fade, Run reads the optimistic runner cursor so the fade animates. The merged row needs both,
+chosen by mode.
+
 **Rules that must hold**
 
+- **Blind must be reachable wherever a cue can be opened.** D2 makes opening a cue Include it, and
+  Include goes to the stage — so "enable Blind first" is the operator's move to make, and the desk's
+  job is only to keep it one press away at the moment it is needed. It is not today: `Blind` toggles
+  **only** in the programmer's action bar, while the ShowBar merely *displays* the state through
+  `ProgrammerIndicator`. Left alone, the flow for "fix Q7 without it hitting the stage" becomes leave
+  Show → Programmer → Blind → back → unlock → open, which is precisely the leaving-to-do-a-thing
+  friction §1 opens with, reintroduced at the worst moment.
+
+  Put the control in the **ShowBar**, beside DBO: they are the same class of thing (a gate on what
+  reaches the rig), the bar is on every view, and the state is already drawn there. Showing it only
+  while **unlocked** costs no width during a running show and ties it to D11 — locked, the badge
+  stays a read-out; unlocked, it becomes the switch. Do not make the existing indicator itself the
+  toggle: it is also the link to the programmer, and one control cannot be both without one of the
+  two jobs becoming a surprise.
+- **Locked means no `cueEdit` session, ever.** Today a session is opened per expanded card and
+  defaults to `mode: 'live'`, and Run auto-expands the live cue on every stack switch. Combined
+  naively that opens a live edit session on the cue that is on stage, mid-show, on every switch.
+  This is the one show-critical hazard in the merge and it must be an explicit rule rather than an
+  emergent property of which panes happen to mount.
+- **Dragging must be impossible while locked, not merely discouraged.** The cue list wraps every row
+  in a dnd context and the cue card calls `useSortable` unconditionally; a sortable row in a live cue
+  list is the accident the lock exists to prevent.
+- **Deep links survive.** `?cue=` is an external contract — the Prompt Book mints it, and the
+  `/program*` redirects carry the search string precisely to keep it. Show addresses one cue by URL
+  while Run tracks a *set* of expanded cues locally; pick one and say which, rather than letting the
+  merge quietly drop the deep link.
 - **Editing a shared Look edits it everywhere**, and this must be said at the moment of the first
   edit, not in a tooltip. **Duplicate for this cue** is the primary action, not "change all 9
   layers": retuning one cue is the common intent, and the other reading is the one an operator cannot
@@ -279,11 +397,16 @@ is deleted.
   will Record take?" becomes something to look at rather than a colour to trust.
 
 **Non-goals.** No template work. Effects keep their current authoring UI — this session changes where
-they *land*, not how they are configured.
+they *land*, not how they are configured. The Prompt Book's own layout is still untouched: it lends
+its lock, it does not change.
 
 **Done when.** An operator builds a scene from three looks and an effect, retunes one look mid-scene,
 reorders the stack while the effect runs without it restarting, records the result, and never opens
 a second editor. `CuePropsPane`, `TargetsPane` and `LayersPane`'s two arrangements are gone.
+
+And: an operator runs the show, spots a wrong cue, presses `L`, fixes it in place, and presses GO —
+which re-locks on its own. There is no `/run` to go to, and at no point did a locked list accept a
+drag or open a `cueEdit` session.
 
 ---
 
@@ -341,18 +464,19 @@ finish all three families.
 
 ## 5. Explicitly out of scope
 
-- **Per-user programmers.** D2 makes the programmer the only cue editor, which means two operators
-  cannot author two cues at once. That is the standing tradeoff of the chosen direction and it
-  triggers [`FU-PROG-PER-USER`](followups.md#fu-prog-per-user), whose gate was exactly "a second
-  operator programming the same show". Decide deliberately: either accept single-author programming
-  and write that down, or promote the follow-up before Session 2. It is an architecture change, not
-  a session.
-- **Run and Prompt Book *layouts*.** Both inherit the new show bar, and Session 1 fixes Run's
-  breakpoint disagreements — but the Run cue list, its card anatomy and the Prompt Book rail are
-  otherwise untouched. Run is a *playback* surface and the brief's complaint about it was the masters
-  at narrow widths, which Session 1 answers. Redesigning what a Run card shows is a separate
-  conversation, and doing it here would put show-critical layout in the same change as an authoring
-  rework.
+- **Per-user programmers — decided, not deferred.** This entry used to ask for a decision before
+  Session 2. It was taken on 2026-08-23: **the programmer stays one shared state**, and that is the
+  design rather than a tradeoff. See D12, and
+  [`FU-PROG-PER-USER`](followups.md#fu-prog-per-user), now a Rejected decision record.
+- ~~**Run and Prompt Book *layouts*.**~~ **Superseded for Run** — the merge is now Session 2's, and
+  the reasoning that put it here has inverted. This entry argued that redesigning a Run card "would
+  put show-critical layout in the same change as an authoring rework". True, and unavoidable: Session
+  2 rebuilds Show's cue read surface as a read-only grid, which is the job Run's panes already do, so
+  leaving Run out means building that surface twice. The risk the entry names is real and is answered
+  by the rules above rather than by deferral.
+
+  **The Prompt Book's layout is still out of scope.** It lends the lock and gains nothing. Its rail,
+  its script pane and its annotation model are untouched.
 - **The effect configuration form.** Sessions 2 and 3 change where effects live and which tempo they
   follow, not how a parameter is set.
 - **Migrations of any kind.** See the status note.
@@ -371,6 +495,17 @@ finish all three families.
 - New, from Session 3: the wheel-snap ΔE shown in the editor and the value actually written at cook
   must come from **one** implementation. Two would drift, and the editor's whole job here is to
   promise what the rig will do.
+- **A live bug, found while scoping the Run/Show merge and worth fixing whatever happens to it.**
+  There are two copies of `PaletteBar` and they disagree: Run's resolves gel names through
+  `resolveColourToHex`, Show's assigns the stored string straight to `background`. So the same cue's
+  palette swatches render differently in the two views, and a gel-named colour is simply wrong in
+  one of them. The merge deletes one copy; until then, fix the duplication.
+- **Stale documentation of an affordance that no longer exists.** Four places — `RunPropsPane`,
+  `ShowHeader`, `App.tsx` and `show-mode-engineering.md` — still describe an "Edit Cue" button that
+  jumps from Run to the cue editor. It is gone, so today there is *no* route from a cue in Run to
+  editing it except the view switcher. The merge closes that gap; the stale comments should go with
+  it, and `show-mode-engineering.md` needs a broader pass (it still describes `ProgramPage`,
+  `ShowRunnerMobile`, `CueDetailSheet` and a Theatre/Band toggle, none of which exist).
 
 ---
 
@@ -388,6 +523,14 @@ Per session, on a live desk:
 2. **S2** — three looks and an effect in one session; retune a look mid-scene and watch the stage;
    drag a layer while the effect runs and confirm the phase survives; record values + effects into
    one Look; confirm a second tab sees the stack change.
+
+   Then the merge, which is the half that can hurt a running show. With the show **running**: try to
+   drag a cue and fail; confirm no `cueEdit` session opens on the live cue across a stack switch;
+   press `L`, edit, press GO, and confirm it re-locked itself; leave it unlocked and idle and watch
+   the countdown re-lock it. With the show **stopped**: confirm it is simply editable, with no lock
+   chrome anywhere. Then a phone: confirm it is locked and cannot be unlocked. Finally switch stacks
+   from the tab strip while a cue fades, and confirm the fade animates *and* the marker does not
+   jitter — that is the two-cursor rule, and it is the one that will be got wrong.
 3. **S3** — one colour template across three different fixture types at once; retune it and watch
    every tracking layer move.
 
@@ -404,7 +547,19 @@ conceptually interesting one and also where the cost is: removing the fixture ty
 machinery the template editor is built from, and the per-head resolution has to be right in the
 engine and *visible* in the editor or it is worse than the constraint it replaces.
 
-If the three sessions have to become two, the honest cut is **Session 3's second half** — ship
+**Session 2 grew when the Run/Show merge folded in, and it is now the largest of the three.** That
+is the right call on duplication grounds — the alternative builds one cue read surface twice — but
+it should be said plainly that it also moves show-critical playback into an authoring change, which
+§5 previously refused. What makes it acceptable is that the lock is a *pre-existing, proven*
+mechanism rather than something invented here, and that the two hard parts are both nameable and
+neither is about editing.
+
+If Session 2 has to split, the seam is clean and runs between the two halves: **2a the programmer
+stack** (scopes, layers-in-place, Record with effects) and **2b the merge** (one view, the lock,
+Run's tab strip in the drill-down). 2a is what the plan originally promised and stands alone; 2b
+needs 2a's read-only grid to merge *onto*, so the order is fixed. Do not attempt 2b first.
+
+If the three sessions have to become two, the honest cut is still **Session 3's second half** — ship
 colour resolution and leave position and beam type-scoped, with the beam exclusions already written
 down. Cutting Session 2 instead would leave the programmer roomier but still not able to compose,
 which is the complaint that started this.
