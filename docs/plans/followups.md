@@ -1004,6 +1004,49 @@ test covers two WS connections racing on `beginEdit` for surface routing.
 
 **Unblock by**: confirming the exact semantics with cue-authoring, then adding the test.
 
+### `FU-FE-DBO-INERT`
+
+**Blackout is a cosmetic toggle sitting beside a functional one** · Ready · desk-simplification
+session 2b, 2026-08-23
+
+`ShowBar`'s DBO tile is local `useState` with no side effect in every host that mounts it, and
+`grep -i blackout` over `src/` finds no API call — the only real blackout is a MIDI/OSC surface
+binding target (`api/surfacesApi.ts`, `BlackoutTarget`). It has always been inert, which was
+survivable while it was the only control in that cluster.
+
+Session 2b put a **BLIND** tile immediately beside it — Blind being a real gate on what reaches the
+rig, wired to `programmer.setBlind`. So the bar now draws two identically-styled tiles, adjacent, of
+which one works. An operator who trusts DBO mid-show because Blind next to it plainly does something
+is the failure this predicts.
+
+**Fix**: a backend blackout route (grand-master-zero, or a Layer-0 gate), and `ShowBar`'s DBO wired
+to it the way Blind is. Out of 2b's scope because it needs backend surface area, and 2b was
+deliberately frontend-only.
+
+**Alternative if that is not wanted**: draw DBO differently from Blind, or remove it. Two peers where
+one is a placeholder is the part that must not stand.
+
+### `FU-FE-SHARED-LOOK-EDIT-GUARD`
+
+**The shared-Look edit guard was never implemented** · Ready · Noticed during desk-simplification
+session 2b, 2026-08-23
+
+Session 2's §"Rules that must hold" says: *"Editing a shared Look edits it everywhere, and this must
+be said at the moment of the first edit, not in a tooltip. **Duplicate for this cue** is the primary
+action, not 'change all 9 layers': retuning one cue is the common intent, and the other reading is
+the one an operator cannot undo across nine cues."*
+
+Nothing implements it. `grep` for the affordance or for a usage count finds no call site, and no
+sheet or dialog offers the choice — a layer-scope edit goes straight to `PUT /looks/{id}` and
+republishes every cue layering that Look, silently.
+
+This is **2a's rule, not 2b's** (it does not mention the lock, so it fell on the near side of the
+split), which is presumably how it was missed: 2a shipped the live-write path that makes it
+necessary. Recorded rather than absorbed because 2b was already the larger half.
+
+**Needs first**: a usage count at the point of edit. §6 of the plan already flags that — *"if that is
+not already cheap to ask for, log it rather than fetching a Look's full detail per keystroke"*.
+
 ### `FU-FE-CUEGRID-PER-CELL-LAYER`
 
 **A cue row fed by two layers shows no layer at all** · Trigger · desk-simplification session 2a,

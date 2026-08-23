@@ -1,7 +1,7 @@
 # Desk simplification — the Programmer as a place, Templates as a thing
 
 > **Document status: IN PROGRESS (2026-08-23).** Four sessions — Session 2 split, as §8
-> anticipated. **1 and 2a have shipped**; **2b** (the Run/Show merge) and **3** (Templates) have not.
+> anticipated. **1, 2a and 2b have shipped**; **3** (Templates) has not.
 >
 > **The design is committed alongside this plan** at
 > [`desk-simplification-design/`](desk-simplification-design/INDEX.md) — sixteen artboards drawn
@@ -27,11 +27,90 @@
 > [programmer-redesign-proposal.md](completed/programmer-redesign-proposal.md) and the §Navigation
 > Registry note in `lighting-react`'s `CLAUDE.md` about there being no `programmer` nav entry.
 >
+> **Amended 2026-08-23 (third amendment) — 2b is built.** The Run/Show merge landed: `/run` is a
+> redirect, there are three live views, and editability is the Prompt Book's lock rather than a
+> route. Frontend only, as predicted — no backend change, no restart.
+>
+> **Seven departures from what is written below.** Six were findings that changed the plan; the
+> seventh is a decision it explicitly deferred to this session.
+>
+> 1. **Run's tab click was destructive, and the hazard list here misses it.** `handleSwitchToStack`
+>    ran `deactivate(old) → goToStack(target) → deactivate(target)`, so one unconfirmed press took
+>    the live cue off stage and repositioned every other client. §"Rules that must hold" names
+>    dragging and `cueEdit` as the show-critical hazards and then asks for this strip in the *locked*
+>    view; this was worse than either. Browsing and arming were therefore split outright — the URL is
+>    the browse cursor, and arming is `OffPlayheadBanner`'s confirm-gated control.
+> 2. **The planned `goToStack` cache patch was wrong and was not made.** The plan proposed nulling
+>    the target's `activeCueId` in `onQueryStarted`; the endpoint calls `activateAtFirstCue`, so that
+>    would contradict what it does. The make-live action states the runner it intends instead, which
+>    is what let `manualSwitchRef` go. Also found: the backend already deactivates the previous stack,
+>    so the client-side call was a redundant round-trip — dropped.
+> 3. **`PaneShell` and `TabButton` were not duplicated.** Only one copy survived, in `RunCueCard`;
+>    2a deleted Show's. So that part was a decision, not a de-dupe — and Run's Output pane already
+>    rendered `CueDetailContent`, so the two bodies were the same surface behind a tab shell.
+>    `MiniStage` was folded into `CueDetailContent` as a Stage section so it survived the deletion.
+> 4. **"Two active-cue cursors" was one added field, not a mode.** `useShowTransport` already
+>    computed the optimistic-preferring value that Run hand-rolled; the divergence was at the
+>    consumer. Both cursors are now returned and the row makes two comparisons. No mode switch, and
+>    the marker/fade split needed no screenshot pass in the common case, because the server cursor is
+>    itself patched optimistically.
+> 5. **A cue row stays read-only.** The merge table says an unlocked row gains "its editable cells";
+>    D2 says a cue is edited by Include. D2 won — giving a row cells would make a cue and the
+>    programmer two places again. So `EditorContext`'s `cue` arm, its four session helpers,
+>    `api/cueEditWsApi.ts` and fifteen branches across five hooks are gone. The
+>    `409 CUE_EDIT_SESSION_OPEN` handling stays: the protocol is live and another client can hold a
+>    session.
+> 6. **Two latent defects surfaced and were fixed**, both found by the characterisation tests written
+>    before anything moved. Run keyed `resetStack` on the stack id alone, so its own "Fix Order" never
+>    recomputed the done/next cursors; and a cue reorder landing mid-fade nulled the optimistic cursor
+>    and stopped the fade dead. A third was found in the keyboard handlers: Run guarded only dialogs,
+>    so Space with the GO button focused fired GO *twice*.
+> 7. **The expansion model beat both predecessors rather than picking one.** `?cue=` holds the
+>    operator's card and the live one is derived on top, so a GO opens the new live card and cannot
+>    take away the card being read — which Show's bare scalar could not express and Run's accumulating
+>    `Set` got wrong in the other direction.
+>
+> **Four corrections from the first desk pass**, all of them consistency defects rather than the
+> functional ones this plan worried about — and three of the four were places where §Session 2's own
+> instructions produced the inconsistency:
+>
+> - **A locked cue row could not be expanded at all.** The row body arms the cue while locked, per
+>   the plan's table, and the chevron was documented as always expanding — but it was a bare icon, not
+>   a target. It is a button now.
+> - **A locked expanded card offered Cue properties…, Edit in Programmer and Record.** All three were
+>   kept on the reasoning that reading a cue and loading it are not edits to the stack. Wrong: Edit in
+>   Programmer *Includes* the cue, and Include goes live (the desk does not auto-blind, by D2). An
+>   expanded card in a running show is now a read surface and nothing else.
+> - **Blind ended up in two different places.** The plan says put it in the ShowBar "only while
+>   unlocked" and *not* on the Programmer, whose action bar already had it — which means the same
+>   control moves location depending on which view you are on, and appears and disappears with the
+>   lock. It now lives in the ShowBar alone, on every view in every state; the action-bar copy is
+>   gone, and `useShowBarProps` reads the action bar's persisted fade key so blinding still fades
+>   rather than snapping. This required ungating the ShowBar from `isShowActive` — which it should
+>   never have been, since blackout, Blind and the speed masters all mean something with the show
+>   down.
+> - **The ShowBar had drifted into three near-copies.** Each host wired it by hand: the Prompt Book's
+>   had no Blind and derived the stack name differently, Show suppressed the stack name beside the tab
+>   strip. All three now spread `showBarProps`, overriding only `showShortcuts` — and adopting the hook
+>   on the Prompt Book collapsed that page from **two** transport instances to one. The lock control
+>   moved to `ShowHeader`'s `actions` slot on the Prompt Book too, so it is in the same position on
+>   both surfaces that have a lock, and its transport shortcuts are now gated on `locked` like Show's.
+>   (That last point supersedes the earlier decision to leave the Prompt Book's keyboard alone.)
+>
+> Two follow-ups to record: **DBO is inert** in every host (local state, no side effect), so a
+> functional Blind tile now sits beside a cosmetic blackout; and **2a's shared-Look edit guard
+> appears never to have shipped** — the rule "*Duplicate for this cue* is the primary action" has no
+> implementation. Neither is 2b's to fix.
+>
+> **2b has not had a desk pass either.** The §7 S2b list stands, with one addition: confirm that
+> *Make this stack live* asks before taking the current cue off stage, and that browsing a sibling
+> stack leaves GO firing the live one.
+>
 > **Amended 2026-08-23 (second amendment).** **Session 2 split at the §8 seam.** 2a — the
-> programmer stack — shipped as `lighting-react` `53be4fc` and `lighting7` `3110c21`; **2b, the
-> Run/Show merge under the Prompt Book's lock, is untouched** and is what a fresh session should
-> pick up. Everything in §Session 2 below about scopes, layers-in-place, Record-with-effects and the
-> cue read surface is **built**; everything under §"Run and Show become one view" is **not**.
+> programmer stack — shipped as `lighting-react` `53be4fc` and `lighting7` `3110c21`. *(2b has since
+> shipped too — see the third amendment above; the paragraph below is left as it stood.)* Everything
+> in §Session 2 below about scopes, layers-in-place, Record-with-effects and the cue read surface is
+> **built**; everything under §"Run and Show become one view" is **not**.
 >
 > Read the sections below as the record of *intent*. Six departures are what was actually built:
 >
@@ -587,12 +666,21 @@ browser verification alone, and 2a specifically had two defects that a green sui
    whether landing in Local rather than on the cook reads right at the desk.
 
 3. **S2b** — the merge, which is the half that can hurt a running show. With the show **running**: try to
-   drag a cue and fail; confirm no `cueEdit` session opens on the live cue across a stack switch;
-   press `L`, edit, press GO, and confirm it re-locked itself; leave it unlocked and idle and watch
-   the countdown re-lock it. With the show **stopped**: confirm it is simply editable, with no lock
-   chrome anywhere. Then a phone: confirm it is locked and cannot be unlocked. Finally switch stacks
-   from the tab strip while a cue fades, and confirm the fade animates *and* the marker does not
-   jitter — that is the two-cursor rule, and it is the one that will be got wrong.
+   drag a cue and fail; press `L`, edit, press GO, and confirm it re-locked itself; leave it unlocked
+   and idle and watch the countdown re-lock it; confirm Blind appears beside DBO only while unlocked
+   and actually gates the rig. With the show **stopped**: confirm it is simply editable, with no lock
+   chrome anywhere. Then a phone: confirm it is locked and cannot be unlocked. Switch stacks from the
+   tab strip while a cue fades, and confirm the fade animates *and* the marker does not jitter — that
+   is the two-cursor rule, and it is the one that will be got wrong.
+
+   Two more, from the browse/arm split that 2b introduced and this list predates: browse to a sibling
+   stack and confirm **GO still fires the live one** (the guarantee that makes off-playhead browsing
+   safe at all), and press *Make this stack live* with a cue on stage — it must ask first, and the
+   blip it warns about (`go-to` fires the target's first cue before the desk darkens it) is worth
+   watching for on the rig, since only a rig can show it.
+
+   The `cueEdit` check is retired: no client-side session exists to open. That is a *structural*
+   guarantee now rather than a behavioural one — the arm and its API module are deleted.
 4. **S3** — one colour template across three different fixture types at once; retune it and watch
    every tracking layer move.
 
