@@ -168,7 +168,7 @@ discriminator column) and one shared resolution behaviour with a warn.
 on. **Fix:** add a group colour chase across multi-element fixtures on two masters, and a crossfade
 scenario. Prerequisite for every C item; cross-ref `FU-TEST-FX-BENCH-CI-GATE`.
 
-~~**C1. Per-tick target re-expansion and register locking**~~ — done. high / P1 / L / fable
+~~**C1. Per-tick target re-expansion and register locking**~~ — done, `49f3b09`. high / P1 / L / fable
 `resolveEffectFixtureKeys` (`FxEngine.kt:2907-2928`) re-expands every group/multi-element fixture
 per effect per pass, taking `registerLock.read` per member; `processGroupFlatElementEffect`
 rebuilds the whole flat element list per tick (`:2755-2769` + wall-clock twin). **Fix:** resolve
@@ -475,7 +475,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | Wave | Items | Note |
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
-| 1 | ~~C1~~ **done**, C2 | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
+| 1 | ~~C1~~ (`49f3b09`), C2 | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | D1–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 before any cueEdit-adjacent work. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, B2 | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
@@ -513,7 +513,7 @@ grew `[chase-beat]`/`[chase-wall]` (group colour chase over multi-element fixtur
 and `[crossfade]`; the wave-0 baseline every C item measures against is recorded in
 `docs/testing-engineering.md` §"Recorded baselines". Test-only, no production change.
 
-C1 — target expansion now resolved once per fixture-register generation into an
+C1 (`49f3b09`) — target expansion now resolved once per fixture-register generation into an
 `FxTargetExpansion` cached on the `FxInstance`, invalidated by a new `Fixtures.structureVersion`.
 No API or DTO change; two behaviour changes worth knowing: an effect naming a deleted
 group/fixture logs "not found" once per register generation instead of once per tick, and
