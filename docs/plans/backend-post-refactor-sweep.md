@@ -1,6 +1,6 @@
 # Backend post-refactor architectural sweep — findings and cleanup plan
 
-> **Document status: BACKLOG, WAVE 0 IN PROGRESS (A1–A4 + A11 done, C0 outstanding).** This is the output of the
+> **Document status: BACKLOG, WAVE 0 COMPLETE (A1–A4, A11, C0 all done).** This is the output of the
 > post-refactor architectural sweep: a categorized backlog for later fix agents, organised into
 > execution waves. Items cite file:line as of `b5067e5`; expect drift as waves land. A matching
 > frontend sweep happens separately — the "Frontend-coordination register" at the bottom is its
@@ -163,7 +163,7 @@ discriminator column) and one shared resolution behaviour with a warn.
 
 ## C — Performance (hot paths)
 
-**C0. Extend the FX benchmark before touching the tick path** — n/a / P0 / M / opus
+~~**C0. Extend the FX benchmark before touching the tick path**~~ — done, `b7939e5`. n/a / P0 / M / opus
 `FxEngineBenchmark.kt` covers only single-fixture `SliderTarget`s — none of the paths C1–C6 live
 on. **Fix:** add a group colour chase across multi-element fixtures on two masters, and a crossfade
 scenario. Prerequisite for every C item; cross-ref `FU-TEST-FX-BENCH-CI-GATE`.
@@ -459,12 +459,32 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 
 | Wave | Items | Note |
 |---|---|---|
-| 0 | A1–A4, A11, C0 | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
-| 1 | D1–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements first — everything after moves less code. D1 before any cueEdit-adjacent work. |
-| 2 | C1–C7, B1, B2 | Hot-path fixes, measured against the wave-0 benchmark. C1+C2 are the big wins; fable for C1–C3. |
-| 3 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
-| 4 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
-| 5 | H1–H3, G4, D7, E9, F4 | Mechanical passes. |
+| 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
+| 1 | C1, C2 | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
+| 2 | D1–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 before any cueEdit-adjacent work. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
+| 3 | C3–C7, B1, B2 | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. |
+| 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
+| 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
+| 6 | H1–H3, G4, D7, E9, F4 | Mechanical passes. |
+
+**Re-sequencing note (2026-08-24).** C1+C2 were originally behind the retirements, on the
+"everything after moves less code" principle. They were pulled forward when C0 landed, for two
+reasons:
+
+1. **A5 and A6 sit inside the code the benchmark measures.** A6 makes `isRunning`, `lastPhase`,
+   `phaseOffset`, `distributionStrategy` and `elementMode` `@Volatile` — `isRunning` gates the
+   whole per-effect pass (`FxEngine.kt:2091`) and the rest are read per member per tick; A5
+   changes how `suppressionCache` is published on the same path. Landing them first invalidates
+   the wave-0 baseline before the item it exists for gets to use it. Running C1+C2 first spends
+   the baseline while it is exactly matched to the code.
+2. **Nothing C1 or C2 touches is D-wave code.** D1 (cueEdit) and D2 (legacy tempo) don't reach
+   group expansion or the colour write path, so the "moves less code" argument doesn't apply to
+   these two specifically — it still does for C3–C7, which is why they stay behind the
+   retirements.
+
+The cost of the swap is that C1+C2 rewrite code the retirements would not have deleted anyway,
+so it is close to free; the benefit is one clean before/after on the two items with the largest
+expected win.
 
 Frontend-coordination register (hand to the frontend sweep): D1 (409 handler), D2 (two
 components + store/fx.ts), D3/D9 (dead stubs, groupFxAdded, presetId types, rateSpeedMasterIndex),
@@ -473,7 +493,10 @@ F1/F2/F3/F5 (renamed paths/messages/status codes), F6 (hand-copied admin prefix 
 **Landed so far:** A2/A3 (`ab0ff8b`) — `presetId` gone from `EffectDto` and `GroupEffectDto`;
 `effectType` on both now reports the registration id. A4 (`d3024f6`) — no DTO shape change, but
 `LightningStrike`'s `compatibleProperties` is now `[dimmer]` only, so the library stops offering
-it on colour-only fixtures (it produced no light there anyway).
+it on colour-only fixtures (it produced no light there anyway). C0 (`b7939e5`) — `FxEngineBenchmark`
+grew `[chase-beat]`/`[chase-wall]` (group colour chase over multi-element fixtures on two masters)
+and `[crossfade]`; the wave-0 baseline every C item measures against is recorded in
+`docs/testing-engineering.md` §"Recorded baselines". Test-only, no production change.
 
 ## Verification
 
@@ -483,7 +506,11 @@ it on colour-only fixtures (it produced no light there anyway).
 - A1: new test — delete + replace-import a `RichProjectFixture` project holding templates; extend
   `ProjectRoundTripTest` where DTO fields change (canonical JSON omits defaults — set non-default
   fixture values).
-- C-wave: `FxEngineBenchmark` before/after per item, on the C0-extended scenarios.
+- C-wave: `FxEngineBenchmark` before/after per item, on the C0-extended scenarios. The "before"
+  for C1/C2 is the wave-0 block in `docs/testing-engineering.md` §"Recorded baselines"; C3–C7
+  measure against the baseline re-captured after wave 2 (A5/A6 move the tick path). Run each
+  comparison on one machine in one sitting — `[beat]` p99 varied 714–1354 µs across two runs of
+  identical code, so cross-session comparisons at that resolution mean nothing.
 - D-wave: grep for each retired `@SerialName`/route string in both repos afterwards; boot the app
   and connect the real frontend (`./gradlew run`, frontend dev server) for a smoke pass.
 - API waves: the OpenAPI/Swagger surface at `/openapi` is the quick diff of what changed.
