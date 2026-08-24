@@ -36,7 +36,8 @@ private val logger = LoggerFactory.getLogger("ScriptCache")
  * script links against the app's own classes; the fingerprint must therefore change whenever
  * those classes change, or a rebuild could load bytecode compiled against a class that has since
  * changed shape (blowing up with `NoSuchMethodError` at evaluation). The fingerprint is computed
- * once at startup — not per script — so it also avoids re-stat-ing the whole classpath per compile.
+ * once per process — see [buildFingerprint] — not per script and not per [State], so it also
+ * avoids re-stat-ing the whole classpath per compile.
  */
 fun buildScriptingHostConfiguration(config: ApplicationConfig): ScriptingHostConfiguration {
     val enabled = config.optionalBoolean("scriptCache.enabled", default = true)
@@ -50,7 +51,6 @@ fun buildScriptingHostConfiguration(config: ApplicationConfig): ScriptingHostCon
 
     return try {
         Files.createDirectories(cacheDir)
-        val buildFingerprint = computeBuildFingerprint()
         logger.info("Compiled-script disk cache enabled at {}", cacheDir)
         ScriptingHostConfiguration(defaultJvmScriptingHostConfiguration) {
             jvm {
@@ -85,12 +85,26 @@ private fun cacheKey(
 }
 
 /**
+ * The process-wide build fingerprint.
+ *
+ * `java.class.path` cannot change within a JVM, so this is a pure function of the process and is
+ * memoised. That matters well beyond tidiness: [buildScriptingHostConfiguration] runs once per
+ * [State], and the test suite builds a `State` per test — without this, every one of them walked
+ * the whole classpath again (~55 ms for ~5170 files under `build/classes`).
+ *
+ * A rebuild *while the app is live* under `gradle run` therefore keeps the fingerprint it started
+ * with. That is correct: the running JVM is still executing the old classes, so scripts compiled
+ * against them are still linked correctly, and picking up new classes already requires a restart.
+ */
+private val buildFingerprint: String by lazy { computeBuildFingerprint() }
+
+/**
  * A fingerprint of the current JVM classpath that changes whenever the app's compiled code
  * changes, so cached jars are invalidated on rebuild. For **directory** classpath entries (the
  * `build/classes/kotlin/main` dir under `gradle run` — where rebuilds actually happen) we fold in
  * the newest last-modified time among all contained files; a nested `.class` rebuild bumps that
  * even though the directory entry's own mtime does not. For **file** entries (jars, the packaged
- * case) the entry's own mtime + size suffice. Computed once at startup.
+ * case) the entry's own mtime + size suffice. Call [buildFingerprint] rather than this directly.
  */
 @OptIn(ExperimentalStdlibApi::class)
 private fun computeBuildFingerprint(): String {

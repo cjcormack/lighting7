@@ -328,8 +328,10 @@ Three things outlived those grammars, all deliberately. `validateLookRows` rejec
 a `tmpl:`-shaped value at the Look write boundary — that rejection *is* the no-nesting guarantee, so
 it survives as an inlined shape check with its own local constant.
 `CueAssignmentResolver.parseAssignmentValue` returns **null** for a `tmpl:`-shaped value rather than
-letting `parseExtendedColour` answer white. And `StateMigrations` still folds `ref:` rows from a v4
-database into layers; that `removePrefix("ref:")` is the upgrade path.
+letting `parseExtendedColour` answer white. The third was the migration that folded `ref:` rows from
+a v4 database into layers; it was removed on 2026-08-24 with the rest of them (see
+[InstallBootstrap.kt](../src/main/kotlin/uk/me/cormack/lighting7/state/InstallBootstrap.kt)), so a
+v4 database no longer has an upgrade path in the code — recover it from git history if one turns up.
 
 Note what the reference got right, because a layer inherits it: it stored the Look's **uuid** rather
 than its int id, since int primary keys never appear in the sync export and are re-minted on import.

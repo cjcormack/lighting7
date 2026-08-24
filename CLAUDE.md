@@ -91,6 +91,16 @@ not permitted` there, or a `MissingFieldException` on a route DTO, suspect that
 pin has been lost** — the route 500s and returns `ErrorResponse`, so a denied
 write disguises itself as a serialization regression.
 
+The suite takes ~1 minute warm, and ~55 s longer on the first run after any code
+change (editing a source file changes the classpath fingerprint, which invalidates
+the compiled-script jar cache and recompiles the 28 built-in FX effects). That cost
+lands on whichever class first builds a `Show` — currently
+`ParkSurvivesFixtureReloadTest`, a one-test class that therefore *looks* like the
+slowest thing in the suite. It is not slow; it is first. Before optimising anything
+in the test suite, read [`docs/testing-engineering.md`](docs/testing-engineering.md):
+four specific changes took it from 14 minutes to 1, and each has a guard test that
+explains why it is safe.
+
 ### Git workflow
 
 Solo personal repo — commit and push directly to `main`. Do **not** open pull
@@ -343,9 +353,15 @@ with `maximumPoolSize = 1` — SQLite has a single writer and a larger pool prod
 defaulting to `<appDataDir>/lighting7.db`. Tables auto-create on startup via
 `SchemaUtils.createMissingTablesAndColumns`.
 
-SQLite is the only supported backend. The historical PostgreSQL-gated migrations
-in `StateMigrations.kt` were unreachable dead code and have been removed —
-recoverable from git history if PostgreSQL ever returns.
+SQLite is the only supported backend, and **there are currently no schema
+migrations at all.** `StateMigrations.kt` is gone; `state/InstallBootstrap.kt`
+holds only the install-identity row, and explains what was removed and why.
+
+That is a deliberate bet on there being exactly one database (the dev desk),
+and it expires the moment a second install exists — the Windows MSI ships an
+upgrade path. Before making a non-additive schema change once anything is
+deployed, recover the migration seam from git history; `InstallBootstrap.kt`
+says where it plugs in and what ordering constraint bit last time.
 
 Key tables:
 - `DaoProjects` - Project definitions
@@ -486,6 +502,7 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 
 For deeper technical details, see the docs in `docs/`:
 
+- [Testing](docs/testing-engineering.md) - What makes the suite ~1 min rather than ~14 (the four changes, each load-bearing), the warm/cold script-cache regimes, why `build/test-data` is pinned, the tests that assert real elapsed time, and the order-dependence detector
 - [DMX Subsystem](docs/dmx-engineering.md) - Low-level DMX control architecture, ArtNet implementation, fading, transactions
 - [Fixture System](docs/fixtures-engineering.md) - Fixture abstractions, traits, property types, adding new fixtures
 - [Show & Scripts](docs/show-scripts-engineering.md) - Script compilation, caching, execution

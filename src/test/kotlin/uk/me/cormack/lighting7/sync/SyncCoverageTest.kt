@@ -115,8 +115,9 @@ class SyncCoverageTest {
         // `DaoCuePresetApplications`. They were excluded rather than portable at formatVersion 5,
         // because exporting both representations would put two copies of one entity in the repo and
         // materialise both on import. Session 4 deleted the tables, so they are out of `ALL_TABLES`
-        // and there is nothing left to have an opinion about. Their pre-v5 shape lives on in
-        // `testsupport/LegacySchema.kt`, which the migration test builds to seed against.
+        // and there is nothing left to have an opinion about. Their pre-v5 shape lived on in
+        // `testsupport/LegacySchema.kt` for the migration tests; both went with the migrations on
+        // 2026-08-24 (see state/InstallBootstrap.kt).
         // Portable rather than excluded-live-state: look/cue effects reference a master by
         // speedMasterUuid, and that reference only survives clone/import if the masters
         // travel with the show. The exported bpm is a starting default, not a live knob.

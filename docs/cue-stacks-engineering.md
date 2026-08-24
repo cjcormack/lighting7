@@ -98,11 +98,13 @@ numbers swapping places would otherwise be a transient duplicate.
 Labels that won't fit `varchar(20)` are skipped — the cue stays blank rather than carrying a
 truncated number.
 
-**Backfill.** Because `renumberAutoCues` only runs off a mutation, cues that predate the feature
-would stay blank until something touched their stack. `backfillAutoCueNumbers()` in
-[StateMigrations.kt](../src/main/kotlin/uk/me/cormack/lighting7/state/StateMigrations.kt) walks every
-stack once at startup. It is idempotent (stacks with no blanks are skipped; a settled stack writes
-nothing), and logs and skips any stack that fails rather than taking startup down.
+**Backfill (removed).** `renumberAutoCues` only runs off a mutation, so cues that predated the
+feature would have stayed blank until something touched their stack. A `backfillAutoCueNumbers()`
+walked every stack once at startup to fix that. It went with the rest of the migrations on
+2026-08-24, once the only database in existence had no blank auto numbers left — see
+[InstallBootstrap.kt](../src/main/kotlin/uk/me/cormack/lighting7/state/InstallBootstrap.kt).
+Nothing backfills now, so a cue that somehow acquires a blank auto number keeps it until its stack
+is next mutated.
 
 ### Key Design Decisions
 

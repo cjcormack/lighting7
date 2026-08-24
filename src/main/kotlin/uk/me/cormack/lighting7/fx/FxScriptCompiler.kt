@@ -27,8 +27,32 @@ import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 class FxScriptCompiler(
     hostConfiguration: ScriptingHostConfiguration = defaultJvmScriptingHostConfiguration,
 ) {
-    private val cache = ConcurrentHashMap<String, CompiledFxScript>()
     private val scriptingHost = BasicJvmScriptingHost(hostConfiguration)
+
+    companion object {
+        /**
+         * Compiled scripts, cached for the **process**, not for one compiler instance.
+         *
+         * A [FxScriptCompiler] is built per [uk.me.cormack.lighting7.show.Show], and a `Show` is
+         * built per project switch — and, in the test suite, per test. A per-instance cache meant
+         * every one of those re-evaluated all 28 built-in `.fx.kts` effects: even with the
+         * on-disk jar cache warm, that is 28 jar loads, 28 classloaders and 28 script evaluations
+         * (~70 ms) to arrive at lambdas byte-identical to the ones the previous `Show` had.
+         *
+         * Sharing them is safe because [CompiledFxScript] is immutable and its lambdas are
+         * stateless: a STATEFUL effect's mutable state is handed in per call as the `state`
+         * parameter, never captured. The key is the script body and its mode, so two `Show`s
+         * only share an entry when they compiled exactly the same source.
+         *
+         * Deliberately not keyed on the host configuration. That only selects *where* compiled
+         * jars are cached on disk; it cannot change the bytecode, and the classpath a script
+         * links against is fixed for the life of the JVM (see `ScriptCache.buildFingerprint`).
+         */
+        private val cache = ConcurrentHashMap<String, CompiledFxScript>()
+
+        /** Drop every cached compilation. Test-only seam; nothing in the app needs it. */
+        internal fun clearProcessCache() = cache.clear()
+    }
 
     /**
      * Compile a script body and extract its lambda for the given effect mode.

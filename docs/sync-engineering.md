@@ -33,8 +33,10 @@ The repo split is:
   configuration. From Phase 2, the canonical storage is the
   `machine_overrides` table accessed via the `Overrides` helper. The
   legacy `DaoUniverseConfigs.address` column is retained in the schema
-  but is unused — a one-shot startup migration moves any prior values
-  into `machine_overrides` and nulls the column.
+  but is unused. The one-shot startup migration that moved prior values
+  into `machine_overrides` was removed on 2026-08-24 along with the rest
+  of the migrations — see
+  [`InstallBootstrap.kt`](../src/main/kotlin/uk/me/cormack/lighting7/state/InstallBootstrap.kt).
 * **Transient runtime state** (never synced): grand master / blackout state,
   AI conversation history.
 
@@ -257,11 +259,12 @@ Wire-format changes:
 * New `StageRegionJson` table — rectangular platforms describing the
   playable surface beyond the project bounding box.
 
-Local DB migration: `State.migrateRiggingsV3` runs on PG installs that still
-have a `rigging_position` column. It reads each distinct legacy string, mints
+Local DB migration (removed): `State.migrateRiggingsV3` ran on PG installs that
+still had a `rigging_position` column — it went with the PostgreSQL-gated
+migrations, before the 2026-08-24 removal of the rest. It read each distinct legacy string, minted
 a Rigging row per `(projectId, riggingPosition)` pair (name = the legacy
-string, geometry null), updates `fixture_patches.rigging_id` to point at the
-new row, swaps `stage_y` ↔ `stage_z` on every patch (Y-up → Z-up), and drops
+string, geometry null), updated `fixture_patches.rigging_id` to point at the
+new row, swapped `stage_y` ↔ `stage_z` on every patch (Y-up → Z-up), and dropped
 the `rigging_position` column. Idempotent — gated on the column's existence.
 
 On import (manual fresh-import or post-pull replace), an export whose
@@ -366,9 +369,12 @@ not follow the show to the next rig. Runtime DMX output picks both up in
 [`DbFixtureLoader`](../src/main/kotlin/uk/me/cormack/lighting7/show/DbFixtureLoader.kt).
 
 The legacy `DaoUniverseConfigs.address` column is retained for schema
-compatibility but is no longer the source of truth — a one-shot startup
-migration in `State.initDatabase` moves any pre-Phase-2 values into
-`machine_overrides` and nulls the column. A future phase can drop it.
+compatibility but is no longer the source of truth. The one-shot startup
+migration in `State.initDatabase` that moved pre-Phase-2 values into
+`machine_overrides` and nulled the column was removed on 2026-08-24 with the
+rest of the migrations (see
+[`InstallBootstrap.kt`](../src/main/kotlin/uk/me/cormack/lighting7/state/InstallBootstrap.kt)),
+having already run everywhere it needed to. A future phase can drop the column.
 
 The exporter never serialises override values: machine-local fields stay
 in the local SQLite DB by construction. On import, no override rows are

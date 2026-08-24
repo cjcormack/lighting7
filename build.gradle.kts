@@ -898,13 +898,17 @@ registerJpackageTask(
 )
 
 tasks.test {
-    // Gradle defaults a Test task to 512m, which this suite outgrew: ~1300 tests in one JVM, and
-    // every integration test constructs a `State` — which builds a Kotlin scripting host and walks
-    // the build tree to fingerprint the script cache. Past the limit the failure is an
-    // OutOfMemoryError thrown from whichever `State.<init>` happens to run next, so it surfaces as
-    // a handful of *unrelated* tests failing differently on each run rather than as anything that
-    // points at memory. Raise it explicitly so that stays diagnosable.
-    maxHeapSize = "2g"
+    // This suite once needed 2g, and the reason was a leak rather than a working set: every
+    // `initializeShow()` added a `this`-capturing lambda to CoreMIDI4J's **static** listener
+    // list and never removed it, so all ~490 `State`s stayed reachable for the life of the JVM
+    // along with their Shows, scripting hosts and compiled-script classloaders. `State.shutdown()`
+    // now unregisters it (see `unregisterCoreMidiChangeListener`), and the suite passes at the
+    // 512m default again. Kept at 1g for headroom, not necessity.
+    //
+    // The failure mode if this is ever too low is worth knowing: an OutOfMemoryError thrown from
+    // whichever `State.<init>` happens to run next, which surfaces as a handful of *unrelated*
+    // tests failing differently on each run rather than as anything that points at memory.
+    maxHeapSize = "1g"
 
     // Pin the data directory at a build-local path for the whole suite. Every integration test
     // constructs a `State`, and `State` resolves the compiled-script cache, the prompt-book PDF
@@ -922,8 +926,8 @@ tasks.test {
     //
     // `lighting7.dataDir` is read before any config (see AppDataDir.kt), so a system property is
     // the only hook — `testAppConfig` can pin `database.path` but not this. Persisting it under
-    // `build/` rather than a per-run temp dir keeps the script cache warm between runs, which is
-    // most of the suite's startup cost; `clean` discards it.
+    // `build/` rather than a per-run temp dir keeps the compiled-script cache warm between runs,
+    // which is worth ~55 s on the first run after any rebuild; `clean` discards it.
     systemProperty("lighting7.dataDir", layout.buildDirectory.dir("test-data").get().asFile.absolutePath)
 
     // Forward opt-in test flags to the forked test JVM. `fx.benchmark` gates the

@@ -7,6 +7,7 @@ import java.io.Closeable
 import java.nio.file.Path
 import java.nio.file.Paths
 import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
@@ -58,6 +59,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
+import uk.co.xfactorylibrarians.coremidi4j.CoreMidiNotification
 
 private val logger = LoggerFactory.getLogger("State")
 
@@ -707,6 +709,11 @@ class State(val config: ApplicationConfig) {
         runCatching { projectChangedJob?.cancel() }
         projectChangedJob = null
 
+        // Before the MIDI stack goes down: the listener's callback reaches back into
+        // `midiRegistry`, and it is the one teardown step whose absence silently retains the
+        // whole State graph.
+        unregisterCoreMidiChangeListener()
+
         runCatching { surfaceInputRouter.stop() }
         runCatching { surfaceFeedbackPublisher.stop() }
         runCatching { midiLearnSessionManager.stop() }
@@ -777,14 +784,50 @@ class State(val config: ApplicationConfig) {
     private fun registerCoreMidiChangeListener() {
         try {
             if (!CoreMidiDeviceProvider.isLibraryLoaded()) return
-            CoreMidiDeviceProvider.addNotificationListener {
+            // Held so [shutdown] can take it back off. CoreMIDI4J's listener list is **static**,
+            // and this lambda captures `this` — so without the removal a `State` stays strongly
+            // reachable for the life of the JVM, dragging its Show, registries, both scripting
+            // hosts and every compiled-script classloader with it. That is invisible in
+            // production (one State per process) and fatal in the test suite, which builds one
+            // per test: it is why the Test task needed `maxHeapSize = 2g`.
+            val listener = CoreMidiNotification {
                 GlobalScope.launch {
                     runCatching { midiRegistry.rescan(createPlatformKtmidiAccessSource()) }
                 }
             }
+            CoreMidiDeviceProvider.addNotificationListener(listener)
+            coreMidiListener = listener
         } catch (t: Throwable) {
             logger.debug("CoreMIDI4J notification listener unavailable: {}", t.message)
         }
+    }
+
+    /** Registered by [registerCoreMidiChangeListener]; removed in [shutdown]. See there for why. */
+    private var coreMidiListener: CoreMidiNotification? = null
+
+    private fun unregisterCoreMidiChangeListener() {
+        val listener = coreMidiListener ?: return
+        coreMidiListener = null
+        runCatching { CoreMidiDeviceProvider.removeNotificationListener(listener) }
+            .onFailure { logger.debug("Could not remove CoreMIDI4J listener: {}", it.message) }
+    }
+
+    /**
+     * True when the database holds no user tables at all — a brand-new install (or a fresh
+     * per-test SQLite file). Deliberately narrow: it is the one case where the model cannot
+     * disagree with the live schema, so the cheap `SchemaUtils.create` path in [initDatabase]
+     * is safe. Any table at all — including a partially-created schema from an interrupted
+     * first boot — falls back to full reconciliation.
+     *
+     * Excludes SQLite's own `sqlite_*` internal tables, which appear as soon as an
+     * AUTOINCREMENT column or an internal index exists.
+     */
+    private fun JdbcTransaction.isEmptyDatabase(): Boolean {
+        var empty = true
+        exec("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'") { rs ->
+            if (rs.next()) empty = rs.getInt("n") == 0
+        }
+        return empty
     }
 
     private fun initDatabase(): Database {
@@ -809,52 +852,45 @@ class State(val config: ApplicationConfig) {
             // but is acceptable for this development/personal project setup
             // Table list lives in models/Schema.kt so the sync-coverage guard can assert
             // against the same set the schema is built from.
-            @Suppress("DEPRECATION")
-            SchemaUtils.createMissingTablesAndColumns(*ALL_TABLES.toTypedArray())
+            //
+            // **Branching on an empty database is a ~1.2 s win, not a micro-optimisation.**
+            // `createMissingTablesAndColumns` reconciles the model against the live schema via
+            // JDBC metadata, and sqlite-jdbc answers that by re-parsing each table's DDL: for
+            // these 41 tables it costs ~1220 ms, and it costs that whether or not anything is
+            // actually missing (measured: an immediate second call costs the same again). A
+            // database with no tables at all has nothing to reconcile, so plain `create()` —
+            // `CREATE TABLE IF NOT EXISTS` plus the declared indices — is equivalent there and
+            // runs in ~6 ms. That is the whole of the test suite's per-test fixture cost (487
+            // tests each built a fresh DB), and it also takes ~1.2 s off a new desk's first boot.
+            if (isEmptyDatabase()) {
+                SchemaUtils.create(*ALL_TABLES.toTypedArray())
+            } else {
+                @Suppress("DEPRECATION")
+                SchemaUtils.createMissingTablesAndColumns(*ALL_TABLES.toTypedArray())
+            }
 
-            // Drops a legacy index name; both PG and SQLite accept `DROP INDEX IF EXISTS`.
-            exec("DROP INDEX IF EXISTS fx_presets_project_id_name")
+            // The two partial unique indexes below are raw SQL because Exposed cannot declare a
+            // `WHERE` clause on an index, so `SchemaUtils` does not create them. They are not
+            // legacy cleanup — drop them and the constraints they enforce simply stop existing.
 
-            // FX definition effectIds are unique per project, not globally — a global unique
-            // index made cloning or importing any project with a script-defined effect fail.
-            // The replacement uniqueIndex(project, effectId) is created by
-            // createMissingTablesAndColumns above.
-            exec("DROP INDEX IF EXISTS fx_definitions_effect_id")
-
-            // Prompt books collapsed to one-per-project: drop the legacy per-name unique
-            // index (was uniqueIndex(project, name)). The new uniqueIndex(project) is
-            // created by createMissingTablesAndColumns above.
-            exec("DROP INDEX IF EXISTS prompt_books_project_id_name")
-
-            // Cue stacks gained a SEPARATOR type; separators may share a name (e.g. two "Interval"
-            // dividers), so the old full (project, name) unique index is replaced with a partial one
-            // scoped to real STACK rows. Drop the legacy index name created by the previous model.
-            exec("DROP INDEX IF EXISTS cue_stacks_project_id_name")
+            // Cue stacks gained a SEPARATOR type, and separators may share a name (e.g. two
+            // "Interval" dividers), so uniqueness is scoped to real STACK rows.
             exec("""
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_cue_stack_name_per_project
                     ON cue_stacks (project_id, name)
                     WHERE type = 'STACK'
             """.trimIndent())
 
-            // Cue names are no longer unique. The (project, name) index predates cue stacks;
-            // with a project owning many stacks, two stacks may legitimately both hold a
-            // "Blackout". Cue numbers stay unique per stack (uq_cue_number_per_stack below).
-            exec("DROP INDEX IF EXISTS cues_project_id_name")
-
-            // Partial unique index: cue_number must be unique per stack for STANDARD cues.
-            // SQLite supports partial indexes with the same syntax.
+            // Cue *names* are not unique — with a project owning many stacks, two stacks may both
+            // hold a "Blackout" — but cue numbers are, per stack, for STANDARD cues.
             exec("""
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_cue_number_per_stack
                     ON cues (cue_stack_id, cue_number)
                     WHERE cue_number IS NOT NULL AND cue_type = 'STANDARD'
             """.trimIndent())
 
-            runStateMigrations()
+            ensureInstallRow()
         }
-
-        // Deliberately after the schema transaction, with a transaction per stack: a stack this
-        // can't number must not roll the schema work back with it. See the function's docs.
-        backfillAutoCueNumbers(database)
 
         return database
     }

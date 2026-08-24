@@ -203,8 +203,10 @@ class Show(
     private val scriptsLock = ReentrantLock()
     private val scriptingHost = BasicJvmScriptingHost(state.scriptingHostConfiguration)
 
+    // Closed in [close]. `newFixedThreadPoolContext` starts its thread eagerly and does not stop
+    // it when the context is collected, so a Show that is replaced (project switch) or discarded
+    // (one per test) leaks a live thread until the JVM exits.
     private val runnerPool = newFixedThreadPoolContext(1, "lighting-running-pool")
-    private val compilerPool = newFixedThreadPoolContext(1, "lighting-compiler-pool")
 
     /**
      * True once [start] has completed — i.e. fixtures are loaded and the FX engine is running, so
@@ -286,6 +288,8 @@ class Show(
         // calls this directly rather than going through `Fixtures.register(removeUnused)`,
         // so without this the transmit threads and their sockets outlive the show.
         fixtures.closeControllers()
+        // After the controllers, so nothing is still dispatching onto it. See its declaration.
+        runCatching { runnerPool.close() }
     }
 
     private val pendingSpeedMasterWrites = java.util.concurrent.ConcurrentHashMap<java.util.UUID, SpeedMasterBank.Change>()

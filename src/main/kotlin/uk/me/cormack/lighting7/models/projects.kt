@@ -18,8 +18,9 @@ object DaoProjects: IntIdTable("projects") {
     val isCurrent = bool("is_current").default(false)
     // The project's currently-active cue stack (the show playhead), or null when the show is not
     // running. Plain integer, no enforced FK — a deleted stack is reconciled by nulling this in the
-    // stack-delete path. (The legacy `active_entry_id` column referenced the dropped show_entries
-    // table; StateMigrations.migrateCollapseShowIntoStacks copies its value here.)
+    // stack-delete path. (It replaced a legacy `active_entry_id` column that referenced the
+    // dropped show_entries table; the migration that copied that value across was removed with
+    // the rest of them on 2026-08-24 — see state/InstallBootstrap.kt.)
     val activeStackId = integer("active_stack_id").nullable()
     // Per-project stage bounds (metres) for the FOH 3D view; synced with the project
     // because shows are designed for a specific venue. See docs/fixtures-engineering.md.
