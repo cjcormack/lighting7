@@ -230,6 +230,13 @@ internal fun Route.routeApiRestProjects(state: State) {
                     look.effects.forEach { it.delete() }
                     look.delete()
                 }
+                // Templates after cues: deleteCueChildren already dropped any layer pointing at
+                // one. No DB-level cascade on `templates.project_id`, so an un-deleted template
+                // blocks project.delete() outright.
+                project.templates.forEach { template ->
+                    template.rows.forEach { it.delete() }
+                    template.delete()
+                }
                 project.fixtureGroups.forEach { group ->
                     group.members.forEach { it.delete() }
                     group.delete()

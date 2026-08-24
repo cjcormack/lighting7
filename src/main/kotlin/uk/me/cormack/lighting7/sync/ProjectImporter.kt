@@ -234,6 +234,13 @@ class ProjectImporter(private val state: State) {
                 look.effects.forEach { it.delete() }
                 look.delete()
             }
+            // Templates after cues (deleteCueChildren already dropped any layer pointing at one).
+            // Without this, the surviving row is untouched and `populateProject` below re-imports
+            // the JSON templates on top of it, tripping `uniqueIndex(project, name)`.
+            project.templates.forEach { template ->
+                template.rows.forEach { it.delete() }
+                template.delete()
+            }
             project.speedMasters.forEach { it.delete() }
             project.fixtureGroups.forEach { group ->
                 group.members.forEach { it.delete() }

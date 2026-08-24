@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
+import uk.me.cormack.lighting7.testsupport.seedRichProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
 import java.nio.file.Path
@@ -145,6 +146,30 @@ class ProjectImporterReplaceTest {
         // Belt-and-braces: project uuid is still what we expect.
         transaction(state.database) {
             assertEquals(projectUuid, DaoProject.findById(projectId)!!.uuid)
+        }
+    }
+
+    @Test
+    fun `replace does not duplicate or orphan templates`() {
+        // A1 regression (docs/plans/backend-post-refactor-sweep.md): replaceFromWorkingTree had no
+        // teardown loop for templates, so re-import re-inserted the JSON templates onto the
+        // untouched survivors and tripped uniqueIndex(project, name).
+        val projectId = seedRichProject(state)
+        val origNames = transaction(state.database) {
+            DaoProject.findById(projectId)!!.templates.map { it.name }.toSet()
+        }
+        assertTrue(origNames.isNotEmpty(), "test sanity: rich fixture should seed templates")
+
+        val exportDir = workingRoot.resolve("export")
+        Files.createDirectories(exportDir)
+        exporter.export(projectId, exportDir)
+
+        importer.replaceFromWorkingTree(projectId, exportDir)
+
+        transaction(state.database) {
+            val names = DaoProject.findById(projectId)!!.templates.map { it.name }
+            assertEquals(origNames, names.toSet(), "template set should be unchanged after replace")
+            assertEquals(names.size, names.toSet().size, "no duplicate template names after replace")
         }
     }
 
