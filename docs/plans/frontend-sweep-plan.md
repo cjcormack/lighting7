@@ -1,0 +1,2030 @@
+# Frontend sweep — what the refactors left behind
+
+> **Document status: findings catalogue, awaiting triage.** Produced 2026-08-24 by a two-round
+> multi-agent sweep of `lighting-react` (31 reviewer/verifier agents: nine audit dimensions plus a
+> completeness critic, then five gap dimensions the critic identified; every finding adversarially
+> verified against the code, S1s twice independently, and the S1/S2 band re-read by hand). Scope is
+> the **frontend only** — backend facts appear solely in §14, which reconciles this catalogue
+> against the sibling [backend-post-refactor-sweep.md](backend-post-refactor-sweep.md): frontend
+> work that must land in step with its waves, plus the few backend findings this sweep hit that its
+> backlog does not carry. This document departs from the house plan format in one declared way: each
+> finding carries a severity / priority / complexity rating and a suggested model tier, defined in
+> §2, because the intended consumer is a dispatching operator handing items to agents.
+>
+> Finding IDs use the slug grammar of `followups.md` but with an `FS-` prefix so they cannot be
+> confused with real `FU-` items until deliberately promoted. Known-open `FU-` items were excluded
+> from the sweep by construction; where a finding *corrects* one, it says so inline
+> (`FS-DEAD-ORPHAN-FILES` vs `FU-FE-REBIND-INPLACE`, `FS-DEAD-DTO-FIELDS` vs
+> `FU-FE-SHARED-LOOK-EDIT-GUARD`).
+
+## 1. Context
+
+`lighting-react` has just absorbed two long refactor arcs — looks-and-layers (five sessions) and
+desk-simplification (four) — that rewrote cue compositing around Look layers, made the Programmer a
+page with a scoped grid, split palettes/presets into Looks and Templates, folded Run into Show
+behind the edit lock, and added speed masters. This sweep hunts what that much rewriting predictably
+leaves behind: residue and gaps, performance regressions, dead code, unnecessary architecture, and
+stale rationale. The deliverable is this catalogue; **no code was changed**.
+
+The headline: the refactors themselves held up well — the load-bearing invariants (grid never
+remounts, null scope ≠ Output, the two apply gestures, the lock semantics) are all intact and mostly
+pinned. What the sweep found instead is two genuine live-desk bugs at the *edges* the refactors
+didn't reach (`FS-BUG-CUESLOT-LIVENESS`, `FS-BUG-STALE-ROW-SNAPSHOT`), a band of real per-frame
+waste in the WS fan-out and the fade path, roughly ten thousand lines of dead or misplaced code, and
+a long tail of rationale comments that now describe deleted machinery — the most dangerous kind of
+residue, because future agents obey comments.
+
+## 2. How to read this
+
+Each finding: one `### FS-<AREA>-<SLUG>` block with a rating line, the mechanism, and a fix at
+agent-briefing altitude (what to do and what must not break — never step-by-step). Code is cited as
+path + symbol, no line numbers. Ratings:
+
+- **Severity** — `S1` incorrect behaviour or data loss on a live desk; `S2` real performance cost,
+  or misleading code likely to breed bugs; `S3` debt (dead code, duplication, structure); `S4`
+  cosmetic — naming, docs, hygiene.
+- **Priority** — `P1` next working session; `P2` next cleanup round; `P3` opportunistic, or ride
+  along with a neighbouring fix.
+- **Complexity** — `C1` mechanical, no design; `C2` contained to one subsystem; `C3` cross-cutting
+  or needs a design decision first.
+- **Model** — cheapest tier an agent needs to fix it *safely*: `haiku` for mechanical batches,
+  `sonnet` for contained changes, `opus` for cross-cutting or perf work, `fable` only where the
+  change touches live-desk invariants (grid-remount rule, WS ordering, blind semantics, transport).
+
+The backend sweep's scales map roughly onto these: its critical/high/medium/low ≈ S1/S2/S3/S4, its
+P0 folds into P1 here, and its S/M/L ≈ C1/C2/C3 — the vocabularies differ because this doc's
+consumer dispatches per-finding agents while that one executes in waves.
+
+Verification status: every finding here survived an adversarial verifier that read the cited code;
+where the verifier corrected the original claim, the dossier states the corrected version. Ratings
+are post-verification (several were downgraded). One batch (`FS-DOCS-STALE-COMMENTS`, the doc-comment
+items from the residue dimension) missed its verdict pass on a bookkeeping mismatch; its individual
+claims are trivially checkable at fix time and are flagged there.
+
+## 3. Index
+
+121 findings: 2 × S1, 19 × S2, 66 × S3, 34 × S4. Sorted by severity then priority. The
+`FS-COORD-*` rows ship with backend waves (§14); the `FS-BE-*` proposals for the backend
+backlog are listed in §14 only.
+
+| ID | Finding | Sev | Pri | Cx | Model |
+|---|---|---|---|---|---|
+| `FS-BUG-CUESLOT-LIVENESS` | "Is this cue/stack live?" is derived from the FX effect stream, so a rows-only cue reads… | S1 | P1 | C2 | fable |
+| `FS-BUG-STALE-ROW-SNAPSHOT` | Per-row programmer snapshot cache goes stale across an off→on subscription cycle | S1 | P1 | C2 | fable |
+| `FS-BUG-EDITOR-RESET-NOOP` | A changed `value` prop can never reach a live playground editor, so ScriptForm's Reset si… | S2 | P1 | C2 | sonnet |
+| `FS-BUG-FADE-KEY-SNAPSHOT` | `PROGRAMMER_FADE_KEY` is shared by key but not by value — ShowBar's Blind uses a mount-ti… | S2 | P1 | C2 | sonnet |
+| `FS-BUG-FXROUTE-REGEX` | `isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects… | S2 | P1 | C1 | sonnet |
+| `FS-BUG-PROGRAMMER-ERROR-DROPPED` | `programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere… | S2 | P1 | C2 | sonnet |
+| `FS-BUG-RECONNECT-RESYNC` | Post-reconnect cache resync is a hand-maintained 15-tag list against 47 tagTypes; 20 tags… | S2 | P1 | C2 | sonnet |
+| `FS-BUG-TIMEDLAYERS-RENAME` | Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →… | S2 | P1 | C1 | sonnet |
+| `FS-DUP-AGGREGATION` | Two implementations of "aggregate a property across heads", already numerically divergent | S2 | P1 | C3 | opus |
+| `FS-PERF-FADE-IN-SHOWBAR` | Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of `Prog… | S2 | P1 | C3 | fable |
+| `FS-PERF-MARQUEE-COUNT` | `batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per… | S2 | P1 | C2 | sonnet |
+| `FS-PERF-PROGRAMMER-MEMO-BARRIER` | The programmer page has no memo barrier between chrome and body | S2 | P1 | C2 | sonnet |
+| `FS-PERF-SAVELOOK-INVALIDATION` | A layer-scope drag refetches the whole fixture list every 400 ms | S2 | P1 | C1 | sonnet |
+| `FS-PERF-WS-SINGLE-PARSE` | The channelState firehose is `JSON.parse`d 24 times per frame | S2 | P1 | C2 | sonnet |
+| `FS-TEST-LOOKONLY-GATE` | The LOOK-only gate — the guard against silently converting a generic template to per-fixt… | S2 | P1 | C1 | sonnet |
+| `FS-BUG-EDITOR-SILENT-READONLY` | A failed `/script-editor/versions` drops every editor to read-only and the frontend neith… | S2 | P2 | C2 | sonnet |
+| `FS-BUG-PIXEL-CACHE-PERMUTATION` | `useGroupColourValues` never compares per-member colours, so a colour chase across a pixe… | S2 | P2 | C2 | sonnet |
+| `FS-PERF-CODE-SPLITTING` | The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere | S2 | P2 | C2 | opus |
+| `FS-PERF-COLLAPSED-PANELS` | Collapsed overview panels keep doing full live work on every route | S2 | P2 | C2 | opus |
+| `FS-PERF-PROMPTBOOK-FADE-DRILL` | Prompt Book prop-drills `fadeProgress` to every cue card in the whole show | S2 | P2 | C2 | sonnet |
+| `FS-TEST-PUBLICPATH` | The publicPath auth/boot-gate bypass predicate is untested and unexported | S2 | P2 | C2 | sonnet |
+| `FS-COORD-CUEEDIT-RETIRE` | Delete the client's cueEdit remnants when backend D1 lands | S3 | P1 | C1 | sonnet |
+| `FS-COORD-GROUPS-WS` | Delete the whole client groups WS layer when backend D3 deletes `GroupSocket` — after ans… | S3 | P1 | C1 | sonnet |
+| `FS-COORD-LEGACY-TEMPO` | Migrate the three legacy-tempo consumers to `speedMasters.*` when backend D2 lands | S3 | P1 | C2 | sonnet |
+| `FS-EDITOR-DEBOUNCE-DIRTY` | onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every Compil… | S3 | P1 | C2 | sonnet |
+| `FS-PERF-BPM-INVALIDATION` | Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects` | S3 | P1 | C2 | sonnet |
+| `FS-TYPES-TEMPLATE-TOGGLE-MASK` | Template toggle discards the client's `propertyMask` and the server derives none, so ever… | S3 | P1 | C1 | sonnet |
+| `FS-WS-ERROR-ISOLATION` | `notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registe… | S3 | P1 | C1 | sonnet |
+| `FS-ARCH-ALERTDIALOG-DEP` | `@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting fro… | S3 | P2 | C1 | haiku |
+| `FS-ARCH-CURSOR-OWNERSHIP` | Two stores own the live-cue/armed-next cursors; several of the resulting copies have no r… | S3 | P2 | C3 | fable |
+| `FS-ARCH-GRID-IN-ROUTES` | `FixturesListContainer` — the shared value grid — lives in a route module a component imp… | S3 | P2 | C2 | sonnet |
+| `FS-ARCH-IMPORT-CYCLE` | The tree's only runtime import cycle: `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`,… | S3 | P2 | C1 | sonnet |
+| `FS-ARCH-LOCALSTORAGE-BOOT` | Unguarded `localStorage` on the boot path, against the policy the tree states explicitly | S3 | P2 | C1 | haiku |
+| `FS-BUG-CUE-TAG-STALE` | The `Cue` tag has no WS invalidation on any path, so an expanded cue's composed values go… | S3 | P2 | C2 | opus |
+| `FS-BUG-WS-SEND-DROPPED` | Every WS write is silently dropped while the socket is down — programmer sets, Blind, bla… | S3 | P2 | C2 | opus |
+| `FS-COORD-ADMIN-GATE` | Re-verify the client's hand-mirrored admin gates when backend F6 lands | S3 | P2 | C1 | sonnet |
+| `FS-COORD-API-NORMALIZE` | Every hard rename in backend F1/F2/F3/F5/F8 is a same-change client edit | S3 | P2 | C2 | sonnet |
+| `FS-COORD-WIRE-FIELD-DELETIONS` | The retired-concept wire fields die server-side under backend A2/D9/B4 — coordinate, don'… | S3 | P2 | C1 | haiku |
+| `FS-DEAD-CUELAYER-HELPERS` | `reorderCueLayers` and `densifyCueLayerOrder` have no production caller | S3 | P2 | C2 | sonnet |
+| `FS-DEAD-CURRENTCUESTATE` | The `currentCueState` chain is dead, and its wire-compat comment protects a type nothing… | S3 | P2 | C1 | haiku |
+| `FS-DEAD-DEVDEPS` | Eight unused devDependencies, including a Prettier-in-ESLint wiring never made | S3 | P2 | C1 | sonnet |
+| `FS-DEAD-EXPORTS` | Sixteen exported symbols with zero references anywhere | S3 | P2 | C1 | haiku |
+| `FS-DEAD-ORPHAN-FILES` | Six files unreachable from `main.tsx` (and from any test) | S3 | P2 | C1 | haiku |
+| `FS-DEAD-RTKQ-HOOKS` | Fourteen exported RTK Query hooks with zero importers; three FX-definition endpoints full… | S3 | P2 | C2 | sonnet |
+| `FS-DUP-COLOUR-POPOVER` | `FxColourPicker` and `FxColourListPicker` duplicate the whole colour-popover body | S3 | P2 | C2 | sonnet |
+| `FS-DUP-EFFECT-COMPAT` | Effect compatibility and sentinel-property resolution implemented twice | S3 | P2 | C2 | sonnet |
+| `FS-DUP-OVERVIEW-TOGGLES` | Four near-identical Overview toggles plus three alias hooks for one persistent toggle | S3 | P2 | C1 | haiku |
+| `FS-DUP-REDIRECTS` | Seventeen byte-identical "redirect to the current project's equivalent" components | S3 | P2 | C1 | haiku |
+| `FS-DUP-ROW-SUBSCRIPTION` | `useRowOwnership` and `useLocalRowValues` duplicate the whole per-row programmer subscrip… | S3 | P2 | C2 | sonnet |
+| `FS-EDITOR-HIGHLIGHTONLY-PRESENCE` | Read-only works only because React omits an `undefined` attribute — `highlightOnly="false… | S3 | P2 | C1 | sonnet |
+| `FS-EDITOR-PROPTYPES-PHANTOM` | `prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares | S3 | P2 | C1 | haiku |
+| `FS-PERF-CHANNEL-FANOUT` | One row's callback fires once per changed channel per batch, rebuilding its signature eac… | S3 | P2 | C2 | opus |
+| `FS-PERF-CHANNELSOURCE-REBUILD` | `createProgrammerChannelSource.rebuild` re-resolves every programmer entry on frames that… | S3 | P2 | C1 | sonnet |
+| `FS-PERF-FADE-DISPATCH` | Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame | S3 | P2 | C3 | fable |
+| `FS-PERF-PROVENANCE-REFETCH` | Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab | S3 | P2 | C3 | fable |
+| `FS-PERF-SIGNATURE-CACHE` | `changedKeys` recomputes both sides' JSON signatures on every diff | S3 | P2 | C2 | sonnet |
+| `FS-RES-CUECARDEDITOR-DIR` | `runner/program/CueCardEditor/` is a directory owned by nobody | S3 | P2 | C1 | haiku |
+| `FS-RES-PALETTERESULT` | `UpdateDialog` renders an unreachable branch from a field the server deleted | S3 | P2 | C1 | haiku |
+| `FS-RES-PRESETPICKER` | `FxSection`'s `presetPicker` prop and doc describe a deleted synthetic-fixture preset bra… | S3 | P2 | C1 | haiku |
+| `FS-TEST-COLOUR-TEMPLATES` | `FxColourTemplates` is untested, and its offerable filter is stricter than CLAUDE.md states | S3 | P2 | C2 | sonnet |
+| `FS-TEST-CUEUTILS-TRIGGERS` | `cueUtils.test.ts` pins fourteen layer fields (CLAUDE.md says thirteen) and none of the t… | S3 | P2 | C1 | haiku |
+| `FS-TEST-EDITOR-PINS` | The documented cross-type poisoning landmine is safe by construction today — and nothing… | S3 | P2 | C2 | sonnet |
+| `FS-TEST-PROGRAMMER-SCOPE` | `focusLayer`'s membership guard and the removed-layer fallback are unpinned | S3 | P2 | C1 | sonnet |
+| `FS-TEST-PROVENANCE-PIN` | The provenance-signature test pins field names that no longer exist, and the `layerSource… | S3 | P2 | C1 | sonnet |
+| `FS-TYPES-ADDLAYER-MASK-DROP` | `ProgrammerLookStack.handleAdd` drops `propertyMask` when forwarding LayerPicker's layer | S3 | P2 | C1 | haiku |
+| `FS-TYPES-CUE-STOMP` | Cue-level `stomp` is absent from the `Cue`/`CueInput` mirror, so duplicating a cue silent… | S3 | P2 | C1 | sonnet |
+| `FS-TYPES-EFFECTTYPE-UNION` | `EffectType` is a closed 20-literal union with no backend counterpart, laundered by a cast | S3 | P2 | C2 | sonnet |
+| `FS-TYPES-MASKGROUP-DUP` | `PropertyMaskGroup` is a second, free-standing copy of `AttributeFamily` | S3 | P2 | C2 | sonnet |
+| `FS-TYPES-PALETTE-WIRE-ARMS` | Retired palette wire arms kept alive by "still on the wire" claims that are now false | S3 | P2 | C2 | sonnet |
+| `FS-TYPES-PRESETCOUNT-RENAME` | `CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount` | S3 | P2 | C1 | haiku |
+| `FS-TYPES-RIGGING-POSITION` | `FixturePatch.riggingPosition` is a phantom; the StageMarker badge it drives can never re… | S3 | P2 | C2 | sonnet |
+| `FS-ARCH-BUSKING-GOD-HOOK` | `useBuskingState` is a 617-line hook mixing selection, derivation, presence rules and fou… | S3 | P3 | C2 | sonnet |
+| `FS-BUG-3D-PLACEHOLDER` | The imperative 3D colour copy has no placeholder arm — an unmatched patch draws as a full… | S3 | P3 | C1 | sonnet |
+| `FS-DEAD-DTO-FIELDS` | Wire-mirror fields never read by the client, several naming retired concepts | S3 | P3 | C2 | sonnet |
+| `FS-DEAD-WS-METHODS` | Six WS API methods declared, implemented, never called | S3 | P3 | C2 | sonnet |
+| `FS-EDITOR-DEAD-BRANCH` | ScriptEditor's entire non-compact branch is unreachable and duplicates the widget mount v… | S3 | P3 | C2 | sonnet |
+| `FS-EDITOR-LIFECYCLE` | Playground instances are never destroyed on unmount, and `window.playgroundInstance` is a… | S3 | P3 | C1 | sonnet |
+| `FS-PERF-CHANNEL-CACHE-DISPATCH` | /channels holds one RTK Query cache entry per channel, dispatching per changed channel pe… | S3 | P3 | C2 | sonnet |
+| `FS-PERF-LITKEYS-ALLOC` | `useLitFixtureKeys` rebuilds a Set and spreads it on every snapshot read | S3 | P3 | C1 | haiku |
+| `FS-PERF-MOBILE-SHEET-FADE` | Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick | S3 | P3 | C2 | sonnet |
+| `FS-PERF-PALETTE-QUERIES` | CommandPalette subscribes six list queries while closed, on every route | S3 | P3 | C1 | haiku |
+| `FS-PERF-STAGE-BUFFER-UPLOADS` | `StageEmitters` marks every instanced attribute dirty every frame, so a static rig re-upl… | S3 | P3 | C2 | sonnet |
+| `FS-RES-CLOUDSYNC-SPLIT` | `routes/CloudSync.tsx` is a 1,306-line module holding two routes and twenty components —… | S3 | P3 | C1 | haiku |
+| `FS-RES-FIXTUREMODEL-SPLIT` | `FixtureModel.tsx` mixes a 1,500-line R3F component with pure beam-cookie geometry, forci… | S3 | P3 | C2 | sonnet |
+| `FS-RES-PROMPTBOOK-GODPAGE` | `PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()`… | S3 | P3 | C3 | sonnet |
+| `FS-TYPES-GROUPFX-WS` | groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls | S3 | P3 | C1 | haiku |
+| `FS-TYPES-SURFACE-DESCRIPTORS` | Control-surface descriptors omit `touchCc` and `programChange`, and type `BankButtonContr… | S3 | P3 | C1 | haiku |
+| `FS-ARCH-BRIDGE-EVAL` | ~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is… | S4 | P2 | C2 | sonnet |
+| `FS-COORD-NEW-BROADCASTS` | When backend B5 adds `scriptListChanged`/`fxDefinitionListChanged`, add the client bridges | S4 | P2 | C1 | sonnet |
+| `FS-DOCS-CLAUDEMD-CUE-ARM` | CLAUDE.md claims `EditorContextValue`'s `cue` arm is kept; the code removed it in 2b | S4 | P2 | C1 | haiku |
+| `FS-DOCS-COMPATIBLELOOKIDS` | `compatibleLookIds` is documented as type-gated and deferred-only in three places; it is… | S4 | P2 | C1 | haiku |
+| `FS-DOCS-ELEMENT-KEY-INVARIANT` | `LookRowStore` cites `syntheticFixture.ts` as the record of the element-key invariant; th… | S4 | P2 | C1 | sonnet |
+| `FS-DOCS-SPEEDMASTERS` | CLAUDE.md §Speed Masters and two code comments describe the deleted 2..N split and a `Spe… | S4 | P2 | C1 | haiku |
+| `FS-DOCS-STALE-COMMENTS` | Batch: ~14 rationale comments naming callers, renderers or files that no longer exist | S4 | P2 | C1 | haiku |
+| `FS-RES-ROUTES-CONVENTION` | `routes/` mixes route modules, settings-tab bodies, orphan redirects and a pure helper —… | S4 | P2 | C2 | sonnet |
+| `FS-RES-RUNNER-DIR` | `components/runner/`'s `program/` and `run/` subdirs are named for deleted routes | S4 | P2 | C2 | sonnet |
+| `FS-ARCH-SURFACES-PATTERN` | `store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the… | S4 | P3 | C2 | sonnet |
+| `FS-CHROME-BEAT-MAP-PRUNE` | Per-master beat subscribables are never pruned, so reconnects re-request beats nothing wa… | S4 | P3 | C2 | sonnet |
+| `FS-CHROME-BEAT-RESUBSCRIBE` | `BeatIndicator` tears down and re-creates its WS subscription on every sync transition | S4 | P3 | C2 | sonnet |
+| `FS-COORD-PING` | Backend D5 deletes the WS `ping` type; this client sends it | S4 | P3 | C1 | haiku |
+| `FS-DEAD-CSS` | `.scrollbar-thin` and its three webkit child rules serve a deleted palette strip | S4 | P3 | C1 | haiku |
+| `FS-DEAD-EXPORT-KEYWORD` | Ten symbols exported but used only inside their own module | S4 | P3 | C1 | haiku |
+| `FS-DEAD-PROTOTYPES` | `src/prototypes/` is 2.4k lines of shipped-and-done design scratch inside the compiled tree | S4 | P3 | C1 | haiku |
+| `FS-DOCS-CLAUDEMD-PROVENANCE` | CLAUDE.md's provenance section names `lookId`/`lookName`, replaced by `layerSource` | S4 | P3 | C1 | haiku |
+| `FS-DOCS-OUTOFSCOPE-COMMENT` | `RecordSkipReason.OUT_OF_SCOPE`'s comment names "palette routes" and claims they are the… | S4 | P3 | C1 | haiku |
+| `FS-DOCS-REF-RATIONALE` | `programmerValue.ts` and `useCellWriters` still teach the retired `ref:` grammar as current | S4 | P3 | C1 | haiku |
+| `FS-DUP-CHANNEL-SLIDER` | Four copies of the labelled 0–255 channel slider row | S4 | P3 | C1 | haiku |
+| `FS-DUP-MARKER-ROW` | The same cue separator renders two different ways depending on surface | S4 | P3 | C1 | sonnet |
+| `FS-DUP-MINISTAGE-GEL` | `MiniStage.pickColour` is a third, divergent copy of the gel arm of the colour dispatch | S4 | P3 | C1 | haiku |
+| `FS-DUP-TARGETKEY` | Three spellings of the `type:key` target encoding; the named owner has no users | S4 | P3 | C1 | haiku |
+| `FS-PERF-LAYER-SIGNATURE` | `programmerLayers` stringifies the whole layer stack on every programmer notification | S4 | P3 | C1 | haiku |
+| `FS-PERF-TRANSPORT-ALLOC` | `useShowTransport` builds a whole-stack signature string per render | S4 | P3 | C1 | haiku |
+| `FS-RES-ANON-CATCH` | Three bare `.catch(() => {})` where the codebase has a named helper for exactly that | S4 | P3 | C1 | haiku |
+| `FS-RES-LIGHTING-EDITOR-DIR` | `components/lighting-editor/` is a one-file directory named for a pre-Programmer era | S4 | P3 | C1 | haiku |
+| `FS-RES-LOOKREFVALUE-NAME` | `lookRefValue.tsx` is named for the retired `ref:` grammar its own doc says it can never… | S4 | P3 | C1 | haiku |
+| `FS-RES-PANECHROME` | `components/cues/paneChrome.tsx` justifies its home with consumers deleted in 2a | S4 | P3 | C1 | haiku |
+| `FS-RES-STRAY-CAPTURES` | Four `capture *.json` DMX debug dumps sit at the repo root | S4 | P3 | C1 | haiku |
+| `FS-TEST-INDICATOR-LINK` | `ProgrammerIndicator`'s link-vs-inert split is unpinned (the CLAUDE.md path trap itself i… | S4 | P3 | C1 | haiku |
+| `FS-TYPES-CLONE-COUNTS` | `CloneProjectResponse` drops four of the server's content counts, and the dialog discards… | S4 | P3 | C1 | haiku |
+| `FS-TYPES-ISBUILTIN` | `FxDefinition.isBuiltin` has no producer and no consumer | S4 | P3 | C1 | haiku |
+| `FS-WS-DEBOUNCE-TICK` | `debounceMapUpdates` keeps its interval alive one no-op tick past idle | S4 | P3 | C1 | haiku |
+
+## 4. Sequencing and collisions
+
+Findings are deliberately not a queue — but several groups collide, and a few orderings are
+load-bearing. The completeness critic mapped these; verified and consolidated:
+
+1. **Fade root cause before fade patches.** `FS-PERF-FADE-DISPATCH` (stop distributing a frame-rate
+   value) comes before the memo barriers and prop-drill removals
+   (`FS-PERF-FADE-IN-SHOWBAR`, `FS-PERF-PROGRAMMER-MEMO-BARRIER`, `FS-PERF-PROMPTBOOK-FADE-DRILL`,
+   `FS-PERF-MOBILE-SHEET-FADE`) — barriers added first look effective while the wake-up remains, and
+   some become dead work.
+2. **The S1 snapshot fix rides the hook consolidation.** Land `FS-BUG-STALE-ROW-SNAPSHOT` *through*
+   `FS-DUP-ROW-SUBSCRIPTION`'s extraction, or the fix must be written twice.
+3. **Collapse the aggregation before fixing inside it.** `FS-BUG-PIXEL-CACHE-PERMUTATION`'s host
+   code is what `FS-DUP-AGGREGATION` deletes — unify first, or fix in the surviving implementation
+   only.
+4. **One Layout/overview-panel refactor, not five patches.** `FS-PERF-COLLAPSED-PANELS`,
+   `FS-PERF-CHANNELSOURCE-REBUILD`'s `isVisible` gate, `FS-DUP-OVERVIEW-TOGGLES`,
+   `FS-BUG-FXROUTE-REGEX`, `FS-ARCH-IMPORT-CYCLE` and `FS-ARCH-LOCALSTORAGE-BOOT` all converge on
+   `Layout.tsx` and the panels — dispatch as one batch.
+5. **The `components/runner/` tree: move first or last, never interleaved.**
+   `FS-RES-RUNNER-DIR` + `FS-RES-CUECARDEDITOR-DIR` touch files carrying
+   `FS-PERF-MOBILE-SHEET-FADE`, `FS-DUP-MARKER-ROW` and `FS-DUP-TARGETKEY`; pick an order and rebase
+   the rest. `FS-DUP-TARGETKEY` supersedes `FS-DEAD-EXPORTS`' `targetEquals` line.
+6. **The script-editor cluster is one work package** (§5), `FS-EDITOR-LIFECYCLE` first — its
+   imperative handle is what the two bugs and the debounce fix need.
+7. **One manifest pass**: `FS-DEAD-DEVDEPS` + `FS-ARCH-ALERTDIALOG-DEP` +
+   `FS-EDITOR-PROPTYPES-PHANTOM`, then one `npm ci` + full check.
+8. **`FS-ARCH-CURSOR-OWNERSHIP` is a decision before a cleanup** — it absorbs three
+   would-be deletions that are not automatically safe (the two `standbyCueId`s carry different
+   facts).
+9. **Any `cueUtils` edit keeps the field-by-field pin shape** (never tidy it into a deep-equal) and
+   takes `FS-TEST-CUEUTILS-TRIGGERS` along.
+10. **Backend-coordinated items wait for their wave** (§14): the `FS-COORD-*` items ship with
+    backend D1/D2/D3/D5/F-wave changes; `FS-PERF-BPM-INVALIDATION` is superseded if D2 lands first;
+    `FS-PERF-PROVENANCE-REFETCH` is re-measured after backend C3.
+
+A reasonable dispatch order for what's left after those constraints: the independent P1 bugs first
+(`FS-BUG-CUESLOT-LIVENESS` with its two backend additions, `FS-BUG-RECONNECT-RESYNC`,
+`FS-BUG-TIMEDLAYERS-RENAME`, `FS-BUG-PROGRAMMER-ERROR-DROPPED`, `FS-BUG-FADE-KEY-SNAPSHOT`,
+`FS-TEST-LOOKONLY-GATE`), then the fade cluster, then `FS-PERF-WS-SINGLE-PARSE` + riders, then the
+haiku dead-code/docs batches (cheap, high signal-to-noise for future agents), then the structural
+moves, with the C3-sized items (`FS-DUP-AGGREGATION`, `FS-ARCH-CURSOR-OWNERSHIP`,
+`FS-PERF-CODE-SPLITTING`) scheduled as their own sessions.
+
+## 5. Bugs
+
+Things a desk can observe doing the wrong thing (or saying nothing when it must speak).
+
+### `FS-BUG-CUESLOT-LIVENESS`
+**"Is this cue/stack live?" is derived from the FX effect stream, so a rows-only cue reads as never
+running** · S1 · P1 · C2 · fable
+`src/store/cues.ts`, `src/components/CueSlotOverviewPanel.tsx`
+
+`useActiveCueIds` / `useActiveCueStackIds` build their sets from `useFxStateQuery().activeEffects[]`
+— but a cue made of property assignments and effect-free Look layers creates **no** `FxInstance`
+(`applyCue` publishes cooked rows through `engine.setCueAssignments`, which never reaches the
+`fxState` frame). `CueSlotOverviewPanel.handleSlotTap` branches on exactly those sets, and the pad's
+`isActive` does too. So on a rows-only cue the slot never lights and every tap **re-fires** instead
+of stopping; on a stack slot the tap calls `activateStack`, and `POST /cue-stacks/{id}/activate` has
+no already-active short-circuit — a press meant to stop a running effect-free stack throws the
+playhead back to cue 1 on a live rig. Static cues are the common case, not the exotic one. This is
+the identical defect class CLAUDE.md records for the old Look pads (`FxInstance.presetId ===
+lookId` "could never see a rows-only Look"), fixed there by reading the layer stack — the cue-slot
+panel was left behind on the effect stream. `useStackActiveCueIds` is a third copy of the derivation
+with no callers at all.
+
+**Fix**: read liveness from the authoritative playhead — `projectProgramState.activeStackId` for
+stack slots, the `cueRunStateChanged`-patched `CueStack.activeCueId` (or a cue-level equivalent) for
+cue slots — and delete/re-point the `activeEffects`-derived hooks so no surface answers "is it on
+stage" from the effect stream again. This changes what a tap does on a live rig: re-verify fire/stop
+and activate/deactivate against a cue with no effects and one with effects. Note the backend half in
+§14 (`FS-BE-STOP-ROWSONLY`): today `POST /cues/{cueId}/stop` cannot clear a rows-only cue fired
+outside its stack, so the client fix alone makes the pad *look* right without making stop work.
+
+### `FS-BUG-STALE-ROW-SNAPSHOT`
+**Per-row programmer snapshot cache goes stale across an off→on subscription cycle** · S1 · P1 · C2
+· fable
+`src/components/fixtures-list/useRowOwnership.ts`, `src/components/fixtures-list/useScopedRowValues.ts`
+
+Both `useRowOwnership.getSnapshot` and `useLocalRowValues.getSnapshot` cache on
+`(cells identity, versionRef.current)`; `versionRef` only advances from notifications received
+*while subscribed*, and both hooks are switched off by being handed `EMPTY_CELLS` (`ownershipCells`
+empties on entering layer scope, `localCells` in any scope but Local). Nothing invalidates on
+re-subscribe (`subscribeToKey` doesn't fire on registration), `cells` identity survives a scope
+switch, and the grid-never-remounts rule guarantees the hook instance (and its stale ref) survives
+too. **It does not self-heal**: `changedKeys` diffs against the api's own maps, which kept advancing
+while the row was off, so the change that happened during the off window is never re-announced.
+Reproduced with a live-subscription renderHook harness: Local → (template chip pressed from Output,
+a second tab busking, a locate, an Include) → back to Local shows the pre-switch grid. It is S1
+rather than S2 because the ownership snapshot carries `staged`, which `applyStagedValue` renders as
+the cell's *value* under blind — and the cell editors seed from that value, so an operator nudging a
+stale cell commits a value derived from a lie.
+
+**Fix**: invalidate the memoised snapshot whenever the subscription set is (re)registered — bump the
+version inside `subscribe`, or fold `subscribedKeys` into the cache key. Do it once by landing
+`FS-DUP-ROW-SUBSCRIPTION` first (the bug exists identically in both copies of the mechanism). Must
+not break: the cached snapshot identity (stops unrelated provenance pushes re-rendering the row),
+the per-`(target,property)` subscription split, empty-cells-means-off, and the blind-transition
+filter.
+
+### `FS-BUG-TIMEDLAYERS-RENAME`
+**Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →
+`timedLayers`** · S2 · P1 · C1 · sonnet
+`src/store/programmerOps.ts`, `src/components/programmer/RecordSheet.tsx`
+
+`ProgrammerPreservedCounts.timedPresetApplications` (non-optional) mirrors a field
+`routes/programmerRecord.kt` renamed to `timedLayers`. The wire value is always `undefined`, so
+`RecordSheet`'s sum is `NaN`, `NaN > 0` is false, and the reassurance "N timed effect(s) kept" can
+**never render** — even when a real `timedAdHocEffects` count arrives. The whole point of that
+panel ("a silent Record reads as everything went in") is silently defeated for this arm; tsc can't
+see it and no test constructs a real response.
+
+**Fix**: rename the field to `timedLayers` and fix the sum. kotlinx has defaults on all five counts,
+so prefer `?? 0` at the read site over trusting non-optionality. Keep both counts in the one
+sentence — that wording is what tells an operator a timed child was preserved rather than dropped.
+
+### `FS-BUG-FXROUTE-REGEX`
+**`isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects panel
+open** · S2 · P1 · C1 · sonnet
+`src/Layout.tsx`, `src/hooks/useEffectsOverview.ts`
+
+`/\/projects\/\d+\/fx/.test(pathname)` has no trailing boundary, so it matches
+`projects/:id/fx-library` as well as the busking grid. Opening the FX Library force-opens the
+effects overview panel and leaves its toolbar toggle dead with a tooltip blaming "the FX view" — a
+page that isn't it. This is the `startsWith` trap CLAUDE.md documents for `pathMatch` and
+`ProgrammerIndicator`, in a third place that never got the segment-aware treatment.
+
+**Fix**: match the whole segment (reuse `lib/navMatch.ts`), retitle the tooltip, and confirm the
+lock is still wanted at all now FX is a band of the programmer rather than a view. Coordinate with
+the Layout cluster (§4).
+
+### `FS-BUG-PROGRAMMER-ERROR-DROPPED`
+**`programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere is
+silent** · S2 · P1 · C2 · sonnet
+`src/api/programmerWsApi.ts`, `src/store/errorToastMiddleware.ts`
+
+`subscribeToErrors` exists, is documented ("so callers can surface a toast"), and has no production
+caller — its only references are the declaration, the test mock, and its own test. The backend
+really sends these: unknown fixture/group, unparseable value, `addLayer` with an unresolvable
+source, and — most visibly — "Property X on Y resolves to no DMX channels". So the slider moves,
+the rig doesn't, and nothing is said. This is the exact failure `errorToastMiddleware`'s deny-list
+design exists to prevent for REST; the WS write path is the one place a failed operator action is
+invisible by default.
+
+**Fix**: one production subscriber (mounted once, beside the other bridges) raising
+`toast.error(message)` with a stable sonner id so a drag's burst collapses to one toast. Don't route
+it through `errorToastMiddleware` (that keys on RTK Query actions). First check whether the backend
+unicasts the frame to the acting socket — a second tab must not toast for someone else's mistake.
+
+### `FS-BUG-FADE-KEY-SNAPSHOT`
+**`PROGRAMMER_FADE_KEY` is shared by key but not by value — ShowBar's Blind uses a mount-time
+snapshot of the fade** · S2 · P1 · C2 · sonnet
+`src/hooks/usePersistentState.ts`, `src/lib/programmerFade.ts`, `src/hooks/useShowBarProps.ts`,
+`src/components/programmer/ProgrammerActionBar.tsx`
+
+`usePersistentState` reads localStorage once in its `useState` initialiser, with no `storage`
+listener and no cross-instance sync. The action bar's fade picker and `useShowBarProps`'s `onBlind`
+are two independent instances of the same key, mounted simultaneously on `/programmer` — so moving
+the picker never reaches the Blind button for the rest of that visit, and Blind fades with the
+stale (typically 0 = snap) value. `lib/programmerFade.ts`'s written rationale ("the value had to
+become addressable … or blinding would have started snapping") is currently false in practice.
+Bounded to one page visit (any navigation re-reads), which is why this is S2 not S1 — but the stale
+press is precisely mid-session, when the operator just chose a fade.
+
+**Fix**: one shared source of truth rather than two snapshots — a module-level
+`useSyncExternalStore` singleton (the shape `useVisSource.ts` already uses), or teach
+`usePersistentState` to notify sibling instances of a key. Blind must still read the fade at press
+time in ms, `Number(fadeMs) || 0` must keep answering 0 for junk, and the persisted key stays
+`programmer.fadeMs`. Pin with a test: picker changed → Blind uses the new fade without a remount.
+
+### `FS-BUG-PIXEL-CACHE-PERMUTATION`
+**`useGroupColourValues` never compares per-member colours, so a colour chase across a pixel bar
+freezes its segments** · S2 · P2 · C2 · sonnet
+`src/hooks/useGroupPropertyValues.ts`, `src/components/fixtures/fixtureAppearance.tsx`
+
+The snapshot cache compares only aggregates (avg R/G/B/W/A/UV, `isUniform`, beam fields) — every
+one permutation-invariant over `members` — while `members` is exactly what `MultiPixelAppearance`
+maps into the `PixelSegment[]` that the 2D plot and mini-stage draw. A pattern that *permutes*
+colour across a multi-pixel fixture (a chase — the canonical reason the fixture exists) leaves all
+aggregates equal, hits the cache, and freezes the per-pixel segments while the overall swatch reads
+correctly. Narrower than it sounds (the whole colour multiset must be preserved within one 33 ms
+batch; the 3D path is unaffected because it calls `computeGroupColourValues` imperatively), but the
+trigger is a real effect shape. The same compare gap sits latent in `useGroupSliderValues` /
+`useGroupSettingValues` / `useGroupPositionValues`, whose uncompared fields have no consumer yet.
+
+**Fix**: fold a cheap per-member signature into the existing members pass and compare it; do the
+siblings too, or delete their uncompared result fields so the trap can't be armed later. Must stay a
+value comparison — the stage views rely on identity-stable snapshots to avoid re-rendering on
+equal-but-fresh data. **Sequencing**: this code is slated for consolidation by
+`FS-DUP-AGGREGATION`; collapse first or fix inside the surviving implementation (§4). The gap round
+independently re-verified this from the stage side and sharpened the observable: the 3D canvas
+animates the chase correctly (its imperative copy has no such cache) while the 2D plot and the DOM
+marker freeze — three surfaces disagreeing about one rig.
+
+### `FS-BUG-RECONNECT-RESYNC`
+**Post-reconnect cache resync is a hand-maintained 15-tag list against 47 tagTypes; 20 tags have no
+resync path at all** · S2 · P1 · C2 · sonnet
+`src/store/status.ts`, `src/store/restApi.ts`, and the per-bridge `open` branches in `src/api/*.ts`
+
+Two independent reconnect mechanisms exist and neither is authoritative: `status.ts` invalidates a
+literal 15-tag list on CLOSED→OPEN (under a comment claiming "all REST caches"), 22 tags are covered
+by their own bridge's `open` branch, and **twenty have no path at all**: `Cue`, `Patch`,
+`UniverseConfig`, `ProgramState`, `ControlSurfaceType`, `SurfaceBinding`, `PerfMidi`, `FxLibrary`,
+the five `CloudSync*`, both `OAuth*`, `Update`, `AuthSessions`, both `ResetToken*`, `DeviceLogin`.
+(Several of those have live WS invalidation paths — what they lack is the reconnect one.) Four
+bridges have no `open` branch at all; `surfacesApi`'s re-sends state but never notifies
+`bindingsChanged`; and there is no RTK Query safety net (`refetchOnReconnect` is opted into by two
+hooks, and it keys off browser online/offline, which doesn't fire for a backend restart). The
+observable is a real desk failure: after a laptop sleep or a lighting7 restart, `ProgramState` —
+patched only by `updateQueryData` from `showChanged`, never invalidated — keeps its stale
+`activeStackId`, so a show started elsewhere leaves this tab's transport greyed out (GO does
+nothing) with no lock chrome, and a show stopped elsewhere leaves an armed-looking transport. Then:
+stale patch list on the fixtures table and all three stage views, stale MIDI bindings, a stale
+Updates tab.
+
+**Fix**: make the resync one derived thing — export the tagTypes array from `restApi.ts` and have
+the CLOSED→OPEN handler invalidate all of it minus a small commented exclusion set (`Auth` at
+minimum: `authWsApi`'s `seenOpen` first-open guard deliberately stops the initial connect racing
+AuthGate). Invalidation only refetches subscribed queries, and the role-gated families already pass
+`skip: !isAdmin`, so the cost is bounded. Then delete the now-redundant pure-invalidation `open`
+branches, keeping the ones that also re-send a socket state request; add a test that fails when tag
+48 is in neither the reconnect list nor the exclusion set.
+
+### `FS-BUG-CUE-TAG-STALE`
+**The `Cue` tag has no WS invalidation on any path, so an expanded cue's composed values go stale on
+a healthy socket** · S3 · P2 · C2 · opus
+`src/store/cues.ts`, `src/store/looks.ts`, `src/store/templates.ts`
+
+`projectCueCooked` — the read behind `CueValueGrid` — is tagged `Cue`, and nothing invalidates `Cue`
+from any socket frame (the cues bridge fires `CueList` only; the looks/templates bridges don't carry
+it; it is absent from the reconnect list). The only writers are this client's own mutations, so the
+doc comment "a Look edit that republishes it refetches this too" is true only in the tab that made
+the edit — where it doesn't matter. Two tabs on `/show` with a cue expanded: one retunes a Look the
+cue layers, the rig moves, the other tab's read-only grid shows the pre-edit values indefinitely,
+and reconnect doesn't clear it either. **Fix** (layered): add `Cue` to the derived reconnect list
+(`FS-BUG-RECONNECT-RESYNC`); have the looks/templates bridges also invalidate `Cue` (both are
+CRUD-cadence, affordable); the full cross-client fix needs a backend frame — `republishForSourceEdit`
+broadcasting its `cuesRepublished` id list, proposed in §14 as `FS-BE-CUES-REPUBLISHED-FRAME` — and
+the `projectCueCooked` doc comment corrected to say which edits actually refetch it.
+
+### `FS-BUG-WS-SEND-DROPPED`
+**Every WS write is silently dropped while the socket is down — programmer sets, Blind, blackout,
+park included** · S3 · P2 · C2 · opus
+`src/api/internalApi.ts` and every WS write path
+
+`send` is `if (ws.readyState === OPEN) ws.send(data)` — no return value, queue, log, or toast — and
+the reconnect backoff reaches 30 s, so the drop window after a blip is seconds to half a minute.
+Because programmer state is server-driven, the UI simply doesn't move; the same failed backend that
+toasts a REST edit is total silence for a Blind press. No stale optimistic state results (the value
+hooks read the live source), which is why this is S3 hardening rather than S2. **Fix**: `send`
+returns false when not OPEN; operator-gesture call sites surface it through the same toast surface
+REST uses, and controls that promise an immediate rig change (blackout, Blind, cell editors, park)
+disable while disconnected. **Do not build a replay queue** — flushing a minute-old blackout on
+reconnect moves the rig behind the operator's back; the bridges' idempotent state re-requests are
+the correct catch-up.
+
+### `FS-BUG-3D-PLACEHOLDER`
+**The imperative 3D colour copy has no placeholder arm — an unmatched patch draws as a fully-lit
+warm-white lamp** · S3 · P3 · C1 · sonnet
+`src/components/stage3d/FixtureModel.tsx`, `src/components/fixtures/fixtureAppearance.tsx`
+
+The shared dispatch renders a missing fixture record as a deliberate dim-grey placeholder; the 3D
+`ColourSync` falls through to `FixedColourBeamSync '#fff8d5'` with dimmer factor 1 — so an unmatched
+patch, and every patch during the window before the fixture list resolves, paints full warm white
+while the 2D plot and markers correctly show unlit placeholders. Two default-colour literals are
+also hard-coded where `DEFAULT_FIXTURE_COLOUR` is importable. **Fix**: add the placeholder arm (a
+`PlaceholderBeamSync` with no channel subscriptions, respecting the fixed-hook-set-per-branch rule
+this dispatch depends on), import the shared constant at both literals, extend
+`FixtureModel.test.ts` with the fixture-undefined case.
+
+### The script-editor cluster
+
+The Kotlin editor subsystem (`src/kotlinScript/`, `src/components/scripts/`, plus the FxLibrary and
+CueTriggerEditor mounts) had **zero findings and zero tests** before the gap round; it turned out to
+hold two real bugs and a band of fragility. All eight items below touch the same two files —
+dispatch them as **one work package** (suggested: one sonnet agent, `FS-EDITOR-LIFECYCLE` first,
+since its imperative handle is what the two bugs' fixes need).
+
+### `FS-BUG-EDITOR-RESET-NOOP`
+**A changed `value` prop can never reach a live playground editor, so ScriptForm's Reset silently
+does nothing** · S2 · P1 · C2 · sonnet
+`src/kotlinScript/component.mjs`, `src/components/scripts/ScriptForm.tsx`
+
+`componentDidUpdate` only re-runs `initPlayground()`, which early-returns once the widget has
+stamped the node initialized; the push-new-value branch is commented out, and the React key contains
+nothing that moves on a content change. So Reset sets `editCode` back while the editor keeps the
+edited text — and worse, the next keystroke's debounced `onChange` hands back the whole current
+body, re-syncing `editCode` to what Reset was supposed to discard. Same latent hazard for any future
+revert in `EditFxDefinitionSheet`, and theme-flip remounts discard cursor/undo for the same reason.
+**Fix**: a real controlled path in `componentDidUpdate` — write through the instance
+(`instance.codemirror.setValue(body)` with the **folded body only**, or `instance.update({code})`),
+compare before writing and suppress the echo `change`. Then pin Reset with a test.
+
+### `FS-BUG-EDITOR-SILENT-READONLY`
+**A failed `/script-editor/versions` drops every editor to read-only and the frontend neither
+detects nor reports it** · S2 · P2 · C2 · sonnet
+`src/kotlinScript/component.mjs`, `src/components/scripts/ScriptEditor.tsx`
+
+kotlin-playground's version probe resolves `undefined` on failure and falls back to
+`highlightOnly`; the backend's own doc names this exact failure mode, but the wrapper discards the
+promise `playground()` returns and no mount site passes `onError`. `/script-editor` sits behind the
+auth gate and the desk restarts for new routes, so a 401 or a restart window is a live path — and it
+bypasses the 401→Auth-invalidation mechanism because it's a raw fetch. The operator sees a
+normal-looking editor that refuses every keystroke. **Fix**: keep the `playground()` promise, treat
+zero-instances/rejection as fallback, render an inline "language service unreachable — editor is
+read-only" message with a Retry that bumps a key nonce (the widget nulls its version cache on
+failure, so a remount genuinely refetches). Wire `onError` while there.
+
+### `FS-EDITOR-LIFECYCLE`
+**Playground instances are never destroyed on unmount, and `window.playgroundInstance` is a
+write-only global that also clobbers the `getInstance` prop** · S3 · P3 · C1 · sonnet
+`src/kotlinScript/component.mjs`
+
+The widget exposes `destroy()`; the wrapper never calls it, so every sheet close, tab switch and
+theme flip abandons a live CodeMirror. `initPlayground` assigns `window.playgroundInstance`
+(read by nothing) *and* overwrites any caller-passed `getInstance` — which is why no consumer can
+reach the live editor value today. **Fix**: `componentWillUnmount` → `destroy()` (try/catch); replace
+the global with a pass-through to `this.props.getInstance`. This unlocks the imperative handle the
+two bugs above and the debounce item below need.
+
+### `FS-EDITOR-DEBOUNCE-DIRTY`
+**onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every
+Compile/Run/Save read a copy that trails the editor** · S3 · P1 · C2 · sonnet
+`src/kotlinScript/component.mjs`, `src/components/scripts/ScriptForm.tsx`, `src/routes/FxLibrary.tsx`,
+`src/components/cues/CueTriggerEditor.tsx`
+
+Trailing-edge debounce, no maxWait, no blur flush, and no read path to the live value — so
+type-then-Escape inside the window closes the sheet with no "Discard changes?" and loses the tail.
+Downgraded from S2 because the window is ≤500 ms of idle and every consumer is a mouse click that
+usually exceeds it — but the guard exists precisely for the hurried case. **Fix**: expose
+`getValue()` through the un-clobbered `getInstance` handle; dirty checks and the send handlers read
+through it (or at minimum flush on wrapper blur). Pin the Escape-after-typing case.
+
+### `FS-EDITOR-HIGHLIGHTONLY-PRESENCE`
+**Read-only works only because React omits an `undefined` attribute — `highlightOnly="false"` would
+make every editor read-only** · S3 · P2 · C1 · sonnet
+`src/components/scripts/ScriptEditor.tsx`, `src/kotlinScript/component.mjs`
+
+The widget tests attribute *presence*, not value; the natural tidy-up `String(readOnly)` flips every
+editor to read-only with no type error and no failing test, and the whole prop surface is unchecked
+(`@ts-expect-error`, `allowJs: false`). **Fix**: a small `component.d.ts` typing the props actually
+used (drops the `@ts-expect-error`), `highlightOnly` typed so the falsy case can only be
+`undefined`, and a call-site comment naming the presence semantics (same note for `autocomplete`
+and `matchBrackets`).
+
+### `FS-EDITOR-DEAD-BRANCH`
+**ScriptEditor's entire non-compact branch is unreachable and duplicates the widget mount verbatim**
+· S3 · P3 · C2 · sonnet
+`src/components/scripts/ScriptEditor.tsx`
+
+All four mount sites pass `compact`, so the name Card, footer actions, `onCompile`/`onRun` props and
+their state are unreachable — and the surviving ternary renders a byte-identical mount in both arms.
+**Fix**: drop the prop and branch, collapse the ternary, note the component is deliberately
+editor-only (the callers' own Compile/Run buttons differ in label, size and mutation and stay).
+
+### `FS-EDITOR-PROPTYPES-PHANTOM`
+**`prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares** · S3
+· P2 · C1 · haiku
+`src/kotlinScript/component.mjs`, `package.json`
+
+Resolved only by hoisting through `react-qr-code`/`eslint-plugin-react`; React 19 no longer
+validates propTypes, so the ~40-line block plus `cloneProps` is inert (and one entry is actively
+wrong per the presence finding). **Fix**: delete the propTypes machinery; keep the shape as the
+`.d.ts` above instead. Do **not** add `prop-types` to package.json. Third item for the one manifest
+pass (`FS-DEAD-DEVDEPS`, `FS-ARCH-ALERTDIALOG-DEP`).
+
+### `FS-TEST-EDITOR-PINS`
+**The documented cross-type poisoning landmine is safe by construction today — and nothing pins any
+of what makes it safe** · S3 · P2 · C2 · sonnet
+`src/components/scripts/`, `src/kotlinScript/`
+
+Verified concretely: the module-global `server` is only ever assigned the one hardcoded
+`"/script-editor"`, no page can mount two editor types at once (FxLibrary's three sheets are
+exclusive branches of one Sheet), and the wrap→unwrap round-trip is exact rather than lucky. None of
+it is pinned — no test asserts the marker line comes first, the body survives byte-for-byte, the
+`server` assignment is unique, or that `.kotlin-editor` (which the Run-button-hiding CSS keys on) is
+on the wrapper. **Fix**: `ScriptEditor.test.tsx` over a mocked widget pinning the value string per
+type, the round-trip using the widget's own arithmetic, the wrapper class, the
+`readOnly`-omits-attribute rule, and a grep-guard that `"/script-editor"` is assigned exactly once.
+
+## 6. Performance
+
+### The fade-progress cluster
+
+Five findings share one root cause: **fade progress travels by Redux dispatch and by prop**, against
+the design rule CLAUDE.md already states ("the fade value is never a prop — each row reads its own
+through `useCueFade`"). Fix the source first (`FS-PERF-FADE-DISPATCH`), then the distribution
+(`FS-PERF-FADE-IN-SHOWBAR`, `FS-PERF-PROMPTBOOK-FADE-DRILL`, `FS-PERF-MOBILE-SHEET-FADE`), then the
+memo barrier (`FS-PERF-PROGRAMMER-MEMO-BARRIER`) — barriers added first would look effective while
+the frame-rate wake-up is still there, and some would become dead work.
+
+### `FS-PERF-FADE-DISPATCH`
+**Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame** · S3 ·
+P2 · C3 · fable
+`src/hooks/useRunnerAnimation.ts`, `src/store/runnerSlice.ts`, `src/store/index.ts`
+
+`useRunnerAnimation` dispatches `setFadeProgress` once per rAF for the whole fade. In production the
+per-dispatch cost is genuinely small (stable-null selectors, shallow-compared query hooks) — the
+real cost is the re-render of everything subscribing to `selectStackRunner`, whose identity changes
+per frame under Immer (see the cluster). In dev it is worse: `immutableCheck`/`serializableCheck`
+exclude only `restApi.*`, so `runner`, `selection` (per-list row-id sets), `saveStatus` and
+`editLock` are deep-traversed twice per dispatch, 60×/s — profiling in dev is dominated by
+invariant middleware.
+
+**Fix**: keep `(fadeStartMs, durationMs, cueId)` in the slice — written once per transition — and
+let `useCueFade` run its own rAF for the single fading row, or throttle the dispatch to display
+cadence (~10–15 Hz; the 0.1 s countdown can't tell). `startElapsedMs`/`serverTransition` mid-fade
+join semantics, `markDone` firing exactly once, and `cancelAnimations` must behave identically;
+`useShowTransport.test.tsx` and `ProgramView.test.tsx` are the guardrails. Also widen the dev-mode
+`ignoredPaths`.
+
+### `FS-PERF-FADE-IN-SHOWBAR`
+**Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of
+`ProgrammerBody`) at frame rate** · S2 · P1 · C3 · fable
+`src/hooks/useShowBarProps.ts`, `src/hooks/useShowTransport.ts`, `src/components/ShowBar.tsx`,
+`src/routes/ProgrammerPage.tsx`
+
+`useShowBarProps` subscribes to the runner slice via `useShowTransport` and returns `fadeRemainMs`,
+so every host re-renders ~60×/s during any fade. On `/programmer` there is no memo boundary at all:
+the page re-renders `ProgrammerBody` → scope providers → action bar → grid → virtualizer per frame,
+while channel frames are also landing — precisely in the fix-it-during-a-running-show case the bar
+was put on that page for. The chrome below `ProgramView`'s memo (`ShowBar` → `SpeedMasters`, all
+arms → `ProgrammerIndicator`) reconciles every frame on `/show` too.
+
+**Fix**: stop returning a frame-rate value from `useShowBarProps` — let the bar's FADING badge read
+the runner through a leaf hook quantised to ~10 Hz, and memoize the bar and `SpeedMasters`. Must not
+remount `ProgrammerGrid` (grid-never-remounts rule, pinned by `ProgrammerPage.test.tsx`'s
+`gridMounts`), must not change what the two cursors mean to cue rows, must leave `ProgramView`'s
+memo intact.
+
+### `FS-PERF-PROGRAMMER-MEMO-BARRIER`
+**The programmer page has no memo barrier between chrome and body** · S2 · P1 · C2 · sonnet
+`src/routes/ProgrammerPage.tsx`
+
+The page-level consequence of the above, worth its own item because it also bites on
+non-fade traffic (`useProgrammerSummaryQuery` changes re-render the whole subtree). Wrap
+`ProgrammerBody` in `React.memo` (its only prop is `projectId`) or pull `useShowBarProps` into a
+small bar-owning child so the page stops subscribing to the runner slice. Same must-not-remount
+constraint as above. Do after `FS-PERF-FADE-DISPATCH` so it protects against what remains, not
+against what should be removed.
+
+### `FS-PERF-PROMPTBOOK-FADE-DRILL`
+**Prompt Book prop-drills `fadeProgress` to every cue card in the whole show** · S2 · P2 · C2 ·
+sonnet
+`src/routes/PromptBookPage.tsx`, `src/components/promptbook/CueStackPanel.tsx`,
+`src/components/promptbook/PromptBookCueCard.tsx`
+
+`railProps` (rebuilt per render, ~60×/s in a fade) spreads `fadeProgress`/`fadeRemainMs` into an
+unmemoized `CueStackPanel`, which maps **every cue in every stack** to unmemoized
+`PromptBookCueCard`s with ten fresh inline arrows each; all but one card re-render to display
+nothing. The page even carries a comment admitting the render path runs every fade frame.
+
+**Fix**: the live card reads its own fade via `useCueFade`; drop the two fields from `railProps`;
+memoize the card with stable per-row callbacks. Keep `statusOf`/`modeOf` semantics and the live
+card's viewMode-follows-GO behaviour.
+
+### `FS-PERF-MOBILE-SHEET-FADE`
+**Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick** · S3 · P3 · C2
+· sonnet
+`src/components/runner/run/RunMobile.tsx`, `src/components/runner/MobileCueListSheet.tsx`,
+`src/routes/ShowPage.tsx`
+
+`ShowPage` builds a fresh `runnerDisplay` per render and the sheet maps every cue to an unmemoized
+`MobileCueRow` with a fresh `onClick`; each row does `completedCueIds.includes(...)` — ~40k
+comparisons per frame on a 200-cue stack, on a phone, while the sheet is open mid-show. Fix: rows
+read their own fade via `useCueFade`, memoize the row, hoist a `Set` for the done-tick. Only the
+active cue draws fade chrome; `onRequeueCue` stays inert off the playhead.
+
+### `FS-PERF-TRANSPORT-ALLOC`
+**`useShowTransport` builds a whole-stack signature string per render** · S4 · P3 · C1 · haiku
+`src/hooks/useShowTransport.ts`, `src/routes/ShowPage.tsx`
+
+`stackCueSig` (`cues.map(id).join(',')`) and `animCue = cues.find(...)` run unmemoized in a hook
+that re-renders at frame rate; `ShowPage` adds an unconditional `runnerDisplay` object only the
+narrow branch uses. Pure allocation reduction — nursery garbage, no measurable cost — so ride it
+along with the cluster rather than scheduling it alone (this repo has cancelled perf follow-ups for
+lack of a measurable gap before). Memoize on `[activeStack]`; the reset-gate semantics must not
+change.
+
+### The WS fan-out band
+
+### `FS-PERF-WS-SINGLE-PARSE`
+**The channelState firehose is `JSON.parse`d 24 times per frame** · S2 · P1 · C2 · sonnet
+`src/api/internalApi.ts`, `src/api/lightingApi.ts`, and every `src/api/*Api.ts` bridge
+
+`notifyEvent` hands every WS event to all ~27 eagerly-built bridges; only `programmerWsApi` and
+`speedMastersWsApi` substring-guard before parsing — 24 others `JSON.parse` the full frame
+unconditionally and discard it. The dominant frame is `channelState` at up to ~40/s per universe
+whenever anything moves, so a single running effect means ~40 × 24 redundant parses per second on
+the main thread that also paints the grid. (The two existing fast paths call this stream "the
+firehose" — the codebase already agrees.)
+
+**Fix**: parse once in `internalApi` — hand bridges the already-parsed object (or a lazily-memoised
+parse) and let them switch on `type`. Keep per-bridge `open` handling and notify-on-open semantics
+(several bridges seed caches on reconnect); do not change which bridge sees which frame. Rider:
+per-subscriber try/catch in `notifyEvent` (`FS-WS-ERROR-ISOLATION`).
+
+### `FS-WS-ERROR-ISOLATION`
+**`notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registered
+last** · S3 · P1 · C1 · sonnet
+`src/api/internalApi.ts`
+
+A bare `forEach` — one throwing subscriber starves every later-registered bridge of that frame, and
+the two most latency-sensitive bridges (programmer, speed masters) are registered last. No reachable
+throw was constructed (the server sends only kotlinx text frames), so this is hardening, not a live
+bug — take it as a rider on `FS-PERF-WS-SINGLE-PARSE`. Log failures; never swallow silently.
+
+### `FS-PERF-SAVELOOK-INVALIDATION`
+**A layer-scope drag refetches the whole fixture list every 400 ms** · S2 · P1 · C1 · sonnet
+`src/store/looks.ts`, `src/components/programmer/LookRowStore.tsx`
+
+`saveLook` invalidates `['Look','LookList','Cue','CueList','Fixture','GroupList']` unconditionally,
+and the layer-scope drag path saves rows-only bodies at 400 ms cadence. `Fixture` is provided by the
+fixture list (48 consumers; server-side it runs `loadLookCompatibilityInfos` + `detectCapabilities`
+per fixture), so every save refetches it and hands every consumer a new array identity mid-drag. A
+rows-only PUT provably cannot move `compatibleLookIds` — `compatibleIdsFor` filters on effect
+categories alone. The comment justifying the tags cites `editorFixtureType`, deleted in session 3;
+fix the comment in the same change (the stale half is what makes the over-broad set look
+justified).
+
+**Fix**: invalidate by what the request wrote — rows-only saves skip `Fixture`/`GroupList`; saves
+touching `effects` keep the full set (a Look gaining its first effect of a family must reappear in
+`LookTogglePicker`/`LayerPicker`).
+
+### `FS-PERF-BPM-INVALIDATION`
+**Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects`** · S3 · P1 · C2 · sonnet
+`src/api/fxApi.ts`, `src/store/fixtureFx.ts`, `src/store/groups.ts`
+
+`createFxApi` calls `notifyState` on a bpm-only `beatSync` (the backend sends one per tap), and two
+module-level bridges answer with tag invalidations. Tempo cannot change which effects exist. The
+worst case in the finding's original form (~60 GETs per tap) needs a second client parked on the
+fixture-cards page; in the same tab a tap costs one redundant `fx/active` refetch — real but
+smaller. **Fix**: split tempo notifications from effect-list notifications (a `subscribeToTempo`, or
+gate the invalidation bridges on the effect half of the frame). Consider `FxBadge` reading the
+rig-wide `useActiveEffectsQuery` rather than a per-fixture query, which removes the fan-out class
+entirely. Don't break `useFxStateQuery` consumers. **Backend D2 (decision taken) retires `beatSync`
+altogether**, which deletes this finding's trigger — take the invalidation-gating half only if it
+lands before `FS-COORD-LEGACY-TEMPO`; the `FxBadge` consolidation stands regardless.
+
+### `FS-PERF-PROVENANCE-REFETCH`
+**Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab** ·
+S3 · P2 · C3 · fable
+`src/api/programmerWsApi.ts`, backend `ProgrammerSocket`/`FxEngine`
+
+`applyProvenance` schedules a state refetch on every `provenanceState` frame; a crossfade republishes
+provenance at ~20 Hz (coalesced 50 ms), so every tab answers with ~10 state requests/s for the whole
+fade — and a cue fade cannot have moved the programmer's own entries. Transient and small in the
+common case (the reply carries no provenance and the programmer is usually near-empty during a run),
+which is why this is S3/C3 rather than S2: the fix needs a protocol change. **Fix**: let provenance
+say whether the programmer's value set could have changed (a monotonic programmer revision on the
+frame, or a cue-fade-only flag) and skip the refetch when it couldn't. The refetch must survive for
+every genuine off-connection write (MIDI, second tab, locate, template apply) — losing one strands
+the grid, which is worse than the traffic. **Backend C3 is the server half** (it stops the
+crossfade re-running the full resolver at ~62 fps): coordinate the protocol change there, and
+re-measure this client cost after C3 lands before spending the effort here.
+
+### `FS-PERF-SIGNATURE-CACHE`
+**`changedKeys` recomputes both sides' JSON signatures on every diff** · S3 · P2 · C2 · sonnet
+`src/api/programmerWsApi.ts`
+
+`signature(previous)` and `signature(value)` both run per key per frame (entry and provenance maps,
+at 10–20 Hz under load), re-stringifying the previous map from scratch each time although it was
+computed when installed. **Fix**: keep a parallel `Map<string,string>` of signatures built at
+install, so a diff stringifies only the incoming side. Content-comparison semantics must stay
+exactly as documented — identity `!==` would defeat the per-key channel entirely.
+
+### `FS-PERF-CHANNEL-FANOUT`
+**One row's callback fires once per changed channel per batch, rebuilding its signature each time**
+· S3 · P2 · C2 · opus
+`src/hooks/usePropertyValues.ts`, `src/components/fixtures-list/useRowValues.ts`
+
+`subscribeToChannels` registers the same callback once per channel, and each notification reruns
+`getSnapshot` with its fresh signature array and per-read key-string allocations. No render churn
+(the signature compare absorbs it) and ordinary rows are cheap (k≈8–13); the cost concentrates on
+windows of collapsed multi-head bars/group rows. **Fix**: a set-level subscription that fires at
+most once per debounced batch (or coalesce in `subscribeToChannels` on a microtask). Must not break
+per-channel granularity for `createFanOut`/derived sources, snapshot-identity caching, or
+`ChannelSource` threading.
+
+### `FS-PERF-CHANNEL-CACHE-DISPATCH`
+**/channels holds one RTK Query cache entry per channel, dispatching per changed channel per frame**
+· S3 · P3 · C2 · sonnet
+`src/store/channels.ts`, `src/routes/Channels.tsx`
+
+Each `ChannelSlider` holds a `{universe, channelNo}`-keyed cache entry whose `updateCachedData` on a
+`number` always emits a dispatch. Virtualization bounds mounted sliders to the low hundreds (not
+512), and exposure is confined to the /channels debug view plus `FixtureContent` rows — hence S3.
+**Fix**: read values through `lightingApi.channels.subscribeToChannel` via `useSyncExternalStore`,
+keeping the per-channel split but taking Redux out of the 30 Hz path. Leave `channelsApi` batching
+and the mutation write path alone.
+
+### `FS-PERF-MARQUEE-COUNT`
+**`batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per pointer
+move** · S2 · P1 · C2 · sonnet
+`src/routes/FixturesList.tsx`, `src/components/fixtures-list/useCellSelection.ts`
+
+The marquee branch ignores `(row, col)` — it returns the same number for every selected cell — yet
+recomputes `byColumn()` over the whole selection plus `expandSelectionToTargets(rows, …)` per
+column, per row, per marquee tick (the callback's identity changes each tick, so every visible row
+re-renders too). Order 10⁵–10⁶ operations per pointer-move frame on a large list. **Fix**: hoist the
+selection-wide count into one `useMemo` keyed on the cell selection and `rows`; keep the per-row
+branches as they are. The count stays a documented *upper bound*, and collapsed multi-head bars must
+keep their per-row "Applying to 12".
+
+### `FS-PERF-LITKEYS-ALLOC`
+**`useLitFixtureKeys` rebuilds a Set and spreads it on every snapshot read** · S3 · P3 · C1 · haiku
+`src/components/fixtures-list/useLitFixtureKeys.ts`
+
+O(fixtures) allocation per 33 ms batch *and* per render even when membership is unchanged. Count
+matches against the cached set while iterating; allocate only on divergence. The membership-only
+notification contract must hold — a fade that changes values but not who is lit must return the
+cached identity, or every row memo churns mid-fade.
+
+### `FS-PERF-LAYER-SIGNATURE`
+**`programmerLayers` stringifies the whole layer stack on every programmer notification** · S4 · P3
+· C1 · haiku
+`src/store/programmer.ts`
+
+Real but tiny (a handful of layers, usually `[]`; tens of microseconds at busk cadence), and the
+whole-object compare is the *correct* part — a hand-rolled field list would be a maintenance hazard.
+Note it; take it only if a cheap change-counter falls out of other programmer work. The
+`layerState`-broadcast-reaches-every-tab invariant and `reset()` propagation must hold.
+
+### Always-mounted chrome
+
+### `FS-PERF-COLLAPSED-PANELS`
+**Collapsed overview panels keep doing full live work on every route** · S2 · P2 · C2 · opus
+`src/Layout.tsx`, `src/components/StageOverviewPanel.tsx`, `src/components/EffectsOverviewPanel.tsx`,
+`src/components/CueSlotOverviewPanel.tsx`
+
+Layout renders all four panels always ("for animation"), with `isVisible` only switching grid rows.
+A live rig therefore re-renders every mini-stage marker ~30×/s behind a zero-height container while
+the operator is on /users; the effects panel keeps a `BeatIndicator` interval alive everywhere; the
+cue-slot panel holds its queries and fxState-derived sets on every page.
+(`docs/stage-vis-engineering.md`'s "a collapsed panel costs nothing" is scoped to the cue-preview
+POST, not these subscriptions.) **Fix**: keep the animated wrapper; gate each panel's subscribing
+body on `isVisible || wasRecentlyVisible` so collapse still animates out. The mini-stage keeps
+sharing the Stage route's `ChannelSource` when open; reopening must not flash empty. Part of the
+Layout cluster (§4). `FS-PERF-CHANNELSOURCE-REBUILD` below is the largest single cost hiding behind
+this panel.
+
+### `FS-PERF-CHANNELSOURCE-REBUILD`
+**`createProgrammerChannelSource.rebuild` re-resolves every programmer entry on frames that cannot
+have changed a channel — app-wide, from the always-mounted overview panel** · S3 · P2 · C1 · sonnet
+`src/api/channelSource.ts`, `src/api/programmerWsApi.ts`, `src/components/StageOverviewPanel.tsx`
+
+`rebuild` runs unconditionally on every `programmer.subscribe` notification — including
+`includeTarget`, `layerState`, `blindState` and every `provenanceState` (up to 10/s) — allocating a
+fresh channel map (parse + descriptor scan per entry) and walking old + new in `notifyChanged`.
+`programmerWsApi` reassigns only the wrapper object on those frames, so `entries`/`channels` keep
+identity and an identity guard distinguishes the cases exactly. `StageOverviewPanel` mounts the
+provider whenever patches exist, on every page, gated only by CSS — so a persisted
+Programmer/Output+Programmer vis choice keeps this running everywhere for a panel nobody can see.
+**Fix**: early-return when both `state.entries` and `state.channels` are reference-identical to last
+time (`refresh()` keeps forcing, it exists for descriptor changes); gate the provider on
+`isVisible` as part of `FS-PERF-COLLAPSED-PANELS`. The drag path staying O(entries) per echo is
+noted, not fixed — incremental resolution is a larger change.
+
+### `FS-PERF-STAGE-BUFFER-UPLOADS`
+**`StageEmitters` marks every instanced attribute dirty every frame, so a static rig re-uploads all
+of them — including both wash meshes on a show with no pixel bars** · S3 · P3 · C2 · sonnet
+`src/components/stage3d/StageEmitters.tsx`
+
+The priority-1 `useFrame` sets `needsUpdate = true` on ~50 instanced attributes plus five
+`instanceMatrix` buffers unconditionally ("Cheap (just bit flips)" — the flip is cheap, the
+consequent full-buffer GPU upload per flagged attribute is not). The wash pair is the clearest
+waste: ~12,800 floats of `instanceMatrix` flagged per frame even when no fixture is a pixel strip
+and the wash director never writes a byte. **Fix**: per-group dirty bits set by the writers; flag
+and clear only dirty groups, wash groups first (biggest buffer, most often untouched). Correct the
+comment.
+
+### `FS-PERF-PALETTE-QUERIES`
+**CommandPalette subscribes six list queries while closed, on every route** · S3 · P3 · C1 · haiku
+`src/components/CommandPalette.tsx`
+
+Fixture/group/park/channel-mapping invalidations refetch lists and re-render the palette on pages
+that display none of them, and the entries can never be evicted. Skip the data queries until first
+open (latch so reopens stay instant); check nothing relies on the palette keeping a list warm.
+
+### `FS-CHROME-BEAT-RESUBSCRIBE`
+**`BeatIndicator` tears down and re-creates its WS subscription on every sync transition** · S4 ·
+P3 · C2 · sonnet
+`src/components/BeatIndicator.tsx`
+
+`synced` sits in the subscribe effect's deps purely so the closure can read it; each regain of sync
+re-subscribes and sends one redundant `requestBeat`. (No dropped-frame window — cleanup and setup
+run in one synchronous flush; the tab-switch storm in the original claim was misattributed.) Hold
+the flag in a ref so the subscription is keyed on `keyedUuid` alone. `BeatIndicator.test.tsx` pins
+the stream choice and resubscribe-on-master-change. **Fold into `FS-COORD-LEGACY-TEMPO`** — the
+subscription effect is rewritten in that migration anyway.
+
+### `FS-CHROME-BEAT-MAP-PRUNE`
+**Per-master beat subscribables are never pruned, so reconnects re-request beats nothing watches** ·
+S4 · P3 · C2 · sonnet
+`src/api/speedMastersWsApi.ts`, `src/api/wsSubscriptionFactory.ts`
+
+Bounded and tiny (masters-ever-displayed per tab; a few extra frames per reconnect only — the
+re-request itself is deliberate and load-bearing for phase recovery). Give `createWsSubscribable` an
+emptiness signal and drop empty entries; keep re-requests for keys with live subscribers and master
+1's `''` convention.
+
+### `FS-PERF-CODE-SPLITTING`
+**The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere** · S2 · P2 · C2 ·
+opus
+`vite.config.ts`, `src/App.tsx`
+
+One 4,023 kB `index-*.js` (1,141 kB gzip); zero `React.lazy` or dynamic imports in src. Measured
+per-island weight (throwaway `manualChunks` build): kotlin-playground 511 kB (script surfaces only),
+pdfjs/react-pdf 416 kB (Prompt Book only), R3F/drei/postprocessing ~293 kB (Stage only),
+react-markdown 123 kB (`AiChatPanel` only) — all parsed before the login screen paints, on every
+cold boot and every post-update restart. **Fix**: route-level `React.lazy` for the four heavy
+islands with layout-stable fallbacks. Two traps: `lib/stageCoords.ts` imports `three` and is
+consumed by non-3D code, so `three` stays in the main chunk until the Three-typed helpers are
+separated; and `AuthGate`/`BootGate` must not sit behind a lazy boundary.
+
+### `FS-WS-DEBOUNCE-TICK`
+**`debounceMapUpdates` keeps its interval alive one no-op tick past idle** · S4 · P3 · C1 · haiku
+`src/api/channelsApi.ts`
+
+Harmless (one empty callback per idle transition) but the function reads as a self-cancelling
+debounce and isn't. Clear when nothing is pending, or switch to a trailing re-armed `setTimeout`;
+all entries from one call must still fire together.
+
+## 7. Contract drift — phantom fields and unpinned mirrors
+
+The client's hand-mirrored types drifted in both directions across the refactors. Phantoms (client
+declares, server no longer sends) are listed here; the one *omission* class the first round found is
+`FS-TYPES-CUE-STOMP`; a dedicated gap-round pass then swept the omission direction backend-first —
+its findings are folded in below.
+
+### `FS-TYPES-CUE-STOMP`
+**Cue-level `stomp` is absent from the `Cue`/`CueInput` mirror, so duplicating a cue silently clears
+it** · S3 · P2 · C1 · sonnet
+`src/api/cuesApi.ts`, `src/lib/cueUtils.ts`
+
+`routes/projectCues.kt`'s `CueDetails` and `NewCue` both carry `stomp: Boolean = false` (the
+cross-cue, effect-removing stomp — distinct from the per-layer one the client does model). Neither
+client type declares it, so `buildCueInput` cannot round-trip it: `handleDuplicate` POSTs a copy that
+takes the server default, and nothing on the desk can read or set the flag on a cue that arrives
+with it (sync import, AI, another client). Latent rather than active — no producer sets it true
+today, and the PATCH route preserves absent fields — but the exported-and-unused PUT (`saveProjectCue`)
+overwrites it, so wiring that hook up would convert the loss to active. The field-by-field pin in
+`cueUtils.test.ts` cannot catch a field the type never had.
+
+**Fix**: add `stomp` to `Cue`/`CueInput`, round-trip it in `buildCueInput`, extend the field-by-field
+test. Decide separately whether `CuePropertiesSheet` exposes it. Do not conflate with per-layer
+stomp (`lighting-composition-model.md` §Stomp).
+
+### `FS-TYPES-PRESETCOUNT-RENAME`
+**`CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount`** · S3 · P2 · C1 · haiku
+`src/api/cueStacksApi.ts` + four test fixtures
+
+The backend renamed it in session 4 (KDoc: "No client reads it yet … treat it as available").
+Declared non-optional, always `undefined`; the field actually sent — the per-cue layer count a
+collapsed row wants — is invisible. Four test files write `presetCount: 0` purely for the compiler,
+pinning the drift in place. **Fix**: mechanical rename + fixtures; optionally then use `layerCount`
+where a layers-only cue currently reads as empty.
+
+### `FS-TYPES-RIGGING-POSITION`
+**`FixturePatch.riggingPosition` is a phantom; the StageMarker badge it drives can never render** ·
+S3 · P2 · C2 · sonnet
+`src/api/patchApi.ts`, `src/components/stage/StageMarker.tsx`
+
+The backend folded the free-text field into first-class Rigging rows (`sync-engineering.md` records
+the removal); the client still declares it on the patch DTO and both request types, and the 2D
+marker's amber rigging badge is unreachable dead UI. **Fix**: delete the field from all three types
+and the fixtures; then decide the badge's replacement — the rigging *name* resolved from
+`riggingUuid` is the honest one, C2 because that half is a design choice.
+
+### `FS-TYPES-EFFECTTYPE-UNION`
+**`EffectType` is a closed 20-literal union with no backend counterpart, laundered by a cast** · S3
+· P2 · C2 · sonnet
+`src/api/groupsApi.ts`, `src/components/busking/useBuskingState.ts`
+
+The real vocabulary is data-driven (`fx/index.txt` + each `.fx.kts` `id:` + user-defined
+definitions, ~25 built-ins); the union is wrong in case, missing at least eight built-ins, and
+structurally unable to name a user-defined effect. It only works because `FxRegistry` normalises
+names, and the single production call site casts `effect.name as EffectType` — so the union
+constrains nothing and misdescribes the vocabulary. **Fix**: widen to `string` (matching
+`addFixtureFx`), delete the three unions and both casts; if narrowing is wanted, derive it from the
+FX library query at runtime. Never canonicalise the sent name — the registry's normalisation is what
+makes it work.
+
+### `FS-TYPES-MASKGROUP-DUP`
+**`PropertyMaskGroup` is a second, free-standing copy of `AttributeFamily`** · S3 · P2 · C2 · sonnet
+`src/lib/attributeFamily.ts`, `src/store/programmerOps.ts`, `src/components/programmer/maskPicker.tsx`
+
+One Kotlin enum, two independent client unions, silently interchangeable and in fact mixed
+(`useLocalFamilyCounts` returns one, `MaskPicker.counts` takes the other). The claim is deliberately
+narrow: the *vocabulary* pin exists (`maskPicker.test.ts` equates `MASK_GROUPS` to
+`ATTRIBUTE_FAMILIES`, and CLAUDE.md documents it) — what's missing is that the two *types* are
+unrelated, so a literal added to one still typechecks. **Fix**: make `PropertyMaskGroup` an alias of
+(or delete it for) `AttributeFamily`, and derive `MASK_GROUPS` rows from
+`ATTRIBUTE_FAMILIES` + `FAMILY_LABELS`. Don't write a new vocabulary test — it exists. Wire form
+(uppercase, `serializePropertyMask` null-normalisation, family order) must not change.
+
+### `FS-TYPES-PALETTE-WIRE-ARMS`
+**Retired palette wire arms kept alive by "still on the wire" claims that are now false** · S3 · P2
+· C2 · sonnet
+`src/store/programmerOps.ts`, `src/api/programmerWsApi.ts`, `src/lib/includedTarget.ts`,
+`src/lib/programmerSource.ts`
+
+Three mirrors keep a PALETTE arm on explicitly documented wire-compat grounds, and all three grounds
+are gone: `ProgrammerUpdateResponse` has no `paletteResult`; `IncludeResponse.kind` is produced as
+`CUE`/`LOOK` only; `IncludedTargetDto` dropped all `palette*` fields (the arm could only ever render
+"Palette undefined"). `programmerWsApi.test.ts`'s "accepts a PALETTE include target" feeds a payload
+the server can no longer emit — certifying the drift instead of catching it. **Fix**: remove the
+PALETTE arm from all four modules and the pinning tests; `includedTargetKey`'s one-shape-per-kind
+guarantee and the LOOK arm's `updateIncludedLook` write-back stay untouched. See also
+`FS-BE-INCLUDEDTARGET-PALETTE` (§14) for the backend half, and `FS-RES-PALETTERESULT` for the
+unreachable `UpdateDialog` branch.
+
+### `FS-TYPES-GROUPFX-WS`
+**groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls** ·
+S3 · P3 · C1 · haiku
+`src/api/groupsApi.ts`
+
+`groupFxAdded` is the only orphan in a full diff of client WS `type` literals against every backend
+`@SerialName`; `addFx` sends a message the backend deliberately no-ops (group FX creation is
+REST-only) and `clearFx` has no caller. The `groupsState` arm also types its payload as the 6-field
+REST `GroupSummary` where the frame carries three fields — harmless only because the handler ignores
+the payload. **Superseded in scope by backend D3**, which deletes `plugins/GroupSocket.kt` outright —
+see `FS-COORD-GROUPS-WS` (§14) for the whole-module deletion and the GroupList-freshness question
+that must be answered first. Do not do this finding's narrower fix separately.
+
+### `FS-TYPES-ISBUILTIN`
+**`FxDefinition.isBuiltin` has no producer and no consumer** · S4 · P3 · C1 · haiku
+`src/store/fxDefinitions.ts`
+
+A required boolean that is always `undefined` — the shape that later grows a guard that never
+fires. The built-in/user distinction is real server-side but lives in *which endpoint served the
+row*. Delete the field.
+
+### `FS-TYPES-TEMPLATE-TOGGLE-MASK`
+**Template toggle discards the client's `propertyMask` and the server derives none, so every ⌥click
+and pad template layer is unmasked — against CLAUDE.md's stated gesture contract** · S3 · P1 · C1 ·
+sonnet
+`src/components/programmer/TemplateStrip.tsx`, `src/components/busking/BuskingView.tsx`, backend
+`ProgrammerLayerStack.toggle` / `projectTemplates.kt`
+
+Both client call sites send `propertyMask: template.family`, and the route's KDoc says the mask is
+"echoed back rather than applied … the server derives" it. Nothing derives it:
+`ProgrammerLayerStack.toggle` has no mask parameter, so the layer lands with `propertyMask: null`
+and the response echo can never disagree with itself. CLAUDE.md's §two-apply-gestures claim ("masked
+to the template's family — the client states the mask, so the layer row shows what it asserts") is
+false in the layer data; the row still *displays* a family badge because `LookStack` derives
+`info.families` from the library lookup, which is what keeps this S3 (rig output unaffected today —
+a template's rows are all one family — and the display lies in the right direction). **Fix**: needs
+the backend half — a `propertyMask` parameter on `toggle` with the family derived server-side
+(proposed in §14 as `FS-BE-TEMPLATE-TOGGLE-MASK`); then fix the KDoc, and pin that the layer
+emitted in `programmer.layerState` after a toggle carries the family.
+
+### `FS-TYPES-ADDLAYER-MASK-DROP`
+**`ProgrammerLookStack.handleAdd` drops `propertyMask` when forwarding LayerPicker's layer** · S3 ·
+P2 · C1 · haiku
+`src/components/programmer/ProgrammerLookStack.tsx`
+
+`LayerPicker` sets the mask with a comment explaining exactly why ("an unmasked template layer would
+read as 'this could touch anything'"); `handleAdd` rebuilds the `programmer.addLayer` payload field
+by field and omits it — though the wire accepts it — so the identical picker produces a masked layer
+in a cue and an unmasked one in the programmer. **Fix**: forward `propertyMask`, extend the comment
+so the timing-only exclusion isn't read as "all extra fields deliberately dropped", pin with a test
+on the outgoing frame.
+
+### `FS-TYPES-SURFACE-DESCRIPTORS`
+**Control-surface descriptors omit `touchCc` and `programChange`, and type `BankButtonControl.note`
+non-nullable where the wire guarantees null for one legal shape** · S3 · P3 · C1 · haiku
+`src/api/surfacesApi.ts`
+
+The wire's Fader carries `touchCc` (populated by the shipped X-Touch profile) which the client
+omits; the wire's BankButton makes `note`/`programChange` mutually exclusive while the client
+declares `note: number` non-nullable and no `programChange`. Latent (nothing reads them today) —
+but note this **corrects `FS-DEAD-DTO-FIELDS`' framing** of the surfaces feedback cluster as pure
+over-declaration: the actual divergence runs in both directions, so that cluster wants
+reconciliation against `ControlDescriptorDto`, not blanket deletion. **Fix**: add the two fields,
+widen `note`, comment the mutual exclusion.
+
+### `FS-TYPES-CLONE-COUNTS`
+**`CloneProjectResponse` drops four of the server's content counts, and the dialog discards the
+rest** · S4 · P3 · C1 · haiku
+`src/api/projectApi.ts`, `src/CloneProjectDialog.tsx`
+
+The server counts scripts, looks, cues, stacks and total records cloned; the client type declares
+`scriptsCloned` only (with a stray blank line where the rest sat), and the dialog `.unwrap()`s and
+discards even that, while its copy says a clone brings "scripts and settings". **Fix**: add the
+fields and surface them as a one-line success toast — the only confirmation an operator gets that a
+clone was complete — and fix the sheet wording.
+
+## 8. Dead code
+
+Roughly 4,300 lines deletable outright, plus endpoint/DTO surface. The house test gates make these
+safe mechanical batches; the notes below are the non-obvious couplings.
+
+### `FS-DEAD-ORPHAN-FILES`
+**Six files unreachable from `main.tsx` (and from any test)** · S3 · P2 · C1 · haiku
+`src/UnsavedChangesDialog.tsx`, `src/components/cues/editor/DeadAssignmentsBanner.tsx`,
+`src/components/looks/DeadLookRowsBanner.tsx`, `src/components/fixtures/GroupPropertiesDialog.tsx`,
+`src/components/ui/searchable-select.tsx`, `src/react-app-env.d.ts`
+
+An import-graph walk from `main.tsx` returns exactly this set. The banner pair is a closed loop
+(each other's only importer); the live health-text path is `lib/healthDescriptor.describeHealth` via
+`BindingMatrix`, which stays. `react-app-env.d.ts` references `react-scripts`, which isn't
+installed. **Corrects a FU**: `FU-FE-REBIND-INPLACE`'s premise is already false —
+`DeadPresetAssignmentsBanner` doesn't exist anywhere and `DeadAssignmentsBanner` renders nowhere, so
+there is no live dead-assignment banner to add Rebind to. Restate that FU against whatever surface
+would host it, or close it.
+
+### `FS-DEAD-RTKQ-HOOKS`
+**Fourteen exported RTK Query hooks with zero importers; three FX-definition endpoints fully dead**
+· S3 · P2 · C2 · sonnet
+`src/store/cues.ts`, `cueStacks.ts`, `templates.ts`, `fixtures.ts`, `fxDefinitions.ts`, `groups.ts`,
+`projects.ts`, `ai.ts`
+
+`useSaveProjectCueMutation` (dead since a cue became read-only), `useCopyCueMutation`,
+`useProjectCueStackQuery`, `useAddCueToCueStackMutation`, `useGoToCueInStackMutation`,
+`useTemplateQuery`, `useFixtureQuery`, `useFxDefinitionsQuery`, `useCompileFxScriptMutation`,
+`useCompileFxDefinitionMutation`, `useTestFxDefinitionMutation`, `useDistributionStrategiesQuery`,
+`useClearGroupFxMutation`, `useProjectScriptQuery`, `useAiConversationQuery`. Delete endpoint
+definitions too where nothing else reaches them. **Coupled lists**: `NON_SAVE_ENDPOINTS`
+(saveStatusSlice) and `SILENT_ENDPOINTS` (errorToastMiddleware) both have existence-pinning tests,
+so an endpoint and its list entries move in one change. `copyCue`'s SILENT entry cites
+`CopyCueDialog.tsx`, a file that does not exist — the one dead path among all paths that file
+names. Verify per symbol, not per module.
+
+### `FS-DEAD-CURRENTCUESTATE`
+**The `currentCueState` chain is dead, and its wire-compat comment protects a type nothing reads —
+with a claim that is also false** · S3 · P2 · C1 · haiku
+`src/store/cues.ts`, `src/api/cuesApi.ts`
+
+Query, lazy hook and `CueCurrentState` have zero consumers; the type's "still `presetApplications`
+on the wire" comment asserts the opposite of the wire (`CueCurrentStateResponse` now carries
+`layers: List<CueLayerDto>`). Delete all three. The backend route stays; a future "what is on stage"
+surface re-types against `layers` then.
+
+### `FS-DEAD-EXPORTS`
+**Sixteen exported symbols with zero references anywhere** · S3 · P2 · C1 · haiku
+across `src/api/`, `src/store/`, `src/hooks/`, `src/lib/`, `src/components/`
+
+`resolveFixtureTypeLabel`, `isDeferred`, `LookPreviewResponse`/`LookPreviewRequest` (outlived their
+endpoints), `CODE_SPEED_MASTER_PROTECTED`, `scopeIsEditable`, `targetEquals`, `SNAP_ANGLE_RAD`,
+`XL_BREAKPOINT`, `useChannelParkStatus`, `alignEdgeLabel`, `arraysEqual`, `StageRegionsRedirect`,
+`useStackActiveCueIds` (also part of `FS-BUG-CUESLOT-LIVENESS`), `buildEffectLibraryLookup`,
+`programmerSetColour`/`programmerSetPosition` (thin wrappers the live call sites bypass). Cautions:
+`isDeferred`'s deletion must not touch `validateLookRows`' inlined `ref:`/`tmpl:` shape checks;
+keep the *meaning* of the `CODE_SPEED_MASTER_PROTECTED` prose in errorToastMiddleware's comment.
+
+### `FS-DEAD-CUELAYER-HELPERS`
+**`reorderCueLayers` and `densifyCueLayerOrder` have no production caller** · S3 · P2 · C2 · sonnet
+`src/lib/cueUtils.ts`, `src/lib/cueUtils.test.ts`
+
+The cue-layer drag they served died with the three-pane editor; the only `LayerHandlers` host is the
+programmer path, which deliberately does not renumber client-side. Their doc comments claim callers
+that don't exist (and CLAUDE.md repeats the claim — see `FS-DOCS-STALE-COMMENTS`). **Fix is a
+decision**: delete both plus their describe block, or keep them explicitly annotated as held for the
+editable-cue-rows decision, the way `EditorContext.tsx` annotates its keeps. Do not let the deletion
+tidy `cueUtils.test.ts`'s thirteen-assertion field-by-field pin into a deep-equal — that shape is
+deliberate.
+
+### `FS-DEAD-DTO-FIELDS`
+**Wire-mirror fields never read by the client, several naming retired concepts** · S3 · P3 · C2 ·
+sonnet
+`src/store/fixtureFx.ts`, `src/api/groupsApi.ts`, `src/api/fxApi.ts`,
+`src/components/programmer/FxSheet.tsx`, `src/api/surfacesApi.ts`, `src/api/looksApi.ts`
+
+Two jobs, not one — and the first is now coordinated: backend A2 deletes `EffectDto.presetId` on
+the wire (see `FS-COORD-WIRE-FIELD-DELETIONS`). **Delete the retired-concept fields**: the three
+`presetId` declarations plus
+`FxSheet.toEffectContext`'s pass-through copy (nothing downstream reads it; sitting in a mapping
+whose siblings are all deliberate makes the residue look load-bearing), `FxEffectState.speedMasterIndex`
+(the chip resolves the index itself). **Leave or consciously collapse the pure wire mirrors**: the
+surfaces feedback cluster (`hasMotor`/`ringCc`/`ledFeedback`/… and the types existing only for
+them) is the one worth collapsing — but reconcile it against `ControlDescriptorDto` first rather
+than deleting: the gap round found the divergence runs both ways there
+(`FS-TYPES-SURFACE-DESCRIPTORS`). **Corrects a FU premise**: `LookDetails.usedByCueIds`/
+`usedByCueNames` are already on the wire and unread — `FU-FE-SHARED-LOOK-EDIT-GUARD`'s missing usage
+count needs no backend work.
+
+### `FS-DEAD-WS-METHODS`
+**Six WS API methods declared, implemented, never called** · S3 · P3 · C2 · sonnet
+`src/api/cloudSyncWsApi.ts`, `src/api/surfacesApi.ts`, `src/api/groupsApi.ts`
+
+`cloudSyncWsApi.subscribeStarted` (strands `CloudSyncStartedEvent`), three
+`surfacesApi.request*State` senders, `groupsApi.addFx`/`clearFx` (see `FS-TYPES-GROUPFX-WS`). All
+senders/subscribers, so removal can't drop an inbound frame; if any is a deliberate protocol
+placeholder, comment it instead.
+
+### `FS-DEAD-DEVDEPS`
+**Eight unused devDependencies, including a Prettier-in-ESLint wiring never made** · S3 · P2 · C1 ·
+sonnet
+`package.json`, `eslint.config.js`
+
+`autoprefixer`, `postcss` (Tailwind v4 runs through `@tailwindcss/vite`), `tw-animate-css` (the
+*other* animate package is the loaded one), `vite-tsconfig-paths` (alias is hand-rolled),
+`@eslint/compat`, `@eslint/eslintrc`, `eslint-config-prettier`, `eslint-plugin-prettier` — the last
+two mean Prettier is not part of `npm run lint` at all. **Fix**: remove, then full `npm run check`
+plus `npm ci` from clean. The Prettier pair is a decision: wire `eslint-config-prettier` in (a
+behaviour change to a real gate) or drop both and leave formatting to `npm run format`. Sibling
+finding: `FS-ARCH-ALERTDIALOG-DEP` *adds* a missing declaration — do them together as one manifest
+pass.
+
+### `FS-DEAD-CSS`
+**`.scrollbar-thin` and its three webkit child rules serve a deleted palette strip** · S4 · P3 · C1
+· haiku
+`src/index.css`
+
+Zero class references; the comment names the "horizontal palette strip" deleted in session 4. The
+whole of the dead-CSS surface — everything else in the file is live or carries documented reasons
+(the kotlin-playground rules stay).
+
+### `FS-DEAD-EXPORT-KEYWORD`
+**Ten symbols exported but used only inside their own module** · S4 · P3 · C1 · haiku
+`src/hooks/`, `src/lib/`, `src/components/programmer/ProgrammerScope.tsx`,
+`src/components/looks/lookRefValue.tsx`
+
+Not dead code — dead *export surface* that reads as API: `getPropertyChannels`,
+`makeFallbackSlider`, `useResolvedChannelSource`, `useNextGoTarget`, `deepEqual` (whose last live
+caller is dead `arraysEqual` — check whether it follows), `DEFAULT_ARRAY_INSET_M`, `LOCAL_SCOPE`,
+`scopesEqual`, `lookValueColourCss`, `describeLookValue`. Drop the `export` keyword.
+`RecordPreset` looks similar but stays exported — it types the context's public `openRecord`.
+
+### `FS-DEAD-PROTOTYPES`
+**`src/prototypes/` is 2.4k lines of shipped-and-done design scratch inside the compiled tree** ·
+S4 · P3 · C1 · haiku
+`src/prototypes/`, `eslint.config.js`
+
+Zero importers; all three prototyped surfaces have shipped; `model.ts`'s `computeWarnings` was
+ported to `lib/promptBook/desync.ts` with the original left behind. Downgraded to S4 because the
+arrangement is partly deliberate (eslint.config.js documents ignoring the `.jsx` files; the README
+frames them as reference implementations) — honour that by **relocating** to `docs/prototypes/` (or
+deleting) rather than leaving a directory a third of which is type-checked and linted for nothing.
+Drop the eslint ignore entry with it.
+
+## 9. Duplication
+
+### `FS-DUP-AGGREGATION`
+**Two implementations of "aggregate a property across heads", already numerically divergent** · S2 ·
+P1 · C3 · opus
+`src/components/fixtures-list/useRowValues.ts`, `src/hooks/useGroupPropertyValues.ts`,
+`src/components/fixtures/PropertyVisualizers.tsx`, `src/components/fixtures/GroupPropertyVisualizers.tsx`
+
+`aggregateCellValue` and the `useGroup*Values` family both compute min/max + uniformity, averaged
+RGB(WAUV) + swatch, and normalised pan/tilt — and they already disagree: the grid averages white
+over heads that *have* a white emitter, the group card divides by all members (two RGBW at W=255
+beside two RGB heads: W=255 in the grid, W=128 on the card). `aggregateCellValue`'s own doc argues
+against exactly this. On top, `PropertyVisualizers`/`GroupPropertyVisualizers` (~1,130 lines) are a
+structurally parallel widget family. **Fix**: make `aggregateCellValue` the single aggregation and
+have the group visualizers read through it; state the extended-emitter averaging rule once at the
+surviving site. `computeGroupColourValues` also feeds the 3D beam colour — carry that derivation
+across explicitly or keep it deliberately separate; do not let unifying the swatch silently change
+what the stage paints. **Sequencing**: contains `FS-BUG-PIXEL-CACHE-PERMUTATION`'s host code —
+collapse first or fix the bug in the survivor (§4).
+
+### `FS-DUP-ROW-SUBSCRIPTION`
+**`useRowOwnership` and `useLocalRowValues` duplicate the whole per-row programmer subscription
+mechanism** · S3 · P2 · C2 · sonnet
+`src/components/fixtures-list/useRowOwnership.ts`, `src/components/fixtures-list/useScopedRowValues.ts`
+
+Same key-signature memo (same eslint-disable, same comment), same dedupe, same version-ref bump,
+same blind-transition listener, same cache shape — so `FS-BUG-STALE-ROW-SNAPSHOT` exists identically
+in both copies, and in Local scope each `(target, property)` carries two `subscribeToKey`
+registrations plus two global listeners per mounted row (~2× the visible window; the table is
+virtualised). **Fix**: extract one hook owning subscription mechanics; consumers layer their
+aggregation on top. Land the S1 fix through this extraction. Preserve: `useRowOwnership`'s public
+shape, empty-cells-means-off, Local's `entry.owner !== 'layers'` predicate, the per-key split.
+
+### `FS-DUP-EFFECT-COMPAT`
+**Effect compatibility and sentinel-property resolution implemented twice** · S3 · P2 · C2 · sonnet
+`src/components/fx/AddEditFxSheet.tsx`, `src/components/busking/useBuskingState.ts`
+
+`allPropertyNames` (with the `'setting'`/`'slider'` sentinels and the dimmer/uv exclusion
+predicate), `compatibleEffects`, `effectsByCategory` and the sentinel→property resolution exist in
+both, the predicate written out four times total. Adding an emitter category is a two-file edit with
+no tying test. (`FU-FE-USE-TARGET-PROPERTIES` does not cover this — every anchor it names was
+deleted; that FU needs restating regardless.) **Fix**: one module owning `propertyNamesFor(target)`,
+`compatibleEffectsFor(library, target)`, `resolveEffectProperty(target, effect)`; pin the sentinel
+rule with a unit test. Keep AddEditFxSheet's explicit setting/slider pickers — a UI affordance, not
+part of the rule.
+
+### `FS-DUP-OVERVIEW-TOGGLES`
+**Four near-identical Overview toggles plus three alias hooks for one persistent toggle** · S3 · P2
+· C1 · haiku
+`src/components/*OverviewToggle.tsx`, `src/Layout.tsx`
+
+Same Tooltip + ghost icon button, differing in icon and noun; the command palette already declares
+the same four panels as plain data — which is the shape one component would take, and reveals a live
+inconsistency (Stage: hand-rolled SVG in the toolbar, lucide `Theater` in the palette). **Fix**: one
+`OverviewToggle` driven by one panel-descriptor array feeding both the toolbar and the palette; drop
+the three `usePersistentToggle` alias hooks; keep the effects panel's lock + tooltip; pick one Stage
+icon. Part of the Layout cluster (§4).
+
+### `FS-DUP-COLOUR-POPOVER`
+**`FxColourPicker` and `FxColourListPicker` duplicate the whole colour-popover body** · S3 · P2 ·
+C2 · sonnet
+`src/components/fx/FxColourPicker.tsx`, `src/components/fx/FxColourListPicker.tsx`
+
+Same five blocks in the same order (HexColorPicker, hex input with the same commit guard, swatch
+row, `FxColourTemplateRow`, extended-channel block), same three handlers, same reseed-on-open
+effect. Only dnd-kit ordering and list serialisation are genuinely list-specific. **Fix**: extract
+one `ColourEditorBody`; each picker keeps its trigger and seeding. The
+reference-opens-at-resolved-colour and touching-the-picker-replaces-the-reference rules are
+documented behaviour and must survive; `FxColourListPicker.test.tsx` passes unchanged.
+
+### `FS-DUP-REDIRECTS`
+**Seventeen byte-identical "redirect to the current project's equivalent" components** · S3 · P2 ·
+C1 · haiku
+one per route file, mounted from `src/App.tsx`
+
+Same `useCurrentProjectQuery` + navigate-with-replace + spinner body, seventeen times, so the
+loading/not-found behaviour has to be edited seventeen times. **Fix**: one
+`<CurrentProjectRedirect to="looks" />` with `preserveSearch` and sub-path options; fold the four
+small variants in as options. `LegacyProgramRedirect` must keep carrying the search string (`?cue=`
+deep links are an external contract), and the legacy `run`/`cues`/`cue-stacks` targets stay
+byte-identical.
+
+### `FS-DUP-CHANNEL-SLIDER`
+**Four copies of the labelled 0–255 channel slider row** · S4 · P3 · C1 · haiku
+`src/components/fixtures/ExtendedChannelSlider.tsx`, `src/components/fx/FxColourListPicker.tsx`,
+`src/components/fixtures/PropertyVisualizers.tsx`, `src/components/fixtures/GroupPropertyVisualizers.tsx`
+
+One shared component exists and one picker imports it; its list sibling redeclares it byte-identical,
+and two more private copies differ only in label styling. Fold to one with the label style as a
+prop; rendered markup must not change (popover widths are tuned to it).
+
+### `FS-DUP-TARGETKEY`
+**Three spellings of the `type:key` target encoding; the named owner has no users** · S4 · P3 · C1
+· haiku
+`src/components/runner/program/CueCardEditor/targetUtils.ts`, `src/components/busking/buskingTypes.ts`
+
+`targetUtils.targetKey`/`targetEquals` are imported by nothing (only `collectCueTargets` is, and it
+inlines the same concatenation); `buskingTypes` has its own `targetKey` over a different union;
+call sites also hand-spell the template literal. **Fix**: one `lib/` helper taking the normalised
+`{type, key}` pair (the busking union carries `name` where the cue union carries `key`); delete the
+unused pair. Note: `components/surfaces/targetUtils.ts` is a different, live module — leave it.
+Coordinate with `FS-RES-CUECARDEDITOR-DIR`, which moves the file (§4).
+
+### `FS-DUP-MARKER-ROW`
+**The same cue separator renders two different ways depending on surface** · S4 · P3 · C1 · sonnet
+`src/components/runner/MarkerRow.tsx`, `src/components/runner/program/ProgramMarkerRow.tsx`
+
+Of the four cue-row renderers flagged in exploration, only this pair truly overlaps (the others do
+distinct jobs): a locked separator on desktop Show renders a different structure from the same
+separator in the phone list and the Prompt Book rail. **Fix**: `ProgramMarkerRow`'s locked branch
+renders `MarkerRow`, keeping the grip-column spacer so rows don't shift as the lock flips; the
+unlocked branch (grip, rename, delete) is the genuinely different job and stays.
+
+### `FS-DUP-MINISTAGE-GEL`
+**`MiniStage.pickColour` is a third, divergent copy of the gel arm of the colour dispatch** · S4 ·
+P3 · C1 · haiku
+`src/components/cues/MiniStage.tsx`
+
+It re-implements the gel/default tail of `FixtureAppearanceSource` minus the `acceptsGel` gate the
+shared version calls out explicitly — so a stale gel code on a colour-mixing LED tints the
+mini-stage dot while all three other surfaces ignore it — hard-codes a fourth copy of
+`DEFAULT_FIXTURE_COLOUR`, and its comment cites a `DimmerOnlyMarker` that no longer exists. **Fix**:
+apply the `acceptsGel` gate (the fixtureType is already looked up), import the constant, drop the
+dead reference. Keep it static — this surface deliberately draws simulated cue targeting, not the
+wire.
+
+## 10. Architecture
+
+### `FS-ARCH-CURSOR-OWNERSHIP`
+**Two stores own the live-cue/armed-next cursors; several of the resulting copies have no reader** ·
+S3 · P2 · C3 · fable
+`src/store/cueStacks.ts`, `src/store/runnerSlice.ts`, `src/hooks/useShowTransport.ts`
+
+One `cueRunStateChanged` frame is written into two stores, and which copy wins is arbitrary per
+field: `useShowTransport` returns `serverActiveCueId` from the RTK cache but `standbyCueId` from the
+slice. The hook then keeps a *second* tracker of the server transition (`prevServerActiveCueRef` +
+reset effect) because the slice's own `serverActiveCueId` isn't exposed. Unread copies:
+`ShowTransport.serverActiveCueId` itself has no production consumer (`ShowPage` hand-computes the
+identical expression; `PromptBookPage` uses the optimistic cursor), and `CueStack.standbyCueId` is
+written twice and read never. **This needs a design decision, not a cleanup pass**: CLAUDE.md's
+two-cursor model is two *questions* and is not what's duplicated — but the two `standbyCueId`s
+genuinely carry different facts (cache: explicitly-armed-only; slice: effective next), so "delete
+the unread one" is not automatically safe, and swapping `PromptBookPage`'s `statusOf` onto the
+server cursor is a live-desk behaviour change. **Fix**: pick one owner for each server fact (the
+RTK cache is the natural home), reduce `runnerSlice` to the genuinely local animation state, expose
+what `ShowPage` currently hand-computes, and write down which cursor each surface reads and why.
+`useShowTransport.test.tsx` pins the reconciliation (deferred reset mid-fade, `serverNextCueId`
+preference, done-tick); GO/BACK must not restart a fade.
+
+### `FS-ARCH-BUSKING-GOD-HOOK`
+**`useBuskingState` is a 617-line hook mixing selection, derivation, presence rules and four
+mutation paths** · S3 · P3 · C2 · sonnet
+`src/components/busking/useBuskingState.ts`
+
+Four `useState`s, five derived memos, eleven callbacks; the group-vs-fixture request builder written
+twice; the property-name derivation written three times in one file. (The fresh-object-per-render
+claim from exploration does *not* hold — every member is individually stable — so the cost is
+comprehension, not renders.) **Fix**: split along its own comment boundaries — pad selection, effect
+authoring (share the request builder), presence — and pull the property-name derivation from
+`FS-DUP-EFFECT-COMPAT`'s shared module. `programmerEntryFor`'s `owner === 'web'` rule is
+load-bearing: a pad must not light on, or clear, a Locate's or a layer's entry.
+
+### `FS-ARCH-IMPORT-CYCLE`
+**The tree's only runtime import cycle: `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`, with no
+lint rule to catch the next one** · S3 · P2 · C1 · sonnet
+`src/components/CueSlotOverviewPanel.tsx`, `src/components/CueSlotEditAssignPanel.tsx`, `eslint.config.js`
+
+A genuine value-import cycle (the only one in the tree once type-only imports are stripped), in the
+codebase whose CLAUDE.md documents what a cycle costs here (the `startOAuthIdentityBridge` TDZ
+break that only shows up as a broken app in the browser). **Fix**: extract `SlotItemContent` +
+`CueSlotAssignDragData` into a third module; then add `eslint-plugin-import` with `import/no-cycle`
+as an error — it lands green immediately and guards the failure mode permanently.
+
+### `FS-ARCH-GRID-IN-ROUTES`
+**`FixturesListContainer` — the shared value grid — lives in a route module a component imports** ·
+S3 · P2 · C2 · sonnet
+`src/routes/FixturesList.tsx`, `src/components/programmer/ProgrammerGrid.tsx`
+
+The only component→route import in the tree, for the single most-reused grid in the app; four
+modules in `components/fixtures-list/` already document themselves against the container by name.
+**Fix**: move it (plus its props type and `LIST_PAGE_CARD_CLASS`) into
+`components/fixtures-list/`, leaving the route as the thin page. Must be a pure move preserving
+component identity — `useListSelection` clears its Redux scope on unmount and
+`ProgrammerPage.test.tsx` pins `gridMounts`; don't touch the null-scope-vs-Output distinction.
+
+### `FS-ARCH-LOCALSTORAGE-BOOT`
+**Unguarded `localStorage` on the boot path, against the policy the tree states explicitly** · S3 ·
+P2 · C1 · haiku
+`src/lib/theme.ts`, `src/main.tsx`, `src/ThemeToggle.tsx`, `src/components/CueSlotOverviewPanel.tsx`
+
+`usePersistentState`'s docblock states the policy (all storage access wrapped) and most sites follow
+it; `getInitialTheme()` runs a bare `getItem` at module scope in `main.tsx` before React mounts — a
+throw there (blocked site data, embedded view) is a blank page with no error boundary. Three lesser
+bare accesses in ThemeToggle and the cue-slot panel. **Fix**: try/catch with a
+what-degrades comment at all four; the boot-path one is the half that matters. Keep the raw string
+encodings — both keys predate the helper and migrating loses stored preferences.
+
+### `FS-ARCH-ALERTDIALOG-DEP`
+**`@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting from the
+`radix-ui` umbrella** · S3 · P2 · C1 · haiku
+`package.json`, `src/components/ui/alert-dialog.tsx`, `src/components/ui/context-menu.tsx`
+
+The umbrella exists for one primitive (`context-menu`); removing or replacing it breaks the build at
+`alert-dialog.tsx` — which `ui/sheet.tsx`'s unsaved-changes guard depends on. Fails loudly at build,
+not runtime, hence S3. **Fix**: declare it at the locked version; decide the umbrella's fate
+deliberately (move alert-dialog onto it, or context-menu off it). Don't change alert-dialog's
+runtime version as a side effect — the sheet guard depends on its close semantics. Do with
+`FS-DEAD-DEVDEPS` as one manifest pass.
+
+### `FS-ARCH-SURFACES-PATTERN`
+**`store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the RTK
+pattern nine siblings use** · S4 · P3 · C2 · sonnet
+`src/store/surfaces.ts`
+
+Real inconsistency, but the costs cited in exploration don't materialise (the two consumers are
+sibling routes never mounted together; nothing wants to invalidate or select these four). Convert to
+`queryFn` + `onCacheEntryAdded` mirroring `speedMasters.ts` when touching the file anyway; the
+subscribe-replays-last-snapshot-synchronously property must stay true of the seed, and the pickup
+Map reduction becomes a pure function.
+
+### `FS-ARCH-BRIDGE-EVAL`
+**~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is implicit**
+· S4 · P2 · C2 · sonnet
+`src/store/*.ts`, `src/main.tsx`
+
+Most store slices subscribe at module scope; `looks`/`templates`/`oauthGithub` defer via
+`start*Bridge()` from `main.tsx` because they sit on the earliest render path (TDZ hazard,
+documented). The exploration framing ("twelve slices do the forbidden thing") misread the doc —
+`store/oauthGithub.ts` treats module-scope as the accepted default and deferral as the exception —
+and today no module in `lightingApi`'s import closure value-imports a store slice, so there is no
+live cycle. What's missing is the **rule written down**: which pattern a new slice uses and what
+makes a slice "early-path". **Fix**: state it once (CLAUDE.md or a comment at `createLightingApi`),
+with the full current census (the deferred trio and the ~20 module-scope sites), rather than
+migrating everything. Migrate only if `import/no-cycle` (see `FS-ARCH-IMPORT-CYCLE`) proves
+insufficient.
+
+## 11. Structure and naming
+
+Where things live and what they're called. Individually small; collectively they are why a new agent
+gets lost. Most are best done as one coordinated pass (§4).
+
+### `FS-RES-CUECARDEDITOR-DIR`
+**`runner/program/CueCardEditor/` is a directory owned by nobody** · S3 · P2 · C1 · haiku
+`src/components/runner/program/CueCardEditor/`, `src/components/cues/`
+
+Leftover of the deleted three-pane editor: `CuePropsPane`'s sole consumer is
+`components/cues/CuePropertiesSheet`; `targetUtils.collectCueTargets`' consumers are three
+`components/cues/` modules plus `CueCardBody` — none is `CueCardEditor`; `ProgramCueRow` is a 16-line
+pass-through existing purely to hide the nesting. So newer code reaches four levels into a directory
+named for a component that doesn't use these modules. The sibling `components/cues/editor/` has the
+same orphaned shape (its live pair `AddLayerSheet`/`LayerPicker` is consumed only from
+`components/programmer/`; its third file is dead — `FS-DEAD-ORPHAN-FILES`) and should be dissolved
+in the same pass. **Fix**: move `CuePropsPane` + `targetUtils` into `components/cues/`, hoist
+`CueCardEditor.tsx` one level, delete `ProgramCueRow`, relocate `AddLayerSheet`/`LayerPicker` beside
+their consumer. Pure moves; the two test files' import/mock paths move with them. Do in the same
+pass as `FS-RES-RUNNER-DIR`.
+
+### `FS-RES-RUNNER-DIR`
+**`components/runner/`'s `program/` and `run/` subdirs are named for deleted routes** · S4 · P2 ·
+C2 · sonnet
+`src/components/runner/program/`, `src/components/runner/run/`, `src/routes/ShowPage.tsx`
+
+The verifier cut this down from "rename the whole tree": `runner` itself is legitimate (the docs
+call `/show` "the runner", and `runnerSlice`/`useRunnerAnimation` are squarely playback) — the
+residue is the two subdirectory names and the `Program*` component names, which point at routes that
+now only redirect. **Fix**: flatten `program/` into `runner/`, rename `run/` → `mobile/` (it is the
+phone takeover its own note describes), rename `ProgramView`/`ProgramMarkerRow` to Show-era names.
+`ShowPage.test.tsx` mocks five of these by path string — update in the same commit. Do together
+with `FS-RES-CUECARDEDITOR-DIR` and after the perf items touching these files, or before all of
+them — not interleaved (§4).
+
+### `FS-RES-ROUTES-CONVENTION`
+**`routes/` mixes route modules, settings-tab bodies, orphan redirects and a pure helper — the
+convention is real but undocumented, with three genuine strays** · S4 · P2 · C2 · sonnet
+`src/routes/Riggings.tsx`, `src/routes/StageRegions.tsx`, `src/routes/RunPage.tsx`,
+`src/routes/CloudSync.tsx`, `src/routes/ProgrammerPage.tsx`
+
+The verifier reframed this: most of it is one uniform pattern (a former route file keeps its
+resource identity and hosts its legacy redirect plus the tab body that replaced it), not drift. The
+genuine strays: `Riggings.tsx`/`StageRegions.tsx` are routed nowhere at all (pure tab bodies
+mis-filed as routes, one carrying a dead redirect export); `RunPage.tsx` is 63 lines of two
+redirects rendering no page; `formatRepoUrl` is a pure helper exported from a route module; and
+`LegacyProgramRedirect` lives in `ProgrammerPage.tsx` rather than `ShowPage.tsx` — the exact
+`/program` vs `/programmer` confusion CLAUDE.md warns about, reproduced in file layout. **Fix**:
+move the two tab bodies to `components/`, `formatRepoUrl` to `lib/`, collect the legacy redirects
+into one `routes/legacyRedirects.tsx` (absorbing `RunPage.tsx`), and write the convention down.
+Every URL and redirect target stays byte-identical — `?cue=` deep links are an external contract.
+
+### `FS-RES-CLOUDSYNC-SPLIT`
+**`routes/CloudSync.tsx` is a 1,306-line module holding two routes and twenty components — beside
+the populated `components/cloudSync/` directory it already imports from** · S3 · P3 · C1 · haiku
+`src/routes/CloudSync.tsx`, `src/components/cloudSync/`
+
+(The exploration claim that the directory is *unused* was wrong — it holds `ConflictPanel`,
+`RepoPicker`, `DeviceFlowModal`, `SyncReauthBanner`, all live. The defensible finding is the
+inverse: the split was started and abandoned for the bulk of the feature.) **Fix**: move the eight
+panels, dialog, row/badge components and pure helpers across, leaving the two route bodies plus
+redirect. Mechanical — but the five `connected === true && reauthRequired !== true` gates CLAUDE.md
+names (three live in this file) must survive verbatim; collapsing either half reintroduces the
+25-day silent-failure bug.
+
+### `FS-RES-PROMPTBOOK-GODPAGE`
+**`PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()` sites**
+· S3 · P3 · C3 · sonnet
+`src/routes/PromptBookPage.tsx`
+
+764 lines of hook body before any JSX; anchor CRUD, annotation dialog, region resolution, desync
+panel, undo snapshots and tool palette interleaved in one scope. The concrete consequence: the
+auto-relock idle timer is reset by 15 scattered `noteEdit()` calls where `ShowPage` does the same
+with two capture handlers — a new edit affordance here silently fails to reset the countdown.
+**Fix**: lift cohesive slices into named hooks under `lib/promptBook/` / `components/promptbook/`
+(the boundary already exists), and replace the 15 call sites with the capture-handler approach.
+`useEditLock`'s shared-slice semantics and transition-only re-arm are pinned by
+`useEditLock.test.tsx` and must hold. `routes/Stage.tsx` has the same shape at smaller scale — same
+treatment when touched.
+
+### `FS-RES-FIXTUREMODEL-SPLIT`
+**`FixtureModel.tsx` mixes a 1,500-line R3F component with pure beam-cookie geometry, forcing its
+unit test into jsdom** · S3 · P3 · C2 · sonnet
+`src/components/stage3d/FixtureModel.tsx`, `src/components/stage3d/beamOptics.ts`
+
+Four exported pure geometry functions live inside the component module, so their node-runnable test
+must open with `@vitest-environment jsdom` just to survive the drei/fiber imports — against the
+documented pattern (`beamOptics.test.ts` runs in default node). **Fix**: move the cookie/lobe maths
+into a peer module beside `beamOptics.ts` taking `three` types only. Must not break the imperative
+per-frame write path — these functions mutate vectors/materials in place from `useFrame`; making
+them allocate would cost per-frame garbage on the canvas.
+
+### `FS-RES-PRESETPICKER`
+**`FxSection`'s `presetPicker` prop and doc describe a deleted synthetic-fixture preset branch — and
+claim a suppression the code doesn't perform** · S3 · P2 · C1 · haiku
+`src/components/fx/FxSection.tsx`
+
+The header says "Suppress this whole panel" for a preset mode that no longer exists; the code
+suppresses nothing. The slot is filled by `LookTogglePicker` at both call sites. **Fix**: delete the
+stale paragraph, rename the prop to `lookPicker` (three sites, one file). Value: the file stops
+advertising a third rendering mode a reader will hunt for.
+
+### `FS-RES-PALETTERESULT`
+**`UpdateDialog` renders an unreachable branch from a field the server deleted** · S3 · P2 · C1 ·
+haiku
+`src/store/programmerOps.ts`, `src/components/programmer/UpdateDialog.tsx`
+
+The render half of `FS-TYPES-PALETTE-WIRE-ARMS`: a full `result.paletteResult &&` block with a
+four-line explanatory comment, plus the `invalidatesTags` arm keyed on it. Delete branch, comment,
+arm, and `PaletteUpdateResult`; `lookResult` is the live successor rendering the same shape. The two
+deliberate `ref:`-era keeps CLAUDE.md names (`validateLookRows`' rejection, `StateMigrations`'
+upgrade path) are backend-side and unaffected.
+
+### `FS-RES-LIGHTING-EDITOR-DIR`
+**`components/lighting-editor/` is a one-file directory named for a pre-Programmer era** · S4 · P3 ·
+C1 · haiku
+
+Holds only `EditorContext.tsx`; all four consumers are programmer-side. Move it into
+`components/programmer/` (one consumer is a `vi.mock` path string). Keep the file's doc comment
+intact — it is the authoritative record of why there is no `cue` arm.
+
+### `FS-RES-LOOKREFVALUE-NAME`
+**`lookRefValue.tsx` is named for the retired `ref:` grammar its own doc says it can never handle**
+· S4 · P3 · C1 · haiku
+`src/components/looks/lookRefValue.tsx`
+
+A reader grepping for surviving `ref:` machinery hits it first. Rename to `lookValueChips.tsx`
+(three importers). Don't touch the deliberate `ref:` survivors.
+
+### `FS-RES-PANECHROME`
+**`components/cues/paneChrome.tsx` justifies its home with consumers deleted in 2a** · S4 · P3 · C1
+· haiku
+`src/components/cues/paneChrome.tsx`
+
+Its only direct importer is `LookStack` — though `LookStack` is itself shared back to the cue side,
+so the doc is stale in its specifics rather than wholly false. Move beside `LookStack` (or inline)
+and drop the obsolete rationale; hand any caller-less export to the dead-code pass.
+
+### `FS-RES-ANON-CATCH`
+**Three bare `.catch(() => {})` where the codebase has a named helper for exactly that** · S4 · P3
+· C1 · haiku
+`src/hooks/useShowBarProps.ts`, `src/components/EffectsOverviewPanel.tsx`
+
+`ignoreReportedError` exists precisely to mark the deliberate sink (eight sites use it), and the
+middleware file itself warns about the anonymous form. Replace the three; verify each endpoint is
+genuinely absent from `SILENT_ENDPOINTS` (they are) — a silenced endpoint plus an anonymous catch
+would be truly invisible.
+
+### `FS-RES-STRAY-CAPTURES`
+**Four `capture *.json` DMX debug dumps sit at the repo root** · S4 · P3 · C1 · haiku
+repo root
+
+Committed debug artefacts. Delete (or move under a gitignored scratch dir) and add a `.gitignore`
+pattern so the next capture doesn't land in the tree.
+
+## 12. Docs and stale rationale
+
+The refactors' most insidious residue: rationale comments and CLAUDE.md paragraphs that now describe
+deleted machinery, in a codebase whose agents demonstrably obey written rationale. Each item below
+names text that would make a competent agent do the wrong thing.
+
+### `FS-DOCS-SPEEDMASTERS`
+**CLAUDE.md §Speed Masters and two code comments describe the deleted 2..N split and a
+`SpeedMastersStrip` that no longer exists** · S4 · P2 · C1 · haiku
+`CLAUDE.md`, `src/routes/SpeedMasters.tsx`, `src/routes/ResetPasswordPage.test.tsx`
+
+No `SpeedMastersStrip` symbol exists; `components/SpeedMasters.tsx` renders **every** master
+including M1 and its docblock explains why the split was removed (the ShowBar BPM tile no longer
+exists either). A reviewer following CLAUDE.md would reintroduce the split brain the component was
+rewritten to remove. **Fix**: rewrite CLAUDE.md §Speed Masters to match the component's docblock;
+fix the two stale mentions. Keep the still-true halves: stored vs live BPM, the two per-effect uuid
+references, master 1 undeletable / what a null uuid means.
+
+### `FS-DOCS-CLAUDEMD-CUE-ARM`
+**CLAUDE.md claims `EditorContextValue`'s `cue` arm is kept; the code removed it in 2b** · S4 · P2 ·
+C1 · haiku
+`CLAUDE.md`, `src/components/lighting-editor/EditorContext.tsx`
+
+The file's own doc says the opposite of CLAUDE.md ("There is no `cue` arm … removed in 2b"). An
+agent reading CLAUDE.md will hunt for branches that don't exist or reintroduce the arm believing it
+deliberate. **Fix**: rewrite the paragraph — the surviving piece is the `409 CUE_EDIT_SESSION_OPEN`
+handling (true only until backend D1: the decision to retire `cueEdit.*` is taken, and
+`FS-COORD-CUEEDIT-RETIRE` then deletes the handling too — write the rewrite so it doesn't enshrine
+a keep that is about to evaporate).
+
+### `FS-DOCS-CLAUDEMD-PROVENANCE`
+**CLAUDE.md's provenance section names `lookId`/`lookName`, replaced by `layerSource`** · S4 · P3 ·
+C1 · haiku
+`CLAUDE.md`, `src/api/programmerWsApi.ts`
+
+The doc's "must stay in `provenanceSignature`" invariant is right but names two fields that no
+longer exist and misses the polymorphism (a Look and a template can share an int PK) that is the
+whole reason the signature reads a source object. Update to `layerId` + `layerSource` with the why.
+Same drift that let the stale test in `FS-TEST-PROVENANCE-PIN` survive.
+
+### `FS-DOCS-COMPATIBLELOOKIDS`
+**`compatibleLookIds` is documented as type-gated and deferred-only in three places; it is neither**
+· S4 · P2 · C1 · haiku
+`src/api/groupsApi.ts`, `src/store/fixtures.ts`, `src/components/fx/LookTogglePicker.tsx`
+
+The producer is capability-only (D6) and never excludes bound rows; "deferred Looks" describes
+nothing since session 3 made every Look row bound. `LayerPicker.tsx` already carries the corrected
+wording, so the codebase contradicts itself on one field. **Fix**: align all four comments with
+`LayerPicker`'s; say what a toggle onto one target does for a Look whose rows name other fixtures.
+Do not restore a client-side filter — compatibility belongs to the backend (and see
+`FS-BE-COMPATIBLEIDS`, §14, for the rows-only hole itself).
+
+### `FS-DOCS-OUTOFSCOPE-COMMENT`
+**`RecordSkipReason.OUT_OF_SCOPE`'s comment names "palette routes" and claims they are the only
+scoped ones — both halves wrong** · S4 · P3 · C1 · haiku
+`src/store/programmerOps.ts`
+
+The backend arm says the *Look* routes; a targeted cue Record passes a scope too; "palette" is
+retired vocabulary. Reword; sweep the file's other retired-vocabulary comments in the same pass
+(`RecordRequest.targets` also says "unlike a palette").
+
+### `FS-DOCS-ELEMENT-KEY-INVARIANT`
+**`LookRowStore` cites `syntheticFixture.ts` as the record of the element-key invariant; that file
+was deleted** · S4 · P2 · C1 · sonnet
+`src/components/programmer/LookRowStore.tsx`
+
+The invariant (element keys are element-local suffixes, never parsed or synthesised client-side) is
+real and now documented nowhere. State it inline or relocate it beside the other value-grammar rules
+in `src/lib/` and cite that. `FU-LOOK-ELEMENT-ROWS` tracks the behaviour gap; this is only about the
+rule having a live home.
+
+### `FS-DOCS-REF-RATIONALE`
+**`programmerValue.ts` and `useCellWriters` still teach the retired `ref:` grammar as current** ·
+S4 · P3 · C1 · haiku
+`src/lib/programmerValue.ts`, `src/components/fixtures-list/useCellWriters.ts`
+
+One doc block says `ref:{uuid}` "can now appear" as an entry's value forty lines above the note
+recording its retirement; `writePosition`'s comment justifies a call-site choice by a distinction
+that no longer exists. The gap round added the same module's other half: `parseProgrammerValue`'s
+doc still claims the positional `P1` grammar "survives" in `colourUtils.ts` (it holds only `tmpl:`
+now), and `programmerValue.test.ts` justifies its `'P1'` case with the same dead claim — the
+assertion is now just another unparseable string. **Fix**: rewrite both files' doc blocks to one
+rule — this parser reads literals only; `ref:` and positional `P*` are both retired, `tmpl:` is
+legal only in an effect parameter — fold the `'P1'` test case into the junk-strings case, and
+repoint the `parseProgrammerEntryValue` tombstone at `colourUtils.test.ts`'s `tmpl:` coverage.
+Leave the live `ref:` rejections alone.
+
+### `FS-DOCS-STALE-COMMENTS`
+**Batch: ~14 rationale comments naming callers, renderers or files that no longer exist** · S4 · P2
+· C1 · haiku
+`CLAUDE.md`, `src/components/ShowBar.tsx`,
+`src/components/runner/program/CueCardEditor/CueCardEditor.tsx`, `src/store/saveStatusSlice.ts`,
+`src/components/cues/TimingBadge.tsx`, `src/api/fxApi.ts`, `src/api/cuesApi.ts`,
+`src/lib/cueUtils.ts`, `src/store/errorToastMiddleware.ts`, `src/components/looks/LookStack.test.tsx`,
+`src/api/fixtureTypeHierarchy.ts`, `src/api/cueStacksApi.ts`, `src/components/runner/run/RunMobile.tsx`
+
+The collected one-liners, each verified against the tree (the last four sat in a batch that missed
+its verdict pass on a bookkeeping mismatch — re-verify each at fix time, it's a grep apiece):
+`ShowBar`'s Blind comment claims host-conditional rendering that 2b deliberately removed (the most
+dangerous one — acting on it reintroduces the drift `useShowBarProps` exists to prevent);
+`CueCardEditor`'s `@container` comment names `bodyRef`/`tabsBreakpoint` (deleted with the tabs) and
+its closing comment recommends "the programmer-wide Make hard", deleted in session 4 (and the
+honest replacement wording depends on backend D5, which proposes deleting the caller-less
+`/flatten` route — don't cite flatten as live if that stands);
+`saveStatusSlice` describes an entry no longer in the list; `TimingBadge` says "preset/effect
+summary cards"; `fxApi.speedMasterIndex` claims the FX-sheet chip renders it (the chip resolves the
+index itself); `cuesApi`'s presetApplications keep-note (goes with `FS-DEAD-CURRENTCUESTATE`);
+`cueUtils`' claimed reorder/densify callers (goes with `FS-DEAD-CUELAYER-HELPERS`, and CLAUDE.md
+repeats the claim); `errorToastMiddleware`'s `CopyCueDialog.tsx` path (goes with
+`FS-DEAD-RTKQ-HOOKS`); `LookStack.test.tsx` citing a deleted `LayersPane.test.tsx` as the cue-side
+coverage; `fixtureTypeHierarchy` naming the deleted Look editor among its consumers;
+`cueStacksApi` citing `docs/cue-stacks-engineering.md` without the `lighting7/` qualifier (reads as
+a dead local path); `RunMobile`'s summary still framing itself against the Run view. **Fix**: fix
+each in the same change that resolves the code it describes where one exists; the rest as one
+mechanical docs pass, verifying each replacement against the tree rather than the surrounding prose.
+
+## 13. Tests
+
+The pattern across these: CLAUDE.md declares an invariant load-bearing, and either the pin rotted
+across the refactors or it never existed. Most fixes are one focused test file. (The script-editor
+subsystem's zero-test state is `FS-TEST-EDITOR-PINS`, filed with its cluster in §5.)
+
+### `FS-TEST-LOOKONLY-GATE`
+**The LOOK-only gate — the guard against silently converting a generic template to per-fixture — has
+no test** · S2 · P1 · C1 · sonnet
+`src/components/programmer/LookRowStore.tsx`, `src/components/programmer/LookRowStore.test.tsx`
+
+CLAUDE.md's rule that `LookRowStore` engages only for a LOOK layer is one expression
+(`layer?.source.kind === 'LOOK' ? … : undefined`), and the suite never constructs a TEMPLATE-source
+layer — the obvious "simplification" to `layer?.source.id` leaves everything green while making a
+focused template's rows editable, which is precisely the silent-conversion CLAUDE.md names.
+`LayerRowNotices` explains, it does not gate. **Fix**: a case focusing a TEMPLATE-source layer,
+asserting on the store's own output (query skipped, empty `serverRows`, `setValue` a no-op) so the
+pin survives notice rewording.
+
+### `FS-TEST-PUBLICPATH`
+**The publicPath auth/boot-gate bypass predicate is untested and unexported** · S2 · P2 · C2 ·
+sonnet
+`src/App.tsx`
+
+The predicate that switches *both* gates off carries two documented traps (matches routes not
+prefixes; the `i` flag is load-bearing against auto-capitalising phone keyboards), and no test
+touches it — the test CLAUDE.md cites pins a consequence, not the matching. **Fix**: extract
+`isPublicPath(pathname)` into `src/lib/publicPath.ts` with its comments, and pin the named cases:
+`/reset/abc` and `/device/abc` true (± trailing slash), `/Device/abc` true, `/device/` and `/device`
+false, `/device/abc/def` false.
+
+### `FS-TEST-PROGRAMMER-SCOPE`
+**`focusLayer`'s membership guard and the removed-layer fallback are unpinned** · S3 · P2 · C1 ·
+sonnet
+`src/components/programmer/ProgrammerScope.tsx`
+
+CLAUDE.md calls the membership guard the one that bites (a cue's `layerId` must be refused), and no
+test asserts it — `FixturesTable.test.tsx` stubs the scope hooks, and while `ProgrammerPage.test.tsx`
+does mount the real provider (pinning landing scope, the Output/Local switch and no-remount), it
+never exercises `focusLayer` refusal or the focused-layer-removed fallback to Output. A regression
+partly self-heals via that fallback, hence S3. **Fix**: `ProgrammerScope.test.tsx` over a mocked
+layers query pinning refusal-returns-false, accept-switches, removal-falls-back, and the actions
+context identity staying stable across a scope change (the file's own doc says that stability is the
+point of the split contexts).
+
+### `FS-TEST-CUEUTILS-TRIGGERS`
+**`cueUtils.test.ts` pins fourteen layer fields (CLAUDE.md says thirteen) and none of the trigger
+fields its own docstring claims** · S3 · P2 · C1 · haiku
+`src/lib/cueUtils.test.ts`, `CLAUDE.md`
+
+`templateId` made it fourteen; CLAUDE.md's count drifted (say "every field" instead of a number so
+it can't re-rot). The docstring claims triggers are pinned field-by-field too, but the fixture's
+`triggers: []` exercises none of the six — the identical silent-drop failure mode, unguarded behind
+a docstring that says it's guarded. **Fix**: a trigger with six non-default fields, pinned
+individually in the layer test's style, plus the `scriptName`-is-stripped assertion.
+
+### `FS-TEST-COLOUR-TEMPLATES`
+**`FxColourTemplates` is untested, and its offerable filter is stricter than CLAUDE.md states** ·
+S3 · P2 · C2 · sonnet
+`src/components/fx/FxColourTemplates.tsx`, `CLAUDE.md`
+
+The only suite touching `useColourTemplates` runs the no-project path. And `isOfferable` requires
+`rows.length === 1` on top of the documented `family === 'COLOUR' && isGeneric`, so a two-row
+generic colour template is silently unofferable and nothing says so. **Fix**: a test file over a
+mocked template list pinning all three exclusions and the `labelFor` loading/resolved/dangling
+split; decide whether the `rows.length === 1` clause is intended and state it in CLAUDE.md either
+way.
+
+### `FS-TEST-INDICATOR-LINK`
+**`ProgrammerIndicator`'s link-vs-inert split is unpinned (the CLAUDE.md path trap itself is now
+historical)** · S4 · P3 · C1 · haiku
+`src/components/ProgrammerIndicator.test.tsx`
+
+All seven cases mount at `/projects/1/show`; none asserts the badge is an inert div (not a Link) on
+the programmer itself. The bare-`startsWith` trap CLAUDE.md warns about cannot actually bite at the
+current path value — it diverges only on non-existent siblings — so what's worth pinning is just the
+on/off-programmer rendering split. **Fix**: parameterise the mount route; assert link+tooltip at
+`/show`, inert at `/programmer` and `/programmer/fx`.
+
+### `FS-TEST-PROVENANCE-PIN`
+**The provenance-signature test pins field names that no longer exist, and the `layerSource` arm of
+the signature has no test at all** · S3 · P2 · C1 · sonnet
+`src/api/programmerWsApi.test.ts`
+
+The "wakes a cell when only the winning layer changed" test sends `lookId`/`lookName` — fields
+`ProvenanceEntry` no longer has — through an `unknown`-typed frame helper, so the stale shape passes
+untyped. The core invariant is still pinned (the frames differ in `layerId`, so dropping that from
+the signature would fail the test) — what is *unpinned* is the arm added for a documented hazard:
+`layerSource.kind/.id/.name`, guarding a Look and a template sharing an int PK. **Fix**: retype the
+frame helper so stale field names fail to compile; rewrite the fixture to the current shape; add the
+missing case (two frames differing only in `layerSource`, `layerId` and `source` held fixed).
+
+## 14. The backend seam
+
+The sibling [backend-post-refactor-sweep.md](backend-post-refactor-sweep.md) landed first, with
+four decisions already taken (retire `cueEdit.*`; retire the legacy tempo surface on both sides;
+route-tree auth gating; normalize the API hard, no aliases) and a "Frontend-coordination register"
+addressed to this document. This section absorbs that register as concrete frontend items — each
+tagged with the backend item and wave it lands with, because doing the frontend half early breaks a
+live desk and doing it late leaves dead client code lying to readers — and then lists the few
+backend facts this sweep hit that the backend backlog does **not** carry.
+
+### Frontend work that lands in step with backend waves
+
+### `FS-COORD-CUEEDIT-RETIRE`
+**Delete the client's cueEdit remnants when backend D1 lands** *(wave 1)* · S3 · P1 · C1 · sonnet
+`src/components/lighting-editor/EditorContext.tsx`, `src/components/programmer/RecordSheet.tsx`,
+`src/components/programmer/UpdateDialog.tsx`, `src/lib/programmerSource.ts`,
+`src/store/programmerOps.ts`, `src/routes/Diagnostics.tsx`
+
+Backend D1 deletes the whole `cueEdit.*` family including `GET /perf/cueedit-histogram`. That
+retires the two client keeps this sweep deliberately did *not* flag as dead: the
+`409 CUE_EDIT_SESSION_OPEN` handling (five files — its justification, "another client can hold a
+session", stops being true) and the Diagnostics cueEdit latency panel (its data source 404s).
+Delete both in the same change as, or immediately after, D1 — and write
+`FS-DOCS-CLAUDEMD-CUE-ARM`'s CLAUDE.md rewrite so it doesn't enshrine a keep that is about to
+evaporate.
+
+### `FS-COORD-LEGACY-TEMPO`
+**Migrate the three legacy-tempo consumers to `speedMasters.*` when backend D2 lands** *(wave 1)* ·
+S3 · P1 · C2 · sonnet
+`src/components/BeatIndicator.tsx`, `src/components/EffectsOverviewPanel.tsx`, `src/store/fx.ts`
+
+Decision taken; backend D2 deletes `setFxBpm`/`tapTempo`/`beatSync`/`requestBeatSync` and the REST
+clock routes. Client half: `BeatIndicator`'s legacy unkeyed path moves to the keyed
+`speedMasters.beat` stream with master 1's `''` key (null uuid already means master 1), the tempo
+reads/writes in `store/fx.ts` move to the speed-master endpoints, and the client senders go.
+Resolves the `beatSync` half of `FS-PERF-BPM-INVALIDATION` by deletion (the `fxState` invalidation
+half stands on its own), and is the natural home for `FS-CHROME-BEAT-RESUBSCRIBE`'s ref fix —
+BeatIndicator's subscription effect is being rewritten anyway.
+
+### `FS-COORD-GROUPS-WS`
+**Delete the whole client groups WS layer when backend D3 deletes `GroupSocket` — after answering
+one question** *(wave 1)* · S3 · P1 · C1 · sonnet
+`src/api/groupsApi.ts`, `src/store/groups.ts`
+
+D3 supersedes `FS-TYPES-GROUPFX-WS`'s scope: the backend deletes `plugins/GroupSocket.kt` outright
+(it found `groupsState` is never pushed — no `setupGroupSubscriptions` exists). The question to
+answer first: `store/groups.ts`'s `groupsState → invalidateTags(['GroupList'])` bridge therefore
+never fires today, so **what keeps `GroupList` fresh across clients?** If the answer is "nothing but
+this client's own mutations", that is a functional gap to raise against the backend backlog
+(a `groupListChanged` on the broadcast bus, like every sibling list), not a silent client deletion.
+
+### `FS-COORD-WIRE-FIELD-DELETIONS`
+**The retired-concept wire fields die server-side under backend A2/D9/B4 — coordinate, don't
+unilaterally delete** *(waves 0–1)* · S3 · P2 · C1 · haiku
+
+Backend A2 deletes `EffectDto.presetId` on the wire and D9 flags the client types — that is
+`FS-DEAD-DTO-FIELDS`'s `presetId` batch, now coordinated rather than unilateral. Backend B4 will
+stop reporting the non-consumed master field per `timingSource`, and its F8 asks whether the client
+is missing `rateSpeedMasterIndex`: the answer from this side is **no** — the FX-sheet chip resolves
+display via `useSpeedMasterDisplay(uuid)`, so index fields are display debris client-side
+(`FS-DOCS-STALE-COMMENTS` covers the stale `speedMasterIndex` claim). State that in F8's change
+rather than adding the field.
+
+### `FS-COORD-API-NORMALIZE`
+**Every hard rename in backend F1/F2/F3/F5/F8 is a same-change client edit** *(wave 4)* · S3 · P2 ·
+C2 · sonnet
+`src/store/*.ts`, `src/api/*.ts`
+
+No aliases and no deprecation windows means the client edit ships with the backend one: the
+kebab/plural path renames land in the matching `store/*.ts` endpoints; `speedMasterListChanged` →
+`speedMasters.listChanged` (`store/speedMasters.ts`) and `surfaceBindingsChanged` →
+`surfaceBank.bindingsChanged` (`api/surfacesApi.ts`); delete-status normalization should be
+verified against any `.unwrap()` that reads a response body; F5's fix for the double
+`speedMasters.state` frame touches this client's request-on-open; F8's DTO unification lands in
+the matching client types. The backend doc commits to maintaining a list of frontend-visible
+changes per wave — consume it change-by-change rather than re-diffing.
+
+### `FS-COORD-ADMIN-GATE`
+**Re-verify the client's hand-mirrored admin gates when backend F6 lands** *(wave 3)* · S3 · P2 ·
+C1 · sonnet
+`src/navigation.ts`, `src/store/restApi.ts`, `src/hooks` (skip guards)
+
+F6 replaces `ADMIN_ONLY_PREFIXES` string matching with route-tree gating and admin-gates the
+code-execution endpoints (`scripts/run`, definition test, script-editor compile, import/export).
+Client half: the `adminOnly` nav ids (pinned by `navigation.test.ts` against nothing backend-side),
+the prefix list the backend doc cites in `restApi.ts`, and — new — any surface an operator can
+reach that calls a newly-gated endpoint needs the `skip: !isAdmin` treatment `useOAuthReauthState` /
+`useUsersQuery` document, or it becomes a 403 generator (the script editor survives for operators
+only if compile stays reachable; check before, not after).
+
+### `FS-COORD-NEW-BROADCASTS`
+**When backend B5 adds `scriptListChanged`/`fxDefinitionListChanged`, add the client bridges** ·
+S4 · P2 · C1 · sonnet
+
+Two new `*ListChanged` frames need client bridges + tag invalidations, or the staleness B5 fixes
+server-side stays unfixed here. Use whichever bridge pattern `FS-ARCH-BRIDGE-EVAL`'s written-down
+rule prescribes.
+
+### `FS-COORD-PING`
+**Backend D5 deletes the WS `ping` type; this client sends it** · S4 · P3 · C1 · haiku
+`src/api/internalApi.ts`
+
+The keepalive sender (`ws.send({type: "ping"})`) goes in the same change — or D5 decides the
+backend tolerates unknown inbound types; decide, don't assume. Also from D5: `POST
+/cues/{cueId}/flatten` dies with no client caller (verified — only two prose comments reference it),
+so `FS-DOCS-STALE-COMMENTS`' CueCardEditor rewrite and CLAUDE.md's flatten paragraph must not
+present flatten as the live replacement for Make Hard if that deletion stands.
+
+Cross-references, not new work: backend **C3** (crossfade republish at ~62 fps) is the server half
+of `FS-PERF-PROVENANCE-REFETCH` — coordinate the protocol change there, and re-measure the client
+cost after C3 before spending the C3-sized frontend effort. Backend **D4** (Look preview routes)
+deletes the endpoints whose client DTO leftovers `FS-DEAD-EXPORTS` removes. Backend **D8** covers
+what this sweep filed as the `IncludedTarget.Kind.PALETTE` backend half of
+`FS-TYPES-PALETTE-WIRE-ARMS`; **D3/D5** cover the orphan inbound WS types (`addFx`, `clearFx`,
+`unparkAll`); **H1** covers the stale `websocket-engineering.md`.
+
+### Proposed additions to the backend backlog
+
+Three backend facts this sweep verified that `backend-post-refactor-sweep.md` does not carry —
+candidates for its A/B series:
+
+- `FS-BE-STOP-ROWSONLY` — `POST /cues/{cueId}/stop` only deactivates the stack when that stack is
+  active; otherwise it calls `removeEffectsForCue` and never `removeCueAssignments`, so a rows-only
+  cue fired directly (e.g. from a slot pad) **cannot be stopped at all**. Blocking half of
+  `FS-BUG-CUESLOT-LIVENESS`; belongs beside its A-series (candidate wave 0).
+- `FS-BE-ACTIVATE-SHORTCIRCUIT` — `POST /cue-stacks/{id}/activate` routes to `activateAtFirstCue`
+  with no already-active short-circuit (unlike `/show/activate`, which has one). This is what turns
+  the liveness bug into a playhead jump rather than a no-op.
+- `FS-BE-COMPATIBLEIDS` — `compatibleIdsFor` (`routes/lightFixtures.kt`) filters on inferred effect
+  capabilities only, so a rows-only Look (empty capability set) is reported compatible with every
+  target and `LookTogglePicker` offers pads that assert nothing. Decide whether compatibility should
+  also require row coverage; the frontend comments claiming it already does are
+  `FS-DOCS-COMPATIBLELOOKIDS`.
+- `FS-BE-TEMPLATE-TOGGLE-MASK` — `ProgrammerLayerStack.toggle` has no `propertyMask` parameter and
+  `projectTemplates.kt`'s toggle route derives none while its KDoc claims the server derives the
+  family and cross-checks the echo (the echo can never disagree with itself). Backend half of
+  `FS-TYPES-TEMPLATE-TOGGLE-MASK`: add the parameter, derive the family server-side, make the KDoc
+  true.
+- `FS-BE-CUES-REPUBLISHED-FRAME` — `republishForLookEdit`/`republishForTemplateEdit` re-cook and
+  re-transmit affected cues but emit no frame naming them, so no *other* client can refresh an
+  expanded cue's composed values (`FS-BUG-CUE-TAG-STALE`). Broadcast the `cuesRepublished` id list
+  (the REST responses already carry the same field for the acting client).
+
+And one remark, not an item: `programmerRecord.kt`'s rename-breadcrumb KDoc pattern ("Was
+`timedPresetApplications`") is what let `FS-BUG-TIMEDLAYERS-RENAME` be found quickly; the rename
+that *didn't* leave one (`layerCount`) took longer. Worth keeping as a convention in the API
+normalization wave.
+
+## 15. Explicitly not findings
+
+Recorded so the next sweep doesn't re-flag them. Each was examined and is deliberate (documented at
+the site or in CLAUDE.md), or was checked and holds:
+
+- **`CueValueGrid` vs `ProgrammerGrid`**, **`LookStack` vs `ProgrammerLookStack`** (wrapper),
+  **`AddLayerSheet` vs `MakeLayerSheet`**, **`lookLayerPresence` vs `templateLayerPresence`** —
+  documented non-duplicates; the reasons at each site still hold.
+- **`SpeedMasters` mounting all responsive arms simultaneously** — documented at the site as
+  deliberate (CSS-only switching so the arms can't drift); the *costs* that ride on it are covered
+  by `FS-PERF-FADE-IN-SHOWBAR` and `FS-CHROME-BEAT-RESUBSCRIBE`, not by un-mounting arms.
+- **`ProgrammerGrid`'s per-render `editorContext` literal** — absorbed by `EditorContext`'s
+  field-wise memo; benign.
+- **Release notes rendering as plain text** — the sweep noted `react-markdown` is now in the tree
+  anyway (via `AiChatPanel`), but the plain-text choice is a documented security posture for
+  untrusted internet text, not a dependency-cost artefact; it stands either way.
+- **`reconnect()` leaving the replaced socket's `onmessage` live** — examined and refuted as
+  unreachable in practice.
+- **`prototypes/computeWarnings` as a duplication risk** — the port is one-way and documented; the
+  residual risk is covered by relocating the directory (`FS-DEAD-PROTOTYPES`).
+- **In-app updates and desk accounts subsystems** — spot-checked clean by the completeness critic:
+  the tick-vs-terminal cache split, the 401/4401 auth invalidation, and the
+  `NOT_A_SESSION_LOSS` exemptions are all implemented exactly as documented.
+- **`useShowTransport`'s two-cursor model** — the two *questions* (stable marker vs fade chrome) are
+  a documented design and are not the duplication `FS-ARCH-CURSOR-OWNERSHIP` describes; don't
+  collapse the cursors while fixing the ownership.
+
+## 16. Scope honesty
+
+What this sweep did and did not do, so silence is never read as a clean bill:
+
+- **Everything the refactors touched was examined hard** — the programmer grid, layers, cue
+  transport, templates, speed masters, WS fan-out — and the first round's completeness critic then
+  named the blind spots, all five of which the gap round swept: reconnect/offline resync, the
+  script-editor subsystem, the stage read path, server→client contract omissions, and stale test
+  assertions. Those five went from zero findings to twenty-seven, so "no findings" in the first
+  round meant *unexamined*, not clean — treat any future subsystem silence the same way.
+- **Perf findings are code-read, not profiled.** Mechanisms and cadences were verified in source
+  (and cost claims were adversarially checked — several were downgraded), but nothing was measured
+  on a desk. The fade cluster and `FS-PERF-WS-SINGLE-PARSE` deserve a before/after on real hardware;
+  anything operator-perceivable (crossfade smoothness, drag responsiveness) belongs as
+  `manual-validation.md` rows when fixed, per house rule.
+- **Still thin**: Surfaces/MIDI beyond `store/surfaces.ts` and the descriptor types (learn-mode
+  flows, `BindingMatrix` interaction paths); Prompt Book annotation/region geometry (only size and
+  prop-drill findings); accessibility (not examined at all); the in-app updates and desk-accounts
+  subsystems were spot-checked clean on correctness but never examined under the perf/fan-out lens.
+- **The contract-omission pass was entity-driven, not exhaustive**: it diffed the main round-trip
+  builders and big DTOs backend-first; smaller response types may still hide omissions of the
+  `CloneProjectResponse` kind.
+- **Counting**: 131 raw findings from 31 agents; 4 refuted outright, ~10 merged as duplicates or
+  absorbed into clusters; what remains is every finding that survived adversarial verification, with
+  downgrades applied. Two S1s, both independently re-verified twice and re-read by hand.
+- This catalogue cites symbols, not line numbers, against `lighting-react` `b5067e5`-era `main`;
+  expect drift as items land. When an item lands, strike it through here with the commit SHA, the
+  way `backend-post-refactor-sweep.md` does.
+
+
+
