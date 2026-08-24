@@ -1,6 +1,6 @@
 # Backend post-refactor architectural sweep — findings and cleanup plan
 
-> **Document status: BACKLOG, NOTHING EXECUTED (2026-08-24).** This is the output of the
+> **Document status: BACKLOG, WAVE 0 IN PROGRESS (A1–A3 done, A4 + C0 outstanding).** This is the output of the
 > post-refactor architectural sweep: a categorized backlog for later fix agents, organised into
 > execution waves. Items cite file:line as of `b5067e5`; expect drift as waves land. A matching
 > frontend sweep happens separately — the "Frontend-coordination register" at the bottom is its
@@ -47,18 +47,34 @@ Findings that duplicate an existing `followups.md` item cite its slug instead of
 tripping `uniqueIndex(project, name)`. **Fix:** template+template_rows teardown beside the look loop
 in both files; test seeded from `RichProjectFixture` (which already seeds two templates).
 
-**A2. `presetId` is always null and degrades the Include duplicate-guard** — high / P0 / M / opus
+~~**A2. `presetId` is always null and degrades the Include duplicate-guard**~~ — done, `ab0ff8b`. high / P0 / M / opus
 Every one of the 8 callers of `createInstanceFromPreset` passes `presetId = null`, so
 `programmerInclude.kt:276-279` dedups on `null == null` — two *different* effects on one
 (target, property) are treated as one and the second is never spawned. **Fix:** delete the
 parameter, `FxInstance.presetId`, `ProgrammerFxOrigin.presetId` + `Kind.PRESET_APPLICATION`,
 `EffectDto.presetId` (wire), and the AI `presetId` key; replace the guard with an
 effect-registration-id (+ lookId/layerId) comparison.
+**Landed with A3**, which needed the same new field. Two notes for whoever reads the diff: the
+"8 callers" were 9 (`CueTriggerManager` has a second spawn path, and `CueEditSession` one that
+D1 will delete); and the guard's `lookId == null && cueLayerId == null` clauses are load-bearing
+rather than belt-and-braces — they are what stops a *layer's* effect from masking an ad-hoc child
+it merely resembles, while an ad-hoc child's own live instance still matches itself exactly, so a
+live cue's children are skipped rather than doubled. `GroupEffectDto.presetId` went too; both wire
+deletions are the frontend register's `presetId` batch.
 
-**A3. `PUT /fx/effect/{id}` reconstructs the type from the display name** — high / P0 / S / opus
+~~**A3. `PUT /fx/effect/{id}` reconstructs the type from the display name**~~ — done, `ab0ff8b`. high / P0 / S / opus
 `lightFx.kt:132` does `existing.effect.name.replace(" ", "")` — an idiom `programmerInclude.kt:266`
 documents as broken for user-defined FX definitions, so a parameter-only update of a user-defined
 effect 400s. **Fix:** store the registration id on `FxInstance` at creation; use it here.
+**Landed as** `FxInstance.registrationId` (the canonical `EffectRegistration.id`, stamped wherever
+an instance is built from a stored spec or a request, carried across `updateEffect`'s swap, and
+re-stamped by a new `newRegistrationId` param when a PUT changes the type) plus
+`FxInstance.effectTypeId`, the `registrationId ?: effect.name.replace(" ", "")` accessor every
+*persist-or-report* site now goes through. The broken idiom had four more copies than this item
+names — `EffectDto`/`IndirectEffectDto`, `GroupEffectDto`, `writeLookEffects`, and
+`fxInstancesToCueChildren` — each of which stored or reported a type string the registry cannot
+resolve for a user-defined effect, failing later when the row was applied. Grep for
+`name.replace(" ", "")` before adding a fifth.
 
 **A4. Composite effects are single-output; the docs say otherwise** — high / P0 / M / opus
 `FxInstance.compositeTargets` (`FxInstance.kt:292`) is never assigned anywhere, making the whole
@@ -282,8 +298,8 @@ after auditing DB-stored scripts on the real desk.
 `paletteUuid` holding a Look uuid. **Fix:** delete the arm, rename `paletteUuid` → `sourceUuid`.
 
 **D9. Permanently-empty wire fields** — low / P2 / S / sonnet
-`LookRepublishOutcome.programmerKeysUncovered` (always 0, self-documented); `EffectDto.presetId`
-(dies with A2); frontend types flagged for the frontend sweep.
+`LookRepublishOutcome.programmerKeysUncovered` (always 0, self-documented); ~~`EffectDto.presetId`~~
+(gone with A2, along with `GroupEffectDto.presetId`); frontend types flagged for the frontend sweep.
 
 ## E — Architecture
 
@@ -413,7 +429,7 @@ No template create (successor to the removed `set_palette`), no Record/Include/U
 standby/GO. **Fix:** add per product judgement — standby/GO first (smallest, highest show value).
 
 **G4. Retired vocabulary** — low / P3 / S / sonnet
-`parsePresetEffect` name, prompt text "the preset", the always-absent `presetId` key (dies with
+`parsePresetEffect` name, prompt text "the preset", ~~the always-absent `presetId` key~~ (gone with
 A2), tombstone naming `get_show_state` for `get_current_state`.
 
 ## H — Docs and naming (one mechanical pass at the end)
@@ -451,6 +467,12 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 Frontend-coordination register (hand to the frontend sweep): D1 (409 handler), D2 (two
 components + store/fx.ts), D3/D9 (dead stubs, groupFxAdded, presetId types, rateSpeedMasterIndex),
 F1/F2/F3/F5 (renamed paths/messages/status codes), F6 (hand-copied admin prefix list).
+
+**Landed and frontend-visible so far:** A2/A3 removed `presetId` from `EffectDto` and
+`GroupEffectDto`, so the frontend sweep's `presetId` batch is unblocked. Same change makes
+`effectType` on those DTOs (and on `/groups/{name}/fx/active`) report the *registration id* for a
+user-defined effect instead of an unresolvable display name — a client round-tripping that string
+back into a create/update now works where it previously 400'd.
 
 ## Verification
 
