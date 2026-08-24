@@ -5,11 +5,13 @@ import java.awt.Color
 import kotlin.math.pow
 
 /**
- * Lightning strike effect — coordinated bright flash with colour shift.
+ * Lightning strike effect — a bright flash, with a matching colour shift on offer.
  *
- * Produces a simultaneous dimmer spike and white-to-blue colour transition,
- * both decaying together over the cycle. Demonstrates [CompositeEffect]
- * multi-output capability.
+ * Derives a dimmer spike and a white-to-blue colour transition from one phase, both
+ * decaying together. **Only the dimmer half is applied**: composites are
+ * primary-output-only ([CompositeEffect]), so the COLOUR entry is computed and dropped.
+ * For a lightning-coloured wash, run a colour effect as a second instance on the same
+ * speed master.
  *
  * Phase breakdown:
  * - 0.0–0.05: Flash — dimmer snaps to max, colour is bright white
@@ -31,7 +33,6 @@ data class LightningStrike(
 ) : CompositeEffect {
     override val name = "Lightning Strike"
     override val outputType = FxOutputType.SLIDER
-    override val outputTypes = setOf(FxOutputType.SLIDER, FxOutputType.COLOUR)
     override val parameters get() = mapOf(
         "maxBrightness" to maxBrightness.toString(),
         "minBrightness" to minBrightness.toString(),

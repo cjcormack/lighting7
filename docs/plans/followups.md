@@ -179,15 +179,20 @@ what `deltaMs` means for every stateful effect — a bigger decision than it loo
 **Per-attribute masters inside one FX instance** · Trigger · Programmer redesign §3.6, promoted
 2026-08-14
 
-`FxInstance.speedMasterUuid` is per *instance*, which already gives per-property speeds for
-everything except composites — a position wave on master 2 and a dimmer chase on master 1 are
-simply two instances. MA3 assigns masters per-attribute *inside* one phaser; here that means a
-composite (`Effect.calculateComposite`, e.g. `LightningStrike`) whose outputs advance on
-different clocks.
+`FxInstance.speedMasterUuid` is per *instance*, which already gives per-property speeds — a
+position wave on master 2 and a dimmer chase on master 1 are simply two instances. MA3 assigns
+masters per-attribute *inside* one phaser; here that would mean a composite
+(`Effect.calculateComposite`, e.g. `LightningStrike`) whose outputs advance on different clocks.
 
 Cut deliberately: a composite computes every output from a single phase, and that coupling is why
 it's a composite rather than N instances. Splitting it means `calculateComposite` taking a
 per-output phase map, plus a picker that can address a constituent.
+
+**Prerequisite as of A4** (2026-08-24): composites are now documented and enforced as
+primary-output-only — the never-populated `FxInstance.compositeTargets` and the engine branch
+that read it are gone, so a composite applies exactly one property. Per-attribute masters
+therefore need multi-output composites *wired at all* first (secondary targets on `FxInstance`
+plus an authoring surface that can name a constituent), not just a per-output phase map.
 
 **Trigger**: an operator wants one shipped composite's constituents on different tempos and can't
 express it as separate instances.

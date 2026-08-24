@@ -114,10 +114,15 @@ object FxStatefulCalcScriptConfiguration : ScriptCompilationConfiguration(
 /**
  * Base class for COMPOSITE FX calculation scripts.
  *
- * Composite effects produce outputs for multiple property types simultaneously.
- * The script body should end with a `Map<FxOutputType, FxOutput>` expression.
+ * The script body should end with a `Map<FxOutputType, FxOutput>` expression. **Only the
+ * entry matching the definition's declared `outputType` is applied** — one FX instance drives
+ * one property, so the other entries are computed and discarded (see `CompositeEffect`).
+ * Write a composite when the outputs are most naturally derived together from one phase;
+ * to actually drive two properties, apply two effects on the same speed master. A definition's
+ * `compatibleProperties` must therefore list only properties of its `outputType`, or picking
+ * one of the others produces no light and no error.
  *
- * Example:
+ * Example (the COLOUR entry here is the discarded one):
  * ```
  * val intensity = if (phase < 0.1) 255 else ((1.0 - phase) * 255).toInt()
  * mapOf(

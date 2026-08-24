@@ -12,7 +12,7 @@ class CompositeEffectTest {
     private fun FxOutput.colourValue(): ExtendedColour = (this as FxOutput.Colour).color
 
     @Test
-    fun `LightningStrike produces both SLIDER and COLOUR outputs`() {
+    fun `LightningStrike computes both SLIDER and COLOUR entries`() {
         val effect = LightningStrike()
         val outputs = effect.calculateComposite(0.0)
 
@@ -53,19 +53,28 @@ class CompositeEffectTest {
     }
 
     @Test
-    fun `LightningStrike declares correct output types`() {
+    fun `LightningStrike declares SLIDER as its primary output type`() {
         val effect = LightningStrike()
-        assertEquals(setOf(FxOutputType.SLIDER, FxOutputType.COLOUR), effect.outputTypes)
         assertEquals(FxOutputType.SLIDER, effect.outputType)
     }
 
+    /**
+     * Guard for the primary-output-only contract (sweep item A4). The engine's only entry
+     * point into an effect is [Effect.calculate]; one [FxInstance] drives one [FxTarget], so
+     * a composite's non-primary entries are computed and discarded. If a future change wants
+     * the COLOUR half of a lightning strike to reach a fixture, it needs secondary targets on
+     * FxInstance *and* an authoring surface that can name them — not a quietly reinstated
+     * branch in the engine.
+     */
     @Test
-    fun `LightningStrike default calculate returns primary SLIDER output`() {
+    fun `composite calculate yields only the primary output`() {
         val effect = LightningStrike()
-        // Default calculate() should return the SLIDER output from calculateComposite()
         val output = effect.calculate(0.02) // Flash phase
-        assertTrue(output is FxOutput.Slider)
+        assertTrue(output is FxOutput.Slider, "calculate() must yield the primary SLIDER entry")
         assertEquals(255.toUByte(), output.sliderValue())
+
+        // The colour half is still computed — it just has nowhere to go.
+        assertNotNull(effect.calculateComposite(0.02)[FxOutputType.COLOUR])
     }
 
     @Test

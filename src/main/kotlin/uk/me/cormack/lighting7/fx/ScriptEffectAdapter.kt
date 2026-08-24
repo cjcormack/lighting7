@@ -99,7 +99,8 @@ private class StatefulScriptEffect(
 }
 
 /**
- * Composite script effect — invokes an extracted lambda returning multiple outputs.
+ * Composite script effect — invokes an extracted lambda returning a map of outputs, of
+ * which only the [outputType] entry is applied (see [CompositeEffect]).
  */
 private class CompositeScriptEffect(
     private val fn: (Double, EffectContext, TypedParams) -> Map<FxOutputType, FxOutput>,
@@ -113,7 +114,6 @@ private class CompositeScriptEffect(
     override val outputType: FxOutputType get() = effectOutputType
     override val parameters: Map<String, String> get() = rawParams
     override val defaultStepTiming: Boolean get() = effectDefaultStepTiming
-    override val outputTypes: Set<FxOutputType> get() = setOf(effectOutputType)
 
     override fun calculateComposite(phase: Double, context: EffectContext): Map<FxOutputType, FxOutput> {
         return fn(phase, context, typedParams)

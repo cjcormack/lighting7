@@ -195,13 +195,13 @@ Tempo-synchronized effects for continuous animations without complex scripts:
 Effect interfaces:
 - **Effect** - Pure phase-based: `(phase, context) → FxOutput`
 - **StatefulEffect** - Tick-based with internal state: `(tick, deltaMs, context) → FxOutput` (e.g., CandleFlicker)
-- **CompositeEffect** - Multi-output: `(phase, context) → Map<FxOutputType, FxOutput>` (e.g., LightningStrike)
+- **CompositeEffect** - `(phase, context) → Map<FxOutputType, FxOutput>`, of which only the `outputType` entry is applied — one instance still drives one property (e.g., LightningStrike applies its dimmer half, not its colour half)
 
 Built-in effect types:
 - **Dimmer**: SineWave, Pulse, RampUp/Down, Triangle, Strobe, Flicker, Breathe, CandleFlicker
 - **Colour**: ColourCycle, RainbowCycle, ColourStrobe, ColourPulse, ColourFade
 - **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition
-- **Composite**: LightningStrike (dimmer + colour)
+- **Composite**: LightningStrike (dimmer; its colour half is computed but not applied)
 
 Scripts can apply effects using extension functions:
 ```kotlin

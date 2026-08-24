@@ -68,8 +68,8 @@ Effects reference a master by **uuid** (`FxInstance.speedMasterUuid`, null → m
 the engine binds that to a runtime slot index at add/update time, re-binding when the
 bank's membership changes; a deleted master's effects degrade to master 1, never stop.
 Because an FX instance targets specific properties, per-instance assignment already gives
-"different speeds for different properties"; composite effects are the exception — one
-scalar phase in `Effect.calculateComposite`'s signature means one master per composite.
+"different speeds for different properties" — including for composites, which apply only
+their primary output and so cover exactly one property per instance.
 
 ### One processing pass, N timebases
 
@@ -186,17 +186,36 @@ automatically in all 4 processing paths (fixture, multi-element, group, flat ele
 
 ### Composite Effects (`CompositeEffect`)
 
-Composite effects produce outputs for multiple property types simultaneously,
-enabling coordinated multi-property animations from a single effect.
+**Composite effects are primary-output-only.** A composite *computes* a map of outputs for
+several property types from one phase, but the engine applies exactly one of them: the entry
+matching the effect's declared `outputType`. The rest are discarded.
 
-| Effect | Description | Output Types | Parameters |
-|--------|-------------|--------------|------------|
-| `LightningStrike` | Flash + colour shift | SLIDER + COLOUR | `maxBrightness`, `minBrightness`, `flashColour`, `decayColour`, `ambientColour` |
+| Effect | Description | Computes | Applies | Parameters |
+|--------|-------------|----------|---------|------------|
+| `LightningStrike` | Flash, with a matching colour shift on offer | SLIDER + COLOUR | SLIDER | `maxBrightness`, `minBrightness`, `flashColour`, `decayColour`, `ambientColour` |
 
 Composite effects implement the `CompositeEffect` interface:
-- `outputTypes: Set<FxOutputType>` — declares all output types produced
 - `calculateComposite(phase, context)` — returns `Map<FxOutputType, FxOutput>`
-- Secondary outputs are routed to targets in `FxInstance.compositeTargets`
+- `calculate(phase, context)` — the interface default, and the engine's only entry point:
+  picks the `outputType` entry out of that map
+
+The interface earns its place for effects most naturally *written* as a coordinated set
+(`LightningStrike` derives brightness and the white→blue shift from one phase), and because
+`.fx.kts` definitions can declare `effectMode: COMPOSITE`. It does **not** get you two
+properties from one instance: an `FxInstance` drives one `FxTarget`. Coordinating two
+properties means two instances on the same speed master.
+
+There was once an `FxInstance.compositeTargets` map and an engine branch that fanned
+secondary outputs out to it. Nothing ever populated the map, so the branch was unreachable
+and `LightningStrike`'s COLOUR output had always been dropped; both were deleted rather than
+finished (sweep item A4). Reviving the ambition needs secondary targets on `FxInstance` *and*
+an authoring surface that can name a constituent — see `FU-SPEED-PER-ATTRIBUTE` in
+`docs/plans/followups.md`.
+
+One consequence worth remembering when writing an effect: a mismatched `FxOutput` is
+**silently dropped** by `FxTarget` (`if (output !is FxOutput.Slider) return` and friends), so a
+composite's `compatibleProperties` must list only properties of its primary output type.
+`LightningStrike` advertising `rgbColour` meant picking it produced no light and no error.
 
 ## Effect Registry
 
@@ -388,7 +407,8 @@ FxOutput.Slider(newLevel.toInt().coerceIn(0, 255).toUByte())
 
 #### FxCompositeCalcScript (COMPOSITE)
 
-For effects that produce multiple output types simultaneously:
+For effects whose outputs are most naturally derived together from one phase. Only the entry
+matching the definition's declared `outputType` is applied — see §"Composite Effects":
 
 ```kotlin
 // Provided: phase (Double), context (EffectContext), params (TypedParams)
@@ -412,7 +432,7 @@ mapOf(
 2. Caches compiled results by content hash
 3. On `calculate()`: creates `TypedParams` from raw params + schema, evaluates script
 4. For stateful: maintains a `MutableMap<String, Any>` per instance
-5. For composite: evaluates and returns the output map
+5. For composite: evaluates the output map, of which only the primary entry is applied
 
 ### FX Definitions REST API
 
@@ -460,8 +480,8 @@ composes:
 
 An active programmer entry (blind off) suppresses **every** effect on its (fixture,
 property) — cue-owned and manual alike: the reset pass paints the programmer value and the
-apply loop skips that pair (per fixture, so a group effect keeps painting other members;
-per property, so composite constituents are checked individually). Effects in the reserved
+apply loop skips that pair (per fixture, so a group effect keeps painting other members, and
+per property, so an effect on another property of the same fixture keeps running). Effects in the reserved
 **programmer priority band** (`FxEngine.PROGRAMMER_FX_PRIORITY_BASE`, strictly above every
 cue-derived priority) are exempt — they are programmer-owned FX and modulate on top of
 programmer values. The suppression snapshot is rebuilt only when `ProgrammerStore.epoch`
@@ -1017,7 +1037,7 @@ than being captured into a per-master collector.
 | `fx/ScriptEffectAdapter.kt` | Bridges compiled FX scripts to Effect interfaces |
 | `fx/FxScriptCompiler.kt` | Compiles and caches FX calculate scripts |
 | `fx/EffectParamUtils.kt` | Parameter parsing utilities (parseExtendedColour, toUByteParam, etc.) |
-| `fx/FxInstance.kt` | Running effect state, distributionStrategy, ElementMode, compositeTargets |
+| `fx/FxInstance.kt` | Running effect state, distributionStrategy, ElementMode, speed-master refs |
 | `fx/FxTarget.kt` | Fixture/group property targeting, FxTargetRef |
 | `fx/FxTargetable.kt` | Common interface for Fixture and FixtureGroup |
 | `fx/FxEngine.kt` | Effect processing loop, group expansion |

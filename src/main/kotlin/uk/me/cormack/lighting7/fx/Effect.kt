@@ -193,21 +193,31 @@ interface StatefulEffect : Effect {
 }
 
 /**
- * A composite effect that produces outputs for multiple property types simultaneously.
+ * An effect whose calculation naturally produces a map of outputs, of which the engine
+ * applies exactly one: the entry matching [outputType].
  *
- * Unlike [Effect], which targets a single output type, composite effects can coordinate
- * multiple properties together (e.g., a lightning strike that controls dimmer + colour).
+ * **Composite effects are primary-output-only.** An [FxInstance] drives one [FxTarget], so
+ * a single instance can only write one property; entries in the returned map other than
+ * [outputType] are computed and discarded. The interface exists because some effects are
+ * most naturally *written* as a coordinated set — `LightningStrike` derives its flash
+ * brightness and its white→blue colour shift from one phase — and because `.fx.kts`
+ * definitions can declare [EffectMode.COMPOSITE].
  *
- * The [outputType] should be set to the primary output type. The [outputTypes] set
- * declares all output types this effect can produce.
+ * Coordinating two properties therefore means two instances, one per property, on the same
+ * speed master. There is no multi-target wiring: a `FxInstance.compositeTargets` field and
+ * the engine branch that read it existed but were never populated, and were removed rather
+ * than finished (sweep item A4). Restoring the ambition means giving [FxInstance] secondary
+ * targets *and* an authoring surface that can name them — see `FU-SPEED-PER-ATTRIBUTE` in
+ * `docs/plans/followups.md` for the design note.
  *
- * When applied via the FX engine, each output type is routed to its corresponding
- * [FxTarget] stored in [FxInstance.compositeTargets].
+ * Because only one entry survives, an effect's `compatibleProperties` must list only
+ * properties of its [outputType]; advertising others makes the engine silently drop the
+ * output ([FxTarget] ignores a mismatched [FxOutput]).
  *
  * Example:
  * ```
  * class LightningStrike : CompositeEffect {
- *     override val outputTypes = setOf(FxOutputType.SLIDER, FxOutputType.COLOUR)
+ *     override val outputType = FxOutputType.SLIDER   // the one that is applied
  *
  *     override fun calculateComposite(phase: Double, context: EffectContext): Map<FxOutputType, FxOutput> {
  *         val intensity = if (phase < 0.1) 255 else (255 * (1.0 - phase)).toInt()
@@ -220,11 +230,9 @@ interface StatefulEffect : Effect {
  * ```
  */
 interface CompositeEffect : Effect {
-    /** All output types this effect produces. */
-    val outputTypes: Set<FxOutputType>
-
     /**
-     * Calculate outputs for all target property types.
+     * Calculate outputs for all property types this effect coordinates. Only the
+     * [outputType] entry is applied; see the interface KDoc.
      *
      * @param phase Position in the effect cycle, from 0.0 (start) to 1.0 (end)
      * @param context Information about the distribution group (size, member index)
@@ -236,7 +244,8 @@ interface CompositeEffect : Effect {
     ): Map<FxOutputType, FxOutput>
 
     /**
-     * Default implementation returns the primary output type from the composite map.
+     * Picks the primary output out of the composite map — the engine's only entry point,
+     * so this is what makes composites primary-output-only.
      */
     override fun calculate(phase: Double, context: EffectContext): FxOutput =
         calculateComposite(phase, context)[outputType]

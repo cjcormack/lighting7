@@ -296,15 +296,6 @@ class FxInstance(
     var elementFilter: ElementFilter = ElementFilter.ALL
 
     /**
-     * Additional targets for [CompositeEffect]s that produce multiple output types.
-     *
-     * Maps each secondary [FxOutputType] to its [FxTarget]. The primary output type
-     * uses the main [target] field. When null, the effect is treated as a single-output
-     * effect even if it implements [CompositeEffect].
-     */
-    var compositeTargets: Map<FxOutputType, FxTarget>? = null
-
-    /**
      * Timing source for this effect.
      *
      * BEAT effects are processed on the Master Clock's BPM-synced tick loop.

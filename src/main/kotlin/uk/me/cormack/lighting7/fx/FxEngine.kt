@@ -2241,7 +2241,7 @@ class FxEngine(
 
         if (effect.target.fixtureHasProperty(fixture)) {
             val effectPhase = effect.calculateWallClockPhase()
-            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE, fixturesWithTx, fixtureKey, suppression)
+            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
             if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
             }
@@ -2288,7 +2288,7 @@ class FxEngine(
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, element.elementKey, suppression)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
             if (!isSuppressed(suppression, element.elementKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
             }
@@ -2325,7 +2325,7 @@ class FxEngine(
                 val memberPhase = effect.calculateWallClockPhaseForMember(member, groupSize)
                 val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
                 val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, member.key, suppression)
+                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
                 if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
                     effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
                 }
@@ -2406,7 +2406,7 @@ class FxEngine(
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, flatElement.elementKey, suppression)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
             if (!isSuppressed(suppression, flatElement.elementKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
             }
@@ -2414,11 +2414,12 @@ class FxEngine(
     }
 
     /**
-     * Calculate the output for an effect, handling stateless, stateful, and composite effects.
+     * Calculate the output for an effect, handling stateless and stateful effects.
      *
-     * For [CompositeEffect]s with [FxInstance.compositeTargets], this also applies
-     * secondary outputs to their respective targets. The primary output is returned
-     * for the caller to apply to the primary target as usual.
+     * A [CompositeEffect] needs no arm of its own: one [FxInstance] drives one
+     * [FxTarget], so its `calculate` default picks the entry matching the effect's
+     * primary [Effect.outputType] out of the composite map and the rest are ignored.
+     * See `docs/fx-engineering.md` §"Composite Effects".
      */
     private fun calculateEffectOutput(
         effect: FxInstance,
@@ -2426,29 +2427,7 @@ class FxEngine(
         deltaMs: Long,
         phase: Double,
         context: EffectContext,
-        fixturesWithTx: Fixtures.FixturesWithTransaction? = null,
-        fixtureKey: String? = null,
-        suppression: Map<String, Set<String>> = emptyMap(),
     ): FxOutput {
-        // Composite effects produce multiple outputs
-        if (effect.effect is CompositeEffect && effect.compositeTargets != null) {
-            val outputs = (effect.effect as CompositeEffect).calculateComposite(phase, context)
-            // Apply secondary outputs to their targets — each constituent property is
-            // suppression-checked individually.
-            val secondaryTargets = effect.compositeTargets!!
-            for ((outputType, target) in secondaryTargets) {
-                val output = outputs[outputType]?.scaled(effect.intensityMultiplier) ?: continue
-                if (fixturesWithTx != null && fixtureKey != null &&
-                    !isSuppressed(suppression, fixtureKey, target.propertyName, effect)
-                ) {
-                    target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
-                }
-            }
-            // Return the primary output
-            val primaryOutput = outputs[effect.effect.outputType] ?: effect.effect.calculate(phase, context)
-            return primaryOutput.scaled(effect.intensityMultiplier)
-        }
-
         // Stateful effects
         val raw = if (effect.effect is StatefulEffect) {
             (effect.effect as StatefulEffect).calculateStateful(tick, deltaMs, context)
@@ -2482,20 +2461,12 @@ class FxEngine(
             if (!effect.isRunning) continue
 
             val keys = resolveEffectFixtureKeys(effect)
-            val primary = effect.target
-            val composite = effect.compositeTargets
+            val target = effect.target
 
             for (key in keys) {
                 val seenForKey = seen.getOrPut(key) { HashSet() }
-                if (seenForKey.add(primary.propertyName)) {
-                    resetOne(fixturesWithTx, key, primary)
-                }
-                if (composite != null) {
-                    for (target in composite.values) {
-                        if (seenForKey.add(target.propertyName)) {
-                            resetOne(fixturesWithTx, key, target)
-                        }
-                    }
+                if (seenForKey.add(target.propertyName)) {
+                    resetOne(fixturesWithTx, key, target)
                 }
             }
         }
@@ -2603,7 +2574,7 @@ class FxEngine(
         if (effect.target.fixtureHasProperty(fixture)) {
             // Direct application to the parent fixture
             val effectPhase = effect.calculatePhase(tick)
-            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE, fixturesWithTx, fixtureKey, suppression)
+            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
             if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
             }
@@ -2660,7 +2631,7 @@ class FxEngine(
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, element.elementKey, suppression)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
             if (!isSuppressed(suppression, element.elementKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
             }
@@ -2712,7 +2683,7 @@ class FxEngine(
                 )
                 val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
                 val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, member.key, suppression)
+                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
                 if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
                     effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
                 }
@@ -2806,7 +2777,7 @@ class FxEngine(
             val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context, fixturesWithTx, flatElement.elementKey, suppression)
+            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
             if (!isSuppressed(suppression, flatElement.elementKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
             }
@@ -2871,15 +2842,8 @@ class FxEngine(
 
         val affectedProperties = mutableSetOf<AffectedProperty>()
         for (removed in removedEffects) {
-            // Collect all targets: primary + composite secondary targets
-            val targets = buildList {
-                add(removed.target)
-                removed.compositeTargets?.values?.let { addAll(it) }
-            }
             for (key in resolveEffectFixtureKeys(removed)) {
-                for (target in targets) {
-                    affectedProperties.add(AffectedProperty(key, target))
-                }
+                affectedProperties.add(AffectedProperty(key, removed.target))
             }
         }
 

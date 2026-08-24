@@ -4,7 +4,7 @@ name: Lightning Strike
 category: composite
 outputType: SLIDER
 effectMode: COMPOSITE
-compatibleProperties: [dimmer, rgbColour]
+compatibleProperties: [dimmer]
 parameters:
   - name: maxBrightness
     type: ubyte
@@ -27,6 +27,10 @@ parameters:
     default: "#000000"
     description: Colour between strikes
 ---*/
+
+// Only the SLIDER entry is applied — composites are primary-output-only, so the COLOUR
+// entry below is computed and discarded (see CompositeEffect). Hence the single
+// compatibleProperties entry: advertising rgbColour would offer a target that does nothing.
 
 val maxBrightness = params.ubyte("maxBrightness")
 val minBrightness = params.ubyte("minBrightness")
