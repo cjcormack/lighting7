@@ -69,7 +69,7 @@ backlog are listed in §14 only.
 
 | ID | Finding | Sev | Pri | Cx | Model |
 |---|---|---|---|---|---|
-| `FS-BUG-CUESLOT-LIVENESS` | "Is this cue/stack live?" is derived from the FX effect stream, so a rows-only cue reads… | S1 | P1 | C2 | fable |
+| ~~`FS-BUG-CUESLOT-LIVENESS`~~ done | "Is this cue/stack live?" is derived from the FX effect stream, so a rows-only cue reads… | S1 | P1 | C2 | fable |
 | `FS-BUG-STALE-ROW-SNAPSHOT` | Per-row programmer snapshot cache goes stale across an off→on subscription cycle | S1 | P1 | C2 | fable |
 | `FS-BUG-EDITOR-RESET-NOOP` | A changed `value` prop can never reach a live playground editor, so ScriptForm's Reset si… | S2 | P1 | C2 | sonnet |
 | `FS-BUG-FADE-KEY-SNAPSHOT` | `PROGRAMMER_FADE_KEY` is shared by key but not by value — ShowBar's Blind uses a mount-ti… | S2 | P1 | C2 | sonnet |
@@ -239,10 +239,14 @@ moves, with the C3-sized items (`FS-DUP-AGGREGATION`, `FS-ARCH-CURSOR-OWNERSHIP`
 
 Things a desk can observe doing the wrong thing (or saying nothing when it must speak).
 
-### `FS-BUG-CUESLOT-LIVENESS`
+### ~~`FS-BUG-CUESLOT-LIVENESS`~~ — done, lighting-react `fa36988` + `1cdadb7`
 **"Is this cue/stack live?" is derived from the FX effect stream, so a rows-only cue reads as never
 running** · S1 · P1 · C2 · fable
 `src/store/cues.ts`, `src/components/CueSlotOverviewPanel.tsx`
+
+Done, with one correction to the fix sketch below: liveness reads `CueStack.activeCueId`, not
+`projectProgramState.activeStackId` — the program state is only the show transport's playhead, and
+a pad-activated stack is live without ever being the playhead. On-rig re-verify still owed.
 
 `useActiveCueIds` / `useActiveCueStackIds` build their sets from `useFxStateQuery().activeEffects[]`
 — but a cue made of property assignments and effect-free Look layers creates **no** `FxInstance`
@@ -1132,7 +1136,7 @@ across `src/api/`, `src/store/`, `src/hooks/`, `src/lib/`, `src/components/`
 `resolveFixtureTypeLabel`, `isDeferred`, `LookPreviewResponse`/`LookPreviewRequest` (outlived their
 endpoints), `CODE_SPEED_MASTER_PROTECTED`, `scopeIsEditable`, `targetEquals`, `SNAP_ANGLE_RAD`,
 `XL_BREAKPOINT`, `useChannelParkStatus`, `alignEdgeLabel`, `arraysEqual`, `StageRegionsRedirect`,
-`useStackActiveCueIds` (also part of `FS-BUG-CUESLOT-LIVENESS`), `buildEffectLibraryLookup`,
+`useStackActiveCueIds` (already deleted with `FS-BUG-CUESLOT-LIVENESS`), `buildEffectLibraryLookup`,
 `programmerSetColour`/`programmerSetPosition` (thin wrappers the live call sites bypass). Cautions:
 `isDeferred`'s deletion must not touch `validateLookRows`' inlined `ref:`/`tmpl:` shape checks;
 keep the *meaning* of the `CODE_SPEED_MASTER_PROTECTED` prose in errorToastMiddleware's comment.
@@ -1943,13 +1947,11 @@ what this sweep filed as the `IncludedTarget.Kind.PALETTE` backend half of
 Three backend facts this sweep verified that `backend-post-refactor-sweep.md` does not carry —
 candidates for its A/B series:
 
-- `FS-BE-STOP-ROWSONLY` — `POST /cues/{cueId}/stop` only deactivates the stack when that stack is
-  active; otherwise it calls `removeEffectsForCue` and never `removeCueAssignments`, so a rows-only
-  cue fired directly (e.g. from a slot pad) **cannot be stopped at all**. Blocking half of
-  `FS-BUG-CUESLOT-LIVENESS`; belongs beside its A-series (candidate wave 0).
-- `FS-BE-ACTIVATE-SHORTCIRCUIT` — `POST /cue-stacks/{id}/activate` routes to `activateAtFirstCue`
-  with no already-active short-circuit (unlike `/show/activate`, which has one). This is what turns
-  the liveness bug into a playhead jump rather than a no-op.
+- ~~`FS-BE-STOP-ROWSONLY`~~ — refuted at HEAD: `removeEffectsForCue` clears Layer 4
+  unconditionally (`b11d66a`), and `/apply` routes through `activateCueInStack` (`dcc511f`) so the
+  stack is active and stop takes the deactivate branch anyway. Pinned by
+  `CueSlotLivenessRouteTest`.
+- ~~`FS-BE-ACTIVATE-SHORTCIRCUIT`~~ — done, `1cdadb7`, with `FS-BUG-CUESLOT-LIVENESS`.
 - `FS-BE-COMPATIBLEIDS` — `compatibleIdsFor` (`routes/lightFixtures.kt`) filters on inferred effect
   capabilities only, so a rows-only Look (empty capability set) is reported compatible with every
   target and `LookTogglePicker` offers pads that assert nothing. Decide whether compatibility should
