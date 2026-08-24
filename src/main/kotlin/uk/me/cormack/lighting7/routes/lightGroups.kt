@@ -356,12 +356,9 @@ private fun groupSupportsProperty(group: FixtureGroup<*>, propertyName: String):
         else -> {
             // Check for slider or setting property by name
             allFixtures.all { fixture ->
-                fixture is Fixture && fixture.fixtureProperties.any { prop ->
-                    prop.name == propertyName && run {
-                        val value = prop.classProperty.call(fixture)
-                        value is Slider || value is DmxFixtureSetting<*>
-                    }
-                }
+                val prop = (fixture as? Fixture)?.fixtureProperty(propertyName)
+                val value = prop?.classProperty?.call(fixture)
+                value is Slider || value is DmxFixtureSetting<*>
             }
         }
     }

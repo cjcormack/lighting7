@@ -547,8 +547,7 @@ internal fun readOutputColour(
     universe: Int,
 ): ExtendedColour {
     fun bundled(category: PropertyCategory): UByte {
-        val prop = fixture?.fixtureProperties?.find { it.bundleWithColour && it.category == category }
-            ?: return 0u
+        val prop = fixture?.bundledProperty(category) ?: return 0u
         val dmx = try {
             prop.classProperty.call(fixture) as? DmxSlider
         } catch (_: Exception) {

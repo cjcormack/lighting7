@@ -21,6 +21,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TEST-MULTI-CONN-CUEEDIT`](#fu-test-multi-conn-cueedit) | Blocked | Test | moot when sweep item D1 retires `cueEdit.*` |
 | [`FU-DIST-NO-BUNDLED-JRE`](#fu-dist-no-bundled-jre) | Rejected | Dist | decision record — do not re-propose |
 | [`FU-PERF-FRAME-TXN-UNIFY`](#fu-perf-frame-txn-unify) | Trigger | Perf | visible flicker where beat + wall-clock share a universe |
+| [`FU-FX-ELEMENT-BUNDLED-COLOUR`](#fu-fx-element-bundled-colour) | Ready | Perf | — |
 | [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Trigger | FE | operator asks for it |
 | [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 4th surface renders `AssignmentHealth` |
 | [`FU-FE-USE-TARGET-PROPERTIES`](#fu-fe-use-target-properties) | Trigger | FE | a 6th consumer of fixture/group property lookup |
@@ -100,6 +101,34 @@ enough that the tick windows overlap often (today's 50 Hz + ~120 Hz worst case d
 *The old packet-rate trigger is obsolete — under continuous streaming the rate is
 `1000 / refreshIntervalMs` by construction, so `GET /api/rest/perf/artnet-rates` now reads as a
 configuration check, not a contention one.*
+
+---
+
+### `FU-FX-ELEMENT-BUNDLED-COLOUR`
+
+**Elements never receive their bundled W/A/UV component** · Ready · found under sweep item C2,
+2026-08-24
+
+`ColourTarget` writes the extended components of an `ExtendedColour` through
+`applyExtendedChannel` / `setExtendedChannel`, both gated on `if (fixture is Fixture)`
+(`FxTarget.kt:379` in `applyValueToFixture`, `:399` in `resetToFallback`; the same gate is at
+`:442` in `composeProgrammerOver` and `:512` in `isPropertyFullyParked`). `FixtureElement` does
+**not** extend `Fixture`, so for any element the white / amber / uv half of a colour output is
+computed and then silently dropped.
+
+This is visible on real hardware: `LedLightbar12PixelFixture.RgbwPixel.white` is declared
+`@FixtureProperty(..., bundleWithColour = true)` (`:225`), so a colour effect or cue on a pixel
+group drives RGB and leaves the white emitter dark. `FxEngineBenchmark`'s chase rig has been
+running exactly this shape and discarding the white component on every tick.
+
+The fix is not simply widening the gate — the four helpers reach for `Fixture.bundledProperty`,
+and the element equivalent is `FixturePropertyCatalogue.of(element::class).bundledByCategory`,
+which now exists and is the same shape. Worth checking whether `isPropertyFullyParked`'s
+`bundledChannelParked` needs the same treatment for consistency.
+
+**Not** done under C2: that item was a performance change measured on allocation, and folding a
+behaviour fix into it would have made the numbers unattributable. Needs a test on element colour
+output before the wire behaviour changes — nothing currently asserts an element's white channel.
 
 ---
 

@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.dmx.TransmitModifier
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
@@ -15,7 +16,6 @@ import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.reflect.full.memberProperties
 
 /**
  * Two global toggles that suppress DMX output at transmit time:
@@ -144,13 +144,10 @@ class GlobalScalerState(
         element: FixtureElement<*>,
         into: MutableSet<Long>,
     ) {
-        for (classProperty in element::class.memberProperties) {
-            val annotation = classProperty.annotations
-                .filterIsInstance<uk.me.cormack.lighting7.fixture.FixtureProperty>()
-                .firstOrNull() ?: continue
-            if (!annotation.category.isIntensityLike()) continue
+        for (property in FixturePropertyCatalogue.of(element::class).all) {
+            if (!property.category.isIntensityLike()) continue
             @Suppress("UNCHECKED_CAST")
-            val raw = (classProperty as kotlin.reflect.KProperty1<Any, *>).call(element) ?: continue
+            val raw = (property.classProperty as kotlin.reflect.KProperty1<Any, *>).call(element) ?: continue
             addValueChannels(universe, raw, into)
         }
     }

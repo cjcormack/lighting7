@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
@@ -16,7 +16,6 @@ import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
 import uk.me.cormack.lighting7.midi.PropertyChannelResolver
 import kotlin.reflect.KProperty1
-import kotlin.reflect.full.memberProperties
 
 /**
  * Resolves a typed [CueAssignmentResolver.PropertyValue] on a [GroupableFixture] to the concrete DMX
@@ -190,32 +189,11 @@ object PropertyChannelWriter {
     /** Reflection result — the backing value and its declared category. */
     internal data class ResolvedProperty(val value: Any, val category: PropertyCategory)
 
-    /** One catalogued element property: the reflection accessor plus its declared category. */
-    private data class ElementProperty(val classProperty: KProperty1<Any, *>, val category: PropertyCategory)
-
-    /**
-     * Per-element-class catalogue of `@FixtureProperty` members, built once per class.
-     * Elements have no equivalent of the precomputed [Fixture.fixtureProperties], and the
-     * FX tick resolves element properties every frame — a `memberProperties` scan per call
-     * would allocate on the hot path ([FxTarget.isPropertyFullyParked] forbids that).
-     */
-    private val elementCatalogues =
-        java.util.concurrent.ConcurrentHashMap<kotlin.reflect.KClass<*>, Map<String, ElementProperty>>()
-
-    private fun elementCatalogue(element: FixtureElement<*>): Map<String, ElementProperty> =
-        elementCatalogues.getOrPut(element::class) {
-            element::class.memberProperties.mapNotNull { prop ->
-                val ann = prop.annotations.filterIsInstance<FixtureProperty>().firstOrNull()
-                    ?: return@mapNotNull null
-                @Suppress("UNCHECKED_CAST")
-                prop.name to ElementProperty(prop as KProperty1<Any, *>, ann.category)
-            }.toMap()
-        }
-
     /**
      * Look up a property by name on [fixture], returning its current backing value and its
-     * [PropertyCategory]. Handles both [Fixture] (via the pre-built [Fixture.fixtureProperties]
-     * catalogue) and [FixtureElement] (via the per-class [elementCatalogue]). Returns null if
+     * [PropertyCategory]. Both shapes resolve through [FixturePropertyCatalogue] — [Fixture] via
+     * [Fixture.fixtureProperty], elements against their own class directly, since
+     * [FixtureElement] does not extend [Fixture] and so has no such accessor. Returns null if
      * the property is absent or its backing value is null / reflection fails.
      *
      * Internal because it is the one place that resolves a property name on *either* shape of
@@ -230,9 +208,10 @@ object PropertyChannelWriter {
                 ResolvedProperty(raw, property.category)
             }
             is FixtureElement<*> -> {
-                val entry = elementCatalogue(fixture)[propertyName] ?: return null
-                val raw = readProperty(entry.classProperty, fixture, propertyName, fixture.elementKey) ?: return null
-                ResolvedProperty(raw, entry.category)
+                val property = FixturePropertyCatalogue.of(fixture::class).byName[propertyName] ?: return null
+                val raw = readProperty(property.classProperty, fixture, propertyName, fixture.elementKey)
+                    ?: return null
+                ResolvedProperty(raw, property.category)
             }
             else -> null
         }
@@ -252,10 +231,10 @@ object PropertyChannelWriter {
                 ?: return@mapNotNull null
             NamedProperty(property.name, property.category, raw)
         }
-        is FixtureElement<*> -> elementCatalogue(fixture).mapNotNull { (name, entry) ->
-            val raw = readProperty(entry.classProperty, fixture, name, fixture.elementKey)
+        is FixtureElement<*> -> FixturePropertyCatalogue.of(fixture::class).all.mapNotNull { property ->
+            val raw = readProperty(property.classProperty, fixture, property.name, fixture.elementKey)
                 ?: return@mapNotNull null
-            NamedProperty(name, entry.category, raw)
+            NamedProperty(property.name, property.category, raw)
         }
         else -> emptyList()
     }

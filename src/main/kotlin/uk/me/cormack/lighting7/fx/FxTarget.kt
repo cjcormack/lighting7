@@ -299,8 +299,7 @@ data class SliderTarget(
         if (fixture !is Fixture) return null
         val prop = fixture.fixtureProperty(propertyName) ?: return null
         if (!prop.bundleWithColour) return null
-        val colourProp = fixture.fixtureProperties.find { it.category == PropertyCategory.COLOUR }
-            ?: return null
+        val colourProp = fixture.colourProperty ?: return null
         val slot = store.get(fixture.targetKey, colourProp.name) ?: return null
         val colour = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Colour)?.value ?: return null
         val component = when (prop.category) {
@@ -483,8 +482,7 @@ data class ColourTarget(
         colourSeq: Long,
         store: ProgrammerStore,
     ): UByte? {
-        val prop = fixture.fixtureProperties.find { it.bundleWithColour && it.category == category }
-            ?: return entryComponent
+        val prop = fixture.bundledProperty(category) ?: return entryComponent
         var bestSeq = if (entryComponent != null) colourSeq else Long.MIN_VALUE
         var best = entryComponent
 
@@ -525,21 +523,20 @@ data class ColourTarget(
         category: PropertyCategory,
         parkManager: ParkManager,
     ): Boolean {
-        val prop = fixture.fixtureProperties.find { it.bundleWithColour && it.category == category }
-            ?: return true
+        val prop = fixture.bundledProperty(category) ?: return true
         val dmx = (prop.classProperty.call(fixture) as? Slider) as? DmxSlider ?: return true
         return parkManager.isParked(dmx.universe.universe, dmx.channelNo)
     }
 
     private fun applyExtendedChannel(fixture: Fixture, category: PropertyCategory, value: UByte, blendMode: BlendMode) {
-        val prop = fixture.fixtureProperties.find { it.bundleWithColour && it.category == category } ?: return
+        val prop = fixture.bundledProperty(category) ?: return
         val slider = prop.classProperty.call(fixture) as? Slider ?: return
         val base = slider.value ?: 0u
         slider.value = applySliderBlendMode(base, value, blendMode)
     }
 
     private fun setExtendedChannel(fixture: Fixture, category: PropertyCategory, value: UByte, fadeMs: Long = 0) {
-        val prop = fixture.fixtureProperties.find { it.bundleWithColour && it.category == category } ?: return
+        val prop = fixture.bundledProperty(category) ?: return
         val slider = prop.classProperty.call(fixture) as? Slider ?: return
         if (fadeMs > 0) slider.fadeToValue(value, fadeMs) else slider.value = value
     }

@@ -295,3 +295,50 @@ twice per rebuild, so **C2's measured win will read smaller than its sweep entry
 of it has already been taken here. And C3's entry cites the per-crossfade-frame
 `resolveEffectFixtureKeys` walk as part of the cost; that walk is now cached, so C3 should be
 re-measured rather than implemented against the old premise.
+
+*(The first of those two predictions was wrong, and instructively so — see the C2 block below.)*
+
+**2026-08-24, selwyn.local, JDK 25** — sweep item C2 (reflective property access). Median of four
+runs per stage, all captured back to back in one sitting. `[colour-beat]` is new in this round, so
+its "before" is the same session, not a historical figure.
+
+```
+                  before        C2a (catalogue)   C2b (indexed lookups)
+[beat]        p50 311µs         96.5µs   −69%     97.5µs      —
+              alloc 1 107 767   355 020  −68%     352 449     —
+[wall]        p50 311.5µs       107µs    −66%     93µs        —
+              alloc 1 100 544   346 745  −68%     343 922     —
+[colour-beat] p50 356µs         203µs    −43%     241.5µs     — (noise, see below)
+              alloc 1 099 724   719 647  −35%     712 227     −1 %
+[chase-beat]  p50 965µs         948.5µs  —        961µs       —
+              alloc 3 354 327   3 377 335 —       3 354 404   —
+[chase-wall]  alloc 1 038 581   1 069 362 —       1 040 671   —
+[crossfade]   p50 734.5µs       643.5µs  −12%     594µs       −8 %
+              alloc 1 353 139   1 052 023 −22%    1 020 553   −3 %
+```
+
+**The win is the wrap, not the scan the item was named after.** `Fixture` computed
+`fixtureProperties` and its `@FixtureType` in *instance* initializers, and `FixturesWithTransaction`
+binds a fixture to a tick's transaction by constructing a new instance — so every touched fixture
+re-ran a full `memberProperties` scan 50×/s. `wrappedFixtureCache` deduped within a tick and
+therefore hid this completely from anyone reading that code. Hoisting the scan to a per-class
+`FixturePropertyCatalogue` took two thirds of `[beat]`'s entire per-tick allocation.
+
+**C2b — replacing the five `fixtureProperties.find {}` scans with indexed lookups — did not
+move anything measurable**, and is recorded here as a null result rather than dropped. A linear
+scan over nine properties is simply not where the time was; `[colour-beat]`'s p50 varied 171–270 µs
+across the four runs, which swamps it entirely. The change was kept for the O(1) lookup and because
+it removes the last linear scans from the tick, not on the strength of a number. The gated
+follow-on (`KProperty1.call` → `.get`) was **not** done: C2b's null result is good evidence the
+remaining cost is not in that resolution either.
+
+`[chase-beat]`/`[chase-wall]` staying flat is a *passing check*, not a disappointment — it is what
+falsifies the model if it fails. That rig drives `RgbwPixel`, a `FixtureElement`, which does not
+extend `Fixture`; it constructs no `Fixture` per tick and its elements were already served by a
+per-class catalogue. Its 3.35 MB/tick remains C6's Fisher-Yates. Scenario 2's KDoc claimed to
+measure C2 and was corrected in the same change.
+
+`[crossfade]`'s allocation **is** readable this time, unlike under C1. The before and after ranges
+are disjoint (1.309–1.400 MB vs 1.016–1.055 MB) rather than overlapping inside one noise band, so
+the ~22 % drop is real — it is the same 168 `HexFixture` wraps, paid per frame. C3 should be
+re-measured against this block, not the C1 one.

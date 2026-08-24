@@ -15,9 +15,8 @@ import org.jetbrains.exposed.v1.core.inList
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.PropertyCategory
-import uk.me.cormack.lighting7.fixture.resolveComposition
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
@@ -25,7 +24,6 @@ import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
-import kotlin.reflect.full.memberProperties
 
 private val logger = LoggerFactory.getLogger("projectCues")
 
@@ -1108,9 +1106,9 @@ private fun findElement(fixture: Fixture, elementKey: String): FixtureElement<*>
 }
 
 /**
- * Element counterpart to [fixtureCategoryFor] — reflects on the element class's
- * `@FixtureProperty` annotations, since elements aren't `Fixture`s and don't participate in
- * the parent's [Fixture.fixtureProperties] catalogue.
+ * Element counterpart to [fixtureCategoryFor]. Elements aren't `Fixture`s and so have no
+ * [Fixture.fixtureProperties] of their own; their `@FixtureProperty` metadata comes from the
+ * shared [FixturePropertyCatalogue] keyed on the element class.
  */
 private fun elementCategoryFor(
     element: FixtureElement<*>,
@@ -1118,21 +1116,16 @@ private fun elementCategoryFor(
 ): Pair<PropertyCategory, CompositionRule>? {
     val canonical = canonicalPropertyName(propertyName)
     if (canonical.equals("position", ignoreCase = true)) {
-        val pan = findElementPropertyAnnotation(element, "pan") ?: return null
-        findElementPropertyAnnotation(element, "tilt") ?: return null
-        return pan.category to pan.resolveComposition()
+        val pan = findElementProperty(element, "pan") ?: return null
+        findElementProperty(element, "tilt") ?: return null
+        return pan.category to pan.composition
     }
-    val ann = findElementPropertyAnnotation(element, canonical) ?: return null
-    return ann.category to ann.resolveComposition()
+    val property = findElementProperty(element, canonical) ?: return null
+    return property.category to property.composition
 }
 
-private fun findElementPropertyAnnotation(element: FixtureElement<*>, name: String): FixtureProperty? {
-    for (prop in element::class.memberProperties) {
-        if (prop.name != name) continue
-        return prop.annotations.filterIsInstance<FixtureProperty>().firstOrNull()
-    }
-    return null
-}
+private fun findElementProperty(element: FixtureElement<*>, name: String): Fixture.Property? =
+    FixturePropertyCatalogue.of(element::class).byName[name]
 
 // ─── Target resolution helpers ──────────────────────────────────────────
 

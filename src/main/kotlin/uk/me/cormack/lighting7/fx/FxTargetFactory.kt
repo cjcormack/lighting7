@@ -81,7 +81,7 @@ object FxTargetFactory {
             "colour", "color", "rgbcolour" -> ColourTarget(ref)
             "position" -> PositionTarget(ref)
             else -> {
-                val prop = fixture?.fixtureProperties?.find { it.name == propertyName }
+                val prop = fixture?.fixtureProperty(propertyName)
                 val propValue = prop?.classProperty?.call(fixture)
                 if (propValue is Slider) {
                     SliderTarget(ref, propertyName)

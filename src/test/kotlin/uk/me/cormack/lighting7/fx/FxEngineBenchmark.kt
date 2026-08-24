@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.bench.summarize
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.CompositionRule
+import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
@@ -25,18 +26,20 @@ import kotlin.test.Test
 /**
  * Per-tick allocation & latency benchmark for [FxEngine]'s hot paths.
  *
- * Three independent scenarios, each with its own rig (engine state, cue assignments and the
+ * Four independent scenarios, each with its own rig (engine state, cue assignments and the
  * effect registry all persist per rig, so sharing one would make the numbers order-dependent):
  *
  * 1. **`beat and wall-clock tick throughput`** — the original scenario. 4 universes of
  *    [HexFixture] with a beat [SliderTarget] and a wall-clock [SliderTarget] per fixture.
  *    Deliberately frozen: it is what the 2026-04-22 baseline was measured on.
- * 2. **`group colour chase on multi-element fixtures across two masters`** — sweep items
- *    C1 (per-tick target re-expansion), C2 (reflective property access on the colour write
- *    path) and the C6 allocation bundle.
+ * 2. **`group colour chase on multi-element fixtures across two masters`** — sweep item
+ *    C1 (per-tick target re-expansion) and the C6 allocation bundle.
  * 3. **`crossfade republish throughput`** — sweep item C3.
+ * 4. **`colour write path with bundled extended channels`** — sweep item C2's reflective
+ *    property resolution. Scenario 2 was originally claimed to cover this; it does not, for
+ *    the reason set out on [newColourRig].
  *
- * See `docs/plans/backend-post-refactor-sweep.md` §C. Scenarios 2 and 3 exist because the
+ * See `docs/plans/backend-post-refactor-sweep.md` §C. Scenarios 2-4 exist because the
  * original rig touches none of those paths: measuring a C-wave "before" on scenario 1 alone
  * would be measuring code the fix does not run.
  *
@@ -80,6 +83,9 @@ class FxEngineBenchmark {
 
         /** 5 s of crossfade at `CueStackManager.CROSSFADE_TICK_MS` (16 ms) ≈ 312 frames. */
         const val CROSSFADE_FRAMES = 312
+
+        /** Colour rig: same fixture count as scenario 1, same tick budget as scenario 2. */
+        const val COLOUR_BEAT_TICKS = 1_200
         const val OUTGOING_CUE = 1
         const val INCOMING_CUE = 2
 
@@ -244,9 +250,17 @@ class FxEngineBenchmark {
      *   implement `WithColour` itself. That is what pushes `processGroupEffect` past its
      *   direct-application branch and down the element-expansion path this scenario exists
      *   to measure (C1).
-     * - `RgbwPixel` is `WithColour, WithWhite` with `bundleWithColour = true` on `white`, so
-     *   each element's colour write pays `ColourTarget.extendedComponent`'s
-     *   `fixtureProperties.find {}` + `KProperty1.call` — the reflection C2 is about.
+     * - `RgbwPixel` is `WithColour, WithWhite` with `bundleWithColour = true` on `white`, which
+     *   drives the element branch of [PropertyChannelWriter]'s per-class property catalogue.
+     *
+     * This scenario does **not** measure sweep item C2, though it claimed to until 2026-08-24.
+     * `RgbwPixel` is a [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement],
+     * and `FixtureElement` does not extend [Fixture] — so the
+     * `if (fixture is Fixture)` guard on every one of [ColourTarget]'s bundled W/A/UV helpers
+     * is false here and none of them run. `Fixtures.resolveElement` likewise wraps only the
+     * element, so this rig constructs no [Fixture] per tick and pays none of the constructor
+     * reflection either. Scenario 4 is where C2 is measured; what remains here is C1's group
+     * expansion and C6's per-member permutation.
      *
      * If a cheaper fixture were substituted here the harness would still run and still print
      * plausible numbers, while measuring none of the above. The setup guards below are what
@@ -630,5 +644,188 @@ class FxEngineBenchmark {
         val stats = summarize("crossfade", timings, alloc, sampleName = "frame")
 
         check(stats.p99Ns < 1_000_000_000L) { "crossfade p99 frame > 1s: ${stats.p99Ns} ns" }
+    }
+
+    // ─── Scenario 4: colour write path with bundled W/A/UV ──────────────────
+
+    private data class ColourRig(
+        val engine: FxEngine,
+        val fixtures: Fixtures,
+        val programmerCovered: Int,
+    )
+
+    /**
+     * [ColourTarget] over real [Fixture]s carrying bundled W/A/UV sliders — sweep item C2's
+     * `fixtureProperties.find {}` + `KProperty1.call` half.
+     *
+     * This scenario exists because **no other rig reaches that code at all**, contrary to what
+     * scenario 2's docs claimed before this was written. [ColourTarget] gates all four of its
+     * bundled-channel helpers on `if (fixture is Fixture)`
+     * ([ColourTarget.applyValueToFixture], [ColourTarget.resetToFallback], and the compose and
+     * park paths), and scenario 2's `RgbwPixel` is a
+     * [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement], which does *not*
+     * extend [Fixture]. Elements resolve through
+     * [PropertyChannelWriter]'s per-class catalogue instead, so scenario 2 measures the group
+     * expansion (C1) and [DistributionStrategy.RANDOM]'s permutation (C6) — not this.
+     *
+     * The fixture choice is load-bearing: [HexFixture] declares `amber`, `white` **and** `uv`
+     * with `bundleWithColour = true`, so each colour write pays the scan three times. A
+     * fixture with no bundled sliders would run the same effects and print plausible numbers
+     * while measuring nothing.
+     *
+     * Three of the four bundled helpers are covered:
+     * - `applyExtendedChannel` — ungated, once per fixture per tick via the effect write;
+     * - `setExtendedChannel` — via `resetToFallback`, which `resetActiveProperties` drives for
+     *   every active property every tick, so the Layer 4 colour rows below are required;
+     * - `extendedComponent` — via `composeProgrammerOver`, behind the per-fixture gate at
+     *   `LayerResolver.fallbackFor`. Half the rig gets a programmer colour entry so the gate is
+     *   genuinely exercised in both directions; a sideband entry is deliberately *not* planted,
+     *   because any sideband slot disables the gate globally and would make the covered/uncovered
+     *   split meaningless.
+     *
+     * `bundledChannelParked` is **not** covered: it needs a `ParkManager`, `FxEngine` takes one
+     * only as a constructor argument defaulting to null, and constructing a real one needs a
+     * `Database`. Pulling a DB into this class would cost more than the branch is worth.
+     */
+    private fun newColourRig(): ColourRig {
+        val controllers = (0 until UNIVERSES).map { MockDmxController(Universe(0, it)) }
+        val fixtures = Fixtures()
+        fixtures.register {
+            controllers.forEach { addController(it) }
+            for (u in 0 until UNIVERSES) {
+                val universe = controllers[u].universe
+                for (f in 0 until FIXTURES_PER_UNIVERSE) {
+                    val first = 1 + f * HEX_CHANNELS
+                    if (first + HEX_CHANNELS - 1 > 512) break
+                    addFixture(HexFixture(universe, "u${u}-hex-${f}", "U$u Hex $f", first))
+                }
+            }
+        }
+        val programmerStore = ProgrammerStore()
+        val engine = FxEngine(
+            fixtures = fixtures,
+            speedMasters = SpeedMasterBank(),
+            programmerStore = programmerStore,
+            layerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
+        )
+
+        // Layer 4 colour rows on every fixture: `resetToFallback` needs something below the
+        // effect to reset *to*, and the extended components must be non-zero or
+        // `setExtendedChannel` writes zeros and the blend is unmeasurable.
+        engine.setCueAssignments(
+            1,
+            fixtures.fixtures.map { f ->
+                CueAssignmentResolver.Assignment(
+                    cueId = 1,
+                    priority = 1,
+                    fadeWeight = 1.0,
+                    targetKey = f.key,
+                    targetIsGroup = false,
+                    propertyName = "rgbColour",
+                    category = PropertyCategory.COLOUR,
+                    compositionOverride = CompositionRule.UNSET,
+                    value = CueAssignmentResolver.PropertyValue.Colour(
+                        ExtendedColour(Color(30, 10, 70), white = 25u, amber = 15u, uv = 40u),
+                    ),
+                )
+            },
+        )
+
+        // One per-fixture colour effect. Every entry carries non-zero W/A/UV so all three
+        // bundled categories resolve on every tick rather than short-circuiting on zero.
+        for (f in fixtures.fixtures) {
+            engine.addEffect(
+                FxInstance(
+                    effect = ColourCycle(
+                        colours = listOf(
+                            ExtendedColour(Color.RED, white = 90u, amber = 40u, uv = 20u),
+                            ExtendedColour(Color.GREEN, white = 30u, amber = 120u, uv = 60u),
+                            ExtendedColour(Color.BLUE, white = 60u, amber = 10u, uv = 200u),
+                        ),
+                    ),
+                    target = ColourTarget(f.key),
+                    timing = FxTiming(beatDivision = BeatDivision.HALF),
+                    blendMode = BlendMode.OVERRIDE,
+                ),
+            )
+        }
+
+        // Programmer coverage on half the rig — opens `composeProgrammerOver` for those, leaves
+        // the gate closed for the rest.
+        val covered = fixtures.fixtures.filterIndexed { i, _ -> i % 2 == 0 }
+        for (f in covered) {
+            programmerStore.put(
+                ProgrammerOwner.WEB,
+                f.key,
+                "rgbColour",
+                CueAssignmentResolver.PropertyValue.Colour(
+                    ExtendedColour(Color(10, 200, 30), white = 70u, amber = 15u, uv = 45u),
+                ),
+            )
+        }
+
+        // Setup guards, in scenario 2's style: every one of these has a silent-no-op failure
+        // mode that still prints believable microseconds.
+        val sample = fixtures.fixtures.first() as HexFixture
+        val bundled = sample.fixtureProperties.filter { it.bundleWithColour }.map { it.category }.toSet()
+        check(bundled == setOf(PropertyCategory.WHITE, PropertyCategory.AMBER, PropertyCategory.UV)) {
+            "the rig fixture must declare all three bundled colour channels, got $bundled"
+        }
+        check(engine.getActiveEffects().all { it.target is ColourTarget }) {
+            "every effect must be a ColourTarget, or the bundled write path is not exercised"
+        }
+        check(1 in engine.activeCueAssignmentIds()) { "Layer 4 colour rows did not land" }
+        check(programmerStore.coversFixture(covered.first().key)) {
+            "programmer gate never opens — composeProgrammerOver would be unmeasured"
+        }
+        check(!programmerStore.coversFixture(fixtures.fixtures[1].key)) {
+            "programmer covers the whole rig — the gate's closed arm would be unmeasured"
+        }
+        check(!programmerStore.hasSidebandEntries) {
+            "a sideband entry disables the per-fixture gate globally; this rig must not plant one"
+        }
+
+        // The decisive guard. Everything above is structural; this one proves the bundled write
+        // actually reached the wire. A rig that fails `ColourTarget`'s `fixture is Fixture` gate
+        // still ticks happily, still writes RGB, and still prints believable microseconds — it
+        // just silently skips the reflection this scenario exists to measure.
+        engine.processBeatTick(beatTick(0, System.currentTimeMillis()))
+        val first = sample.firstChannel
+        for ((name, channel) in listOf("amber" to first + 4, "white" to first + 5, "uv" to first + 6)) {
+            check(controllers[0].getValue(channel) > 0u) {
+                "bundled $name channel $channel never written — ColourTarget's bundled branch " +
+                    "did not run, so this scenario would measure nothing"
+            }
+        }
+
+        return ColourRig(engine, fixtures, covered.size)
+    }
+
+    @Test
+    fun `colour write path with bundled extended channels`() {
+        assumeBenchmarkEnabled()
+
+        val rig = newColourRig()
+        println(
+            "[setup] universes=$UNIVERSES fixtures=${rig.fixtures.fixtures.size} " +
+                "colourEffects=${rig.engine.getActiveEffects().size} " +
+                "programmerCovered=${rig.programmerCovered}",
+        )
+
+        val warmupStart = System.currentTimeMillis()
+        for (n in 0L until WARMUP_BEAT_TICKS.toLong()) rig.engine.processBeatTick(beatTick(n, warmupStart))
+
+        val timings = LongArray(COLOUR_BEAT_TICKS)
+        val start = System.currentTimeMillis()
+        val allocBefore = allocatedBytes()
+        for (n in 0L until COLOUR_BEAT_TICKS.toLong()) {
+            val t = beatTick(n + WARMUP_BEAT_TICKS, start)
+            timings[n.toInt()] = measureNanoTime { rig.engine.processBeatTick(t) }
+        }
+        val alloc = allocatedBytes().takeIf { it >= 0 && allocBefore >= 0 }
+            ?.let { it - allocBefore } ?: -1L
+        val stats = summarize("colour-beat", timings, alloc, sampleName = "tick")
+
+        check(stats.p99Ns < 1_000_000_000L) { "colour-beat p99 tick > 1s: ${stats.p99Ns} ns" }
     }
 }

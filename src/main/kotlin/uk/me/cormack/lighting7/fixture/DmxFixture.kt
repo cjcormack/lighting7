@@ -10,7 +10,6 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.routes.*
-import kotlin.reflect.full.memberProperties
 
 abstract class DmxFixture(
     val universe: Universe,
@@ -48,15 +47,7 @@ abstract class DmxFixture(
             for (element in elements) {
                 val elementPrefix = "Head ${element.elementIndex + 1}"
 
-                val elementProperties = element::class.memberProperties.flatMap { classProperty ->
-                    @Suppress("UNCHECKED_CAST")
-                    val fixtureProp = classProperty as kotlin.reflect.KProperty1<out Fixture, *>
-                    classProperty.annotations.filterIsInstance<FixtureProperty>().map { fixtureProperty ->
-                        Fixture.Property.fromAnnotation(fixtureProp, fixtureProperty)
-                    }
-                }
-
-                for (prop in elementProperties) {
+                for (prop in FixturePropertyCatalogue.of(element::class).all) {
                     @Suppress("UNCHECKED_CAST")
                     val propTyped = prop.classProperty as kotlin.reflect.KProperty1<Any, *>
                     val value = propTyped.call(element) ?: continue
@@ -258,16 +249,7 @@ abstract class DmxFixture(
     private fun extractElementProperties(element: FixtureElement<*>): List<PropertyDescriptor> {
         val descriptors = mutableListOf<PropertyDescriptor>()
 
-        // Get all properties from the element class with @FixtureProperty annotation
-        val elementProperties = element::class.memberProperties.flatMap { classProperty ->
-            @Suppress("UNCHECKED_CAST")
-            val fixtureProp = classProperty as kotlin.reflect.KProperty1<out Fixture, *>
-            classProperty.annotations.filterIsInstance<FixtureProperty>().map { fixtureProperty ->
-                Fixture.Property.fromAnnotation(fixtureProp, fixtureProperty)
-            }
-        }
-
-        for (prop in elementProperties) {
+        for (prop in FixturePropertyCatalogue.of(element::class).all) {
             @Suppress("UNCHECKED_CAST")
             val propTyped = prop.classProperty as kotlin.reflect.KProperty1<Any, *>
             val value = propTyped.call(element) ?: continue
