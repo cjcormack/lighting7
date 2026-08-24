@@ -40,7 +40,7 @@ Findings that duplicate an existing `followups.md` item cite its slug instead of
 
 ## A — Correctness bugs
 
-**A1. Project delete / replace-import never deletes `templates`** — critical / P0 / S / sonnet
+~~**A1. Project delete / replace-import never deletes `templates`**~~ — done, `2fecc13`. critical / P0 / S / sonnet
 `routes/projects.kt:215-271` tears down looks, cues, groups, … but has no template loop; the
 `templates.project_id` FK (no ON DELETE) blocks `project.delete()`. `ProjectImporter.replaceProject`
 (`sync/ProjectImporter.kt:225-249`) has the same omission and re-imports templates onto survivors,
