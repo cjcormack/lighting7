@@ -1,6 +1,6 @@
 # Backend post-refactor architectural sweep — findings and cleanup plan
 
-> **Document status: BACKLOG, WAVE 0 IN PROGRESS (A1–A4 done, A11 + C0 outstanding).** This is the output of the
+> **Document status: BACKLOG, WAVE 0 IN PROGRESS (A1–A4 + A11 done, C0 outstanding).** This is the output of the
 > post-refactor architectural sweep: a categorized backlog for later fix agents, organised into
 > execution waves. Items cite file:line as of `b5067e5`; expect drift as waves land. A matching
 > frontend sweep happens separately — the "Frontend-coordination register" at the bottom is its
@@ -99,7 +99,7 @@ deactivate.
 `TemplateRegistry.kt:83,88`: `@Volatile` + `++` can lose a bump the class doc relies on. **Fix:**
 `AtomicLong`. (Coordinates with C4, which may change this mechanism anyway.)
 
-**A11. Every position effect silently produces nothing when applied to `pan`/`tilt`** — high / P0 / S / opus
+~~**A11. Every position effect silently produces nothing when applied to `pan`/`tilt`**~~ — done, `d0d0cc5`. high / P0 / S / opus
 All seven `src/main/resources/fx/position/*.fx.kts` declare `outputType: POSITION` with
 `compatibleProperties: [pan, tilt]`, but `PositionTarget`'s property name is the synthetic
 `"position"` (`FxTarget.kt:573`), which is also the only name the two target resolvers map to it
