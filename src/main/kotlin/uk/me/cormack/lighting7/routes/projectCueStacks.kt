@@ -290,6 +290,21 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val manager = state.show.cueStackManager
 
             try {
+                // A bare /activate on an already-active stack short-circuits, like /show/activate:
+                // it routes to activateAtFirstCue, so honouring the repeat would throw the playhead
+                // back to cue 1 on a live rig. Only a request naming a cue is a deliberate re-fire.
+                val activeCueId = if (request.cueId == null) manager.getActiveCueId(resource.parent.stackId) else null
+                if (activeCueId != null) {
+                    val cueName = transaction(state.database) { DaoCue.findById(activeCueId)?.name } ?: ""
+                    call.respond(CueStackActivateResponse(
+                        stackId = resource.parent.stackId,
+                        cueId = activeCueId,
+                        cueName = cueName,
+                        effectCount = 0,
+                    ))
+                    return@withCurrentProject
+                }
+
                 val result = if (request.cueId != null) {
                     manager.activateCueInStack(state, resource.parent.stackId, request.cueId)
                 } else {
