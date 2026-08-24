@@ -871,7 +871,6 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         state.show.programmerLayerStack.installPreview(
             snapshot = uk.me.cormack.lighting7.fx.LookSnapshot(
                 lookId = 0, lookUuid = java.util.UUID(0L, 0L), name = "preview",
-                palette = emptyList(),
                 rows = listOf(
                     uk.me.cormack.lighting7.fx.LookRowEntry(null, "dimmer", "77"),
                 ),

@@ -238,24 +238,6 @@ class SocketMessageWireFormatTest {
         }
     }
 
-    // ─── Palette domain ─────────────────────────────────────────────────────
-
-    @Test
-    fun `palette domain — SetPaletteInMessage routes via PaletteInMessage`() {
-        val raw = """{"type":"setPalette","colours":["#ff0000","#00ff00"]}"""
-        val decoded = json.decodeFromString<InMessage>(raw)
-        assertIs<PaletteInMessage>(decoded)
-        assertEquals(listOf("#ff0000", "#00ff00"), assertIs<SetPaletteInMessage>(decoded).colours)
-    }
-
-    @Test
-    fun `palette domain — PaletteChangedOutMessage round-trips with discriminator`() {
-        val out = PaletteChangedOutMessage(listOf("#ff0000"))
-        val encoded = json.encodeToString<OutMessage>(out)
-        assertTrue(encoded.contains(""""type":"paletteChanged""""))
-        assertEquals(out, assertIs<PaletteChangedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
-    }
-
     // ─── Group domain ───────────────────────────────────────────────────────
 
     @Test

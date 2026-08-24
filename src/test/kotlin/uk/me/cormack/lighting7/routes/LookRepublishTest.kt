@@ -77,13 +77,13 @@ class LookRepublishTest : RouteIntegrationTest() {
             val project = DaoProject.findById(projectId)!!
             val stack = DaoCueStack.new {
                 this.project = project
-                name = "stack-${System.nanoTime()}"; this.palette = emptyList(); loop = false
+                name = "stack-${System.nanoTime()}"; loop = false
                 type = CueStackType.STACK.name; sortOrder = 0
             }
             val cue = DaoCue.new {
                 this.project = project
                 name = "cue-$fixtureKey"; cueStack = stack; sortOrder = 0
-                this.palette = emptyList(); cueType = CueType.STANDARD.name
+                cueType = CueType.STANDARD.name
             }
             if (lookUuid == null) {
                 DaoCuePropertyAssignment.new {

@@ -24,7 +24,6 @@ class BackfillAutoCueNumbersTest : RouteIntegrationTest() {
             val stack = DaoCueStack.new {
                 this.project = DaoProject.findById(projectId)!!
                 this.name = name
-                palette = emptyList()
                 loop = false
                 type = CueStackType.STACK.name
                 sortOrder = 0
@@ -33,7 +32,6 @@ class BackfillAutoCueNumbersTest : RouteIntegrationTest() {
                 DaoCue.new {
                     this.name = cueName
                     this.project = DaoProject.findById(projectId)!!
-                    palette = emptyList()
                     cueStack = stack
                     this.sortOrder = index
                     cueNumber = number

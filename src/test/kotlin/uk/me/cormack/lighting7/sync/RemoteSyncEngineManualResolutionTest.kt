@@ -146,7 +146,6 @@ class RemoteSyncEngineManualResolutionTest {
             val stack = DaoCueStack.new {
                 this.project = project
                 this.name = "shared"
-                this.palette = emptyList()
             }
             stack.uuid
         }

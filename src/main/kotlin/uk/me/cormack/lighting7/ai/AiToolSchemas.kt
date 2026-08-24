@@ -169,7 +169,7 @@ internal val getCurrentStateTool = AnthropicToolDef(
                 put("items", buildJsonObject {
                     put("type", "string")
                     put("enum", buildJsonArray {
-                        add("active_effects"); add("bpm"); add("fixtures"); add("groups"); add("looks"); add("palette"); add("cues"); add("cue_stacks")
+                        add("active_effects"); add("bpm"); add("fixtures"); add("groups"); add("looks"); add("templates"); add("cues"); add("cue_stacks")
                     })
                 })
                 put("description", "What to include. Defaults to all.")
@@ -178,21 +178,11 @@ internal val getCurrentStateTool = AnthropicToolDef(
     }
 )
 
-internal val setPaletteTool = AnthropicToolDef(
-    name = "set_palette",
-    description = "Set the colour palette. Palette colours are shared across all running effects that use palette references (P1, P2, etc.). Changes take effect immediately on all running effects. Use colour names ('red'), hex ('#FF0000'), or extended format ('#ff0000;w128;a64;uv200').",
-    inputSchema = buildJsonObject {
-        put("type", "object")
-        put("properties", buildJsonObject {
-            put("colours", buildJsonObject {
-                put("type", "array")
-                put("items", buildJsonObject { put("type", "string") })
-                put("description", "Ordered list of palette colours. Each can be a colour name, hex code, or extended colour string.")
-            })
-        })
-        put("required", buildJsonArray { add("colours") })
-    }
-)
+// `set_palette` stood here. It replaced the global positional colour list that effects indexed as
+// `P1` / `P2` — a single mutable list of unnamed slots, and the only thing the word "palette" still
+// meant. There is no successor tool by design: a colour an effect should follow is a **template**,
+// which has a name and a uuid, and retuning one moves every effect referencing it without a
+// stage-wide mutation. `get_show_state` lists them under `templates`.
 private val adHocEffectSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
@@ -275,15 +265,6 @@ internal val createCueTool = AnthropicToolDef(
         put("type", "object")
         put("properties", buildJsonObject {
             put("name", buildJsonObject { put("type", "string"); put("description", "Unique cue name") })
-            put("palette", buildJsonObject {
-                put("type", "array")
-                put("items", buildJsonObject { put("type", "string") })
-                put("description", "Positional colour list as ordered colour strings (hex, names or extended format), referenced from effects as P1, P2, ...")
-            })
-            put("updateGlobalPalette", buildJsonObject {
-                put("type", "boolean")
-                put("description", "When true, applying this cue also sets the global palette (affecting ad-hoc effects). Default false.")
-            })
             put("layers", buildJsonObject {
                 put("type", "array")
                 put("items", cueLayerSchema)
@@ -301,7 +282,7 @@ internal val createCueTool = AnthropicToolDef(
 
 internal val applyCueTool = AnthropicToolDef(
     name = "apply_cue",
-    description = "Apply a saved cue by ID. By default, adds the cue's effects alongside other running cues. Set replaceAll=true to stop all other running cues first. The cue's palette is used for its own effects (isolated from the global palette unless updateGlobalPalette is set). If this cue is already running, its effects are refreshed.",
+    description = "Apply a saved cue by ID. By default, adds the cue's effects alongside other running cues. Set replaceAll=true to stop all other running cues first. If this cue is already running, its effects are refreshed.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -334,11 +315,6 @@ internal val createCueStackTool = AnthropicToolDef(
         put("type", "object")
         put("properties", buildJsonObject {
             put("name", buildJsonObject { put("type", "string"); put("description", "Stack name") })
-            put("palette", buildJsonObject {
-                put("type", "array")
-                put("items", buildJsonObject { put("type", "string") })
-                put("description", "Stack-level base palette. Cue palettes override this when set.")
-            })
             put("loop", buildJsonObject {
                 put("type", "boolean")
                 put("description", "Loop back to start after last cue. Default false.")
@@ -350,7 +326,7 @@ internal val createCueStackTool = AnthropicToolDef(
 
 internal val activateCueStackTool = AnthropicToolDef(
     name = "activate_cue_stack",
-    description = "Activate a cue stack, starting playback from the first cue (or a specific cue). The stack's palette is applied, and the cue's effects are started. If the cue has auto-advance configured, the stack will automatically advance to the next cue after the delay.",
+    description = "Activate a cue stack, starting playback from the first cue (or a specific cue). The cue's effects are started. If the cue has auto-advance configured, the stack will automatically advance to the next cue after the delay.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {

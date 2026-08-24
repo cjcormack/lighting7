@@ -2,9 +2,7 @@ package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
-import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.PaletteCascade
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
@@ -37,8 +35,6 @@ class BuildCueAssignmentsForCueTest {
         CueApplyData(
             cueId = 7,
             cueName = "test",
-            palette = emptyList(),
-            updateGlobalPalette = false,
             adHocEffects = emptyList(),
             propertyAssignments = assignments.toList(),
             cueStackId = 3,
@@ -164,34 +160,19 @@ class BuildCueAssignmentsForCueTest {
     }
 
     @Test
-    fun `palette cascade - palette ref resolved against supplied cue palette`() {
-        val fixtures = fixturesWithTwoHexesInAGroup()
-        val cascade = PaletteCascade(cue = listOf(ExtendedColour(Color(10, 20, 30))))
-        val out = buildCueAssignmentsForCue(fixtures, cueData(
-            CuePropertyAssignmentDto(
-                targetType = "fixture",
-                targetKey = "hex-1",
-                propertyName = "colour",
-                value = "P1",
-            ),
-        ), cascade)
-        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
-        assertEquals(Color(10, 20, 30), v.value.color)
-    }
-
-    @Test
-    fun `palette cascade - no palette falls through to white`() {
+    fun `a template reference in a value is skipped rather than resolved`() {
+        // A cue row is a literal. `tmpl:` is legal in an effect *parameter* only, and letting one
+        // through here would read as white — see `CueAssignmentResolver.parseAssignmentValue`.
         val fixtures = fixturesWithTwoHexesInAGroup()
         val out = buildCueAssignmentsForCue(fixtures, cueData(
             CuePropertyAssignmentDto(
                 targetType = "fixture",
                 targetKey = "hex-1",
                 propertyName = "colour",
-                value = "P1",
+                value = "tmpl:2f1c8a3e-0000-4000-8000-000000000001",
             ),
         ))
-        val v = assertIs<CueAssignmentResolver.PropertyValue.Colour>(out.single().value)
-        assertEquals(Color.WHITE, v.value.color)
+        assertTrue(out.isEmpty(), "the row must be dropped with a warn")
     }
 
     @Test

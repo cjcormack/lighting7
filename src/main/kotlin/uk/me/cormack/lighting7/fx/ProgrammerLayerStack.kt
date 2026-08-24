@@ -533,9 +533,8 @@ class ProgrammerLayerStack(
                 repriorities[existing] = priority
                 continue
             }
-            val palette = resolveLook(layer.source.uuid)?.palette ?: emptyList()
             val override = byLayerId[layer.layerId]?.beatDivisionOverride
-            val id = spawn(layer, effect, target, priority, palette, override) ?: continue
+            val id = spawn(layer, effect, target, priority, override) ?: continue
             effectInstances[key] = id
             spawned++
         }
@@ -567,7 +566,6 @@ class ProgrammerLayerStack(
         effect: LookEffectEntry,
         target: TargetRef,
         priority: Int,
-        lookPalette: List<String>,
         beatDivisionOverride: Double?,
     ): Long? {
         val st = state() ?: return null
@@ -579,22 +577,17 @@ class ProgrammerLayerStack(
             null
         } ?: return null
 
-        // Snapshot suppliers, as Include uses: a programmer layer is not a live cue, so the
-        // cue-scoped palette supplier has nothing to resolve against.
+        // [createInstanceFromPreset] gives this a **live** colour source, unlike the frozen
+        // snapshot this path used to build for itself.
         //
-        // Built through [PaletteCascade] rather than an ad-hoc `?:` so this path and the cue path
-        // (`CueComposer.applyLayer`) cannot drift on what "most specific scope" means. Same answer
-        // either way — the Look's own colour list, falling back to the global one — but expressed
-        // once.
-        val snapshot = PaletteCascade(
-            look = lookPalette.toPaletteColours(),
-            global = engine().getPalette(),
-        ).effective
+        // The old positional colour list was captured at include time — version pinned to `0L` — so
+        // an effect on a programmer layer kept the colours it was born with. A `tmpl:` reference is
+        // a live dependency by design: the whole point of naming a template rather than stating a
+        // colour is that retuning it moves everything that follows it, and a programmer layer is no
+        // more exempt from that than a cue's.
         val instance = try {
             createInstanceFromPreset(
                 spec, fxTarget, presetId = null, state = st,
-                paletteSupplier = { snapshot },
-                paletteVersionSupplier = { 0L },
                 overrideSpeedMasterUuid = layer.speedMasterUuid,
                 overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
             )

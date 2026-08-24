@@ -131,11 +131,11 @@ class RemoteSyncEnginePushRetryTest {
         // cleanly via auto-merge.
         transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
-            DaoCueStack.new { this.project = project; this.name = "from-A-${UUID.randomUUID()}"; this.palette = emptyList() }
+            DaoCueStack.new { this.project = project; this.name = "from-A-${UUID.randomUUID()}" }
         }
         transaction(stateB.database) {
             val project = DaoProject.findById(projectIdB)!!
-            DaoCueStack.new { this.project = project; this.name = "from-B-${UUID.randomUUID()}"; this.palette = emptyList() }
+            DaoCueStack.new { this.project = project; this.name = "from-B-${UUID.randomUUID()}" }
         }
 
         val (resultA, resultB) = listOf(

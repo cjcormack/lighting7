@@ -81,8 +81,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 val cue = DaoCue.new {
                     name = newCue.name
                     this.project = project
-                    palette = newCue.palette
-                    updateGlobalPalette = newCue.updateGlobalPalette
                     autoAdvance = newCue.autoAdvance
                     autoAdvanceDelayMs = newCue.autoAdvanceDelayMs
                     fadeDurationMs = newCue.fadeDurationMs
@@ -150,8 +148,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if (cue.project.id != project.id) return@transaction null
 
                 cue.name = updatedData.name
-                cue.palette = updatedData.palette
-                cue.updateGlobalPalette = updatedData.updateGlobalPalette
                 cue.autoAdvance = updatedData.autoAdvance
                 cue.autoAdvanceDelayMs = updatedData.autoAdvanceDelayMs
                 cue.fadeDurationMs = updatedData.fadeDurationMs
@@ -162,7 +158,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 // A number that differs from what's stored is an operator edit, so it becomes
                 // explicit; clearing it hands the cue back to the auto scheme. An *unchanged*
                 // value leaves the auto flag alone, so a full-object save that merely round-trips
-                // the current number (the palette editor's PUT) can't silently freeze an auto
+                // the current number (a properties PUT) can't silently freeze an auto
                 // number as explicit.
                 val incomingNumber = updatedData.cueNumber?.takeIf { it.isNotEmpty() }
                 val numberChanged = incomingNumber != cue.cueNumber
@@ -348,8 +344,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val newCue = DaoCue.new {
                 name = cueName
                 project = targetProject
-                palette = sourceCue.palette
-                updateGlobalPalette = sourceCue.updateGlobalPalette
                 autoAdvance = sourceCue.autoAdvance
                 autoAdvanceDelayMs = sourceCue.autoAdvanceDelayMs
                 fadeDurationMs = sourceCue.fadeDurationMs
@@ -513,7 +507,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         }
     }
 
-    // GET /{projectId}/cues/current-state - Get current palette and active effects without creating a cue
+    // GET /{projectId}/cues/current-state - Get the active effects without creating a cue
     get<CueCurrentStateResource> { resource ->
         withCurrentProject(
             state,
@@ -522,7 +516,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         ) { _ ->
             val captured = captureCurrentState(state)
             call.respond(CueCurrentStateResponse(
-                palette = captured.palette,
                 layers = captured.layers,
                 adHocEffects = captured.adHocEffects,
             ))
@@ -553,12 +546,10 @@ data class CueCurrentStateResource(val parent: ProjectCuesResource)
 @Serializable
 data class NewCue(
     val name: String,
-    val palette: List<String> = emptyList(),
     val layers: List<CueLayerDto> = emptyList(),
     val adHocEffects: List<CueAdHocEffectDto> = emptyList(),
     val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDto> = emptyList(),
-    val updateGlobalPalette: Boolean = false,
     val cueStackId: Int? = null,
     val sortOrder: Int? = null,
     val autoAdvance: Boolean = false,
@@ -575,13 +566,11 @@ data class NewCue(
 data class CueDetails(
     val id: Int,
     val name: String,
-    val palette: List<String>,
     /** The cue's ordered Look composition, in `sortOrder`. */
     val layers: List<CueLayerDto> = emptyList(),
     val adHocEffects: List<CueAdHocEffectDto>,
     val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDetailDto> = emptyList(),
-    val updateGlobalPalette: Boolean = false,
     val cueStackId: Int? = null,
     val cueStackName: String? = null,
     val sortOrder: Int = 0,
@@ -623,7 +612,6 @@ data class ApplyCueResponse(
 
 @Serializable
 data class CueCurrentStateResponse(
-    val palette: List<String>,
     /**
      * The stage's Look layers, one per Look with a de-duplicated target list.
      *
@@ -654,7 +642,6 @@ internal fun getOrCreateUnsortedStack(project: DaoProject): DaoCueStack =
     }.firstOrNull() ?: DaoCueStack.new {
         name = "Unsorted"
         this.project = project
-        palette = emptyList()
         loop = false
         type = CueStackType.STACK.name
         sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1

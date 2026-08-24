@@ -32,8 +32,9 @@ sealed class ProgrammerInMessage : InMessage()
  * Set a programmer value on a fixture or group property. [value] uses the same canonical
  * string form as cue assignments ([CueAssignmentResolver.parseAssignmentValue] /
  * [CueAssignmentResolver.PropertyValue.serialize]): `"0".."255"` for sliders and settings,
- * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) or a positional palette ref (`"P1"`) for colours,
- * `"pan,tilt"` for `position`.
+ * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) for colours, `"pan,tilt"` for `position`. A programmer
+ * value is always a **literal**: a `tmpl:{uuid}` template reference is legal only in an effect
+ * parameter, and a dependency on a template is a layer (see [templateColourSource]).
  *
  * [sourceGroup] is for clients that fan a group-scoped gesture out to member fixtures rather
  * than sending `targetType: "group"` — a group virtual dimmer over heterogeneous members, a
@@ -742,8 +743,9 @@ object ProgrammerHandler {
     /**
      * Parse a canonical value string for (target, property): `position` is the synthetic
      * pan/tilt pair; everything else resolves its category from the fixture's property
-     * catalogue (via the first member for groups). Palette refs (`P1`…) resolve against the
-     * live global palette.
+     * catalogue (via the first member for groups). A programmer value is always a literal — a
+     * `tmpl:` template reference is refused by [CueAssignmentResolver.parseAssignmentValue] rather
+     * than read as white.
      */
     private fun parseValue(
         state: State,
@@ -770,8 +772,6 @@ object ProgrammerHandler {
         }
         val category = PropertyChannelWriter.resolveProperty(fixture, propertyName)?.category
             ?: return null
-        return CueAssignmentResolver.parseAssignmentValue(
-            category, propertyName, value, palette = state.show.fxEngine.getPalette(),
-        )
+        return CueAssignmentResolver.parseAssignmentValue(category, propertyName, value)
     }
 }

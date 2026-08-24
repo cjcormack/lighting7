@@ -94,6 +94,37 @@ object TemplateResolver {
 
     // ─── Colour ─────────────────────────────────────────────────────────────
 
+    /**
+     * The **fixture-free** reading of a colour intent, for consumers holding no head.
+     *
+     * An FX colour parameter is one of them and the reason this exists: an effect's output is a
+     * single [ExtendedColour] applied to every head it targets, so there is no fixture to ask
+     * whether it has a white emitter. This resolves as though the head were RGBW — the common case
+     * in this rig — which makes a template referenced from an effect produce **the same channels**
+     * as the same template applied as a layer on any RGBW or RGBWA head.
+     *
+     * **Know what that costs a head with no white emitter**, because it is sharper than "one
+     * emitter short". Under [WhitePolicy.EXTRACT] the neutral is taken *out of RGB* here, and
+     * `ColourTarget.applyExtendedChannel` then silently drops the white byte on a head that has no
+     * white property — so the head receives the reduced RGB with nothing compensating for it, and
+     * reads both **dimmer and more saturated** than the hex asked for (`#FF9D4A` lands as
+     * `#B55300`). It is not the RGB-only reading; it is worse than the RGB-only reading. An
+     * amber-but-no-white head fares the same way, since [mixColour] routes the neutral to amber
+     * only when there is no white to route it to, and here there always notionally is.
+     *
+     * That is the accepted trade for matching the layer exactly on the common head. If a rig is
+     * mostly RGB-only, resolving with [WhitePolicy.RGB_ONLY] here instead is a one-line change and
+     * inverts which class of head is exact.
+     *
+     * It goes through the same [mixColour] as [resolve] rather than repeating the arithmetic,
+     * because the value an editor previews and the value the rig receives drifting apart is the
+     * failure this whole area is built to avoid.
+     */
+    fun resolveColourGeneric(intent: TemplateIntent.Colour): ExtendedColour? {
+        val target = parseHex(intent.hex) ?: return null
+        return mixColour(target, intent.policy, hasWhite = true, hasAmber = true).first
+    }
+
     private fun resolveColour(
         fixture: GroupableFixture,
         propertyName: String,

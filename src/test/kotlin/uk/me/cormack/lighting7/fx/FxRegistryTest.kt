@@ -72,24 +72,24 @@ class FxRegistryTest {
     }
 
     @Test
-    fun `createEffect passes palette suppliers`() {
+    fun `createEffect passes the colour source through to the factory`() {
         val registry = FxRegistry()
-        var receivedPalette: (() -> List<ExtendedColour>)? = null
+        var received: ((String) -> ExtendedColour?)? = null
         registry.register(EffectRegistration(
-            id = "PaletteTest",
-            name = "Palette Test",
+            id = "ColourSourceTest",
+            name = "Colour Source Test",
             category = "colour",
             outputType = FxOutputType.COLOUR,
             compatibleProperties = listOf("rgbColour"),
-            factory = { _, paletteSupplier, _ ->
-                receivedPalette = paletteSupplier
+            factory = { _, resolveColourSource, _ ->
+                received = resolveColourSource
                 SineWave() // dummy return
             },
         ))
 
-        val supplier: () -> List<ExtendedColour> = { listOf(ExtendedColour.BLACK) }
-        registry.createEffect("PaletteTest", paletteSupplier = supplier, paletteVersionSupplier = { 1L })
-        assertEquals(supplier, receivedPalette)
+        val source: (String) -> ExtendedColour? = { ExtendedColour.BLACK }
+        registry.createEffect("ColourSourceTest", resolveColourSource = source, colourSourceVersion = { 1L })
+        assertEquals(source, received)
     }
 
     @Test

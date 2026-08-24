@@ -22,8 +22,8 @@ object ScriptEffectAdapter {
         outputType: FxOutputType,
         defaultStepTiming: Boolean = false,
     ): EffectFactory {
-        return { params, paletteSupplier, paletteVersionSupplier ->
-            val typedParams = TypedParams(params, schema, paletteSupplier, paletteVersionSupplier)
+        return { params, resolveColourSource, colourSourceVersion ->
+            val typedParams = TypedParams(params, schema, resolveColourSource, colourSourceVersion)
 
             when (compiled.effectMode) {
                 EffectMode.STANDARD -> {

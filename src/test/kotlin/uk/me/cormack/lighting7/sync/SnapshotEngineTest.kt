@@ -247,7 +247,6 @@ class SnapshotEngineTest {
         DaoCueStack.new {
             this.project = project
             this.name = name
-            this.palette = emptyList()
         }.id.value
     }
 }

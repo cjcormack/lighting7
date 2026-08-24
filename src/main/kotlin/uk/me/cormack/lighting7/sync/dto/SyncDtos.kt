@@ -26,6 +26,13 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v7: the positional colour list is gone. `palette` leaves `looks/`, `cues/` and `cueStacks/`,
+    // and `updateGlobalPalette` leaves `cues/`; an effect that wants a named colour references a
+    // **template** from its own parameters instead. `minReader` stays at **5**: every removed field
+    // has a default, so a v5 or v6 archive still imports — it simply drops colour lists nothing
+    // reads any more. Only the writer's version moves, which is what makes an older install refuse
+    // a v7 repo rather than silently write those fields back on its next push.
+    //
     // v6: templates become their own entity — a `templates/` folder, and `CueLayerJson.lookUuid`
     // becomes optional beside a new `templateUuid`. `minReader` stays at **5**, deliberately: a v5
     // repo has no `templates/` folder (the importer reads a missing directory as empty) and every
@@ -48,7 +55,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 6,
+    val formatVersion: Int = 7,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -155,7 +162,6 @@ data class LookJson(
     val notes: String? = null,
     val sortOrder: Int = 0,
     /** The positional colour list (`P1` / `P2`), not the Look's own rows. */
-    val palette: List<String> = emptyList(),
     val rows: List<LookRowJson> = emptyList(),
     val effects: List<LookEffectJson> = emptyList(),
 )
@@ -313,7 +319,6 @@ data class FixtureGroupJson(
 data class CueStackJson(
     val uuid: String,
     val name: String,
-    val palette: List<String> = emptyList(),
     val loop: Boolean = false,
     val sortOrder: Int = 0,
     /** "STACK" (default) or "SEPARATOR". */
@@ -410,8 +415,6 @@ data class CueJson(
     val uuid: String,
     val cueStackUuid: String? = null,
     val name: String,
-    val palette: List<String> = emptyList(),
-    val updateGlobalPalette: Boolean = false,
     val sortOrder: Int = 0,
     val autoAdvance: Boolean = false,
     val autoAdvanceDelayMs: Long? = null,

@@ -21,7 +21,6 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.LayerSource
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
-import uk.me.cormack.lighting7.fx.toPaletteColours
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.fx.LookRowEntry
@@ -129,7 +128,6 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     this.sortOrder = request.sortOrder
                         ?: ((DaoLook.find { DaoLooks.project eq project.id }
                             .maxOfOrNull { it.sortOrder } ?: -1) + 1)
-                    this.palette = request.palette
                 }
                 createLookChildren(look, request.rows, request.effects)
                 look.toDetailsDto(state)
@@ -168,10 +166,6 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 }
                 if ("notes" in body) look.notes = body["notes"].nullableString()
                 body["sortOrder"].nullableInt()?.let { look.sortOrder = it }
-                if ("palette" in body) {
-                    look.palette = lookJson.decodeFromJsonElement<List<String>>(body["palette"]!!)
-                }
-
                 val hasRows = "rows" in body
                 val hasEffects = "effects" in body
                 val rows = if (hasRows) {
@@ -281,7 +275,6 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     this.notes = source.notes
                     this.sortOrder = (DaoLook.find { DaoLooks.project eq target.id }
                         .maxOfOrNull { it.sortOrder } ?: -1) + 1
-                    this.palette = source.palette
                 }
                 // Fresh uuids on every child: a copy is a new entity, and reusing the source's
                 // uuid would make sync treat the two as one record.
@@ -444,7 +437,6 @@ private fun LookPreviewRequest.toPreviewSnapshot(): LookSnapshot? {
         lookId = 0,
         lookUuid = java.util.UUID(0L, 0L),
         name = "preview",
-        palette = palette,
         rows = propertyAssignments.map {
             LookRowEntry(
                 target = null,
@@ -508,7 +500,6 @@ internal data class LookPreviewRowDto(
 @Serializable
 internal data class LookPreviewRequest(
     val propertyAssignments: List<LookPreviewRowDto> = emptyList(),
-    val palette: List<String> = emptyList(),
     val targets: List<CueTargetDto> = emptyList(),
 )
 
@@ -582,7 +573,6 @@ internal data class LookDetails(
     val notes: String? = null,
     val sortOrder: Int,
     val families: List<String>,
-    val palette: List<String> = emptyList(),
     val rows: List<LookRowDto> = emptyList(),
     val effects: List<LookEffectDto> = emptyList(),
     val layerCount: Int,
@@ -595,7 +585,6 @@ internal data class CreateLookRequest(
     val name: String,
     val notes: String? = null,
     val sortOrder: Int? = null,
-    val palette: List<String> = emptyList(),
     val rows: List<LookRowDto> = emptyList(),
     val effects: List<LookEffectDto> = emptyList(),
 )
@@ -652,8 +641,8 @@ private val lookJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = tru
  *
  * A layer references its Look through a real FK column, so this is one plain indexed query. Until
  * session 4 there was a second half — an exact-equality scan over opaque `value` text for rows
- * holding `ref:{uuid}` — inherited from the palette era and counted separately as `refRowCount`. It
- * retired with the grammar. The delete guard must keep seeing exactly what `republishForLookEdit`'s
+ * holding `ref:{uuid}` — inherited from the named-palette era and counted separately as
+ * `refRowCount`. It retired with the grammar. The delete guard must keep seeing exactly what `republishForLookEdit`'s
  * [activeCuesReferencingLook] sees, or a Look reported as "used by nothing" gets deleted out from
  * under a cue that still resolves through it; both are now the same single FK query.
  */
@@ -698,22 +687,25 @@ internal fun lookUsageFor(lookIds: Collection<Int>): Map<Int, LookUsage> {
 }
 
 /**
- * The value prefix a Look row may never start with.
+ * The value prefixes a Look row may never start with.
  *
- * Spelled out here rather than imported, because the module that used to own it — `fx/PaletteRef.kt`
- * — is gone, and the point of [validateLookRows]'s check is to survive exactly that.
+ * Spelled out here rather than imported, because the module that used to own `ref:` —
+ * `fx/PaletteRef.kt` — is gone, and the point of [validateLookRows]'s check is to survive exactly
+ * that. `tmpl:` is listed for the same reason ahead of time: `fx/TemplateColourSource.kt` owns that
+ * grammar today and this guard must not depend on it still existing tomorrow.
  */
-private const val LOOK_ROW_REFERENCE_PREFIX = "ref:"
+private val LOOK_ROW_REFERENCE_PREFIXES = listOf("ref:", "tmpl:")
 
 /**
  * Reject rows a Look must never hold. Returns the problem, or null when every row is acceptable.
  *
- * The `ref:` rejection is what keeps **Looks from nesting**, so resolution can never recurse, and it
- * **must outlive the grammar it names**. Nothing authors a `ref:` any more — the parser, the
- * resolver and every producer retired in session 4 — but this is a *write boundary*, and the value
- * it guards is free text a client supplies. It is deliberately an inlined shape check rather than a
- * call into a shared parser, so that deleting the last reader of the grammar cannot quietly delete
- * the guarantee `FU-LOOK-NESTED` rests on. `LookRoutesTest` pins it.
+ * The reference rejection is what keeps **Looks from nesting**, so resolution can never recurse, and
+ * it **must outlive the grammars it names**. Nothing authors a `ref:` any more — the parser, the
+ * resolver and every producer retired in session 4 — and `tmpl:` is legal only in an *effect
+ * parameter*, never in a value. But this is a *write boundary*, and the value it guards is free text
+ * a client supplies. It is deliberately an inlined shape check rather than a call into a shared
+ * parser, so that deleting the last reader of either grammar cannot quietly delete the guarantee
+ * `FU-LOOK-NESTED` rests on. `LookRoutesTest` pins it.
  */
 internal fun validateLookRows(rows: List<LookRowDto>): String? {
     for (row in rows) {
@@ -733,7 +725,7 @@ internal fun validateLookRows(rows: List<LookRowDto>): String? {
         }
         if (row.propertyName.isBlank()) return "Row property name must not be blank"
         if (row.value.isBlank()) return "Row value must not be blank"
-        if (row.value.trimStart().startsWith(LOOK_ROW_REFERENCE_PREFIX, ignoreCase = true)) {
+        if (LOOK_ROW_REFERENCE_PREFIXES.any { row.value.trimStart().startsWith(it, ignoreCase = true) }) {
             return "A look row must hold a literal, not a reference — looks do not nest"
         }
     }
@@ -883,7 +875,6 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
         notes = notes,
         sortOrder = sortOrder,
         families = derivedFamilies(state),
-        palette = palette,
         // Sorted in memory, not via `orderBy`: `derivedFamilies` above already iterates the
         // referrer collection, and Exposed refuses to order a SizedIterable once it is loaded.
         rows = rows

@@ -148,8 +148,6 @@ enum class CueType { STANDARD, MARKER }
 object DaoCues : IntIdTable("cues") {
     val name = varchar("name", 255)
     val project = reference("project_id", DaoProjects)
-    val palette = json<List<String>>("palette", Json)
-    val updateGlobalPalette = bool("update_global_palette").default(false)
     val cueStack = reference("cue_stack_id", DaoCueStacks)
     val sortOrder = integer("sort_order").default(0)
     val autoAdvance = bool("auto_advance").default(false)
@@ -187,8 +185,6 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
 
     var name by DaoCues.name
     var project by DaoProject referencedOn DaoCues.project
-    var palette by DaoCues.palette
-    var updateGlobalPalette by DaoCues.updateGlobalPalette
     var cueStack by DaoCueStack referencedOn DaoCues.cueStack
     var sortOrder by DaoCues.sortOrder
     var autoAdvance by DaoCues.autoAdvance

@@ -1,12 +1,11 @@
 # Cue Stacks Engineering Documentation
 
-This document describes the Cue Stack system — ordered containers for sequential cue playback with palette cascading, looping, and per-cue auto-advance and intensity envelope crossfades.
+This document describes the Cue Stack system — ordered containers for sequential cue playback with looping and per-cue auto-advance and intensity envelope crossfades.
 
 ## Overview
 
 A **Cue Stack** is a named, project-scoped entity that groups cues into an ordered sequence for theatre-style playback:
 - **Ordered cues** with `sortOrder` for sequential traversal
-- **Stack-level palette** that persists across cue transitions (cue palettes override when set)
 - **Looping** — wraps from last cue back to first (and vice versa)
 - **Per-cue auto-advance** — each cue can individually enable timed progression to the next cue
 - **Per-cue crossfade** — each cue can configure its own fade-in duration and easing curve
@@ -18,7 +17,6 @@ Key behaviours:
 - Activating a stack applies the first (or specified) cue's effects
 - Advancing steps through cues in sort order
 - Deactivating removes all effects tagged with the stack's ID
-- Stack palette cascading: cue palette replaces stack palette when set; stack palette persists when a cue has no palette
 
 ## Data Model
 
@@ -29,7 +27,6 @@ cue_stacks
 ├── id (auto-increment PK)
 ├── name (varchar 255)
 ├── project_id (FK → projects)
-├── palette (JSON: List<String>)
 ├── loop (boolean, default false)
 └── unique(project_id, name)
 
@@ -176,7 +173,7 @@ difference is at a non-looping boundary: `positionalCueId` returns null there, w
 
 | Method | Description |
 |--------|-------------|
-| `activateCueInStack(state, stackId, cueId, scope)` | Activate a cue within a stack (handles crossfade, palette, auto-advance) |
+| `activateCueInStack(state, stackId, cueId, scope)` | Activate a cue within a stack (handles crossfade and auto-advance) |
 | `advanceStack(state, stackId, direction, scope)` | Advance forward/backward respecting loop setting |
 | `goToCue(state, stackId, cueId, scope)` | Jump to a specific cue |
 | `deactivateStack(stackId)` | Remove all effects, cancel timers |
@@ -194,19 +191,15 @@ difference is at a non-looping boundary: `positionalCueId` returns null there, w
 1. Cancel any in-progress crossfade and auto-advance for this stack
 2. Snapshot outgoing effects (for crossfade) — effects where `cueStackId == stackId`
 3. If crossfading: leave outgoing effects in place; if snap-cut: remove them
-4. Merge cue palette into stack palette (cue palette replaces, or keep stack palette if cue has none)
-5. Apply cue's effects (presets + ad-hoc) tagged with both `cueId` and `cueStackId`
-6. If crossfading: start new effects at `intensityMultiplier = 0.0`, launch crossfade coroutine
-7. If this cue has auto-advance configured: start delay timer
+4. Apply cue's effects (presets + ad-hoc) tagged with both `cueId` and `cueStackId`
+5. If crossfading: start new effects at `intensityMultiplier = 0.0`, launch crossfade coroutine
+6. If this cue has auto-advance configured: start delay timer
 
-### Palette Resolution for Stack Cue Effects
-
-```kotlin
-paletteSupplier = { engine.getStackPalette(stackId) ?: engine.getPalette() }
-paletteVersionSupplier = { engine.getStackPaletteVersion(stackId) + engine.paletteVersion }
-```
-
-Falls back to global palette if no stack palette is set.
+A step "merge cue palette into stack palette" used to sit at 4, and the stack carried a positional
+colour list its cues inherited. That whole grammar is gone — an effect parameter names a colour
+template (`tmpl:{uuid}`) whose answer does not depend on which stack is running — so a stack now
+carries no colour state at all, and `removeEffectsForCueStackKeepPalette` folded back into
+`removeEffectsForCueStack`.
 
 ## Crossfade (Option B — Intensity Envelope)
 
@@ -296,9 +289,9 @@ Both this and `reorder` also call `FxEngine.repriorityCues`, since cue priority 
 
 ### DTOs
 
-- `NewCueStack` — name, palette, loop
+- `NewCueStack` — name, loop
 - `CueStackDetails` — full stack with ordered cues, activeCueId, canEdit, canDelete
-- `CueStackCueEntry` — id, name, sortOrder, paletteSize, presetCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, cueNumberAuto, notes, cueType
+- `CueStackCueEntry` — id, name, sortOrder, presetCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, cueNumberAuto, notes, cueType
 - `CueStackActivateResponse` — stackId, cueId, cueName, effectCount
 - `CueStackDeactivateResponse` — stackId, removedCount
 - `SortByNumberResponse` — updatedCues, pinnedCount, nullNumberCount
@@ -308,7 +301,7 @@ Both this and `reorder` also call `FxEngine.repriorityCues`, since cue priority 
 `POST /{stackId}/preview` answers "what would this cue look like?" — the channel values a cue
 *would* produce, with nothing published. It backs the Next GO stage view (lighting-react
 `docs/stage-vis-engineering.md` §"The fourth source: Next GO"): composing a cue in the browser
-would otherwise mean reimplementing specificity, HTP/LTP, palette resolution and move-in-dark
+would otherwise mean reimplementing specificity, HTP/LTP, template resolution and move-in-dark
 arming client-side.
 
 `routes/cuePreview.kt`, and it is reuse end to end:
@@ -321,9 +314,7 @@ arming client-side.
    crossfade progress lives in `cueFadeWeights`), so a cue caught mid-crossfade is previewed
    settled, which is what a preview wants.
 2. **Incoming rows** — `buildCombinedCueLayerRows`, the same builder `republishCueLayer` uses,
-   with the cue-scope palette a GO would use: `activateCueInStack` merges the cue's palette into
-   the *stack* palette and resolves refs against that, so a palette-less cue in a stack that has
-   a palette is previewed against the stack's palette rather than against nothing.
+   which is what makes the preview and the GO agree by construction rather than by inspection.
 3. **Compose** — a *fresh* `CueAssignmentResolver`. `resolve` is a pure function of its rows, so
    this cannot disturb `layerResolver`'s live state (`CuePreviewRouteTest` asserts that).
 4. **To channels** — `PropertyChannelWriter.resolve` per composed property, subnet 0 only,
@@ -417,7 +408,7 @@ The `fxState` WebSocket message includes `cueStackId` on each effect in `activeE
 ## Lux AI Integration
 
 Five tools:
-- `create_cue_stack` — Create with name, palette, loop
+- `create_cue_stack` — Create with name, loop
 - `activate_cue_stack` — Activate (optionally at specific cue)
 - `deactivate_cue_stack` — Deactivate
 - `advance_cue_stack` — Advance forward/backward

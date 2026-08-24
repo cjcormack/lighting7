@@ -96,8 +96,8 @@ class SyncStateBookkeepingTest {
         configureSync(projectId)
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
-            DaoCueStack.new { this.project = project; this.name = "Stack-1"; this.palette = emptyList() }
-            DaoCueStack.new { this.project = project; this.name = "Stack-2"; this.palette = emptyList() }
+            DaoCueStack.new { this.project = project; this.name = "Stack-1" }
+            DaoCueStack.new { this.project = project; this.name = "Stack-2" }
         }
 
         val result = runSync(projectId)
@@ -122,7 +122,7 @@ class SyncStateBookkeepingTest {
         configureSync(projectId)
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
-            DaoCueStack.new { this.project = project; this.name = "Stack-1"; this.palette = emptyList() }
+            DaoCueStack.new { this.project = project; this.name = "Stack-1" }
         }
         runSync(projectId)
         val before = fetchSyncStates(projectId)
@@ -139,7 +139,7 @@ class SyncStateBookkeepingTest {
         configureSync(projectId)
         val stackUuid = transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
-            DaoCueStack.new { this.project = project; this.name = "before"; this.palette = emptyList() }.uuid
+            DaoCueStack.new { this.project = project; this.name = "before" }.uuid
         }
         runSync(projectId)
         val before = fetchSyncStates(projectId).single { it.first.uuid == stackUuid }.second
@@ -164,7 +164,7 @@ class SyncStateBookkeepingTest {
         configureSync(projectId)
         val stackUuid = transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
-            DaoCueStack.new { this.project = project; this.name = "deleteMe"; this.palette = emptyList() }.uuid
+            DaoCueStack.new { this.project = project; this.name = "deleteMe" }.uuid
         }
         runSync(projectId)
         val initial = transaction(state.database) {

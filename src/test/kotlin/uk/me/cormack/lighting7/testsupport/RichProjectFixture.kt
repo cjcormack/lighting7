@@ -229,7 +229,6 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         name = "Warm Amber"
         notes = "act one wash"
         sortOrder = 3
-        palette = listOf("#ff8800")
     }
     DaoLookRow.new {
         look = boundLook; targetType = "fixture"; targetKey = "hex-1"
@@ -254,7 +253,6 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         name = "warm-pulse"
         notes = "warm pulse"
         sortOrder = 1
-        palette = listOf("#ff8800")
     }
     DaoLookEffect.new {
         look = effectsLook; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
@@ -305,22 +303,21 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
 
     // 2 cue stacks, 3 cues, with property assignments + ad-hoc + preset apps + triggers
     val stack1 = DaoCueStack.new {
-        this.project = project; name = "show-1"; palette = emptyList(); loop = false
+        this.project = project; name = "show-1"; loop = false
         type = CueStackType.STACK.name; sortOrder = 0
     }
     val stack2 = DaoCueStack.new {
-        this.project = project; name = "show-2"; palette = emptyList(); loop = true
+        this.project = project; name = "show-2"; loop = true
         type = CueStackType.STACK.name; sortOrder = 2
     }
     val cue1 = DaoCue.new {
         this.project = project; name = "open"; cueStack = stack1; sortOrder = 0
-        palette = listOf("#000000"); fadeDurationMs = 1000L
         // Every optional cue field set, so a copier that skips one is caught.
+        fadeDurationMs = 1000L
         cueNumber = "1.5"
         notes = "house to half, then go"
         cueType = CueType.STANDARD.name
         stomp = true
-        updateGlobalPalette = true
         autoAdvance = true
         autoAdvanceDelayMs = 2500L
         fadeCurve = "SINE_IN_OUT"
@@ -398,11 +395,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoCue.new {
         this.project = project; name = "build"; cueStack = stack1; sortOrder = 1
-        palette = emptyList()
     }
     DaoCue.new {
         this.project = project; name = "finale"; cueStack = stack2; sortOrder = 0
-        palette = emptyList()
         cueType = CueType.MARKER.name
     }
 
@@ -410,7 +405,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // sortOrder values above define show order.
     DaoCueStack.new {
         this.project = project; name = "intermission"; label = "intermission"
-        palette = emptyList(); loop = false; type = CueStackType.SEPARATOR.name; sortOrder = 1
+        loop = false; type = CueStackType.SEPARATOR.name; sortOrder = 1
     }
 
     // cue slot

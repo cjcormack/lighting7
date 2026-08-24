@@ -6,7 +6,7 @@ import kotlinx.coroutines.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
+import uk.me.cormack.lighting7.routes.createInstanceFromPreset
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.state.State
@@ -83,10 +83,6 @@ class CueTriggerManager(
      * [priority] is the cue-derived Layer 4 priority (see
      * [uk.me.cormack.lighting7.routes.cueDerivedPriority]). Timed preset fires produce Layer 4
      * rows at this priority so they compose consistently with the cue's apply-time rows.
-     *
-     * [cuePalette] is the cue's declared palette (parsed to [ExtendedColour]) or empty when the
-     * cue doesn't declare one. Combined with each preset's own palette and the global palette
-     * at fire time, see [PaletteCascade].
      */
     internal fun activateTimedEffectsForCue(
         cueId: Int,
@@ -95,7 +91,6 @@ class CueTriggerManager(
         cueData: uk.me.cormack.lighting7.routes.CueApplyData,
         timedAdHocEffects: List<CueAdHocEffectDto>,
         scope: CoroutineScope,
-        cuePalette: List<ExtendedColour> = emptyList(),
     ) {
         val timedLayers = cueData.layers.filter { it.enabled && it.isTimed }
         if (timedLayers.isEmpty() && timedAdHocEffects.isEmpty()) return
@@ -108,11 +103,6 @@ class CueTriggerManager(
         // run's set, which would make a re-applied cue skip its delays.
         val fired: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         firedTimedLooks[cueId] = fired
-
-        // Hoisted so recurring fires don't re-synchronise the global palette on every tick.
-        // The global palette only changes when the operator mutates it, and a palette edit
-        // will re-apply the cue anyway.
-        val baseCascade = PaletteCascade(cue = cuePalette, global = fxEngine.getPalette())
 
         // A timed layer contributes to Layer 4 by joining the cue's fired set and re-cooking, so
         // the published rows are always a single cook of "apply-time layers + whatever has fired".
@@ -137,7 +127,7 @@ class CueTriggerManager(
                 }
 
                 val localRows = uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue(
-                    state.show.fixtures, cueData, baseCascade,
+                    state.show.fixtures, cueData,
                 )
                 val cooked = CueComposer.cook(
                     fixtures = state.show.fixtures,
@@ -145,7 +135,6 @@ class CueTriggerManager(
                     priority = priority,
                     layers = cueData.layers,
                     localRows = localRows,
-                    cascade = baseCascade,
                     lookRegistry = state.show.lookRegistry,
                     templateRegistry = state.show.templateRegistry,
                     includeTimed = fired.toSet(),
@@ -359,8 +348,8 @@ class CueTriggerManager(
             resolveTargetForCue(state, CueTargetDto(target), effectSpec)
         } catch (_: Exception) { null } ?: return
 
-        val instance = createInstanceFromPresetForCue(
-            effectSpec, fxTarget, presetId = null, state = state, cueId = cueId,
+        val instance = createInstanceFromPreset(
+            effectSpec, fxTarget, presetId = null, state = state,
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
         )
@@ -407,9 +396,7 @@ class CueTriggerManager(
             resolveTargetForCue(state, toggleTarget, presetEffect)
         } catch (_: Exception) { null } ?: return
 
-        val instance = createInstanceFromPresetForCue(
-            presetEffect, fxTarget, null, state, cueId
-        )
+        val instance = createInstanceFromPreset(presetEffect, fxTarget, null, state)
         instance.cueId = cueId
         instance.cueStackId = cueStackId
 

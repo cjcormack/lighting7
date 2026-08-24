@@ -140,7 +140,6 @@ class ProjectExporter(private val state: State) {
                 CueStackJson(
                     uuid = s.uuid.toString(),
                     name = s.name,
-                    palette = s.palette,
                     loop = s.loop,
                     sortOrder = s.sortOrder,
                     type = s.type,
@@ -153,8 +152,6 @@ class ProjectExporter(private val state: State) {
                     uuid = c.uuid.toString(),
                     cueStackUuid = c.cueStack.uuid.toString(),
                     name = c.name,
-                    palette = c.palette,
-                    updateGlobalPalette = c.updateGlobalPalette,
                     sortOrder = c.sortOrder,
                     autoAdvance = c.autoAdvance,
                     autoAdvanceDelayMs = c.autoAdvanceDelayMs,
@@ -325,7 +322,6 @@ class ProjectExporter(private val state: State) {
                     name = l.name,
                     notes = l.notes,
                     sortOrder = l.sortOrder,
-                    palette = l.palette,
                     rows = rows,
                     effects = effects,
                 )

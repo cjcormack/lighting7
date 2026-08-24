@@ -82,7 +82,6 @@ class ProjectImporterReplaceTest {
             DaoCueStack.new {
                 this.project = p
                 this.name = "Doomed"
-                this.palette = emptyList()
             }.id.value
         }
 
@@ -99,7 +98,7 @@ class ProjectImporterReplaceTest {
         val newUuid = UUID.randomUUID().toString()
         Files.writeString(
             cueStacksDir.resolve("$newUuid.json"),
-            """{"loop":false,"name":"Fresh","palette":[],"uuid":"$newUuid"}""" + "\n",
+            """{"loop":false,"name":"Fresh","uuid":"$newUuid"}""" + "\n",
         )
 
         importer.replaceFromWorkingTree(projectId, exportDir)

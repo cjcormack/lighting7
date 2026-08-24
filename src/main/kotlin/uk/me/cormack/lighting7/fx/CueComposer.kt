@@ -209,7 +209,6 @@ internal object CueComposer {
         priority: Int,
         layers: List<CookLayer>,
         localRows: List<CueAssignmentResolver.Assignment>,
-        cascade: PaletteCascade = PaletteCascade.EMPTY,
         lookRegistry: LookRegistry? = null,
         templateRegistry: TemplateRegistry? = null,
         includeTimed: Set<Int> = emptySet(),
@@ -261,7 +260,7 @@ internal object CueComposer {
                 continue
             }
             val keys = HashMap<String, MutableSet<String>>()
-            applyLayer(fixtures, cueId, layer, index, content, cascade, acc, keys)
+            applyLayer(fixtures, cueId, layer, index, content, acc, keys)
             asserted.add(LayerAssertions(layer.layerId, layer.stomp, keys))
         }
 
@@ -418,7 +417,7 @@ internal object CueComposer {
         /** Rows in `sortOrder`, in the shape [applyLayer] consumes. */
         val rows: List<SourceRow>
 
-        /** A Look: literals, plus its own positional colour list as the cascade's narrowest scope. */
+        /** A Look: literal values and its own effects. */
         class OfLook(val look: LookSnapshot) : LayerContent {
             override val rows: List<SourceRow> = look.rows.map {
                 SourceRow(it.target, it.propertyName, it.value, it.elementKey)
@@ -470,7 +469,6 @@ internal object CueComposer {
         /** Rank among the contributing layers — see [CookWinner.index]. */
         layerIndex: Int,
         content: LayerContent,
-        baseCascade: PaletteCascade,
         acc: LinkedHashMap<Key, Contribution>,
         /**
          * Collects `targetKey → properties` for everything this layer actually asserted — after the
@@ -487,17 +485,6 @@ internal object CueComposer {
         }
         val blendMode = parseLayerBlendMode(layer.blendMode, layer.source.name, cueId)
         val amount = layer.amount.coerceIn(0.0, 1.0)
-
-        // The Look's own positional colour list is the most specific cascade scope, which is what
-        // `PaletteCascade.look` is (called `preset` until session 4 — the name lagged the merge).
-        // A Look row's literal may itself be "P1", which is why the cascade has to be threaded
-        // through here at all rather than resolved once per cue.
-        // A template has no positional colour list of its own — it is not a `PaletteCascade` scope —
-        // so a template layer composes against the cue's and the global one unchanged.
-        val effectivePalette = when (content) {
-            is LayerContent.OfLook -> baseCascade.copy(look = content.look.palette.toPaletteColours()).effective
-            is LayerContent.OfTemplate -> baseCascade.effective
-        }
 
         // Expand the layer's target set once. Null means "unrestricted"; non-empty means the layer
         // both *supplies* targets to deferred rows and *filters* bound ones — one meaning serving
@@ -587,7 +574,7 @@ internal object CueComposer {
             }
             val (category, override) = categoryInfo
             val incoming = resolved?.value
-                ?: CueAssignmentResolver.parseAssignmentValue(category, canonical, p.rawValue, effectivePalette)
+                ?: CueAssignmentResolver.parseAssignmentValue(category, canonical, p.rawValue)
             if (incoming == null) {
                 logger.warn(
                     "cue {}: {} '{}' — invalid value '{}' for {}.{} — skipping",

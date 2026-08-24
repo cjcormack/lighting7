@@ -93,7 +93,7 @@ import kotlin.io.path.isDirectory
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 6
+internal const val SUPPORTED_FORMAT_VERSION = 7
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -377,7 +377,7 @@ class ProjectImporter(private val state: State) {
 
     /**
      * Looks, with their rows and effects. Returns a uuid → DAO map because a cue *layer* references
-     * its Look through a real FK — unlike a palette, which was only ever named by a `ref:{uuid}`
+     * its Look through a real FK — unlike a named palette, which was only ever named by a `ref:{uuid}`
      * string inside an opaque `value` column and so needed no map.
      */
     private fun importLooks(dir: Path, project: DaoProject): Map<UUID, DaoLook> =
@@ -389,7 +389,6 @@ class ProjectImporter(private val state: State) {
                 name = l.name
                 notes = l.notes
                 sortOrder = l.sortOrder
-                palette = l.palette
                 this.uuid = uuid
             }
             l.rows.forEach { r ->
@@ -583,7 +582,6 @@ class ProjectImporter(private val state: State) {
             val dao = DaoCueStack.new {
                 name = s.name
                 this.project = project
-                palette = s.palette
                 loop = s.loop
                 sortOrder = s.sortOrder
                 type = s.type
@@ -607,7 +605,6 @@ class ProjectImporter(private val state: State) {
             } ?: DaoCueStack.new {
                 name = "Unsorted"
                 this.project = project
-                palette = emptyList()
                 loop = false
                 type = CueStackType.STACK.name
                 sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1
@@ -627,8 +624,6 @@ class ProjectImporter(private val state: State) {
         val dao = DaoCue.new {
             name = c.name
             this.project = project
-            palette = c.palette
-            updateGlobalPalette = c.updateGlobalPalette
             cueStack = stack
             sortOrder = c.sortOrder
             autoAdvance = c.autoAdvance
@@ -833,7 +828,6 @@ class ProjectImporter(private val state: State) {
                     this.project = project
                     name = e.label ?: "Separator"
                     label = e.label
-                    palette = emptyList()
                     loop = false
                     type = CueStackType.SEPARATOR.name
                     sortOrder = e.sortOrder

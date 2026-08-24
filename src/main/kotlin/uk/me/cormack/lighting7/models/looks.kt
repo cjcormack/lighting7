@@ -121,18 +121,10 @@ object DaoLooks : IntIdTable("looks") {
     val notes = text("notes").nullable()
     val sortOrder = integer("sort_order").default(0)
 
-    /**
-     * The **positional** colour list (`P1` / `P2` / `P*`), inherited from `DaoFxPresets.palette`.
-     * A third, unrelated thing historically also called "palette": it parameterises *effects*
-     * rather than describing a look, and it survives this merge untouched. Keeping the column here
-     * means [uk.me.cormack.lighting7.fx.PaletteCascade]'s most-specific scope becomes
-     * `look > cue > global` rather than being lost. See `docs/plans/completed/looks-and-layers-plan.md` §7.
-     */
-    val palette = json<List<String>>("palette", Json).default(emptyList())
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
-        // Scoped by project and name only. The old palette index included `type` (per-type banks
+        // Scoped by project and name only. The old named-palette index included `type` (per-type banks
         // were separate namespaces) and the preset index included `fixtureType`; a Look has
         // neither as identity — its families are derived and its editor hint is advisory — so
         // "Warm" is one Look per project, which is the whole point of the merge.
@@ -147,7 +139,6 @@ class DaoLook(id: EntityID<Int>) : IntEntity(id) {
     var name by DaoLooks.name
     var notes by DaoLooks.notes
     var sortOrder by DaoLooks.sortOrder
-    var palette by DaoLooks.palette
     var uuid by DaoLooks.uuid
     val rows by DaoLookRow referrersOn DaoLookRows.look
     val effects by DaoLookEffect referrersOn DaoLookEffects.look

@@ -54,8 +54,8 @@ enum class RecordSource {
 
     /**
      * The old `snapshot-from-live` behaviour: composed stage state (cue layer overlaid with the
-     * programmer) plus every running effect and the live palette. Captures everything on stage,
-     * including values no one in this session touched.
+     * programmer) plus every running effect. Captures everything on stage, including values no one
+     * in this session touched.
      */
     STAGE_SNAPSHOT,
 }
@@ -82,9 +82,9 @@ enum class RecordSkipReason {
     MASKED_OUT,
 
     /**
-     * Outside the request's fixture scope. Recording a palette from the *whole* programmer is
+     * Outside the request's fixture scope. Recording a **Look** from the *whole* programmer is
      * almost always wrong — "Warm Amber" would capture every head the programmer happens to hold —
-     * so the palette routes pass the operator's selection and everything else reports this.
+     * so the Look routes pass the operator's selection and everything else reports this.
      */
     OUT_OF_SCOPE,
 }
@@ -127,8 +127,6 @@ data class ProgrammerRecording(
      */
     val layers: List<CueLayerDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
-    /** The live palette — captured only by [RecordSource.STAGE_SNAPSHOT]. */
-    val palette: List<String>?,
     val groupRowsEmitted: Int,
     val skipped: List<RecordSkip>,
 )
@@ -346,7 +344,6 @@ internal fun collectProgrammerRecording(
                         targetInScope(fixtures, it.target, scope)
                 }
             } else emptyList(),
-            palette = captured.palette,
             groupRowsEmitted = rows.count { it.targetType == TargetRef.Group.TYPE },
             skipped = skipped,
             // A stage snapshot describes what is *on stage*, which is not the same as what the
@@ -387,10 +384,6 @@ internal fun collectProgrammerRecording(
         rows = collapsed.rows,
         layers = layers,
         adHocEffects = adHoc,
-        // TOUCHED/ALL record the programmer, and the programmer holds no palette. Leaving the
-        // cue's palette alone is the right default: recording a look shouldn't silently rewrite
-        // the colour list other cues in the stack inherit from.
-        palette = null,
         groupRowsEmitted = collapsed.groupRows,
         skipped = entrySkips + collapsed.skipped,
     )

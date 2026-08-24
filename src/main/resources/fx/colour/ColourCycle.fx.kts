@@ -8,8 +8,8 @@ compatibleProperties: [rgbColour]
 parameters:
   - name: colours
     type: colourList
-    default: "P1,P2,P3"
-    description: Comma-separated colours (supports palette refs like P1)
+    default: "#ff0000,#00ff00,#0000ff"
+    description: Comma-separated colours. Each entry is a literal (hex, name or extended) or a colour-template reference, tmpl:{uuid}
   - name: fadeRatio
     type: double
     default: "0.5"

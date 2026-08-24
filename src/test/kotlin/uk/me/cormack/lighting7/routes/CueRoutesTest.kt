@@ -199,7 +199,6 @@ class CueRoutesTest {
     fun `NewCue serialization round-trips with full data`() {
         val newCue = NewCue(
             name = "Test Cue",
-            palette = listOf("#ff0000", "#00ff00;w128", "#0000ff"),
             layers = listOf(
                 CueLayerDto(lookId = 1, targets = listOf(CueTargetDto("group", "front-wash"))),
             ),
@@ -226,7 +225,6 @@ class CueRoutesTest {
     @Test
     fun `NewCue defaults to empty collections`() {
         val newCue = NewCue(name = "Minimal Cue")
-        assertEquals(emptyList(), newCue.palette)
         assertEquals(emptyList(), newCue.layers)
         assertEquals(emptyList(), newCue.adHocEffects)
         assertEquals(emptyList(), newCue.propertyAssignments)
@@ -254,7 +252,6 @@ class CueRoutesTest {
         val details = CueDetails(
             id = 1,
             name = "Blue Wash",
-            palette = listOf("#0000ff"),
             layers = listOf(
                 CueLayerDto(
                     lookId = 5,
@@ -275,7 +272,6 @@ class CueRoutesTest {
         val details = CueDetails(
             id = 1,
             name = "Read Only",
-            palette = emptyList(),
             adHocEffects = emptyList(),
             canEdit = false,
             canDelete = false,
@@ -346,7 +342,6 @@ class CueRoutesTest {
     fun `complex cue with multiple layers and ad-hoc effects serializes correctly`() {
         val newCue = NewCue(
             name = "Full Show Look",
-            palette = listOf("#ff0000;w255", "#00ff00", "#0000ff;w128", "#ffffff"),
             layers = listOf(
                 CueLayerDto(
                     lookId = 1,
@@ -398,7 +393,6 @@ class CueRoutesTest {
         val serialized = json.encodeToString(newCue)
         val deserialized = json.decodeFromString<NewCue>(serialized)
         assertEquals(newCue, deserialized)
-        assertEquals(4, deserialized.palette.size)
         assertEquals(2, deserialized.layers.size)
         assertEquals(2, deserialized.adHocEffects.size)
         assertEquals(2, deserialized.layers[0].targets.size)

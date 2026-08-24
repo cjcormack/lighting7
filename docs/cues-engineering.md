@@ -11,20 +11,23 @@ This document describes the Cue system — named states built as an ordered stac
 ## Overview
 
 A **Cue** is a named, project-scoped entity that captures a complete lighting look:
-- **Colour palette** (list of extended colour strings) — isolated per-cue, not shared with the global palette
 - **Layers** — an ordered list of Looks to apply, each with its own targets, property mask, blend
   mode and amount. Looks are read fresh at apply time, so editing a Look moves every cue layering
   it. Later layers override earlier ones for the same fixture and property, whatever the attribute;
   the cue's own local values win over every layer.
 - **Ad-hoc effects** — manually applied effects belonging to no Look, stored as full inline effect definitions.
-- **`updateGlobalPalette`** — boolean flag; when true, applying the cue also sets the global palette (affecting ad-hoc effects and the PalettePanel).
+
+A cue used to carry a **positional colour list** too (`palette` + `updateGlobalPalette`), which its
+effects indexed as `P1` / `P2` / `P*` and which cascaded global → stack → cue. That whole grammar is
+gone: an effect parameter names a **colour template** instead (`tmpl:{uuid}`, see
+`fx/TemplateColourSource.kt`), which has one meaning wherever it is read and needs no per-cue scope.
 
 Key behaviours:
-- **Multiple concurrent cues**: Applying a cue adds it alongside other running cues (not replace). Each cue's effects resolve palette refs (P1, P2, etc.) against the cue's own palette.
+- **Multiple concurrent cues**: Applying a cue adds it alongside other running cues (not replace).
 - **Re-apply**: Applying a cue that is already running refreshes it (stops and re-starts its effects only).
 - **Replace all**: Apply with `?replaceAll=true` to stop all other running cues first.
 - **Stop**: Use the stop endpoint to remove a specific cue's effects without affecting others.
-- Create from current live FX/palette state
+- Create from the current live FX state
 - Duplicate within active project, copy to another project
 - Deleting a Look is blocked if any cue layer references it (`LOOK_IN_USE`), unless forced
 
@@ -36,9 +39,7 @@ Key behaviours:
 cues
 ├── id (auto-increment PK)
 ├── name (varchar 255)
-├── project_id (FK → projects)
-├── palette (JSON: List<String>)
-└── update_global_palette (boolean, default false)
+└── project_id (FK → projects)
 
 cue_layers
 ├── id (auto-increment PK)
@@ -89,7 +90,7 @@ remain unique per stack via the partial index `uq_cue_number_per_stack`.
 
 ### Key Design Decisions
 
-- **Separate child tables with FKs** rather than JSON columns for layers and ad-hoc effects. This provides referential integrity (FK from a layer to its Look), simpler queries for usage counts — the delete guard is a plain indexed FK query where the palette era could only scan opaque value text — and proper normalization.
+- **Separate child tables with FKs** rather than JSON columns for layers and ad-hoc effects. This provides referential integrity (FK from a layer to its Look), simpler queries for usage counts — the delete guard is a plain indexed FK query where the named-palette era could only scan opaque value text — and proper normalization.
 - **Targets stored as JSON** within `cue_layers` because each application has a small, variable-length list of targets that doesn't benefit from its own table.
 - **Parameters stored as JSON**, matching `cue_ad_hoc_effects` and `look_effects`.
 
@@ -107,7 +108,7 @@ All endpoints are scoped under `/api/rest/project/{projectId}/cues`.
 | POST | `/{projectId}/cues/{cueId}/copy` | Copy cue to another project |
 | POST | `/{projectId}/cues/{cueId}/apply` | Apply cue (current project only). Query param: `replaceAll=true` to stop all other cues first. |
 | POST | `/{projectId}/cues/{cueId}/stop` | Stop a running cue, removing its effects |
-| POST | `/{projectId}/cues/from-state` | Create cue from current FX/palette state |
+| POST | `/{projectId}/cues/from-state` | Create cue from the current FX state |
 
 Writing the *programmer* into a cue lives outside this namespace, under
 `/api/rest/programmer` — see [the composition model](lighting-composition-model.md#record--include--update):
@@ -130,35 +131,34 @@ triggers and timed effects the old route left to chance.
 ### Apply Semantics
 
 When a cue is applied:
-1. **Remove previous effects for this cue** — only effects tagged with this cue's ID are removed (allows other cues to keep running). If `replaceAll=true`, all effects tagged with any `cueId` are removed instead, and their per-cue palettes are cleaned up.
-2. **Set per-cue palette** — the cue's palette is stored in FxEngine's per-cue palette storage, isolated from the global palette. If `updateGlobalPalette` is true on the cue, the global palette is also updated.
-3. The layer stack is cooked to one contributor per (fixture, property), then each layer's effects are spawned **in layer order**
-4. Each ad-hoc effect is applied directly from its stored definition
-5. All new FxInstances are tagged with the cue's ID
-6. **Palette resolution**: Effects created from a cue use palette suppliers that resolve against the cue's palette first, falling back to the global palette if the cue has no palette set.
+1. **Remove previous effects for this cue** — only effects tagged with this cue's ID are removed (allows other cues to keep running). If `replaceAll=true`, all effects tagged with any `cueId` are removed instead.
+2. The layer stack is cooked to one contributor per (fixture, property), then each layer's effects are spawned **in layer order**
+3. Each ad-hoc effect is applied directly from its stored definition
+4. All new FxInstances are tagged with the cue's ID
 
 ### Stop Semantics
 
 When a cue is stopped via `POST /{cueId}/stop`:
 1. All effects tagged with the cue's ID are removed from FxEngine
-2. The cue's per-cue palette is cleaned up
-3. Other running cues are unaffected
+2. Other running cues are unaffected
 
-### Per-Cue Palette
+### Colour resolution
 
-FxEngine maintains per-cue palette storage (`ConcurrentHashMap<Int, CuePaletteEntry>`):
-- `setCuePalette(cueId, colours)` — stores palette for a cue with a version counter
-- `getCuePalette(cueId)` — returns the cue's palette (or null if not set)
-- `getCuePaletteVersion(cueId)` — returns the cue's palette version (for cache invalidation)
-- `removeCuePalette(cueId)` — removes the cue's palette (called on stop/re-apply)
+Every effect, wherever it is spawned from, gets the **same** colour source:
 
-Effects created from a cue use palette suppliers:
 ```kotlin
-paletteSupplier = { engine.getCuePalette(cueId) ?: engine.getPalette() }
-paletteVersionSupplier = { engine.getCuePaletteVersion(cueId) + engine.paletteVersion }
+resolveColourSource = templateColourSource(state.show.templateRegistry)
+colourSourceVersion = { state.show.templateRegistry.version }
 ```
 
-The version supplier sums both versions to ensure cache invalidation when either the cue palette or global palette (fallback case) changes.
+There were two `createInstanceFromPreset` variants until the positional list went — a cue-scoped one
+resolving `P1` against `getCuePalette(cueId) ?: getPalette()`, and a second one Include needed
+because that fallback silently reached the *global* list when the cue was not live. A `tmpl:`
+reference has one answer wherever it is read, so the fork had nothing left to be about and the two
+collapsed into one.
+
+**One invariant when adding a spawn site**: call `prewarmTemplateColours` on the request thread
+first. `TemplateRegistry.snapshot` falls back to a DB read, and the tick loop must never take one.
 
 ### From-State Capture
 
@@ -197,7 +197,6 @@ The `cues` table has two additional columns:
 | Behaviour | Standalone Cue | Stacked Cue |
 |-----------|---------------|-------------|
 | Apply/Stop | Via `apply_cue`/`stop_cue` | Via stack activate/advance/deactivate |
-| Palette | Per-cue palette in FxEngine | Stack palette (cue palette overrides) |
 | Multiple concurrent | Yes (independent) | Yes (via multiple active stacks) |
 | FxInstance tagging | `cueId` set, `cueStackId` null | Both `cueId` and `cueStackId` set |
 | Crossfade | None (snap-cut on re-apply) | Intensity envelope (if cue has fadeDurationMs) |
@@ -294,39 +293,42 @@ own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
 ## Lux AI Integration
 
 Three tools for the AI assistant:
-- `create_cue` — Create a named cue with a positional colour list, Look layers, ad-hoc effects, and optional `updateGlobalPalette` flag
+- `create_cue` — Create a named cue with Look layers and ad-hoc effects
 - `apply_cue` — Apply a saved cue by ID. Optional `replaceAll` parameter to stop all other running cues first.
 - `stop_cue` — Stop a running cue by ID, removing all its effects. Other running cues are unaffected.
 
 The `get_current_state` tool includes `cueId` on active effects and `cues` in its default include set, returning cue names and counts for the current project.
 
 The system prompt describes:
-- Multiple concurrent cues with isolated palettes
-- The `updateGlobalPalette` flag behaviour
+- Multiple concurrent cues, applied alongside one another
+- Colour templates, listed with their uuids under `templates`, and the `tmpl:{uuid}` grammar an
+  effect parameter uses to name one
 - Active effects display includes `cueId` for each effect
-- The distinction between global palette (ad-hoc effects) and per-cue palettes
 
-## Assignment values: two forms, not three
+## Assignment values: one form
 
-A `cue_property_assignments.value` (and its `look_rows` twin) holds one of:
+A `cue_property_assignments.value` (and its `look_rows` twin) holds a **literal**, in the canonical
+`CueAssignmentResolver.PropertyValue.serialize()` grammar — `"200"`, `"#rrggbb[;wN;aN;uvN]"`,
+`"pan,tilt"`. Nothing else.
 
-1. a **literal** in the canonical `CueAssignmentResolver.PropertyValue.serialize()` grammar — `"200"`,
-   `"#rrggbb[;wN;aN;uvN]"`, `"pan,tilt"`;
-2. a **positional palette ref** — `"P1"`, `"P2"`, `"P*"` — indexing the ordered colour list scoped
-   global → stack → cue (`PaletteCascade`), colour-only.
+Two other forms have been through here, and both retired for the same reason. `"ref:{paletteUuid}"`
+resolved per fixture against the `Palette` entity and **retired in session 4** of the
+looks-and-layers plan. The **positional ref** — `"P1"`, `"P2"`, `"P*"`, indexing an ordered colour
+list scoped global → stack → cue — went with the whole positional palette.
 
-There was a third: `"ref:{paletteUuid}"`, resolved per fixture against the `Palette` entity, and it
-was the form that survived an edit — changing the palette moved every live cue referencing it. It
-**retired in session 4** of the looks-and-layers plan. That capability did not go with it; it moved
-up a level, from a value to a **`DaoCueLayer`**, which names its Look through a real FK. The layer is
-strictly better for the job: an FK cannot be half-rewritten by an import, the delete guard is an
-indexed query rather than a scan over opaque text, and a `propertyMask` expresses "only this cue's
-colour comes from Warm" without needing a reference per row.
+Neither capability was lost; each moved up a level. A dependency on a *named look* is a
+**`DaoCueLayer`**, which names its Look through a real FK — an FK cannot be half-rewritten by an
+import, the delete guard is an indexed query rather than a scan over opaque text, and a
+`propertyMask` expresses "only this cue's colour comes from Warm" without a reference per row. A
+dependency on a *named colour* inside an **effect parameter** is `tmpl:{uuid}`, which is the one
+consumer with no layer to hang off.
 
-Two things that outlived the grammar, both deliberately. `validateLookRows` still rejects a
-`ref:`-shaped value at the Look write boundary — that rejection *is* the no-nesting guarantee, so it
-survives as an inlined shape check with its own local constant. And `StateMigrations` still folds
-`ref:` rows from a v4 database into layers; that `removePrefix("ref:")` is the upgrade path.
+Three things outlived those grammars, all deliberately. `validateLookRows` rejects both a `ref:`- and
+a `tmpl:`-shaped value at the Look write boundary — that rejection *is* the no-nesting guarantee, so
+it survives as an inlined shape check with its own local constant.
+`CueAssignmentResolver.parseAssignmentValue` returns **null** for a `tmpl:`-shaped value rather than
+letting `parseExtendedColour` answer white. And `StateMigrations` still folds `ref:` rows from a v4
+database into layers; that `removePrefix("ref:")` is the upgrade path.
 
 Note what the reference got right, because a layer inherits it: it stored the Look's **uuid** rather
 than its int id, since int primary keys never appear in the sync export and are re-minted on import.

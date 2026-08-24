@@ -175,7 +175,6 @@ data class CueSlotDetails(
     val itemType: String,
     val itemId: Int,
     val itemName: String,
-    val palette: List<String>,
 )
 
 @Serializable
@@ -208,7 +207,6 @@ private fun DaoCueSlot.toDetails(): CueSlotDetails {
             itemType = "cue",
             itemId = resolvedCue.id.value,
             itemName = resolvedCue.name,
-            palette = resolvedCue.palette,
         )
         resolvedStack != null -> CueSlotDetails(
             id = id.value,
@@ -217,7 +215,6 @@ private fun DaoCueSlot.toDetails(): CueSlotDetails {
             itemType = "cue_stack",
             itemId = resolvedStack.id.value,
             itemName = resolvedStack.name,
-            palette = resolvedStack.palette,
         )
         else -> error("CueSlot ${id.value} has neither cue nor cueStack set")
     }

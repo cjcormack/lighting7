@@ -128,7 +128,7 @@ silently miss heads. Omitting the mask, or naming all four groups, means "everyt
 - **Source** — `TOUCHED` (default) takes property entries whose winning slot is an operator edit;
   `ALL` also takes untouched slots, which today means unpark hand-downs (channel-shaped by
   construction, so `touched = false` only ever appears in the sideband); `STAGE_SNAPSHOT` captures
-  composed stage state plus running effects and the live palette. Recording *from the programmer*
+  composed stage state plus running effects. Recording *from the programmer*
   rather than from composed state is the point: what you busked is what records.
 - **Sideband** — a slot whose channel a property covers is lifted into a property row; one with no
   backing property cannot be (cue assignments have no channel form) and is reported as a skip
@@ -154,10 +154,10 @@ operator's programmer out from under them when the cue stops.
 
 - **Mode A** — with an include target, only entries that *changed since Include* are written. The
   INCLUDE slot survives underneath the operator's write, so the comparison needs no extra state.
-  This is also what makes Update reference-preserving before palette refs exist: a cue row stored
-  as `"P1"` is parsed to a colour at include time, and because the operator didn't touch it, it is
-  not written back — the ref survives. Writing everything back would harden every ref in the cue on
-  the first Update after any Include.
+  It is also what keeps a cue row in the *exact form it was authored*: a row stored as `"red"` is
+  parsed to a colour at include time, and because the operator didn't touch it, it is not written
+  back — so it stays `"red"` rather than being re-serialised as `"#ff0000"`. Writing everything back
+  would rewrite every untouched row in the cue on the first Update after any Include.
 - **Mode B** — with nothing included, the server answers with the cues the programmer is currently
   overriding, grouped by stack, and the client confirms which to write. Keys with no cue underneath
   are bucketed separately ("record a new cue instead"). A commit writes each cue only the keys it
@@ -302,7 +302,9 @@ that computed its own ΔE would promise what the rig does not do.
 A template's property vocabulary is **closed** (`TemplateProperty`), which is where "a template
 cannot carry a gobo" lives: slotted roles are per-model, so they are refused by name and live in a
 recorded Look, which names a head and can hold anything that head has. A template also holds no
-effects at all (D7) and no positional colour list — it is not a `PaletteCascade` scope.
+effects at all (D7). It has always held no positional colour list either — and now nothing does,
+because that grammar is gone: an effect parameter names a colour template rather than indexing a
+list, so a template *is* the named colour instead of being one more scope that holds several.
 
 A Look's rows hold **literals only**. A row holding a `ref:`-shaped value is rejected at the write
 boundary, so **Looks do not nest** and resolution can never recurse. The `ref:` *value grammar* itself
@@ -312,7 +314,7 @@ because it is the guarantee rather than a consequence of one.
 There is deliberately **no stored attribute type**. Which families a Look touches is derived from
 its rows via `maskGroupForProperty`, so the library banks by family the way the per-type palette
 banks used to, and a Look can grow from one family to several with no migration. One consequence
-worth noting: the old `PaletteTypeMismatch` diagnosis is gone, because "this is a POSITION palette
+worth noting: the old `PaletteTypeMismatch` diagnosis is gone, because "this is a POSITION bank
 and that is a COLOUR property" is no longer a coherent complaint — a Look spanning both is entirely
 legitimate. A reference that finds nothing now reports the symptom (no entry for this fixture and
 property) rather than a cause that no longer exists.
@@ -412,7 +414,7 @@ programmer keys. Publishing the cue layer first would transmit stale programmer 
 a frame.
 
 Finding the affected cues is now an **indexed FK query** on `cue_layers.look_id`, which is the
-structural win of the merge: the palette era could only scan opaque `value` text for an exact string
+structural win of the merge: the named-palette era could only scan opaque `value` text for an exact string
 match.
 
 A reference whose Look stops covering it keeps its last resolved value rather than vanishing; a
@@ -456,15 +458,37 @@ One detail survives from the old implementation: the category for a row's proper
 pan/tilt pair with no `@FixtureProperty` of its own. Looking the name up directly answers null and
 reports every POSITION row as unresolvable.
 
-### Relationship to the positional palette
+### What replaced the positional palette
 
-The older ordered-colour-list palette — referenced positionally as `P1` / `P2` / `P*`, scoped
-global → stack → cue by `PaletteCascade` — is unchanged and still supported. It is a third,
-unrelated thing that was also called "palette": it parameterises *effects* rather than describing a
-look. A Look carries its own colour list, so the cascade's most-specific scope is now
-`look > cue > global`. The two grammars cannot collide (`^P(\d+)$` never matches `ref:…`), and a
-Look row's literal may itself be a positional ref, which is why the cook step threads the cascade
-through exactly as the old builders did.
+There used to be an ordered-colour-list palette here, referenced positionally as `P1` / `P2` / `P*`
+and scoped global → stack → cue by a `PaletteCascade`. It was a third, unrelated thing also called
+"palette": it parameterised *effects* rather than describing a look, and Looks, cues and stacks each
+carried a column for it.
+
+**It is gone**, and what replaced it inverts the arrangement. An effect's colour parameter names a
+**colour template** by uuid — `tmpl:{uuid}`, `fx/TemplateColourSource.kt` — so the colour has an
+identity and a name instead of a slot number, and retuning the template moves every running effect
+that follows it. There is no cascade, because there is nothing left to scope: a reference has one
+answer wherever it is read.
+
+Two rules that fall out of that, both enforced rather than conventional:
+
+- **A reference is legal only in an effect parameter.** A value — a cue row, a Look row, a programmer
+  entry — is a literal, and a *value's* dependency mechanism is a layer.
+  `parseAssignmentValue` returns null for a `tmpl:`-shaped value and `validateLookRows` rejects one,
+  beside its `ref:` rejection.
+- **Only a generic colour template can be named.** An effect's output is one colour applied to every
+  head it targets, so `TemplateResolver.resolveColourGeneric` resolves the intent without a fixture —
+  as though the head were RGBW, which makes it identical to the same template applied as a layer on
+  any RGBW/RGBWA head. A per-fixture template holds no single colour and is refused.
+
+  **The cost lands on heads with no white emitter, and it is sharper than "one emitter short".**
+  Under `extract` the neutral is taken out of RGB at resolve time, and `applyExtendedChannel` then
+  drops the white byte on a head that has no white property — so that head gets the reduced RGB with
+  nothing compensating, reading dimmer *and* more saturated than the hex asked for (`#FF9D4A` lands
+  as `#B55300`). That is worse than the RGB-only reading, not equal to it. It is the accepted trade
+  for matching the layer exactly on the common head; resolving `RGB_ONLY` there instead is a one-line
+  change that inverts which class of head is exact.
 
 ## Layer 5 — Baseline / defaults
 
@@ -555,7 +579,7 @@ Operators edit cues through an active editing session, managed by `cueEdit.*` so
 ### Lifecycle
 
 - `cueEdit.beginEdit { cueId, mode }` — server snapshots the cue's Layer 4 property assignments (the pre-edit baseline) and stores it for the session. In Live mode the cue is activated on stage for the session (if not already active). In Blind mode the session does not toggle stage activation.
-- `cueEdit.setChannel / setProperty / setPalette / addPresetApplication / addAdHocEffect / clearAssignment` — edits auto-persist into the cue. In Live mode the server also performs the transient stage-side write for instant feedback. In Blind mode there is no transient write, but edits still propagate to stage naturally via Layer 4 re-composition if the cue is already active via the playback stack (see below).
+- `cueEdit.setChannel / setProperty / addPresetApplication / addAdHocEffect / clearAssignment` — edits auto-persist into the cue. In Live mode the server also performs the transient stage-side write for instant feedback. In Blind mode there is no transient write, but edits still propagate to stage naturally via Layer 4 re-composition if the cue is already active via the playback stack (see below).
 - `cueEdit.discardChanges { cueId }` — restores the cue's Layer 4 property assignments from the session-start snapshot. Stage reflects the restored state on the next composition pass if the cue is active (in either mode). Equivalent in spirit to EOS `Release` / grandMA `Clear`.
 - `cueEdit.setMode { cueId, mode }` — transitions mid-session. Live → Blind drops the session-owned stage activation but keeps the session open; if the cue is also active via the stack it remains on stage. Blind → Live activates the cue on stage for the session if it is not already active.
 - `cueEdit.endEdit { cueId }` — closes the session. In Live mode, drops the session-owned stage activation (the cue stays on stage if the stack is also running it). In Blind mode, is a stage no-op. The snapshot is dropped.

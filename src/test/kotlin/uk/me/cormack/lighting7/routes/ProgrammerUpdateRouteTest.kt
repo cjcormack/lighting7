@@ -58,18 +58,21 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `Mode A leaves an untouched palette-ref row as a ref`() = testApplication {
+    fun `Mode A leaves an untouched row in the exact form it was written`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
-        // `P1` is a positional palette reference resolved at compose time. Include parses it to
-        // a concrete colour; if Update wrote every entry back, that ref would be silently
-        // hardened into a literal on the very first Update after any Include. Writing back only
-        // what changed is what makes Update reference-preserving before Session 4's real refs.
+        // A *named* colour is the probe, because Include resolves it to a `Color` and Update would
+        // serialise that back as `#ff0000`. So the row surviving as `red` is proof that Update
+        // writes back only what changed rather than re-serialising every entry it included.
+        //
+        // This used to test the same property with `P1`, a positional palette reference. That
+        // grammar is gone; the property it was protecting is not, and it matters more now — a cue
+        // row is the one place a value must stay exactly as authored.
         val cueId = createCue(
-            client, "ref-look",
+            client, "named-look",
             rows = listOf(
-                assignment("fixture", "hex-1", "rgbColour", "P1"),
+                assignment("fixture", "hex-1", "rgbColour", "red"),
                 assignment("fixture", "hex-1", "dimmer", "100"),
             ),
         )
@@ -79,7 +82,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
 
         val rows = client.cueRowsByProperty(cueId)
-        assertEquals("P1", rows.getValue("rgbColour"), "an untouched ref must survive Update")
+        assertEquals("red", rows.getValue("rgbColour"), "an untouched row must survive Update verbatim")
         assertEquals("255", rows.getValue("dimmer"))
     }
 

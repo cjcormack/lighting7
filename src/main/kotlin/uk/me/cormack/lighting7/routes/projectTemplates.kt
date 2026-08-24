@@ -21,10 +21,13 @@ import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
 import uk.me.cormack.lighting7.fx.parseTemplateIntent
+import uk.me.cormack.lighting7.fx.serializeTemplateColourRef
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
+import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
+import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.models.DaoTemplateRows
@@ -225,8 +228,13 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     ?: return@transaction TemplateDeleteOutcome.NotFound
                 if (template.project.id != project.id) return@transaction TemplateDeleteOutcome.NotFound
                 val usage = templateUsage(template.id.value)
-                if (usage.layerCount > 0 && !resource.force) {
-                    return@transaction TemplateDeleteOutcome.InUse(usage)
+                // Two kinds of usage, and both must block. A layer *applies* the template; an
+                // effect parameter *references* it by uuid (`tmpl:{uuid}`) — and deleting out from
+                // under one of those is worse than out from under a layer, because the effect keeps
+                // running and its colour silently falls back to white.
+                val fxRefs = templateFxReferenceCount(template.uuid)
+                if ((usage.layerCount > 0 || fxRefs > 0) && !resource.force) {
+                    return@transaction TemplateDeleteOutcome.InUse(usage, fxRefs)
                 }
                 // No DB-level ON DELETE CASCADE — SQLite does not enforce cascades without a
                 // per-connection pragma, so children go first, explicitly.
@@ -243,11 +251,13 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 is TemplateDeleteOutcome.InUse -> call.respond(
                     HttpStatusCode.Conflict,
                     TemplateInUseResponse(
-                        error = "This template is still applied by ${outcome.usage.describe()}",
+                        error = "This template is still in use by " +
+                            describeTemplateUse(outcome.usage, outcome.fxReferenceCount),
                         code = CODE_TEMPLATE_IN_USE,
                         layerCount = outcome.usage.layerCount,
                         cueIds = outcome.usage.cueIds,
                         cueNames = outcome.usage.cueNames,
+                        fxReferenceCount = outcome.fxReferenceCount,
                     ),
                 )
                 is TemplateDeleteOutcome.Deleted -> {
@@ -404,6 +414,8 @@ internal data class TemplateInUseResponse(
     val layerCount: Int,
     val cueIds: List<Int>,
     val cueNames: List<String>,
+    /** Effect parameters holding a `tmpl:{uuid}` reference to this template. */
+    val fxReferenceCount: Int = 0,
 )
 
 @Serializable
@@ -491,7 +503,7 @@ private sealed interface TemplateWriteOutcome {
 
 private sealed interface TemplateDeleteOutcome {
     data object NotFound : TemplateDeleteOutcome
-    data class InUse(val usage: TemplateUsage) : TemplateDeleteOutcome
+    data class InUse(val usage: TemplateUsage, val fxReferenceCount: Int) : TemplateDeleteOutcome
     data object Deleted : TemplateDeleteOutcome
 }
 
@@ -566,6 +578,43 @@ internal data class TemplateUsage(
         cueNames.size == 1 -> "1 layer in ${cueNames.first()}"
         else -> "$layerCount layers across ${cueNames.size} cues"
     }
+}
+
+/**
+ * How many **effect parameters** reference this template by uuid.
+ *
+ * Deliberately not folded into [TemplateUsage]: that is computed on every library read, and this is
+ * a scan of two JSON columns rather than an indexed FK lookup. Delete is rare; listing is not.
+ *
+ * The scan is over the whole show's ad-hoc and Look effects rather than a `LIKE` on the JSON text,
+ * because the stored form is a serialised `Map<String, String>` and a substring match on it would
+ * also hit a parameter whose *name* happened to contain the uuid. Effect counts are in the hundreds.
+ *
+ * `fx_definitions.parameters` is **not** scanned: it holds a definition's schema *defaults*, which
+ * seed new effects rather than driving running ones. A default naming a deleted template produces
+ * one white effect the next time someone adds it, not a change to anything on stage.
+ *
+ * Must be called inside a transaction.
+ */
+internal fun templateFxReferenceCount(templateUuid: java.util.UUID): Int {
+    val ref = serializeTemplateColourRef(templateUuid)
+    fun Map<String, String>.holdsRef() = values.any { value ->
+        value.split(",").any { it.trim().equals(ref, ignoreCase = true) }
+    }
+    val adHoc = DaoCueAdHocEffect.all().count { it.parameters.holdsRef() }
+    val look = DaoLookEffect.all().count { it.parameters.holdsRef() }
+    return adHoc + look
+}
+
+/** Phrase both kinds of usage for the 409 body. */
+private fun describeTemplateUse(usage: TemplateUsage, fxReferenceCount: Int): String {
+    val parts = buildList {
+        if (usage.layerCount > 0) add(usage.describe())
+        if (fxReferenceCount > 0) {
+            add(if (fxReferenceCount == 1) "1 effect parameter" else "$fxReferenceCount effect parameters")
+        }
+    }
+    return if (parts.isEmpty()) "nothing" else parts.joinToString(" and ")
 }
 
 /** Must be called inside a transaction. */

@@ -7,38 +7,6 @@ import java.awt.Color
 import java.util.UUID
 
 /**
- * Scoped palette cascade for resolving positional colour refs (`"P1"`, `"P2"`, …) in Layer 4
- * assignment values. [effective] picks the most specific scope with a non-empty palette:
- * [look] > [cue] > [global]. All empty → positional refs fall through to the static colour
- * parser (invalid hex → white).
- *
- * This is the **positional** ordered colour list — a third, unrelated thing that was also once
- * called a palette, and the only thing the word means now. It survived the looks-and-layers merge
- * untouched; see `docs/lighting-composition-model.md` §"Relationship to the positional palette".
- *
- * [look] was called `preset` until session 4. Only the name changed: `CueComposer.cook` has
- * populated it from a Look's own `palette` column since session 1, which is what keeps the
- * most-specific scope alive now that FX presets are gone. A cue's own rows leave it empty; a row
- * coming from a layer fills it in with that layer's Look's list.
- */
-data class PaletteCascade(
-    val look: List<ExtendedColour> = emptyList(),
-    val cue: List<ExtendedColour> = emptyList(),
-    val global: List<ExtendedColour> = emptyList(),
-) {
-    val effective: List<ExtendedColour>
-        get() = when {
-            look.isNotEmpty() -> look
-            cue.isNotEmpty() -> cue
-            else -> global
-        }
-
-    companion object {
-        val EMPTY = PaletteCascade()
-    }
-}
-
-/**
  * Cue-layer composition resolver — merges [CuePropertyAssignment] rows from active cues
  * into a per-(target, property) value stream that [LayerResolver] consumes.
  *
@@ -143,9 +111,11 @@ class CueAssignmentResolver {
          * - `propertyName == "position"` (case-insensitive): `"pan,tilt"` (each `0..255`) →
          *   [PropertyValue.Position]. This matches the `createFixtureTargetForCue` special case.
          * - [PropertyCategory.COLOUR]: hex / named / extended string consumed by
-         *   [resolveColour] → [PropertyValue.Colour]. Palette refs (`"P1"`, `"P2"`, …) are
-         *   resolved against [palette] when non-empty; an empty palette falls through to the
-         *   static colour parser (`"P1"` → white). See [PaletteCascade] for the scope rules.
+         *   [parseExtendedColour] → [PropertyValue.Colour]. A **template reference**
+         *   (`tmpl:{uuid}`) is refused here and returns null: an assignment value is a literal,
+         *   and a dependency on a template is expressed by a *layer*. Letting it through would
+         *   hand [parseExtendedColour] an unparseable string, which answers white — the same
+         *   silent failure the retired positional-palette grammar had when its list was empty.
          * - [PropertyCategory.SETTING] / [PropertyCategory.OTHER]: `"0".."255"` → [PropertyValue.Setting].
          * - Every other category (intensity-like and axis sliders): `"0".."255"` →
          *   [PropertyValue.Slider].
@@ -157,7 +127,6 @@ class CueAssignmentResolver {
             category: PropertyCategory,
             propertyName: String,
             value: String,
-            palette: List<ExtendedColour> = emptyList(),
         ): PropertyValue? {
             val trimmed = value.trim()
             if (propertyName.equals("position", ignoreCase = true)) {
@@ -168,7 +137,10 @@ class CueAssignmentResolver {
                 return PropertyValue.Position(pan, tilt)
             }
             return when (category) {
-                PropertyCategory.COLOUR -> runCatching { PropertyValue.Colour(resolveColour(trimmed, palette)) }.getOrNull()
+                PropertyCategory.COLOUR -> {
+                    if (isTemplateColourRef(trimmed)) null
+                    else runCatching { PropertyValue.Colour(parseExtendedColour(trimmed)) }.getOrNull()
+                }
                 // Wheel-like roles read as discrete selections. Which arm a category lands
                 // in is now only a labelling choice: PropertyChannelWriter resolves both
                 // Setting and Slider through the same single-byte-channel path, precisely

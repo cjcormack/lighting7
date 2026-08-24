@@ -40,7 +40,6 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         val stack = DaoCueStack.new {
             this.project = project
             this.name = "shared"
-            this.palette = emptyList()
         }
         val rows = listOf(
             uk.me.cormack.lighting7.sync.ConflictRow(
@@ -189,7 +188,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         val stackUuid = transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val stack = DaoCueStack.new {
-                this.project = project; this.name = "shared"; this.palette = emptyList()
+                this.project = project; this.name = "shared"
             }
             val rows = listOf(
                 uk.me.cormack.lighting7.sync.ConflictRow(
@@ -240,7 +239,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         val stackUuid = transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val stack = DaoCueStack.new {
-                this.project = project; this.name = "shared"; this.palette = emptyList()
+                this.project = project; this.name = "shared"
             }
             val rows = listOf(
                 uk.me.cormack.lighting7.sync.ConflictRow(
@@ -294,7 +293,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val stack = DaoCueStack.new {
-                this.project = project; this.name = "shared"; this.palette = emptyList()
+                this.project = project; this.name = "shared"
             }
             ConflictSession.open(
                 project = project,

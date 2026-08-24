@@ -22,7 +22,6 @@ enum class CueStackType { STACK, SEPARATOR }
 object DaoCueStacks : IntIdTable("cue_stacks") {
     val name = varchar("name", 255)
     val project = reference("project_id", DaoProjects)
-    val palette = json<List<String>>("palette", Json)
     val loop = bool("loop").default(false)
     /** Position within the project's ordered stack list (the show order). */
     val sortOrder = integer("sort_order").default(0)
@@ -42,7 +41,6 @@ class DaoCueStack(id: EntityID<Int>) : IntEntity(id) {
 
     var name by DaoCueStacks.name
     var project by DaoProject referencedOn DaoCueStacks.project
-    var palette by DaoCueStacks.palette
     var loop by DaoCueStacks.loop
     var sortOrder by DaoCueStacks.sortOrder
     var type by DaoCueStacks.type

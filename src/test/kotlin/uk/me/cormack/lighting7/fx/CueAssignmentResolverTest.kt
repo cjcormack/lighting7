@@ -503,50 +503,24 @@ class CueAssignmentResolverTest {
     }
 
     @Test
-    fun `parseAssignmentValue - palette ref resolves against supplied palette`() {
-        val palette = listOf(
-            ExtendedColour(Color(10, 20, 30)),
-            ExtendedColour(Color(40, 50, 60)),
-        )
+    fun `parseAssignmentValue - a template reference is refused rather than read as white`() {
+        // The point of the refusal. `tmpl:` is legal in an *effect parameter* and nowhere else, and
+        // an assignment value is a literal. Without the guard `parseExtendedColour` would take this
+        // unrecognised string and answer white — the exact silent failure the retired positional
+        // grammar had when its list was empty.
         val v = CueAssignmentResolver.parseAssignmentValue(
-            PropertyCategory.COLOUR, "rgbColour", "P2", palette,
+            PropertyCategory.COLOUR, "rgbColour", "tmpl:2f1c8a3e-0000-4000-8000-000000000001",
         )
-        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
-        assertEquals(Color(40, 50, 60), v.value.color)
+        assertNull(v, "a template reference in a value must be skipped with a warn, not resolved")
     }
 
     @Test
-    fun `parseAssignmentValue - palette ref with empty palette falls through to white`() {
-        // P1 isn't a valid hex or named colour, so parseExtendedColour returns white.
-        val v = CueAssignmentResolver.parseAssignmentValue(
-            PropertyCategory.COLOUR, "rgbColour", "P1",
-        )
+    fun `parseAssignmentValue - an unparseable colour still reads as white`() {
+        // Unchanged behaviour, pinned beside the refusal above so the contrast is visible: only the
+        // reference *shape* is rejected; ordinary junk keeps the loud-white fallback.
+        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", "P1")
         assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
         assertEquals(Color.WHITE, v.value.color)
-    }
-
-    @Test
-    fun `parseAssignmentValue - hex value ignores supplied palette`() {
-        val palette = listOf(ExtendedColour(Color(10, 20, 30)))
-        val v = CueAssignmentResolver.parseAssignmentValue(
-            PropertyCategory.COLOUR, "rgbColour", "#00FF00", palette,
-        )
-        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
-        assertEquals(Color(0, 255, 0), v.value.color)
-    }
-
-    @Test
-    fun `parseAssignmentValue - palette ref wraps modulo palette size`() {
-        val palette = listOf(
-            ExtendedColour(Color(10, 20, 30)),
-            ExtendedColour(Color(40, 50, 60)),
-        )
-        // P3 on a 2-entry palette → (3-1) mod 2 = 0 → first entry.
-        val v = CueAssignmentResolver.parseAssignmentValue(
-            PropertyCategory.COLOUR, "rgbColour", "P3", palette,
-        )
-        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
-        assertEquals(Color(10, 20, 30), v.value.color)
     }
 
     @Test

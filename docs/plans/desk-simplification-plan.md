@@ -630,8 +630,11 @@ colour, resolved per head, with the resolution visible before you save.
 
 **Non-goals.** No per-property blend ([`FU-LOOK-PERPROP-BLEND`](followups.md#fu-look-perprop-blend)).
 No positional-list conversion
-([`FU-PAL-POSITIONAL-CONVERSION`](followups.md#fu-pal-positional-conversion)). "Palette" continues to
-mean exactly one thing — the positional ordered colour list FX parameters index as `P1`/`P2`.
+([`FU-PAL-POSITIONAL-CONVERSION`](followups.md#fu-pal-positional-conversion)) — for this session.
+"Palette" continued to mean exactly one thing here (the positional ordered colour list FX parameters
+index as `P1`/`P2`) and then, in the follow-on change, stopped meaning anything: that list was
+**deleted**, and an effect parameter now names a colour template (`tmpl:{uuid}`) instead. The
+follow-up is closed done-differently; see its Completed entry.
 
 **Done when.** One "Amber Key" is applied to an LED bar, a MAC Aura and a CMY profile in the same
 cue and each looks amber; retuning it moves every layer that tracks it; and a beam template says out
@@ -677,11 +680,10 @@ finish all three families.
 - New, from Session 3: the wheel-snap ΔE shown in the editor and the value actually written at cook
   must come from **one** implementation. Two would drift, and the editor's whole job here is to
   promise what the rig will do.
-- **A live bug, found while scoping the Run/Show merge and worth fixing whatever happens to it.**
-  There are two copies of `PaletteBar` and they disagree: Run's resolves gel names through
-  `resolveColourToHex`, Show's assigns the stored string straight to `background`. So the same cue's
-  palette swatches render differently in the two views, and a gel-named colour is simply wrong in
-  one of them. The merge deletes one copy; until then, fix the duplication.
+- ~~**A live bug, found while scoping the Run/Show merge.**~~ **Moot.** There were two copies of
+  `PaletteBar` disagreeing on whether they resolved gel names, so the same cue's swatches rendered
+  differently in the two views. Session 2b de-duplicated them into `CuePaletteBar`, and the
+  positional colour list they drew is now gone outright — so is the component.
 - **Stale documentation of an affordance that no longer exists.** Four places — `RunPropsPane`,
   `ShowHeader`, `App.tsx` and `show-mode-engineering.md` — still describe an "Edit Cue" button that
   jumps from Run to the cue editor. It is gone, so today there is *no* route from a cue in Run to

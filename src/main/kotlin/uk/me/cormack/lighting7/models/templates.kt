@@ -33,9 +33,12 @@ import uk.me.cormack.lighting7.fx.AssignmentHealth
  * - **No effects.** D7: effects live in a Look or on a cue, never on a layer — and a template is
  *   the thing a layer tracks. `POST /looks/{id}/absorb-effects` remains the way a running effect
  *   joins a library entity.
- * - **No `palette`.** The positional `P1`/`P2` colour list is a
- *   [uk.me.cormack.lighting7.fx.PaletteCascade] scope (`look > cue > global`); a template is not a
- *   cascade scope, and giving it a column would invent a fourth.
+ * - **No positional colour list.** There used to be one on every cue, stack and Look — the `P1` /
+ *   `P2` grammar FX parameters indexed, cascading `look > cue > global` — and a template
+ *   deliberately did not join it. That whole grammar is now gone, and the inverse arrangement is
+ *   what replaced it: an effect parameter names a *template*
+ *   ([uk.me.cormack.lighting7.fx.templateColourSource]), so a template is the colour rather than a
+ *   scope that holds a list of them.
  * - **No stored family.** Which family a template is in is *derived* from its rows, exactly as a
  *   Look's `families` are, and validated to be **exactly one** at the write boundary. A declared
  *   column would be a second source of truth for something the rows already say.

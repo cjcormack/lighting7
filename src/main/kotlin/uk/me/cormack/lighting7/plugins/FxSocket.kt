@@ -87,8 +87,6 @@ data class FxStateOutMessage(
     val bpm: Double,
     val isClockRunning: Boolean,
     val activeEffects: List<FxEffectState>,
-    val palette: List<String> = emptyList(),
-    val stackPalettes: Map<Int, List<String>> = emptyMap(),
 ) : FxOutMessage()
 
 @Serializable
@@ -248,9 +246,5 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
         bpm = engine.masterClock.bpm.value,
         isClockRunning = engine.masterClock.isRunning.value,
         activeEffects = effectStates,
-        palette = engine.getPalette().map { it.toSerializedString() },
-        stackPalettes = engine.getAllStackPalettes().mapValues { (_, colours) ->
-            colours.map { it.toSerializedString() }
-        },
     )
 }

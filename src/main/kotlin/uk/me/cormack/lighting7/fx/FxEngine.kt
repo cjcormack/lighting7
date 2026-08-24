@@ -477,103 +477,6 @@ class FxEngine(
         }
     }
 
-    // --- Palette ---
-
-    private val _palette = mutableListOf(
-        ExtendedColour.fromColor(Color.RED),
-        ExtendedColour.fromColor(Color.GREEN),
-        ExtendedColour.fromColor(Color.BLUE),
-    )
-
-    /** Version counter incremented on every palette change, for caching in palette-aware effects. */
-    @Volatile
-    var paletteVersion: Long = 0L
-        private set
-
-    private val _paletteFlow = MutableSharedFlow<List<ExtendedColour>>(replay = 1, extraBufferCapacity = 1)
-
-    /** Flow of palette updates for WebSocket broadcasting */
-    val paletteFlow: SharedFlow<List<ExtendedColour>> = _paletteFlow.asSharedFlow()
-
-    /** Get a thread-safe copy of the current palette. */
-    fun getPalette(): List<ExtendedColour> = synchronized(_palette) { _palette.toList() }
-
-    /** Replace the entire palette. */
-    fun setPalette(colours: List<ExtendedColour>) {
-        synchronized(_palette) {
-            _palette.clear()
-            _palette.addAll(colours)
-            paletteVersion++
-        }
-        emitPaletteUpdate()
-    }
-
-    /** Update a single palette slot by index. */
-    fun setPaletteColour(index: Int, colour: ExtendedColour) {
-        synchronized(_palette) {
-            if (index in _palette.indices) {
-                _palette[index] = colour
-                paletteVersion++
-            }
-        }
-        emitPaletteUpdate()
-    }
-
-    /** Append a colour to the palette. */
-    fun addPaletteColour(colour: ExtendedColour) {
-        synchronized(_palette) {
-            _palette.add(colour)
-            paletteVersion++
-        }
-        emitPaletteUpdate()
-    }
-
-    /** Remove a colour from the palette by index. */
-    fun removePaletteColour(index: Int) {
-        synchronized(_palette) {
-            if (index in _palette.indices) {
-                _palette.removeAt(index)
-                paletteVersion++
-            }
-        }
-        emitPaletteUpdate()
-    }
-
-    private fun emitPaletteUpdate() {
-        _paletteFlow.tryEmit(getPalette())
-    }
-
-    private val _stackPaletteFlow = MutableSharedFlow<Map<Int, List<ExtendedColour>>>(replay = 1, extraBufferCapacity = 1)
-
-    /** Flow of stack palette updates for WebSocket broadcasting */
-    val stackPaletteFlow: SharedFlow<Map<Int, List<ExtendedColour>>> = _stackPaletteFlow.asSharedFlow()
-
-    private fun emitStackPaletteUpdate() {
-        _stackPaletteFlow.tryEmit(getAllStackPalettes())
-    }
-
-    // --- Per-Cue Palettes ---
-
-    private data class CuePaletteEntry(
-        val colours: List<ExtendedColour>,
-        val version: Long
-    )
-
-    private val cuePalettes = ConcurrentHashMap<Int, CuePaletteEntry>()
-    private val cuePaletteVersionCounter = AtomicLong(0)
-
-    fun setCuePalette(cueId: Int, colours: List<ExtendedColour>) {
-        cuePalettes[cueId] = CuePaletteEntry(colours, cuePaletteVersionCounter.incrementAndGet())
-    }
-
-    fun getCuePalette(cueId: Int): List<ExtendedColour>? = cuePalettes[cueId]?.colours
-
-    fun getCuePaletteVersion(cueId: Int): Long = cuePalettes[cueId]?.version ?: 0L
-
-    fun removeCuePalette(cueId: Int) {
-        cuePalettes.remove(cueId)
-    }
-
     // --- Per-Cue Layer 4 Assignments ---
     //
     // Tracks the property assignments contributed by each currently-active cue. All writes go
@@ -689,8 +592,8 @@ class FxEngine(
      * **Crossfade weights are deliberately left alone**, and that is the whole reason this exists
      * rather than a loop over [setCueAssignments]. That function's `weight` defaults to 1.0 and
      * *clears* the cue's [cueFadeWeights] entry, so using it here would snap any in-flight
-     * crossfade on an affected cue to fully-in. A palette edit touches every cue that references
-     * the palette at once, which makes that a likely accident rather than a theoretical one.
+     * crossfade on an affected cue to fully-in. A Look edit touches every cue that layers it at
+     * once, which makes that a likely accident rather than a theoretical one.
      *
      * Cues absent from [cueAssignments] are skipped: a cue that stopped being live between the
      * caller's scan and this call has nothing to republish.
@@ -1618,37 +1521,17 @@ class FxEngine(
             SettingTarget(key.targetKey, key.propertyName)
     }
 
-    // --- Per-Stack Palettes ---
-
-    private val stackPalettes = ConcurrentHashMap<Int, CuePaletteEntry>()
-    private val stackPaletteVersionCounter = AtomicLong(0)
-
-    fun setStackPalette(stackId: Int, colours: List<ExtendedColour>) {
-        stackPalettes[stackId] = CuePaletteEntry(colours, stackPaletteVersionCounter.incrementAndGet())
-        emitStackPaletteUpdate()
-    }
-
-    fun getStackPalette(stackId: Int): List<ExtendedColour>? = stackPalettes[stackId]?.colours
-
-    /** Get a snapshot of all active stack palettes keyed by stack ID. */
-    fun getAllStackPalettes(): Map<Int, List<ExtendedColour>> =
-        stackPalettes.mapValues { (_, entry) -> entry.colours }
-
-    fun getStackPaletteVersion(stackId: Int): Long = stackPalettes[stackId]?.version ?: 0L
-
-    fun removeStackPalette(stackId: Int) {
-        stackPalettes.remove(stackId)
-        emitStackPaletteUpdate()
-    }
-
     /**
-     * Remove all effects that belong to a specific cue stack, preserving the stack palette.
-     * Used during cue transitions within a stack where the palette should carry over.
+     * Remove all effects that belong to a specific cue stack.
+     *
+     * Used both for a cue transition within a stack and for fully deactivating one. There used to
+     * be two functions here because a stack carried a positional colour list that had to survive a
+     * transition but not a deactivation; with that gone the two callers want the same thing.
      *
      * @param stackId The cue stack ID whose effects should be removed
      * @return Number of effects removed
      */
-    fun removeEffectsForCueStackKeepPalette(stackId: Int): Int {
+    fun removeEffectsForCueStack(stackId: Int): Int {
         val toRemove = activeEffects.values.filter { it.cueStackId == stackId }
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
@@ -1661,19 +1544,6 @@ class FxEngine(
             emitStateUpdate()
         }
         return toRemove.size
-    }
-
-    /**
-     * Remove all effects that belong to a specific cue stack and clean up its palette.
-     * Used when fully deactivating a stack.
-     *
-     * @param stackId The cue stack ID whose effects should be removed
-     * @return Number of effects removed
-     */
-    fun removeEffectsForCueStack(stackId: Int): Int {
-        val count = removeEffectsForCueStackKeepPalette(stackId)
-        removeStackPalette(stackId)
-        return count
     }
 
     /**
@@ -1720,8 +1590,6 @@ class FxEngine(
         speedMasters.start(scope)
         provenanceScope = scope
 
-        // Emit initial palette so new WebSocket subscribers get it immediately
-        emitPaletteUpdate()
         // Seed the provenance replay so subscribers connecting before any layer event get
         // a (usually empty) snapshot instead of nothing.
         emitProvenanceUpdate()
@@ -2142,7 +2010,6 @@ class FxEngine(
             resetUncoveredProperties(toRemove)
             emitStateUpdate()
         }
-        removeCuePalette(cueId)
         removeCueAssignments(cueId)
         return toRemove.size
     }

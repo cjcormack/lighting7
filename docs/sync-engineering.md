@@ -194,6 +194,12 @@ also cuts the other way, and session 3 proved it: bumping the DTO to 6 while `SU
 made the importer **refuse its own export**, which surfaced as every clone and round-trip test failing
 with an `ImportError`. Move both, or neither.
 
+**v7 is the worked example of a removed field.** The positional colour list went: `palette` left
+`looks/`, `cues/` and `cueStacks/`, and `updateGlobalPalette` left `cues/`. `minReader` stayed at
+**5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
+colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
+install refuse a v7 repo rather than silently write those fields back on its next push.
+
 ### Version 6 — templates as their own entity
 
 **v6 is the worked example of a one-directional break.** Templates got their own tables, so the

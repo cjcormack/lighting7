@@ -57,12 +57,10 @@ class CueComposerTest {
     private fun look(
         name: String,
         vararg rows: LookRowEntry,
-        palette: List<String> = emptyList(),
     ): LookSnapshot = LookSnapshot(
         lookId = name.hashCode(),
         lookUuid = UUID.nameUUIDFromBytes(name.toByteArray()),
         name = name,
-        palette = palette,
         rows = rows.toList(),
         effects = emptyList(),
     )
@@ -119,8 +117,7 @@ class CueComposerTest {
         registry: LookRegistry,
         layers: List<CookLayer>,
         localRows: List<CueAssignmentResolver.Assignment> = emptyList(),
-        cascade: PaletteCascade = PaletteCascade.EMPTY,
-    ) = cookFull(fixtures, registry, layers, localRows, cascade).rows
+    ) = cookFull(fixtures, registry, layers, localRows).rows
 
     /** As [cook], but the whole [CookResult] — for the tests that assert on stomp suppression. */
     private fun cookFull(
@@ -128,14 +125,12 @@ class CueComposerTest {
         registry: LookRegistry,
         layers: List<CookLayer>,
         localRows: List<CueAssignmentResolver.Assignment> = emptyList(),
-        cascade: PaletteCascade = PaletteCascade.EMPTY,
     ) = CueComposer.cook(
         fixtures = fixtures,
         cueId = cueId,
         priority = priority,
         layers = layers,
         localRows = localRows,
-        cascade = cascade,
         lookRegistry = registry,
     )
 
@@ -557,38 +552,6 @@ class CueComposerTest {
         assertEquals(150u.toUByte(), sliderAt(rows, "hex-2"))
     }
 
-    // ─── The cascade ────────────────────────────────────────────────────
-
-    @Test
-    fun `a Look's own colour list is the most specific palette scope`() {
-        val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look(
-            "A",
-            lookRow(propertyName = "rgbColour", value = "P1"),
-            palette = listOf("#00ff00"),
-        )
-        val rows = cook(
-            fixtures,
-            registryOf(fixtures, a),
-            listOf(layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1")))),
-            cascade = PaletteCascade(cue = listOf(ExtendedColour(Color.RED)), global = listOf(ExtendedColour(Color.BLUE))),
-        )
-        assertEquals(Color(0, 255, 0), colourAt(rows, "hex-1").color, "the Look's list beats cue and global")
-    }
-
-    @Test
-    fun `a Look with no colour list falls through to the cue scope`() {
-        val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "rgbColour", value = "P1"))
-        val rows = cook(
-            fixtures,
-            registryOf(fixtures, a),
-            listOf(layer(a, 0, targets = listOf(CueTargetDto("fixture", "hex-1")))),
-            cascade = PaletteCascade(cue = listOf(ExtendedColour(Color.RED)), global = listOf(ExtendedColour(Color.BLUE))),
-        )
-        assertEquals(Color.RED, colourAt(rows, "hex-1").color)
-    }
-
     // ─── Timed layers ───────────────────────────────────────────────────
 
     @Test
@@ -606,12 +569,12 @@ class CueComposerTest {
         val registry = registryOf(fixtures, base, timed)
 
         val beforeFire = CueComposer.cook(
-            fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
+            fixtures, cueId, priority, layers, emptyList(), registry,
         ).rows
         assertEquals(100u.toUByte(), sliderAt(beforeFire, "hex-1"))
 
         val afterFire = CueComposer.cook(
-            fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
+            fixtures, cueId, priority, layers, emptyList(), registry,
             includeTimed = setOf(timed.lookId),
         ).rows
         assertEquals(255u.toUByte(), sliderAt(afterFire, "hex-1"))
@@ -635,7 +598,7 @@ class CueComposerTest {
         val registry = registryOf(fixtures, same)
 
         val afterFirstFire = CueComposer.cook(
-            fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
+            fixtures, cueId, priority, layers, emptyList(), registry,
             includeTimed = setOf(first.layerId),
         ).rows
         assertEquals(
@@ -645,7 +608,7 @@ class CueComposerTest {
         )
 
         val afterBoth = CueComposer.cook(
-            fixtures, cueId, priority, layers, emptyList(), PaletteCascade.EMPTY, registry,
+            fixtures, cueId, priority, layers, emptyList(), registry,
             includeTimed = setOf(first.layerId, second.layerId),
         ).rows
         assertEquals(200u.toUByte(), sliderAt(afterBoth, "hex-1"))
@@ -660,7 +623,6 @@ class CueComposerTest {
             lookId = 55,
             lookUuid = UUID.nameUUIDFromBytes("muted".toByteArray()),
             name = "Muted",
-            palette = emptyList(),
             rows = emptyList(),
             effects = listOf(
                 LookEffectEntry(

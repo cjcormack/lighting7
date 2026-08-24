@@ -17,13 +17,15 @@ enum class EffectSource {
  * Factory function that creates an [Effect] from string parameters.
  *
  * @param params Effect-specific parameters as string key-value pairs
- * @param paletteSupplier Optional supplier for current palette colours (for palette-aware effects)
- * @param paletteVersionSupplier Optional supplier for palette version counter (for caching)
+ * @param resolveColourSource Optional resolver for a colour parameter that *names* a colour rather
+ *        than stating one — a `tmpl:{uuid}` template reference. See [templateColourSource].
+ * @param colourSourceVersion Optional version counter, bumped when a referenced template is edited,
+ *        so a running effect re-resolves without being rebuilt.
  */
 typealias EffectFactory = (
     params: Map<String, String>,
-    paletteSupplier: (() -> List<ExtendedColour>)?,
-    paletteVersionSupplier: (() -> Long)?,
+    resolveColourSource: ((String) -> ExtendedColour?)?,
+    colourSourceVersion: (() -> Long)?,
 ) -> Effect
 
 /**
@@ -148,12 +150,12 @@ class FxRegistry {
     fun createEffect(
         effectType: String,
         params: Map<String, String> = emptyMap(),
-        paletteSupplier: (() -> List<ExtendedColour>)? = null,
-        paletteVersionSupplier: (() -> Long)? = null,
+        resolveColourSource: ((String) -> ExtendedColour?)? = null,
+        colourSourceVersion: (() -> Long)? = null,
     ): Effect {
         val registration = getRegistration(effectType)
             ?: throw IllegalArgumentException("Unknown effect type: $effectType")
-        return registration.factory(params, paletteSupplier, paletteVersionSupplier)
+        return registration.factory(params, resolveColourSource, colourSourceVersion)
     }
 
     /**

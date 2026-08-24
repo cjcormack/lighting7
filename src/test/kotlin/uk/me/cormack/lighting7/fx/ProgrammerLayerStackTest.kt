@@ -71,7 +71,6 @@ class ProgrammerLayerStackTest {
             lookId = name.hashCode(),
             lookUuid = uuid,
             name = name,
-            palette = emptyList(),
             rows = listOf(
                 LookRowEntry(target = null, propertyName = "dimmer", value = dimmer.toString()),
             ),
@@ -85,7 +84,6 @@ class ProgrammerLayerStackTest {
         lookId = 0,
         lookUuid = UUID(0L, 0L),
         name = "preview",
-        palette = emptyList(),
         rows = listOf(
             LookRowEntry(target = null, propertyName = "dimmer", value = dimmer.toString()),
         ),

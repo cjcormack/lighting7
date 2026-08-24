@@ -371,13 +371,13 @@ class CueFlattenRouteTest : RouteIntegrationTest() {
         val project = DaoProject.findById(projectId)!!
         val stack = DaoCueStack.new {
             this.project = project
-            name = "stack-${System.nanoTime()}"; palette = emptyList(); loop = false
+            name = "stack-${System.nanoTime()}"; loop = false
             type = CueStackType.STACK.name; sortOrder = 0
         }
         val cue = DaoCue.new {
             this.project = project
             name = "cue"; cueStack = stack; sortOrder = 0
-            palette = emptyList(); cueType = CueType.STANDARD.name
+            cueType = CueType.STANDARD.name
         }
         DaoCueLayer.new {
             this.cue = cue

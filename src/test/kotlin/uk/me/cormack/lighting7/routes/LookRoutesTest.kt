@@ -47,7 +47,6 @@ class LookRoutesTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = "dim-50",
                     notes = "dimmer at 50%",
-                    palette = listOf("#ff8800"),
                     rows = listOf(
                         LookRowDto(
                             targetType = "fixture", targetKey = "hex-1",
@@ -67,7 +66,6 @@ class LookRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.Created, createResp.status, createResp.bodyAsText())
         val created = createResp.body<LookDetails>()
         assertEquals("dim-50", created.name)
-        assertEquals(listOf("#ff8800"), created.palette)
         assertEquals("128", created.rows.single().value)
         assertEquals(750L, created.rows.single().fadeDurationMs)
         assertEquals("Pulse", created.effects.single().effectType)

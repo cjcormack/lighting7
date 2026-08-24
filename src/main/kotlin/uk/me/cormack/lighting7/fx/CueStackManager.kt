@@ -53,8 +53,7 @@ data class CueRunState(
 /**
  * Manages runtime state for active cue stacks.
  *
- * Tracks which cue is active in each stack, maintains stack-level palettes
- * (which persist across cue transitions), and handles auto-advance timers.
+ * Tracks which cue is active in each stack and handles auto-advance timers.
  *
  * Supports Layer 4 property-assignment crossfades: when a cue has `fadeDurationMs`
  * configured, its outgoing and incoming Layer 4 assignments crossfade using per-cue
@@ -116,11 +115,10 @@ class CueStackManager(
      * Activate a cue within a stack.
      *
      * 1. Cancel any in-flight crossfade and remove outgoing effects (effects always snap)
-     * 2. Merge the cue's palette into the stack palette
-     * 3. Apply the cue's effects (tagged with both cueId and cueStackId) and Layer 4
+     * 2. Apply the cue's effects (tagged with both cueId and cueStackId) and Layer 4
      *    assignments (at weight 0 if crossfading, 1 otherwise)
-     * 4. Start Layer 4 crossfade coroutine if configured
-     * 5. Start auto-advance timer if configured
+     * 3. Start Layer 4 crossfade coroutine if configured
+     * 4. Start auto-advance timer if configured
      */
     fun activateCueInStack(
         state: State,
@@ -147,15 +145,12 @@ class CueStackManager(
 
             val sd = StackData(
                 id = stack.id.value,
-                palette = stack.palette,
                 loop = stack.loop,
             )
 
             val cd = CueApplyData(
                 cueId = cue.id.value,
                 cueName = cue.name,
-                palette = cue.palette,
-                updateGlobalPalette = cue.updateGlobalPalette,
                 adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
                 // Load-bearing: `cookEffects` and `cook` below both read `cueData.layers`, so
                 // omitting this makes every Look layer inert on the stack GO path — the primary
@@ -199,7 +194,7 @@ class CueStackManager(
 
         val fadeDurationMs = cueData.fadeDurationMs ?: 0L
         // Governs Layer 4 assignments only — effects always snap (see
-        // `removeEffectsForCueStackKeepPalette` below).
+        // `removeEffectsForCueStack` below).
         val useCrossfade = fadeDurationMs > 0 && outgoingCueId != null
 
         // Deactivate triggers for the outgoing cue (stop recurring triggers, etc.)
@@ -212,23 +207,10 @@ class CueStackManager(
             }
         }
 
-        // Outgoing effects always snap off, regardless of crossfade. Keeps the stack palette
-        // (it carries over between cues).
-        fxEngine.removeEffectsForCueStackKeepPalette(stackId)
+        // Outgoing effects always snap off, regardless of crossfade.
+        fxEngine.removeEffectsForCueStack(stackId)
 
-        // 2. Merge cue palette into stack palette
-        if (cueData.palette.isNotEmpty()) {
-            fxEngine.setStackPalette(stackId, cueData.palette.toPaletteColours())
-        } else if (fxEngine.getStackPalette(stackId) == null && stackData.palette.isNotEmpty()) {
-            fxEngine.setStackPalette(stackId, stackData.palette.toPaletteColours())
-        }
-
-        // Also update global palette if the cue requests it
-        if (cueData.updateGlobalPalette && cueData.palette.isNotEmpty()) {
-            fxEngine.setPalette(cueData.palette.toPaletteColours())
-        }
-
-        // 3. Apply cue effects with stack palette resolution
+        // 2. Apply cue effects
         var effectCount = 0
 
         val (immediateAdHoc, timedAdHoc) = cueData.adHocEffects.partition {
@@ -245,8 +227,8 @@ class CueStackManager(
                 resolveTargetForCue(state, CueTargetDto(target), effectSpec)
             } catch (_: Exception) { null } ?: continue
 
-            val instance = createInstanceForStack(
-                effectSpec, fxTarget, presetId = null, state = state, stackId = stackId,
+            val instance = createInstanceFromPreset(
+                effectSpec, fxTarget, presetId = null, state = state,
                 overrideSpeedMasterUuid = layer.speedMasterUuid,
                 overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
             )
@@ -284,9 +266,7 @@ class CueStackManager(
                 resolveTargetForCue(state, target, presetEffectDto)
             } catch (_: Exception) { null } ?: continue
 
-            val instance = createInstanceForStack(
-                presetEffectDto, fxTarget, null, state, stackId
-            )
+            val instance = createInstanceFromPreset(presetEffectDto, fxTarget, null, state)
             instance.cueId = cueData.cueId
             instance.cueStackId = stackId
             fxEngine.addEffect(instance)
@@ -296,22 +276,17 @@ class CueStackManager(
         // Apply Layer 4 for the incoming cue. Under crossfade the incoming starts at weight 0
         // atomically with the insert; `runCrossfade` ticks it up from there. Stomp runs off
         // the same assignments so HTP/LTP and stomp overlap agree.
-        val stackCascade = PaletteCascade(
-            cue = fxEngine.getStackPalette(stackId) ?: emptyList(),
-            global = fxEngine.getPalette(),
-        )
         // Cook the layer stack with the cue's local rows on top. Note this path previously called
         // `buildCueAssignmentsForCue` *alone*, so an immediate preset's property assignments never
         // reached Layer 4 on a stack GO — unlike `applyCue`, which concatenated both. Routing both
         // paths through `cook` fixes that asymmetry.
-        val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, stackCascade)
+        val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData)
         val cooked = CueComposer.cook(
             fixtures = state.show.fixtures,
             cueId = cueData.cueId,
             priority = cueDerivedPriority(cueData),
             layers = cueData.layers,
             localRows = localRows,
-            cascade = stackCascade,
             lookRegistry = state.show.lookRegistry,
             templateRegistry = state.show.templateRegistry,
         )
@@ -384,10 +359,6 @@ class CueStackManager(
                 cueData = cueData,
                 timedAdHocEffects = timedAdHoc,
                 scope = scope,
-                // Stack cues merge their own palette into the stack palette (see step 2), so
-                // the stack palette is the authoritative cue-scope palette for timed preset
-                // palette-ref resolution. Falls through to global inside the build call.
-                cuePalette = fxEngine.getStackPalette(stackId) ?: emptyList(),
             )
         }
 
@@ -845,68 +816,12 @@ class CueStackManager(
 
     private data class StackData(
         val id: Int,
-        val palette: List<String>,
         val loop: Boolean,
     )
 
-    /**
-     * Create an FxInstance for a stack cue, using the stack palette for resolution.
-     */
-    private fun createInstanceForStack(
-        presetEffect: LookEffectSpec,
-        fxTarget: FxTarget,
-        presetId: Int?,
-        state: State,
-        stackId: Int,
-        /** Per-cue-application override; null falls through to the preset effect's own master. */
-        overrideSpeedMasterUuid: java.util.UUID? = null,
-        overrideRateSpeedMasterUuid: java.util.UUID? = null,
-    ): FxInstance {
-        val engine = state.show.fxEngine
-        val effect = state.show.fxRegistry.createEffect(
-            presetEffect.effectType,
-            presetEffect.parameters,
-            paletteSupplier = { engine.getStackPalette(stackId) ?: engine.getPalette() },
-            paletteVersionSupplier = { engine.getStackPaletteVersion(stackId) + engine.paletteVersion },
-        )
-        val timing = FxTiming(presetEffect.beatDivision)
-        val blendMode = try {
-            BlendMode.valueOf(presetEffect.blendMode)
-        } catch (_: Exception) {
-            BlendMode.OVERRIDE
-        }
-        val distribution = try {
-            uk.me.cormack.lighting7.fx.group.DistributionStrategy.fromName(presetEffect.distribution)
-        } catch (_: Exception) {
-            uk.me.cormack.lighting7.fx.group.DistributionStrategy.LINEAR
-        }
-        val elementMode = try {
-            presetEffect.elementMode?.let { ElementMode.valueOf(it) } ?: ElementMode.PER_FIXTURE
-        } catch (_: Exception) {
-            ElementMode.PER_FIXTURE
-        }
-        val elementFilter = try {
-            presetEffect.elementFilter?.let { ElementFilter.fromName(it) } ?: ElementFilter.ALL
-        } catch (_: Exception) {
-            ElementFilter.ALL
-        }
-
-        // Propagate timing source from the effect's registration
-        val registration = state.show.fxRegistry.getRegistration(presetEffect.effectType)
-        val timingSource = registration?.timingSource ?: TimingSource.BEAT
-
-        return FxInstance(effect, fxTarget, timing, blendMode).apply {
-            this.presetId = presetId
-            phaseOffset = presetEffect.phaseOffset
-            distributionStrategy = distribution
-            this.elementMode = elementMode
-            this.elementFilter = elementFilter
-            this.timingSource = timingSource
-            presetEffect.stepTiming?.let { this.stepTiming = it }
-            speedMasterUuid = overrideSpeedMasterUuid
-                ?: speedMasterUuidOrNull(presetEffect.speedMasterUuid)
-            rateSpeedMasterUuid = overrideRateSpeedMasterUuid
-                ?: speedMasterUuidOrNull(presetEffect.rateSpeedMasterUuid)
-        }
-    }
+    // `createInstanceForStack` stood here. It was `createInstanceFromPreset` with a `stackId`
+    // parameter, which existed only to resolve `P1` against the stack's positional colour list.
+    // With that list gone the two bodies were identical — and this copy had lost the
+    // `prewarmTemplateColours` call the shared one makes, so a stack GO left the first `tmpl:`
+    // resolve to the 50 Hz tick loop, where it opens a transaction.
 }

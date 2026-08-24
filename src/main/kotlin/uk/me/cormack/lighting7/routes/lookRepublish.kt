@@ -78,7 +78,15 @@ internal fun republishForTemplateEdit(state: State, templateUuid: UUID): LookRep
         state,
         templateUuid,
         kind = "template",
-        invalidate = { state.show.templateRegistry.invalidate(templateUuid) },
+        invalidate = {
+            state.show.templateRegistry.invalidate(templateUuid)
+            // Re-warm on this thread, immediately. The bump `invalidate` performs is what every
+            // running effect's colour cache watches (`TypedParams.invalidateColourCacheIfStale`),
+            // so without this line the first re-resolve of a `tmpl:` parameter happens on the
+            // 50 Hz tick loop and opens a transaction there — the one thing
+            // `prewarmTemplateColours` exists to keep off that thread.
+            state.show.templateRegistry.snapshot(templateUuid)
+        },
         referencing = { activeCueIds -> activeCuesReferencingTemplate(state, templateUuid, activeCueIds) },
     )
 

@@ -3,9 +3,7 @@ package uk.me.cormack.lighting7.routes
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
-import uk.me.cormack.lighting7.fx.toPaletteColours
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.state.State
 
@@ -14,7 +12,7 @@ import uk.me.cormack.lighting7.state.State
  * already live and returns the resulting DMX channel values, without publishing anything.
  *
  * Exists for the Next GO stage view (lighting-react `src/hooks/useNextGoPreview.ts`): previewing
- * a cue in the browser would otherwise mean reimplementing specificity, HTP/LTP, palette
+ * a cue in the browser would otherwise mean reimplementing specificity, HTP/LTP, template
  * resolution and move-in-dark arming client-side. Every step here is the same code an actual
  * apply runs — [buildCombinedCueLayerRows] for the rows, a [CueAssignmentResolver] for the merge,
  * [PropertyChannelWriter] for the patch — so a preview and the GO that follows it cannot
@@ -70,27 +68,20 @@ internal fun previewCueLook(state: State, stackId: Int, requestedCueId: Int?): P
         ?: state.show.cueStackManager.effectiveNextCueId(state, stackId)
         ?: return null
 
-    val (applyData, stackPalette) = transaction(state.database) {
+    val applyData = transaction(state.database) {
         val cue = DaoCue.findById(cueId)
             ?: throw IllegalArgumentException("Cue not found: $cueId")
         if (cue.cueStack.id.value != stackId) {
             throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
         }
-        buildCueApplyData(cue) to cue.cueStack.palette
+        buildCueApplyData(cue)
     }
 
     // What the GO leaves alone: every published cue that isn't this stack's — see
     // [FxEngine.cueAssignmentsExcludingStack] for why the filter lives in the engine.
     val retained = engine.cueAssignmentsExcludingStack(stackId)
 
-    // The cue-scope palette a GO would build against. `activateCueInStack` merges the cue's own
-    // palette into the *stack* palette first and resolves refs against that, so a palette-less
-    // cue in a stack that has a palette must not resolve its refs against nothing here.
-    val cuePalette: List<ExtendedColour> = when {
-        applyData.palette.isNotEmpty() -> applyData.palette.toPaletteColours()
-        else -> engine.getStackPalette(stackId) ?: stackPalette.toPaletteColours()
-    }
-    val incoming = buildCombinedCueLayerRows(state, cueId, applyData, cuePalette).rows
+    val incoming = buildCombinedCueLayerRows(state, cueId, applyData).rows
 
     // A fresh resolver, not `engine.layerResolver`: [CueAssignmentResolver.resolve] is a pure
     // function of its rows, so composing here cannot disturb what is on stage.

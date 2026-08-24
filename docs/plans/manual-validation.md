@@ -11,6 +11,7 @@ as a one-line row.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-DESK-S1`](#fu-manual-desk-s1) | the Programmer view, the show-bar ladder and drag-select survive a real desk | Desk simplification S1, 2026-08-23 |
+| [`FU-MANUAL-FX-TEMPLATE-COLOUR`](#fu-manual-fx-template-colour) | a running effect follows the template its parameter names | Palette removal, 2026-08-24 |
 | [`FU-MANUAL-EDITOR-INPROCESS`](#fu-manual-editor-inprocess) | in-process editor compiles don't stutter live output | KCS retire, 2026-08-18 |
 | [`FU-MANUAL-SPEED-MASTERS-RIG`](#fu-manual-speed-masters-rig) | two masters drive one show — **restart required first** | Programmer S5, 2026-08-14 |
 | [`FU-MANUAL-UPDATE-APPLY`](#fu-manual-update-apply) | the in-app update upgrades in place — now unblocked | Windows updates, 2026-08-17 |
@@ -113,6 +114,39 @@ Repeat with an FX_CALC script, whose template differs.
 **If it stutters**, levers in order of bluntness: raise the client-side debounce, drop autocomplete
 on lower-powered desks, or gate the editor routes on the rig being idle. A second process is the
 last resort — it's what this change removed.
+
+## `FU-MANUAL-FX-TEMPLATE-COLOUR`
+
+**A template retune moves a running effect** · from the positional-palette removal, 2026-08-24
+
+The positional colour list is gone and an effect's colour parameter names a **colour template**
+instead (`tmpl:{uuid}`). `TemplateColourSourceTest` covers the grammar, the fixture-free resolution
+and the cache invalidation, but the payoff is a rig behaviour and the path is long: registry
+invalidation → `TemplateRegistry.version` → `TypedParams.invalidateColourCacheIfStale` → the next
+tick's `calculate`. A stale cache looks exactly like "nothing happened".
+
+**The check.** Create a generic colour template on `/templates`. Add a `ColourCycle` ad-hoc effect
+whose `colours` mixes it with a literal, and confirm the chase runs those colours. Then **retune the
+template** and watch the running chase follow within a tick without re-firing anything.
+
+Three things worth checking in the same sitting, each of which a single-effect retune cannot show:
+
+1. **A programmer layer's effect follows too.** That path deliberately froze its colour source at
+   include time (version pinned to `0L`) when the source was a palette; it is live now, and that is
+   a behaviour change rather than a port.
+2. **A mixed group degrades as documented, and this is the one to look hardest at.**
+   `resolveColourGeneric` resolves as though the head were RGBW, so an RGBW/RGBWA head should match
+   the same template applied as a **layer**. An RGB-only head does *not* get the plain hex: the
+   neutral has already been taken out of RGB and its white byte is dropped, so `#FF9D4A` arrives as
+   `#B55300` — dimmer and more saturated. Confirm that is tolerable on the real rig. If it is not,
+   the fix is one line (resolve `RGB_ONLY` in `resolveColourGeneric`) and it inverts which class of
+   head is exact — worth deciding with lamps in front of you rather than from the arithmetic.
+3. **The delete guard sees the reference.** Deleting a template an effect parameter names should 409
+   with an `fxReferenceCount`, not succeed and leave the chase running white. This is the one arm
+   with no unit coverage of its JSON scan.
+
+**If it fails at step 1**, suspect the pre-warm: `prewarmTemplateColours` runs on the request thread
+at every spawn site, and a missed one means the first resolve happens on the 50 Hz loop.
 
 ## `FU-MANUAL-PALETTE-TOURING`
 

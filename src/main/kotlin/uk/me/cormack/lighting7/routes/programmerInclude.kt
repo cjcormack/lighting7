@@ -7,12 +7,10 @@ import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.PaletteCascade
 import uk.me.cormack.lighting7.fx.ProgrammerFxOrigin
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
-import uk.me.cormack.lighting7.fx.toPaletteColours
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
@@ -64,16 +62,12 @@ internal fun includeCueIntoProgrammer(
     val skipped = ArrayList<RecordSkip>()
     val warnings = ArrayList<String>()
 
-    val cascade = PaletteCascade(
-        cue = cueData.palette.toPaletteColours(),
-        global = engine.getPalette(),
-    )
     // **Only the cue's own rows become INCLUDE slots.** Its layers become *programmer layers*
     // (below), which is the whole point of this rewrite: Include used to flatten a cue's
     // composition into literals, so the operator got the right output with none of the structure —
     // and Update then had nothing to write back but literals. Now the stack arrives intact,
     // reorderable, and Update can diff it.
-    val cueOwnRows = buildCueAssignmentsForCue(fixtures, cueData, cascade)
+    val cueOwnRows = buildCueAssignmentsForCue(fixtures, cueData)
 
     // Still needed for the local rows: `buildCueAssignmentsForCue` deliberately emits both a
     // group-expanded member row and any direct fixture row for the same member, leaving the
@@ -130,7 +124,7 @@ internal fun includeCueIntoProgrammer(
         .mapNotNull { (it.target as? TargetRef.Group)?.key }
         .toSet()
 
-    val fx = spawnIncludedFx(state, cueData, mask, cascade)
+    val fx = spawnIncludedFx(state, cueData, mask)
     fixtureKeys += fx.coveredFixtureKeys
 
     val nothingIncluded = writes.isEmpty() &&
@@ -233,7 +227,6 @@ private fun spawnIncludedFx(
     state: State,
     cueData: CueApplyData,
     mask: Set<PropertyMaskGroup>?,
-    cascade: PaletteCascade,
 ): IncludedFxOutcome {
     val engine = state.show.fxEngine
     var spawned = 0
@@ -251,7 +244,6 @@ private fun spawnIncludedFx(
         target: TargetRef,
         presetId: Int?,
         origin: ProgrammerFxOrigin,
-        palette: List<ExtendedColour>,
     ) {
         if (mask != null) {
             val reference = try {
@@ -296,14 +288,7 @@ private fun spawnIncludedFx(
             null
         } ?: return
 
-        // Snapshot suppliers: the included cue's palette must resolve even when the cue isn't
-        // live, which the cue-scoped supplier can't promise.
-        val snapshot = if (palette.isNotEmpty()) palette else cascade.effective
-        val instance = createInstanceFromPreset(
-            presetEffect, fxTarget, presetId, state,
-            paletteSupplier = { snapshot },
-            paletteVersionSupplier = { 0L },
-        )
+        val instance = createInstanceFromPreset(presetEffect, fxTarget, presetId, state)
         uk.me.cormack.lighting7.routes.markProgrammerOwned(instance, true)
         instance.programmerOrigin = origin
         engine.addEffect(instance)
@@ -319,7 +304,6 @@ private fun spawnIncludedFx(
         spawn(
             adHoc.toPresetEffectDto(), adHoc.target, null,
             ProgrammerFxOrigin(cueData.cueId, ProgrammerFxOrigin.Kind.AD_HOC, null, adHoc.sortOrder),
-            cascade.effective,
         )
     }
 

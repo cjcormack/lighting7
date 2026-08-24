@@ -30,7 +30,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
 | [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
-| [`FU-PAL-POSITIONAL-CONVERSION`](#fu-pal-positional-conversion) | Trigger | Pal | a show maintains the same colours in both forms |
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
 | [`FU-LOOK-MIDI-RECALL`](#fu-look-midi-recall) | Trigger | Look | an operator wants a Look on a button |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
@@ -271,27 +270,6 @@ cheaper half and needs no personality data — invert the target set and scale.
 
 ---
 
-## Palettes
-
-### `FU-PAL-POSITIONAL-CONVERSION`
-
-**Convert `P1`/`P2` colour lists to named palettes** · Trigger · Programmer redesign §3.5 /
-Session 4, deferred
-
-Two unrelated things are called "palette": the positional ordered colour list that FX params index
-as `P1`/`P2`/`P*` (global / stack / cue scopes, `PaletteCascade.effective`), and the Session-4
-named `Palette` entity. Session 4 left the old one untouched and relabelled it **"Colour List"**
-throughout the UI, removing the confusion without removing the duplication.
-
-A conversion tool would take a cue's or stack's colour list and mint a named COLOUR palette per
-entry, rewriting the FX params that index it. The hard part isn't the minting: a positional entry
-is a bare colour with no fixture attached while a named palette entry is per-fixture, so the
-conversion must choose which fixtures the new palette covers — the cue's targets is the obvious
-answer and not always the right one.
-
-**Trigger**: a show is found maintaining the same colours in both forms. Until then the two
-coexist and the relabel carries the distinction.
-
 ### `FU-LOOK-PERPROP-BLEND`
 
 **Per-property blend override within a layer** · Trigger · Looks-and-layers §3.4, cut as
@@ -340,9 +318,10 @@ Note the write boundary currently *rejects* a `ref:` in a look row (`validateLoo
 rejection is what guarantees resolution never recurses — so this item is precisely the work of
 replacing that guarantee with a bounded one. The cook step is where it would land.
 
-**Trigger**: a show keeps one Look hand-synced to another — the same signal
-`FU-PAL-POSITIONAL-CONVERSION` waits on. If both fire, do the conversion first; it decides how many
-Looks exist.
+**Trigger**: a show keeps one Look hand-synced to another. This used to say "do
+`FU-PAL-POSITIONAL-CONVERSION` first, it decides how many Looks exist" — that entry is closed
+(done differently: the positional form was deleted, not converted), so there is no longer anything
+to sequence this behind.
 
 ### `FU-LOOK-ELEMENT-ROWS`
 
@@ -1175,6 +1154,49 @@ One line each: slug, what shipped, commit. Full narratives live in the commit me
 file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-08
+
+- `FU-PAL-POSITIONAL-CONVERSION` — **closed done-differently.** The entry asked for a tool to convert
+  positional `P1`/`P2` colour lists into named palettes, waiting on "a show maintaining the same
+  colours in both forms". Templates (desk-simplification session 3) made that signal moot by making
+  the *other* form strictly better, so the positional list was **deleted** rather than converted:
+  gone are `PaletteCascade`, the `palette` column on `cues` / `cue_stacks` / `looks`,
+  `Cue.updateGlobalPalette`, `FxEngine`'s global / per-cue / per-stack colour state and its flows,
+  `PaletteSocket`, `cueEdit.setPalette`, the `set_palette` AI tool, the script API's
+  `palette`/`setPalette`, `fx/effects/PaletteColourEffects.kt` (which was already dead), and the
+  `P(\d+)` / `P*` grammar itself.
+
+  In its place, an **effect colour parameter names a colour template**: `tmpl:{uuid}`, owned by
+  `fx/TemplateColourSource.kt` and resolved through `TemplateResolver.resolveColourGeneric`. Four
+  decisions are worth carrying forward. The seam is **`TypedParams`** — one place every colour
+  parameter is read, already built around a supplier plus a version counter, so the swap was a
+  rename of what it is given (`TemplateRegistry.version` steps into `paletteVersion`'s role).
+  Resolution is **fixture-free but policy-honouring**, resolving as though the head were RGBW so a
+  referenced template matches the same template applied as a layer on the common case. A reference is
+  legal **only in a parameter**, never in a value — `parseAssignmentValue` returns null for one and
+  `validateLookRows` rejects it beside `ref:` — which is what stops this becoming a second, weaker
+  layer mechanism. And there is **no successor to `P*`**: a template holds one colour, so a colour
+  list is an explicit ordered mix of literals and references.
+
+  Two things fell out for free. `createInstanceFromPresetForCue` and `createInstanceFromPreset`
+  collapsed into one: the fork existed because the cue-scoped palette supplier silently reached the
+  global list when the cue was not live, and a `tmpl:` reference has one answer everywhere. And a
+  **programmer layer's effects became live** — that path deliberately pinned its palette version to
+  `0L`, because a Look's colour list was captured at include time; a template reference is a live
+  dependency by design.
+
+  Two things the removal needed beyond deleting code, both in `migratePositionalColourListsAway`.
+  The columns had to be **dropped**, not merely un-modelled: `cues.palette` and `cue_stacks.palette`
+  are `NOT NULL` with no default on every pre-removal database and `createMissingTablesAndColumns`
+  only ever adds columns, so leaving them made every `DaoCue.new` / `DaoCueStack.new` fail — a break
+  no test can see, because tests build the schema from the current model. And the stored `P1` / `P*`
+  parameters had to be **inlined** into literals against the scope that used to resolve them
+  (cue, else stack, else the historical red/green/blue), or a running chase would have come back as
+  one static white with the list that held the answer already unreadable.
+
+  One invariant to hold when adding a spawn site: `TemplateRegistry.snapshot` can fall back to a DB
+  read, so every spawn path calls `prewarmTemplateColours` on the request thread. Positional lookups
+  were pure memory reads; this is the only way the replacement is not like-for-like. Sync format
+  version 7 (both constants); `MIN_SUPPORTED` stays at 5, since every removed field has a default.
 
 - `FU-LOOK-STOMP-WITHIN-CUE` — per-layer `stomp` is read. `CueComposer.cook` now returns a
   `CookResult` rather than a bare row list, carrying `stompSuppression` (`layerId → targetKey →

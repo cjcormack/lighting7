@@ -68,8 +68,6 @@ private fun maybeLogDeadAssignments(
 internal data class CueApplyData(
     val cueId: Int,
     val cueName: String,
-    val palette: List<String>,
-    val updateGlobalPalette: Boolean,
     val adHocEffects: List<CueAdHocEffectDto>,
     /**
      * The cue's ordered Look composition, resolved far enough for [CueComposer.cook] — the Look's
@@ -90,7 +88,6 @@ internal data class CueApplyData(
 // ─── State capture ──────────────────────────────────────────────────────
 
 internal data class CapturedState(
-    val palette: List<String>,
     /**
      * Layers reconstructed from the running effects, one per Look, with a de-duplicated target list.
      *
@@ -106,12 +103,11 @@ internal data class CapturedState(
 )
 
 /**
- * Capture live palette, active effects, and Layer 4 property assignments from the FX engine.
+ * Capture active effects and Layer 4 property assignments from the FX engine.
  * Group-scoped assignments round-trip with `targetType="group"` intact when members share a
  * single composed value — see [captureCueAssignments] for the shape-preservation rules.
  */
 internal fun captureCurrentState(state: State): CapturedState {
-    val currentPalette = state.show.fxEngine.getPalette().map { it.toSerializedString() }
     val activeEffects = state.show.fxEngine.getActiveEffects()
 
     // Keyed by Look, not by preset: nothing stamps `presetId` any more. A Look applied twice to
@@ -159,7 +155,6 @@ internal fun captureCurrentState(state: State): CapturedState {
     val propertyAssignments = captureCueAssignments(state)
 
     return CapturedState(
-        palette = currentPalette,
         layers = layerDtos,
         adHocEffects = adHocEffects,
         propertyAssignments = propertyAssignments,
@@ -319,8 +314,6 @@ internal fun captureCueAssignmentsFromSnapshot(
 internal fun buildCueApplyData(cue: DaoCue): CueApplyData = CueApplyData(
     cueId = cue.id.value,
     cueName = cue.name,
-    palette = cue.palette,
-    updateGlobalPalette = cue.updateGlobalPalette,
     adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
     layers = cue.layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
     propertyAssignments = cue.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
@@ -463,12 +456,10 @@ internal fun DaoCue.toCueDetails(
     return CueDetails(
         id = this.id.value,
         name = this.name,
-        palette = this.palette,
         layers = this.layers.sortedBy { it.sortOrder }.map { it.toDto() },
         adHocEffects = this.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
         propertyAssignments = assignmentDetails,
         triggers = triggerDetails,
-        updateGlobalPalette = this.updateGlobalPalette,
         cueStackId = this.cueStack?.id?.value,
         cueStackName = this.cueStack?.name,
         sortOrder = this.sortOrder,
@@ -659,7 +650,7 @@ internal fun deletePromptBookAnchorsForCue(cue: DaoCue): Int =
 // ─── Apply logic ────────────────────────────────────────────────────────
 
 /**
- * Apply a cue: remove previous effects, set palette, apply preset effects and ad-hoc effects.
+ * Apply a cue: remove previous effects, then apply its layer effects and ad-hoc effects.
  *
  * @param replaceAll If true, remove ALL running cue effects (from any cue). If false, only
  *                   remove effects from this same cue (allowing multiple cues to run concurrently).
@@ -685,27 +676,17 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // 1. Remove effects — either all cue effects or just this cue's effects
     if (replaceAll) {
         val toRemove = engine.getActiveEffects().filter { it.cueId != null }
-        val removedCueIds = toRemove.mapNotNull { it.cueId }.toSet()
         for (effect in toRemove) {
             engine.removeEffect(effect.id)
-        }
-        for (removedCueId in removedCueIds) {
-            engine.removeCuePalette(removedCueId)
         }
     } else {
         val toRemove = engine.getActiveEffects().filter { it.cueId == cueData.cueId }
         for (effect in toRemove) {
             engine.removeEffect(effect.id)
         }
-        engine.removeCuePalette(cueData.cueId)
     }
 
     val priority = cueDerivedPriority(cueData)
-
-    val cascade = PaletteCascade(
-        cue = cueData.palette.toPaletteColours(),
-        global = engine.getPalette(),
-    )
 
     // Publish Layer 4 before applying effects so the effect reset pass sees the cue's baseline
     // instead of Layer 5 zero.
@@ -714,14 +695,13 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // CueTriggerManager, which at fire time re-cooks this cue with the fired layer included. It
     // re-cooks rather than appending because appending would put two contributors on one
     // (fixture, property) key, which is precisely the ambiguity cooking removes.
-    val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData, cascade)
+    val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData)
     val cooked = CueComposer.cook(
         fixtures = state.show.fixtures,
         cueId = cueData.cueId,
         priority = priority,
         layers = cueData.layers,
         localRows = localRows,
-        cascade = cascade,
         lookRegistry = state.show.lookRegistry,
         templateRegistry = state.show.templateRegistry,
     )
@@ -740,16 +720,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         engine.stompForCue(cueData.cueId, buildStompOverlap(state.show.fixtures, cueData, cooked))
     }
 
-    // 2. Set per-cue palette (isolated from global palette)
-    if (cueData.palette.isNotEmpty()) {
-        val colours = cueData.palette.map { parseExtendedColour(it) }
-        engine.setCuePalette(cueData.cueId, colours)
-        if (cueData.updateGlobalPalette) {
-            engine.setPalette(colours)
-        }
-    }
-
-    // 3. Spawn the layers' effects, **in layer order**.
+    // 2. Spawn the layers' effects, **in layer order**.
     //
     // No priority arithmetic is needed for that order to hold: `sortedEffectsComparator` is
     // `compareBy(priority, id)` with `id` a monotonic creation counter, and per-tick composition is
@@ -763,8 +734,8 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             resolveTargetForCue(state, CueTargetDto(target), effectSpec)
         } catch (_: Exception) { null } ?: continue
 
-        val instance = createInstanceFromPresetForCue(
-            effectSpec, fxTarget, presetId = null, state = state, cueId = cueData.cueId,
+        val instance = createInstanceFromPreset(
+            effectSpec, fxTarget, presetId = null, state = state,
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
         )
@@ -800,9 +771,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             resolveTargetForCue(state, target, presetEffectDto)
         } catch (_: Exception) { null } ?: continue
 
-        val instance = createInstanceFromPresetForCue(
-            presetEffectDto, fxTarget, null, state, cueData.cueId
-        )
+        val instance = createInstanceFromPreset(presetEffectDto, fxTarget, null, state)
         instance.cueId = cueData.cueId
         instance.priority = priority
         engine.addEffect(instance)
@@ -941,7 +910,7 @@ internal fun fixtureCategoryFor(
  *
  * There used to be a per-member branch here: a row whose value was `ref:{uuid}` resolved **once per
  * target fixture**, taking each member's *own* property category rather than the reference fixture's,
- * because a palette is per-fixture by construction and a mixed-type group is exactly the case it
+ * because a reference is per-fixture by construction and a mixed-type group is exactly the case it
  * existed to serve. The `ref:` grammar retired in session 4, so every row is a literal and one parse
  * against the reference fixture serves the whole target — which is what the "literal rows keep the
  * single parse before the fanout" fast path always was.
@@ -949,11 +918,9 @@ internal fun fixtureCategoryFor(
 internal fun buildCueAssignmentsForCue(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
     cueData: CueApplyData,
-    cascade: PaletteCascade = PaletteCascade.EMPTY,
 ): List<CueAssignmentResolver.Assignment> {
     if (cueData.propertyAssignments.isEmpty()) return emptyList()
     val priority = cueDerivedPriority(cueData)
-    val effectivePalette = cascade.effective
     val out = ArrayList<CueAssignmentResolver.Assignment>(cueData.propertyAssignments.size * 2)
 
     for (assignment in cueData.propertyAssignments) {
@@ -1024,7 +991,7 @@ internal fun buildCueAssignmentsForCue(
             continue
         }
 
-        val parsed = CueAssignmentResolver.parseAssignmentValue(category, canonical, assignment.value, effectivePalette) ?: run {
+        val parsed = CueAssignmentResolver.parseAssignmentValue(category, canonical, assignment.value) ?: run {
             logger.warn("cue {}: invalid value '{}' for {}.{} — skipping", cueData.cueId, assignment.value, target.key, assignment.propertyName)
             continue
         }
@@ -1077,12 +1044,6 @@ internal fun republishCueLayer(state: State, cueId: Int, applyData: CueApplyData
  * them in one pass — see `republishForLookEdit`, where publishing per cue would take the engine
  * lock and transmit once per cue for what is a single operator edit.
  *
- * [cuePalette] overrides the cue-scope palette. A stack cue's cue-scope palette is the *stack*
- * palette (`activateCueInStack` merges the cue's own palette into it before building), which the
- * cue's `applyData.palette` only equals when the cue carries a palette of its own — so the
- * preview path passes the resolved stack palette rather than letting a palette-less cue resolve
- * its references against nothing. Null means "use the cue's own palette", as the apply paths do.
- *
  * [firedTimedLayerIds] names the timed layers that have already fired, so a rebuild triggered while
  * a timed layer is live reproduces its contribution instead of dropping it. See
  * [uk.me.cormack.lighting7.fx.CueTriggerManager] for why firing re-cooks rather than appending.
@@ -1093,21 +1054,15 @@ internal fun buildCombinedCueLayerRows(
     state: State,
     cueId: Int,
     applyData: CueApplyData,
-    cuePalette: List<ExtendedColour>? = null,
     firedTimedLayerIds: Set<Int>? = null,
 ): CookResult {
-    val cascade = PaletteCascade(
-        cue = cuePalette ?: applyData.palette.toPaletteColours(),
-        global = state.show.fxEngine.getPalette(),
-    )
-    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, applyData, cascade)
+    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, applyData)
     return CueComposer.cook(
         fixtures = state.show.fixtures,
         cueId = cueId,
         priority = cueDerivedPriority(applyData),
         layers = applyData.layers,
         localRows = cueOwn,
-        cascade = cascade,
         lookRegistry = state.show.lookRegistry,
         templateRegistry = state.show.templateRegistry,
         includeTimed = firedTimedLayerIds ?: state.cueTriggerManager.firedTimedLayerIds(cueId),
@@ -1291,54 +1246,31 @@ internal fun categoryFromPropertyName(propertyName: String): String {
 }
 
 /**
- * Create an FxInstance from preset effect data for cue application.
- */
-internal fun createInstanceFromPresetForCue(
-    presetEffect: LookEffectSpec,
-    fxTarget: FxTarget,
-    presetId: Int?,
-    state: State,
-    cueId: Int,
-    /** Per-cue-application override; null falls through to the preset effect's own master. */
-    overrideSpeedMasterUuid: java.util.UUID? = null,
-    /** Per-cue-application rate-master override; same fall-through rule. */
-    overrideRateSpeedMasterUuid: java.util.UUID? = null,
-): FxInstance {
-    val engine = state.show.fxEngine
-    return createInstanceFromPreset(
-        presetEffect, fxTarget, presetId, state,
-        paletteSupplier = { engine.getCuePalette(cueId) ?: engine.getPalette() },
-        paletteVersionSupplier = { engine.getCuePaletteVersion(cueId) + engine.paletteVersion },
-        overrideSpeedMasterUuid = overrideSpeedMasterUuid,
-        overrideRateSpeedMasterUuid = overrideRateSpeedMasterUuid,
-    )
-}
-
-/**
- * Build an [FxInstance] from a preset effect definition with caller-supplied palette suppliers.
+ * Build an [FxInstance] from a preset effect definition.
  *
- * Split out of [createInstanceFromPresetForCue] for Include. That function's supplier reads
- * `getCuePalette(cueId) ?: getPalette()`, which silently falls back to the *global* palette
- * when the cue isn't live — so including a non-running cue whose FX use a palette ref (`P1`)
- * would resolve it against the wrong colours. Include passes a snapshot of the included cue's
- * own palette instead.
+ * There were two of these until the positional colour list went. A cue-scoped one resolved `P1`
+ * against `getCuePalette(cueId) ?: getPalette()`, and Include needed a second that took an explicit
+ * snapshot instead — because the cue-scoped supplier silently fell back to the *global* list when
+ * the cue wasn't live, resolving an included cue's colours against the wrong ones. A `tmpl:`
+ * reference has one answer wherever it is read, so the fork had nothing left to be about.
  */
 internal fun createInstanceFromPreset(
     presetEffect: LookEffectSpec,
     fxTarget: FxTarget,
     presetId: Int?,
     state: State,
-    paletteSupplier: () -> List<ExtendedColour>,
-    paletteVersionSupplier: () -> Long,
     /** Per-cue-application override; null falls through to the preset effect's own master. */
     overrideSpeedMasterUuid: java.util.UUID? = null,
     overrideRateSpeedMasterUuid: java.util.UUID? = null,
 ): FxInstance {
+    // On the request thread, before the effect can tick: see [prewarmTemplateColours].
+    val templates = state.show.templateRegistry
+    prewarmTemplateColours(templates, presetEffect.parameters)
     val effect = state.show.fxRegistry.createEffect(
         presetEffect.effectType,
         presetEffect.parameters,
-        paletteSupplier = paletteSupplier,
-        paletteVersionSupplier = paletteVersionSupplier,
+        resolveColourSource = templateColourSource(templates),
+        colourSourceVersion = { templates.version },
     )
     val timing = FxTiming(presetEffect.beatDivision)
     val blendMode = try {

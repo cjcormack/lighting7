@@ -172,7 +172,7 @@ class RemoteSyncEngineConflictsTest {
         configureSync(stateA, projectIdA, credsA)
         transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
-            DaoCueStack.new { this.project = project; this.name = "shared"; this.palette = emptyList() }
+            DaoCueStack.new { this.project = project; this.name = "shared" }
         }
         runSync(stateA, engineA, projectIdA)
 
@@ -182,14 +182,14 @@ class RemoteSyncEngineConflictsTest {
         // A adds CueStack "from-A".
         transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
-            DaoCueStack.new { this.project = project; this.name = "from-A"; this.palette = emptyList() }
+            DaoCueStack.new { this.project = project; this.name = "from-A" }
         }
         runSync(stateA, engineA, projectIdA)
 
         // B adds CueStack "from-B" before pulling A's new state. Disjoint records → auto-merge.
         transaction(stateB.database) {
             val project = DaoProject.findById(projectIdB)!!
-            DaoCueStack.new { this.project = project; this.name = "from-B"; this.palette = emptyList() }
+            DaoCueStack.new { this.project = project; this.name = "from-B" }
         }
         val resultB = runSync(stateB, engineB, projectIdB)
         assertEquals(SyncOutcome.MERGED, resultB.outcome, "Disjoint edits must auto-merge")
@@ -367,7 +367,7 @@ class RemoteSyncEngineConflictsTest {
         configureSync(stateA, projectIdA, credsA)
         val sharedUuid = transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
-            val stack = DaoCueStack.new { this.project = project; this.name = "shared"; this.palette = emptyList() }
+            val stack = DaoCueStack.new { this.project = project; this.name = "shared" }
             stack.uuid
         }
         runSync(stateA, engineA, projectIdA)
@@ -558,7 +558,7 @@ class RemoteSyncEngineConflictsTest {
         configureSync(stateA, projectIdA, credsA)
         val stackUuid = transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
-            DaoCueStack.new { this.project = project; this.name = "ephemeral"; this.palette = emptyList() }.uuid
+            DaoCueStack.new { this.project = project; this.name = "ephemeral" }.uuid
         }
         runSync(stateA, engineA, projectIdA)
 

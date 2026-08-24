@@ -66,11 +66,6 @@ abstract class FxApplicationScript(
     fun speedMaster(index: Int): MasterClock =
         speedMasters.clockFor(speedMasters.masterStates().indexOfFirst { it.index == index })
 
-    // --- Palette ---
-
-    val palette: List<ExtendedColour> get() = fxEngine.getPalette()
-    fun setPalette(colours: List<ExtendedColour>) = fxEngine.setPalette(colours)
-
     // --- Fixture FX Extensions (implicit engine) ---
 
     fun <T> T.dimmerFx(

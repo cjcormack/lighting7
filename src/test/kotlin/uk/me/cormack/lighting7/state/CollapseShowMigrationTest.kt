@@ -25,11 +25,11 @@ class CollapseShowMigrationTest : RouteIntegrationTest() {
         val (aId, bId) = transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val a = DaoCueStack.new {
-                this.project = project; name = "Act 1"; palette = emptyList(); loop = false
+                this.project = project; name = "Act 1"; loop = false
                 type = CueStackType.STACK.name; sortOrder = 0
             }
             val b = DaoCueStack.new {
-                this.project = project; name = "Act 2"; palette = emptyList(); loop = false
+                this.project = project; name = "Act 2"; loop = false
                 type = CueStackType.STACK.name; sortOrder = 0
             }
 

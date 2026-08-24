@@ -239,7 +239,7 @@ class PromptScriptSyncTest {
         // because the store lacks the bytes — that would revert it onto A.
         transaction(stateC.database) {
             val project = DaoProject.findById(projectIdC)!!
-            DaoCueStack.new { this.project = project; this.name = "unrelated-on-C"; this.palette = emptyList() }
+            DaoCueStack.new { this.project = project; this.name = "unrelated-on-C" }
         }
         val cPush = runSync(stateC, engineC, projectIdC)
         assertTrue(
@@ -277,7 +277,7 @@ class PromptScriptSyncTest {
         // touching the book.
         transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
-            DaoCueStack.new { this.project = project; this.name = "on-A"; this.palette = emptyList() }
+            DaoCueStack.new { this.project = project; this.name = "on-A" }
         }
         runSync(stateA, engineA, projectIdA)
 

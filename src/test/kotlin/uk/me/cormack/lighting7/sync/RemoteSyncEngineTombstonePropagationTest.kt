@@ -114,7 +114,7 @@ class RemoteSyncEngineTombstonePropagationTest {
         configureSync(stateA, projectIdA, credsA)
         val recordUuid = transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
-            DaoCueStack.new { this.project = project; this.name = "to-be-deleted"; this.palette = emptyList() }.uuid
+            DaoCueStack.new { this.project = project; this.name = "to-be-deleted" }.uuid
         }
         runSync(stateA, engineA, projectIdA)
         val projectUuid = transaction(stateA.database) { DaoProject.findById(projectIdA)!!.uuid }
@@ -163,7 +163,7 @@ class RemoteSyncEngineTombstonePropagationTest {
         transaction(stateC.database) {
             val project = DaoProject.findById(projectIdC)!!
             DaoCueStack.new {
-                this.project = project; this.name = "unrelated-on-C"; this.palette = emptyList()
+                this.project = project; this.name = "unrelated-on-C"
             }
         }
         val cPush = runSync(stateC, engineC, projectIdC)
@@ -203,7 +203,7 @@ class RemoteSyncEngineTombstonePropagationTest {
         configureSync(stateA, projectIdA, credsA)
         val recordUuid = transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
-            DaoCueStack.new { this.project = project; this.name = "doomed"; this.palette = emptyList() }.uuid
+            DaoCueStack.new { this.project = project; this.name = "doomed" }.uuid
         }
         runSync(stateA, engineA, projectIdA)
         val projectUuid = transaction(stateA.database) { DaoProject.findById(projectIdA)!!.uuid }
@@ -226,7 +226,7 @@ class RemoteSyncEngineTombstonePropagationTest {
             transaction(stateC.database) {
                 val project = DaoProject.findById(projectIdC)!!
                 DaoCueStack.new {
-                    this.project = project; this.name = "cycle-$i"; this.palette = emptyList()
+                    this.project = project; this.name = "cycle-$i"
                 }
             }
             runSync(stateC, engineC, projectIdC)

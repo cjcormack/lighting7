@@ -144,7 +144,7 @@ Effects that produce RGB color values.
 
 | Effect | Description | Parameters |
 |--------|-------------|------------|
-| `ColourCycle` | Step through palette | `colours`, `fadeRatio` |
+| `ColourCycle` | Step through a list of colours | `colours`, `fadeRatio` |
 | `RainbowCycle` | Hue rotation | `saturation`, `brightness` |
 | `ColourStrobe` | Flash colour | `onColor`, `offColor`, `onRatio` |
 | `ColourPulse` | Pulse between two | `colorA`, `colorB` |
@@ -227,7 +227,7 @@ Each registered effect provides:
 - `compatibleProperties` — which fixture properties this can target
 - `source` — `BUILT_IN` or `USER`
 - `script` — the calculate body (Kotlin script source)
-- `factory` — creates an `Effect` from string parameters + palette suppliers
+- `factory` — creates an `Effect` from string parameters + the colour source (see below)
 
 Lookup is case-insensitive with spaces and underscores stripped.
 
@@ -276,7 +276,7 @@ params.ubyte("min")          → UByte (default from schema)
 params.int("count")          → Int
 params.double("fadeRatio")   → Double
 params.boolean("pingPong")   → Boolean
-params.colour("baseColor")   → ExtendedColour (resolves palette refs like "P1")
+params.colour("baseColor")   → ExtendedColour (resolves a template reference, "tmpl:{uuid}")
 params.colourList("colours") → List<ExtendedColour>
 params.easingCurve("curve")  → EasingCurve
 params.string("name")        → String
@@ -1092,7 +1092,7 @@ table. At apply time these are converted directly to `FxInstance`s tagged with t
 ### Look Delete Blocking
 
 A Look cannot be deleted if any cue layer references it via `cue_layers` — a plain indexed FK query,
-where the palette era could only scan opaque `value` text. The Look detail API includes `layerCount`
+where the named-palette era could only scan opaque `value` text. The Look detail API includes `layerCount`
 and the referencing cue names; the delete returns 409 with code `LOOK_IN_USE`, and `?force=true`
 deletes the layers with it.
 

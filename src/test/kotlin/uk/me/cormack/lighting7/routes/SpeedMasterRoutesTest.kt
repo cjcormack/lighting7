@@ -121,12 +121,11 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         val cueId = transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val stack = DaoCueStack.new {
-                this.project = project; name = "s"; palette = emptyList(); loop = false
+                this.project = project; name = "s"; loop = false
                 type = CueStackType.STACK.name; sortOrder = 0
             }
             val cue = DaoCue.new {
                 this.project = project; name = "c"; cueStack = stack; sortOrder = 0
-                palette = emptyList()
             }
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
@@ -171,12 +170,11 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         val cueId = transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val stack = DaoCueStack.new {
-                this.project = project; name = "s"; palette = emptyList(); loop = false
+                this.project = project; name = "s"; loop = false
                 type = CueStackType.STACK.name; sortOrder = 0
             }
             val cue = DaoCue.new {
                 this.project = project; name = "c"; cueStack = stack; sortOrder = 0
-                palette = emptyList()
             }
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
@@ -214,12 +212,11 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val stack = DaoCueStack.new {
-                this.project = project; name = "s"; palette = emptyList(); loop = false
+                this.project = project; name = "s"; loop = false
                 type = CueStackType.STACK.name; sortOrder = 0
             }
             val cue = DaoCue.new {
                 this.project = project; name = "c"; cueStack = stack; sortOrder = 0
-                palette = emptyList()
             }
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"

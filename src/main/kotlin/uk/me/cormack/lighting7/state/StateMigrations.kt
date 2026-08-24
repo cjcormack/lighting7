@@ -43,6 +43,12 @@ private val logger = LoggerFactory.getLogger("StateMigrations")
  */
 internal fun JdbcTransaction.runStateMigrations() {
     ensureInstallRow()
+    // **First, and that is not arbitrary.** It ends by dropping `cues.palette` and
+    // `cue_stacks.palette`, which are `NOT NULL` with no default on every database written before
+    // the positional colour list was removed from the model. Until they are gone, *any* insert
+    // through the DAO omits a NOT NULL column and fails — including the `DaoCueStack.new` /
+    // `DaoCue.new` calls in [migrateCollapseShowIntoStacks] two lines below.
+    migratePositionalColourListsAway()
     migrateUniverseAddressesToOverrides()
     migrateCollapseShowIntoStacks()
     migratePresetsAndPalettesToLooks()
@@ -174,7 +180,6 @@ internal fun JdbcTransaction.migrateCollapseShowIntoStacks() {
             }.firstOrNull() ?: DaoCueStack.new {
                 this.project = project
                 name = "Unsorted"
-                palette = emptyList()
                 loop = false
                 type = "STACK"
                 sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1
@@ -234,7 +239,6 @@ internal fun JdbcTransaction.migrateCollapseShowIntoStacks() {
                     this.project = project
                     name = entry.label ?: "Separator"
                     label = entry.label
-                    palette = emptyList()
                     loop = false
                     type = "SEPARATOR"
                     sortOrder = entry.sortOrder
@@ -295,6 +299,159 @@ private fun JdbcTransaction.columnExists(table: String, column: String): Boolean
     return exists
 }
 
+// ─── Positional colour lists ────────────────────────────────────────────────
+
+/** `P1`, `p7`: a 1-indexed position in a colour list, wrapping past the end. */
+private val POSITIONAL_COLOUR_REF = Regex("^P(\\d+)$", RegexOption.IGNORE_CASE)
+
+/** `P*`: every colour in the list, in order. Only ever legal inside a colour *list* parameter. */
+private const val POSITIONAL_ALL_REF = "P*"
+
+/**
+ * What an empty list resolved to before the removal: `FxEngine`'s global list booted red/green/blue
+ * and a reference against an empty list fell through to the literal parser, which answers white.
+ * Red/green/blue is the honest reproduction of what the rig was actually showing.
+ */
+private val LEGACY_DEFAULT_PALETTE = listOf("#ff0000", "#00ff00", "#0000ff")
+
+/**
+ * Rewrite the positional colour references in one effect's parameters into literals, or null when
+ * there were none.
+ *
+ * A parameter value is a comma-separated list (a single colour is a list of one), so `P*` expands
+ * in place and `Pn` becomes one entry. Non-reference entries are passed through **verbatim**,
+ * spacing included, so a parameter this does not touch is not reformatted.
+ */
+private fun inlinePositionalColourRefs(
+    parameters: Map<String, String>,
+    palette: List<String>,
+): Map<String, String>? {
+    val list = palette.ifEmpty { LEGACY_DEFAULT_PALETTE }
+    var changed = false
+    val out = parameters.mapValues { (_, raw) ->
+        if (!raw.contains('p', ignoreCase = true)) return@mapValues raw
+        val rewritten = raw.split(",").flatMap { entry ->
+            val trimmed = entry.trim()
+            val positional = POSITIONAL_COLOUR_REF.matchEntire(trimmed)
+            when {
+                trimmed.equals(POSITIONAL_ALL_REF, ignoreCase = true) -> list
+                positional != null ->
+                    listOf(list[(positional.groupValues[1].toInt() - 1).mod(list.size)])
+                else -> listOf(entry)
+            }
+        }.joinToString(",")
+        if (rewritten == raw) raw else { changed = true; rewritten }
+    }
+    return if (changed) out else null
+}
+
+/** A stored `List<String>` colour list column, or empty when it is null or unreadable. */
+private fun parsePaletteColumn(raw: String?): List<String> {
+    if (raw.isNullOrBlank()) return emptyList()
+    return runCatching { Json.decodeFromString<List<String>>(raw) }.getOrElse { emptyList() }
+}
+
+/** A stored effect `parameters` column (a `Map<String, String>`), or null when it is unreadable. */
+private fun parseEffectParametersColumn(raw: String?): Map<String, String>? {
+    if (raw.isNullOrBlank()) return null
+    return runCatching { Json.decodeFromString<Map<String, String>>(raw) }.getOrNull()
+}
+
+/**
+ * Retire the positional colour list — first by inlining it into the effect parameters that read it,
+ * then by dropping the columns that held it.
+ *
+ * **The drop is the load-bearing half.** `cues.palette` and `cue_stacks.palette` are `NOT NULL` with
+ * no default on every database written before the model lost them, and
+ * `SchemaUtils.createMissingTablesAndColumns` only ever *adds* columns. So while they are still
+ * there, every `DaoCue.new` / `DaoCueStack.new` — Record, duplicate, import, the Unsorted stack,
+ * [migrateCollapseShowIntoStacks] itself — omits a NOT NULL column and fails with
+ * `SQLITE_CONSTRAINT_NOTNULL`. Tests never see it: they build the schema from the current model, so
+ * the columns do not exist there and this whole function is a no-op.
+ *
+ * **The inlining is the half that keeps a show sounding the same.** `{"colours":"P*"}` on an ad-hoc
+ * effect used to mean "the six colours this cue carries"; with the grammar gone it means
+ * `parseExtendedColour("P*")`, which is white — a running chase would come back as one static
+ * colour, with the list that had the answer about to be unreadable. So each parameter is resolved
+ * against the scope that resolved it at runtime: a cue's own list, else the list its stack carried
+ * (`activateCueInStack` merged the cue's into the stack's), else the historical global default. A
+ * Look's effects resolve against the Look's own list on the same rule.
+ *
+ * Idempotent both ways: the rewrite leaves no reference behind, and the whole function is gated on
+ * the columns existing.
+ */
+internal fun JdbcTransaction.migratePositionalColourListsAway() {
+    if (!columnExists("cues", "palette")) return
+
+    /** id → the effective colour list, resolved by the same scope rule the runtime used. */
+    val paletteForCue = HashMap<Int, List<String>>()
+    exec(
+        """SELECT c.id AS id, c.palette AS cue_palette, s.palette AS stack_palette
+           FROM cues c LEFT JOIN cue_stacks s ON s.id = c.cue_stack_id"""
+    ) { rs ->
+        while (rs.next()) {
+            val own = parsePaletteColumn(rs.getString("cue_palette"))
+            paletteForCue[rs.getInt("id")] =
+                own.ifEmpty { parsePaletteColumn(rs.getString("stack_palette")) }
+        }
+    }
+    val paletteForLook = HashMap<Int, List<String>>()
+    if (columnExists("looks", "palette")) {
+        exec("SELECT id, palette FROM looks") { rs ->
+            while (rs.next()) {
+                paletteForLook[rs.getInt("id")] = parsePaletteColumn(rs.getString("palette"))
+            }
+        }
+    }
+
+    // Collected first and written after: SQLite gives this migration one connection, so an UPDATE
+    // issued from inside the read callback would run with the cursor still open.
+    val updates = ArrayList<Triple<String, Int, String>>()
+    for ((table, owner, palettes) in listOf(
+        Triple("cue_ad_hoc_effects", "cue_id", paletteForCue),
+        Triple("look_effects", "look_id", paletteForLook),
+    )) {
+        // A database old enough to have `cues.palette` but no `looks` table at all is possible —
+        // the looks tables arrived after the colour list did.
+        if (!tableExists(table)) continue
+        exec("SELECT id, $owner AS owner_id, parameters FROM $table") { rs ->
+            while (rs.next()) {
+                val id = rs.getInt("id")
+                val params = parseEffectParametersColumn(rs.getString("parameters")) ?: continue
+                val inlined = inlinePositionalColourRefs(params, palettes[rs.getInt("owner_id")] ?: emptyList())
+                    ?: continue
+                updates.add(Triple(table, id, Json.encodeToString(inlined)))
+            }
+        }
+    }
+    for ((table, id, parameters) in updates) {
+        exec("UPDATE $table SET parameters = ${sqlText(parameters)} WHERE id = $id")
+    }
+    if (updates.isNotEmpty()) {
+        logger.info(
+            "Positional colour list migration: inlined the list into {} effect parameter set(s)",
+            updates.size,
+        )
+    }
+
+    // Now the columns. The two on `cues` / `cue_stacks` are the ones an insert trips over; the other
+    // two are merely dead, and are dropped in the same pass so nothing is left claiming to hold a
+    // colour list. A failure is logged rather than thrown: rolling this transaction back would take
+    // the whole schema setup with it, and the constraint error a later insert raises names the
+    // column plainly.
+    for ((table, column) in listOf(
+        "cues" to "palette",
+        "cues" to "update_global_palette",
+        "cue_stacks" to "palette",
+        "looks" to "palette",
+    )) {
+        if (!columnExists(table, column)) continue
+        runCatching { exec("ALTER TABLE $table DROP COLUMN $column") }
+            .onSuccess { logger.info("Dropped legacy column {}.{}", table, column) }
+            .onFailure { logger.error("Could not drop legacy column {}.{}: {}", table, column, it.message) }
+    }
+}
+
 /**
  * Collapse FX presets and named palettes into Looks, and cue preset applications into cue layers.
  *
@@ -307,8 +464,9 @@ private fun JdbcTransaction.columnExists(table: String, column: String): Boolean
  * Mapping:
  * - each palette → a Look; entries → rows with concrete targets
  * - each preset → a Look carrying its **effects** (as `look_effects` rows marked `deferred`, which
- *   still means "fan over the layer's targets") and its `palette`. Its target-less *property
- *   assignments* are **dropped with a warning** — see the note in the presets arm below.
+ *   still means "fan over the layer's targets"). Its target-less *property assignments* are
+ *   **dropped with a warning** — see the note in the presets arm below. Its positional colour list
+ *   has no successor column, so it is *inlined* into the effect parameters that referenced it.
  * - each cue preset application → a cue layer, carrying `sortOrder`, the timing triple and both
  *   speed-master overrides
  * - each cue assignment whose value is `ref:{uuid}` → folded into **one** layer per (cue, Look),
@@ -403,9 +561,9 @@ internal fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
             if (palUuid in lookIdByUuid) continue
             val name = uniqueName(pal.projectId, pal.name)
             exec(
-                "INSERT INTO looks (project_id, name, notes, sort_order, palette, uuid) " +
+                "INSERT INTO looks (project_id, name, notes, sort_order, uuid) " +
                     "VALUES (${pal.projectId}, ${sqlText(name)}, ${sqlText(pal.notes)}, ${nextSortOrder(pal.projectId)}, " +
-                    "'[]', ${sqlUuid(palUuid)})"
+                    "${sqlUuid(palUuid)})"
             )
             val lookId = lastInsertRowId() ?: continue
             lookIdByUuid[palUuid] = lookId
@@ -436,6 +594,11 @@ internal fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
     // The uuid is still preserved, so the `cue_preset_applications` arm below still finds its Look
     // and every existing reference still resolves.
     if (tableExists("fx_presets")) {
+        // `fx_presets.palette` is still read, but for the opposite reason it used to be. It held the
+        // preset's **positional** colour list, and there is no successor column to carry it into —
+        // so it is read only to *inline* it into the effect parameters that referenced it, exactly
+        // as [migratePositionalColourListsAway] does for the live tables. That migration cannot
+        // cover these effects: they do not exist as `look_effects` rows until this arm writes them.
         data class Preset(val id: Int, val projectId: Int, val name: String, val description: String?, val fixtureType: String, val effects: String, val palette: String, val uuid: UUID?)
         val presets = mutableListOf<Preset>()
         exec("SELECT id, project_id, name, description, fixture_type, effects, palette, uuid FROM fx_presets") { rs ->
@@ -443,7 +606,8 @@ internal fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
                 presets.add(Preset(
                     rs.getInt("id"), rs.getInt("project_id"), rs.getString("name"),
                     rs.getString("description"), rs.getString("fixture_type"),
-                    rs.getString("effects") ?: "[]", rs.getString("palette") ?: "[]",
+                    rs.getString("effects") ?: "[]",
+                    rs.getString("palette") ?: "[]",
                     rs.javaUuid("uuid"),
                 ))
             }
@@ -457,10 +621,10 @@ internal fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
             if (presetUuid in lookIdByUuid) continue
             val name = uniqueName(preset.projectId, preset.name)
             exec(
-                "INSERT INTO looks (project_id, name, notes, sort_order, palette, uuid) " +
+                "INSERT INTO looks (project_id, name, notes, sort_order, uuid) " +
                     "VALUES (${preset.projectId}, ${sqlText(name)}, ${sqlText(preset.description)}, " +
                     "${nextSortOrder(preset.projectId)}, " +
-                    "${sqlText(preset.palette)}, ${sqlUuid(presetUuid)})"
+                    "${sqlUuid(presetUuid)})"
             )
             val lookId = lastInsertRowId() ?: continue
             lookIdByUuid[presetUuid] = lookId
@@ -484,7 +648,12 @@ internal fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
             // The effects blob becomes real rows. Uuids are minted here because the blob never had
             // any — the effects lived inside the preset's own record, so sync only ever saw the
             // parent's uuid.
+            val presetPalette = parsePaletteColumn(preset.palette)
             for ((index, effect) in parseLegacyPresetEffects(preset.effects).withIndex()) {
+                // Positional references become literals on the way in; the list they named is not
+                // coming with them. See [migratePositionalColourListsAway].
+                val parameters = inlinePositionalColourRefs(effect.parameters, presetPalette)
+                    ?: effect.parameters
                 exec(
                     "INSERT INTO look_effects (look_id, target_type, target_key, effect_type, category, " +
                         "property_name, beat_division, blend_mode, distribution, phase_offset, element_mode, " +
@@ -495,7 +664,7 @@ internal fun JdbcTransaction.migratePresetsAndPalettesToLooks() {
                         "${sqlText(effect.blendMode)}, ${sqlText(effect.distribution)}, ${effect.phaseOffset}, " +
                         "${sqlText(effect.elementMode)}, ${sqlText(effect.elementFilter)}, " +
                         "${effect.stepTiming?.let { if (it) 1 else 0 }?.toString() ?: "NULL"}, " +
-                        "${sqlText(Json.encodeToString(effect.parameters))}, " +
+                        "${sqlText(Json.encodeToString(parameters))}, " +
                         "${sqlUuid(uuidOrNull(effect.speedMasterUuid))}, " +
                         "${sqlUuid(uuidOrNull(effect.rateSpeedMasterUuid))}, " +
                         "$index, ${sqlUuid(UUID.randomUUID())})"

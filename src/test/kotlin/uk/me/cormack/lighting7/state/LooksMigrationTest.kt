@@ -5,7 +5,6 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.PaletteCascade
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
@@ -121,6 +120,11 @@ class LooksMigrationTest : RouteIntegrationTest() {
             this.name = name
             this.description = "seeded"
             this.fixtureType = fixtureType
+            // The legacy column still exists here. Seeded deliberately: the positional colour list
+            // has no successor column, so the migration reads this one only to *inline* it into the
+            // effect parameters that referenced it, and a legacy preset that has one is the case
+            // that proves the read still works. This preset's effect names no colour, so nothing is
+            // rewritten — `#ff8800` is here to be read past, not resolved.
             this.palette = listOf("#ff8800")
             this.effects = if (!withEffect) emptyList() else listOf(
                 LookEffectSpec(
@@ -142,12 +146,12 @@ class LooksMigrationTest : RouteIntegrationTest() {
 
     private fun seedCue(name: String = "cue-1"): Int = transaction(state.database) {
         val stack = DaoCueStack.new {
-            this.project = project(); this.name = "stack-$name"; palette = emptyList()
+            this.project = project(); this.name = "stack-$name"
             loop = false; type = CueStackType.STACK.name; sortOrder = 0
         }
         DaoCue.new {
             this.project = project(); this.name = name; cueStack = stack; sortOrder = 0
-            palette = emptyList(); cueType = CueType.STANDARD.name
+            cueType = CueType.STANDARD.name
         }.id.value
     }
 
@@ -234,8 +238,8 @@ class LooksMigrationTest : RouteIntegrationTest() {
         val paletteUuid = seedPalette("Warm Amber", listOf(Triple("fixture", "hex-1", "#ff8800")))
         transaction(state.database) {
             exec(
-                "INSERT INTO looks (project_id, name, notes, sort_order, palette, uuid) " +
-                    "VALUES ($projectId, 'Warm Amber', NULL, 0, '[]', 'not-a-blob-uuid')"
+                "INSERT INTO looks (project_id, name, notes, sort_order, uuid) " +
+                    "VALUES ($projectId, 'Warm Amber', NULL, 0, 'not-a-blob-uuid')"
             )
         }
         assertTrue("text" in uuidStorageTypes("looks"), "precondition: a text-uuid row exists")
@@ -270,7 +274,6 @@ class LooksMigrationTest : RouteIntegrationTest() {
             assertEquals(setOf("hex-1", "front-wash"), bound.rows.map { it.targetKey }.toSet())
 
             val fromPreset = DaoLook.all().single { it.name == "warm-pulse" }
-            assertEquals(listOf("#ff8800"), fromPreset.palette, "the positional colour list carries over")
             // **The preset's target-less value rows do not come across, and that is the contract
             // since session 3.** A deferred Look row is refused at the write boundary now — a value
             // you point at a selection is a template — so the migration logs those rows rather than

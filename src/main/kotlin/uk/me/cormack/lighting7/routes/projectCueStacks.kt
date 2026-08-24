@@ -53,7 +53,6 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val stack = DaoCueStack.new {
                     name = resolvedName
                     this.project = project
-                    palette = input.palette
                     loop = input.loop
                     type = stackType
                     label = input.label
@@ -123,7 +122,6 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     if (newLabel.isNotBlank()) stack.name = newLabel
                 } else {
                     stack.name = input.name
-                    stack.palette = input.palette
                     stack.loop = input.loop
                 }
 
@@ -498,7 +496,6 @@ data class CueStackSortByNumberResource(val parent: ProjectCueStackResource)
 @Serializable
 data class NewCueStack(
     val name: String = "",
-    val palette: List<String> = emptyList(),
     val loop: Boolean = false,
     /** "STACK" (default) or "SEPARATOR". */
     val type: String? = null,
@@ -512,7 +509,6 @@ data class NewCueStack(
 data class CueStackDetails(
     val id: Int,
     val name: String,
-    val palette: List<String>,
     val loop: Boolean,
     val sortOrder: Int,
     val type: String,
@@ -535,15 +531,14 @@ data class CueStackCueEntry(
     val id: Int,
     val name: String,
     val sortOrder: Int,
-    val paletteSize: Int,
     /**
      * How many Look layers the cue carries.
      *
      * Was `presetCount`, counting `cue_preset_applications` — which retired in session 4. Renamed
      * rather than deleted because it is the count a collapsed cue row wants: a cue built entirely
      * from layers otherwise reads as empty in the Run list. **No client reads it yet** (the
-     * frontend's `CueStackCueEntry` declares it and nothing consumes it, along with `paletteSize`
-     * and `adHocEffectCount`), so treat it as available rather than as load-bearing.
+     * frontend's `CueStackCueEntry` declares it and nothing consumes it, along with
+     * `adHocEffectCount`), so treat it as available rather than as load-bearing.
      */
     val layerCount: Int,
     val adHocEffectCount: Int,
@@ -645,7 +640,6 @@ private fun DaoCueStack.toCueStackDetails(
             id = cue.id.value,
             name = cue.name,
             sortOrder = cue.sortOrder,
-            paletteSize = cue.palette.size,
             layerCount = cue.layers.count().toInt(),
             adHocEffectCount = cue.adHocEffects.count().toInt(),
             autoAdvance = cue.autoAdvance,
@@ -662,7 +656,6 @@ private fun DaoCueStack.toCueStackDetails(
     return CueStackDetails(
         id = id.value,
         name = name,
-        palette = palette,
         loop = loop,
         sortOrder = sortOrder,
         type = type,

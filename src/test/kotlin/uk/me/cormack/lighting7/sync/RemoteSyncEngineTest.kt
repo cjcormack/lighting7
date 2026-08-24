@@ -125,7 +125,6 @@ class RemoteSyncEngineTest {
             DaoCueStack.new {
                 this.project = project
                 this.name = "Stack 1"
-                this.palette = emptyList()
             }
         }
         val result = runSync(projectId)
@@ -249,7 +248,6 @@ class RemoteSyncEngineTest {
             DaoCueStack.new {
                 this.project = project
                 this.name = "Local Stack"
-                this.palette = emptyList()
             }
         }
 
@@ -296,7 +294,7 @@ class RemoteSyncEngineTest {
                 Files.createDirectories(cueStacksDir)
                 Files.writeString(
                     cueStacksDir.resolve("$stackUuid.json"),
-                    """{"loop":false,"name":"From-other","palette":[],"uuid":"$stackUuid"}""" + "\n",
+                    """{"loop":false,"name":"From-other","uuid":"$stackUuid"}""" + "\n",
                 )
                 JGitClient.stageAll(repo)
                 JGitClient.commit(repo, "RemoteInstall", "remote@example.com", "from-other-install")

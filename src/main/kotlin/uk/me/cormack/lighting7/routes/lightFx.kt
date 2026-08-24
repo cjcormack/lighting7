@@ -132,10 +132,14 @@ internal fun Route.routeApiRestFx(state: State) {
                 val newEffect = if (request.effectType != null || request.parameters != null) {
                     val effectType = request.effectType ?: existing.effect.name.replace(" ", "")
                     val params = request.parameters ?: existing.effect.parameters
+                    // On the request thread, before the effect can tick — see
+                    // [prewarmTemplateColours].
+                    val templates = state.show.templateRegistry
+                    prewarmTemplateColours(templates, params)
                     state.show.fxRegistry.createEffect(
                         effectType, params,
-                        paletteSupplier = engine::getPalette,
-                        paletteVersionSupplier = { engine.paletteVersion },
+                        resolveColourSource = templateColourSource(templates),
+                        colourSourceVersion = { templates.version },
                     )
                 } else null
 
@@ -477,12 +481,14 @@ private fun createTargetFromRequest(request: AddEffectRequest, state: State): Fx
 }
 
 private fun createEffectFromRequest(request: AddEffectRequest, state: State): Effect {
-    val engine = state.show.fxEngine
+    // On the request thread, before the effect can tick — see [prewarmTemplateColours].
+    val templates = state.show.templateRegistry
+    prewarmTemplateColours(templates, request.parameters)
     return state.show.fxRegistry.createEffect(
         request.effectType,
         request.parameters,
-        paletteSupplier = engine::getPalette,
-        paletteVersionSupplier = { engine.paletteVersion },
+        resolveColourSource = templateColourSource(templates),
+        colourSourceVersion = { templates.version },
     )
 }
 

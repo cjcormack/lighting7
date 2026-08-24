@@ -104,7 +104,6 @@ internal fun createCueFromRecording(
     val cue = DaoCue.new {
         this.name = name
         this.project = project
-        this.palette = recording.palette ?: emptyList()
         this.cueStack = stack
         this.cueNumber = cueNumber
         this.cueType = cueType.name
@@ -263,7 +262,6 @@ internal fun writeRecordingIntoCue(
                 written++
             }
             replaceImmediateFxChildren(cue, recording, mask, state, scope, warnings)
-            if (recording.palette != null) cue.palette = recording.palette
         }
     }
 

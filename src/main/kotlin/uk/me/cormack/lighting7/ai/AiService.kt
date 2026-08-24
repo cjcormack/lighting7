@@ -7,6 +7,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.detectCapabilities
 import uk.me.cormack.lighting7.state.State
@@ -268,13 +269,6 @@ class AiService(
         // Current state
         sb.appendLine("## Current State")
         sb.appendLine("BPM: ${state.show.fxEngine.masterClock.bpm.value}")
-        val palette = state.show.fxEngine.getPalette()
-        if (palette.isNotEmpty()) {
-            val paletteStr = palette.mapIndexed { i, c -> "P${i + 1}=${c.toSerializedString()}" }.joinToString(", ")
-            sb.appendLine("Palette: $paletteStr")
-        } else {
-            sb.appendLine("Palette: (empty)")
-        }
         val activeEffects = state.show.fxEngine.getActiveEffects()
         if (activeEffects.isNotEmpty()) {
             sb.appendLine("Active effects: ${activeEffects.size}")
@@ -306,12 +300,30 @@ class AiService(
             sb.appendLine()
         }
 
+        // Colour templates, with their uuids — the only thing a colour parameter can reference, so
+        // the uuid has to be in the prompt or `tmpl:` is unusable.
+        val colourTemplates = transaction(state.database) {
+            DaoTemplate.find { DaoTemplates.project eq project.id }.mapNotNull { template ->
+                val rows = template.rows.toList()
+                val colour = rows.singleOrNull()
+                    ?.takeIf { TemplateProperty.ofOrNull(it.propertyName) == TemplateProperty.COLOUR }
+                    ?.takeIf { it.targetType == DEFERRED_TARGET_TYPE }
+                    ?: return@mapNotNull null
+                "${template.name} — `tmpl:${template.uuid}` (${colour.value})"
+            }
+        }
+        if (colourTemplates.isNotEmpty()) {
+            sb.appendLine("## Colour Templates")
+            colourTemplates.forEach { sb.appendLine("- $it") }
+            sb.appendLine()
+        }
+
         // Existing cues
         val cues = transaction(state.database) {
             DaoCue.find { DaoCues.project eq project.id }
                 .map {
                     val stackInfo = it.cueStack?.let { s -> " [stack: ${s.name}]" } ?: ""
-                    "**${it.name}** (id=${it.id.value}, ${it.palette.size} palette colours, ${it.layers.count()} layers, ${it.adHocEffects.count()} ad-hoc effects)$stackInfo"
+                    "**${it.name}** (id=${it.id.value}, ${it.layers.count()} layers, ${it.adHocEffects.count()} ad-hoc effects)$stackInfo"
                 }
         }
         if (cues.isNotEmpty()) {
@@ -345,18 +357,17 @@ class AiService(
         sb.appendLine("- Beat divisions: 0.125 (1/32), 0.25 (16th), 0.5 (8th), 1.0 (quarter), 2.0 (half), 4.0 (1 bar), 8.0 (2 bars)")
         sb.appendLine("- Blend modes: OVERRIDE (replace), ADDITIVE (add), MULTIPLY, MAX, MIN")
         sb.appendLine("- Distributions: LINEAR (sequential chase), UNIFIED (all same), CENTER_OUT, EDGES_IN, PING_PONG, REVERSE, SPLIT, RANDOM")
-        sb.appendLine("- Colour format: hex '#FF0000', names 'red', extended '#ff0000;w128;a64;uv200', or palette refs 'P1', 'P2', etc.")
-        sb.appendLine("- **Palette references**: Use P1, P2, P3 etc. in colour parameters to reference the shared palette. 1-indexed, wraps if index exceeds palette size (e.g. P4 with 3 colours = P1). Default colour effect params use palette refs (e.g. ColourCycle defaults to P1,P2,P3).")
-        sb.appendLine("- **P* wildcard**: In ColourCycle, use 'P*' as the colours parameter to automatically use ALL palette colours. This is the easiest way to create a colour cycle from the palette.")
-        sb.appendLine("- The global palette (set via set_palette) applies to ad-hoc effects not created from a cue. Cue effects use their cue's own palette, which is isolated from the global palette. Changing the global palette does not affect running cue effects.")
+        sb.appendLine("- Colour format: hex '#FF0000', names 'red', extended '#ff0000;w128;a64;uv200', or a template reference 'tmpl:{uuid}'.")
+        sb.appendLine("- **Template references**: a colour parameter may name a colour template by uuid — 'tmpl:2f1c…' — instead of stating a colour. Retuning that template moves every running effect that references it, which is the point: it is how a show keeps one set of colours in one place. Only the **generic** colour templates listed above can be referenced; a per-fixture template holds no single colour. Use them in a colourList too: 'colours' takes a comma-separated mix, e.g. 'tmpl:<warm>,tmpl:<cold>,#ff0000'.")
+        sb.appendLine("- A template reference is legal **only in an effect parameter**. Cue values, look rows and programmer values are always literals; a cue that should follow a template gets a *layer* applying it (see create_cue / cue layers).")
         sb.appendLine("- For group effects, use distribution=LINEAR for chases, UNIFIED for all-together")
         sb.appendLine("- **Step timing**: Controls whether beat division means per-step time or total cycle time. When stepTiming=true, each step gets one full beat-division (total cycle = beatDivision × steps). When false, the entire cycle completes in one beat-division. Static effects default to stepTiming=true (chase), continuous effects default to false. You can override per-effect in the preset.")
         sb.appendLine("- UByte values range 0-255 (use 'u' suffix in scripts: 128u)")
         sb.appendLine("- **Looks and layers**: A *look* is a named, reusable bundle of static values and effects. A *layer* applies one look inside a cue, at a position in the cue's stack. A look whose rows name their own fixtures is **bound** (edit it and every cue layering it moves); one whose rows are deferred takes its targets from the layer, so the same look can be pointed at different fixtures.")
         sb.appendLine("- **Layer order**: within a cue, later layers override earlier ones for the same fixture and property — for *every* attribute, intensity included. This is not HTP: a later dim layer really does dim. The cue's own local values always win over every layer. Per-layer blendMode (MAX/MIN/MULTIPLY/ADDITIVE) and amount (0..1) modify how a layer mixes over what is beneath it.")
         sb.appendLine("- **One limit worth knowing**: effects sit above static values regardless of layer order, because effects are a higher composition layer than values. So a later layer setting colour statically will not beat an earlier layer running a colour effect.")
-        sb.appendLine("- **Cues**: A cue is an ordered stack of look layers plus its own local values and ad-hoc effects. Multiple cues can run concurrently — applying a cue adds it alongside existing cues. Each cue has its own isolated positional colour list (effects resolve P1, P2 etc. against it, not against the global one). Cues with updateGlobalPalette=true also set the global list when applied. Re-applying the same cue refreshes it. Use stop_cue to stop one cue, or apply_cue with replaceAll=true to stop all others first. Looks are read fresh at apply time, so edits to a look are always reflected.")
-        sb.appendLine("- **Cue Stacks**: An ordered container of cues for sequential playback (theatre-style cue-to-cue). Create a stack with create_cue_stack, add cues with add_cue_to_stack, then activate with activate_cue_stack. Use advance_cue_stack to go forward/backward. Stacks support looping (wraps at end). Individual cues within a stack can have: auto-advance (timed transition to next cue, configured per-cue via autoAdvance + autoAdvanceDelayMs), crossfade (intensity envelope between cue transitions, configured per-cue via fadeDurationMs + fadeCurve). Stack palette cascading: cue palette replaces stack palette when set; stack palette persists when a cue has no palette. Multiple stacks can be active simultaneously.")
+        sb.appendLine("- **Cues**: A cue is an ordered stack of look layers plus its own local values and ad-hoc effects. Multiple cues can run concurrently — applying a cue adds it alongside existing cues. Re-applying the same cue refreshes it. Use stop_cue to stop one cue, or apply_cue with replaceAll=true to stop all others first. Looks are read fresh at apply time, so edits to a look are always reflected.")
+        sb.appendLine("- **Cue Stacks**: An ordered container of cues for sequential playback (theatre-style cue-to-cue). Create a stack with create_cue_stack, add cues with add_cue_to_stack, then activate with activate_cue_stack. Use advance_cue_stack to go forward/backward. Stacks support looping (wraps at end). Individual cues within a stack can have: auto-advance (timed transition to next cue, configured per-cue via autoAdvance + autoAdvanceDelayMs), crossfade (intensity envelope between cue transitions, configured per-cue via fadeDurationMs + fadeCurve). Multiple stacks can be active simultaneously.")
 
         return sb.toString()
     }

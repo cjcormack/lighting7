@@ -55,8 +55,6 @@ data class LookSnapshot(
     val lookId: Int,
     val lookUuid: UUID,
     val name: String,
-    /** The positional colour list (`P1` / `P2`), feeding [PaletteCascade]'s most-specific scope. */
-    val palette: List<String>,
     /** Rows in `sortOrder`. */
     val rows: List<LookRowEntry>,
     /** Effects in `sortOrder`. */
@@ -106,7 +104,7 @@ class ExpandedLook(
  *   membership — the failure mode is a fixture added to a group not picking up the Look, which
  *   looks like a Look bug and isn't.
  *
- * [version] increments on every invalidation, mirroring [FxEngine.paletteVersion] / the
+ * [version] increments on every invalidation, mirroring [TemplateRegistry.version] / the
  * `TypedParams.invalidateColourCacheIfStale` idiom.
  *
  * Misses are deliberately *not* cached: a dangling reference costs one small query per apply, and
@@ -230,7 +228,6 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
             lookId = look.id.value,
             lookUuid = look.uuid,
             name = look.name,
-            palette = look.palette,
             rows = look.rows
                 .orderBy(DaoLookRows.sortOrder to SortOrder.ASC)
                 .mapNotNull { row ->

@@ -268,7 +268,6 @@ internal fun recordingForUpdate(
         // layer list to the MERGE writer as well would append the whole stack on every Update.
         layers = emptyList(),
         adHocEffects = adHoc,
-        palette = null,
         groupRowsEmitted = collapsed.groupRows,
         skipped = collapsed.skipped,
     )

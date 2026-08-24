@@ -21,7 +21,7 @@ sealed class BroadcastOutMessage : OutMessage()
  * `routes/lookRepublish.kt`), which is what drives the programmer sheet to re-read resolved values.
  *
  * Replaces the two messages this collapses — `presetListChanged` and `paletteListChanged` — now
- * that FX presets and named palettes are one entity.
+ * that FX presets and the old named palette banks are one entity, the Look.
  */
 @Serializable
 @SerialName("lookListChanged")

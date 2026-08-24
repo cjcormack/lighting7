@@ -27,9 +27,6 @@ fun parseColor(colorString: String): Color {
     return parseExtendedColour(colorString).color
 }
 
-/** Parse a serialised palette (`List<String>`, as stored on cues / presets / stacks) to [ExtendedColour]s. */
-fun List<String>.toPaletteColours(): List<ExtendedColour> = map { parseExtendedColour(it) }
-
 /**
  * Parse a colour string into an [ExtendedColour].
  *
@@ -37,6 +34,12 @@ fun List<String>.toPaletteColours(): List<ExtendedColour> = map { parseExtendedC
  * - Named colours: "red", "green", "blue", "yellow", "cyan", "magenta", "orange", "pink", "white", "black"
  * - Hex: "#FF0000", "FF0000", "#F00"
  * - Extended: "#ff0000;w128;a64;uv200" (semicolons separate optional W/A/UV channels)
+ *
+ * **Unrecognised input is white, never an exception.** The hex arms parse with `toIntOrNull` for
+ * that reason: a string of exactly six (or three) non-hex characters used to throw
+ * `NumberFormatException` out of here, and this function is reached from an effect's `calculate` on
+ * the 50 Hz tick loop — via [TypedParams.colour], whose fallback for a template reference it cannot
+ * honour is precisely "hand the raw string to this parser". `tmpl:1` is six characters.
  */
 fun parseExtendedColour(colorString: String): ExtendedColour {
     val parts = colorString.split(";")
@@ -56,12 +59,16 @@ fun parseExtendedColour(colorString: String): ExtendedColour {
         else -> {
             val hex = rgbPart.removePrefix("#")
             when (hex.length) {
-                6 -> Color(hex.toInt(16))
+                6 -> hex.toIntOrNull(16)?.let { Color(it) } ?: Color.WHITE
                 3 -> {
-                    val r = hex.substring(0, 1).toInt(16)
-                    val g = hex.substring(1, 2).toInt(16)
-                    val b = hex.substring(2, 3).toInt(16)
-                    Color(r * 17, g * 17, b * 17)
+                    val r = hex.substring(0, 1).toIntOrNull(16)
+                    val g = hex.substring(1, 2).toIntOrNull(16)
+                    val b = hex.substring(2, 3).toIntOrNull(16)
+                    if (r == null || g == null || b == null) {
+                        Color.WHITE
+                    } else {
+                        Color(r * 17, g * 17, b * 17)
+                    }
                 }
                 else -> Color.WHITE
             }

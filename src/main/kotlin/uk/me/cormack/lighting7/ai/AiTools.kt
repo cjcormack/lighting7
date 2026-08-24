@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.*
+import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -29,7 +30,6 @@ class AiTools(private val state: State) {
         setBpmTool,
         clearEffectsTool,
         getCurrentStateTool,
-        setPaletteTool,
         createCueTool,
         applyCueTool,
         stopCueTool,
@@ -52,7 +52,6 @@ class AiTools(private val state: State) {
                 "set_bpm" -> executeSetBpm(input)
                 "clear_effects" -> executeClearEffects(input)
                 "get_current_state" -> executeGetCurrentState(input)
-                "set_palette" -> executeSetPalette(input)
                 "create_cue" -> executeCreateCue(input)
                 "apply_cue" -> executeApplyCue(input)
                 "stop_cue" -> executeStopCue(input)
@@ -275,7 +274,7 @@ class AiTools(private val state: State) {
 
     private fun executeGetCurrentState(input: JsonObject): ToolExecutionResult {
         val include = input["include"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
-            ?: setOf("active_effects", "bpm", "fixtures", "groups", "looks", "palette", "cues", "cue_stacks")
+            ?: setOf("active_effects", "bpm", "fixtures", "groups", "looks", "templates", "cues", "cue_stacks")
 
         val result = buildJsonObject {
             if ("bpm" in include) {
@@ -348,17 +347,24 @@ class AiTools(private val state: State) {
                 })
             }
 
-            if ("palette" in include) {
-                val palette = state.show.fxEngine.getPalette()
-                put("palette", buildJsonArray {
-                    for ((i, colour) in palette.withIndex()) {
-                        addJsonObject {
-                            put("index", i + 1)
-                            put("ref", "P${i + 1}")
-                            put("colour", colour.toSerializedString())
+            if ("templates" in include) {
+                // Generic colour templates only: they are the ones a `tmpl:` colour parameter can
+                // name, and the uuid is what it names them by.
+                val project = state.projectManager.currentProject
+                val templates = transaction(state.database) {
+                    DaoTemplate.find { DaoTemplates.project eq project.id }.mapNotNull { template ->
+                        val row = template.rows.toList().singleOrNull()
+                            ?.takeIf { TemplateProperty.ofOrNull(it.propertyName) == TemplateProperty.COLOUR }
+                            ?.takeIf { it.targetType == DEFERRED_TARGET_TYPE }
+                            ?: return@mapNotNull null
+                        buildJsonObject {
+                            put("name", template.name)
+                            put("ref", "tmpl:${template.uuid}")
+                            put("intent", row.value)
                         }
                     }
-                })
+                }
+                put("templates", buildJsonArray { templates.forEach { add(it) } })
             }
 
             if ("cues" in include) {
@@ -369,7 +375,6 @@ class AiTools(private val state: State) {
                             buildJsonObject {
                                 put("id", cue.id.value)
                                 put("name", cue.name)
-                                put("paletteSize", cue.palette.size)
                                 put("layerCount", cue.layers.count())
                                 put("adHocEffectCount", cue.adHocEffects.count())
                             }
@@ -409,37 +414,11 @@ class AiTools(private val state: State) {
         )
     }
 
-    private fun executeSetPalette(input: JsonObject): ToolExecutionResult {
-        val coloursArray = input["colours"]?.jsonArray ?: return errorResult("Missing 'colours'")
-        val colours = coloursArray.map { parseExtendedColour(it.jsonPrimitive.content) }
-        state.show.fxEngine.setPalette(colours)
-
-        val paletteStr = colours.mapIndexed { i, c -> "P${i + 1}=${c.toSerializedString()}" }.joinToString(", ")
-        return ToolExecutionResult(
-            success = true,
-            description = "Set palette to ${colours.size} colours: $paletteStr",
-            result = buildJsonObject {
-                put("paletteSize", colours.size)
-                put("palette", buildJsonArray {
-                    for ((i, colour) in colours.withIndex()) {
-                        addJsonObject {
-                            put("ref", "P${i + 1}")
-                            put("colour", colour.toSerializedString())
-                        }
-                    }
-                })
-            }.toString()
-        )
-    }
-
     private fun executeCreateCue(input: JsonObject): ToolExecutionResult {
         val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
-        val paletteArray = input["palette"]?.jsonArray
         val layersArray = input["layers"]?.jsonArray
         val adHocArray = input["adHocEffects"]?.jsonArray
 
-        val updateGlobalPalette = input["updateGlobalPalette"]?.jsonPrimitive?.booleanOrNull ?: false
-        val palette = paletteArray?.map { it.jsonPrimitive.content } ?: emptyList()
         val layers = layersArray?.mapIndexed { index, layer ->
             val obj = layer.jsonObject
             CueLayerDto(
@@ -470,8 +449,6 @@ class AiTools(private val state: State) {
             val newCue = DaoCue.new {
                 this.name = name
                 this.project = project
-                this.palette = palette
-                this.updateGlobalPalette = updateGlobalPalette
                 this.cueStack = stack
                 this.sortOrder = stack.cues.count().toInt()
             }
@@ -484,11 +461,10 @@ class AiTools(private val state: State) {
         val cueId = cue.id.value
         return ToolExecutionResult(
             success = true,
-            description = "Created cue '$name' (id=$cueId, ${palette.size} palette colours, ${layers.size} layers, ${adHocEffects.size} ad-hoc effects)",
+            description = "Created cue '$name' (id=$cueId, ${layers.size} layers, ${adHocEffects.size} ad-hoc effects)",
             result = buildJsonObject {
                 put("cueId", cueId)
                 put("name", name)
-                put("paletteSize", palette.size)
                 put("layerCount", layers.size)
                 put("adHocEffectCount", adHocEffects.size)
             }.toString()
@@ -504,8 +480,6 @@ class AiTools(private val state: State) {
             CueApplyData(
                 cueId = cue.id.value,
                 cueName = cue.name,
-                palette = cue.palette,
-                updateGlobalPalette = cue.updateGlobalPalette,
                 // Without this the tool applies the cue with an empty layer stack — none of its
                 // Looks contribute values or spawn effects. `applyCue` reads only `layers`.
                 layers = cue.layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
@@ -565,8 +539,6 @@ class AiTools(private val state: State) {
 
     private fun executeCreateCueStack(input: JsonObject): ToolExecutionResult {
         val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
-        val paletteArray = input["palette"]?.jsonArray
-        val palette = paletteArray?.map { it.jsonPrimitive.content } ?: emptyList()
         val loop = input["loop"]?.jsonPrimitive?.booleanOrNull ?: false
 
         val project = state.projectManager.currentProject
@@ -574,7 +546,6 @@ class AiTools(private val state: State) {
             DaoCueStack.new {
                 this.name = name
                 this.project = project
-                this.palette = palette
                 this.loop = loop
             }
         }

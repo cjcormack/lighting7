@@ -9,9 +9,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
-import uk.me.cormack.lighting7.fx.PaletteCascade
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
-import uk.me.cormack.lighting7.fx.toPaletteColours
 import uk.me.cormack.lighting7.models.CueLayerDto
 // Explicit: `plugins` already has a private `ProgrammerLayer.toDto()`, which otherwise wins the
 // name and fails on receiver type.
@@ -30,7 +28,7 @@ import uk.me.cormack.lighting7.routes.CueApplyData
 import uk.me.cormack.lighting7.routes.applyCue
 import uk.me.cormack.lighting7.routes.buildCueApplyData
 import uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue
-import uk.me.cormack.lighting7.routes.createInstanceFromPresetForCue
+import uk.me.cormack.lighting7.routes.createInstanceFromPreset
 import uk.me.cormack.lighting7.routes.cueDerivedPriority
 import uk.me.cormack.lighting7.routes.republishCueLayer
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
@@ -119,9 +117,10 @@ data class CueEditDiscardChangesInMessage(val cueId: Int) : CueEditInMessage()
 @SerialName("cueEdit.setMode")
 data class CueEditSetModeInMessage(val cueId: Int, val mode: String) : CueEditInMessage()
 
-@Serializable
-@SerialName("cueEdit.setPalette")
-data class CueEditSetPaletteInMessage(val cueId: Int, val palette: List<String>) : CueEditInMessage()
+// `cueEdit.setPalette` stood here. It replaced the cue's positional colour list — the `P1` / `P2`
+// grammar FX parameters indexed — and in Live mode pushed it at the stage too. The whole positional
+// list is gone: an effect names a colour **template** instead (`tmpl:{uuid}`), which is one thing
+// wherever it is read and needs no per-cue scope to push.
 
 // `cueEdit.addPresetApplication` stood here. It appended a `DaoCuePresetApplication` to the cue and,
 // in Live mode, spawned the preset's effects immediately. The op was **dead on both sides** before
@@ -192,13 +191,6 @@ data class CueEditAssignmentClearedOutMessage(
 ) : CueEditOutMessage()
 
 @Serializable
-@SerialName("cueEdit.paletteChanged")
-data class CueEditPaletteChangedOutMessage(
-    val cueId: Int,
-    val palette: List<String>,
-) : CueEditOutMessage()
-
-@Serializable
 @SerialName("cueEdit.adHocEffectAdded")
 data class CueEditAdHocEffectAddedOutMessage(
     val cueId: Int,
@@ -248,8 +240,6 @@ suspend fun handleCueEdit(scope: SocketScope, message: CueEditInMessage) {
                 )
             }
         }
-        is CueEditSetPaletteInMessage ->
-            CueEditSessionHandler.setPalette(state, ref, message.cueId, message.palette)
         is CueEditAddAdHocEffectInMessage ->
             CueEditSessionHandler.addAdHocEffect(state, ref, message.cueId, message.effect)
     }
@@ -619,40 +609,6 @@ object CueEditSessionHandler {
     }
 
     /**
-     * Replace the cue's palette. In Live mode also updates the stage palette via
-     * [FxEngine.setCuePalette] so running effects that reference palette entries pick up the
-     * change on the next tick.
-     */
-    fun setPalette(
-        state: State,
-        sessionRef: AtomicReference<CueEditSessionState?>,
-        cueId: Int,
-        palette: List<String>,
-    ): OutMessage {
-        val session = sessionRef.get()
-        if (session == null || session.cueId != cueId) {
-            return CueEditErrorOutMessage(cueId, "No active cueEdit session for this cue")
-        }
-
-        try {
-            transaction(state.database) {
-                val cue = DaoCue.findById(cueId) ?: error("Cue not found")
-                cue.palette = palette
-            }
-        } catch (e: Exception) {
-            return CueEditErrorOutMessage(cueId, "Persist failed: ${e.message}")
-        }
-
-        if (session.mode == CueEditMode.LIVE) {
-            val colours = runCatching { palette.toPaletteColours() }.getOrNull()
-            if (colours != null) state.show.fxEngine.setCuePalette(cueId, colours)
-        }
-
-        state.show.fixtures.cueListChanged()
-        return CueEditPaletteChangedOutMessage(cueId, palette)
-    }
-
-    /**
      * Append an ad-hoc effect to the cue. In Live mode spawns the effect immediately
      * (immediate effects only — timed ones are persisted for [CueTriggerManager]).
      */
@@ -720,9 +676,7 @@ object CueEditSessionHandler {
                 resolveTargetForCue(state, target, presetEffectDto)
             }.getOrNull()
             if (fxTarget != null) {
-                val instance = createInstanceFromPresetForCue(
-                    presetEffectDto, fxTarget, null, state, cueId
-                )
+                val instance = createInstanceFromPreset(presetEffectDto, fxTarget, null, state)
                 instance.cueId = cueId
                 instance.priority = cueDerivedPriority(applyData)
                 state.show.fxEngine.addEffect(instance)

@@ -36,7 +36,6 @@ class LookRegistryTest {
         lookId = 4,
         lookUuid = uuid,
         name = "Warm Amber",
-        palette = emptyList(),
         rows = rows.toList(),
         effects = emptyList(),
     )
@@ -205,7 +204,7 @@ class LookRegistryTest {
                 }
                 LookSnapshot(
                     lookId = 1, lookUuid = uuid, name = "Warm Amber",
-                    palette = emptyList(), effects = emptyList(),
+                    effects = emptyList(),
                     rows = listOf(LookRowEntry(TargetRef.Fixture("hex-1"), "colour", observed)),
                 )
             },
