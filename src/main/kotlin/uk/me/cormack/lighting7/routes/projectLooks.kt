@@ -349,8 +349,8 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
     // A layer carries the whole Look, so a **bound** row now lands on the fixture it names instead
     // of being filtered out — the old path could only offer deferred rows, because it had nowhere
     // to put a target set. And the instance is tagged `lookId` + `programmerLayerId` rather than
-    // `presetId = lookId`, which is what used to make `captureCurrentState` reconstruct a preset
-    // application naming whatever `DaoFxPreset` happened to share the number.
+    // having the Look id smuggled through a preset-id field, which is what used to make
+    // `captureCurrentState` reconstruct a preset application naming an unrelated `DaoFxPreset`.
     post<ToggleLookResource> { resource ->
         withCurrentProject(
             state,

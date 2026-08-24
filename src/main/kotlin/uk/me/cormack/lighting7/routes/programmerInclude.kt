@@ -242,7 +242,6 @@ private fun spawnIncludedFx(
     fun spawn(
         presetEffect: LookEffectSpec,
         target: TargetRef,
-        presetId: Int?,
         origin: ProgrammerFxOrigin,
     ) {
         if (mask != null) {
@@ -261,21 +260,25 @@ private fun spawnIncludedFx(
             if (!maskAllows(mask, group)) return
         }
 
-        // Matched on target + preset id, deliberately *not* on effect type.
+        // Matched on target + property + **effect registration**, and only against the cue's own
+        // ad-hoc children — the only thing this function spawns.
         //
-        // The obvious type test — `it.effect.name.replace(" ", "") == presetEffect.effectType`
-        // — only works for built-in effects, where the registration's id happens to be its
-        // display name with spaces stripped. A user-defined FX definition sets `effectId`
-        // independently of `name`, so the comparison never matches and Include spawns a second
-        // copy on top of the live one, visibly doubling it under any non-OVERRIDE blend.
+        // Never on `it.effect.name.replace(" ", "")`: that is a registration id only for
+        // built-ins, whose display name is their id with spaces in it. A user-defined FX
+        // definition sets `id` independently of `name`, so the comparison never matches and
+        // Include spawns a second copy on top of the live one. [FxInstance.registrationId] is the
+        // id itself, so the test holds for both.
         //
-        // Erring toward "already covered" is the safe direction: the cost of a false match is
-        // one un-spawned band instance on a property the cue is already driving, while a false
-        // miss is a visible double-apply.
+        // The two null clauses are what stop a *layer's* effect from masking a child it merely
+        // resembles. The child's own live instance still matches it exactly — same target,
+        // property and registration, and no layer provenance either — so a live cue's children
+        // are still skipped rather than doubled, which is the rule this guard exists for.
+        val registrationId = state.show.fxRegistry.getRegistration(presetEffect.effectType)?.id
         val duplicate = running.any {
             it.target.targetKey == target.key &&
                 it.target.propertyName == presetEffect.propertyName &&
-                it.presetId == presetId
+                it.registrationId == registrationId &&
+                it.lookId == null && it.cueLayerId == null
         }
         if (duplicate) {
             alreadyRunning++
@@ -288,7 +291,7 @@ private fun spawnIncludedFx(
             null
         } ?: return
 
-        val instance = createInstanceFromPreset(presetEffect, fxTarget, presetId, state)
+        val instance = createInstanceFromPreset(presetEffect, fxTarget, state)
         uk.me.cormack.lighting7.routes.markProgrammerOwned(instance, true)
         instance.programmerOrigin = origin
         engine.addEffect(instance)
@@ -302,8 +305,8 @@ private fun spawnIncludedFx(
     // retraction on remove, re-ranking on reorder. Only the cue's own ad-hoc children are left here.
     for (adHoc in cueData.adHocEffects.filter { it.delayMs == null && it.intervalMs == null }) {
         spawn(
-            adHoc.toPresetEffectDto(), adHoc.target, null,
-            ProgrammerFxOrigin(cueData.cueId, ProgrammerFxOrigin.Kind.AD_HOC, null, adHoc.sortOrder),
+            adHoc.toPresetEffectDto(), adHoc.target,
+            ProgrammerFxOrigin(cueData.cueId, ProgrammerFxOrigin.Kind.AD_HOC, adHoc.sortOrder),
         )
     }
 

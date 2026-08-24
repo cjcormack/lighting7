@@ -82,9 +82,10 @@ internal fun Route.routeApiRestFx(state: State) {
                     instance.stepTiming = it
                 }
 
-                // Propagate timing source from the effect's registration
+                // Propagate timing source and identity from the effect's registration
                 val registration = state.show.fxRegistry.getRegistration(request.effectType)
                 registration?.timingSource?.let { instance.timingSource = it }
+                instance.registrationId = registration?.id
 
                 instance.speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
                 instance.rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
@@ -130,7 +131,10 @@ internal fun Route.routeApiRestFx(state: State) {
 
                 // Resolve new effect if type or parameters changed
                 val newEffect = if (request.effectType != null || request.parameters != null) {
-                    val effectType = request.effectType ?: existing.effect.name.replace(" ", "")
+                    // `existing.effectTypeId`, not the display name: a parameters-only edit of a
+                    // user-defined effect otherwise looks up a type the registry has never heard
+                    // of and the whole update 400s.
+                    val effectType = request.effectType ?: existing.effectTypeId
                     val params = request.parameters ?: existing.effect.parameters
                     // On the request thread, before the effect can tick — see
                     // [prewarmTemplateColours].
@@ -161,6 +165,11 @@ internal fun Route.routeApiRestFx(state: State) {
                     newStepTiming = request.stepTiming,
                     newSpeedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid),
                     newRateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid),
+                    // Only when the client actually renamed the type; a parameters-only edit
+                    // leaves the instance's registration id alone.
+                    newRegistrationId = request.effectType?.let {
+                        state.show.fxRegistry.getRegistration(it)?.id
+                    },
                 )
 
                 if (updated != null) {
@@ -358,15 +367,9 @@ data class EffectDto(
     val elementMode: String? = null,
     val elementFilter: String? = null,
     val stepTiming: Boolean = false,
-    val presetId: Int? = null,
     /**
-     * The Look this effect came from, when it came from one.
-     *
-     * Separate from [presetId], which names a `DaoFxPreset` — the two are ids in different tables.
-     * The Look toggle used to stamp the Look id into `presetId`, which is what made the busking
-     * pads' active ring work and `captureCurrentState` mint a preset application naming an
-     * unrelated preset. Now that a Look reaches the programmer as a layer, `presetId` stays null and
-     * this is the field to match on.
+     * The Look this effect came from, when it came from one. The field the busking pads' active
+     * ring matches on.
      */
     val lookId: Int? = null,
     /** The programmer layer that spawned this effect, when one did. */
@@ -411,7 +414,7 @@ internal fun requireSpeedMasterUuid(raw: String?): java.util.UUID? = raw?.let {
 
 private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDto(
     id = id,
-    effectType = effect.name.replace(" ", ""),
+    effectType = effectTypeId,
     targetKey = target.targetKey,
     propertyName = target.propertyName,
     beatDivision = timing.beatDivision,
@@ -428,7 +431,6 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
     elementFilter = if ((isGroupEffect || isMultiElementExpanded) && elementFilter != ElementFilter.ALL)
         elementFilter.name else null,
     stepTiming = stepTiming,
-    presetId = presetId,
     lookId = lookId,
     programmerLayerId = programmerLayerId,
     cueId = cueId,
@@ -441,7 +443,7 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
 
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     id = id,
-    effectType = effect.name.replace(" ", ""),
+    effectType = effectTypeId,
     groupName = target.targetKey,
     propertyName = target.propertyName,
     beatDivision = timing.beatDivision,

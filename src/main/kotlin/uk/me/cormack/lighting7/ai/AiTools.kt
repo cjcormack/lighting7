@@ -287,14 +287,16 @@ class AiTools(private val state: State) {
                     for (effect in state.show.fxEngine.getActiveEffects()) {
                         addJsonObject {
                             put("id", effect.id)
-                            put("effectType", effect.effect.name)
+                            // The registration id, not the display name: the model echoes this
+                            // straight back into add_effect, and a user-defined effect's name
+                            // resolves to nothing in the registry.
+                            put("effectType", effect.effectTypeId)
                             put("targetKey", effect.target.targetKey)
                             put("propertyName", effect.target.propertyName)
                             put("isGroupTarget", effect.isGroupEffect)
                             put("beatDivision", effect.timing.beatDivision)
                             put("blendMode", effect.blendMode.name)
                             put("isRunning", effect.isRunning)
-                            effect.presetId?.let { put("presetId", it) }
                             effect.cueId?.let { put("cueId", it) }
                             effect.cueStackId?.let { put("cueStackId", it) }
                         }

@@ -332,8 +332,8 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
     }
 
     // A preset-application merge loop stood here, beside the layer one above. It was already
-    // unreachable: `recording.presetApplications` has been `emptyList()` since `captureCurrentState`
-    // stopped stamping `presetId`, so it iterated nothing. Gone with `cue_preset_applications`.
+    // unreachable: `recording.presetApplications` had been `emptyList()` since `captureCurrentState`
+    // moved to keying on `lookId`, so it iterated nothing. Gone with `cue_preset_applications`.
     val existingAdHoc = cue.adHocEffects.toList()
     for (effect in recording.adHocEffects) {
         // Upsert, not skip-if-present. `(target, effectType, property)` identifies *which*

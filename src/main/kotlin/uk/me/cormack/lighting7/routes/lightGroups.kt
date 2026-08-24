@@ -103,7 +103,11 @@ internal fun Route.routeApiRestGroups(state: State) {
                     val expanded = engine.isMultiElementExpanded(instance)
                     GroupEffectDto(
                         id = instance.id,
-                        effectType = instance.effect.name,
+                        // The display name is kept as the fallback so a built-in still reports the
+                        // spaced form this endpoint has always sent (the registry normalises it
+                        // back on the way in); a user-defined effect's name resolves to nothing,
+                        // so it has to report its registration id.
+                        effectType = instance.registrationId ?: instance.effect.name,
                         propertyName = instance.target.propertyName,
                         beatDivision = instance.timing.beatDivision,
                         blendMode = instance.blendMode.name,
@@ -116,7 +120,6 @@ internal fun Route.routeApiRestGroups(state: State) {
                         phaseOffset = instance.phaseOffset,
                         currentPhase = instance.lastPhase,
                         parameters = instance.effect.parameters,
-                        presetId = instance.presetId,
                         cueId = instance.cueId,
                         programmerOwned = FxEngine.isProgrammerFxPriority(instance.priority),
                         intensityMultiplier = instance.intensityMultiplier,
@@ -235,7 +238,6 @@ data class GroupEffectDto(
     val phaseOffset: Double,
     val currentPhase: Double,
     val parameters: Map<String, String>,
-    val presetId: Int? = null,
     val cueId: Int? = null,
     /** True when this effect sits in the programmer's reserved priority band. */
     val programmerOwned: Boolean = false,
@@ -434,6 +436,7 @@ private fun applyGroupEffect(
 
     // Create SINGLE FxInstance for the entire group
     val instance = FxInstance(effect, target, timing, blendMode).apply {
+        registrationId = state.show.fxRegistry.getRegistration(request.effectType)?.id
         phaseOffset = request.phaseOffset
         distributionStrategy = distribution
         this.elementMode = elementMode

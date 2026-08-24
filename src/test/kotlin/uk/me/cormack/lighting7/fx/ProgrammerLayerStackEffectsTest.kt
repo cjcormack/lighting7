@@ -90,9 +90,9 @@ class ProgrammerLayerStackEffectsTest : RouteIntegrationTest() {
             assertEquals(1, effects.size)
             assertEquals(layer.layerId, effects.single().programmerLayerId)
             assertEquals(look.id, effects.single().lookId)
-            // `presetId` stays null: passing the *Look* id there is what made captureCurrentState
-            // reconstruct a preset application naming whatever DaoFxPreset shared the number.
-            assertEquals(null, effects.single().presetId)
+            // The registration id, not the display name: the two coincide for a built-in and
+            // diverge for every user-defined FX definition.
+            assertEquals("Pulse", effects.single().registrationId)
         }
 
     @Test

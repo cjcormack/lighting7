@@ -349,7 +349,7 @@ class CueTriggerManager(
         } catch (_: Exception) { null } ?: return
 
         val instance = createInstanceFromPreset(
-            effectSpec, fxTarget, presetId = null, state = state,
+            effectSpec, fxTarget, state = state,
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
         )
@@ -396,7 +396,7 @@ class CueTriggerManager(
             resolveTargetForCue(state, toggleTarget, presetEffect)
         } catch (_: Exception) { null } ?: return
 
-        val instance = createInstanceFromPreset(presetEffect, fxTarget, null, state)
+        val instance = createInstanceFromPreset(presetEffect, fxTarget, state)
         instance.cueId = cueId
         instance.cueStackId = cueStackId
 

@@ -110,8 +110,8 @@ internal data class CapturedState(
 internal fun captureCurrentState(state: State): CapturedState {
     val activeEffects = state.show.fxEngine.getActiveEffects()
 
-    // Keyed by Look, not by preset: nothing stamps `presetId` any more. A Look applied twice to
-    // different targets therefore collapses into one layer covering both — which is the honest
+    // Keyed by Look: an effect names the Look it came from and nothing else. A Look applied twice
+    // to different targets therefore collapses into one layer covering both — which is the honest
     // reading of a *snapshot*, since the stage cannot tell you it was two gestures.
     val layerTargets = mutableMapOf<Int, MutableList<CueTargetDto>>()
     val adHocEffects = mutableListOf<CueAdHocEffectDto>()
@@ -131,7 +131,7 @@ internal fun captureCurrentState(state: State): CapturedState {
             adHocEffects.add(CueAdHocEffectDto(
                 targetType = targetType,
                 targetKey = targetKey,
-                effectType = effect.effect.name.replace(" ", ""),
+                effectType = effect.effectTypeId,
                 category = categoryFromPropertyName(effect.target.propertyName),
                 propertyName = effect.target.propertyName,
                 beatDivision = effect.timing.beatDivision,
@@ -735,7 +735,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         } catch (_: Exception) { null } ?: continue
 
         val instance = createInstanceFromPreset(
-            effectSpec, fxTarget, presetId = null, state = state,
+            effectSpec, fxTarget, state = state,
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
         )
@@ -771,7 +771,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             resolveTargetForCue(state, target, presetEffectDto)
         } catch (_: Exception) { null } ?: continue
 
-        val instance = createInstanceFromPreset(presetEffectDto, fxTarget, null, state)
+        val instance = createInstanceFromPreset(presetEffectDto, fxTarget, state)
         instance.cueId = cueData.cueId
         instance.priority = priority
         engine.addEffect(instance)
@@ -1257,7 +1257,6 @@ internal fun categoryFromPropertyName(propertyName: String): String {
 internal fun createInstanceFromPreset(
     presetEffect: LookEffectSpec,
     fxTarget: FxTarget,
-    presetId: Int?,
     state: State,
     /** Per-cue-application override; null falls through to the preset effect's own master. */
     overrideSpeedMasterUuid: java.util.UUID? = null,
@@ -1299,7 +1298,10 @@ internal fun createInstanceFromPreset(
     val timingSource = registration?.timingSource ?: uk.me.cormack.lighting7.fx.TimingSource.BEAT
 
     return FxInstance(effect, fxTarget, timing, blendMode).apply {
-        this.presetId = presetId
+        // The *canonical* id, not `presetEffect.effectType`: the registry resolves aliases, so two
+        // stored specs can name one registration and must compare equal. See
+        // [FxInstance.registrationId].
+        this.registrationId = registration?.id
         phaseOffset = presetEffect.phaseOffset
         distributionStrategy = distribution
         this.elementMode = elementMode

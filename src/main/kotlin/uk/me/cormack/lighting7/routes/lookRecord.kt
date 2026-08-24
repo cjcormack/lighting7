@@ -421,7 +421,7 @@ internal fun writeLookEffects(look: DaoLook, effects: List<FxInstance>, mode: Re
             this.look = look
             targetType = if (effect.isGroupEffect) TargetRef.Group.TYPE else TargetRef.Fixture.TYPE
             targetKey = effect.target.targetKey
-            effectType = effect.effect.name.replace(" ", "")
+            effectType = effect.effectTypeId
             category = categoryFromPropertyName(effect.target.propertyName)
             propertyName = effect.target.propertyName
             beatDivision = effect.timing.beatDivision

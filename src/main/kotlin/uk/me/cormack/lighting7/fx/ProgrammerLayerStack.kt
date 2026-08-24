@@ -587,7 +587,7 @@ class ProgrammerLayerStack(
         // more exempt from that than a cue's.
         val instance = try {
             createInstanceFromPreset(
-                spec, fxTarget, presetId = null, state = st,
+                spec, fxTarget, state = st,
                 overrideSpeedMasterUuid = layer.speedMasterUuid,
                 overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
             )
@@ -598,9 +598,7 @@ class ProgrammerLayerStack(
             )
             return null
         }
-        // `presetId` stays null on purpose. The toggle route used to pass the *Look* id there,
-        // which made `captureCurrentState` reconstruct a preset application naming whatever
-        // `DaoFxPreset` shared the number. `lookId` and `programmerLayerId` are the honest fields.
+        // `lookId` and `programmerLayerId` are the honest fields for where this came from.
         // Only a Look can own an effect (D7), so only a Look id belongs here — a template layer
         // never reaches `spawn` because a template holds no effects to spawn.
         instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }

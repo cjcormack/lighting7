@@ -1788,6 +1788,12 @@ class FxEngine(
          * `timingSource` changes doesn't lose the assignment for the mode it isn't in.
          */
         newRateSpeedMasterUuid: java.util.UUID? = null,
+        /**
+         * The canonical registration id of [newEffect], when the caller swapped the effect for one
+         * of a different type. Null = keep, like every other param. Passing [newEffect] without
+         * this leaves [FxInstance.registrationId] naming the type the instance no longer runs.
+         */
+        newRegistrationId: String? = null,
     ): FxInstance? {
         val existing = activeEffects[effectId] ?: return null
 
@@ -1802,11 +1808,21 @@ class FxEngine(
                 blendMode = newBlendMode ?: existing.blendMode
             ).apply {
                 id = existing.id
-                presetId = existing.presetId
+                registrationId = newRegistrationId ?: existing.registrationId
                 lookId = existing.lookId
+                // The layer ids are what `isSuppressed` looks a stomp mask up by, and what
+                // Record reads to tell a layer's effect from a loose one. Dropping them here
+                // un-stomps an edited layer effect and makes Record write it back a second
+                // time as an ad-hoc child.
+                cueLayerId = existing.cueLayerId
+                programmerLayerId = existing.programmerLayerId
+                programmerOrigin = existing.programmerOrigin
                 cueId = existing.cueId
                 cueStackId = existing.cueStackId
                 priority = existing.priority
+                // A manual fade lives here; without it, editing an effect mid-fade snaps it to
+                // full output.
+                intensityMultiplier = existing.intensityMultiplier
                 startedAtMs = existing.startedAtMs
                 startedAtBeat = existing.startedAtBeat
                 isRunning = existing.isRunning

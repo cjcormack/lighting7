@@ -676,7 +676,7 @@ object CueEditSessionHandler {
                 resolveTargetForCue(state, target, presetEffectDto)
             }.getOrNull()
             if (fxTarget != null) {
-                val instance = createInstanceFromPreset(presetEffectDto, fxTarget, null, state)
+                val instance = createInstanceFromPreset(presetEffectDto, fxTarget, state)
                 instance.cueId = cueId
                 instance.priority = cueDerivedPriority(applyData)
                 state.show.fxEngine.addEffect(instance)

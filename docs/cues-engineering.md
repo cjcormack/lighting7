@@ -164,7 +164,7 @@ first. `TemplateRegistry.snapshot` falls back to a DB read, and the tick loop mu
 
 The `from-state` endpoint and `programmer/record { source: "STAGE_SNAPSHOT" }` share
 `captureCurrentState`, which captures the current FxEngine state:
-- Effects with a non-null `presetId` (now a look id) are grouped by Look into layer entries, deduplicating targets
+- Effects with a non-null `lookId` are grouped by Look into layer entries, deduplicating targets
 - Effects belonging to no Look (ad-hoc) are captured as full `CueAdHocEffectDto` entries with all fields
 
 ### Look Delete Blocking
@@ -204,7 +204,8 @@ The `cues` table has two additional columns:
 
 ## FxInstance Integration
 
-The `FxInstance` class has a `cueId: Int?` field (alongside `presetId`, which now carries the look id). When a cue is applied, all created FxInstances are tagged with the cue's ID. This allows:
+The `FxInstance` class has a `cueId: Int?` field (alongside `lookId`, `cueLayerId` and
+`programmerLayerId`, which name what spawned it). When a cue is applied, all created FxInstances are tagged with the cue's ID. This allows:
 - The apply logic to identify and remove effects from a specific cue (not all cues)
 - The stop endpoint to remove only the target cue's effects
 - Active cue tracking in the frontend (derived from effect cueIds in WebSocket state)

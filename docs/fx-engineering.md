@@ -1111,9 +1111,21 @@ Two things a snapshot **cannot** recover, because an `FxInstance` never carried 
 stack's own amounts and masks preserved they Record `TOUCHED`, which reads `ProgrammerStore.layers`
 directly rather than reconstructing from the stage.
 
-This used to key on `FxInstance.presetId`. Nothing stamps that field any more — session 3a added a
-separate `lookId` precisely because the two are ids in *different* tables, and reading `presetId` as
-a look id would reconstruct a cue naming whatever `DaoFxPreset` happened to share the number.
+This used to key on an `FxInstance.presetId` field. Session 3a added a separate `lookId` precisely
+because the two were ids in *different* tables — reading a preset id as a look id reconstructed a
+cue naming whatever `DaoFxPreset` happened to share the number — and nothing stamped `presetId`
+after that, so it was deleted.
+
+What an `FxInstance` *does* carry, beyond `lookId`: `registrationId`, the canonical
+`EffectRegistration.id` it was built from. Any "same effect type?" test reads that. The tempting
+`effect.name.replace(" ", "")` is a registration id only for built-ins, whose display name is their
+id with spaces in it; a user-defined FX definition sets `id` independently of `name`.
+
+Anything that *persists or reports* an effect type — a recorded Look or cue child, an API DTO the
+client hands back on Update — goes through `FxInstance.effectTypeId`, which is `registrationId` with
+the display name kept only as the last resort for a script-constructed effect that never went
+through the registry. Writing the display name directly stores a string the registry cannot resolve,
+and the failure surfaces much later, when the row is applied.
 
 ### Related Files
 

@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.routes
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -11,10 +12,13 @@ import org.junit.Test
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
+import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.programmerChannel
 import uk.me.cormack.lighting7.testsupport.jsonClient
@@ -178,6 +182,73 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         assertEquals(1, response.fxAlreadyRunning)
         assertEquals(1, state.show.fxEngine.getActiveEffects().size)
     }
+
+    @Test
+    fun `a layer's running effect does not mask a different ad-hoc child on the same property`() =
+        testApplication {
+            // The guard used to match on `(target, property)` alone: it compared a preset id that
+            // nothing had stamped since Looks replaced presets, so `null == null` made every effect
+            // on one property look like every other. A live cue whose layer drives dimmer therefore
+            // swallowed an ad-hoc dimmer child that was *not* on stage — and Update, which replaces
+            // the cue's immediate FX children from the band, then deleted it from the cue.
+            //
+            // Editing a live cue is how the two diverge: PUT rewrites the children without
+            // re-applying, so the layer's Pulse is running and the new SineWave child is not.
+            mountTestApp(state)
+            val client = jsonClient()
+            seedHex("hex-1", 1)
+            val pulsing = ProgrammerRouteTestSupport.createLookBoundTo(
+                client, projectId, "Pulsing", rows = emptyMap(),
+                effects = listOf(
+                    LookEffectDto(
+                        targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                        effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
+                        beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                    ),
+                ),
+            )
+            val layers = listOf(
+                CueLayerDto(
+                    lookId = pulsing.id, sortOrder = 0,
+                    targets = listOf(CueTargetDto("fixture", "hex-1")),
+                ),
+            )
+            val cueId = createCue(client, "layered", layers = layers)
+            client.post("/api/rest/project/$projectId/cues/$cueId/apply")
+            assertEquals(
+                listOf("Pulse"),
+                state.show.fxEngine.getActiveEffects().map { it.registrationId },
+                "only the layer's effect is on stage",
+            )
+
+            client.put("/api/rest/project/$projectId/cues/$cueId") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    NewCue(
+                        name = "layered",
+                        layers = layers,
+                        adHocEffects = listOf(
+                            CueAdHocEffectDto(
+                                targetType = "fixture", targetKey = "hex-1",
+                                effectType = "SineWave", category = "dimmer",
+                                propertyName = "dimmer", beatDivision = 1.0,
+                                blendMode = "OVERRIDE", distribution = "LINEAR",
+                            ),
+                        ),
+                    )
+                )
+            }
+
+            client.include(cueId)
+
+            val band = state.show.fxEngine.getActiveEffects()
+                .filter { FxEngine.isProgrammerFxPriority(it.priority) }
+            assertTrue(
+                band.any { it.registrationId == "SineWave" },
+                "the ad-hoc child is a different effect from the layer's Pulse, so it has to " +
+                    "reach the band for Update to write it back",
+            )
+        }
 
     @Test
     fun `mask scopes what include pulls in`() = testApplication {

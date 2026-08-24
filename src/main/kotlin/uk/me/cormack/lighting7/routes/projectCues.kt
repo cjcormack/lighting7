@@ -615,9 +615,9 @@ data class CueCurrentStateResponse(
     /**
      * The stage's Look layers, one per Look with a de-duplicated target list.
      *
-     * Was `presetApplications: List<CuePresetApplicationDetail>`, reconstructed from each running
-     * effect's `presetId`. Nothing stamps `presetId` any more — `captureCurrentState` keys on
-     * `lookId` instead — so the field was already always empty before session 4 deleted the DTO.
+     * Was `presetApplications: List<CuePresetApplicationDetail>`, reconstructed from a preset id
+     * on each running effect. Nothing stamped that field by the end — `captureCurrentState` keys
+     * on `lookId` — so it was already always empty before session 4 deleted the DTO.
      */
     val layers: List<CueLayerDto>,
     val adHocEffects: List<CueAdHocEffectDto>,

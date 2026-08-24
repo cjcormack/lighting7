@@ -133,12 +133,10 @@ enum class BlendMode {
 data class ProgrammerFxOrigin(
     val cueId: Int,
     val kind: Kind,
-    val presetId: Int?,
     val childSortOrder: Int,
 ) {
     enum class Kind {
         AD_HOC,
-        PRESET_APPLICATION,
     }
 }
 
@@ -151,17 +149,32 @@ class FxInstance(
     /** Unique identifier assigned by FxEngine */
     var id: Long = 0
 
-    /** If this effect was applied as part of a preset, the preset ID. Null otherwise. */
-    var presetId: Int? = null
+    /**
+     * The canonical [EffectRegistration.id] this instance was created from, when it was created
+     * from one. Null for effects a script constructed directly, which never went through the
+     * registry.
+     *
+     * The field exists because the alternative — `effect.name.replace(" ", "")` — is only a
+     * registration id by coincidence. It holds for built-ins, whose display name is their id with
+     * spaces in it, and fails for every user-defined FX definition, which sets `id` independently
+     * of `name`. Code that asks "are these two instances running the same effect type?" must read
+     * this, not the display name.
+     */
+    var registrationId: String? = null
 
     /**
-     * If this effect was spawned by a cue's Look layer, the Look's ID. Null otherwise.
+     * The effect type to *persist or report* for this instance: [registrationId] when there is
+     * one, and the display-name approximation only as a last resort for a script-constructed
+     * effect that never went through the registry.
      *
-     * Kept separate from [presetId] rather than reusing it: the two are ids in *different* tables,
-     * and `captureCurrentState` reads `presetId` to reconstruct `CuePresetApplicationDto`s. Putting
-     * a look id there made recording live state emit a preset application naming whatever
-     * `DaoFxPreset` happened to share the number, baking an unrelated preset into the new cue.
+     * Everything that writes an `effectType` — a recorded Look or cue child, an API DTO the
+     * client hands back on Update — must go through this. Writing `effect.name.replace(" ", "")`
+     * directly stores a string the registry cannot resolve for any user-defined FX definition,
+     * and the failure only surfaces later, when the row is applied.
      */
+    val effectTypeId: String get() = registrationId ?: effect.name.replace(" ", "")
+
+    /** If this effect was spawned by a cue's Look layer, the Look's ID. Null otherwise. */
     var lookId: Int? = null
 
     /**

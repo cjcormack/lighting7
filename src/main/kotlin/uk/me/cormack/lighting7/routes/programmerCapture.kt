@@ -466,7 +466,7 @@ internal fun fxInstancesToCueChildren(
                 CueAdHocEffectDto(
                     targetType = targetType,
                     targetKey = targetKey,
-                    effectType = effect.effect.name.replace(" ", ""),
+                    effectType = effect.effectTypeId,
                     category = categoryFromPropertyName(effect.target.propertyName),
                     propertyName = effect.target.propertyName,
                     beatDivision = effect.timing.beatDivision,
