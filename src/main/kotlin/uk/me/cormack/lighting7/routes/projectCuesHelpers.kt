@@ -21,7 +21,6 @@ import uk.me.cormack.lighting7.fixture.resolveComposition
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.*
@@ -1142,19 +1141,23 @@ internal fun resolveTargetForCue(
     target: CueTargetDto,
     presetEffect: LookEffectSpec,
 ): FxTarget? {
+    // A recorded row's own `propertyName` wins, and rows recorded while sweep item A11 was live
+    // carry `"pan"` for a position effect. The registration's output type is what lets
+    // FxTargetFactory read that as the position pair rather than a dead SliderTarget.
+    val outputType = state.show.fxRegistry.getRegistration(presetEffect.effectType)?.outputType
     return when (target.target) {
         is TargetRef.Group -> {
             val group = state.show.fixtures.untypedGroup(target.key)
             val propertyName = presetEffect.propertyName
                 ?: resolvePresetEffectPropertyForCue(presetEffect, group.detectCapabilities())
                 ?: return null
-            createGroupTargetForCue(group.name, propertyName, group)
+            createGroupTargetForCue(group.name, propertyName, group, outputType)
         }
         is TargetRef.Fixture -> {
             val propertyName = presetEffect.propertyName
                 ?: resolvePresetEffectPropertyForFixtureInCue(presetEffect)
                 ?: return null
-            createFixtureTargetForCue(target.key, propertyName, state)
+            createFixtureTargetForCue(target.key, propertyName, state, outputType)
         }
     }
 }
@@ -1188,48 +1191,21 @@ private fun createGroupTargetForCue(
     groupName: String,
     propertyName: String,
     group: FixtureGroup<*>,
-): FxTarget {
-    return when (propertyName.lowercase()) {
-        "dimmer" -> SliderTarget.forGroup(groupName, "dimmer")
-        "colour", "color", "rgbcolour" -> ColourTarget.forGroup(groupName)
-        "position" -> PositionTarget.forGroup(groupName)
-        "uv" -> SliderTarget.forGroup(groupName, "uv")
-        else -> {
-            val firstFixture = group.fixtures.firstOrNull() as? Fixture
-            val prop = firstFixture?.fixtureProperties?.find { it.name == propertyName }
-            val propValue = prop?.classProperty?.call(firstFixture)
-            if (propValue is Slider) {
-                SliderTarget.forGroup(groupName, propertyName)
-            } else {
-                SettingTarget.forGroup(groupName, propertyName)
-            }
-        }
-    }
-}
+    outputType: FxOutputType?,
+): FxTarget = FxTargetFactory.forGroup(
+    groupName, propertyName, outputType, group.fixtures.firstOrNull() as? Fixture,
+)
 
 internal fun createFixtureTargetForCue(
     fixtureKey: String,
     propertyName: String,
     state: State,
+    outputType: FxOutputType?,
 ): FxTarget {
-    return when (propertyName.lowercase()) {
-        "dimmer" -> SliderTarget(fixtureKey, "dimmer")
-        "uv" -> SliderTarget(fixtureKey, "uv")
-        "colour", "color", "rgbcolour" -> ColourTarget(fixtureKey)
-        "position" -> PositionTarget(fixtureKey)
-        else -> {
-            val fixture = try {
-                state.show.fixtures.untypedFixture(fixtureKey) as? Fixture
-            } catch (_: Exception) { null }
-            val prop = fixture?.fixtureProperties?.find { it.name == propertyName }
-            val propValue = prop?.classProperty?.call(fixture)
-            if (propValue is Slider) {
-                SliderTarget(fixtureKey, propertyName)
-            } else {
-                SettingTarget(fixtureKey, propertyName)
-            }
-        }
-    }
+    val fixture = try {
+        state.show.fixtures.untypedFixture(fixtureKey) as? Fixture
+    } catch (_: Exception) { null }
+    return FxTargetFactory.forFixture(fixtureKey, propertyName, outputType, fixture)
 }
 
 

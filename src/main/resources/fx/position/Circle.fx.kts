@@ -4,7 +4,7 @@ name: Circle
 category: position
 outputType: POSITION
 effectMode: STANDARD
-compatibleProperties: [pan, tilt]
+compatibleProperties: [position]
 parameters:
   - name: panCenter
     type: ubyte

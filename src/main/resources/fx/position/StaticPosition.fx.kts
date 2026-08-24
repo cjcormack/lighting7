@@ -5,7 +5,7 @@ category: position
 outputType: POSITION
 effectMode: STANDARD
 defaultStepTiming: true
-compatibleProperties: [pan, tilt]
+compatibleProperties: [position]
 parameters:
   - name: pan
     type: ubyte

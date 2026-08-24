@@ -63,6 +63,23 @@ sealed class FxTarget {
     /** Name of the property being targeted */
     abstract val propertyName: String
 
+    /**
+     * The one [FxOutputType] this target can apply.
+     *
+     * Every [applyValueToFixture] opens with a type guard and **returns silently** on anything
+     * else, so an effect whose `outputType` differs from its target's produces no light, no error
+     * and no log. That is the whole of sweep items A4 and A11: `LightningStrike` advertising
+     * `rgbColour`, and the seven position effects advertising `pan`/`tilt`.
+     *
+     * Consequences, in the two places that matter:
+     * - An `EffectRegistration.compatibleProperties` entry must name a property that
+     *   [FxTargetFactory] maps to a target with this same accepted type. `FxRegistrationTargetCompatibilityTest`
+     *   holds every built-in to it.
+     * - [FxInstance] warns when its effect and target disagree, and the FX-add routes reject it
+     *   outright — the mismatch is no longer allowed to be quiet.
+     */
+    abstract val acceptedOutputType: FxOutputType
+
     /** Target key (fixture key or group name) */
     val targetKey: String get() = targetRef.targetKey
 
@@ -205,6 +222,8 @@ data class SliderTarget(
     constructor(fixtureKey: String, propertyName: String) :
         this(FxTargetRef.fixture(fixtureKey), propertyName)
 
+    override val acceptedOutputType: FxOutputType = FxOutputType.SLIDER
+
     override fun applyValueToFixture(
         fixture: GroupableFixture,
         output: FxOutput,
@@ -341,6 +360,8 @@ data class ColourTarget(
 
     /** Convenience constructor for targeting a single fixture */
     constructor(fixtureKey: String) : this(FxTargetRef.fixture(fixtureKey))
+
+    override val acceptedOutputType: FxOutputType = FxOutputType.COLOUR
 
     override fun applyValueToFixture(
         fixture: GroupableFixture,
@@ -576,6 +597,8 @@ data class PositionTarget(
     /** Convenience constructor for targeting a single fixture */
     constructor(fixtureKey: String) : this(FxTargetRef.fixture(fixtureKey))
 
+    override val acceptedOutputType: FxOutputType = FxOutputType.POSITION
+
     override fun applyValueToFixture(
         fixture: GroupableFixture,
         output: FxOutput,
@@ -696,6 +719,9 @@ data class SettingTarget(
     /** Convenience constructor for targeting a single fixture */
     constructor(fixtureKey: String, propertyName: String) :
         this(FxTargetRef.fixture(fixtureKey), propertyName)
+
+    /** A setting is one DMX channel, so it takes a slider byte like any other channel. */
+    override val acceptedOutputType: FxOutputType = FxOutputType.SLIDER
 
     override fun applyValueToFixture(
         fixture: GroupableFixture,

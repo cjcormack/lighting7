@@ -4,7 +4,7 @@ name: Sweep
 category: position
 outputType: POSITION
 effectMode: STANDARD
-compatibleProperties: [pan, tilt]
+compatibleProperties: [position]
 parameters:
   - name: startPan
     type: ubyte

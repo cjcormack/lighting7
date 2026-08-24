@@ -217,6 +217,59 @@ One consequence worth remembering when writing an effect: a mismatched `FxOutput
 composite's `compatibleProperties` must list only properties of its primary output type.
 `LightningStrike` advertising `rgbColour` meant picking it produced no light and no error.
 
+## `compatibleProperties` must match the output type
+
+That silent drop is not a composite problem — it is the general rule, and it bit every effect in
+the `position` category (sweep item A11). All seven declared `compatibleProperties: [pan, tilt]`
+against `outputType: POSITION`; `pan` and `tilt` are real `@FixtureProperty` sliders, so every
+frontend picker chose one, posted `propertyName: "pan"`, and got a `SliderTarget` that discarded
+the `FxOutput.Position`. No light, no error, no log, for the desk's whole life.
+
+The contract, and the three things that now hold authors to it:
+
+- **`FxTarget.acceptedOutputType`** — the one `FxOutputType` a target can apply. A **`POSITION`
+  effect must advertise `position`**, the synthetic pan/tilt compound, and never an axis by name;
+  a `COLOUR` effect must advertise `rgbColour` (or an alias); a `SLIDER` effect must advertise
+  anything *but* `position` or the colour bundle.
+- **`FxTargetFactory`** (`fx/FxTargetFactory.kt`) is the single place a property *name* becomes a
+  target. It replaced four near-identical copies in the route layer, all of which had A11.
+  Given the effect's output type it also coerces `pan`/`tilt` to a `PositionTarget` for a
+  `POSITION` effect — a repair for Look and cue rows *already recorded* with `propertyName: "pan"`,
+  not a licence for dishonest metadata. A `SLIDER` effect on `pan` alone still resolves to
+  `SliderTarget("pan")`, because that is a legitimate thing to ask for.
+- **Reported, not swallowed.** `POST /fx/add`, `PUT /fx/{id}` and `POST /groups/{name}/fx` reject a
+  mismatch with 400 (`requireOutputTypeMatch`), and `POST`/`PUT /fx/definitions` rejects a
+  user definition whose `compatibleProperties` its `outputType` cannot drive. Everywhere a throw
+  would be worse than a dark light — cue and Look fire, Include, scripts, MIDI — `FxInstance`'s
+  `init` logs a warn instead.
+
+`FxRegistrationTargetCompatibilityTest` holds every built-in to this, resolving each declared
+property through `FxTargetFactory` *without* the output-type hint, so re-adding `[pan, tilt]` goes
+red. It parses frontmatter only and compiles nothing.
+
+### Definitions heal rather than lock
+
+`compatibleProperties` is on **no** editing surface, and the FX edit sheet sends only
+`{id, name, script}`. So validating the merged declaration on `PUT` — request field, else the
+stored one — would have permanently bricked every position definition already saved with
+`[pan, tilt]`: a script-only edit re-checks a stored list the operator cannot reach, 400s, and has
+no in-app remedy. `normaliseCompatibleProperties` runs first and rewrites `pan`/`tilt` → `position`
+for a POSITION definition, and the `PUT` writes the normalised list back even when the request
+didn't supply the field, so the first save heals the row. That one rewrite is the only thing done
+silently, because it has no reading under which the author meant it; everything else is rejected
+out loud.
+
+### The frontend change A11 didn't predict
+
+A11 said neither fix needed a frontend change. True of the FX-*add* path — `AddEditFxSheet`,
+`useBuskingState` and `ConfigureEffectSheet` read the property list off the library and needed
+nothing. Not true of the *authoring* path: `FxLibrary.tsx`'s new-definition form derived
+`compatibleProperties` from the chosen **category** while `outputType` is an independent select
+defaulting to `SLIDER`. That let Category = Position + the default output type write a list the
+effect could never drive, and the new 400 would have fired on the desk's own create flow, naming a
+field the form doesn't expose. It now derives from `outputType`, which is what actually decides the
+answer.
+
 ## Effect Registry
 
 All effects (built-in and user-defined) are registered in a unified `FxRegistry`.

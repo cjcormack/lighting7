@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
+import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 
@@ -146,6 +147,25 @@ class FxInstance(
     val timing: FxTiming,
     val blendMode: BlendMode = BlendMode.OVERRIDE
 ) {
+    init {
+        // The only place every spawn path meets: routes, scripts, programmer Include, cue and
+        // Look fire, MIDI. [FxTarget.acceptedOutputType] explains what a mismatch costs — the
+        // apply returns silently, so the operator gets no light and, before this line, no trace
+        // either. That is how sweep items A4 and A11 stayed invisible.
+        //
+        // A warn, not a throw: a cue firing mid-show must not die because one recorded row names
+        // the wrong property. The REST add/update paths reject it up front instead
+        // (`requireOutputTypeMatch`), which is where an operator can still act on it.
+        if (effect.outputType != target.acceptedOutputType) {
+            logger.warn(
+                "Effect '{}' outputs {} but target {}.{} applies {} — this effect will produce " +
+                    "nothing. Check the effect's compatibleProperties.",
+                effect.name, effect.outputType,
+                target.targetKey, target.propertyName, target.acceptedOutputType,
+            )
+        }
+    }
+
     /** Unique identifier assigned by FxEngine */
     var id: Long = 0
 
@@ -485,5 +505,9 @@ class FxInstance(
     /** Resume the effect */
     fun resume() {
         isRunning = true
+    }
+
+    companion object {
+        private val logger = LoggerFactory.getLogger(FxInstance::class.java)
     }
 }

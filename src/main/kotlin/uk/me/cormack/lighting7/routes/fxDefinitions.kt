@@ -61,15 +61,22 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         val request = call.receive<CreateFxDefinitionRequest>()
         val currentProject = state.show.project
 
+        val requestOutputType = FxOutputType.valueOf(request.outputType)
+        val requestCompatible = normaliseCompatibleProperties(requestOutputType, request.compatibleProperties)
+        validateCompatibleProperties(requestOutputType, requestCompatible)?.let {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
+            return@post
+        }
+
         val definition = transaction(state.database) {
             DaoFxDefinition.new {
                 effectId = request.effectId
                 name = request.name
                 category = request.category
-                outputType = FxOutputType.valueOf(request.outputType)
+                outputType = requestOutputType
                 effectMode = EffectMode.valueOf(request.effectMode)
                 parameters = request.parameters
-                compatibleProperties = request.compatibleProperties
+                compatibleProperties = requestCompatible
                 script = request.script
                 project = currentProject
                 defaultStepTiming = request.defaultStepTiming
@@ -106,16 +113,40 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
     put<FxDefinitionResource> { resource ->
         val request = call.receive<UpdateFxDefinitionRequest>()
 
+        // Validate the *merged* declaration in its own read, before the mutating transaction
+        // below. Every request field is optional, so a bad `compatibleProperties` may only
+        // conflict with the *stored* outputType (or the reverse) — and the mutations happen
+        // inside that transaction, so validating there would have already written the row this
+        // rejects.
+        val stored = transaction(state.database) {
+            DaoFxDefinition.findById(resource.definitionId)?.let { it.outputType to it.compatibleProperties }
+        }
+        if (stored == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("FX definition not found"))
+            return@put
+        }
+        val mergedOutputType = request.outputType?.let { FxOutputType.valueOf(it) } ?: stored.first
+        // Normalised, and then written back below even when the request didn't supply the field:
+        // an edit sends only `{id, name, script}`, so this is the only chance a definition stored
+        // with the old `[pan, tilt]` has to heal. See [normaliseCompatibleProperties].
+        val mergedCompatible = normaliseCompatibleProperties(
+            mergedOutputType, request.compatibleProperties ?: stored.second,
+        )
+        validateCompatibleProperties(mergedOutputType, mergedCompatible)?.let {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
+            return@put
+        }
+
         val definition = transaction(state.database) {
             val def = DaoFxDefinition.findById(resource.definitionId) ?: return@transaction null
 
             request.effectId?.let { def.effectId = it }
             request.name?.let { def.name = it }
             request.category?.let { def.category = it }
-            request.outputType?.let { def.outputType = FxOutputType.valueOf(it) }
+            def.outputType = mergedOutputType
             request.effectMode?.let { def.effectMode = EffectMode.valueOf(it) }
             request.parameters?.let { def.parameters = it }
-            request.compatibleProperties?.let { def.compatibleProperties = it }
+            def.compatibleProperties = mergedCompatible
             request.script?.let { def.script = it }
             request.defaultStepTiming?.let { def.defaultStepTiming = it }
             request.timingSource?.let { def.timingSource = try { TimingSource.valueOf(it) } catch (_: Exception) { TimingSource.BEAT } }
@@ -202,6 +233,80 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             messages = regResult.diagnostics.map { FxCompileMessage(it.severity, it.message, it.location) },
         ))
     }
+}
+
+/**
+ * Reject `compatibleProperties` an effect of this [outputType] cannot actually drive.
+ *
+ * The authoring-time half of [uk.me.cormack.lighting7.fx.FxTarget.acceptedOutputType]: a property
+ * whose target takes a different [FxOutputType] discards the effect's output, so advertising it
+ * hands the operator a menu entry that produces no light and no error. That was sweep item A11 for
+ * the built-in position effects, and the same trap is open to anyone writing an FX definition.
+ *
+ * Name-based, deliberately: a definition may legitimately name any slider or setting property on
+ * any fixture (`zoom`, `focus`, a colour-wheel setting) plus the frontend's `setting` / `slider`
+ * sentinels, and none of those can be resolved without a fixture in hand. So this checks only what
+ * a name alone can prove wrong — which is every mismatch [uk.me.cormack.lighting7.fx.FxTargetFactory]
+ * can produce from the fixed vocabulary. COLOUR can afford to be strict because every `DmxColour`
+ * property in the fixture tree is named `rgbColour`, which is also why
+ * [uk.me.cormack.lighting7.fx.ColourTarget] defaults its `propertyName` to it.
+ *
+ * The built-in loader gets no equivalent check on purpose: a misdeclared built-in should fail the
+ * build (`FxRegistrationTargetCompatibilityTest`), not quietly shrink the library at boot. Nor
+ * does `ProjectImporter` — an import must not reject a peer's content, and `FxInstance` warns.
+ *
+ * @return an error message naming the offending property, or null when the declaration is sound
+ */
+internal fun validateCompatibleProperties(
+    outputType: FxOutputType,
+    compatibleProperties: List<String>,
+): String? {
+    fun bad(prop: String, expected: String) =
+        "compatibleProperties entry '$prop' cannot take a $outputType output — it would be " +
+            "discarded, leaving the effect with no visible result. Expected $expected."
+
+    for (prop in compatibleProperties) {
+        when (outputType) {
+            FxOutputType.POSITION ->
+                if (!prop.equals("position", ignoreCase = true)) return bad(prop, "'position'")
+            FxOutputType.COLOUR ->
+                if (canonicalPropertyName(prop) != "rgbColour") return bad(prop, "'rgbColour'")
+            FxOutputType.SLIDER -> {
+                if (prop.equals("position", ignoreCase = true))
+                    return bad(prop, "a slider or setting property, not the pan/tilt pair")
+                if (canonicalPropertyName(prop) == "rgbColour")
+                    return bad(prop, "a slider or setting property, not the colour bundle")
+            }
+        }
+    }
+    return null
+}
+
+/**
+ * Repair a `compatibleProperties` list that can only be a mistake, before validating the rest.
+ *
+ * A POSITION effect naming `pan` or `tilt` is the exact shape of sweep item A11 — both axes emitted
+ * at once, addressed by one of them — and it is what the desk's own UI used to write: `FxLibrary`'s
+ * new-definition form derived the list from the *category*, so every position definition ever saved
+ * carries `[pan, tilt]`.
+ *
+ * Without this the validation added above would be a trap rather than a guard. `compatibleProperties`
+ * is not an editable field on any surface, and the edit sheet sends only `{id, name, script}`, so
+ * validating the merged declaration would reject a **script-only** edit of an existing definition
+ * on the strength of a stored list the operator cannot reach — permanently, with no in-app remedy.
+ * Normalising on write instead means the first save of such a definition heals it.
+ *
+ * Only this one rewrite is safe to do silently: `pan`/`tilt` under POSITION has no reading under
+ * which the operator meant it. Everything else [validateCompatibleProperties] rejects out loud.
+ */
+internal fun normaliseCompatibleProperties(
+    outputType: FxOutputType,
+    compatibleProperties: List<String>,
+): List<String> {
+    if (outputType != FxOutputType.POSITION) return compatibleProperties
+    return compatibleProperties
+        .map { if (it.equals("pan", ignoreCase = true) || it.equals("tilt", ignoreCase = true)) "position" else it }
+        .distinct()
 }
 
 /**

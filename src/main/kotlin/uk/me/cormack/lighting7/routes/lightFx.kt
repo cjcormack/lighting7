@@ -12,7 +12,6 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.state.State
@@ -63,7 +62,10 @@ internal fun Route.routeApiRestFx(state: State) {
             val request = call.receive<AddEffectRequest>()
             try {
                 val effect = createEffectFromRequest(request, state)
-                val target = createTargetFromRequest(request, state)
+                // The effect first: its output type is what tells FxTargetFactory that a
+                // `pan`/`tilt` property name means the position pair (sweep item A11).
+                val target = createTargetFromRequest(request, state, effect.outputType)
+                requireOutputTypeMatch(effect, target)
                 val timing = FxTiming(
                     beatDivision = request.beatDivision,
                     startOnBeat = request.startOnBeat
@@ -146,6 +148,11 @@ internal fun Route.routeApiRestFx(state: State) {
                         colourSourceVersion = { templates.version },
                     )
                 } else null
+
+                // An effect-type swap keeps the instance's existing target, so it can land an
+                // effect whose output that target discards. Reject rather than silently going
+                // dark — same rule the add path applies.
+                newEffect?.let { requireOutputTypeMatch(it, existing.target) }
 
                 val newTiming = request.beatDivision?.let { FxTiming(it, existing.timing.startOnBeat) }
                 val newBlendMode = request.blendMode?.let { BlendMode.valueOf(it) }
@@ -460,26 +467,15 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
 )
 
-private fun createTargetFromRequest(request: AddEffectRequest, state: State): FxTarget {
-    return when (request.propertyName) {
-        "dimmer" -> SliderTarget(request.fixtureKey, "dimmer")
-        "uv" -> SliderTarget(request.fixtureKey, "uv")
-        "rgbColour", "colour" -> ColourTarget(request.fixtureKey)
-        "position" -> PositionTarget(request.fixtureKey)
-        else -> {
-            // Check if the property is a slider or a setting on the fixture
-            val fixture = try {
-                state.show.fixtures.untypedFixture(request.fixtureKey) as? Fixture
-            } catch (_: Exception) { null }
-            val prop = fixture?.fixtureProperties?.find { it.name == request.propertyName }
-            val propValue = prop?.classProperty?.call(fixture)
-            if (propValue is Slider) {
-                SliderTarget(request.fixtureKey, request.propertyName)
-            } else {
-                SettingTarget(request.fixtureKey, request.propertyName)
-            }
-        }
-    }
+private fun createTargetFromRequest(
+    request: AddEffectRequest,
+    state: State,
+    outputType: FxOutputType?,
+): FxTarget {
+    val fixture = try {
+        state.show.fixtures.untypedFixture(request.fixtureKey) as? Fixture
+    } catch (_: Exception) { null }
+    return FxTargetFactory.forFixture(request.fixtureKey, request.propertyName, outputType, fixture)
 }
 
 private fun createEffectFromRequest(request: AddEffectRequest, state: State): Effect {

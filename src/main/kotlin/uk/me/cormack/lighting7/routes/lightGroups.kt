@@ -413,24 +413,13 @@ private fun applyGroupEffect(
         )
     }
 
-    // Create appropriate group target based on property type
-    val target = when (request.propertyName.lowercase()) {
-        "dimmer" -> SliderTarget.forGroup(group.name, "dimmer")
-        "colour", "color", "rgbcolour" -> ColourTarget.forGroup(group.name)
-        "position" -> PositionTarget.forGroup(group.name)
-        "uv" -> SliderTarget.forGroup(group.name, "uv")
-        else -> {
-            // Check if the property is a slider or a setting on the first fixture
-            val firstFixture = group.fixtures.firstOrNull() as? Fixture
-            val prop = firstFixture?.fixtureProperties?.find { it.name == request.propertyName }
-            val propValue = prop?.classProperty?.call(firstFixture)
-            if (propValue is Slider) {
-                SliderTarget.forGroup(group.name, request.propertyName)
-            } else {
-                SettingTarget.forGroup(group.name, request.propertyName)
-            }
-        }
-    }
+    val target = FxTargetFactory.forGroup(
+        group.name,
+        request.propertyName,
+        effect.outputType,
+        group.fixtures.firstOrNull() as? Fixture,
+    )
+    requireOutputTypeMatch(effect, target)
 
     val elFilter = ElementFilter.fromName(request.elementFilter)
 
