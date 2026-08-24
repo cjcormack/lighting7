@@ -191,3 +191,67 @@ Skipped by default via `org.junit.Assume`; each needs its flag forwarded by `tas
 
 Note `:test` rather than `test`: the latter also runs `:launcher:test`, which fails the
 `--tests` filter with "No tests found for given includes".
+
+### `FxEngineBenchmark` scenarios
+
+Three independent rigs, one per `@Test`, because engine state, cue assignments and the effect
+registry all persist per rig — sharing one would make the numbers order-dependent.
+
+| Scenario | Rig | Exists for |
+|---|---|---|
+| `[beat]` / `[wall]` | 4 universes × `HexFixture`, one beat + one wall-clock `SliderTarget` each (168 fixtures, 336 effects) | the original Phase 5 harness — **frozen**, it is what the 2026-04-22 baseline was measured on |
+| `[chase-beat]` / `[chase-wall]` | 40 × `LedLightbar12PixelFixture.Mode48Ch` in two groups (480 `RgbwPixel` elements), 4 group colour effects across two speed masters — FLAT and PER_FIXTURE on both tick loops | sweep C1 (per-tick target re-expansion), C2 (reflective property access on the colour write path), C6 (allocation bundle) |
+| `[crossfade]` | 168 `HexFixture`s, two cues × dimmer+colour rows (672 rows), 169 effects; drives `updateCueFadeWeights` at 62 fps | sweep C3 |
+
+The chase rig's fixture choice is load-bearing, not incidental. `Mode48Ch` implements
+`MultiElementFixture` and deliberately does *not* implement `WithColour` itself, which is what
+pushes `processGroupEffect` down the element-expansion branch; its `RgbwPixel` elements are
+`WithColour, WithWhite` with `bundleWithColour = true`, which is what makes each element's write
+pay `ColourTarget.extendedComponent`'s `fixtureProperties.find {}` + `KProperty1.call`. Swap in a
+cheaper fixture and the harness still runs, still passes, and measures none of that — so each
+scenario asserts its own shape before the warmup (`fixtureKeysCoveredBy(...).size`, effect counts,
+`activeCueAssignmentIds()`). Those guards are the only thing standing between a wrong rig and
+plausible-looking microsecond numbers.
+
+The crossfade scenario measures the **single-threaded** per-frame republish cost. C3 also flags
+lock contention on `cueAssignmentsLock` with concurrent programmer writes; that is a different
+shape of measurement and is deliberately not in this harness.
+
+### Recorded baselines
+
+Track-only — nothing asserts against these. `FU-TEST-FX-BENCH-CI-GATE` holds the ±20 %
+fail-on-regression gate, deferred pending a variance study on real CI hardware.
+
+**2026-08-24, selwyn.local, JDK 25** — the C-wave "before", captured under sweep item C0:
+
+```
+[setup] universes=4 fixtures=168 effects=336
+[beat]  ticks=2400 p50=322µs p99=714µs mean=386µs allocBytes/tick=1111848
+[wall]  ticks=500  p50=316µs p99=438µs mean=347µs allocBytes/tick=1104593
+
+[setup] universes=4 bars=40 elements=480 elementsPerGroup=240 effects=4 masters=2
+[chase-beat] ticks=1200 p50=1007µs p99=6703µs mean=1177µs allocBytes/tick=3441219
+[chase-wall] ticks=500  p50=322µs  p99=914µs  mean=402µs  allocBytes/tick=1139358
+
+[setup] universes=4 fixtures=168 cueRows=672 effects=169 frames=312
+[crossfade] frames=312 p50=816µs p99=2108µs mean=867µs allocBytes/frame=1338020
+```
+
+The chase rig's four effects are deliberately one per branch C1 rewrites: beat FLAT, beat FLAT
+on the second master, wall-clock PER_FIXTURE, wall-clock FLAT. Dropping the last one (an earlier
+draft did) halves `[chase-wall]` to ~165 µs and hides `processWallClockGroupFlatElementEffect`
+entirely — the reason each mode/loop pairing gets its own `fixtureKeysCoveredBy` guard.
+
+Two things to read off it. `[chase-beat]` costs ~3× a `[beat]` tick while running **3** effects
+against 336 — that ratio is the C1/C2 signal, and it is what the C-wave should move.
+`[crossfade]` at ~773 µs/frame × 62 fps is ~5 % of a core spent continuously republishing, which
+is C3's case in one number.
+
+`[beat]` reads faster here than the 600 µs recorded on 2026-04-22 in
+`docs/plans/completed/cue-authoring-unification-plan.md`. That scenario's code is unchanged, so
+the difference is environment (JDK, JIT, machine state), not a real improvement — which is also
+the reason the CI gate wants a variance study before it picks a threshold.
+
+Both wall-clock windows are inherently noisier than the beat ones:
+`FxEngine.processWallClockTickSuspend` derives its `deltaMs` from the real
+`System.currentTimeMillis()`, while the beat windows are driven by synthetic ticks.

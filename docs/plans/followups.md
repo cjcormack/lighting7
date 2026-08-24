@@ -1047,6 +1047,13 @@ real tolerance depends on how jittery the allocation counter and `measureNanoTim
 actual runner, and without that study a fixed threshold either flakes constantly or catches
 nothing.
 
+**Widened 2026-08-24** by the backend sweep's C0: the harness now has three scenarios
+(`[beat]`/`[wall]`, `[chase-beat]`/`[chase-wall]`, `[crossfade]`), so the baseline to collect is
+five summary lines, not two — and the two wall-clock windows are the jittery ones, since
+`processWallClockTickSuspend` takes `deltaMs` from the real clock. First numbers are in
+`docs/testing-engineering.md` §"Recorded baselines"; note `[beat]` already reads ~45% faster than
+the 2026-04-22 capture on unchanged code, which is itself the argument for the variance study.
+
 ### `FU-TEST-MULTI-CONN-CUEEDIT`
 
 **Multi-connection cueEdit conflict** · Blocked · Control-surface Phase 6
