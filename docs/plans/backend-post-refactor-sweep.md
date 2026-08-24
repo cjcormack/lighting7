@@ -74,10 +74,16 @@ newer epoch and stale suppression is served until the next mutation. **Fix:** pu
 immutable pair object (the `SpeedMasterBank.Bindings` pattern at `SpeedMasterBank.kt:129`).
 
 **A6. `FxInstance` mutable fields shared across threads without happens-before** — medium / P1 / S / fable
-`isRunning`, `lastPhase`, `phaseOffset`, `stepTiming`, `distributionStrategy`, `elementMode`,
-`elementFilter`, `timingSource` are plain `var`s written from request threads and read by the tick
-loop; `isRunning` gates the whole per-effect pass (`FxEngine.kt:2091`). **Fix:** uniformly
-`@Volatile`, or swap immutable snapshots as the existing `needsSwap` branch does.
+`isRunning`, `lastPhase`, `phaseOffset`, `stepTiming`, `distributionStrategy`, `timingSource` are
+plain `var`s written from request threads and read by the tick loop; `isRunning` gates the whole
+per-effect pass (`FxEngine.kt:2091`). **Fix:** uniformly `@Volatile`, or swap immutable snapshots
+as the existing `needsSwap` branch does.
+
+Six fields, not the eight originally listed: C1 (`49f3b09`) took `elementMode` and `elementFilter`,
+which it had to — `elementFilter` gates the expansion cache's validity, and `elementMode` is
+deliberately *outside* that check, so the unsynchronised read became the only path by which a mode
+change reached the tick at all. `distributionStrategy` sits next to them and looks like it went
+too; it did not, and it is the one most likely to be assumed done.
 
 **A7. `ProgrammerLayerStack.toggle` compares target lists by order** — medium / P1 / S / sonnet
 `ProgrammerLayerStack.kt:237-239` (`it.targets == targets`): same fixtures in a different order add
@@ -189,9 +195,32 @@ multi-element walkers once the lists arrived pre-resolved, so both were deleted 
 `FxTarget.kt:465-521`: `fixtureProperties.find{}` linear scan + `KProperty1.call` per fixture per
 tick (a colour effect pays ~6/fixture/tick); `getSlider`/`getSetting` re-resolve per call. **Fix:**
 memoise per-(fixture-class, property) accessors the way `elementCatalogues` already does.
-*(C1 already took the `fixtureHasProperty` half — twice per effect per tick down to twice per
-register generation — so expect the measured win to read smaller than this entry implies.
-The `applyValue` path, which is the bulk of it, is untouched.)*
+
+Landed as `503b50d`, but **almost none of the win came from what this entry describes.** The cost was one layer
+down: `Fixture` ran `this::class.memberProperties` and `this::class.annotations` in *instance*
+initializers, and `FixturesWithTransaction` binds a fixture to a tick by constructing a new
+instance — so every touched fixture re-ran a full reflection scan 50×/s. `wrappedFixtureCache`
+deduped within a tick, which is why this never looked like a per-tick cost when reading the code.
+Hoisting it to a per-class `fixture/FixturePropertyCatalogue.kt` cut `[beat]`'s per-tick allocation
+by 68 % and its p50 by 69 %. Six copies of the same `memberProperties` + `@FixtureProperty` scan
+collapsed onto it (`Fixture`, both `DmxFixture` duplicates, `PropertyChannelWriter`'s
+`elementCatalogues`, `projectCuesHelpers`, `GlobalScalerState`).
+
+Three corrections this item's premises needed:
+- The `find{}` scans **were** replaced (five sites, now O(1)), and doing so **changed nothing
+  measurable** — a linear scan over nine properties was never the cost. Kept for the lookup
+  shape, not for a number. `KProperty1.call` → `.get` was consequently not attempted.
+- `getSlider` does **no** reflection for `dimmer`/`uv`/`white`/`amber` — those are `as?` interface
+  checks (`FxTarget.kt:320-331`). Only its `else` branch resolves, and no benchmark reaches it.
+- `[chase-beat]` could never have measured this: `RgbwPixel` is a `FixtureElement`, which does not
+  extend `Fixture`, so `ColourTarget`'s `if (fixture is Fixture)` gate excludes it. The benchmark
+  KDoc asserting otherwise was wrong and is fixed. Scenario 4 (`[colour-beat]`) was added to cover
+  the bundled-W/A/UV path; `bundledChannelParked` remains unmeasured (it needs a `ParkManager`,
+  which needs a `Database`).
+
+Numbers and the null result in `docs/testing-engineering.md` §"Recorded baselines". One behaviour
+gap found and *not* fixed here — elements declaring `bundleWithColour` never receive the component
+— is filed in `docs/plans/followups.md`.
 
 **C3. Crossfade republish re-runs the full resolver at ~62 fps under a lock** — high / P1 / M / fable
 *(Premise partly spent: C1 cached the per-frame `resolveEffectFixtureKeys` walk this item cites.
@@ -475,7 +504,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | Wave | Items | Note |
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
-| 1 | ~~C1~~ (`49f3b09`), C2 | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
+| 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | D1–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 before any cueEdit-adjacent work. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, B2 | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
@@ -521,6 +550,13 @@ group/fixture logs "not found" once per register generation instead of once per 
 `processElementKeys` / `processWallClockElementKeys`). Numbers in
 `docs/testing-engineering.md` §"Recorded baselines"; they also revise what C2 and C3 have left
 to win.
+
+C2 (`503b50d`) — `Fixture`'s per-instance reflection hoisted to a per-class `FixturePropertyCatalogue`, which
+six sites now share; the five `fixtureProperties.find{}` scans on the tick indexed. No API or DTO
+change. `[beat]` −68 % allocation, `[crossfade]` −22 %, `[chase-*]` unchanged by design. Two
+things to carry forward: the benchmark grew a `[colour-beat]` scenario (C0's harness, extended)
+and scenario 2's docs were corrected — it never measured C2. C3's re-measurement baseline is now
+the C2 block, not the C1 one.
 
 ## Verification
 
