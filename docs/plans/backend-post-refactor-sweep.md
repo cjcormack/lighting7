@@ -124,8 +124,8 @@ accepting its `outputType`, under the same mapping the add path uses — it goes
 is the point. Found while landing A4; not desk-verified (static read of both repos).
 
 *(The `CueEditSession` bugs — moveInDark lost on discard and upsert, fresh layer uuids causing sync
-tombstone churn, ad-hoc effects missing `cueStackId`, silent layer drops — are all deleted by D1
-and intentionally have no items here.)*
+tombstone churn, ad-hoc effects missing `cueStackId`, silent layer drops — intentionally had no
+items here, because D1 was going to delete the file. It has.)*
 
 ## B — Functional gaps
 
@@ -282,7 +282,7 @@ per head (`TemplateResolver.kt:137,147`); `coversTarget` re-expands per bound ef
 
 ## D — Dead code and retirements
 
-**D1. Retire the `cueEdit.*` family** *(decision taken)* — high / P1 / L / opus
+~~**D1. Retire the `cueEdit.*` family**~~ — done, `26cc782`. high / P1 / L / opus
 No client can start a session (frontend removed its arm in 2b; `beginEdit` over WS is the only
 entry), so the MIDI cue-edit fader branch (`midi/SurfaceActions.kt:148-167`) is transitively dead
 too. Remove: `plugins/CueEditSession.kt` (827 lines), `CueEditSessionRegistry.kt`,
@@ -290,6 +290,14 @@ too. Remove: `plugins/CueEditSession.kt` (827 lines), `CueEditSessionRegistry.kt
 guards, the `Sockets.kt` teardown hook, and the SurfaceActions branch. Update `followups.md`:
 `FU-TEST-MULTI-CONN-CUEEDIT` becomes moot (one-line Completed/retired row). Frontend keeps a 409
 handler — flag for the frontend sweep. All A-series cueEdit bugs die here.
+
+**The removal list above was incomplete** — it named three 409 guards where there are four
+(`projectCuesFlatten.kt` has one, `programmerRoutes.kt` two plus an Include *warning*), and nine
+further main-source files referenced the family: `ChannelSocket`, `SocketScope`,
+`SurfaceFeedbackPublisher`, `CueStackManager`, `models/cues.kt`, `models/looks.kt`, `State.kt`,
+`perf.kt`, `programmerRoutes.kt`. It also missed the opt-in perf harness (`CueEditProfileTest`,
+`-Dcueedit.profile=true`, forwarded from `build.gradle.kts`) and the twelve test files — five
+dedicated, seven referencing. Grep before trusting a removal list.
 
 **D2. Retire the legacy tempo surface, both sides** *(decision taken)* — high / P1 / M / opus
 Backend: `setFxBpm`/`tapTempo`/`beatSync`/`requestBeatSync` (`FxSocket.kt`), REST
@@ -411,8 +419,11 @@ each); extract `TapTempo` from `MasterClock`; name the magic-number relationship
 One short `docs/api-conventions.md`: kebab-case paths; plural collections with GET-on-collection;
 one spelling for vocabulary enumerations; `?force=true` as the guard-override convention;
 "unbounded lists are fine at desk scale" stated explicitly. Then fix the deviants:
-`/controlSurfaceTypes`, `/stageRegions`, `/surfaceBindings`, `/cueedit-histogram` (dies with D1),
+`/controlSurfaceTypes`, `/stageRegions`, `/surfaceBindings`,
 `GET /project/list|current` and `GET /fixture/list|types` → plural resources.
+(`/cueedit-histogram` was on this list; D1 deleted it. Note `?force=true` lost two of its three
+users with D1 as well — the surviving guard-override convention is worth restating on whatever is
+left rather than on what this item was written against.)
 
 **F2. One scoping rule for `{projectId}`** — medium / P2 / M / opus
 102 handlers 409 unless the id is current, while equally project-dependent surfaces (`/groups`,
@@ -505,7 +516,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
-| 2 | D1–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 before any cueEdit-adjacent work. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
+| 2 | ~~D1~~ **done**, D2–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 is done, so cueEdit-adjacent work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, B2 | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
@@ -534,6 +545,21 @@ Frontend-coordination register (hand to the frontend sweep): D1 (409 handler), D
 components + store/fx.ts), D3/D9 (dead stubs, groupFxAdded, presetId types, rateSpeedMasterIndex),
 F1/F2/F3/F5 (renamed paths/messages/status codes), F6 (hand-copied admin prefix list).
 
+D1's frontend half, now that the backend is done (nothing here is urgent — the backend simply
+never answers 409 `CUE_EDIT_SESSION_OPEN` again, so the handlers are unreachable rather than
+broken):
+
+- `CUE_EDIT_SESSION_OPEN` handling in `RecordSheet.tsx`, `UpdateDialog.tsx`,
+  `store/programmerOps.ts` (the union type) and `lib/programmerSource.ts` (the comment).
+- **The `force` senders — remove these before the backend fields.** `RecordSheet.submit(force)`
+  and `UpdateDialog.commit(force)` put `force` in every request body, and the backend's `Json` is
+  strict on unknown keys, so the two inert `force` fields have to outlive their senders. Deleting
+  them backend-first 400s every Record and Update.
+- `routes/Diagnostics.tsx`'s cueEdit latency panel: `GET /perf/cueedit-histogram` is gone, so the
+  panel now 404s rather than showing its empty state.
+- Stale doc comments naming the family in `EditorContext.tsx`, `CueCardEditor.tsx` and
+  `useCellWriters.ts`.
+
 **Landed so far:** A2/A3 (`ab0ff8b`) — `presetId` gone from `EffectDto` and `GroupEffectDto`;
 `effectType` on both now reports the registration id. A4 (`d3024f6`) — no DTO shape change, but
 `LightningStrike`'s `compatibleProperties` is now `[dimmer]` only, so the library stops offering
@@ -557,6 +583,55 @@ change. `[beat]` −68 % allocation, `[crossfade]` −22 %, `[chase-*]` unchange
 things to carry forward: the benchmark grew a `[colour-beat]` scenario (C0's harness, extended)
 and scenario 2's docs were corrected — it never measured C2. C3's re-measurement baseline is now
 the C2 block, not the C1 one.
+
+D1 (`26cc782`) — the `cueEdit.*` family is gone: three files deleted
+(`CueEditSession.kt`, `CueEditSessionRegistry.kt`, `CueEditLatencyTracker.kt`), fifteen
+`@SerialName("cueEdit.*")` socket messages with them, plus `GET /perf/cueedit-histogram`, all four
+409 guards and the Include warning, the `Sockets.kt` dispatch arm and teardown hook,
+`SocketScope.cueEditSessionRef`, and the two `SurfaceActions` routing branches. Suite 1804 → 1767,
+0 failures.
+
+Five things worth carrying forward:
+
+1. **`force` survives on the Record and Update request bodies, inert.** It existed only to bypass
+   the 409, but `RecordSheet` and `UpdateDialog` send it on *every* submit, not just the conflict
+   retry — and the route's `Json` is Ktor's default, which is strict on unknown keys. Removing the
+   field would 400 every Record and Update until the frontend sweep lands. Flatten's `force` was a
+   query parameter with no sender, so that one went.
+2. **Two things beyond `cueEdit` were left provably dead and handled differently.**
+   `PropertyChannelResolver.serializeToAssignmentValue` had no other caller and was deleted (a
+   one-line wrapper over `toPropertyValue`). `CueStackManager.resumeAutoAdvance` also lost its only
+   caller but was **kept**: `pauseAutoAdvance` is still live via the surface PAUSE binding, and half
+   a pause/resume pair is worse than an unused half. Its doc comment now says so. If D6 disagrees,
+   that is the place to take it.
+3. **`SurfaceFeedbackPublisher` lost a whole index, not just a branch.**
+   `Index.continuousByAssignmentKey` existed solely to let `resyncEntriesMatching` skip a per-entry
+   walk on the cue-edit hot path — it and `resyncAllDevices`, `value7BitFromAssignment`,
+   `assignmentKeyFor`, `buildAssignmentMap` and the `sessionAssignments` cache all died with the
+   event handler. `computeValue7Bit` now has one source: the live composed DMX value.
+   `FU-PERF-REGISTRY-INDICES` (Completed, `672c139`) built that index; it is now half-retired.
+4. **`MidiFloodHarness` was kept and reframed**, against the plan's instinct to delete it. It has no
+   compile-time dependency on the family (only doc framing), it is gated by `-Dmidi.flood=true`
+   which `build.gradle.kts` does not even forward, and it is still the only load generator for the
+   surface write path — which is still per-event work, just landing in
+   `FxEngine.writeProgrammerProperty` now. `FU-MANUAL-SUSPEND-PATH` still wants it.
+   `FU-PERF-COALESCE-WRITES`, its other consumer, was already cancelled.
+5. **`HttpRoundTripTest` was rewritten, not deleted.** Its whole round-trip ran through a cueEdit
+   session, but the test exists to close `FU-TEST-HTTP-ROUNDTRIP` — HTTP → WS → HTTP — so the WS leg
+   moved to `programmer.set`, which is what the frontend has done since 2b anyway. Its
+   source-cue assertions went (nothing writes a cue over the socket any more).
+
+Docs revised: `lighting-composition-model.md` (the cueEdit guard, the Layer-4 fader-routing note,
+the whole "Cue edit sessions" section, and the "two cue-authoring paths" divergence — now one),
+`midi-control-surface-engineering.md` §Phase 6, `testing-engineering.md` (the third opt-in harness,
+with a warning about the shared `if` block), and `CLAUDE.md`'s follow-up gate list.
+`FU-MANUAL-CUEEDIT-HARDWARE` in `manual-validation.md` was retired unrun — the plan named only the
+`followups.md` item.
+
+**Not done:** the plan's D-wave verification asks for a boot-and-connect-the-real-frontend smoke
+pass (`./gradlew run` + the frontend dev server). That needs the operator; `./gradlew test`
+(`--rerun-tasks`, for the deleted sealed subclasses) is green. The frontend still has its 409
+handler and `force` senders — frontend sweep, register below.
 
 ## Verification
 
