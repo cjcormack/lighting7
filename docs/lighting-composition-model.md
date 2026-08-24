@@ -1,6 +1,6 @@
 # Lighting Composition Model
 
-This document specifies how lighting7 composes the DMX channel output sent each frame. It is the source of truth for priority rules, blending, programmer semantics, cue crossfades, and `cueEdit` session behaviour.
+This document specifies how lighting7 composes the DMX channel output sent each frame. It is the source of truth for priority rules, blending, programmer semantics and cue crossfades.
 
 Related:
 - Strategic plan for adopting this model: [cue-authoring-unification-plan.md](plans/completed/cue-authoring-unification-plan.md).
@@ -164,11 +164,13 @@ operator's programmer out from under them when the cue stops.
   was actually underneath.
 - Update applies MERGE semantics and never deletes. Removing content from a cue is `record REMOVE`.
 
-**The cueEdit guard**, asymmetric because the risks are: opening a cue-edit session on the current
-include target *warns*, and Include on a cue with an open session warns (Include only reads).
-Record and Update targeting a cue with an open session are a **409 unless forced** — `beginEdit`
-snapshots the cue's assignments and Discard restores that snapshot wholesale, so anything written
-underneath would be silently reverted.
+There used to be a **cueEdit guard** here — an asymmetric one, because the risks were: Record and
+Update targeting a cue with an open cue-edit session answered **409 unless forced** (`beginEdit`
+snapshotted the cue's assignments and Discard restored that snapshot wholesale, so anything written
+underneath was silently reverted), while Include only warned, because Include only reads. Backend
+sweep item D1 retired the `cueEdit.*` family, so there is no second writer to guard against and
+Record / Update / flatten have no conflict case left. `force` survives on the Record and Update
+request bodies as an inert accepted field only because the frontend still sends it on every submit.
 
 ## Layer 3 — Effects
 
@@ -270,8 +272,6 @@ operator is most likely to be surprised by, and why `FU-MANUAL-LAYER-PRECEDENCE`
 ### Fade weight
 
 Each active cue has a fade weight in `[0, 1]` tracking its crossfade progress. During a cue transition, outgoing cues fade `1 → 0` and incoming cues fade `0 → 1` over the cue fade time. The weight feeds both the crossfade interpolation for `LTP` categories and the scaled `max` for `HTP` categories.
-
-Interaction with cue-edit sessions: when a client holds an active `cueEdit` session, surface fader writes route into the cue's Layer 4 property assignments (via `cueEdit.setProperty`) rather than the programmer. See [Cue edit sessions](#cue-edit-sessions) below.
 
 ## Looks, templates and layers
 
@@ -572,34 +572,30 @@ Three details worth knowing:
   helper is the point: "what is painting" and "what provenance reports" have no business
   disagreeing.
 
-## Cue edit sessions
+## Cue edit sessions — retired
 
-Operators edit cues through an active editing session, managed by `cueEdit.*` socket messages.
+Cues were once editable in place, through a session held over the socket (`cueEdit.beginEdit` /
+`setProperty` / `discardChanges` / `setMode` / `endEdit`) with a snapshot-based Discard and a
+Live/Blind mode of its own. That was the second of two cue-authoring paths, and it is gone: the
+frontend dropped its arm in desk-simplification session 2b, leaving no client able to open a
+session, and backend sweep item D1 removed the server half.
 
-### Lifecycle
+**A cue is now read-only except through the programmer.** Authoring is Record / Include / Update
+(above) for every surface — the web client, a MIDI fader, and the REST API alike. What this
+removed, besides ~1,000 lines: a whole second writer to Layer 4, the 409 guards that existed to
+keep the two writers apart, and the surface-feedback path that made a bound fader show the cue
+being edited rather than the stage.
 
-- `cueEdit.beginEdit { cueId, mode }` — server snapshots the cue's Layer 4 property assignments (the pre-edit baseline) and stores it for the session. In Live mode the cue is activated on stage for the session (if not already active). In Blind mode the session does not toggle stage activation.
-- `cueEdit.setChannel / setProperty / addPresetApplication / addAdHocEffect / clearAssignment` — edits auto-persist into the cue. In Live mode the server also performs the transient stage-side write for instant feedback. In Blind mode there is no transient write, but edits still propagate to stage naturally via Layer 4 re-composition if the cue is already active via the playback stack (see below).
-- `cueEdit.discardChanges { cueId }` — restores the cue's Layer 4 property assignments from the session-start snapshot. Stage reflects the restored state on the next composition pass if the cue is active (in either mode). Equivalent in spirit to EOS `Release` / grandMA `Clear`.
-- `cueEdit.setMode { cueId, mode }` — transitions mid-session. Live → Blind drops the session-owned stage activation but keeps the session open; if the cue is also active via the stack it remains on stage. Blind → Live activates the cue on stage for the session if it is not already active.
-- `cueEdit.endEdit { cueId }` — closes the session. In Live mode, drops the session-owned stage activation (the cue stays on stage if the stack is also running it). In Blind mode, is a stage no-op. The snapshot is dropped.
-
-### Live vs Blind
-
-The modes differ in whether the edit session itself activates the cue on stage. They do **not** differ in whether edits to an *already-active* cue are visible — those always are, because Layer 4 re-composes each frame.
-
-- **Live** (default on the Cues page): starting an edit activates the cue on stage. Edits reflect in real time. What you see is what you save.
-- **Blind**: starting an edit does not activate the cue. Two cases:
-  - *Cue is not active via the stack*: edits persist silently and become visible when the cue is next fired. Useful for preparing an upcoming cue while a different look is on stage.
-  - *Cue is already active via the stack* (the common case during a running show): edits persist and are visible on stage on the next composition pass, because the cue's Layer 4 contribution recomposes with the new values. This lets the operator tweak the current live look without any separate "live override" flow, while edits to *other* inactive cues in the same session remain invisible until fired.
-
-Naming note: the cue-edit session's Live/Blind *mode* and the programmer's **Blind** gate are different mechanisms that coexist. UI labels must distinguish them — "Blind" stays with the programmer gate (console muscle memory); the cue-edit mode toggle is relabelled "Preview edit" wherever both are visible.
+One naming consequence worth keeping: **Blind** now unambiguously means the programmer's Blind
+gate. It used to collide with the cue-edit session's own Live/Blind mode, which is why that mode
+was relabelled "Preview edit" wherever both were visible; there is no longer anything to
+disambiguate it from.
 
 ## Divergences from industry consoles
 
 For readers familiar with EOS, grandMA, Hog, MagicQ, or Avolites:
 
-- **Two cue-authoring paths coexist**: the programmer's Record/Include/Update loop (stage-driven) and `cueEdit` sessions (a bound form over the cue document, auto-persisting with snapshot-based discard). Most consoles have only the former. See the guard below.
+- **One cue-authoring path**, the programmer's Record/Include/Update loop — which is also what most consoles have. There were two until backend sweep item D1; see [Cue edit sessions — retired](#cue-edit-sessions--retired).
 - **No HTP/LTP toggle on cues**: the composition rule is a property-category intrinsic, not a per-cue choice. We do not need the EOS / Hog "this cuelist is HTP for intensity" switch because the category already declares it.
 - **Programmer wins HTP categories too**: MagicQ's `Programmer overrides HTP chans` setting collapsed to an always-on rule — busking-first system, predictability beats max-merge.
 - **Non-tracking**: cues are complete states; there is no tracking apparatus (block/unblock/trace/cue-only).

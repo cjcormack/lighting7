@@ -13,13 +13,9 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
-import uk.me.cormack.lighting7.plugins.CueEditAssignmentChangedOutMessage
-import uk.me.cormack.lighting7.plugins.CueEditBeginEditInMessage
-import uk.me.cormack.lighting7.plugins.CueEditEndEditInMessage
-import uk.me.cormack.lighting7.plugins.CueEditSessionEndedOutMessage
-import uk.me.cormack.lighting7.plugins.CueEditSessionStartedOutMessage
-import uk.me.cormack.lighting7.plugins.CueEditSetPropertyInMessage
 import uk.me.cormack.lighting7.plugins.InMessage
+import uk.me.cormack.lighting7.plugins.ProgrammerEntryChangedOutMessage
+import uk.me.cormack.lighting7.plugins.ProgrammerSetInMessage
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.awaitOfType
 import uk.me.cormack.lighting7.testsupport.createWsClient
@@ -28,18 +24,23 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
 /**
- * End-to-end HTTP + WebSocket round-trip: POST /patches → WS cueEdit (beginEdit →
- * setProperty → endEdit) → POST programmer/record (STAGE_SNAPSHOT) → GET. Closes the gap named
- * in `FU-TEST-HTTP-ROUNDTRIP`.
+ * End-to-end HTTP + WebSocket round-trip: POST /patches → WS `programmer.set` → POST
+ * programmer/record (STAGE_SNAPSHOT) → GET. Closes the gap named in `FU-TEST-HTTP-ROUNDTRIP`.
  *
  * The capture step used to be `POST /cues/{id}/snapshot-from-live`, which Session 3 replaced
  * with `programmer.record { source: STAGE_SNAPSHOT, mode: UPDATE_EXISTING }` — the same
  * capture, now one source among several rather than its own endpoint.
+ *
+ * The WS leg used to be a `cueEdit` session (beginEdit → setProperty → endEdit), writing into
+ * the cue's Layer 4 directly. Sweep item D1 retired that family, so the leg is now a programmer
+ * write — which is what the frontend has done since session 2b anyway. The shape of the test is
+ * unchanged and so is what it covers: a value set over the socket has to be visible to a
+ * subsequent REST capture, and survive to a REST read.
  */
 class HttpRoundTripTest : RouteIntegrationTest() {
 
     @Test
-    fun `patch then cueEdit then stage-snapshot record then GET round-trips through HTTP + WS`() = testApplication {
+    fun `patch then programmer set then stage-snapshot record then GET round-trips through HTTP + WS`() = testApplication {
         mountTestApp(state)
         val client = createWsClient()
 
@@ -59,32 +60,24 @@ class HttpRoundTripTest : RouteIntegrationTest() {
         }
         assertEquals(HttpStatusCode.Created, patchResp.status, "patches body: ${patchResp.bodyAsText()}")
 
-        val sourceCueId = createEmptyCue(client, "source-cue")
         val targetCueId = createEmptyCue(client, "target-cue")
 
         // The WS connection fans out a burst of initial-state messages on connect
         // (channelMapping, fxState, palette, etc. — see plugins/Sockets.kt). Filter
         // via [awaitOfType] rather than reading the first frame blindly.
         //
-        // Snapshot happens inside the open Live session: after setProperty, Layer 4
-        // reflects the edit, but endEdit would tear it down (removeEffectsForCue →
-        // removeCueAssignments), so the snapshot has to come before endEdit.
+        // The snapshot happens while the socket is still open: the programmer entry is what
+        // puts 200 on stage, and STAGE_SNAPSHOT reads the stage.
         client.webSocket("/api") {
-            sendSerialized<InMessage>(CueEditBeginEditInMessage(sourceCueId, "LIVE"))
-            val started = awaitOfType<CueEditSessionStartedOutMessage>()
-            assertEquals(sourceCueId, started.cueId)
-
             sendSerialized<InMessage>(
-                CueEditSetPropertyInMessage(
-                    cueId = sourceCueId,
+                ProgrammerSetInMessage(
                     targetType = "fixture",
                     targetKey = "hex-1",
                     propertyName = "dimmer",
                     value = "200",
                 )
             )
-            val changed = awaitOfType<CueEditAssignmentChangedOutMessage>()
-            assertEquals(sourceCueId, changed.cueId)
+            val changed = awaitOfType<ProgrammerEntryChangedOutMessage>()
             assertEquals("hex-1", changed.targetKey)
             assertEquals("dimmer", changed.propertyName)
             assertEquals("200", changed.value)
@@ -101,10 +94,6 @@ class HttpRoundTripTest : RouteIntegrationTest() {
                 )
             }
             assertEquals(HttpStatusCode.OK, snapResp.status, "snapshot body: ${snapResp.bodyAsText()}")
-
-            sendSerialized<InMessage>(CueEditEndEditInMessage(sourceCueId))
-            val ended = awaitOfType<CueEditSessionEndedOutMessage>()
-            assertEquals(sourceCueId, ended.cueId)
         }
 
         val getResp = client.get("/api/rest/project/$projectId/cues/$targetCueId")
@@ -114,16 +103,8 @@ class HttpRoundTripTest : RouteIntegrationTest() {
             it.targetKey == "hex-1" && it.propertyName == "dimmer"
         }
         assertNotNull(dimmerRow, "expected snapshot to contain hex-1.dimmer; got ${details.propertyAssignments}")
-        assertEquals("200", dimmerRow.value, "snapshot should preserve the Live edit's dimmer value")
+        assertEquals("200", dimmerRow.value, "snapshot should preserve the programmer write's dimmer value")
         assertEquals("fixture", dimmerRow.targetType)
-
-        val sourceResp = client.get("/api/rest/project/$projectId/cues/$sourceCueId")
-        val sourceDetails = sourceResp.body<CueDetails>()
-        val sourceDimmer = sourceDetails.propertyAssignments.singleOrNull {
-            it.targetKey == "hex-1" && it.propertyName == "dimmer"
-        }
-        assertNotNull(sourceDimmer, "cueEdit.setProperty should persist to source cue")
-        assertEquals("200", sourceDimmer.value)
     }
 
     private suspend fun createEmptyCue(client: HttpClient, name: String): Int {

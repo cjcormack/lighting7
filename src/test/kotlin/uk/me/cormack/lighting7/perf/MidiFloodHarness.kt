@@ -15,13 +15,19 @@ import kotlin.math.sin
 import kotlin.test.Test
 
 /**
- * MIDI flood harness — drives the backend's `cueEdit` fader hot path under realistic
+ * MIDI flood harness — drives the backend's surface fader hot path under realistic
  * sustained load.
  *
  * Phase B item 4 of the follow-up drain plan; companion to `EffectStormHarness`.
- * Referenced by `FU-PERF-COALESCE-WRITES` (the headline target — 100 Hz fader CC traffic
- * runs through `CueEditSessionHandler.setPropertyForSession` per event, with a Hikari
- * borrow + Exposed transaction + Layer 4 republish each time) and by `FU-MANUAL-SUSPEND-PATH`.
+ * Referenced by `FU-MANUAL-SUSPEND-PATH`.
+ *
+ * The original target was `cueEdit`: 100 Hz of fader CC ran through
+ * `CueEditSessionHandler.setPropertyForSession`, a Hikari borrow + Exposed transaction +
+ * Layer 4 republish per event, which is what `FU-PERF-COALESCE-WRITES` was raised against
+ * (and cancelled on — p99 2.1 ms). Sweep item D1 retired that family, so a bound fader now
+ * lands in `FxEngine.writeProgrammerProperty` instead. The harness is unchanged and still
+ * useful: it is the only load generator for the surface write path, and that path is still
+ * per-event work on the operator's hot loop.
  *
  * Opens a libremidi virtual output port with the same shape as
  * `src/main/kotlin/uk/me/cormack/lighting7/midi/KtmidiAccessSource.kt`, so the running
@@ -34,16 +40,15 @@ import kotlin.test.Test
  * # Run-book
  *
  * 1. Boot the backend (`./gradlew run`) in a separate process.
- * 2. In the React frontend, open a cue for edit (Live or Blind), bind a fader on a learned
- *    control surface to a fixture's `dimmer` (or `uv` — anything that round-trips through
- *    `setPropertyForSession`).
+ * 2. In the React frontend, bind a fader on a learned control surface to a fixture's `dimmer`
+ *    (or `uv` — anything `PropertyChannelResolver.toPropertyValue` accepts).
  * 3. Launch the harness — it registers a virtual port named `lighting7-flood` (override with
  *    `--port-name`). The backend's poll loop (~1 s interval) discovers it; you'll need to
  *    re-bind the fader to the harness device or re-route the binding through the virtual
  *    surface in the UI. The harness emits on channel 1, CC 1 by default — matching fader 1
  *    of the X-Touch Compact Standard profile.
- * 4. Watch the backend's `setPropertyForSession` histograms (Phase B item 1 — not yet built;
- *    until then, JFR or `jstack` mid-run). The CSV at `--out` exists only for log-correlation
+ * 4. Watch `GET /api/rest/perf/midi-latency` (ingress + egress buckets), or JFR / `jstack`
+ *    mid-run. The CSV at `--out` exists only for log-correlation
  *    after the run; CC values + emit timestamps, no client-side latency measurement (the
  *    interesting numbers are all backend-side).
  *
@@ -205,7 +210,7 @@ private fun printMidiFloodUsage() {
         """
         |Usage: MidiFloodHarness [OPTIONS]
         |
-        |Drives the backend's cueEdit fader hot path via a libremidi virtual MIDI port.
+        |Drives the backend's surface fader hot path via a libremidi virtual MIDI port.
         |Boot the backend separately, bind a fader to a property in the UI, then launch.
         |
         |Options:

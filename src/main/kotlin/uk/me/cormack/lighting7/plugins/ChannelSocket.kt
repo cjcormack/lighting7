@@ -122,8 +122,7 @@ suspend fun handleChannel(scope: SocketScope, message: ChannelInMessage) {
  * - Slider- or setting-backed channels lift to a property-level programmer entry.
  * - Colour sub-channels lift to the whole `rgbColour` property: the written component
  *   replaces its axis in the fixture's current output colour, deliberately freezing the
- *   sibling components into the programmer (the property-level analogue of what
- *   `cueEdit.setChannel` guides users toward).
+ *   sibling components into the programmer.
  * - Position axes and channels with no backing property stay channel-shaped in the
  *   programmer's sideband — still above the layers below, still released by Clear.
  */

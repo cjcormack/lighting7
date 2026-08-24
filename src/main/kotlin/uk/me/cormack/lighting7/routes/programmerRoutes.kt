@@ -58,7 +58,6 @@ internal data class ProgrammerConflictResponse(
     val cueId: Int? = null,
 )
 
-internal const val CODE_CUE_EDIT_SESSION_OPEN = "CUE_EDIT_SESSION_OPEN"
 internal const val CODE_INCLUDE_TARGET_GONE = "INCLUDE_TARGET_GONE"
 
 // ── Record ──────────────────────────────────────────────────────────────────
@@ -81,7 +80,13 @@ internal data class ProgrammerRecordRequest(
     val cueNumber: String? = null,
     val sortOrder: Int? = null,
     val cueType: String = "STANDARD",
-    /** Record anyway when a cue-edit session is open on the target cue. */
+    /**
+     * Inert since sweep item D1 retired `cueEdit.*` — there is no longer a session to record
+     * underneath, so nothing consults this. Accepted rather than removed because `RecordSheet`
+     * sends it on *every* submit, not only on the conflict retry, and the route's `Json` is
+     * strict about unknown keys: dropping the field would 400 every Record until the frontend
+     * sweep lands. Delete it with the frontend's sender.
+     */
     val force: Boolean = false,
     /**
      * Restrict the record to these fixtures — MagicQ's selection-scoped record, "put just these
@@ -137,26 +142,6 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
             HttpStatusCode.BadRequest,
             ErrorResponse("${mode.name} requires cueId"),
         )
-    }
-
-    if (request.cueId != null && !request.force) {
-        // Hard stop, not a warning: an open session snapshotted this cue's assignments, and
-        // its Discard restores that snapshot wholesale — so anything recorded underneath would
-        // vanish the moment the operator discarded. Silently losing a Record is worse than an
-        // explicit confirm.
-        val open = state.cueEditSessionRegistry
-            .activeSession(state.projectManager.currentProject.id.value)
-        if (open?.session?.cueId == request.cueId) {
-            return call.respond(
-                HttpStatusCode.Conflict,
-                ProgrammerConflictResponse(
-                    "A cue-edit session is open on this cue — recording underneath it would be " +
-                        "reverted by Discard.",
-                    CODE_CUE_EDIT_SESSION_OPEN,
-                    request.cueId,
-                ),
-            )
-        }
     }
 
     // Expand the selection outside the transaction too — it reads the patch, not the DB.
@@ -315,13 +300,6 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
         }
 
         val warnings = ArrayList<String>()
-        // Include only *reads* the cue, so an open cue-edit session is a caution, not a
-        // conflict — unlike Record/Update, which write underneath it.
-        val open = state.cueEditSessionRegistry.activeSession(project.id.value)
-        if (open?.session?.cueId == cueData.cueId) {
-            warnings += "A cue-edit session is open on this cue — its Discard will revert " +
-                "anything Update writes back."
-        }
 
         val outcome = includeCueIntoProgrammer(state, cueData, mask, request.fadeMs ?: 0)
 
@@ -368,6 +346,7 @@ internal data class ProgrammerUpdateRequest(
     /** Return the checklist without writing anything, even when an include target exists. */
     val preview: Boolean = false,
     val includeFx: Boolean = true,
+    /** Inert since D1 — see [ProgrammerRecordRequest.force]. `UpdateDialog` always sends it. */
     val force: Boolean = false,
 )
 
@@ -467,23 +446,6 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
         }
 
         val cueIds = request.targets ?: listOf(includeTarget!!.cueId!!)
-
-        if (!request.force) {
-            val open = state.cueEditSessionRegistry.activeSession(project.id.value)
-            val clash = open?.session?.cueId?.takeIf { it in cueIds }
-            if (clash != null) {
-                call.respond(
-                    HttpStatusCode.Conflict,
-                    ProgrammerConflictResponse(
-                        "A cue-edit session is open on cue $clash — updating underneath it " +
-                            "would be reverted by Discard.",
-                        CODE_CUE_EDIT_SESSION_OPEN,
-                        clash,
-                    ),
-                )
-                return@withCurrentProject
-            }
-        }
 
         // Mode A writes only what changed since Include (which is what preserves palette refs
         // the operator didn't touch); Mode B writes each cue exactly the keys it was under.

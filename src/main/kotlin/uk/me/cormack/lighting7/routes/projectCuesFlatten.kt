@@ -24,7 +24,6 @@ private val logger = LoggerFactory.getLogger("cueFlatten")
 internal data class FlattenCueLayersResource(
     val parent: ProjectCuesResource,
     val cueId: Int,
-    val force: Boolean = false,
 )
 
 @Serializable
@@ -86,7 +85,6 @@ internal suspend fun RoutingContext.handleFlattenCueLayers(
     state: State,
     projectId: String,
     cueId: Int,
-    force: Boolean,
 ) {
     val request = try {
         call.receive<CueFlattenRequest>()
@@ -107,23 +105,6 @@ internal suspend fun RoutingContext.handleFlattenCueLayers(
     withCurrentProject(state, projectId, { p ->
         "Cannot modify project '${p.name}' — only the current project can be modified"
     }) { project ->
-        if (!force) {
-            // Same rule as Record/Update: an open session's Discard would revert this.
-            val open = state.cueEditSessionRegistry.activeSession(project.id.value)
-            if (open?.session?.cueId == cueId) {
-                call.respond(
-                    HttpStatusCode.Conflict,
-                    ProgrammerConflictResponse(
-                        "A cue-edit session is open on this cue — flattening underneath it would be " +
-                            "reverted by Discard.",
-                        CODE_CUE_EDIT_SESSION_OPEN,
-                        cueId,
-                    ),
-                )
-                return@withCurrentProject
-            }
-        }
-
         val result = transaction(state.database) {
             val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
                 ?: return@transaction FlattenResult.CueNotFound

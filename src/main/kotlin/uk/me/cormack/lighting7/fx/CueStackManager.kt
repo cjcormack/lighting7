@@ -743,9 +743,10 @@ class CueStackManager(
     /**
      * Reschedule auto-advance on an active stack, re-reading the active cue's configuration.
      *
-     * Used by `cueEdit.endEdit` / disconnect after `pauseAutoAdvance` was called at the start
-     * of a Live stack-cue edit session: on edit end we want the stack to keep rolling forward
-     * if the cue had auto-advance configured. No-op if:
+     * The counterpart to [pauseAutoAdvance], which a surface PAUSE binding still calls. Its own
+     * caller was `cueEdit.endEdit`, retired by sweep item D1 — so nothing in production resumes a
+     * paused stack today. Kept because a surface RESUME binding is the obvious next caller and
+     * deleting half a pause/resume pair is worse than an unused half. No-op if:
      * - the stack isn't active
      * - the active cue has no `autoAdvance` or no `autoAdvanceDelayMs`
      * - an auto-advance timer is already running (we don't stack timers)

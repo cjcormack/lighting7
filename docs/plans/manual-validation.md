@@ -17,7 +17,6 @@ as a one-line row.
 | [`FU-MANUAL-UPDATE-APPLY`](#fu-manual-update-apply) | the in-app update upgrades in place — now unblocked | Windows updates, 2026-08-17 |
 | [`FU-MANUAL-SCALER-PROJECT-SWITCH`](#fu-manual-scaler-project-switch) | scaler state survives a project switch | Control-surface P9 |
 | [`FU-MANUAL-SUSPEND-PATH`](#fu-manual-suspend-path) | the suspend path doesn't stutter under load | Control-surface P8 |
-| [`FU-MANUAL-CUEEDIT-HARDWARE`](#fu-manual-cueedit-hardware) | cueEdit works from a bound fader | Control-surface P6 |
 | [`FU-MANUAL-SURFACES-FLOW`](#fu-manual-surfaces-flow) | the `/surfaces` MIDI-learn flow works | Control-surface P5 |
 | [`FU-MANUAL-DEAD-ASSIGNMENTS`](#fu-manual-dead-assignments) | dead markers render after a fixture rename | Cue-authoring P6 |
 | [`FU-MANUAL-RUN-STATE-TWO-SESSIONS`](#fu-manual-run-state-two-sessions) | desk, tablet and MIDI surface agree on what GO fires | Server-owned Next, 2026-08-20 |
@@ -299,15 +298,6 @@ property. Confirm no stage stutter, no WebSocket `channelState` lag, no coroutin
 dump. No functional change expected — the suspend path delivers the same per-channel acks as the old
 blocking path. Regression sanity check, not new validation.
 
-## `FU-MANUAL-CUEEDIT-HARDWARE`
-
-**cueEdit integration on hardware** · Control-surface Phase 6
-
-Open a cue for edit in Live mode via the frontend → wiggle a bound fader → confirm the cue's
-`dimmer` row updates (`GET /cues/{id}`) → stage reflects the new value → close the editor →
-retrigger the cue → the edit reproduces. Repeat in Blind: stage unaffected during the edit, value
-still persists.
-
 ## `FU-MANUAL-SURFACES-FLOW`
 
 **End-to-end `/surfaces` flow** · Control-surface Phase 5
@@ -332,9 +322,11 @@ affected rows and Remove clears them. 10 minutes.
 
 ## Validated
 
-Passed on the rig; the procedures are in this file's git history if one is ever needed again.
+Passed on the rig, or retired unrun because the feature went away; the procedures are in this
+file's git history if one is ever needed again.
 
 | Item | Passed | Result |
 |---|---|---|
 | `FU-MANUAL-DIST-INSTALL` | 2026-08-19 | clean install on Mac + Windows; all four native payloads and editor completion good |
 | `FU-MANUAL-AUTH-QR-SCAN` | 2026-08-19 | both QR flows resolved and completed from a real phone |
+| `FU-MANUAL-CUEEDIT-HARDWARE` | — | retired unrun 2026-08-24: sweep item D1 removed `cueEdit.*`, so there is no cue to open for edit from a fader |

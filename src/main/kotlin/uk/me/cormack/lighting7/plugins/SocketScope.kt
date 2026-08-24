@@ -10,7 +10,6 @@ import uk.me.cormack.lighting7.state.State
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Per-connection context handed to every domain handler and subscription setup.
@@ -48,9 +47,6 @@ class SocketScope(
      * broadcasts so two `/surfaces` tabs don't see each other's captures.
      */
     val ownedLearnSessions: MutableSet<String> = Collections.synchronizedSet(LinkedHashSet())
-
-    /** At most one open cue-edit session per connection; cleared on disconnect. */
-    val cueEditSessionRef: AtomicReference<CueEditSessionState?> = AtomicReference(null)
 
     suspend fun send(message: OutMessage) {
         try {

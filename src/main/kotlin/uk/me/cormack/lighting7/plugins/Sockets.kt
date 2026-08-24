@@ -139,7 +139,6 @@ fun Application.configureSockets(state: State) {
                             is GroupInMessage -> handleGroup(scope, message)
                             is ProjectInMessage -> handleProject(scope, message)
                             is SurfaceInMessage -> handleSurface(scope, message)
-                            is CueEditInMessage -> handleCueEdit(scope, message)
                             is ProgrammerInMessage -> handleProgrammer(scope, message)
                             is SpeedMasterInMessage -> handleSpeedMasters(scope, message)
                             null -> System.err.println("WS /api: undeserializable frame ignored")
@@ -155,7 +154,6 @@ fun Application.configureSockets(state: State) {
                 scope.cancelAll()
                 scope.ownedLearnSessions.toList().forEach { state.midiLearnSessionManager.cancel(it) }
                 scope.ownedLearnSessions.clear()
-                CueEditSessionHandler.endSessionOnDisconnect(state, scope.cueEditSessionRef)
                 unregisterBroadcastListener()
             }
         }

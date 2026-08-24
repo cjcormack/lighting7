@@ -27,9 +27,6 @@ internal fun Route.routeApiRestPerf(state: State) {
                 }
             call.respond(ArtNetRatesResponse(windowSeconds = 30, universes = universes))
         }
-        get<CueEditHistogram> {
-            call.respond(state.cueEditLatencyTracker.snapshot())
-        }
         get<MidiLatency> {
             call.respond(
                 MidiLatencyResponse(
@@ -48,9 +45,6 @@ internal fun Route.routeApiRestPerf(state: State) {
 
 @Resource("/artnet-rates")
 data object ArtNetRates
-
-@Resource("/cueedit-histogram")
-data object CueEditHistogram
 
 @Resource("/midi-latency")
 data object MidiLatency

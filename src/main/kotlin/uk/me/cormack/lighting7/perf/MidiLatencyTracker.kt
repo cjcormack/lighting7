@@ -15,8 +15,8 @@ enum class MidiLatencyStage(val wireName: String) {
 
 /**
  * Per-process registry of [LatencyHistogram] buckets covering the MIDI surface hot path.
- * Unlike [CueEditLatencyTracker] there's no per-session boundary — MIDI traffic is continuous —
- * so the buckets accumulate until [reset] is called explicitly (operator-driven via
+ * There's no per-session boundary to reset on — MIDI traffic is continuous — so the buckets
+ * accumulate until [reset] is called explicitly (operator-driven via
  * `POST /api/rest/perf/midi-latency/reset`).
  *
  * Buckets are pre-allocated at construction so the hot path is one array access + one

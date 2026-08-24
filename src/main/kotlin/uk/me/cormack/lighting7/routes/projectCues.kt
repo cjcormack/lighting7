@@ -48,7 +48,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
     // POST /{projectId}/cues/{cueId}/flatten — mounted above the bare POST so the more specific
     // path matches first.
     post<FlattenCueLayersResource> { resource ->
-        handleFlattenCueLayers(state, resource.parent.projectId, resource.cueId, resource.force)
+        handleFlattenCueLayers(state, resource.parent.projectId, resource.cueId)
     }
 
     // POST /{projectId}/cues - Create new cue (current project only)

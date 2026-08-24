@@ -3,7 +3,6 @@ package uk.me.cormack.lighting7.midi
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -13,16 +12,12 @@ import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.perf.MidiLatencyStage
 import uk.me.cormack.lighting7.perf.MidiLatencyTracker
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
-import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
-import uk.me.cormack.lighting7.plugins.CueEditSessionState
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import java.util.UUID
@@ -101,15 +96,6 @@ class SurfaceFeedbackPublisher(
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
     val touchState: TouchStateTracker = TouchStateTracker(),
     val takeover: SoftTakeoverStateMachine = SoftTakeoverStateMachine(),
-    /**
-     * Phase 6: when non-null, feedback for bound continuous targets reflects the cue-edit
-     * session's current Layer 4 assignment for the target (if any) instead of the composed
-     * live DMX value. Lookup is cached internally so the hot [onChannelsChanged] path stays
-     * allocation-free when no session is open.
-     */
-    private val cueEditSessionProvider: ((Int) -> CueEditSessionState?)? = null,
-    /** When provided, [start] subscribes to keep the session-assignments cache in sync. */
-    private val cueEditEvents: SharedFlow<CueEditSessionRegistry.Event>? = null,
     /** Records per-stage wall-clock duration of motor / LED egress writes. */
     private val latencyTracker: MidiLatencyTracker = MidiLatencyTracker(),
 ) : SurfaceFeedbackHooks {
@@ -167,13 +153,6 @@ class SurfaceFeedbackPublisher(
     private data class Index(
         val byChannel: Map<Long, List<ContinuousEntry>>,
         val continuousByDisplay: Map<String, List<ContinuousEntry>>,
-        /**
-         * Secondary index of fixture / group continuous entries keyed by assignment identity —
-         * lets [resyncEntriesMatching] skip the per-entry walk on the cue-edit hot path.
-         * Populated only for bindings whose target produces a [CueAssignmentResolver.Key]
-         * (FixtureProperty / GroupProperty); Flash / cueStack / blackout targets are absent.
-         */
-        val continuousByAssignmentKey: Map<CueAssignmentResolver.Key, List<ContinuousEntry>>,
         val ledsByDisplay: Map<String, List<LedEntry>>,
         val flashByBindingId: Map<Int, LedEntry>,
         val blackoutLeds: List<LedEntry>,
@@ -188,7 +167,7 @@ class SurfaceFeedbackPublisher(
     ) {
         companion object {
             val EMPTY = Index(
-                emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyList(), emptyList(), emptyList(),
+                emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyList(), emptyList(), emptyList(),
             )
         }
     }
@@ -197,14 +176,6 @@ class SurfaceFeedbackPublisher(
 
     @Volatile
     private var currentFixtures: Fixtures? = null
-
-    /**
-     * Per-target cached cue assignments for the active cue-edit session. Keyed by
-     * [CueAssignmentResolver.Key] — matches [CuePropertyAssignmentDto] row identity. Empty when
-     * no session is active. Rebuilt on session start / mode change / discard; patched
-     * incrementally on single-assignment events.
-     */
-    private val sessionAssignments = AtomicReference<Map<CueAssignmentResolver.Key, String>>(emptyMap())
 
     private val fixtureListener = object : FixturesChangeListener {
         override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) =
@@ -253,11 +224,6 @@ class SurfaceFeedbackPublisher(
         }
         subscribeScaler(scope)
         subscribeSpeedMasters(scope)
-        cueEditEvents?.let { events ->
-            jobs += scope.launch(CoroutineName("FeedbackPublisher-cueEdit")) {
-                events.collect { onCueEditEvent(it) }
-            }
-        }
     }
 
     /**
@@ -310,7 +276,6 @@ class SurfaceFeedbackPublisher(
         speedMasterJob?.cancel()
         speedMasterJob = null
         publisherScope = null
-        sessionAssignments.set(emptyMap())
         detachFromFixtures()
     }
 
@@ -318,9 +283,6 @@ class SurfaceFeedbackPublisher(
         detachFromFixtures()
         touchState.clearAll()
         takeover.clearAll()
-        // Any cached cue-edit state belongs to the previous project's cue; drop it so the
-        // registry's next event on the new project rebuilds from scratch.
-        sessionAssignments.set(emptyMap())
         attachToFixtures()
         rebuildIndex()
         // Re-subscribe to the new show's scaler facade — the previous subscription
@@ -470,99 +432,6 @@ class SurfaceFeedbackPublisher(
         }
     }
 
-    // --- Cue-edit session handling (Phase 6) ---
-
-    /**
-     * React to a [CueEditSessionRegistry] event. Lifecycle events (Started / Ended / mode
-     * change / discard) rebuild the cached assignments map and resync every attached device
-     * — bound feedback may switch between cue-value and live-value sources. Incremental
-     * events (AssignmentChanged / AssignmentCleared) patch the cache and resync only the
-     * entries whose target matches.
-     */
-    private fun onCueEditEvent(event: CueEditSessionRegistry.Event) {
-        when (event) {
-            is CueEditSessionRegistry.Event.Started -> {
-                sessionAssignments.set(buildAssignmentMap(event.session.snapshot))
-                resyncAllDevices()
-            }
-            is CueEditSessionRegistry.Event.ModeChanged -> {
-                // Snapshot doesn't change across mode flips; feedback source might (stage vs.
-                // blind) so resync.
-                resyncAllDevices()
-            }
-            is CueEditSessionRegistry.Event.Ended -> {
-                sessionAssignments.set(emptyMap())
-                resyncAllDevices()
-            }
-            is CueEditSessionRegistry.Event.AssignmentChanged -> {
-                val key = CueAssignmentResolver.Key(event.target, event.propertyName)
-                val current = sessionAssignments.get()
-                sessionAssignments.set(current + (key to event.value))
-                resyncEntriesMatching(key)
-            }
-            is CueEditSessionRegistry.Event.AssignmentCleared -> {
-                val key = CueAssignmentResolver.Key(event.target, event.propertyName)
-                val current = sessionAssignments.get()
-                if (key in current) {
-                    sessionAssignments.set(current - key)
-                }
-                resyncEntriesMatching(key)
-            }
-            is CueEditSessionRegistry.Event.AssignmentsReloaded -> {
-                sessionAssignments.set(buildAssignmentMap(event.assignments))
-                resyncAllDevices()
-            }
-        }
-    }
-
-    private fun buildAssignmentMap(rows: List<CuePropertyAssignmentDto>): Map<CueAssignmentResolver.Key, String> =
-        rows.associate { CueAssignmentResolver.Key(it.target, it.propertyName) to it.value }
-
-    private fun resyncAllDevices() {
-        for (displayKey in deviceMatcher.attached.value.keys) {
-            sendFullResync(displayKey)
-        }
-    }
-
-    private fun resyncEntriesMatching(key: CueAssignmentResolver.Key) {
-        val entries = index.get().continuousByAssignmentKey[key] ?: return
-        for (entry in entries) {
-            sendContinuousFeedback(entry, computeValue7Bit(entry))
-        }
-    }
-
-    /**
-     * Convert a cue's assignment value string to the 7-bit feedback position for [entry]'s
-     * primary channel. Returns null if the string doesn't parse for the property type (the
-     * caller falls back to the DMX-derived value). Uses the channel's declared category /
-     * `min..max` to respect slider sub-ranges and colour fan-out.
-     */
-    private fun value7BitFromAssignment(entry: ContinuousEntry, valueStr: String): UByte? {
-        val pc = entry.primaryChannel
-        val propertyName = when (val t = entry.binding.target) {
-            is BindingTarget.FixtureProperty -> t.propertyName
-            is BindingTarget.GroupProperty -> t.propertyName
-            else -> return null
-        }
-        val parsed = CueAssignmentResolver.parseAssignmentValue(pc.category, propertyName, valueStr) ?: return null
-        return when (parsed) {
-            is CueAssignmentResolver.PropertyValue.Slider ->
-                PropertyChannelResolver.scaleWithinRangeTo7Bit(parsed.value, pc.min, pc.max)
-            is CueAssignmentResolver.PropertyValue.Setting ->
-                PropertyChannelResolver.scaleWithinRangeTo7Bit(parsed.channelValue, pc.min, pc.max)
-            is CueAssignmentResolver.PropertyValue.Colour -> {
-                // Primary channel for a colour binding is the red axis (0..255 range). Pick
-                // the red component to drive the motor — a uniform grey set by
-                // [serializeToAssignmentValue] round-trips to the same 7-bit position.
-                PropertyChannelResolver.scaleDmxTo7Bit(parsed.value.color.red.toUByte())
-            }
-            is CueAssignmentResolver.PropertyValue.Position -> {
-                // Primary channel for a position binding is the pan axis.
-                PropertyChannelResolver.scaleDmxTo7Bit(parsed.pan)
-            }
-        }
-    }
-
     // --- Rebuild & resync ---
 
     internal fun rebuildIndexForTest() = rebuildIndex()
@@ -582,7 +451,6 @@ class SurfaceFeedbackPublisher(
         val profilesByKey = types().associateBy { it.typeKey }
         val byChannel = HashMap<Long, MutableList<ContinuousEntry>>()
         val continuousByDisplay = HashMap<String, MutableList<ContinuousEntry>>()
-        val continuousByAssignmentKey = HashMap<CueAssignmentResolver.Key, MutableList<ContinuousEntry>>()
         val ledsByDisplay = HashMap<String, MutableList<LedEntry>>()
         val flashByBindingId = HashMap<Int, LedEntry>()
         val blackoutLeds = mutableListOf<LedEntry>()
@@ -623,9 +491,6 @@ class SurfaceFeedbackPublisher(
                         byChannel.getOrPut(packChannelKey(primary.universe.universe, primary.channel)) { mutableListOf() }
                             .add(entry)
                         continuousByDisplay.getOrPut(displayKey) { mutableListOf() }.add(entry)
-                        assignmentKeyFor(entry)?.let { key ->
-                            continuousByAssignmentKey.getOrPut(key) { mutableListOf() }.add(entry)
-                        }
                     }
                 }
                 if (control is ButtonDescriptor && control.ledFeedback != LedFeedback.NONE) {
@@ -649,7 +514,6 @@ class SurfaceFeedbackPublisher(
             Index(
                 byChannel = byChannel as Map<Long, List<ContinuousEntry>>,
                 continuousByDisplay = continuousByDisplay as Map<String, List<ContinuousEntry>>,
-                continuousByAssignmentKey = continuousByAssignmentKey as Map<CueAssignmentResolver.Key, List<ContinuousEntry>>,
                 ledsByDisplay = ledsByDisplay as Map<String, List<LedEntry>>,
                 flashByBindingId = flashByBindingId,
                 blackoutLeds = blackoutLeds,
@@ -721,21 +585,14 @@ class SurfaceFeedbackPublisher(
         }
     }
 
+    /**
+     * Feedback position for a bound continuous control: always the live composed DMX value on
+     * the binding's primary channel. Until sweep item D1 there was a second source — an open
+     * `cueEdit` session's own Layer 4 assignment took precedence, so a fader showed the cue
+     * being edited rather than the stage. With that family retired a cue is read-only from a
+     * surface, and the stage is the only thing feedback can mean.
+     */
     private fun computeValue7Bit(entry: ContinuousEntry): UByte {
-        // Phase 6: during an active cue-edit session, prefer the cue's own Layer 4 assignment
-        // for the bound target. Falls through to the DMX-derived value when the cue hasn't
-        // asserted this property (or the provider reports no session), so an un-edited fader
-        // still shows the live composed value.
-        val assignments = sessionAssignments.get()
-        if (assignments.isNotEmpty() && cueEditSessionProvider != null) {
-            val key = assignmentKeyFor(entry)
-            if (key != null) {
-                val value = assignments[key]
-                if (value != null) {
-                    value7BitFromAssignment(entry, value)?.let { return it }
-                }
-            }
-        }
         val fixtures = currentFixtures ?: return 0u
         val controller: DmxController = try {
             fixtures.controller(entry.primaryChannel.universe)
@@ -745,12 +602,6 @@ class SurfaceFeedbackPublisher(
         val dmx = controller.getValue(entry.primaryChannel.channel)
         val pc = entry.primaryChannel
         return PropertyChannelResolver.scaleWithinRangeTo7Bit(dmx, pc.min, pc.max)
-    }
-
-    private fun assignmentKeyFor(entry: ContinuousEntry): CueAssignmentResolver.Key? = when (val t = entry.binding.target) {
-        is BindingTarget.FixtureProperty -> CueAssignmentResolver.Key.fixture(t.fixtureKey, t.propertyName)
-        is BindingTarget.GroupProperty -> CueAssignmentResolver.Key.group(t.groupName, t.propertyName)
-        else -> null
     }
 
     /**

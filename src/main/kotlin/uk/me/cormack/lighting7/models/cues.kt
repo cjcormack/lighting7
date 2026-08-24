@@ -311,9 +311,8 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
  *
  * The cue's own [DaoCuePropertyAssignments] / [DaoCueAdHocEffects] are **the local layer** —
  * always exactly one, always last, so it needs no identity row here. Keeping them separate is
- * deliberate on three counts: they carry `moveInDark`; `CueEditSession.upsertAssignment` matches on
- * `(targetType, targetKey, propertyName)` with no layer dimension and keeps working unchanged; and
- * it gives surface and cue-edit writes an unambiguous destination.
+ * deliberate on two counts: they carry `moveInDark`, and they give a Record / Update write an
+ * unambiguous destination — `(targetType, targetKey, propertyName)` with no layer dimension.
  *
  * See `docs/plans/completed/looks-and-layers-plan.md` §3.2 and `fx/CueComposer.kt` for how a stack of these
  * is flattened to one contributor per (fixture, property) before the resolver sees it.

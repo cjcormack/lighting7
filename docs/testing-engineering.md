@@ -186,8 +186,13 @@ Skipped by default via `org.junit.Assume`; each needs its flag forwarded by `tas
 ```
 ./gradlew :test --tests "…FxEngineBenchmark"  -Dfx.benchmark=true
 ./gradlew :test --tests "…BenchmarkSetValues" -Ddmx.benchmark=true
-./gradlew :test --tests "…CueEditProfileTest" -Dcueedit.profile=true
 ```
+
+There was a third, `CueEditProfileTest` (`-Dcueedit.profile=true`); it went with the
+`cueEdit.*` family in backend-sweep item D1. Its flag-forwarding arm in `build.gradle.kts`
+went too, but the `if` block around it is shared with the two above — it sets
+`outputs.upToDateWhen { false }` and `showStandardStreams` for all of them, so removing the
+block rather than just the arm silently costs the surviving benchmarks their numbers.
 
 Note `:test` rather than `test`: the latter also runs `:launcher:test`, which fails the
 `--tests` filter with "No tests found for given includes".

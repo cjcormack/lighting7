@@ -224,7 +224,7 @@ object DaoLookEffects : IntIdTable("look_effects") {
  * One effect as the FX engine is asked to spawn it — **the shared effect wire shape**, not a
  * Look-only type despite where it lives.
  *
- * Read by `CueStackManager`, `CueTriggerManager`, `CueEditSession`, `FxInstance`,
+ * Read by `CueStackManager`, `CueTriggerManager`, `FxInstance`,
  * `ProgrammerLayerStack`, `projectLooks`, `programmerInclude`, `AiTools` and the sync DTOs: anything
  * that turns a stored effect row into a running one goes through this.
  *

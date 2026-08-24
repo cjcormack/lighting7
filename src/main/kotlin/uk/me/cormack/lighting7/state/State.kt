@@ -37,9 +37,7 @@ import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
 import uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher
 import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.perf.CueEditLatencyTracker
 import uk.me.cormack.lighting7.perf.MidiLatencyTracker
-import uk.me.cormack.lighting7.plugins.CueEditSessionRegistry
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
@@ -588,22 +586,6 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
-     * Phase 6 cue-edit session registry. Each WebSocket connection that runs `cueEdit.*`
-     * messages registers its [uk.me.cormack.lighting7.plugins.CueEditSessionState] here so
-     * the [SurfaceInputRouter] can route fader writes into the open cue and the
-     * [SurfaceFeedbackPublisher] can drive motors from the cue's Layer 4 value.
-     */
-    val cueEditSessionRegistry: CueEditSessionRegistry by lazy { CueEditSessionRegistry() }
-
-    /**
-     * Per-process timing histogram for [uk.me.cormack.lighting7.plugins.CueEditSessionHandler.setPropertyForSession].
-     * Reset on `cueEdit.beginEdit`; snapshot frozen on `cueEdit.endEdit`. Read via
-     * `GET /api/rest/perf/cueedit-histogram` — drives the
-     * `MidiFloodHarness` profiling step that gates `FU-PERF-COALESCE-WRITES`.
-     */
-    val cueEditLatencyTracker: CueEditLatencyTracker by lazy { CueEditLatencyTracker() }
-
-    /**
      * Per-process MIDI surface hot-path histogram registry. Buckets covering ingress (router →
      * dispatch) and egress (feedback publisher → controller) stages — see
      * [SurfaceInputRouter] / [SurfaceFeedbackPublisher] for the recording sites. Read via
@@ -627,10 +609,6 @@ class State(val config: ApplicationConfig) {
             fixturesProvider = { show.fixtures },
             globalScalerStateProvider = { show.globalScalerState },
             speedMasterBankProvider = { show.speedMasterBank },
-            cueEditSessionProvider = { projectId ->
-                cueEditSessionRegistry.activeSession(projectId)?.session
-            },
-            cueEditEvents = cueEditSessionRegistry.events,
             latencyTracker = midiLatencyTracker,
         )
     }
@@ -640,8 +618,6 @@ class State(val config: ApplicationConfig) {
      * [deviceMatcher] attach events and per-controller input flows, resolves bindings
      * via [controlSurfaceBindingService], and calls through to [DefaultSurfaceActions].
      * Phase 4: consults [surfaceFeedbackPublisher] for touch suppression + soft takeover.
-     * Cue-edit session routing lives inside [DefaultSurfaceActions] — the router itself is
-     * session-agnostic.
      */
     val surfaceInputRouter: SurfaceInputRouter by lazy {
         SurfaceInputRouter(

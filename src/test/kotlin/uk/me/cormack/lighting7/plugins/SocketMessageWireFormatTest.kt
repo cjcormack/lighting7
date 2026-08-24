@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
  * polymorphism transparently, but it's worth proving on the wire).
  *
  * One inbound + one outbound representative per domain; the goal is structural coverage,
- * not exhaustive per-leaf testing. Domain-specific field-level tests (e.g. CueEdit
+ * not exhaustive per-leaf testing. Domain-specific field-level tests (e.g. programmer
  * setProperty value parsing) live in the per-domain test file.
  */
 class SocketMessageWireFormatTest {
@@ -311,16 +311,6 @@ class SocketMessageWireFormatTest {
         val encoded = json.encodeToString<OutMessage>(out)
         assertTrue(encoded.contains(""""type":"projectChanged""""))
         assertEquals(out, assertIs<ProjectChangedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
-    }
-
-    // ─── CueEdit domain (verifies reparenting) ──────────────────────────────
-
-    @Test
-    fun `cueEdit domain — beginEdit routes via CueEditInMessage`() {
-        val raw = """{"type":"cueEdit.beginEdit","cueId":7,"mode":"live"}"""
-        val decoded = json.decodeFromString<InMessage>(raw)
-        assertIs<CueEditInMessage>(decoded)
-        assertIs<CueEditBeginEditInMessage>(decoded)
     }
 
     // ─── Programmer domain ──────────────────────────────────────────────────

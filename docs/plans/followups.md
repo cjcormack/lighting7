@@ -18,7 +18,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-AUTH-STALE-ANON-SOCKET`](#fu-auth-stale-anon-socket) | Ready | Auth | — |
 | [`FU-DIST-ICONS`](#fu-dist-icons) | Ready | Dist | — |
 | [`FU-SYNC-FORMAT-MIGRATIONS`](#fu-sync-format-migrations) | Blocked | Sync | a real breaking `formatVersion` bump |
-| [`FU-TEST-MULTI-CONN-CUEEDIT`](#fu-test-multi-conn-cueedit) | Blocked | Test | moot when sweep item D1 retires `cueEdit.*` |
 | [`FU-DIST-NO-BUNDLED-JRE`](#fu-dist-no-bundled-jre) | Rejected | Dist | decision record — do not re-propose |
 | [`FU-PERF-FRAME-TXN-UNIFY`](#fu-perf-frame-txn-unify) | Trigger | Perf | visible flicker where beat + wall-clock share a universe |
 | [`FU-FX-ELEMENT-BUNDLED-COLOUR`](#fu-fx-element-bundled-colour) | Ready | Perf | — |
@@ -1083,20 +1082,6 @@ five summary lines, not two — and the two wall-clock windows are the jittery o
 `docs/testing-engineering.md` §"Recorded baselines"; note `[beat]` already reads ~45% faster than
 the 2026-04-22 capture on unchanged code, which is itself the argument for the variance study.
 
-### `FU-TEST-MULTI-CONN-CUEEDIT`
-
-**Multi-connection cueEdit conflict** · Blocked · Control-surface Phase 6
-
-The plan defers to cue-authoring's "reject-second-`beginEdit`" conflict resolution, but no Phase 6
-test covers two WS connections racing on `beginEdit` for surface routing.
-
-**Unblock by**: confirming the exact semantics with cue-authoring, then adding the test.
-
-**Superseded in principle (2026-08-24):** the backend sweep decided to retire the whole
-`cueEdit.*` family — no client can start a session since the frontend removed its arm in 2b. See
-[backend-post-refactor-sweep.md](backend-post-refactor-sweep.md) item D1; when D1 lands, move this
-item to Completed as retired-without-implementation.
-
 ### `FU-FE-DBO-INERT`
 
 **Blackout is a cosmetic toggle sitting beside a functional one** · Ready · desk-simplification
@@ -1201,6 +1186,8 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-08
 
+- `FU-TEST-MULTI-CONN-CUEEDIT` — retired without implementation: sweep item D1 removed the
+  `cueEdit.*` family, so there is no `beginEdit` for two connections to race on
 - `FU-PAL-POSITIONAL-CONVERSION` — **closed done-differently.** The entry asked for a tool to convert
   positional `P1`/`P2` colour lists into named palettes, waiting on "a show maintaining the same
   colours in both forms". Templates (desk-simplification session 3) made that signal moot by making

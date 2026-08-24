@@ -181,20 +181,6 @@ object PropertyChannelResolver {
     }
 
     /**
-     * Serialize a MIDI 7-bit value for [propertyName] on [fixture] into the string form
-     * consumed by [uk.me.cormack.lighting7.fx.CueAssignmentResolver.parseAssignmentValue] — i.e.
-     * the value that sits in `CuePropertyAssignment.value`. See [toPropertyValue] for the
-     * per-type semantics; output is produced via
-     * [uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.serialize] so this path
-     * round-trips through `parseAssignmentValue` by construction.
-     */
-    fun serializeToAssignmentValue(
-        fixture: Fixture,
-        propertyName: String,
-        midiValue7Bit: UByte,
-    ): String? = toPropertyValue(fixture, propertyName, midiValue7Bit)?.serialize()
-
-    /**
      * The typed value a flash press should assert for [propertyName] on [fixture] at the
      * binding's 0..255 [max] level.
      *

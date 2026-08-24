@@ -448,44 +448,6 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `recording into a cue with an open cue-edit session needs force`() = testApplication {
-        mountTestApp(state)
-        val client = jsonClient()
-        seedHex("hex-1", 1)
-        val stackId = createStack(client, "stack-a")
-
-        setProgrammer("hex-1", "dimmer", "200")
-        val created: ProgrammerRecordResponse = client.record(
-            ProgrammerRecordRequest(
-                projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
-            )
-        ).body()
-
-        val sessionRef = java.util.concurrent.atomic.AtomicReference<
-            uk.me.cormack.lighting7.plugins.CueEditSessionState?
-            >(null)
-        uk.me.cormack.lighting7.plugins.CueEditSessionHandler.beginEdit(
-            state, sessionRef, created.cue.id, "BLIND",
-        )
-
-        val blocked = client.record(
-            ProgrammerRecordRequest(
-                projectId = projectId.toString(), mode = "MERGE", cueId = created.cue.id,
-            )
-        )
-        assertEquals(HttpStatusCode.Conflict, blocked.status)
-        assertEquals("CUE_EDIT_SESSION_OPEN", blocked.body<ProgrammerConflictResponse>().code)
-
-        val forced = client.record(
-            ProgrammerRecordRequest(
-                projectId = projectId.toString(), mode = "MERGE",
-                cueId = created.cue.id, force = true,
-            )
-        )
-        assertEquals(HttpStatusCode.OK, forced.status)
-    }
-
-    @Test
     fun `targets scope what is recorded`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

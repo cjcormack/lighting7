@@ -264,35 +264,6 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `updating a cue with an open cue-edit session needs force`() = testApplication {
-        mountTestApp(state)
-        val client = jsonClient()
-        seedHex("hex-1", 1)
-        val cueId = createCue(
-            client, "look", rows = listOf(assignment("fixture", "hex-1", "dimmer", "200")),
-        )
-        client.include(cueId)
-        setProgrammer("hex-1", "dimmer", "255")
-
-        val sessionRef = java.util.concurrent.atomic.AtomicReference<
-            uk.me.cormack.lighting7.plugins.CueEditSessionState?
-            >(null)
-        val started = uk.me.cormack.lighting7.plugins.CueEditSessionHandler.beginEdit(
-            state, sessionRef, cueId, "BLIND",
-        ) as uk.me.cormack.lighting7.plugins.CueEditSessionStartedOutMessage
-        assertNotNull(started.warning, "cue-edit warns when the cue is already Included")
-
-        val blocked = client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
-        assertEquals(HttpStatusCode.Conflict, blocked.status)
-        assertEquals("CUE_EDIT_SESSION_OPEN", blocked.body<ProgrammerConflictResponse>().code)
-
-        val forced = client.update(
-            ProgrammerUpdateRequest(projectId = projectId.toString(), force = true),
-        )
-        assertEquals(HttpStatusCode.OK, forced.status)
-    }
-
-    @Test
     fun `an empty targets list is rejected rather than read as the checklist`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

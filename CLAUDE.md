@@ -552,9 +552,9 @@ operator-on-the-rig checks. Don't poll either routinely.
 
 **Open followups.md when your current change might fire a listed gate** (e.g.
 touching FX tick loops, ArtNet output paths, shared `AssignmentHealth` UI,
-cueEdit session routing, the auth gate's role prefixes, anything that adds a WS
-command an operator shouldn't have, or anything that adds a 6th consumer of
-fixture/group property lookup) — or when you want a Ready item to pick up. **Read
+the auth gate's role prefixes, anything that adds a WS command an operator
+shouldn't have, or anything that adds a 6th consumer of fixture/group property
+lookup) — or when you want a Ready item to pick up. **Read
 the index table at the top first** — one row per item with its status and gate —
 and only read the body of a matching item. If a gate fires, flag it inline (or
 promote the item to Ready) rather than silently working around it.

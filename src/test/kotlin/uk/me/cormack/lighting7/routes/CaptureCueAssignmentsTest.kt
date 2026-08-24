@@ -47,7 +47,7 @@ class CaptureCueAssignmentsTest {
 
     @Test
     fun `group hint with uniform member values collapses to a single group row`() {
-        // Operator wrote `targetType=group` at 150 via cueEdit; all members composed to 150.
+        // Operator wrote `targetType=group` at 150; all members composed to 150.
         val fixtures = fixturesWithTwoHexesInAGroup()
         val snapshot = mapOf(
             CueAssignmentResolver.Key.fixture("hex-1", "dimmer") to slider(150u),

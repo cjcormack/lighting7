@@ -368,7 +368,7 @@ All subscribers are cancelled together on `SurfaceFeedbackPublisher.stop()`.
 | Cue stack buttons | `CueStackManager.*` | *(Layer 4 via cue apply)* | Same path as REST / UI |
 | Fire cue | `CueStackManager.fireCue` | *(Layer 4)* | |
 
-Phase 6 adds **cueEdit-aware property writes**: when a cue-edit session is open for the project, `DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty` transparently route to `cueEdit.setProperty` (the cue layer) instead of the programmer. The router itself is session-agnostic — branching lives inside the action impl (which is already State-coupled). Matches the frontend `EditorContext` pattern: surfaces become another client of the same session. See [control-surface-plan.md](plans/completed/control-surface-plan.md) §Phase 6.
+**A fader always writes the programmer.** Phase 6 added a second destination — when a cue-edit session was open for the project, `DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty` routed to `cueEdit.setProperty` (the cue layer) instead, and `SurfaceFeedbackPublisher` drove the motor from the cue's Layer 4 value rather than the stage. Backend sweep item D1 retired the `cueEdit.*` family, so both halves are gone: one write destination, and feedback that always means the live composed DMX value. See [control-surface-plan.md](plans/completed/control-surface-plan.md) §Phase 6 for what the session-routing design was.
 
 ## Threading model
 

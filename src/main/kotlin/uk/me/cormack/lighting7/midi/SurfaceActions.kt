@@ -12,9 +12,6 @@ import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.SpeedMasterSource
-import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.plugins.CueEditSessionHandler
-import uk.me.cormack.lighting7.plugins.CueEditSessionState
 import uk.me.cormack.lighting7.show.Fixtures
 
 /**
@@ -30,12 +27,12 @@ import uk.me.cormack.lighting7.show.Fixtures
 interface SurfaceActions {
     /**
      * Write a continuous value (0..127 MIDI 7-bit) to a fixture property. The production
-     * implementation transparently routes into the active cue's Layer 4 when a cue-edit
-     * session is open on the current project, otherwise writes a programmer entry.
+     * implementation writes a programmer entry — a cue is read-only from a surface, and is
+     * edited by Include / Update like every other authoring path.
      */
     fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte)
 
-    /** Group variant of [writeFixtureProperty]. Same cue-edit fan-out rules apply. */
+    /** Group variant of [writeFixtureProperty], fanned out per member. */
     fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte)
 
     /** Flash press: store at 0..255 [max] on the property's channels. */
@@ -94,11 +91,6 @@ class DefaultSurfaceActions(
             logger.debug("Surface write: fixture '{}' not found", fixtureKey)
             return
         }
-        val session = activeCueEditSession()
-        if (session != null) {
-            upsertCueAssignment(session, TargetRef.Fixture(fixtureKey), fixture, propertyName, midiValue7Bit)
-            return
-        }
         val value = PropertyChannelResolver.toPropertyValue(fixture, propertyName, midiValue7Bit) ?: run {
             logger.debug("Surface write: property '{}' on '{}' not fader-writable", propertyName, fixtureKey)
             return
@@ -113,16 +105,6 @@ class DefaultSurfaceActions(
             logger.debug("Surface write: group '{}' not found", groupName)
             return
         }
-        val session = activeCueEditSession()
-        if (session != null) {
-            // Serialise via the first member — property types are consistent within a group.
-            val first = group.fixtures.firstOrNull() as? Fixture ?: run {
-                logger.debug("Surface cueEdit write: group '{}' has no fixture members", groupName)
-                return
-            }
-            upsertCueAssignment(session, TargetRef.Group(groupName), first, propertyName, midiValue7Bit)
-            return
-        }
         // Convert per member — sliders scale through each member's own min..max sub-range.
         val writes = group.fixtures.filterIsInstance<Fixture>().mapNotNull { member ->
             PropertyChannelResolver.toPropertyValue(member, propertyName, midiValue7Bit)?.let {
@@ -131,46 +113,6 @@ class DefaultSurfaceActions(
         }
         if (writes.isEmpty()) return
         fxEngine.writeProgrammerProperties(ProgrammerOwner.SURFACE, writes)
-    }
-
-    /**
-     * Resolve the active cue-edit session for the current project, or `null` if none. Guards
-     * against `currentProject` throwing before [uk.me.cormack.lighting7.state.State.initializeShow]
-     * has run — surface input can't arrive before then in production, but tests and
-     * start-up races shouldn't crash.
-     */
-    private fun activeCueEditSession(): CueEditSessionState? {
-        val projectId = try {
-            state.projectManager.currentProject.id.value
-        } catch (_: Exception) {
-            return null
-        }
-        return state.cueEditSessionRegistry.activeSession(projectId)?.session
-    }
-
-    private fun upsertCueAssignment(
-        session: CueEditSessionState,
-        target: TargetRef,
-        serialiserFixture: Fixture,
-        propertyName: String,
-        midiValue7Bit: UByte,
-    ) {
-        val valueStr = PropertyChannelResolver.serializeToAssignmentValue(
-            serialiserFixture, propertyName, midiValue7Bit,
-        ) ?: run {
-            logger.debug(
-                "Surface cueEdit write: {} property '{}' on '{}' not serialisable",
-                target.discriminator, propertyName, target.key,
-            )
-            return
-        }
-        CueEditSessionHandler.setPropertyForSession(
-            state = state,
-            session = session,
-            target = target,
-            propertyName = propertyName,
-            value = valueStr,
-        )
     }
 
     override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {
