@@ -1,6 +1,6 @@
 # Backend post-refactor architectural sweep — findings and cleanup plan
 
-> **Document status: BACKLOG, WAVE 0 IN PROGRESS (A1–A3 done, A4 + C0 outstanding).** This is the output of the
+> **Document status: BACKLOG, WAVE 0 IN PROGRESS (A1–A4 done, A11 + C0 outstanding).** This is the output of the
 > post-refactor architectural sweep: a categorized backlog for later fix agents, organised into
 > execution waves. Items cite file:line as of `b5067e5`; expect drift as waves land. A matching
 > frontend sweep happens separately — the "Frontend-coordination register" at the bottom is its
@@ -60,7 +60,7 @@ effect-registration-id (+ lookId/layerId) comparison.
 documents as broken for user-defined FX definitions, so a parameter-only update of a user-defined
 effect 400s. **Fix:** store the registration id on `FxInstance` at creation; use it here.
 
-**A4. Composite effects are single-output; the docs say otherwise** — high / P0 / M / opus
+~~**A4. Composite effects are single-output; the docs say otherwise**~~ — done, `d3024f6`. high / P0 / M / opus
 `FxInstance.compositeTargets` (`FxInstance.kt:292`) is never assigned anywhere, making the whole
 secondary-output branch (`FxEngine.kt:2418-2434`) unreachable; `CompositeScriptEffect.outputTypes`
 also declares only the primary type (`ScriptEffectAdapter.kt:116`). `LightningStrike`'s COLOUR
@@ -98,6 +98,24 @@ deactivate.
 **A10. `TemplateRegistry.version++` is not atomic** — low / P2 / S / sonnet
 `TemplateRegistry.kt:83,88`: `@Volatile` + `++` can lose a bump the class doc relies on. **Fix:**
 `AtomicLong`. (Coordinates with C4, which may change this mechanism anyway.)
+
+**A11. Every position effect silently produces nothing when applied to `pan`/`tilt`** — high / P0 / S / opus
+All seven `src/main/resources/fx/position/*.fx.kts` declare `outputType: POSITION` with
+`compatibleProperties: [pan, tilt]`, but `PositionTarget`'s property name is the synthetic
+`"position"` (`FxTarget.kt:573`), which is also the only name the two target resolvers map to it
+(`lightFx.kt:463`, `projectCuesHelpers.kt:1210`). `pan` and `tilt` are `@FixtureProperty`
+`DmxSlider`s, so they're real descriptors alongside `"position"` (`DmxFixture.kt:150,308`) and both
+frontend surfaces pick the *first* compatible property present — `AddEditFxSheet.tsx:223`,
+`useBuskingState.ts:351` — so they post `propertyName: "pan"`. That resolves to a `SliderTarget`,
+and `SliderTarget.applyValueToFixture` drops a `FxOutput.Position` (`FxTarget.kt:213`): no light,
+no error, no log. Same failure mode as the A4 tail (a `compatibleProperties` entry whose type the
+effect can't produce), but on the main FX-add path and for every position effect. Nothing in the
+suite applies a position effect through either resolver. **Fix (pick one):** narrow the seven
+resources to `compatibleProperties: [position]`, or have the resolvers map `pan`/`tilt` to
+`PositionTarget` when the effect outputs POSITION. Neither needs a frontend change. **Guard:**
+one test asserting every built-in registration's `compatibleProperties` resolve to a target
+accepting its `outputType`, under the same mapping the add path uses — it goes red today, which
+is the point. Found while landing A4; not desk-verified (static read of both repos).
 
 *(The `CueEditSession` bugs — moveInDark lost on discard and upsert, fresh layer uuids causing sync
 tombstone churn, ad-hoc effects missing `cueStackId`, silent layer drops — are all deleted by D1
@@ -441,7 +459,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 
 | Wave | Items | Note |
 |---|---|---|
-| 0 | A1–A4, C0 | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
+| 0 | A1–A4, A11, C0 | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | D1–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements first — everything after moves less code. D1 before any cueEdit-adjacent work. |
 | 2 | C1–C7, B1, B2 | Hot-path fixes, measured against the wave-0 benchmark. C1+C2 are the big wins; fable for C1–C3. |
 | 3 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
@@ -453,7 +471,9 @@ components + store/fx.ts), D3/D9 (dead stubs, groupFxAdded, presetId types, rate
 F1/F2/F3/F5 (renamed paths/messages/status codes), F6 (hand-copied admin prefix list).
 
 **Landed so far:** A2/A3 (`ab0ff8b`) — `presetId` gone from `EffectDto` and `GroupEffectDto`;
-`effectType` on both now reports the registration id.
+`effectType` on both now reports the registration id. A4 (`d3024f6`) — no DTO shape change, but
+`LightningStrike`'s `compatibleProperties` is now `[dimmer]` only, so the library stops offering
+it on colour-only fixtures (it produced no light there anyway).
 
 ## Verification
 
