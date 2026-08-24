@@ -18,7 +18,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-AUTH-STALE-ANON-SOCKET`](#fu-auth-stale-anon-socket) | Ready | Auth | — |
 | [`FU-DIST-ICONS`](#fu-dist-icons) | Ready | Dist | — |
 | [`FU-SYNC-FORMAT-MIGRATIONS`](#fu-sync-format-migrations) | Blocked | Sync | a real breaking `formatVersion` bump |
-| [`FU-TEST-MULTI-CONN-CUEEDIT`](#fu-test-multi-conn-cueedit) | Blocked | Test | cue-authoring `beginEdit` conflict semantics |
+| [`FU-TEST-MULTI-CONN-CUEEDIT`](#fu-test-multi-conn-cueedit) | Blocked | Test | moot when sweep item D1 retires `cueEdit.*` |
 | [`FU-DIST-NO-BUNDLED-JRE`](#fu-dist-no-bundled-jre) | Rejected | Dist | decision record — do not re-propose |
 | [`FU-PERF-FRAME-TXN-UNIFY`](#fu-perf-frame-txn-unify) | Trigger | Perf | visible flicker where beat + wall-clock share a universe |
 | [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Trigger | FE | operator asks for it |
@@ -1050,6 +1050,11 @@ The plan defers to cue-authoring's "reject-second-`beginEdit`" conflict resoluti
 test covers two WS connections racing on `beginEdit` for surface routing.
 
 **Unblock by**: confirming the exact semantics with cue-authoring, then adding the test.
+
+**Superseded in principle (2026-08-24):** the backend sweep decided to retire the whole
+`cueEdit.*` family — no client can start a session since the frontend removed its arm in 2b. See
+[backend-post-refactor-sweep.md](backend-post-refactor-sweep.md) item D1; when D1 lands, move this
+item to Completed as retired-without-implementation.
 
 ### `FU-FE-DBO-INERT`
 
