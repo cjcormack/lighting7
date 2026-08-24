@@ -1837,6 +1837,11 @@ class FxEngine(
                 elementFilter = newElementFilter ?: existing.elementFilter
                 stepTiming = newStepTiming ?: existing.stepTiming
                 timingSource = existing.timingSource
+                // `expansion` is deliberately NOT carried across: the fresh instance rebuilds
+                // it on first read, which costs one walk and is the safe direction. Carrying it
+                // would survive a future `updateEffect` that learns to retarget, and the effect
+                // would silently keep painting the old fixtures.
+                //
                 // Master assignment must survive the swap: this block hand-enumerates every
                 // carried field, and missing one silently yanks an edited effect back to
                 // master 1 the moment its beat division or blend mode is tweaked.
@@ -2232,52 +2237,44 @@ class FxEngine(
         deltaMs: Long,
         suppression: Map<String, Set<String>> = emptyMap(),
     ) {
-        val fixtureKey = effect.target.targetKey
-        val fixture = try {
-            fixtures.untypedFixture(fixtureKey)
-        } catch (e: Exception) {
-            return
-        }
+        val expansion = expansionFor(effect)
+        when (expansion.kind) {
+            FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
+                val fixtureKey = effect.target.targetKey
+                val effectPhase = effect.calculateWallClockPhase()
+                val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
+                if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
+                    effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
+                }
+            }
 
-        if (effect.target.fixtureHasProperty(fixture)) {
-            val effectPhase = effect.calculateWallClockPhase()
-            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
-            if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
-                effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
-            }
-        } else if (fixture is MultiElementFixture<*>) {
-            val elements = fixture.elements
-            if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
-                processWallClockMultiElementEffect(tick, effect, fixturesWithTx, elements, deltaMs, suppression)
-            }
+            FxTargetExpansion.Kind.FIXTURE_ELEMENTS ->
+                processWallClockElementKeys(tick, effect, fixturesWithTx, expansion.flat, deltaMs, suppression)
+
+            FxTargetExpansion.Kind.NONE,
+            FxTargetExpansion.Kind.GROUP_MEMBERS,
+            FxTargetExpansion.Kind.GROUP_ELEMENTS,
+            -> {}
         }
     }
 
     /**
      * Process a wall-clock effect expanded across multi-element fixture elements.
      */
-    private fun processWallClockMultiElementEffect(
+    private fun processWallClockElementKeys(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
-        elements: List<uk.me.cormack.lighting7.fixture.group.FixtureElement<*>>,
+        elementKeys: List<String>,
         deltaMs: Long,
         suppression: Map<String, Set<String>> = emptyMap(),
     ) {
-        val filter = effect.elementFilter
-        val elementCount = elements.size
-
-        val filteredElements = if (filter == ElementFilter.ALL) {
-            elements.mapIndexed { idx, el -> idx to el }
-        } else {
-            elements.withIndex().filter { (idx, _) -> filter.includes(idx, elementCount) }
-                .map { (idx, el) -> idx to el }
-        }
-        val filteredCount = filteredElements.size
+        // The beat twin of this is [processElementKeys]; they differ only in which phase
+        // function they call. Already filtered and in distribution order.
+        val filteredCount = elementKeys.size
         if (filteredCount == 0) return
 
-        for ((distributionIdx, pair) in filteredElements.withIndex()) {
-            val (_, element) = pair
+        for ((distributionIdx, elementKey) in elementKeys.withIndex()) {
             val memberInfo = object : DistributionMemberInfo {
                 override val index: Int = distributionIdx
                 override val normalizedPosition: Double =
@@ -2289,8 +2286,8 @@ class FxEngine(
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
             val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
-            if (!isSuppressed(suppression, element.elementKey, effect.target.propertyName, effect)) {
-                effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
+            if (!isSuppressed(suppression, elementKey, effect.target.propertyName, effect)) {
+                effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode)
             }
         }
     }
@@ -2305,111 +2302,34 @@ class FxEngine(
         deltaMs: Long,
         suppression: Map<String, Set<String>> = emptyMap(),
     ) {
-        val groupName = effect.target.targetKey
-        val group = try {
-            fixtures.untypedGroup(groupName)
-        } catch (e: Exception) {
-            return
-        }
-
-        val allMembers = group.allMembers
-        if (allMembers.isEmpty()) return
-
-        val firstMemberFixture = try {
-            fixtures.untypedFixture(allMembers.first().key)
-        } catch (_: Exception) { return }
-
-        if (effect.target.fixtureHasProperty(firstMemberFixture)) {
-            val groupSize = allMembers.size
-            for (member in allMembers) {
-                val memberPhase = effect.calculateWallClockPhaseForMember(member, groupSize)
-                val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
-                val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
-                if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
-                    effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
-                }
-            }
-            return
-        }
-
-        // Multi-element expansion
-        if (firstMemberFixture !is MultiElementFixture<*>) return
-        val firstElements = firstMemberFixture.elements
-        if (firstElements.isEmpty() || !effect.target.fixtureHasProperty(firstElements.first())) return
-
-        when (effect.elementMode) {
-            ElementMode.PER_FIXTURE -> {
+        val expansion = expansionFor(effect)
+        when (expansion.kind) {
+            FxTargetExpansion.Kind.GROUP_MEMBERS -> {
+                val allMembers = expansion.members
+                val groupSize = allMembers.size
                 for (member in allMembers) {
-                    val parentFixture = try {
-                        fixtures.untypedFixture(member.key)
-                    } catch (_: Exception) { continue }
-
-                    if (parentFixture is MultiElementFixture<*>) {
-                        processWallClockMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements, deltaMs, suppression)
+                    val memberPhase = effect.calculateWallClockPhaseForMember(member, groupSize)
+                    val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
+                    val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
+                    val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
+                    if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
+                        effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
                     }
                 }
             }
-            ElementMode.FLAT -> {
-                processWallClockGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers, deltaMs, suppression)
-            }
-        }
-    }
 
-    /**
-     * Process a wall-clock group effect in FLAT element mode.
-     */
-    private fun processWallClockGroupFlatElementEffect(
-        tick: MasterClock.ClockTick,
-        effect: FxInstance,
-        fixturesWithTx: Fixtures.FixturesWithTransaction,
-        allMembers: List<uk.me.cormack.lighting7.fixture.group.GroupMember<*>>,
-        deltaMs: Long,
-        suppression: Map<String, Set<String>> = emptyMap(),
-    ) {
-        val filter = effect.elementFilter
-
-        data class FlatElement(val elementKey: String, val globalIndex: Int)
-
-        val allFlatElements = mutableListOf<FlatElement>()
-        for (member in allMembers) {
-            val parentFixture = try {
-                fixtures.untypedFixture(member.key)
-            } catch (_: Exception) { continue }
-
-            if (parentFixture is MultiElementFixture<*>) {
-                for (element in parentFixture.elements) {
-                    allFlatElements.add(FlatElement(element.elementKey, allFlatElements.size))
+            FxTargetExpansion.Kind.GROUP_ELEMENTS -> when (effect.elementMode) {
+                ElementMode.PER_FIXTURE -> for (memberKeys in expansion.perFixture) {
+                    processWallClockElementKeys(tick, effect, fixturesWithTx, memberKeys, deltaMs, suppression)
                 }
-            }
-        }
-
-        if (allFlatElements.isEmpty()) return
-        val totalUnfilteredCount = allFlatElements.size
-
-        val flatElements = if (filter == ElementFilter.ALL) {
-            allFlatElements
-        } else {
-            allFlatElements.filter { filter.includes(it.globalIndex, totalUnfilteredCount) }
-        }
-        if (flatElements.isEmpty()) return
-        val filteredCount = flatElements.size
-
-        for ((distributionIdx, flatElement) in flatElements.withIndex()) {
-            val memberInfo = object : DistributionMemberInfo {
-                override val index: Int = distributionIdx
-                override val normalizedPosition: Double =
-                    if (filteredCount > 1) distributionIdx.toDouble() / (filteredCount - 1) else 0.5
+                ElementMode.FLAT ->
+                    processWallClockElementKeys(tick, effect, fixturesWithTx, expansion.flat, deltaMs, suppression)
             }
 
-            val memberPhase = effect.calculateWallClockPhaseForMember(memberInfo, filteredCount)
-            val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
-
-            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
-            if (!isSuppressed(suppression, flatElement.elementKey, effect.target.propertyName, effect)) {
-                effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
-            }
+            FxTargetExpansion.Kind.NONE,
+            FxTargetExpansion.Kind.DIRECT_FIXTURE,
+            FxTargetExpansion.Kind.FIXTURE_ELEMENTS,
+            -> {}
         }
     }
 
@@ -2562,30 +2482,27 @@ class FxEngine(
         deltaMs: Long = 0L,
         suppression: Map<String, Set<String>> = emptyMap(),
     ) {
-        val fixtureKey = effect.target.targetKey
-        val fixture = try {
-            fixtures.untypedFixture(fixtureKey)
-        } catch (e: Exception) {
-            System.err.println("FX Engine: Fixture '$fixtureKey' not found for effect ${effect.id}")
-            return
-        }
+        val expansion = expansionFor(effect)
+        when (expansion.kind) {
+            FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
+                val fixtureKey = effect.target.targetKey
+                val effectPhase = effect.calculatePhase(tick)
+                val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
+                if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
+                    effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
+                }
+            }
 
-        // Check if the parent fixture has the target property
-        if (effect.target.fixtureHasProperty(fixture)) {
-            // Direct application to the parent fixture
-            val effectPhase = effect.calculatePhase(tick)
-            val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
-            if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
-                effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
-            }
-        } else if (fixture is MultiElementFixture<*>) {
-            // Parent doesn't have the property — check if elements do
-            val elements = fixture.elements
-            if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
-                processMultiElementEffect(tick, effect, fixturesWithTx, elements, deltaMs, suppression)
-            }
+            FxTargetExpansion.Kind.FIXTURE_ELEMENTS ->
+                processElementKeys(tick, effect, fixturesWithTx, expansion.flat, deltaMs, suppression)
+
+            // Neither parent nor elements have the property, or the fixture is gone:
+            // silently skip. The group kinds cannot reach this function.
+            FxTargetExpansion.Kind.NONE,
+            FxTargetExpansion.Kind.GROUP_MEMBERS,
+            FxTargetExpansion.Kind.GROUP_ELEMENTS,
+            -> {}
         }
-        // If neither parent nor elements have the property, silently skip
     }
 
     /**
@@ -2594,31 +2511,21 @@ class FxEngine(
      * Uses the same distribution strategy machinery as group effects,
      * creating lightweight [DistributionMemberInfo] wrappers for each element.
      */
-    private fun processMultiElementEffect(
+    private fun processElementKeys(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
-        elements: List<uk.me.cormack.lighting7.fixture.group.FixtureElement<*>>,
+        elementKeys: List<String>,
         deltaMs: Long = 0L,
         suppression: Map<String, Set<String>> = emptyMap(),
     ) {
-        val filter = effect.elementFilter
-        val elementCount = elements.size
-
-        // Build filtered list for distribution calculation
-        // Distribution indices are based on the filtered set so that phase
-        // offsets distribute evenly across only the included elements.
-        val filteredElements = if (filter == ElementFilter.ALL) {
-            elements.mapIndexed { idx, el -> idx to el }
-        } else {
-            elements.withIndex().filter { (idx, _) -> filter.includes(idx, elementCount) }
-                .map { (idx, el) -> idx to el }
-        }
-        val filteredCount = filteredElements.size
+        // Already filtered and in distribution order — see [FxTargetExpansion.flat] /
+        // [FxTargetExpansion.perFixture]. Distribution indices run over the *included* elements,
+        // so phase offsets spread evenly across only those.
+        val filteredCount = elementKeys.size
         if (filteredCount == 0) return
 
-        for ((distributionIdx, pair) in filteredElements.withIndex()) {
-            val (_, element) = pair
+        for ((distributionIdx, elementKey) in elementKeys.withIndex()) {
             val memberInfo = object : DistributionMemberInfo {
                 override val index: Int = distributionIdx
                 override val normalizedPosition: Double =
@@ -2632,8 +2539,8 @@ class FxEngine(
 
             val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
             val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
-            if (!isSuppressed(suppression, element.elementKey, effect.target.propertyName, effect)) {
-                effect.target.applyValue(fixturesWithTx, element.elementKey, output, effect.blendMode)
+            if (!isSuppressed(suppression, elementKey, effect.target.propertyName, effect)) {
+                effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode)
             }
         }
     }
@@ -2658,129 +2565,41 @@ class FxEngine(
         deltaMs: Long = 0L,
         suppression: Map<String, Set<String>> = emptyMap(),
     ) {
-        val groupName = effect.target.targetKey
-        val group = try {
-            fixtures.untypedGroup(groupName)
-        } catch (e: Exception) {
-            System.err.println("FX Engine: Group '$groupName' not found for effect ${effect.id}")
-            return
-        }
-
-        val allMembers = group.allMembers
-        if (allMembers.isEmpty()) return
-
-        // Check if members have the target property directly
-        val firstMemberFixture = try {
-            fixtures.untypedFixture(allMembers.first().key)
-        } catch (_: Exception) { return }
-
-        if (effect.target.fixtureHasProperty(firstMemberFixture)) {
-            // Direct application to members (existing behaviour)
-            val groupSize = allMembers.size
-            for (member in allMembers) {
-                val memberPhase = effect.calculatePhaseForMember(
-                    tick, member, groupSize
-                )
-                val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
-                val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-                val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
-                if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
-                    effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
-                }
-            }
-            return
-        }
-
-        // Members don't have the property — check for multi-element expansion
-        if (firstMemberFixture !is MultiElementFixture<*>) return
-        val firstElements = firstMemberFixture.elements
-        if (firstElements.isEmpty() || !effect.target.fixtureHasProperty(firstElements.first())) return
-
-        when (effect.elementMode) {
-            ElementMode.PER_FIXTURE -> {
-                // Each fixture gets the effect independently across its own elements
+        val expansion = expansionFor(effect)
+        when (expansion.kind) {
+            FxTargetExpansion.Kind.GROUP_MEMBERS -> {
+                val allMembers = expansion.members
+                val groupSize = allMembers.size
                 for (member in allMembers) {
-                    val parentFixture = try {
-                        fixtures.untypedFixture(member.key)
-                    } catch (_: Exception) { continue }
-
-                    if (parentFixture is MultiElementFixture<*>) {
-                        processMultiElementEffect(tick, effect, fixturesWithTx, parentFixture.elements, deltaMs, suppression)
+                    val memberPhase = effect.calculatePhaseForMember(
+                        tick, member, groupSize
+                    )
+                    val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
+                    val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
+                    val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
+                    if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
+                        effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
                     }
                 }
             }
-            ElementMode.FLAT -> {
-                // Collect all elements across all fixtures into one flat list
-                processGroupFlatElementEffect(tick, effect, fixturesWithTx, allMembers, deltaMs, suppression)
-            }
-        }
-    }
 
-    /**
-     * Process a group effect in FLAT element mode — all elements across all
-     * group members form a single flat list for distribution.
-     *
-     * For example, 2 fixtures with 4 heads each = 8 elements total,
-     * distributed as indices 0-7.
-     */
-    private fun processGroupFlatElementEffect(
-        tick: MasterClock.ClockTick,
-        effect: FxInstance,
-        fixturesWithTx: Fixtures.FixturesWithTransaction,
-        allMembers: List<uk.me.cormack.lighting7.fixture.group.GroupMember<*>>,
-        deltaMs: Long = 0L,
-        suppression: Map<String, Set<String>> = emptyMap(),
-    ) {
-        val filter = effect.elementFilter
-
-        // Collect all elements in order
-        data class FlatElement(
-            val elementKey: String,
-            val globalIndex: Int
-        )
-
-        val allFlatElements = mutableListOf<FlatElement>()
-        for (member in allMembers) {
-            val parentFixture = try {
-                fixtures.untypedFixture(member.key)
-            } catch (_: Exception) { continue }
-
-            if (parentFixture is MultiElementFixture<*>) {
-                for (element in parentFixture.elements) {
-                    allFlatElements.add(FlatElement(element.elementKey, allFlatElements.size))
+            FxTargetExpansion.Kind.GROUP_ELEMENTS -> when (effect.elementMode) {
+                // Each fixture gets the effect independently across its own elements, so its
+                // own list size is the group size the phase calculation sees.
+                ElementMode.PER_FIXTURE -> for (memberKeys in expansion.perFixture) {
+                    processElementKeys(tick, effect, fixturesWithTx, memberKeys, deltaMs, suppression)
                 }
-            }
-        }
-
-        if (allFlatElements.isEmpty()) return
-        val totalUnfilteredCount = allFlatElements.size
-
-        // Apply element filter on the flat list
-        val flatElements = if (filter == ElementFilter.ALL) {
-            allFlatElements
-        } else {
-            allFlatElements.filter { filter.includes(it.globalIndex, totalUnfilteredCount) }
-        }
-        if (flatElements.isEmpty()) return
-        val filteredCount = flatElements.size
-
-        for ((distributionIdx, flatElement) in flatElements.withIndex()) {
-            val memberInfo = object : DistributionMemberInfo {
-                override val index: Int = distributionIdx
-                override val normalizedPosition: Double =
-                    if (filteredCount > 1) distributionIdx.toDouble() / (filteredCount - 1) else 0.5
+                // All elements across all fixtures as one list.
+                ElementMode.FLAT ->
+                    processElementKeys(tick, effect, fixturesWithTx, expansion.flat, deltaMs, suppression)
             }
 
-            val memberPhase = effect.calculatePhaseForMember(
-                tick, memberInfo, filteredCount
-            )
-            val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
-
-            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
-            if (!isSuppressed(suppression, flatElement.elementKey, effect.target.propertyName, effect)) {
-                effect.target.applyValue(fixturesWithTx, flatElement.elementKey, output, effect.blendMode)
-            }
+            // Group missing, empty, or neither members nor their elements have the property.
+            // The fixture kinds cannot reach this function.
+            FxTargetExpansion.Kind.NONE,
+            FxTargetExpansion.Kind.DIRECT_FIXTURE,
+            FxTargetExpansion.Kind.FIXTURE_ELEMENTS,
+            -> {}
         }
     }
 
@@ -2795,37 +2614,8 @@ class FxEngine(
      * @param instance The effect instance to check
      * @return true if this effect will be expanded to elements
      */
-    fun isMultiElementExpanded(instance: FxInstance): Boolean {
-        if (instance.isGroupEffect) {
-            // Check if group members need element expansion
-            val group = try {
-                fixtures.untypedGroup(instance.target.targetKey)
-            } catch (_: Exception) {
-                return false
-            }
-            val firstMember = group.allMembers.firstOrNull() ?: return false
-            val fixture = try {
-                fixtures.untypedFixture(firstMember.key)
-            } catch (_: Exception) {
-                return false
-            }
-            if (instance.target.fixtureHasProperty(fixture)) return false
-            if (fixture !is MultiElementFixture<*>) return false
-            val elements = fixture.elements
-            return elements.isNotEmpty() && instance.target.fixtureHasProperty(elements.first())
-        }
-
-        // Fixture effect
-        val fixture = try {
-            fixtures.untypedFixture(instance.target.targetKey)
-        } catch (_: Exception) {
-            return false
-        }
-        if (instance.target.fixtureHasProperty(fixture)) return false
-        if (fixture !is MultiElementFixture<*>) return false
-        val elements = fixture.elements
-        return elements.isNotEmpty() && instance.target.fixtureHasProperty(elements.first())
-    }
+    fun isMultiElementExpanded(instance: FxInstance): Boolean =
+        expansionFor(instance).isElementExpanded
 
     /**
      * Reset fixture properties that are no longer covered by any active effect.
@@ -2876,68 +2666,170 @@ class FxEngine(
      * [resolveEffectFixtureKeys] — used by Include to report which heads a spawned group
      * effect covers, so the sheet can select them.
      */
-    fun fixtureKeysCoveredBy(effect: FxInstance): List<String> = resolveEffectFixtureKeys(effect)
+    fun fixtureKeysCoveredBy(effect: FxInstance): List<String> = expansionFor(effect).coverageKeys
 
     /**
      * Resolve all fixture/element keys that an effect was writing to.
      *
      * For fixture effects: the target fixture key (or element keys if multi-element expanded).
      * For group effects: all member keys (or element keys if multi-element expanded).
+     *
+     * Not filtered by [FxInstance.elementFilter] — coverage is what the effect *owns*, which
+     * is a different question from which elements it paints on a given tick. See
+     * [FxTargetExpansion.coverageKeys].
      */
-    private fun resolveEffectFixtureKeys(effect: FxInstance): List<String> {
+    private fun resolveEffectFixtureKeys(effect: FxInstance): List<String> =
+        expansionFor(effect).coverageKeys
+
+    /**
+     * [effect]'s cached expansion, re-derived when the fixture register has been rebuilt under
+     * it or when `updateEffect` has moved the two fields the expansion depends on.
+     *
+     * `elementFilter` is part of the validity check rather than an invalidation hook on
+     * `updateEffect`: it is a plain enum, so the check is one identity compare on a path that
+     * already reads the instance, and there is no mutation site left to forget. `elementMode`
+     * is not checked — both shapes it selects between are built up front. `distributionStrategy`
+     * is not either: it moves the offsets, not which keys resolve. `target` is a `val`.
+     */
+    private fun expansionFor(effect: FxInstance): FxTargetExpansion {
+        // Read the version BEFORE the lookups it stamps — see [Fixtures.structureVersion].
+        val version = fixtures.structureVersion
+        val filter = effect.elementFilter
+        val cached = effect.expansion
+        if (cached != null && cached.structureVersion == version && cached.elementFilter == filter) {
+            return cached
+        }
+        return buildExpansion(effect, version, filter).also { effect.expansion = it }
+    }
+
+    /**
+     * Walk the register once and resolve everything the tick loops need for [effect]: which
+     * branch applies, the unfiltered coverage keys, and the filtered keys the apply loop walks.
+     *
+     * The "not found" diagnostics live here rather than in the `process*` functions, which is
+     * where they used to be — an effect pointing at a deleted group printed on every tick, at
+     * up to 120 Hz. Once per register generation says the same thing without the flood.
+     */
+    private fun buildExpansion(
+        effect: FxInstance,
+        version: Long,
+        filter: ElementFilter,
+    ): FxTargetExpansion {
+        fun none() = FxTargetExpansion.none(version, filter)
+
+        /** Filtered by index within [keys], against [keys]'s own size — see `ElementFilter`. */
+        fun applyFilter(keys: List<String>): List<String> =
+            if (filter == ElementFilter.ALL) keys
+            else keys.filterIndexed { index, _ -> filter.includes(index, keys.size) }
+
         if (effect.isGroupEffect) {
+            val groupName = effect.target.targetKey
             val group = try {
-                fixtures.untypedGroup(effect.target.targetKey)
-            } catch (_: Exception) { return emptyList() }
+                fixtures.untypedGroup(groupName)
+            } catch (_: Exception) {
+                System.err.println("FX Engine: Group '$groupName' not found for effect ${effect.id}")
+                return none()
+            }
 
             val allMembers = group.allMembers
-            if (allMembers.isEmpty()) return emptyList()
+            if (allMembers.isEmpty()) return none()
 
             val firstMemberFixture = try {
                 fixtures.untypedFixture(allMembers.first().key)
-            } catch (_: Exception) { return emptyList() }
+            } catch (_: Exception) { return none() }
 
+            // The first member stands for the group, as it always has. A heterogeneous group
+            // takes the branch its first member implies.
             if (effect.target.fixtureHasProperty(firstMemberFixture)) {
-                return allMembers.map { it.key }
+                return FxTargetExpansion(
+                    structureVersion = version,
+                    elementFilter = filter,
+                    kind = FxTargetExpansion.Kind.GROUP_MEMBERS,
+                    coverageKeys = allMembers.map { it.key },
+                    flat = emptyList(),
+                    perFixture = emptyList(),
+                    // Copied out of the GroupMembers rather than held — see [MemberSlot].
+                    members = allMembers.map {
+                        MemberSlot(it.key, it.index, it.normalizedPosition)
+                    },
+                )
             }
 
-            // Multi-element expansion for group
-            if (firstMemberFixture is MultiElementFixture<*>) {
-                val elements = firstMemberFixture.elements
-                if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
-                    return allMembers.flatMap { member ->
-                        val fixture = try {
-                            fixtures.untypedFixture(member.key)
-                        } catch (_: Exception) { return@flatMap emptyList() }
-                        if (fixture is MultiElementFixture<*>) {
-                            fixture.elements.map { it.elementKey }
-                        } else emptyList()
-                    }
+            if (firstMemberFixture !is MultiElementFixture<*>) return none()
+            val firstElements = firstMemberFixture.elements
+            if (firstElements.isEmpty() || !effect.target.fixtureHasProperty(firstElements.first())) {
+                return none()
+            }
+
+            // Element keys per member, in member order. A member that isn't multi-element
+            // contributes nothing — the same skip all three old walks took.
+            val perMemberKeys = ArrayList<List<String>>(allMembers.size)
+            for (member in allMembers) {
+                val memberFixture = try {
+                    fixtures.untypedFixture(member.key)
+                } catch (_: Exception) { continue }
+                if (memberFixture is MultiElementFixture<*>) {
+                    perMemberKeys.add(memberFixture.elements.map { it.elementKey })
                 }
             }
 
-            return emptyList()
+            val coverage = perMemberKeys.flatten()
+            if (coverage.isEmpty()) return none()
+
+            return FxTargetExpansion(
+                structureVersion = version,
+                elementFilter = filter,
+                kind = FxTargetExpansion.Kind.GROUP_ELEMENTS,
+                coverageKeys = coverage,
+                // FLAT filters across the whole set, on the global flat index; PER_FIXTURE
+                // filters within each fixture, on that fixture's own element count. Both are
+                // built here so `elementMode` stays out of the cache identity.
+                flat = applyFilter(coverage),
+                perFixture = perMemberKeys.map { applyFilter(it) },
+                members = emptyList(),
+            )
         }
 
         // Fixture effect
         val fixtureKey = effect.target.targetKey
         val fixture = try {
             fixtures.untypedFixture(fixtureKey)
-        } catch (_: Exception) { return emptyList() }
+        } catch (_: Exception) {
+            System.err.println("FX Engine: Fixture '$fixtureKey' not found for effect ${effect.id}")
+            return none()
+        }
 
         if (effect.target.fixtureHasProperty(fixture)) {
-            return listOf(fixtureKey)
+            val single = listOf(fixtureKey)
+            return FxTargetExpansion(
+                structureVersion = version,
+                elementFilter = filter,
+                kind = FxTargetExpansion.Kind.DIRECT_FIXTURE,
+                coverageKeys = single,
+                flat = single,
+                perFixture = emptyList(),
+                members = emptyList(),
+            )
         }
 
         // Multi-element expansion for fixture
         if (fixture is MultiElementFixture<*>) {
             val elements = fixture.elements
             if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
-                return elements.map { it.elementKey }
+                val elementKeys = elements.map { it.elementKey }
+                return FxTargetExpansion(
+                    structureVersion = version,
+                    elementFilter = filter,
+                    kind = FxTargetExpansion.Kind.FIXTURE_ELEMENTS,
+                    coverageKeys = elementKeys,
+                    flat = applyFilter(elementKeys),
+                    perFixture = emptyList(),
+                    members = emptyList(),
+                )
             }
         }
 
-        return emptyList()
+        return none()
     }
 
     /**
@@ -2946,6 +2838,12 @@ class FxEngine(
      * Handles direct fixture effects, group effects whose members include the
      * fixture, and multi-element expansion at both levels. Paused effects still
      * count as covering their channels.
+     *
+     * **Deliberately not routed through [expansionFor].** This is broader than
+     * [FxTargetExpansion.coverageKeys] on purpose: for an element-expanded group effect it
+     * also answers true for the *member* keys, which coverage excludes. Swapping in the
+     * cached list would narrow it and start resetting parents that a removed effect never
+     * painted. Two questions, two answers — not one cache.
      */
     private fun isPropertyCoveredByAny(
         fixtureKey: String,

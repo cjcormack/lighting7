@@ -213,6 +213,11 @@ scenario asserts its own shape before the warmup (`fixtureKeysCoveredBy(...).siz
 `activeCueAssignmentIds()`). Those guards are the only thing standing between a wrong rig and
 plausible-looking microsecond numbers.
 
+Since C1 the engine caches each effect's expansion, so those guards no longer prove it is *live* —
+a cache that never invalidated would satisfy every one of them, because a benchmark rig registers
+once and never repatches. The chase rig re-checks past a `patchListChanged()` to catch a cache
+serving garbage, but the invalidation itself is covered by `FxExpansionCacheTest`, not here.
+
 The crossfade scenario measures the **single-threaded** per-frame republish cost. C3 also flags
 lock contention on `cueAssignmentsLock` with concurrent programmer writes; that is a different
 shape of measurement and is deliberately not in this harness.
@@ -239,8 +244,8 @@ fail-on-regression gate, deferred pending a variance study on real CI hardware.
 
 The chase rig's four effects are deliberately one per branch C1 rewrites: beat FLAT, beat FLAT
 on the second master, wall-clock PER_FIXTURE, wall-clock FLAT. Dropping the last one (an earlier
-draft did) halves `[chase-wall]` to ~165 µs and hides `processWallClockGroupFlatElementEffect`
-entirely — the reason each mode/loop pairing gets its own `fixtureKeysCoveredBy` guard.
+draft did) halves `[chase-wall]` to ~165 µs and hides the wall-clock loop's FLAT arm entirely —
+the reason each mode/loop pairing gets its own `fixtureKeysCoveredBy` guard.
 
 Two things to read off it. `[chase-beat]` costs ~3× a `[beat]` tick while running **3** effects
 against 336 — that ratio is the C1/C2 signal, and it is what the C-wave should move.
@@ -255,3 +260,38 @@ the reason the CI gate wants a variance study before it picks a threshold.
 Both wall-clock windows are inherently noisier than the beat ones:
 `FxEngine.processWallClockTickSuspend` derives its `deltaMs` from the real
 `System.currentTimeMillis()`, while the beat windows are driven by synthetic ticks.
+
+**2026-08-24, selwyn.local, JDK 25** — after sweep item C1 (per-tick target re-expansion). Median
+of four runs each side, captured back to back in one sitting; the block above is the matching
+"before" median, not the single run recorded under C0.
+
+```
+[beat]       p50=319µs  (was 319µs)   allocBytes/tick=1108245  (was 1112064)
+[wall]       p50=321µs  (was 316µs)   allocBytes/tick=1100577  (was 1104600)
+[chase-beat] p50=964µs  (was 1023µs)  allocBytes/tick=3354364  (was 3440994)
+[chase-wall] p50=263µs  (was 329µs)   allocBytes/tick=1039159  (was 1139773)
+[crossfade]  p50=740µs  (was 781µs)   allocBytes/frame=no measurable change
+```
+
+Read the per-tick allocation column, not the percentiles: across the four runs each side it
+varied by ~240 bytes on `[chase-beat]` and ~2.7 kB on `[chase-wall]`, while p50 on unchanged code
+moves by tens of µs. `[beat]`/`[wall]` are flat, as they should be — single-fixture `SliderTarget`
+rigs have no group expansion to cache, so they only confirm the validity check costs nothing.
+
+`[crossfade]`'s **per-frame** allocation is the one figure to distrust: it bounced between 1.31 MB
+and 1.41 MB across six runs on *both* sides of the change, so the medians say nothing. Its p50 did
+move. If C3 wants an allocation signal out of this scenario it needs a quieter measurement first.
+
+`[chase-beat]` moving ~6 % is the honest size of C1 on its own, not a disappointment. That
+scenario's cost is dominated by two things C1 deliberately did not touch:
+`DistributionStrategy.RANDOM` allocating a `java.util.Random` plus a boxed permutation **per
+member per call, twice per member** (~2.4 MB of the 3.35 MB/tick, C6), and the reflective
+property resolution on the colour write path (C2). C1 removed the register lookups and the
+per-tick list rebuilds around those, which is what `[chase-wall]` — no RANDOM effect — shows at
+−20 %.
+
+Two knock-ons for later items. C1 also cut `fixtureHasProperty` from twice per effect per tick to
+twice per rebuild, so **C2's measured win will read smaller than its sweep entry predicts** — part
+of it has already been taken here. And C3's entry cites the per-crossfade-frame
+`resolveEffectFixtureKeys` walk as part of the cost; that walk is now cached, so C3 should be
+re-measured rather than implemented against the old premise.

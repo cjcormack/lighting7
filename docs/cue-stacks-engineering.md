@@ -220,11 +220,13 @@ The `FxOutput` sealed interface has a `scaled(multiplier: Double)` method:
 - **Colour**: scales RGB/W/A/UV toward black
 - **Position**: no scaling (snap — no meaningful position fade)
 
-Applied in `FxEngine` at all 4 effect output sites:
+Applied in `FxEngine` at every effect output site — three per tick loop, since the beat and
+wall-clock paths are twins:
 1. `processFixtureEffect` — direct fixture
-2. `processMultiElementEffect` — per-element distribution
-3. `processGroupEffect` — group member direct
-4. `processGroupFlatElementEffect` — flat element distribution
+2. `processGroupEffect` — group member direct
+3. `processElementKeys` — per-element distribution, serving both the multi-element fixture
+   expansion and a group's `FLAT`/`PER_FIXTURE` element lists (they became the same walk once
+   the expansion started arriving pre-resolved — see `FxTargetExpansion`)
 
 ### Crossfade Coroutine
 

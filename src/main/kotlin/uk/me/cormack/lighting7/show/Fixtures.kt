@@ -52,6 +52,33 @@ interface FixturesChangeListener {
 
 class Fixtures {
     private val registerLock = ReentrantReadWriteLock()
+
+    /**
+     * Bumped whenever the fixture / group / controller register is rebuilt, so callers can
+     * cache anything derived from it and re-derive lazily on a mismatch. `FxEngine`'s
+     * per-effect target expansion is the one consumer; the idiom mirrors
+     * [uk.me.cormack.lighting7.fx.FxEngine] binding itself to
+     * [uk.me.cormack.lighting7.fx.SpeedMasterBank.version].
+     *
+     * A version rather than a [FixturesChangeListener] on purpose. [register] fires its
+     * listeners *outside* the write lock, so an evict-on-signal cache has a window where a
+     * reader sees the new register and the old cached value; and `changeListeners` is a plain
+     * list iterated without a lock. Bumping here, inside the write lock, has neither problem,
+     * and needs no re-attach when a project switch replaces the whole `Show`.
+     *
+     * **Read this before the register lookups it stamps, never after.** In that order the only
+     * race is stamping a *stale* version onto an expansion built from the new register, which
+     * self-heals on the next read. The reverse — a new version stamped onto an old expansion —
+     * cannot happen, because the bump is published only after the mutation completes, and the
+     * register is unreachable while the writer holds the lock.
+     *
+     * Atomic rather than a `@Volatile var` with `++`, because [patchListChanged] bumps it
+     * without taking the lock: two concurrent patch edits doing a read-modify-write can lose an
+     * update *and* momentarily move the version backwards, which would turn a stale expansion
+     * into a valid-looking one.
+     */
+    private val structureVersionCounter = java.util.concurrent.atomic.AtomicLong(0L)
+    val structureVersion: Long get() = structureVersionCounter.get()
     private val controllerRegister: MutableMap<String, DmxController> = mutableMapOf()
     private val controllerChannelChangeListeners: MutableMap<String, ChannelChangeListener> = mutableMapOf()
 
@@ -329,6 +356,15 @@ class Fixtures {
     }
 
     fun patchListChanged() {
+        // Strictly redundant — every patch, group or universe edit that can change what a
+        // target expands to also runs `DbFixtureLoader.loadFixtures` → [register], which bumps.
+        // Kept because it costs one re-derivation per effect and removes the need to keep
+        // proving that redundancy holds. It does mean a metadata-only edit, or an edit to a
+        // project that isn't current, drops the expansions for nothing.
+        //
+        // No lock: nothing here mutates the register, and taking the write lock would stall
+        // every FX tick's fixture lookup for the duration of a REST call.
+        structureVersionCounter.incrementAndGet()
         changeListeners.forEach {
             it.patchListChanged()
         }
@@ -466,6 +502,11 @@ class Fixtures {
             }
 
             block(registerer)
+
+            // Inside the write lock and *after* the mutation — see [structureVersion]. Bumping
+            // first would let a reader take the new version, then build against the old
+            // register, and stamp the stale result as current.
+            structureVersionCounter.incrementAndGet()
         }
 
         changeListeners.forEach {

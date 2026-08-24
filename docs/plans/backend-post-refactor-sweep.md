@@ -168,19 +168,34 @@ discriminator column) and one shared resolution behaviour with a warn.
 on. **Fix:** add a group colour chase across multi-element fixtures on two masters, and a crossfade
 scenario. Prerequisite for every C item; cross-ref `FU-TEST-FX-BENCH-CI-GATE`.
 
-**C1. Per-tick target re-expansion and register locking** — high / P1 / L / fable
+~~**C1. Per-tick target re-expansion and register locking**~~ — done. high / P1 / L / fable
 `resolveEffectFixtureKeys` (`FxEngine.kt:2907-2928`) re-expands every group/multi-element fixture
 per effect per pass, taking `registerLock.read` per member; `processGroupFlatElementEffect`
 rebuilds the whole flat element list per tick (`:2755-2769` + wall-clock twin). **Fix:** resolve
 key lists and flat-element lists once at `addEffect`, invalidate on
 `fixturesChanged`/`patchListChanged`.
 
+Landed as a pull-based cache rather than the listener the item assumed: `Fixtures.structureVersion`
+bumped inside the register write lock, stamped into an immutable `FxTargetExpansion` on the
+`FxInstance` and re-checked per read. Resolved once per *register generation*, not at `addEffect`
+— `updateEffect` and a repatch both had to move it, and a version re-check covers both without a
+mutation site to forget. Six derivation sites collapsed onto it (the item named two);
+`processGroupFlatElementEffect` and its wall twin turned out to be byte-identical to the
+multi-element walkers once the lists arrived pre-resolved, so both were deleted in favour of
+`processElementKeys` / `processWallClockElementKeys`. Numbers, and why `[chase-beat]` moved only
+~6 %, in `docs/testing-engineering.md` §"Recorded baselines".
+
 **C2. Reflective property access on the DMX write path** — high / P1 / L / fable
 `FxTarget.kt:465-521`: `fixtureProperties.find{}` linear scan + `KProperty1.call` per fixture per
 tick (a colour effect pays ~6/fixture/tick); `getSlider`/`getSetting` re-resolve per call. **Fix:**
 memoise per-(fixture-class, property) accessors the way `elementCatalogues` already does.
+*(C1 already took the `fixtureHasProperty` half — twice per effect per tick down to twice per
+register generation — so expect the measured win to read smaller than this entry implies.
+The `applyValue` path, which is the bulk of it, is untouched.)*
 
 **C3. Crossfade republish re-runs the full resolver at ~62 fps under a lock** — high / P1 / M / fable
+*(Premise partly spent: C1 cached the per-frame `resolveEffectFixtureKeys` walk this item cites.
+Re-measure `[crossfade]` before implementing.)*
 `CROSSFADE_TICK_MS = 16` → `updateCueFadeWeights` → `republishCueAssignments` (`FxEngine.kt:1405`):
 per frame it copies every row, re-runs `CueAssignmentResolver.resolve` + winners + index, and walks
 all active effects × `resolveEffectFixtureKeys` — inside `synchronized(cueAssignmentsLock)` that
@@ -460,7 +475,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | Wave | Items | Note |
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
-| 1 | C1, C2 | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
+| 1 | ~~C1~~ **done**, C2 | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | D1–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 before any cueEdit-adjacent work. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, B2 | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
@@ -497,6 +512,15 @@ it on colour-only fixtures (it produced no light there anyway). C0 (`b7939e5`) �
 grew `[chase-beat]`/`[chase-wall]` (group colour chase over multi-element fixtures on two masters)
 and `[crossfade]`; the wave-0 baseline every C item measures against is recorded in
 `docs/testing-engineering.md` §"Recorded baselines". Test-only, no production change.
+
+C1 — target expansion now resolved once per fixture-register generation into an
+`FxTargetExpansion` cached on the `FxInstance`, invalidated by a new `Fixtures.structureVersion`.
+No API or DTO change; two behaviour changes worth knowing: an effect naming a deleted
+group/fixture logs "not found" once per register generation instead of once per tick, and
+`processGroupFlatElementEffect` / `processWallClockGroupFlatElementEffect` are gone (folded into
+`processElementKeys` / `processWallClockElementKeys`). Numbers in
+`docs/testing-engineering.md` §"Recorded baselines"; they also revise what C2 and C3 have left
+to win.
 
 ## Verification
 

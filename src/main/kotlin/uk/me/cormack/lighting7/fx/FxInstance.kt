@@ -302,7 +302,14 @@ class FxInstance(
      *
      * Ignored for fixture targets and groups where members directly have
      * the target property.
+     *
+     * `@Volatile` for the same reason as [elementFilter], and more sharply: this one is
+     * deliberately *outside* [expansion]'s validity check, so the direct read in
+     * `FxEngine.processGroupEffect` / `processWallClockGroupEffect` is the only path by which a
+     * REST/WS mode change reaches the tick thread at all. A stale read there leaves a chase
+     * distributing across the wrong list indefinitely.
      */
+    @Volatile
     var elementMode: ElementMode = ElementMode.PER_FIXTURE
 
     /**
@@ -311,9 +318,31 @@ class FxInstance(
      * When set, only elements whose indices match the filter will receive
      * the effect. Other elements are skipped entirely during processing.
      *
+     * `@Volatile` because it gates [expansion]'s validity: it is written from REST/WS threads
+     * and read once per effect per tick on `Dispatchers.Default`, and a stale read there means
+     * the tick keeps painting through the previous filter indefinitely.
+     *
      * @see ElementFilter
      */
+    @Volatile
     var elementFilter: ElementFilter = ElementFilter.ALL
+
+    /**
+     * What this effect resolves to against the fixture register — the group/element expansion
+     * and its key lists, cached so the tick loops stop re-deriving them per effect per tick.
+     *
+     * Owned by `FxEngine.expansionFor`, which is also the only thing that should read it: the
+     * validity check — against [FxTargetExpansion.structureVersion] and [elementFilter], and
+     * deliberately *not* [elementMode] — lives there. Held on the instance rather than in a side
+     * map so it dies with the effect and no removal path can leak it.
+     *
+     * That exclusion is load-bearing in the other direction: because a mode toggle does not
+     * invalidate, `FxEngine.buildExpansion` must keep building both [FxTargetExpansion.flat] and
+     * [FxTargetExpansion.perFixture] up front. Build only the one the current mode needs and the
+     * next toggle silently serves the wrong key list.
+     */
+    @Volatile
+    internal var expansion: FxTargetExpansion? = null
 
     /**
      * Timing source for this effect.

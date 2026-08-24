@@ -346,7 +346,7 @@ class FxEngineBenchmark {
         engine.addEffect(randomChase)
 
         // PER_FIXTURE wall-clock effect rate-scaled by master 2 — exercises
-        // `processMultiElementEffect` and `SpeedMasterBank.rateScales()` against a bank with
+        // `processWallClockElementKeys` and `SpeedMasterBank.rateScales()` against a bank with
         // more than one entry.
         val wallChase = FxInstance(
             effect = ColourCycle(
@@ -366,10 +366,10 @@ class FxEngineBenchmark {
         }
         engine.addEffect(wallChase)
 
-        // C1 names `processGroupFlatElementEffect` "+ wall-clock twin"
-        // (`processWallClockGroupFlatElementEffect`). The PER_FIXTURE effect above never
-        // reaches it, so the twin gets its own FLAT effect — otherwise half of what C1's fix
-        // touches would be unmeasured.
+        // The FLAT and PER_FIXTURE arms take different lists out of the cached expansion
+        // (`flat` vs `perFixture`), and the PER_FIXTURE effect above never reaches the FLAT
+        // one — so the wall-clock loop gets its own FLAT effect, otherwise half of what C1's
+        // fix touches would be unmeasured.
         val wallFlatChase = FxInstance(
             effect = RainbowCycle(brightness = 0.7f),
             target = ColourTarget.forGroup("bars-b"),
@@ -404,6 +404,18 @@ class FxEngineBenchmark {
             "wall-clock FLAT effect must expand to $elementsPerGroup element keys"
         }
         check(1 in engine.activeCueAssignmentIds()) { "Layer 4 colour rows did not land" }
+
+        // Since the engine caches each effect's expansion, the checks above only prove the
+        // *first* one. Re-check past an invalidation so the numbers below can't be a cache
+        // serving garbage. This does NOT prove the cache invalidates — nothing structural
+        // changed here — which is `FxExpansionCacheTest`'s job.
+        fixtures.patchListChanged()
+        check(engine.fixtureKeysCoveredBy(flatChase).size == elementsPerGroup) {
+            "expansion did not survive an invalidation"
+        }
+        check(engine.fixtureKeysCoveredBy(wallFlatChase).size == elementsPerGroup) {
+            "wall-clock expansion did not survive an invalidation"
+        }
 
         return ChaseRig(engine, fixtures, elementsPerGroup)
     }

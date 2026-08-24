@@ -1126,6 +1126,36 @@ than being captured into a per-master collector.
 | REST handlers | Ktor I/O | Request handling |
 | WebSocket handlers | Ktor WebSocket | Message handling |
 
+### Target expansion is cached, not re-derived
+
+Everything on this page about how a target expands — group members, `MultiElementFixture`
+elements, the `PER_FIXTURE`/`FLAT` split, `ElementFilter` — is resolved **once per effect per
+register generation**, into an `FxTargetExpansion` held on the `FxInstance`. The tick loops read
+it; they do not walk the group.
+
+They used to walk it twice per tick per effect: once in `resolveEffectFixtureKeys` for the reset
+pass, and again in the `process*` pass, with every `untypedGroup` / `untypedFixture` lookup taking
+`Fixtures.registerLock.read`. A 240-element group effect cost ~480 lock acquisitions and two
+fresh key lists per tick, at up to 120 Hz.
+
+This is safe because the topology is frozen between rebuilds: `FixtureGroup.members` is an
+immutable list, `allMembers` is `by lazy`, and `MultiElementFixture.elements` is bound in each
+fixture's constructor. The only thing that changes any of it is `Fixtures.register {}`.
+
+**Invalidation is pull-based, not a listener.** `Fixtures.structureVersion` is bumped inside the
+register write lock (and, redundantly but cheaply, by `patchListChanged()`); the version is
+stamped *inside* the cached value and re-checked on every read. That is deliberately unlike
+`LookRegistry`, whose fast path returns a hit without re-validating and therefore needs a
+fill-time re-check, a retry loop and `putIfAbsent` — here a value built across an invalidation is
+simply rebuilt on the next read. `elementFilter` is part of the cache identity; `elementMode` is
+not, because both shapes it selects between are built up front.
+
+The consequence to know about: an effect whose group or fixture has been deleted now logs
+"not found" **once per register generation** rather than on every tick.
+
+`FxExpansionCacheTest` is what stands behind the invalidation. `FxEngineBenchmark`'s setup guards
+do not — they only ever check the first expansion.
+
 ## Cue Integration
 
 A cue is an ordered stack of **Look layers** plus its own local values and ad-hoc effects. The FX system supports cues via the `cueId` field on `FxInstance`.
