@@ -100,7 +100,7 @@ fixture-resolution failure silently drop an effect; `CueStackManager.kt:779` emp
 `advanceStack`. All now log at warn with cue/layer/target context, matching `CueComposer`'s
 existing pattern for its equivalent skips. `CueStackManager.kt` had no logger — added one.
 
-**A9. Timed-trigger edge conditions** — low / P2 / S / sonnet
+~~**A9. Timed-trigger edge conditions**~~ — done, `951fda1`. low / P2 / S / sonnet
 `CueTriggerManager.kt:95` schedules amount-0 timed layers (cook filters them; the trigger doesn't);
 `deactivateTriggersForCue` (`:232-252`) doesn't clear the stomp suppression a timed fire wrote —
 an invariant currently held by luck. **Fix:** add the `amount > 0` filter; clear suppression on
