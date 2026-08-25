@@ -78,17 +78,15 @@ review surfaced (`LayerResolver`, `TypedParams`+`TemplateRegistry`), the lookRep
 scan-TOCTOU/silent-skip/attempted-vs-replaced reporting, and the cue DELETE route's missing
 live-output teardown.
 
-**A6. `FxInstance` mutable fields shared across threads without happens-before** — medium / P1 / S / fable
-`isRunning`, `lastPhase`, `phaseOffset`, `stepTiming`, `distributionStrategy`, `timingSource` are
-plain `var`s written from request threads and read by the tick loop; `isRunning` gates the whole
-per-effect pass (`FxEngine.kt:2091`). **Fix:** uniformly `@Volatile`, or swap immutable snapshots
-as the existing `needsSwap` branch does.
-
-Six fields, not the eight originally listed: C1 (`49f3b09`) took `elementMode` and `elementFilter`,
-which it had to — `elementFilter` gates the expansion cache's validity, and `elementMode` is
-deliberately *outside* that check, so the unsynchronised read became the only path by which a mode
-change reached the tick at all. `distributionStrategy` sits next to them and looks like it went
-too; it did not, and it is the one most likely to be assumed done.
+~~**A6. `FxInstance` mutable fields shared across threads without happens-before**~~ — done, `4cee250`. medium / P1 / S / fable
+Landed as the second offered fix (immutable snapshots), not the first: a per-field `@Volatile`
+draft was reviewed and found to still tear across fields mid-pass and mid-update. The fields —
+plus `elementMode`/`elementFilter`, folded back in from C1 — now live in one `FxDynamics` value
+behind an `AtomicReference` that `updateEffect`'s swap shares with the replacement instance,
+which also closed a pre-existing race the review surfaced: a pause/resume landing mid-swap was
+silently undone by the swap's read-copy-publish. `timingSource` proved to be pre-publication-only
+and stays a plain `var` with that constraint documented; `lastPhase` stores once per pass. See
+`docs/fx-engineering.md` §"Instance dynamics".
 
 **A7. `ProgrammerLayerStack.toggle` compares target lists by order** — medium / P1 / S / sonnet
 `ProgrammerLayerStack.kt:237-239` (`it.targets == targets`): same fixtures in a different order add
@@ -508,7 +506,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
-| 2 | ~~D1–D6, D8, D9, A5~~ **done**, A6–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
+| 2 | ~~D1–D6, D8, D9, A5, A6~~ **done**, A7–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
@@ -525,12 +523,12 @@ still comparable, but the freeze is now a convention rather than a fact.
 "everything after moves less code" principle. They were pulled forward when C0 landed, for two
 reasons:
 
-1. **A5 and A6 sit inside the code the benchmark measures.** A6 makes `isRunning`, `lastPhase`,
-   `phaseOffset`, `distributionStrategy` and `elementMode` `@Volatile` — `isRunning` gates the
-   whole per-effect pass (`FxEngine.kt:2091`) and the rest are read per member per tick; A5
-   changes how `suppressionCache` is published on the same path. Landing them first invalidates
-   the wave-0 baseline before the item it exists for gets to use it. Running C1+C2 first spends
-   the baseline while it is exactly matched to the code.
+1. **A5 and A6 sit inside the code the benchmark measures.** A6 puts `isRunning`, `phaseOffset`,
+   `distributionStrategy` and friends behind an atomic snapshot read once per pass — `isRunning`
+   gates the whole per-effect pass and the rest were read per member per tick; A5 changes how
+   `suppressionCache` is published on the same path. Landing them first invalidates the wave-0
+   baseline before the item it exists for gets to use it. Running C1+C2 first spends the
+   baseline while it is exactly matched to the code.
 2. **Nothing C1 or C2 touches is D-wave code.** D1 (cueEdit) and D2 (legacy tempo) don't reach
    group expansion or the colour write path, so the "moves less code" argument doesn't apply to
    these two specifically — it still does for C3–C7, which is why they stay behind the
