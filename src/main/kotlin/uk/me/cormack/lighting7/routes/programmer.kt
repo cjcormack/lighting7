@@ -1,21 +1,15 @@
 package uk.me.cormack.lighting7.routes
 
-import io.ktor.resources.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
-import io.ktor.server.resources.*
 import io.ktor.server.resources.post
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.state.State
 
 /**
  * The programmer's REST surface.
  *
- * - `clear-all` is the escape hatch: release every programmer entry (all owners, property
- *   entries and the channel sideband) back to the layers below. The WS `programmer.clearAll`
- *   op is the same operation.
  * - `record` / `include` / `update` are the authoring loop.
  * - `record-look` records the programmer into a Look — the gesture that creates a *bound* Look.
  *   Masked by an explicit `mask`, because a Look has no type to imply one, and optionally moving
@@ -35,16 +29,6 @@ import uk.me.cormack.lighting7.state.State
  */
 internal fun Route.routeApiRestProgrammer(state: State) {
     route("/programmer") {
-        post<ProgrammerClearAllResource> {
-            val request = try {
-                call.receive<ProgrammerClearAllRequest>()
-            } catch (_: Exception) {
-                ProgrammerClearAllRequest()
-            }
-            val cleared = clearProgrammerCompletely(state, request.fadeMs ?: 0)
-            call.respond(ProgrammerClearAllResponse(cleared.entryCount, cleared.effectsCleared))
-        }
-
         post<ProgrammerRecordResource> { handleProgrammerRecord(state) }
         post<ProgrammerRecordLookResource> { handleProgrammerRecordLook(state) }
         post<ProgrammerIncludeResource> { handleProgrammerInclude(state) }
@@ -78,12 +62,3 @@ internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): Programm
     val entryCount = state.show.fxEngine.clearProgrammerAll(fadeMs)
     return ProgrammerClearOutcome(entryCount, effectsCleared)
 }
-
-@Resource("/clear-all")
-private class ProgrammerClearAllResource
-
-@Serializable
-internal data class ProgrammerClearAllRequest(val fadeMs: Long? = null)
-
-@Serializable
-internal data class ProgrammerClearAllResponse(val cleared: Int, val effectsCleared: Int = 0)

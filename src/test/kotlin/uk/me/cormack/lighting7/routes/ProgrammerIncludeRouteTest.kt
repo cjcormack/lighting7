@@ -287,7 +287,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         client.include(cueId)
         assertNotNull(state.show.programmerStore.lastIncludedTarget)
 
-        client.post("/api/rest/programmer/clear-all")
+        clearProgrammerCompletely(state, 0)
 
         assertEquals(0, state.show.programmerStore.size)
         assertNull(

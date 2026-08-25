@@ -169,18 +169,6 @@ internal fun Route.routeApiRestFx(state: State) {
             call.respond(FixtureEffectsResponse(direct, indirect))
         }
 
-        // Clear all effects for a fixture
-        delete<FixtureEffects> {
-            val count = state.show.fxEngine.removeEffectsForFixture(it.fixtureKey)
-            call.respond(ClearEffectsResponse(count))
-        }
-
-        // Clear all effects
-        post<ClearAll> {
-            state.show.fxEngine.clearAllEffects()
-            call.respond(HttpStatusCode.OK)
-        }
-
         // Effect library - list available effect types
         get<EffectLibrary> {
             call.respond(state.show.fxRegistry.getLibrary())
@@ -207,9 +195,6 @@ data class EffectId(val id: Long) {
 
 @Resource("/fixture/{fixtureKey}")
 data class FixtureEffects(val fixtureKey: String)
-
-@Resource("/clear")
-data object ClearAll
 
 @Resource("/library")
 data object EffectLibrary
@@ -248,9 +233,6 @@ data class AddEffectRequest(
 
 @Serializable
 data class AddEffectResponse(val effectId: Long)
-
-@Serializable
-data class ClearEffectsResponse(val removedCount: Int)
 
 @Serializable
 data class ErrorResponse(

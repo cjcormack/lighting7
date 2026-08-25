@@ -21,10 +21,6 @@ import java.awt.Color
 sealed class ChannelInMessage : InMessage()
 
 @Serializable
-@SerialName("ping")
-data object PingInMessage : ChannelInMessage()
-
-@Serializable
 @SerialName("channelState")
 data object ChannelStateInMessage : ChannelInMessage()
 
@@ -87,7 +83,6 @@ data class ChannelMappingStateOutMessage(
 suspend fun handleChannel(scope: SocketScope, message: ChannelInMessage) {
     val state = scope.state
     when (message) {
-        is PingInMessage -> Unit
         is ChannelStateInMessage -> {
             // Overlay parked values onto currentValues so clients see what the fixture is
             // actually emitting, not the underlying buffered value.

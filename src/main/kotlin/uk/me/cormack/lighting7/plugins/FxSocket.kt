@@ -14,17 +14,6 @@ sealed class FxInMessage : InMessage()
 data object FxStateInMessage : FxInMessage()
 
 @Serializable
-@SerialName("addFx")
-data class AddFxInMessage(
-    val effectType: String,
-    val fixtureKey: String,
-    val propertyName: String,
-    val beatDivision: Double = 1.0,
-    val blendMode: String = "OVERRIDE",
-    val phaseOffset: Double = 0.0,
-) : FxInMessage()
-
-@Serializable
 @SerialName("removeFx")
 data class RemoveFxInMessage(val effectId: Long) : FxInMessage()
 
@@ -114,9 +103,6 @@ suspend fun handleFx(scope: SocketScope, message: FxInMessage) {
         is ClearFxInMessage -> {
             engine.clearAllEffects()
             scope.send(FxChangedOutMessage(FxChangeType.CLEARED))
-        }
-        is AddFxInMessage -> {
-            // Complex effect creation goes through the REST API; the WS path is intentionally a no-op.
         }
     }
 }

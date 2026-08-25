@@ -344,7 +344,6 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectPromptBooks(state)
         routeApiRestProjectSurfaceBindings(state)
         routeApiRestProjectExport(state)
-        routeApiRestProjectMachineOverrides(state)
         routeApiRestProjectCloudSync(state)
 
         // POST /{id}/clone - Clone a project, whole graph. Runs through the cloud-sync

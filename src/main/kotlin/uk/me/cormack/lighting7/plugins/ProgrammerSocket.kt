@@ -139,7 +139,9 @@ data class ProgrammerEntryClearedOutMessage(
 @Serializable
 @SerialName("programmer.cleared")
 data class ProgrammerClearedOutMessage(
-    val entryCount: Int,
+    /** Property entries swept. Named to match the REST `programmer/clear-all` convention this
+     * message is now the sole survivor of (that route is gone; see D5 of the backend sweep). */
+    val cleared: Int,
     /** Programmer-band FX instances swept alongside the values. */
     val effectsCleared: Int = 0,
 ) : ProgrammerOutMessage()

@@ -169,8 +169,8 @@ Update targeting a cue with an open cue-edit session answered **409 unless force
 snapshotted the cue's assignments and Discard restored that snapshot wholesale, so anything written
 underneath was silently reverted), while Include only warned, because Include only reads. Backend
 sweep item D1 retired the `cueEdit.*` family, so there is no second writer to guard against and
-Record / Update / flatten have no conflict case left. `force` survives on the Record and Update
-request bodies as an inert accepted field only because the frontend still sends it on every submit.
+Record / Update have no conflict case left. `force` survives on the Record and Update request
+bodies as an inert accepted field only because the frontend still sends it on every submit.
 
 ## Layer 3 — Effects
 
@@ -419,44 +419,6 @@ match.
 
 A reference whose Look stops covering it keeps its last resolved value rather than vanishing; a
 disappearing programmer entry mid-show is worse than a stale one the sheet marks broken.
-
-### Hardening — flattening a layer
-
-`POST /{projectId}/cues/{cueId}/flatten` detaches a cue from the library: it writes the composed
-result as the cue's own local rows and deletes the layers that produced it. It replaces three Make
-Hard routes — one per cue, one per FX preset, one programmer-wide — none of which had a single test.
-
-The awkward case they had is *gone*. An FX preset row was target-*less*, so hardening it could not
-resolve "per target" at all, and both ways to invent a target set were wrong: the union of today's
-applications stopped being true the moment the preset was applied somewhere new, and asking the
-operator asked them to answer for applications that did not exist yet. A layer always has a target
-set.
-
-Three properties of the flatten route, each of which looks like a loss and is not:
-
-- **What gets written is the cooked value, not the layer's rows.** Cook has already applied blend,
-  `amount`, `propertyMask` and group expansion and reduced the stack to one value per (fixture,
-  property), so flattening is "write down what cook computed". That is what makes it
-  output-preserving.
-- **Rows come out fixture-targeted, never group-targeted.** The old cue route could keep a group row
-  when every member happened to resolve alike, because it rewrote a value in place without cooking.
-  Cook's output is per fixture *by construction* — that invariant is the point of it — and a cooked
-  key carries no group name, so re-deriving one would mean guessing which of several overlapping
-  groups to name.
-- **A Look row's `fadeDurationMs` does not survive.** It never reached the stage either: cook carries
-  no per-row fade, so a layered row's fade is already not honoured. Flattening preserves the cue's
-  *actual* behaviour, which is the guarantee that matters. `moveInDark` does survive, because it
-  lives on the cue's own rows and those are untouched.
-
-**A single layer can only be flattened when it is the last enabled one.** Local rows beat every
-layer unconditionally, so promoting a middle layer's values to local rows would make them win over
-the layers *above* it — the cue would look different immediately after an operation whose whole
-promise is that nothing changes. The route refuses that with a 409 rather than silently reordering.
-
-One detail survives from the old implementation: the category for a row's property comes from
-`fixtureCategoryFor`, not a direct property-catalogue lookup, because `position` is a synthetic
-pan/tilt pair with no `@FixtureProperty` of its own. Looking the name up directly answers null and
-reports every POSITION row as unresolvable.
 
 ### What replaced the positional palette
 

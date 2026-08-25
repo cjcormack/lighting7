@@ -28,10 +28,6 @@ data class UnparkChannelInMessage(
     val channel: Int,
 ) : ParkInMessage()
 
-@Serializable
-@SerialName("unparkAll")
-data object UnparkAllInMessage : ParkInMessage()
-
 // ─── Outbound ───────────────────────────────────────────────────────────
 
 @Serializable
@@ -64,10 +60,6 @@ suspend fun handlePark(scope: SocketScope, message: ParkInMessage) {
         }
         is UnparkChannelInMessage -> {
             parkManager.unpark(message.universe, message.channel)
-            scope.state.show.fxEngine.emitProvenanceUpdate()
-        }
-        is UnparkAllInMessage -> {
-            parkManager.unparkAll()
             scope.state.show.fxEngine.emitProvenanceUpdate()
         }
     }

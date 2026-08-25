@@ -118,7 +118,6 @@ Writing the *programmer* into a cue lives outside this namespace, under
 | POST | `/programmer/record` | Write the programmer into a cue (`CREATE`/`MERGE`/`REMOVE`/`UPDATE_EXISTING`, optional I/P/C/B mask) |
 | POST | `/programmer/include` | Load a cue's layers + rows + FX, or a Look's rows, into the programmer for editing |
 | POST | `/programmer/record-look` | Record the programmer into a Look — `CREATE`/`MERGE`/`REMOVE`/`UPDATE_EXISTING`, with an explicit I/P/C/B mask |
-| POST | `/project/{id}/cues/{cueId}/flatten` | Detach a cue from the library: write the cooked layer stack as local rows and delete the layers |
 | POST | `/project/{id}/looks` … `/looks/{lookId}` | Look CRUD, banked by derived attribute family; delete guarded by `LOOK_IN_USE` |
 | POST | `/programmer/update` | Write programmer edits back — to the include target, or to cues named from the Mode B checklist |
 

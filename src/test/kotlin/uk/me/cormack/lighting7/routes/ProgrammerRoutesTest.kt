@@ -27,7 +27,8 @@ import kotlin.test.assertTrue
 
 /**
  * The `updateChannel` → programmer compatibility shim, and the clear-all escape hatch
- * (`POST /api/rest/programmer/clear-all`) including the toggle-bookkeeping reset that
+ * (`clearProgrammerCompletely`, reachable live only via the WS `programmer.clearAll` op — the
+ * REST twin was retired, D5 of the backend sweep) including the toggle-bookkeeping reset that
  * keeps locate and preset toggles consistent with the swept store.
  */
 class ProgrammerRoutesTest : RouteIntegrationTest() {
@@ -111,9 +112,8 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         assertTrue(state.show.programmerStore.size > 0)
         assertEquals(1, state.show.programmerStore.layers.size)
 
-        val response: ProgrammerClearAllResponse =
-            client.post("/api/rest/programmer/clear-all").body()
-        assertTrue(response.cleared > 0)
+        val response = clearProgrammerCompletely(state, 0)
+        assertTrue(response.entryCount > 0)
 
         assertEquals(0, state.show.programmerStore.size, "every property entry swept")
         assertEquals(0, state.show.programmerStore.channelCount, "sideband swept")
@@ -169,8 +169,7 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         )
         assertEquals(0, state.show.fxEngine.getEffect(plain.effectId)!!.priority)
 
-        val response: ProgrammerClearAllResponse =
-            client.post("/api/rest/programmer/clear-all").body()
+        val response = clearProgrammerCompletely(state, 0)
         assertEquals(1, response.effectsCleared, "only the band effect is swept")
 
         val surviving = state.show.fxEngine.getActiveEffects().map { it.id }.toSet()
