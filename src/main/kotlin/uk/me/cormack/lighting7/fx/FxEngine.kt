@@ -664,84 +664,6 @@ class FxEngine(
         }
     }
 
-    /**
-     * Append [additions] to [cueId]'s Layer 4 assignments without touching existing rows. Used
-     * by the runtime timed-preset fire path to contribute Layer 4 rows at fire time rather than
-     * at cue-apply time (immediate presets fan their assignments in during [applyCue]; timed
-     * presets stay effects-only until fired). Creates the cue's entry if absent.
-     */
-    fun appendCueAssignments(cueId: Int, additions: List<CueAssignmentResolver.Assignment>) {
-        if (additions.isEmpty()) return
-        mutateCueAssignments(cueId, toRemove = emptyList(), additions = additions)
-    }
-
-    /**
-     * Remove rows matching [toRemove] from [cueId]'s Layer 4 assignments by structural equality.
-     * Each element in [toRemove] removes exactly one matching occurrence — so
-     * appendCueAssignments(X) followed by removeCueAssignmentSubset(X) round-trips cleanly even
-     * when the cue independently asserts a value-equal row.
-     */
-    fun removeCueAssignmentSubset(cueId: Int, toRemove: List<CueAssignmentResolver.Assignment>) {
-        if (toRemove.isEmpty()) return
-        mutateCueAssignments(cueId, toRemove = toRemove, additions = emptyList())
-    }
-
-    /**
-     * Atomically remove [toRemove] and append [additions] in a single locked mutation with one
-     * republish. Used by the recurring timed-preset fire path — retracting the prior fire's
-     * rows and appending the new ones separately costs two full Layer 4 publishes per tick;
-     * this collapses them into one.
-     */
-    fun replaceCueAssignmentSubset(
-        cueId: Int,
-        toRemove: List<CueAssignmentResolver.Assignment>,
-        additions: List<CueAssignmentResolver.Assignment>,
-    ) {
-        if (toRemove.isEmpty() && additions.isEmpty()) return
-        mutateCueAssignments(cueId, toRemove = toRemove, additions = additions)
-    }
-
-    /**
-     * Shared implementation of append / remove-subset / replace-subset. Removes `toRemove` rows
-     * by structural equality (one occurrence per element), then adds `additions`. Drops the
-     * cue's entry (and fade-weight) if the list ends up empty. Republishes once on any change.
-     */
-    private fun mutateCueAssignments(
-        cueId: Int,
-        toRemove: List<CueAssignmentResolver.Assignment>,
-        additions: List<CueAssignmentResolver.Assignment>,
-    ) {
-        synchronized(cueAssignmentsLock) {
-            val existing = cueAssignments[cueId]
-            if (existing == null) {
-                if (additions.isEmpty()) return
-                cueAssignments[cueId] = ArrayList(additions)
-                republishCueAssignments()
-                return
-            }
-            val mutable = ArrayList<CueAssignmentResolver.Assignment>(existing.size + additions.size)
-            mutable.addAll(existing)
-            var changed = additions.isNotEmpty()
-            for (row in toRemove) {
-                if (mutable.remove(row)) changed = true
-            }
-            if (!changed) return
-            mutable.addAll(additions)
-            if (mutable.isEmpty()) {
-                cueAssignments.remove(cueId)
-                cueFadeWeights.remove(cueId)
-                cueStackIds.remove(cueId)
-                // Goes with the rows, as everywhere else. A cue that has emptied out asserts
-                // nothing, and a suppression entry outliving the assertions that justified it would
-                // leave a layer's effects silenced with nothing left on stage to explain why.
-                if (cueStompSuppression.remove(cueId) != null) rebuildStompFlatLocked()
-            } else {
-                cueAssignments[cueId] = mutable
-            }
-            republishCueAssignments()
-        }
-    }
-
     /** Drop all Layer 4 contributions from [cueId]. */
     fun removeCueAssignments(cueId: Int) {
         synchronized(cueAssignmentsLock) {
@@ -1696,19 +1618,6 @@ class FxEngine(
      * Get all active effect instances.
      */
     fun getActiveEffects(): List<FxInstance> = activeEffects.values.toList()
-
-    /**
-     * Get all active effects for a given target key and property.
-     *
-     * @param targetKey The fixture key or group name
-     * @param propertyName The property name
-     * @return List of matching effect instances
-     */
-    fun getEffectsForTarget(targetKey: String, propertyName: String): List<FxInstance> {
-        return activeEffects.values.filter {
-            it.target.targetKey == targetKey && it.target.propertyName == propertyName
-        }
-    }
 
     /**
      * Get all active effects targeting a specific group.

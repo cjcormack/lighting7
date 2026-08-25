@@ -4,7 +4,6 @@ import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.models.TargetRef
 import java.awt.Color
-import java.util.UUID
 
 /**
  * Cue-layer composition resolver — merges [CuePropertyAssignment] rows from active cues

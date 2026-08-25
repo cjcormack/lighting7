@@ -444,7 +444,6 @@ class FxEngineBenchmark {
         val t2 = beatTick((n * MASTER_2_BPM / MASTER_1_BPM).toLong(), startMs, MASTER_2_BPM.toInt())
         return SpeedMasterBank.Frame(
             arrayOf(t1, t2),
-            doubleArrayOf(1.0, MASTER_2_BPM / MasterClock.DEFAULT_BPM),
             t1.timestampMs,
         )
     }

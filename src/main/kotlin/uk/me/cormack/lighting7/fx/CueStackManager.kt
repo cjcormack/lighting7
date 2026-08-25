@@ -127,8 +127,8 @@ class CueStackManager(
         scope: CoroutineScope = GlobalScope,
         rejectMarkers: Boolean = false,
     ): ActivateResult {
-        // Read stack and cue data from DB
-        val (stackData, cueData) = transaction(state.database) {
+        // Read cue data from DB
+        val cueData = transaction(state.database) {
             val stack = DaoCueStack.findById(stackId)
                 ?: throw IllegalArgumentException("Cue stack not found: $stackId")
             if (stack.type == CueStackType.SEPARATOR.name) {
@@ -143,12 +143,7 @@ class CueStackManager(
                 throw IllegalArgumentException("Cannot go-to a MARKER cue")
             }
 
-            val sd = StackData(
-                id = stack.id.value,
-                loop = stack.loop,
-            )
-
-            val cd = CueApplyData(
+            CueApplyData(
                 cueId = cue.id.value,
                 cueName = cue.name,
                 adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
@@ -175,8 +170,6 @@ class CueStackManager(
                 cueStackId = cue.cueStack.id.value,
                 sortOrder = cue.sortOrder,
             )
-
-            sd to cd
         }
 
         // Cancel any in-progress crossfade for this stack. A crossfade cancelled mid-flight
@@ -814,11 +807,6 @@ class CueStackManager(
     fun isStackActive(stackId: Int): Boolean = activeStacks.containsKey(stackId)
 
     // ─── Private helpers ─────────────────────────────────────────────────
-
-    private data class StackData(
-        val id: Int,
-        val loop: Boolean,
-    )
 
     // `createInstanceForStack` stood here. It was `createInstanceFromPreset` with a `stackId`
     // parameter, which existed only to resolve `P1` against the stack's positional colour list.

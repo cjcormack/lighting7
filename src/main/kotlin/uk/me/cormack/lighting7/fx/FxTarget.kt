@@ -100,14 +100,6 @@ sealed class FxTarget {
     )
 
     /**
-     * Get the current value from a fixture or element (before FX).
-     *
-     * @param fixture The fixture or element to read from
-     * @return The current value as an FxOutput
-     */
-    abstract fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput
-
-    /**
      * Check whether a fixture or element has the property this target controls.
      *
      * Used by FxEngine to determine whether an effect needs to be expanded
@@ -236,11 +228,6 @@ data class SliderTarget(
         val baseValue = slider.value ?: 0u
         val newValue = applyBlendMode(baseValue, output.value, blendMode)
         slider.value = newValue
-    }
-
-    override fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput {
-        val slider = getSlider(fixture)
-        return FxOutput.Slider(slider?.value ?: 0u)
     }
 
     override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
@@ -382,11 +369,6 @@ data class ColourTarget(
             applyExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, blendMode)
             applyExtendedChannel(fixture, PropertyCategory.UV, ext.uv, blendMode)
         }
-    }
-
-    override fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput {
-        val colour = (fixture as? WithColour)?.rgbColour
-        return FxOutput.Colour(colour?.value ?: Color.BLACK)
     }
 
     override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
@@ -615,14 +597,6 @@ data class PositionTarget(
         positionFixture.tilt.value = newTilt
     }
 
-    override fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput {
-        val positionFixture = fixture as? WithPosition
-        return FxOutput.Position(
-            positionFixture?.pan?.value ?: 128u,
-            positionFixture?.tilt?.value ?: 128u
-        )
-    }
-
     override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
         if (fallback !is FxOutput.Position) return
         val positionFixture = fixture as? WithPosition ?: return
@@ -732,13 +706,6 @@ data class SettingTarget(
 
         // Settings are discrete — always override regardless of blend mode
         transaction.setValue(setting.universe, setting.channelNo, output.value)
-    }
-
-    override fun getCurrentValueFromFixture(fixture: GroupableFixture): FxOutput {
-        val setting = getSetting(fixture) ?: return FxOutput.Slider(0u)
-        val transaction = setting.transaction ?: return FxOutput.Slider(0u)
-        val currentLevel = transaction.getValue(setting.universe, setting.channelNo)
-        return FxOutput.Slider(currentLevel)
     }
 
     override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {

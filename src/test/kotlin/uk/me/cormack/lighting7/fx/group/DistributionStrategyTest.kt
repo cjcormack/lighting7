@@ -207,31 +207,6 @@ class DistributionStrategyTest {
     }
 
     @Test
-    fun `CUSTOM allows arbitrary offset calculation`() {
-        // Custom: invert the position
-        val strategy = DistributionStrategy.CUSTOM { position ->
-            1.0 - position
-        }
-        val groupSize = 4
-
-        val offsets = (0 until groupSize).map { idx ->
-            strategy.calculateOffset(createMember(idx, groupSize), groupSize)
-        }
-
-        assertEquals(1.0, offsets[0], 0.001)
-        assertEquals(0.0, offsets[3], 0.001)
-    }
-
-    @Test
-    fun `CUSTOM clamps values to 0-1 range`() {
-        val strategy = DistributionStrategy.CUSTOM { _ -> 5.0 }
-        val member = createMember(0, 1)
-        val offset = strategy.calculateOffset(member, 1)
-
-        assertEquals(1.0, offset) // Clamped from 5.0
-    }
-
-    @Test
     fun `fromName returns correct strategy`() {
         assertEquals(DistributionStrategy.LINEAR, DistributionStrategy.fromName("LINEAR"))
         assertEquals(DistributionStrategy.UNIFIED, DistributionStrategy.fromName("UNIFIED"))

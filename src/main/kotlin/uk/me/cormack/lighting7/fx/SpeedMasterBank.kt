@@ -94,26 +94,22 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
 
     /**
      * A coherent per-pass sample of every master: `ticks[slot]` is that master's most
-     * recent tick, `rateScales[slot]` is `bpm / 120` (the wall-clock rate-master scale).
-     * Out-of-range slots resolve to slot 0 — a deleted master's not-yet-rebound effect
-     * degrades to the global tempo, never to a crash.
+     * recent tick. Out-of-range slots resolve to slot 0 — a deleted master's not-yet-rebound
+     * effect degrades to the global tempo, never to a crash. (The wall-clock rate scale is a
+     * separate per-pass sample — see [rateScales] — since a beat-only pass never needs it.)
      */
     class Frame internal constructor(
         private val ticks: Array<MasterClock.ClockTick>,
-        private val rateScales: DoubleArray,
         /** Pass timestamp — the engine's deltaMs source, independent of any one master's tick rate. */
         val timestampMs: Long,
     ) {
         fun tick(slot: Int): MasterClock.ClockTick =
             if (slot in ticks.indices) ticks[slot] else ticks[0]
 
-        fun rateScale(slot: Int): Double =
-            if (slot in rateScales.indices) rateScales[slot] else 1.0
-
         companion object {
             /** Every slot answers with [tick] — the synthetic-tick shim for tests and benchmarks. */
             fun uniform(tick: MasterClock.ClockTick): Frame =
-                Frame(arrayOf(tick), doubleArrayOf(1.0), tick.timestampMs)
+                Frame(arrayOf(tick), tick.timestampMs)
         }
     }
 
@@ -229,8 +225,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
     fun snapshotFrame(): Frame {
         val current = bindings.slots
         val ticks = Array(current.size) { current[it].clock.currentTick }
-        val scales = DoubleArray(current.size) { current[it].clock.bpm.value / MasterClock.DEFAULT_BPM }
-        return Frame(ticks, scales, System.currentTimeMillis())
+        return Frame(ticks, System.currentTimeMillis())
     }
 
     /**

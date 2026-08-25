@@ -656,9 +656,9 @@ class FxEnginePipelineTest {
 
     // ─── Speed masters: one pass, N timebases ────────────────────────────────
 
-    /** Frame whose slot 0 sees [tick0] and slot 1 sees [tick1]; rate scales neutral. */
+    /** Frame whose slot 0 sees [tick0] and slot 1 sees [tick1]. */
     private fun frameOf(tick0: MasterClock.ClockTick, tick1: MasterClock.ClockTick) =
-        SpeedMasterBank.Frame(arrayOf(tick0, tick1), doubleArrayOf(1.0, 1.0), maxOf(tick0.timestampMs, tick1.timestampMs))
+        SpeedMasterBank.Frame(arrayOf(tick0, tick1), maxOf(tick0.timestampMs, tick1.timestampMs))
 
     @Test
     fun `two effects on two masters get their own masters' phases in one pass`() {

@@ -49,8 +49,8 @@ class CueTriggerManager(
      * this on the look would make the first fire pull in the second layer too.
      *
      * This exists because firing a timed layer **re-cooks the whole cue** rather than appending the
-     * layer's rows. Appending was what the preset era did (`replaceCueAssignmentSubset`, matching
-     * the prior fire's rows by structural equality), and it cannot survive cooking: two
+     * layer's rows. Appending was what the preset era did (subset-mutating the cue's Layer 4 rows,
+     * matching the prior fire's rows by structural equality), and it cannot survive cooking: two
      * contributors would then sit on one (fixture, property) key inside one cue, and the LTP
      * tie-break between them falls to `HashMap` iteration order in `republishCueAssignments`.
      * Re-cooking keeps the one-row-per-key invariant globally, and publishing through
@@ -275,31 +275,6 @@ class CueTriggerManager(
         randomWindowMs: Long?,
         scope: CoroutineScope,
         action: () -> Unit,
-    ): Job? = launchTimedActionWithState(
-        delayMs = delayMs,
-        intervalMs = intervalMs,
-        randomWindowMs = randomWindowMs,
-        scope = scope,
-        initialState = Unit,
-    ) { action() }
-
-    /**
-     * Launch a coroutine for a timed action that threads state across recurring fires.
-     *
-     * The state seed is [initialState]; each fire receives the state returned by the previous
-     * fire and emits the next state. For one-shot (delayed-only) actions the state is simply
-     * consumed by the single fire and never re-used.
-     *
-     * Used by the timed-preset path to carry the previous fire's Layer 4 contribution across
-     * ticks so each fire can retract it before appending the new one.
-     */
-    private fun <T> launchTimedActionWithState(
-        delayMs: Long?,
-        intervalMs: Long?,
-        randomWindowMs: Long?,
-        scope: CoroutineScope,
-        initialState: T,
-        action: (T) -> T,
     ): Job? {
         return when {
             // Recurring: fire at intervalMs with optional initial delay
@@ -307,11 +282,10 @@ class CueTriggerManager(
                 scope.launch {
                     // If there's also a delay, wait before starting the recurring loop
                     if (delayMs != null && delayMs > 0) delay(delayMs)
-                    var state = initialState
                     while (isActive) {
                         val actualInterval = computeRandomisedInterval(intervalMs, randomWindowMs)
                         delay(actualInterval)
-                        try { state = action(state) } catch (e: Exception) {
+                        try { action() } catch (e: Exception) {
                             logger.error("Error in recurring timed action", e)
                         }
                     }
@@ -321,7 +295,7 @@ class CueTriggerManager(
             delayMs != null && delayMs > 0 -> {
                 scope.launch {
                     delay(delayMs)
-                    try { action(initialState) } catch (e: Exception) {
+                    try { action() } catch (e: Exception) {
                         logger.error("Error in delayed timed action", e)
                     }
                 }

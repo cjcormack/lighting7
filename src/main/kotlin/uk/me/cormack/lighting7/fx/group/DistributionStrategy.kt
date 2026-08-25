@@ -204,20 +204,6 @@ sealed interface DistributionStrategy {
     }
 
     /**
-     * Custom offset calculation using a provided function.
-     *
-     * The function receives the member's normalized position (0.0-1.0)
-     * and should return a phase offset (0.0-1.0).
-     *
-     * @param offsetFn Function mapping normalized position to phase offset
-     */
-    data class CUSTOM(val offsetFn: (Double) -> Double) : DistributionStrategy {
-        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
-            return offsetFn(member.normalizedPosition).coerceIn(0.0, 1.0)
-        }
-    }
-
-    /**
      * Position-based distribution using the member's normalized position.
      *
      * Uses the member's normalizedPosition directly as the offset,

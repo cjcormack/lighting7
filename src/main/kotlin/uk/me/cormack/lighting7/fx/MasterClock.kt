@@ -255,18 +255,4 @@ class MasterClock {
             setBpm(60_000.0 / averageIntervalMs)
         }
     }
-
-    /**
-     * Get the duration of one beat in milliseconds at current BPM.
-     */
-    fun beatDurationMs(): Long = (60_000.0 / _bpm.value).toLong()
-
-    /**
-     * Get duration for a beat division in milliseconds.
-     *
-     * @param division The beat division (e.g., BeatDivision.QUARTER for one beat)
-     * @return Duration in milliseconds
-     */
-    fun divisionDurationMs(division: Double): Long =
-        (beatDurationMs() * division).toLong()
 }
