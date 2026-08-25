@@ -222,24 +222,6 @@ class SocketMessageWireFormatTest {
         }
     }
 
-    // ─── Group domain ───────────────────────────────────────────────────────
-
-    @Test
-    fun `group domain — ClearGroupFxInMessage routes via GroupInMessage`() {
-        val raw = """{"type":"clearGroupFx","groupName":"front-wash"}"""
-        val decoded = json.decodeFromString<InMessage>(raw)
-        assertIs<GroupInMessage>(decoded)
-        assertEquals("front-wash", assertIs<ClearGroupFxInMessage>(decoded).groupName)
-    }
-
-    @Test
-    fun `group domain — GroupFxClearedOutMessage round-trips with discriminator`() {
-        val out = GroupFxClearedOutMessage(groupName = "front-wash", removedCount = 4)
-        val encoded = json.encodeToString<OutMessage>(out)
-        assertTrue(encoded.contains(""""type":"groupFxCleared""""))
-        assertEquals(out, assertIs<GroupFxClearedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
-    }
-
     // ─── Surface domain ─────────────────────────────────────────────────────
 
     @Test

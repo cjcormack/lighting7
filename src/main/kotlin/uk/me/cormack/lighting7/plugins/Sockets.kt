@@ -136,7 +136,6 @@ fun Application.configureSockets(state: State) {
                             is ChannelInMessage -> handleChannel(scope, message)
                             is ParkInMessage -> handlePark(scope, message)
                             is FxInMessage -> handleFx(scope, message)
-                            is GroupInMessage -> handleGroup(scope, message)
                             is ProjectInMessage -> handleProject(scope, message)
                             is SurfaceInMessage -> handleSurface(scope, message)
                             is ProgrammerInMessage -> handleProgrammer(scope, message)
