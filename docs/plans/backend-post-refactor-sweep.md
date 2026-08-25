@@ -345,13 +345,47 @@ the client stubs for the frontend sweep.
 `ProgrammerLayerStack.installPreview`. **Fix:** delete routes + `installPreview` (and check
 `FU-PROG-FOCUS-PREVIEW-LAYER` — Ready — doesn't want this hook before deleting).
 
-**D5. Dead endpoint/message singles** — medium / P1 / M / sonnet
+~~**D5. Dead endpoint/message singles**~~ — done, `98ec1a2` (+ lighting-react `c6ee984`). medium / P1 / M / sonnet
 Delete (or consciously keep, one line each in the commit): `POST /fx/clear`,
 `DELETE /fx/fixture/{key}`, `POST /cues/{cueId}/flatten` (+ the frontend field kept for it),
 `GET /project/{id}/machine-overrides`, WS `unparkAll`, `ping` (Ktor pingPeriod already keeps
 alive), the two no-op `addFx`/`addGroupFx` messages, and the REST/WS twin dedup:
 `POST /programmer/clear-all` vs `programmer.clearAll` (keep the WS one the client uses; align the
 reply field names), `programmer.addLayer` vs `POST /looks/{id}/toggle` (keep one).
+
+Three corrections and one addition:
+
+- **`addGroupFx` was already gone.** It died with D3 (`de2e1d5`), before D5 was written against a
+  slightly earlier tree. Nothing left to delete server-side; the frontend stub is D3's own
+  register entry, not a new one.
+- **`programmer.addLayer` vs `POST /looks/{id}/toggle` is not a twin — false positive, no action
+  taken.** `addLayer` unconditionally adds (full layer-authoring surface: propertyMask, blendMode,
+  amount, both speed-master refs); `toggle` is match-and-toggle for the busking pads (narrower
+  params, ack-only reply, no add-vs-remove ambiguity to collapse). Both are live, serve distinct
+  frontend features (`MakeLayerSheet` vs the busking pads / `LookTogglePicker`), and the
+  divergence is already deliberate, documented history
+  (`docs/plans/completed/looks-and-layers-plan.md` session 3b). `POST /templates/{id}/toggle` is
+  the same pattern a third time, for the same reason — also not a twin.
+- **`ping` needed a coordinated two-repo deletion, not a backend-only one.** The frontend's
+  `internalApi.ts` sent it as a 10s keepalive heartbeat — genuinely redundant with Ktor's own
+  `pingPeriod = 15s` (`plugins/Sockets.kt`), but a live sender, so the message type
+  (`ChannelSocket.kt`'s `PingInMessage`) and the frontend's `window.setInterval` sender were
+  deleted in the same pair of commits.
+- **The `programmer/clear-all` REST/WS reply-field misalignment was real**: REST said `cleared`,
+  WS said `entryCount` for the identical value. With the REST route gone, WS is the only survivor,
+  so `ProgrammerClearedOutMessage.entryCount` → `cleared` — a wire-format change, paired with the
+  matching frontend rename (`ProgrammerClearedIncoming.entryCount` → `cleared` in
+  `programmerWsApi.ts`, plus its two wire-format test frames). The two REST-based backend tests
+  (`ProgrammerRoutesTest.kt`, `ProgrammerIncludeRouteTest.kt`) now call `clearProgrammerCompletely`
+  directly, matching the pattern `ProgrammerLayerStackEffectsTest.kt` already used.
+
+Also deleted: `CueFlattenRouteTest.kt` (12 tests, no production caller); the frontend's
+`CueLayerDetail.id` (`cuesApi.ts`), which existed solely for flatten's single-layer mode and had
+no other reader; the "Hardening — flattening a layer" section of
+`docs/lighting-composition-model.md` and its table row in `docs/cues-engineering.md`. Backend
+suite green after `--rerun-tasks` (sealed-subclass deletions: `UnparkAllInMessage`,
+`AddFxInMessage`, `PingInMessage`); frontend `tsc --noEmit`/`npm run check` and the full test
+suites on both sides (backend + 1309 frontend tests) all green.
 
 **D6. fx-internal dead code sweep** — medium / P1 / M / sonnet
 `FxEngine.appendCueAssignments`/`removeCueAssignmentSubset`/`replaceCueAssignmentSubset`/
@@ -543,7 +577,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
-| 2 | ~~D1, D2, D3, D4~~ **done**, D5, D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
+| 2 | ~~D1–D5~~ **done**, D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, B2 | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
