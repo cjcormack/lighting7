@@ -824,6 +824,84 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         assertEquals(2, response.cue.layers.size)
     }
 
+    @Test
+    fun `MERGE matches an existing layer whose targets arrive in a different order`() = testApplication {
+        // A7 sibling: appendFxChildren's layer upsert used to key on order-sensitive target
+        // equality. Re-busking the same Look onto the same fixtures, with the client sending the
+        // target list in a different order the second time, must update the existing layer rather
+        // than append a duplicate.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val uuid = java.util.UUID.fromString(warm.uuid)
+        state.show.programmerLayerStack.add(
+            source = LayerSource.look(warm.id, uuid, warm.name),
+            targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
+        )
+        val created: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE",
+                cueStackId = createStack(client, "s"), name = "layered",
+            )
+        ).body()
+        assertEquals(1, created.cue.layers.size)
+
+        clearProgrammer()
+        state.show.programmerLayerStack.add(
+            source = LayerSource.look(warm.id, uuid, warm.name),
+            targets = listOf(CueTargetDto("fixture", "hex-2"), CueTargetDto("fixture", "hex-1")),
+        )
+        val merged: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "MERGE", cueId = created.cue.id,
+            )
+        ).body()
+
+        assertEquals(1, merged.cue.layers.size, "the reordered send updated the existing layer")
+    }
+
+    @Test
+    fun `REMOVE matches an existing layer whose targets arrive in a different order`() = testApplication {
+        // A7 sibling: the REMOVE branch's layer match used to key on order-sensitive target
+        // equality, so a reordered re-send would leave the stale cue layer behind undeleted.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
+            client, projectId, "Warm", mapOf("dimmer" to "200"),
+        )
+        val uuid = java.util.UUID.fromString(warm.uuid)
+        state.show.programmerLayerStack.add(
+            source = LayerSource.look(warm.id, uuid, warm.name),
+            targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
+        )
+        val created: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE",
+                cueStackId = createStack(client, "s"), name = "layered",
+            )
+        ).body()
+        assertEquals(1, created.cue.layers.size)
+
+        clearProgrammer()
+        state.show.programmerLayerStack.add(
+            source = LayerSource.look(warm.id, uuid, warm.name),
+            targets = listOf(CueTargetDto("fixture", "hex-2"), CueTargetDto("fixture", "hex-1")),
+        )
+        val removed: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "REMOVE", cueId = created.cue.id,
+            )
+        ).body()
+
+        assertTrue(removed.cue.layers.isEmpty(), "the reordered send still matched and removed the layer")
+    }
+
     private suspend fun HttpClient.record(request: ProgrammerRecordRequest) =
         post("/api/rest/programmer/record") {
             contentType(ContentType.Application.Json)

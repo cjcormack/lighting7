@@ -284,4 +284,23 @@ class ProgrammerLayerStackTest {
         assertNull(rig.valueOf("hex-1"))
         assertEquals(200, rig.valueOf("hex-2"), "the other pad is still on")
     }
+
+    @Test
+    fun `toggle matches the same targets in a different order`() {
+        // A7: the same fixture set re-sent in a different order (e.g. re-derived from a Set on the
+        // client) must still toggle the existing layer off, not stack a second one on top.
+        val rig = newRig()
+        val uuid = rig.look("Warm", 200)
+        val source = LayerSource.look("Warm".hashCode(), uuid, "Warm")
+        val targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2"))
+        val reordered = listOf(CueTargetDto("fixture", "hex-2"), CueTargetDto("fixture", "hex-1"))
+
+        val applied = rig.stack.toggle(source, targets)
+        assertEquals("applied", applied.first)
+        assertEquals(1, rig.store.layers.size)
+
+        val removed = rig.stack.toggle(source, reordered)
+        assertEquals("removed", removed.first)
+        assertTrue(rig.store.layers.isEmpty())
+    }
 }

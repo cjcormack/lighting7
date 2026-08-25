@@ -24,6 +24,20 @@ data class CueTargetDto(
     val target: TargetRef get() = TargetRef.of(type, key)
 }
 
+/**
+ * Same fixtures/groups, regardless of order — what "the same target set" means everywhere a layer
+ * (programmer or cue) is matched by its targets: [uk.me.cormack.lighting7.fx.ProgrammerLayerStack.toggle],
+ * and the Record REMOVE/MERGE layer matching in `programmerRecord.kt`.
+ *
+ * Sorts rather than converting to a `Set`: a plain `toSet()` comparison would call `[A, A, B]` and
+ * `[A, B, B]` equal, since both collapse to `{A, B}`. Targets aren't expected to repeat, but a
+ * sorted-list comparison costs nothing extra and stays correct if one ever does.
+ */
+fun sameTargets(a: List<CueTargetDto>, b: List<CueTargetDto>): Boolean {
+    val key = compareBy<CueTargetDto>({ it.type }, { it.key })
+    return a.sortedWith(key) == b.sortedWith(key)
+}
+
 
 /**
  * One line of a cue's ordered Look composition. Wire shape of [DaoCueLayers]; see its KDoc for

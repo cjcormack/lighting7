@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fx
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.models.sameTargets
 import uk.me.cormack.lighting7.routes.createInstanceFromPreset
 import uk.me.cormack.lighting7.routes.resolveTargetForCue
 import uk.me.cormack.lighting7.show.Fixtures
@@ -195,6 +196,9 @@ class ProgrammerLayerStack(
      * pad's own reading, and the one that lets the same Look sit on two different target sets as two
      * independently-toggleable pads. Matching on the whole [LayerSource] rather than on an id is
      * what keeps a Look and a template that happen to share an int PK from cancelling each other.
+     * The target comparison is order-insensitive ([sameTargets]): a pad re-sending its own target
+     * list in a different order — the client re-derived it from a `Set`, say — must still toggle the
+     * existing layer off rather than stacking a second, functionally-identical one on top.
      * Returns `"applied"`/`"removed"` and how many effects moved, which is the contract
      * `togglePresetOnTargets` had and the pads still read.
      *
@@ -208,7 +212,7 @@ class ProgrammerLayerStack(
         beatDivisionOverride: Double? = null,
     ): Pair<String, Int> {
         val existing = store.layers.firstOrNull {
-            it.source == source && it.targets == targets
+            it.source == source && sameTargets(it.targets, targets)
         }
         return if (existing != null) {
             "removed" to remove(existing.layerId).effectsRetracted

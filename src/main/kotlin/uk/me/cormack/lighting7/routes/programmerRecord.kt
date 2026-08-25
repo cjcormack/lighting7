@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
+import uk.me.cormack.lighting7.models.sameTargets
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
@@ -191,7 +192,7 @@ internal fun writeRecordingIntoCue(
         RecordMode.REMOVE -> {
             for (layer in recording.layers) {
                 cue.layers.toList()
-                    .filter { !it.isTimed && it.appliesSameSourceAs(layer) && it.targets == layer.targets }
+                    .filter { !it.isTimed && it.appliesSameSourceAs(layer) && sameTargets(it.targets, layer.targets) }
                     .forEach { it.delete() }
             }
             val doomed = recording.rows.map { it.matchKey() }.toSet()
@@ -307,7 +308,7 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
     val existingLayers = cue.layers.toList()
     for (layer in recording.layers) {
         val match = existingLayers.firstOrNull {
-            !it.isTimed && it.appliesSameSourceAs(layer) && it.targets == layer.targets
+            !it.isTimed && it.appliesSameSourceAs(layer) && sameTargets(it.targets, layer.targets)
         }
         if (match != null) {
             if (match.applyFrom(layer)) count++
