@@ -355,6 +355,11 @@ replacing that guarantee with a bounded one. The cook step is where it would lan
 (done differently: the positional form was deleted, not converted), so there is no longer anything
 to sequence this behind.
 
+`ProgrammerRecordLookResponse.refsFlattened` — a permanently-0 wire field kept alive on the theory
+that this item would want the same count again — was removed in `1788d7d` rather than carried
+speculatively. If this item lands, it needs a fresh field for "how many `ref:` rows did this record
+flatten", not a resurrection of the old one; the removal commit shows the shape it had.
+
 ### `FU-LOOK-ELEMENT-ROWS`
 
 **A Look's element row composes nowhere** · Ready · Looks-and-layers correction #10, 2026-08-22
