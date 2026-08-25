@@ -706,6 +706,26 @@ class FxEngine(
         }
     }
 
+    /**
+     * Drop [cueId]'s within-cue stomp suppression without touching its Layer 4 rows or fade
+     * weight.
+     *
+     * A timed layer's fire can leave a `cueStompSuppression` entry live after the cue's *effects*
+     * are gone — [CueTriggerManager.deactivateTriggersForCue] cancels the firing jobs but has no
+     * other reason to touch [FxEngine], and every call site that also calls [removeCueAssignments]
+     * for the same cue already clears the entry as a side effect of that call. This exists for the
+     * cue-trigger side to close that gap itself rather than depending on every current and future
+     * caller to remember the pairing. Safe to call even while the cue's rows are still fading out
+     * in a crossfade: [isLayerStomped] only suppresses *live effects* tagged with this cue's layer
+     * ids, and those are already removed (via [removeEffectsForCueStack]) before a crossfade starts
+     * — the suppression entry has nothing left to affect by the time this runs.
+     */
+    fun clearCueStompSuppression(cueId: Int) {
+        synchronized(cueAssignmentsLock) {
+            if (cueStompSuppression.remove(cueId) != null) rebuildStompFlatLocked()
+        }
+    }
+
     /** Drop every cue's Layer 4 contribution — used by [stop] / [clearAllEffects] callers. */
     fun clearAllCueAssignments() {
         synchronized(cueAssignmentsLock) {

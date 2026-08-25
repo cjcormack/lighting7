@@ -92,7 +92,10 @@ class CueTriggerManager(
         timedAdHocEffects: List<CueAdHocEffectDto>,
         scope: CoroutineScope,
     ) {
-        val timedLayers = cueData.layers.filter { it.enabled && it.isTimed }
+        // Matches `CueComposer.cook`'s own filter (`enabled && amount > 0.0`): an amount-0 layer
+        // contributes nothing when it fires, so scheduling it would just spend a timer on a
+        // no-op re-cook.
+        val timedLayers = cueData.layers.filter { it.enabled && it.amount > 0.0 && it.isTimed }
         if (timedLayers.isEmpty() && timedAdHocEffects.isEmpty()) return
 
         cueStackId?.let { cueToStack[cueId] = it }
@@ -249,6 +252,14 @@ class CueTriggerManager(
 
         firedTimedLooks.remove(cueId)
         cueToStack.remove(cueId)
+
+        // A fired timed layer's most recent `replaceCueAssignments` call may have left this cue's
+        // within-cue stomp suppression live in the engine. Every current caller also happens to
+        // call `fxEngine.removeCueAssignments` for the same cue (immediately, or at end-of-crossfade),
+        // which clears it as a side effect — but that pairing isn't enforced anywhere, so clear it
+        // here too rather than depend on it. See `FxEngine.clearCueStompSuppression` for why this is
+        // safe mid-crossfade.
+        fxEngine.clearCueStompSuppression(cueId)
     }
 
     /**
