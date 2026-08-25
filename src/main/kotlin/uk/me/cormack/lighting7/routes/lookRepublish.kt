@@ -23,13 +23,6 @@ private val logger = LoggerFactory.getLogger("lookRepublish")
 internal data class LookRepublishOutcome(
     /** Programmer keys whose resolved value changed and were re-transmitted. */
     val programmerKeysRefreshed: Int,
-    /**
-     * Always 0 since the `ref:` grammar retired, and kept as a field rather than removed because it
-     * is on the wire (`ProgrammerLookUpdateResult`). A layer that stops covering a key loses its
-     * slot on the recook instead, which is a value change rather than a partial failure — there is
-     * no longer a state where the programmer holds a reference the Look cannot answer.
-     */
-    val programmerKeysUncovered: Int,
     val cuesRepublished: List<Int>,
     val activeCuesScanned: Int,
 )
@@ -141,7 +134,6 @@ private fun republishForSourceEdit(
     )
     return LookRepublishOutcome(
         programmerKeysRefreshed = programmerKeys.size,
-        programmerKeysUncovered = 0,
         cuesRepublished = rebuilt.keys.toList(),
         activeCuesScanned = activeCueIds.size,
     )
