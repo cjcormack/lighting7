@@ -247,14 +247,6 @@ internal data class ProgrammerRecordLookResponse(
     val rowsWritten: Int,
     val rowsRemoved: Int,
     val groupRowsEmitted: Int,
-    /**
-     * Always 0. Counted programmer entries that were themselves `ref:{uuid}` references and so had
-     * to be flattened, since Looks don't nest. The `ref:` grammar retired in session 4 and the
-     * programmer can no longer hold one; the field stays on the wire so a client reading it doesn't
-     * break, and because "how many references did this record flatten?" is a question a future
-     * nested-Look feature (`FU-LOOK-NESTED`) would ask again.
-     */
-    val refsFlattened: Int,
     val skipped: List<ProgrammerSkipDto>,
     /** Programmer-band effects folded into the Look, and so removed from the band. */
     val effectsWritten: Int = 0,
@@ -359,7 +351,6 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
                 rowsWritten = outcome.written,
                 rowsRemoved = outcome.removed,
                 groupRowsEmitted = collapsed.groupRows,
-                refsFlattened = 0,
                 skipped = skips.map { it.toDto() },
                 effectsWritten = bandEffects.size,
                 programmerKeysRefreshed = republish.programmerKeysRefreshed,
