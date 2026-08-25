@@ -126,8 +126,11 @@ internal fun buildUpdateChecklist(
     }
 
     val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.propertyName) }
-    val cueLayerState = engine.layerResolver.currentCueLayerState
-    val sources = engine.underlyingSources(byKey.keys)
+    // One snapshot for both the cueValue reads and the attribution, so a cue apply landing
+    // mid-request cannot pair one cue's value with another cue's name in the checklist.
+    val cueLayer = engine.layerResolver.current
+    val cueLayerState = cueLayer.state
+    val sources = engine.underlyingSources(byKey.keys, cueLayer)
 
     val unattributed = ArrayList<ProgrammerChecklistKeyDto>()
     val byCue = LinkedHashMap<Int, MutableList<ProgrammerChecklistKeyDto>>()

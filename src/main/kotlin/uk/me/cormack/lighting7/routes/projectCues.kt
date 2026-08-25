@@ -297,6 +297,13 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 // isn't a STANDARD cue of the stack, but leaving the entry makes
                 // `standbyCueId` report a cue that no longer exists.
                 state.show.cueStackManager.clearStandbyForCue(state, resource.cueId)
+                // And its live output. Nothing else ever will: every republish path rebuilds
+                // from the DB row that no longer exists (and skips it with a warning), so a
+                // live deleted cue would otherwise keep painting its old Layer 4 rows and
+                // effects until the whole stack was released.
+                state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
+                state.show.fxEngine.removeEffectsForCue(resource.cueId)
+                state.show.fxEngine.removeCueAssignments(resource.cueId)
                 state.show.fixtures.cueListChanged()
                 state.show.fixtures.cueStackListChanged()
                 if (result > 0) state.show.fixtures.promptBookChanged()

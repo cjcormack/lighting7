@@ -32,41 +32,64 @@ class LayerResolver(
     private val programmer: ProgrammerStore,
 ) {
     /**
-     * Current Layer 4 composition output, indexed by (targetKey, propertyName). Rebuilt when
-     * cues change active state (Phase 1 wires this; Phase 0 keeps it empty).
+     * The four Layer 4 maps, published as ONE volatile reference. They must never be
+     * separate fields: readers are lock-free and consume them as a tuple — the tick loops,
+     * provenance ([FxEngine.computeProvenance]), and the Update checklist
+     * ([FxEngine.underlyingSources]) — and a read straddling an [applyAssignments] swap of
+     * separate fields could find a key in the new [state] with no entry in the old
+     * [winners]: "a cue owns this" naming no cue, or a checklist pairing one cue's value
+     * with another's attribution.
      */
-    @Volatile
-    private var cueLayerState: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue> = emptyMap()
+    class CueLayerSnapshot internal constructor(
+        /**
+         * Layer 4 composition output, indexed by (targetKey, propertyName). Rebuilt when
+         * cues change active state.
+         */
+        val state: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
+        /**
+         * Hot-path index keyed by fixtureKey → propertyName → value. Lets the per-tick reset
+         * path look up a Layer 4 contribution without allocating a compound
+         * `CueAssignmentResolver.Key` per call.
+         */
+        val index: Map<String, Map<String, CueAssignmentResolver.PropertyValue>>,
+        /**
+         * Winning contributor per composed key — provenance only, never on the hot path.
+         * Approximation: the highest-(priority, fadeWeight) contributor, which matches the
+         * LTP winner exactly and names the dominant contributor under HTP/crossfade blends.
+         */
+        val winners: Map<CueAssignmentResolver.Key, Int>,
+        /**
+         * The winning *layer* per composed key, for the keys a Look layer produced. Same
+         * selection as [winners] — it is the same winning assignment, read for a different
+         * field — so the two can never disagree about which contributor won. Keys whose
+         * winner was a cue's local row are absent rather than null-valued: absence already
+         * means "no layer", and a null value would make "not attributable" and "attributable
+         * to nothing" two spellings of one thing.
+         */
+        val layerWinners: Map<CueAssignmentResolver.Key, CookWinner>,
+    ) {
+        internal companion object {
+            val EMPTY = CueLayerSnapshot(emptyMap(), emptyMap(), emptyMap(), emptyMap())
+        }
+    }
 
-    // Hot-path index keyed by fixtureKey → propertyName → value. Lets the per-tick reset path
-    // look up a Layer 4 contribution without allocating a compound
-    // `CueAssignmentResolver.Key` per call. Rebuilt atomically alongside `cueLayerState`
-    // in [applyAssignments].
     @Volatile
-    private var cueLayerIndex: Map<String, Map<String, CueAssignmentResolver.PropertyValue>> = emptyMap()
-
-    // Winning contributor per composed key — provenance only, never on the hot path.
-    // Approximation: the highest-(priority, fadeWeight) contributor, which matches the LTP
-    // winner exactly and names the dominant contributor under HTP/crossfade blends.
-    @Volatile
-    private var cueLayerWinners: Map<CueAssignmentResolver.Key, Int> = emptyMap()
-
-    // The winning *layer* per composed key, for the keys a Look layer produced. Same selection as
-    // [cueLayerWinners] — it is the same winning assignment, read for a different field — so the
-    // two can never disagree about which contributor won. Keys whose winner was a cue's local row
-    // are absent rather than null-valued: absence already means "no layer", and a null value would
-    // make "not attributable" and "attributable to nothing" two spellings of one thing.
-    @Volatile
-    private var cueLayerLayerWinners: Map<CueAssignmentResolver.Key, CookWinner> = emptyMap()
+    private var cueLayer: CueLayerSnapshot = CueLayerSnapshot.EMPTY
 
     /** Replace the Layer 4 state from the current set of assignments. Called on cue apply. */
     fun applyAssignments(assignments: List<CueAssignmentResolver.Assignment>) {
-        val composed = if (assignments.isEmpty()) emptyMap() else cueAssignmentResolver.resolve(assignments)
-        cueLayerState = composed
-        cueLayerIndex = buildIndex(composed)
+        if (assignments.isEmpty()) {
+            cueLayer = CueLayerSnapshot.EMPTY
+            return
+        }
+        val composed = cueAssignmentResolver.resolve(assignments)
         val winners = selectWinners(assignments)
-        cueLayerWinners = winners.mapValues { (_, a) -> a.cueId }
-        cueLayerLayerWinners = winners.mapNotNull { (key, a) -> a.layerWinner?.let { key to it } }.toMap()
+        cueLayer = CueLayerSnapshot(
+            state = composed,
+            index = buildIndex(composed),
+            winners = winners.mapValues { (_, a) -> a.cueId },
+            layerWinners = winners.mapNotNull { (key, a) -> a.layerWinner?.let { key to it } }.toMap(),
+        )
     }
 
     private fun selectWinners(
@@ -106,19 +129,24 @@ class LayerResolver(
 
     /** Clear the Layer 4 state — equivalent to "no cue contributing". */
     fun clearAssignments() {
-        cueLayerState = emptyMap()
-        cueLayerIndex = emptyMap()
-        cueLayerWinners = emptyMap()
-        cueLayerLayerWinners = emptyMap()
+        cueLayer = CueLayerSnapshot.EMPTY
     }
 
-    /** Current snapshot; exposed for tests and diagnostics. */
+    /**
+     * The current snapshot, as one reference. A caller reading more than one of the maps —
+     * or pairing them with [FxEngine.underlyingSources] — must take this once rather than
+     * using the single-map accessors below, or its reads can straddle a swap.
+     */
+    val current: CueLayerSnapshot
+        get() = cueLayer
+
+    /** Current composition output; exposed for tests and diagnostics. */
     val currentCueLayerState: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>
-        get() = cueLayerState
+        get() = cueLayer.state
 
     /** Winning contributor cueId per composed key — provenance / diagnostics. */
     val currentCueLayerWinners: Map<CueAssignmentResolver.Key, Int>
-        get() = cueLayerWinners
+        get() = cueLayer.winners
 
     /**
      * Winning **layer** per composed key, for keys a Look layer produced — provenance.
@@ -126,7 +154,7 @@ class LayerResolver(
      * A key is absent when a cue's local row won it. See [CookWinner].
      */
     val currentCueLayerLayerWinners: Map<CueAssignmentResolver.Key, CookWinner>
-        get() = cueLayerLayerWinners
+        get() = cueLayer.layerWinners
 
     /**
      * Resolve the fallback [FxOutput] for the given target + fixture. Returned value is what
@@ -138,7 +166,7 @@ class LayerResolver(
         // partially-covering programmer contribution (one sideband channel of a colour)
         // needs the below value for the components it doesn't own.
         val below = run {
-            val idx = cueLayerIndex
+            val idx = cueLayer.index
             val cue = if (idx.isNotEmpty()) idx[fixtureKey]?.get(target.propertyName) else null
             cue?.asFxOutputFor(target) ?: target.baselineFallback(fixture)
         }

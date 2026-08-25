@@ -42,10 +42,19 @@ class TypedParams(
     private val booleanCache = ConcurrentHashMap<String, Boolean>()
     private val easingCurveCache = ConcurrentHashMap<String, EasingCurve>()
 
-    // Colour caches with colour-source version tracking
-    @Volatile private var cachedColourSourceVersion = -1L
-    private val colourCache = ConcurrentHashMap<String, ExtendedColour>()
-    private val colourListCache = ConcurrentHashMap<String, List<ExtendedColour>>()
+    /**
+     * The colour caches and the source version they resolve against, published as ONE
+     * volatile reference. As separate fields (clear one cache, clear the other, stamp the
+     * version — three independent mutations), a reader racing the invalidation could observe
+     * the new version already stamped over entries resolved against the old source, and
+     * serve them until the next template edit.
+     */
+    private class ColourCaches(val sourceVersion: Long) {
+        val colours = ConcurrentHashMap<String, ExtendedColour>()
+        val colourLists = ConcurrentHashMap<String, List<ExtendedColour>>()
+    }
+
+    @Volatile private var colourCaches = ColourCaches(sourceVersion = -1L)
 
     /**
      * Get the raw string value for a parameter, falling back to the schema default.
@@ -100,8 +109,7 @@ class TypedParams(
      * an intentional blackout, and the refusal has already been logged with its reason.
      */
     fun colour(name: String): ExtendedColour {
-        invalidateColourCacheIfStale()
-        return colourCache.getOrPut(name) {
+        return currentColourCaches().colours.getOrPut(name) {
             val value = raw(name)
             if (value.isBlank()) return ExtendedColour.BLACK
             resolveColourSource?.invoke(value) ?: parseExtendedColour(value)
@@ -117,8 +125,7 @@ class TypedParams(
      * of a colour cycle reads as a deliberate flash.
      */
     fun colourList(name: String): List<ExtendedColour> {
-        invalidateColourCacheIfStale()
-        return colourListCache.getOrPut(name) {
+        return currentColourCaches().colourLists.getOrPut(name) {
             val value = raw(name)
             if (value.isBlank()) return emptyList()
             value.split(",").mapNotNull { str ->
@@ -142,12 +149,19 @@ class TypedParams(
         }
     }
 
-    private fun invalidateColourCacheIfStale() {
+    /**
+     * The caches for the source's current version, replacing them wholesale when the version
+     * moved. Racing callers may each build a fresh [ColourCaches]; every published pair is
+     * self-consistent, and one that lost the race carries the same version, so at worst a
+     * resolve is repeated — never served from the wrong version.
+     */
+    private fun currentColourCaches(): ColourCaches {
         val currentVersion = colourSourceVersion?.invoke() ?: 0L
-        if (currentVersion != cachedColourSourceVersion) {
-            colourCache.clear()
-            colourListCache.clear()
-            cachedColourSourceVersion = currentVersion
+        var caches = colourCaches
+        if (caches.sourceVersion != currentVersion) {
+            caches = ColourCaches(currentVersion)
+            colourCaches = caches
         }
+        return caches
     }
 }

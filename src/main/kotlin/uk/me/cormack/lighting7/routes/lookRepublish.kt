@@ -19,12 +19,20 @@ import java.util.UUID
 
 private val logger = LoggerFactory.getLogger("lookRepublish")
 
+/**
+ * Upper bound on the stable-set re-scan in [republishForSourceEdit]. Two passes settle every
+ * benign case (pass 1 does the work, pass 2 sees no new active cues and stops); the slack
+ * exists only for cues registering mid-republish, and a bound keeps a pathological GO storm
+ * from pinning the request.
+ */
+private const val MAX_ACTIVE_CUE_SCANS = 3
+
 /** What a Look edit moved. Reported back so a route can tell the operator. */
 internal data class LookRepublishOutcome(
     /** Programmer keys whose resolved value changed and were re-transmitted. */
     val programmerKeysRefreshed: Int,
+    /** The cues whose Layer 4 rows were actually replaced — not merely attempted. */
     val cuesRepublished: List<Int>,
-    val activeCuesScanned: Int,
 )
 
 /**
@@ -37,7 +45,8 @@ internal data class LookRepublishOutcome(
  *
  * 1. Invalidate the registry, before anything reads through it.
  * 2. Re-cook the programmer's layer stack — *without publishing yet*.
- * 3. Rebuild and replace the affected cues' rows in one [uk.me.cormack.lighting7.fx.FxEngine.replaceCueAssignments].
+ * 3. Rebuild and replace the affected cues' rows via [uk.me.cormack.lighting7.fx.FxEngine.replaceCueAssignments],
+ *    one call per scan pass — normally exactly one.
  * 4. Publish the programmer keys, then emit provenance.
  *
  * Step 2 has to precede step 3 because [uk.me.cormack.lighting7.fx.FxEngine.publishCueLayerToControllers]
@@ -101,21 +110,44 @@ private fun republishForSourceEdit(
     //    corrected a frame later — a visible flicker on the very fixtures being edited.
     val layerKeys = state.show.programmerLayerStack.recookIfReferences(sourceUuid)
 
-    // 3. Rebuild the live cues that depend on this record, then one republish for all of them.
-    val activeCueIds = engine.activeCueAssignmentIds()
-    val referencingCues = if (activeCueIds.isEmpty()) emptySet() else referencing(activeCueIds)
-    val rebuilt = LinkedHashMap<Int, List<CueAssignmentResolver.Assignment>>()
-    val rebuiltStomp = LinkedHashMap<Int, LayerStompSuppression>()
-    for (cueId in referencingCues) {
-        val cooked = rebuildCueLayerRows(state, cueId) ?: continue
-        rebuilt[cueId] = cooked.rows
-        // Carried per cue, and *always* — including when it is empty. An edit that deleted the rows
-        // a stomping layer used to assert must shrink its suppression set too, and
-        // `replaceCueAssignments` reads an absent entry as "this cook found no stomper".
-        rebuiltStomp[cueId] = cooked.stompSuppression
+    // 3. Rebuild the live cues that depend on this record, then one republish per scan pass.
+    //    The scan loops until the active set is stable: a cue fired concurrently with this edit
+    //    can cook pre-edit content *before* step 1's invalidate yet register its assignments
+    //    *after* a single scan — neither republished here nor cooked fresh, leaving the pre-edit
+    //    Look on stage until re-fired. Re-scanning catches such a cue once it registers. (A fire
+    //    that outlives every pass can still slip through; closing that fully needs fire-vs-
+    //    republish serialisation, which no path has today.)
+    val republished = LinkedHashSet<Int>()
+    val scanned = HashSet<Int>()
+    var pass = 0
+    while (pass++ < MAX_ACTIVE_CUE_SCANS) {
+        val newlyActive = engine.activeCueAssignmentIds() - scanned
+        if (newlyActive.isEmpty()) break
+        scanned += newlyActive
+        val referencingCues = referencing(newlyActive)
+        if (referencingCues.isEmpty()) continue
+        val rebuilt = LinkedHashMap<Int, List<CueAssignmentResolver.Assignment>>()
+        val rebuiltStomp = LinkedHashMap<Int, LayerStompSuppression>()
+        for (cueId in referencingCues) {
+            val cooked = rebuildCueLayerRows(state, cueId)
+            if (cooked == null) {
+                // The cue's row vanished between the referencing query and the rebuild. Nothing
+                // to republish for it, but never silently: its live Layer 4 rows (if any) are
+                // the delete path's to tear down, and this log is the only trace if they leak.
+                logger.warn(
+                    "{} {} republish: cue {} disappeared before its rows could be rebuilt; skipped",
+                    kind, sourceUuid, cueId,
+                )
+                continue
+            }
+            rebuilt[cueId] = cooked.rows
+            // Carried per cue, and *always* — including when it is empty. An edit that deleted the
+            // rows a stomping layer used to assert must shrink its suppression set too, and
+            // `replaceCueAssignments` reads an absent entry as "this cook found no stomper".
+            rebuiltStomp[cueId] = cooked.stompSuppression
+        }
+        if (rebuilt.isNotEmpty()) republished += engine.replaceCueAssignments(rebuilt, rebuiltStomp)
     }
-    val republished =
-        if (rebuilt.isEmpty()) 0 else engine.replaceCueAssignments(rebuilt, rebuiltStomp)
 
     // 4. Now the programmer's own keys, then tell the clients to re-read. republishProgrammerKeys
     //    emits provenance itself, but only when it has keys — so cover the empty case here rather
@@ -130,12 +162,11 @@ private fun republishForSourceEdit(
 
     logger.info(
         "{} {} edited: {} programmer layer key(s) refreshed, {} of {} active cue(s) republished",
-        kind, sourceUuid, programmerKeys.size, republished, activeCueIds.size,
+        kind, sourceUuid, programmerKeys.size, republished.size, scanned.size,
     )
     return LookRepublishOutcome(
         programmerKeysRefreshed = programmerKeys.size,
-        cuesRepublished = rebuilt.keys.toList(),
-        activeCuesScanned = activeCueIds.size,
+        cuesRepublished = republished.toList(),
     )
 }
 

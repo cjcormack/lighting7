@@ -47,30 +47,50 @@ data class TemplateSnapshot(
  * intents resolved per head by [TemplateResolver] at cook time — so there is nothing patch-shaped
  * in the cache and a repatch cannot make an entry stale. Only a template's own edit can.
  *
- * The version re-check in [snapshot] is the same guard [LookRegistry.expanded] carries, and for the
- * same reason: an invalidation landing while a load is in flight has no entry to evict, so a racing
- * load would insert its pre-edit snapshot *after* the invalidation and serve it indefinitely — a
- * save that reported success while the rig kept showing the old value.
+ * The generation re-check in [snapshot] is the same guard [LookRegistry.expanded] carries, and for
+ * the same reason: an invalidation landing while a load is in flight has no entry to evict, so a
+ * racing load would insert its pre-edit snapshot *after* the invalidation and serve it indefinitely
+ * — a save that reported success while the rig kept showing the old value.
  */
 class TemplateRegistry(
     private val loader: (UUID) -> TemplateSnapshot?,
 ) {
     private val logger = LoggerFactory.getLogger(TemplateRegistry::class.java)
-    private val cache = ConcurrentHashMap<UUID, TemplateSnapshot>()
+
+    /**
+     * The cache and the version it belongs to, published as ONE volatile reference. They
+     * must never be separate fields: `TypedParams` keys every running effect's colour cache
+     * on [version], and with a separate version bumped before the eviction, a tick landing
+     * between the two writes read the *new* version paired with the *pre-edit* entry — and
+     * re-seeded the stale colour under the new version, serving it until the template was
+     * edited again. One reference makes "observed version V" imply "observed the cache
+     * state labelled V".
+     */
+    private class Generation(val version: Long) {
+        val cache = ConcurrentHashMap<UUID, TemplateSnapshot>()
+    }
 
     @Volatile
-    var version: Long = 0L
-        private set
+    private var generation = Generation(0L)
+
+    // Serialises invalidations (each builds the next generation from the current one);
+    // reads never take it.
+    private val invalidateLock = Any()
+
+    val version: Long get() = generation.version
 
     fun snapshot(templateUuid: UUID): TemplateSnapshot? {
-        cache[templateUuid]?.let { return it }
         repeat(MAX_FILL_ATTEMPTS) {
-            val versionBefore = version
+            val gen = generation
+            gen.cache[templateUuid]?.let { return it }
             val snapshot = loader(templateUuid) ?: return null
-            if (version == versionBefore) {
-                return cache.putIfAbsent(templateUuid, snapshot) ?: snapshot
+            // The re-check is the in-flight-load guard from [LookRegistry.expanded]: an
+            // invalidation landing while a load is in flight swaps the generation itself, so
+            // a pre-edit snapshot inserted after this check goes into the superseded map,
+            // unreachable from the new generation — it can never be served indefinitely.
+            if (generation === gen) {
+                return gen.cache.putIfAbsent(templateUuid, snapshot) ?: snapshot
             }
-            cache[templateUuid]?.let { return it }
         }
         // Persistently contended — serve a fresh read without caching it rather than risk pinning
         // a stale one.
@@ -78,18 +98,21 @@ class TemplateRegistry(
     }
 
     fun invalidate(templateUuid: UUID) {
-        // Bump before evicting — see the class doc. Reversing these two lines reopens the
-        // permanently-stale-cache race.
-        version++
-        cache.remove(templateUuid)
+        synchronized(invalidateLock) {
+            val old = generation
+            val next = Generation(old.version + 1)
+            for ((uuid, snapshot) in old.cache) {
+                if (uuid != templateUuid) next.cache[uuid] = snapshot
+            }
+            generation = next
+        }
     }
 
     fun invalidateAll() {
-        version++
-        if (cache.isNotEmpty()) {
-            cache.clear()
-            logger.debug("template cache cleared")
+        synchronized(invalidateLock) {
+            generation = Generation(generation.version + 1)
         }
+        logger.debug("template cache cleared")
     }
 
     companion object {

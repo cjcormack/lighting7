@@ -97,11 +97,26 @@ class FxEngine(
     @Volatile private var lastTickMs: Long = 0L
     @Volatile private var lastWallClockTickMs: Long = 0L
 
-    // Per-tick programmer suppression snapshot, cached on the store's epoch so the 50 Hz
-    // loops rebuild it only when the programmer actually changed. Both tick loops may race
-    // the rebuild; they compute identical values, so last-write-wins is benign.
-    @Volatile private var suppressionCache: Map<String, Set<String>> = emptyMap()
-    @Volatile private var suppressionCacheEpoch: Long = -1L
+    /**
+     * The suppression map and the coverage epoch it was built from, published as ONE
+     * volatile reference — the same single-reference publication [SpeedMasterBank] uses for
+     * its internal slot bindings. As two fields, racing tick loops could pair an older map
+     * with a newer epoch and serve stale suppression until the next programmer mutation.
+     */
+    private class SuppressionSnapshot(
+        val byFixture: Map<String, Set<String>>,
+        val epoch: Long,
+    )
+
+    // Per-tick programmer suppression snapshot, cached on the store's coverage epoch so the
+    // 50 Hz loops rebuild it only when the set of covered keys changes — a busk rewriting
+    // already-held keys bumps [ProgrammerStore.epoch] per write but never this. The coverage
+    // epoch is bumped *after* the mutation it reports, so a rebuild that observed the new
+    // epoch also observes the write. Both tick loops may still race the rebuild; each
+    // publishes a self-consistent (map, epoch) pair, and a pair that lost the race carries
+    // the older epoch with it, so the next tick detects the mismatch and rebuilds — one
+    // stale tick at worst, never a latch.
+    @Volatile private var suppressionCache = SuppressionSnapshot(emptyMap(), epoch = -1L)
 
     /**
      * fixtureKey → property names with an active programmer entry, or empty when blind is
@@ -111,12 +126,13 @@ class FxEngine(
      */
     private fun programmerSuppression(): Map<String, Set<String>> {
         if (programmerStore.blind) return emptyMap()
-        val epoch = programmerStore.epoch
-        if (epoch != suppressionCacheEpoch) {
-            suppressionCache = programmerStore.activePropertiesByFixture()
-            suppressionCacheEpoch = epoch
+        val epoch = programmerStore.coverageEpoch
+        var cached = suppressionCache
+        if (epoch != cached.epoch) {
+            cached = SuppressionSnapshot(programmerStore.activePropertiesByFixture(), epoch)
+            suppressionCache = cached
         }
-        return suppressionCache
+        return cached.byFixture
     }
 
     /**
@@ -346,9 +362,12 @@ class FxEngine(
 
         val effectByKey = highestPriorityEffectByKey()
 
-        val cueLayerState = layerResolver.currentCueLayerState
-        val cueLayerWinners = layerResolver.currentCueLayerWinners
-        val cueLayerLayerWinners = layerResolver.currentCueLayerLayerWinners
+        // One snapshot for all three maps — this runs outside [cueAssignmentsLock], so
+        // reading them as separate fields could straddle a concurrent cue apply.
+        val cueLayer = layerResolver.current
+        val cueLayerState = cueLayer.state
+        val cueLayerWinners = cueLayer.winners
+        val cueLayerLayerWinners = cueLayer.layerWinners
 
         val keys = HashSet<CueAssignmentResolver.Key>(programmerKeys)
         keys.addAll(cueLayerState.keys)
@@ -457,9 +476,18 @@ class FxEngine(
         val viaEffectId: Long?,
     )
 
-    fun underlyingSources(keys: Collection<CueAssignmentResolver.Key>): List<UnderlyingSource> {
+    fun underlyingSources(
+        keys: Collection<CueAssignmentResolver.Key>,
+        /**
+         * The Layer 4 snapshot to attribute against. A caller that also reads the cue layer
+         * itself (the Update checklist pairs `state` values with this attribution) must pass
+         * the one snapshot it read, or a cue apply landing between the two reads pairs one
+         * cue's value with another's attribution.
+         */
+        cueLayer: LayerResolver.CueLayerSnapshot = layerResolver.current,
+    ): List<UnderlyingSource> {
         if (keys.isEmpty()) return emptyList()
-        val cueLayerWinners = layerResolver.currentCueLayerWinners
+        val cueLayerWinners = cueLayer.winners
         // Band effects are excluded from the *scan*, not filtered from its result. Filtering
         // afterwards would lose the cue underneath: band effects always outrank cue-derived
         // priorities, so a single top-priority-per-key map would only ever hold the band one,
@@ -587,7 +615,8 @@ class FxEngine(
     /**
      * Replace several live cues' Layer 4 rows in one locked mutation with a single republish —
      * the [repriorityCues] shape, for callers that rebuilt rows rather than re-prioritised them.
-     * Returns the number of cues actually replaced.
+     * Returns the cues actually replaced — a subset of [updates]' keys, so a caller reporting
+     * "these cues moved" must report this set, not what it attempted.
      *
      * **Crossfade weights are deliberately left alone**, and that is the whole reason this exists
      * rather than a loop over [setCueAssignments]. That function's `weight` defaults to 1.0 and
@@ -607,9 +636,9 @@ class FxEngine(
          * stomping layer.
          */
         stompSuppression: Map<Int, LayerStompSuppression> = emptyMap(),
-    ): Int {
-        if (updates.isEmpty()) return 0
-        var replaced = 0
+    ): Set<Int> {
+        if (updates.isEmpty()) return emptySet()
+        val replaced = LinkedHashSet<Int>()
         synchronized(cueAssignmentsLock) {
             var stompChanged = false
             for ((cueId, rows) in updates) {
@@ -624,10 +653,10 @@ class FxEngine(
                     val stomp = stompSuppression[cueId] ?: emptyMap()
                     if (setCueStompEntryLocked(cueId, stomp)) stompChanged = true
                 }
-                replaced++
+                replaced.add(cueId)
             }
             if (stompChanged) rebuildStompFlatLocked()
-            if (replaced > 0) republishCueAssignments()
+            if (replaced.isNotEmpty()) republishCueAssignments()
         }
         return replaced
     }

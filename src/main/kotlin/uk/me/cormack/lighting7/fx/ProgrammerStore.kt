@@ -383,12 +383,35 @@ class ProgrammerStore {
 
     /**
      * Monotonic mutation counter. Incremented on every put/clear (property or sideband) and
-     * used to stamp [Slot.seq] on writes. Per-tick consumers cache derived snapshots keyed
-     * on this and rebuild only on change.
+     * used to stamp [Slot.seq] on writes. Because a put claims its seq *before* installing
+     * the slot, a reader can observe a new epoch ahead of the write it numbers — so this is
+     * a change signal, not a happens-before edge. A consumer that derives a snapshot from
+     * the map contents must key it on [coverageEpoch] (bumped after the mutation) or
+     * tolerate a stale read.
      */
     val epoch: Long get() = epochCounter.get()
 
     private fun bumpEpoch(): Long = epochCounter.incrementAndGet()
+
+    private val coverageCounter = AtomicLong(0)
+
+    /**
+     * Monotonic counter of **coverage** changes — a (fixtureKey, propertyName) entry gaining
+     * its first slot or losing its last. The per-tick effect-suppression snapshot
+     * (`FxEngine.programmerSuppression`) caches [activePropertiesByFixture] on this rather
+     * than on [epoch]: coverage is all that map reports, and keying on [epoch] made every
+     * busk-time fader write rebuild it in both 50 Hz loops for a byte-identical result.
+     *
+     * Always bumped **after** the map mutation it reports, never before. The bump is a
+     * volatile write, so a reader that observes the new count also observes the mutation.
+     * Bumping before installing would let a tick pair a pre-write map with the post-write
+     * count and serve stale suppression until the next coverage change.
+     */
+    val coverageEpoch: Long get() = coverageCounter.get()
+
+    private fun bumpCoverage() {
+        coverageCounter.incrementAndGet()
+    }
 
     // ── Property entries ────────────────────────────────────────────────────
 
@@ -420,7 +443,12 @@ class ProgrammerStore {
     ) {
         val slot = Slot(owner, value, touched, sourceGroup, seq = bumpEpoch())
         val byProperty = properties.computeIfAbsent(fixtureKey) { ConcurrentHashMap() }
-        byProperty.compute(propertyName) { _, holder -> withSlot(holder, slot) }
+        var covered = false
+        byProperty.compute(propertyName) { _, holder ->
+            covered = holder != null
+            withSlot(holder, slot)
+        }
+        if (!covered) bumpCoverage()
     }
 
     /** One key's share of a cooked layer stack, ready for [putLayerSlots]. */
@@ -451,7 +479,8 @@ class ProgrammerStore {
      * baseline underneath show through for one publish on every key that survives, which on an
      * effect-covered key is a visible flash on each Look edit.
      *
-     * **One epoch bump for the whole swap.** `epoch` gates the per-tick effect-suppression snapshot
+     * **One epoch bump for the whole swap** (and at most one [coverageEpoch] bump, after every
+     * mutation). [coverageEpoch] gates the per-tick effect-suppression snapshot
      * (`FxEngine.programmerSuppression`); bumping per key would make it rebuild once per key in the
      * middle of a half-applied stack.
      *
@@ -467,6 +496,7 @@ class ProgrammerStore {
     fun putLayerSlots(writes: List<LayerSlotWrite>): Set<CueAssignmentResolver.Key> {
         val moved = HashSet<CueAssignmentResolver.Key>()
         val named = HashSet<Pair<String, String>>(writes.size)
+        var coverageChanged = false
 
         for (write in writes) {
             named.add(write.fixtureKey to write.propertyName)
@@ -480,6 +510,7 @@ class ProgrammerStore {
             val byProperty = properties.computeIfAbsent(write.fixtureKey) { ConcurrentHashMap() }
             var before: ProgrammerValue? = null
             byProperty.compute(write.propertyName) { _, holder ->
+                if (holder == null) coverageChanged = true
                 before = holder?.top?.value
                 withSlot(holder, slot)
             }
@@ -495,7 +526,9 @@ class ProgrammerStore {
                 var before: ProgrammerValue? = null
                 byProperty.computeIfPresent(propertyName) { _, holder ->
                     before = holder.top.value
-                    withoutOwner(holder, ProgrammerOwner.LAYERS)
+                    val next = withoutOwner(holder, ProgrammerOwner.LAYERS)
+                    if (next == null) coverageChanged = true
+                    next
                 }
                 val after = byProperty[propertyName]?.top?.value
                 if (before != null && before?.resolved != after?.resolved) {
@@ -505,6 +538,7 @@ class ProgrammerStore {
         }
 
         bumpEpoch()
+        if (coverageChanged) bumpCoverage()
         return moved
     }
 
@@ -531,12 +565,15 @@ class ProgrammerStore {
     fun clear(owner: ProgrammerOwner, fixtureKey: String, propertyName: String) {
         val byProperty = properties[fixtureKey] ?: return
         var changed = false
+        var removedLast = false
         byProperty.computeIfPresent(propertyName) { _, holder ->
             val next = withoutOwner(holder, owner)
             if (next !== holder) changed = true
+            if (next == null) removedLast = true
             next
         }
         if (changed) bumpEpoch()
+        if (removedLast) bumpCoverage()
     }
 
     /** [owner]'s own slot at (fixtureKey, propertyName), whether or not it is on top. */
@@ -623,6 +660,7 @@ class ProgrammerStore {
      */
     fun clearOwner(owner: ProgrammerOwner): Int {
         var swept = 0
+        var coverageChanged = false
         // Emptied inner maps are left in place — see [clear] for the race a
         // check-then-remove would open against a concurrent [put] on the same fixture.
         for (byProperty in properties.values) {
@@ -630,6 +668,7 @@ class ProgrammerStore {
                 byProperty.computeIfPresent(propertyName) { _, holder ->
                     val next = withoutOwner(holder, owner)
                     if (next !== holder) swept++
+                    if (next == null) coverageChanged = true
                     next
                 }
             }
@@ -642,6 +681,7 @@ class ProgrammerStore {
             }
         }
         if (swept > 0) bumpEpoch()
+        if (coverageChanged) bumpCoverage()
         return swept
     }
 
@@ -661,6 +701,7 @@ class ProgrammerStore {
         synchronized(layersLock) { layers = emptyList() }
         includedLayerSnapshot = emptyList()
         bumpEpoch()
+        bumpCoverage()
     }
 
     // ── Enumeration (cold path: Record, blind republish, state broadcast) ───
@@ -737,7 +778,9 @@ class ProgrammerStore {
 
     /**
      * fixtureKey → property names with at least one slot. Feeds the per-tick effect
-     * suppression snapshot; cache the result keyed on [epoch].
+     * suppression snapshot; cache the result keyed on [coverageEpoch] — [epoch] moves on
+     * every value rewrite and is stamped before the write lands, so it can neither pace
+     * this scan nor guarantee the scan sees the mutation that bumped it.
      */
     fun activePropertiesByFixture(): Map<String, Set<String>> {
         if (properties.isEmpty()) return emptyMap()
@@ -746,7 +789,7 @@ class ProgrammerStore {
             if (byProperty.isEmpty()) continue
             out[fixtureKey] = HashSet(byProperty.keys)
         }
-        return out
+        return out.ifEmpty { emptyMap() }
     }
 
     /** Number of properties holding at least one slot. Tests / diagnostics. */
