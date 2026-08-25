@@ -333,7 +333,7 @@ Four corrections to the above, and one thing it didn't mention:
   deleted WS messages and had to survive; CLAUDE.md's `FX_APPLICATION` example calls `setBpm`. A
   grep-driven deletion on those names would have taken the script API with it.
 
-**D3. `GroupSocket` is dead in both directions** — medium / P1 / S / sonnet
+~~**D3. `GroupSocket` is dead in both directions**~~ — done, `de2e1d5`. medium / P1 / S / sonnet
 No `setupGroupSubscriptions` exists, so `groupsState` is never pushed nor requested; `addGroupFx`
 is a deliberate no-op; frontend `groupsApi.addFx/clearFx` have zero call sites and it branches on a
 `groupFxAdded` message the backend never emits. **Fix:** delete `plugins/GroupSocket.kt` and flag
@@ -543,7 +543,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
-| 2 | ~~D1, D2~~ **done**, D3–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
+| 2 | ~~D1, D2, D3~~ **done**, D4–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, B2 | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
@@ -660,6 +660,18 @@ with a warning about the shared `if` block), and `CLAUDE.md`'s follow-up gate li
 pass (`./gradlew run` + the frontend dev server). That needs the operator; `./gradlew test`
 (`--rerun-tasks`, for the deleted sealed subclasses) is green. The frontend still has its 409
 handler and `force` senders — frontend sweep, register below.
+
+D3 (`de2e1d5`) — `plugins/GroupSocket.kt` deleted outright: no `setupGroupSubscriptions` existed
+anywhere in `Sockets.kt`'s per-connection setup list, so `groupsState` was never pushed on connect
+like every other domain, and `AddGroupFxInMessage` was a literal no-op. Confirmed frontend-side
+before deleting: `groupsApi.addFx`/`clearFx` (the WS senders) have zero call sites — `store/groups.ts`
+uses the REST `groupsApi` for everything, including its own `clearGroupFx` mutation
+(`DELETE /groups/{name}/fx`) — and `groupFxAdded` is branched on in `handleOnMessage` but the
+backend never emitted it. Also removed: the `GroupInMessage` dispatch arm in `Sockets.kt` and the
+two now-dead wire-format tests. No sealed-subclass rerun needed — `InMessage`/`OutMessage` are plain
+open sealed classes with no separate registration list. Suite 1764, 0 failures. Frontend stubs
+(`groupsApi.addFx`/`clearFx`, the `groupFxAdded` branch, `GroupsInMessage`) left for the frontend
+sweep, per the register below.
 
 ## Verification
 
