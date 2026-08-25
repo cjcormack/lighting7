@@ -1209,6 +1209,50 @@ The consequence to know about: an effect whose group or fixture has been deleted
 `FxExpansionCacheTest` is what stands behind the invalidation. `FxEngineBenchmark`'s setup guards
 do not — they only ever check the first expansion.
 
+### Tick-path failures
+
+Everything on the tick path logs through SLF4J (`logger` in `FxEngine.kt`), never `System.err`,
+and every tick-path log line goes through `FxEngine.logThrottled`: one line per distinct fault per
+`LOG_THROTTLE_NANOS` (10s), with the repeats counted into the next line that gets through. Without
+that, a fault on a 120 Hz pass writes thousands of lines a minute and buries the rest of the log —
+and the fault worth reading about is usually the *first* one. Two rules for throttle keys:
+they are compared on `nanoTime`, because an NTP step backwards on a wall clock would silence a key
+until real time caught up; and they are drawn from something the **rig** bounds (a fixture key, a
+group name, an effect type — never an effect id, which is a monotonic counter), because nothing
+ever sweeps the map.
+
+Three levels of containment, outermost first:
+
+1. **The pass loops** (`start`) catch around each pass. Anything escaping there would cancel the
+   loop's job for the rest of the process — the desk's effects would stop for good, with one line
+   on the uncaught-exception handler. `CancellationException` is rethrown so `stop()` still works.
+2. **Each effect's pass** is caught individually, so one bad effect doesn't cost the others their
+   tick.
+3. **An effect that fails `MAX_CONSECUTIVE_TICK_FAILURES` (120) passes in a row is paused** —
+   `noteTickFailure`. A script effect that throws on every `calculate` is not going to come good
+   on the next tick; pausing keeps the instance (phase, parameters, its row in the sheet) so the
+   operator can fix the definition and hit resume, logs the pause at `error` with the exception,
+   and shows up in the UI through the `isRunning` that `fxState` already streams. The threshold is
+   a pass count, not a duration, so it trips faster the faster the desk is ticking — the safe
+   direction, since a fault that clears itself (a fixture missing for the length of a patch
+   reload) gets more real time to clear on the slower paths. One good pass clears the run.
+
+Levels 2 and 3 catch `Throwable`, not `Exception`: every built-in effect is a compiled script, so a
+recursive helper in one (`StackOverflowError`) or a script class that fails to link
+(`NoClassDefFoundError`) raises an `Error`, and that must not be the thing that takes the pass loop
+down for the process.
+
+Pausing also **resets the effect's properties to the layer below**, into the pass's open
+transaction. An effect can die part-way through its own targets — a group effect that throws on
+member 7 has already painted 0..6 — and from the next pass on a paused effect is skipped by
+`resetActiveProperties`, so a half-applied frame would sit frozen with nothing left to move it. A
+*manual* pause deliberately freezes instead: that frame is one the operator chose.
+
+`FxTickFailureTest` covers the pause rule, the reset, and the run-clearing.
+
+The reset pass (`resetOne`) is the one deliberate exception to "log it at warn": it logs at debug,
+because the effect's own apply is about to fail on the same missing fixture and report it properly.
+
 ## Cue Integration
 
 A cue is an ordered stack of **Look layers** plus its own local values and ad-hoc effects. The FX system supports cues via the `cueId` field on `FxInstance`.

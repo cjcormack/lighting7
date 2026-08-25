@@ -236,7 +236,15 @@ class Show(
         // every clock begins at its stored tempo rather than the 120 default.
         reloadSpeedMasters()
 
-        // Start the FX engine after fixtures are loaded
+        // Start the FX engine after fixtures are loaded.
+        //
+        // GlobalScope is accepted here for now, deliberately: the engine's two loops live as
+        // long as the show does, [fxEngine.stop] cancels them by hand, and it catches per pass
+        // so neither loop can die on its own. The cost of the shortcut is that a Show which is
+        // dropped without close() leaks its loops, and there is no parent to cancel the tree in
+        // one move — the same bargain the other long-lived subsystems here have struck
+        // (ArtNetController's transmit loop, the MIDI registry). If any of them grows a real
+        // lifecycle owner, this should move onto it too.
         fxEngine.start(GlobalScope)
 
         // Write live tempo changes back to their rows, so the stored bpm is "wherever the

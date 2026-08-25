@@ -386,6 +386,14 @@ class FxInstance internal constructor(
     @Volatile
     var lastPhase: Double = 0.0
 
+    /**
+     * Length of the current run of consecutive tick passes this effect threw out of. Owned by
+     * the tick loops — an instance is on the beat path or the wall-clock path, never both — so
+     * it needs no volatile publication, and nothing else reads it.
+     * `FxEngine.noteTickFailure` auto-pauses the effect once the run is long enough.
+     */
+    var consecutiveTickFailures: Int = 0
+
     /** Timestamp when the effect started (for timing calculations) */
     var startedAtMs: Long = System.currentTimeMillis()
 

@@ -28,8 +28,9 @@ import kotlin.test.assertTrue
  *
  * Per Phase 5 of the cue-authoring unification plan: driving synthetic beat ticks through the
  * engine pays off the Phase 0 deferral that was blocked on an accessible `DmxController` stub.
- * [MockDmxController] already serves as the stub (main source), and [FxEngine.processBeatTick]
- * was relaxed to `internal` so this suite can pump ticks without the real-time loop.
+ * [MockDmxController] already serves as the stub (main source), and [FxEngine.processBeatTickSuspend]
+ * was relaxed to `internal` so this suite can pump ticks without the real-time loop — through the
+ * `processBeatTick` shim in `FxEngineTickShims.kt`, which is where the `runBlocking` lives.
  *
  * These tests are deliberately deterministic: they use [WindowedSlider] / [WindowedColour] for
  * effect outputs so the asserted composition arithmetic does not depend on the phase of a

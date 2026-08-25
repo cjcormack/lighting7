@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.dmx.Universe
@@ -22,6 +23,8 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.awt.Color
+
+private val logger = LoggerFactory.getLogger("FxEngine")
 
 /**
  * Central effect processing engine.
@@ -96,6 +99,132 @@ class FxEngine(
 
     @Volatile private var lastTickMs: Long = 0L
     @Volatile private var lastWallClockTickMs: Long = 0L
+
+    private class LogThrottle {
+        /** `System.nanoTime()` of the last emitted line; 0 until the first one. */
+        val lastLogNanos = AtomicLong(0L)
+        val suppressed = AtomicLong(0L)
+    }
+
+    /**
+     * Per-cause log throttles. Entries are never swept, so every key must be drawn from
+     * something the *rig* bounds — a fixture key, a group name, an effect type — and never
+     * from an effect id: ids come from a monotonic counter, so a broken effect re-spawned on
+     * every GO would leave a new permanent entry behind each time. Keying on the stable
+     * identity also throttles the fault properly across those re-spawns, which is what an
+     * operator watching the same effect fail out of every cue actually wants.
+     */
+    private val logThrottles = ConcurrentHashMap<String, LogThrottle>()
+
+    /** Stable throttle key for a fault attributable to [effect] — see [logThrottles]. */
+    private fun faultKey(prefix: String, effect: FxInstance): String =
+        "$prefix-${effect.effectTypeId}-${effect.target.targetKey}.${effect.target.propertyName}"
+
+    /**
+     * Log a tick-path fault at most once per [LOG_THROTTLE_NANOS] per [key].
+     *
+     * The beat pass runs at up to 120 Hz and the wall-clock pass at 50 Hz, so a fault that
+     * recurs every tick — a script effect that throws on every `calculate`, an effect
+     * pointing at a fixture that has gone away — would otherwise write thousands of lines a
+     * minute and bury everything else. Suppressed repeats are counted and reported on the
+     * next line that does get through, so the log still says "this is happening constantly"
+     * rather than looking like an isolated blip.
+     *
+     * [message] is only evaluated when the line is actually emitted. Faults whose real report
+     * comes from somewhere else pass [debug] and cost nothing at all when debug is off.
+     */
+    private fun logThrottled(
+        key: String,
+        error: Throwable? = null,
+        debug: Boolean = false,
+        message: () -> String,
+    ) {
+        if (debug && !logger.isDebugEnabled) return
+        val throttle = logThrottles.getOrPut(key) { LogThrottle() }
+        // nanoTime, not currentTimeMillis: this is an elapsed-time comparison, and an NTP
+        // correction that steps the wall clock backwards would otherwise make every later
+        // `now - last` negative and silence this key until real time caught up again.
+        val now = System.nanoTime()
+        val last = throttle.lastLogNanos.get()
+        // The CAS also resolves the two tick loops racing on one key: the loser suppresses.
+        if ((last != 0L && now - last < LOG_THROTTLE_NANOS) ||
+            !throttle.lastLogNanos.compareAndSet(last, now)
+        ) {
+            throttle.suppressed.incrementAndGet()
+            return
+        }
+        val suppressed = throttle.suppressed.getAndSet(0L)
+        // "since the last report" rather than "in the last 10s": the gap is only the throttle
+        // window when the fault is continuous. A burst that stopped an hour ago and recurred
+        // once would otherwise be reported as if it were still constant.
+        val text = if (suppressed > 0L) "${message()} (+$suppressed since the last report)" else message()
+        when {
+            debug -> logger.debug(text)
+            error != null -> logger.warn(text, error)
+            else -> logger.warn(text)
+        }
+    }
+
+    /**
+     * Record that [effect] threw out of its pass, and auto-pause it once it has thrown out of
+     * [MAX_CONSECUTIVE_TICK_FAILURES] passes in a row.
+     *
+     * A script effect that throws on every `calculate` is not going to be fixed by retrying it
+     * 120 times a second: it burns pass budget and floods the log for a property it will never
+     * paint. Pausing keeps the instance — its phase, its parameters, its place in the sheet —
+     * so the operator can fix the definition and hit resume, and the reset pass goes on showing
+     * the layer below meanwhile. It also surfaces in the UI, because `isRunning` already
+     * streams on `fxState`.
+     *
+     * Deliberately a tick count rather than a wall-clock duration: it makes the run *faster* to
+     * trip the more often the desk is ticking, which is the safe direction — a fault that clears
+     * itself (a fixture missing for the length of a reload) gets more real time to clear on the
+     * slow paths, and a genuinely broken effect on a fast one stops in about a second.
+     *
+     * The counter is owned by the tick loops (an instance is on the beat path or the wall-clock
+     * path, never both), and an `updateEffect` swap resets it — which is right, since changed
+     * parameters deserve a fresh verdict.
+     */
+    private fun noteTickFailure(
+        effect: FxInstance,
+        e: Throwable,
+        what: String,
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+    ) {
+        val failures = ++effect.consecutiveTickFailures
+
+        val describe = "$what ${effect.id} ('${effect.effect.name}' on " +
+            "${effect.target.targetKey}.${effect.target.propertyName})"
+
+        if (failures >= MAX_CONSECUTIVE_TICK_FAILURES) {
+            effect.consecutiveTickFailures = 0
+            effect.pause()
+
+            // An effect can throw part-way through its own targets — a group effect that dies on
+            // member 7 has already painted 0..6 this pass. From the next pass on, a paused effect
+            // is skipped by [resetActiveProperties], so whatever it managed to write would stay
+            // frozen on those channels with nothing left to move it. Put the layer below back
+            // now, into this pass's open transaction, so the property lands somewhere defined.
+            // (A manual pause deliberately freezes instead: that frame is one the operator chose.)
+            for (key in resolveEffectFixtureKeys(effect)) {
+                resetOne(fixturesWithTx, key, effect.target)
+            }
+
+            logger.error(
+                "FX engine paused $describe after $failures consecutive failing ticks", e,
+            )
+            emitStateUpdate()
+            return
+        }
+
+        logThrottled(faultKey("tick-failure", effect), e) { "FX engine error processing $describe" }
+    }
+
+    /** Clear [effect]'s failure run after a pass it survived. */
+    private fun noteTickSuccess(effect: FxInstance) {
+        // Guarded so the overwhelmingly common case is a plain read, not a write.
+        if (effect.consecutiveTickFailures != 0) effect.consecutiveTickFailures = 0
+    }
 
     /**
      * The suppression map and the coverage epoch it was built from, published as ONE
@@ -225,6 +354,19 @@ class FxEngine(
 
         /** Coalescing window for provenance recomputes — see [emitProvenanceUpdate]. */
         const val PROVENANCE_COALESCE_MS = 50L
+
+        /** How often one recurring tick-path fault may write a log line — see [logThrottled]. */
+        const val LOG_THROTTLE_NANOS = 10_000_000_000L
+
+        /**
+         * How many consecutive passes an effect may throw out of before the engine pauses it.
+         *
+         * In passes rather than seconds, so the grace period varies with how fast the desk is
+         * ticking: ~2.4s on the 50 Hz wall-clock loop, 5s for a lone master at 60 BPM (24
+         * ticks/beat), 1s for one at 300 BPM, and less again with several out-of-phase masters
+         * driving the pass. See [noteTickFailure] for why that direction is the safe one.
+         */
+        const val MAX_CONSECUTIVE_TICK_FAILURES = 120
 
         /**
          * Reserved priority band for programmer-owned effects (Session 2's busking FX).
@@ -1322,9 +1464,9 @@ class FxEngine(
             val fixture = try {
                 fixturesWithTx.untypedGroupableFixture(key.targetKey)
             } catch (e: Exception) {
-                System.err.println(
-                    "FX Engine: cascade publish could not find fixture '${key.targetKey}': ${e.message}"
-                )
+                logThrottled("cascade-missing-${key.targetKey}", e) {
+                    "FX engine: cascade publish could not find fixture '${key.targetKey}'"
+                }
                 continue
             }
 
@@ -1336,9 +1478,9 @@ class FxEngine(
                 target.resetToFallback(fixture, fallback, fadeMs)
                 wrote = true
             } catch (e: Exception) {
-                System.err.println(
-                    "FX Engine: failed to publish cascade for ${key.targetKey}.${key.propertyName}: ${e.message}"
-                )
+                logThrottled("cascade-publish-${key.targetKey}.${key.propertyName}", e) {
+                    "FX engine: failed to publish cascade for ${key.targetKey}.${key.propertyName}"
+                }
             }
         }
 
@@ -1468,9 +1610,9 @@ class FxEngine(
                 target.resetToFallback(fixture, fallback)
                 wrote = true
             } catch (e: Exception) {
-                System.err.println(
-                    "FX Engine: failed to publish Layer 4 for ${key.targetKey}.${key.propertyName}: ${e.message}"
-                )
+                logThrottled("layer4-publish-${key.targetKey}.${key.propertyName}", e) {
+                    "FX engine: failed to publish Layer 4 for ${key.targetKey}.${key.propertyName}"
+                }
             }
         }
 
@@ -1570,9 +1712,23 @@ class FxEngine(
         // landing while a pass is in flight collapse into a single follow-up pass — the
         // pass rate is bounded by the fastest master, and one pass means one
         // ControllerTransaction however many masters are ticking.
+        //
+        // Both loops swallow a failed pass rather than letting it out: anything escaping here
+        // cancels the job for the rest of the process, and the desk's effects would stop for
+        // good with one line on whatever the uncaught-exception handler is. The per-effect
+        // catches inside a pass cover the common case; this covers the pass-level work around
+        // them (the reset sweep, the suppression rebuild, the transaction commit). Throwable
+        // rather than Exception for the same reason those are — a script effect can raise an
+        // Error — with cancellation rethrown so [stop] still stops the loop.
         processingJob = scope.launch(Dispatchers.Default) {
             for (wake in speedMasters.wake) {
-                processBeatTickSuspend(speedMasters.snapshotFrame())
+                try {
+                    processBeatTickSuspend(speedMasters.snapshotFrame())
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    logThrottled("beat-pass", t) { "FX engine: beat pass failed" }
+                }
             }
         }
 
@@ -1580,7 +1736,13 @@ class FxEngine(
         wallClockJob = scope.launch(Dispatchers.Default) {
             while (isActive) {
                 delay(WALL_CLOCK_INTERVAL_MS)
-                processWallClockTickSuspend()
+                try {
+                    processWallClockTickSuspend()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    logThrottled("wall-clock-pass", t) { "FX engine: wall-clock pass failed" }
+                }
             }
         }
     }
@@ -2019,21 +2181,6 @@ class FxEngine(
     }
 
     /**
-     * Process all BEAT-timed effects on a Master Clock tick.
-     *
-     * `internal` so that `FxEnginePipelineTest` can drive synthetic ticks without waiting on the
-     * real-time tick loop.
-     */
-    /**
-     * Non-suspend entry point used by tests (`runBlocking` shim). Production calls
-     * [processBeatTickSuspend] directly from the collect loop so the transaction commit
-     * doesn't pin the calling thread on a `runBlocking`.
-     */
-    internal fun processBeatTick(tick: MasterClock.ClockTick) = runBlocking {
-        processBeatTickSuspend(tick)
-    }
-
-    /**
      * Single-master shim: every effect sees [tick] as its master's tick. Kept so the
      * synthetic-tick drivers in `FxEnginePipelineTest` / `FxEngineBenchmark` stay valid —
      * a uniform frame *is* the single-clock world.
@@ -2041,6 +2188,14 @@ class FxEngine(
     internal suspend fun processBeatTickSuspend(tick: MasterClock.ClockTick) =
         processBeatTickSuspend(SpeedMasterBank.Frame.uniform(tick))
 
+    /**
+     * Process all BEAT-timed effects over one frame of every master's current tick.
+     *
+     * `internal` so that `FxEnginePipelineTest` can drive synthetic ticks without waiting on the
+     * real-time tick loop — through the `processBeatTick` shim in `FxEngineTickShims.kt` (test
+     * source), which is where the `runBlocking` wrapper lives. Production never blocks a thread
+     * on a pass: the loops in [start] call these suspend forms directly.
+     */
     internal suspend fun processBeatTickSuspend(frame: SpeedMasterBank.Frame) {
         // Membership changes re-bind lazily, at pass start: slots only matter during a
         // pass, and Frame clamps an out-of-range slot to master 1 in the window between
@@ -2092,8 +2247,13 @@ class FxEngine(
                 } else {
                     processFixtureEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression)
                 }
-            } catch (e: Exception) {
-                System.err.println("FX Engine error processing effect ${effect.id}: ${e.message}")
+                noteTickSuccess(effect)
+            } catch (t: Throwable) {
+                // Throwable, not Exception: every built-in effect is a compiled script, so a
+                // recursive helper in one (StackOverflowError) or a script class that fails to
+                // link (NoClassDefFoundError) is an Error, and letting one past here would kill
+                // the pass loop for the life of the process.
+                noteTickFailure(effect, t, "effect", fixturesWithTx)
             }
         }
 
@@ -2120,16 +2280,9 @@ class FxEngine(
      * handled by [FxInstance.calculateWallClockPhase] and
      * [FxInstance.calculateWallClockPhaseForMember].
      *
-     * `internal` so that `FxEnginePipelineTest` can drive the wall-clock path synchronously.
+     * `internal` so that `FxEnginePipelineTest` can drive the wall-clock path synchronously,
+     * through the `processWallClockTick` shim in `FxEngineTickShims.kt` (test source).
      */
-    /**
-     * Non-suspend entry point used by tests (`runBlocking` shim). Production calls
-     * [processWallClockTickSuspend] directly from the wall-clock loop.
-     */
-    internal fun processWallClockTick() = runBlocking {
-        processWallClockTickSuspend()
-    }
-
     internal suspend fun processWallClockTickSuspend() {
         // Same lazy rebind as the beat pass — rate-master slots must follow membership
         // changes even when no beat effect is running.
@@ -2195,8 +2348,10 @@ class FxEngine(
                 } else {
                     processWallClockFixtureEffect(syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression)
                 }
-            } catch (e: Exception) {
-                System.err.println("FX Engine error processing wall-clock effect ${effect.id}: ${e.message}")
+                noteTickSuccess(effect)
+            } catch (t: Throwable) {
+                // See the beat loop's catch for why this is Throwable.
+                noteTickFailure(effect, t, "wall-clock effect", fixturesWithTx)
             }
         }
 
@@ -2395,8 +2550,15 @@ class FxEngine(
             if (allChannelsParked(target, fixture)) return
             val fallback = layerResolver.fallbackFor(target, fixture, fixtureKey)
             target.resetToFallback(fixture, fallback)
-        } catch (_: Exception) {
-            // Non-fatal — the effect application will also handle missing fixtures
+        } catch (e: Exception) {
+            // Non-fatal, and deliberately quieter than the apply path: the usual cause is a
+            // fixture that has gone away, and the apply for the same effect will fail on the
+            // next line and report it at warn (and eventually pause the effect). Logging both
+            // at warn would double every line for one fault. Throttled all the same — this
+            // runs once per (fixture, property) per tick.
+            logThrottled("reset-$fixtureKey.${target.propertyName}", debug = true) {
+                "FX engine: reset to fallback failed for $fixtureKey.${target.propertyName}: ${e.message}"
+            }
         }
     }
 
@@ -2660,7 +2822,10 @@ class FxEngine(
                 val fallback = layerResolver.fallbackFor(affected.target, fixture, affected.fixtureKey)
                 affected.target.resetToFallback(fixture, fallback)
             } catch (e: Exception) {
-                System.err.println("FX Engine: Failed to reset ${affected.target.propertyName} on '${affected.fixtureKey}': ${e.message}")
+                logThrottled("reset-uncovered-${affected.fixtureKey}.${affected.target.propertyName}", e) {
+                    "FX engine: failed to reset ${affected.target.propertyName} " +
+                        "on '${affected.fixtureKey}'"
+                }
             }
         }
 
@@ -2736,8 +2901,10 @@ class FxEngine(
             val groupName = effect.target.targetKey
             val group = try {
                 fixtures.untypedGroup(groupName)
-            } catch (_: Exception) {
-                System.err.println("FX Engine: Group '$groupName' not found for effect ${effect.id}")
+            } catch (e: Exception) {
+                logThrottled("missing-group-$groupName", e) {
+                    "FX engine: group '$groupName' not found for effect ${effect.id}"
+                }
                 return none()
             }
 
@@ -2804,8 +2971,10 @@ class FxEngine(
         val fixtureKey = effect.target.targetKey
         val fixture = try {
             fixtures.untypedFixture(fixtureKey)
-        } catch (_: Exception) {
-            System.err.println("FX Engine: Fixture '$fixtureKey' not found for effect ${effect.id}")
+        } catch (e: Exception) {
+            logThrottled("missing-fixture-$fixtureKey", e) {
+                "FX engine: fixture '$fixtureKey' not found for effect ${effect.id}"
+            }
             return none()
         }
 
