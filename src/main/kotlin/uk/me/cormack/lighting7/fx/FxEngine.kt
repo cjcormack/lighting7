@@ -73,8 +73,8 @@ class FxEngine(
     private val parkManager: ParkManager? = null,
 ) {
     /**
-     * Master 1's clock — the pre-bank compatibility surface (`setFxBpm`, scripts, the REST
-     * clock endpoints, and `beatSync` all mean this clock).
+     * Master 1's clock — the global tempo. Scripts (`setBpm`/`tapTempo`/`masterClock`), the
+     * AI `set_bpm` tool, and every effect with no explicit master all mean this clock.
      */
     val masterClock: MasterClock get() = speedMasters.master1()
 

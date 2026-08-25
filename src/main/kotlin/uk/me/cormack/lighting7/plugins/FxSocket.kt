@@ -1,10 +1,7 @@
 package uk.me.cormack.lighting7.plugins
 
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filter
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.state.State
 
 // ─── Inbound ────────────────────────────────────────────────────────────
@@ -15,14 +12,6 @@ sealed class FxInMessage : InMessage()
 @Serializable
 @SerialName("fxState")
 data object FxStateInMessage : FxInMessage()
-
-@Serializable
-@SerialName("setFxBpm")
-data class SetFxBpmInMessage(val bpm: Double) : FxInMessage()
-
-@Serializable
-@SerialName("tapTempo")
-data object TapTempoInMessage : FxInMessage()
 
 @Serializable
 @SerialName("addFx")
@@ -51,10 +40,6 @@ data class ResumeFxInMessage(val effectId: Long) : FxInMessage()
 @SerialName("clearFx")
 data object ClearFxInMessage : FxInMessage()
 
-@Serializable
-@SerialName("requestBeatSync")
-data object RequestBeatSyncInMessage : FxInMessage()
-
 // ─── Outbound ───────────────────────────────────────────────────────────
 
 @Serializable
@@ -81,11 +66,15 @@ data class FxEffectState(
     val rateSpeedMasterIndex: Int = 1,
 )
 
+/**
+ * The active-effect list. Purely an effect frame: tempo is not in it, and never was in it
+ * for more than master 1 — the `bpm` / `isClockRunning` fields carried master 1's clock
+ * because this message predates the speed-master bank. Tempo now lives on the
+ * `speedMasters.*` family, per-master and keyed.
+ */
 @Serializable
 @SerialName("fxState")
 data class FxStateOutMessage(
-    val bpm: Double,
-    val isClockRunning: Boolean,
     val activeEffects: List<FxEffectState>,
 ) : FxOutMessage()
 
@@ -104,31 +93,12 @@ data class FxChangedOutMessage(
     val effectId: Long? = null,
 ) : FxOutMessage()
 
-@Serializable
-@SerialName("beatSync")
-data class BeatSyncOutMessage(
-    val beatNumber: Long,
-    val bpm: Double,
-    val timestampMs: Long,
-) : FxOutMessage()
-
 // ─── Handler ────────────────────────────────────────────────────────────
 
 suspend fun handleFx(scope: SocketScope, message: FxInMessage) {
     val engine = scope.state.show.fxEngine
     when (message) {
         is FxStateInMessage -> scope.send(buildFxStateMessage(scope.state))
-        // The legacy unkeyed tempo messages mean master 1. Routed through the bank rather
-        // than the clock so source tracking, the speedMasters.changed push, and the
-        // write-through persister all see the change.
-        is SetFxBpmInMessage -> {
-            engine.speedMasters.setBpm(null, message.bpm, SpeedMasterSource.MANUAL)
-            scope.send(buildFxStateMessage(scope.state))
-        }
-        is TapTempoInMessage -> {
-            engine.speedMasters.tap(null)
-            scope.send(buildFxStateMessage(scope.state))
-        }
         is RemoveFxInMessage -> {
             engine.removeEffect(message.effectId)
             scope.send(FxChangedOutMessage(FxChangeType.REMOVED, message.effectId))
@@ -148,7 +118,6 @@ suspend fun handleFx(scope: SocketScope, message: FxInMessage) {
         is AddFxInMessage -> {
             // Complex effect creation goes through the REST API; the WS path is intentionally a no-op.
         }
-        is RequestBeatSyncInMessage -> scope.sendNextBeat.set(true)
     }
 }
 
@@ -157,7 +126,6 @@ suspend fun handleFx(scope: SocketScope, message: FxInMessage) {
 fun setupFxSubscriptions(scope: SocketScope) {
     val state = scope.state
     val engine = state.show.fxEngine
-    val clock = engine.masterClock
 
     scope.subscribe(engine.fxStateFlow) { update ->
         val effectStates = update.effectStates.values.map { effectState ->
@@ -180,41 +148,7 @@ fun setupFxSubscriptions(scope: SocketScope) {
                 rateSpeedMasterIndex = effectState.rateSpeedMasterIndex,
             )
         }
-        scope.send(FxStateOutMessage(
-            bpm = clock.bpm.value,
-            isClockRunning = clock.isRunning.value,
-            activeEffects = effectStates,
-        ))
-    }
-
-    // Periodic beat sync for UI drift correction (every 16 beats ≈ 8s at 120 BPM), plus an
-    // immediate sync on the next beat when [SocketScope.sendNextBeat] is set by a
-    // requestBeatSync message.
-    //
-    // `getAndSet(false)` rather than `get()`: the flag starts life `true` and nothing ever
-    // cleared it, so this filter was permanently short-circuited and every connection got a
-    // frame on EVERY beat — 16x the intended traffic, and the documented "every 16 beats"
-    // cadence was never what actually shipped. Consuming the flag makes the request the
-    // one-shot it was always described as. Note this makes the client's local interpolation
-    // load-bearing for the first time; BeatIndicator has always had it.
-    scope.subscribe(
-        clock.beatFlow.filter { beat -> beat.beatNumber % 16 == 0L || scope.sendNextBeat.getAndSet(false) }
-    ) { beat ->
-        scope.send(BeatSyncOutMessage(
-            beatNumber = beat.beatNumber,
-            bpm = clock.bpm.value,
-            timestampMs = beat.timestampMs,
-        ))
-    }
-
-    // Immediate beat sync whenever BPM changes (tap tempo, setBpm, etc.). beatNumber=-1 marks
-    // these BPM-change syncs so the frontend can distinguish them from beat-boundary sync.
-    scope.subscribe(clock.bpm.drop(1)) { newBpm ->
-        scope.send(BeatSyncOutMessage(
-            beatNumber = -1,
-            bpm = newBpm,
-            timestampMs = System.currentTimeMillis(),
-        ))
+        scope.send(FxStateOutMessage(activeEffects = effectStates))
     }
 }
 
@@ -242,9 +176,5 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
             rateSpeedMasterIndex = masterStates.getOrNull(effect.rateMasterSlot)?.index ?: 1,
         )
     }
-    return FxStateOutMessage(
-        bpm = engine.masterClock.bpm.value,
-        isClockRunning = engine.masterClock.isRunning.value,
-        activeEffects = effectStates,
-    )
+    return FxStateOutMessage(activeEffects = effectStates)
 }

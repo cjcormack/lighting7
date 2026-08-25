@@ -76,33 +76,17 @@ class SocketMessageWireFormatTest {
     // ─── FX domain ──────────────────────────────────────────────────────────
 
     @Test
-    fun `fx domain — SetFxBpmInMessage routes via FxInMessage`() {
-        val raw = """{"type":"setFxBpm","bpm":128.5}"""
-        val decoded = json.decodeFromString<InMessage>(raw)
+    fun `fx domain — FxStateInMessage object decodes`() {
+        val decoded = json.decodeFromString<InMessage>("""{"type":"fxState"}""")
         assertIs<FxInMessage>(decoded)
-        assertEquals(128.5, assertIs<SetFxBpmInMessage>(decoded).bpm)
-    }
-
-    @Test
-    fun `fx domain — TapTempoInMessage object decodes`() {
-        val decoded = json.decodeFromString<InMessage>("""{"type":"tapTempo"}""")
-        assertIs<FxInMessage>(decoded)
-        assertIs<TapTempoInMessage>(decoded)
-    }
-
-    @Test
-    fun `fx domain — BeatSyncOutMessage round-trips with discriminator`() {
-        val out = BeatSyncOutMessage(beatNumber = 42L, bpm = 120.0, timestampMs = 1_000_000L)
-        val encoded = json.encodeToString<OutMessage>(out)
-        assertTrue(encoded.contains(""""type":"beatSync""""))
-        assertEquals(out, assertIs<BeatSyncOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+        assertIs<FxStateInMessage>(decoded)
     }
 
     // ─── Speed-master domain ────────────────────────────────────────────────
-    // The legacy fx-domain messages above are the compatibility promise: `setFxBpm`,
-    // `tapTempo` and `beatSync` mean master 1, unchanged on the wire. The keyed
-    // `speedMasters.*` family is the superset, not a replacement — if editing those
-    // fx-domain assertions ever seems necessary, the promise is being broken.
+    // The `speedMasters.*` family is the whole tempo surface. It used to be the keyed
+    // superset of an unkeyed master-1-only one (`setFxBpm`/`tapTempo`/`beatSync`, once
+    // pinned here as a compatibility promise); that surface is retired, and `fxState`
+    // carries no tempo at all any more.
 
     @Test
     fun `speedMasters domain — setBpm routes via SpeedMasterInMessage with an optional uuid`() {
@@ -176,8 +160,8 @@ class SocketMessageWireFormatTest {
         assertTrue(encoded.contains(""""type":"speedMasters.beat""""))
         assertEquals(out, assertIs<SpeedMasterBeatOutMessage>(json.decodeFromString<OutMessage>(encoded)))
 
-        // Master 1 rides the keyed stream too, as a null uuid — the same convention the
-        // write messages use. `beatSync` above is untouched and still means master 1.
+        // Master 1 rides the same stream. A null uuid is the pre-load master 1 — once the
+        // bank has loaded, master 1's frames carry its real uuid like every other master's.
         val m1 = SpeedMasterBeatOutMessage(
             masterUuid = null, index = 1, beatNumber = 0L, bpm = 120.0, timestampMs = 1L,
         )

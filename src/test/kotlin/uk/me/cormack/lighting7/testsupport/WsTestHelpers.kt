@@ -24,7 +24,7 @@ fun ApplicationTestBuilder.createWsClient(): HttpClient = createClient {
 
 /**
  * Read inbound frames until one deserializes as [T]. The server fans out an initial-state
- * burst on connect (channelMapping / fxState / palette / beatSync / speedMasters.state —
+ * burst on connect (channelMapping / fxState / palette / speedMasters.state —
  * see plugins/Sockets.kt); tests use this to skip past those and wait for the message they
  * actually care about.
  */

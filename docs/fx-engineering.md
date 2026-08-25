@@ -58,9 +58,14 @@ The FX system provides:
 
 Tempo lives in a per-show **`SpeedMasterBank`** of `MasterClock` instances — named tempo
 buses that effects *subscribe to* rather than owning speeds. **Slot 0 is always master 1**,
-the global tempo every pre-bank surface (`setFxBpm`, `tapTempo`, `fxState.bpm`, `beatSync`,
-the REST clock endpoints, script `setBpm`/`tapTempo`, the AI `set_bpm` tool) maps to, and
+the global tempo that script `setBpm`/`tapTempo` and the AI `set_bpm` tool mean, and that
 every effect with no explicit master resolves to.
+
+There used to be a second, unkeyed tempo surface alongside this one — WS
+`setFxBpm`/`tapTempo`/`beatSync`/`requestBeatSync`, REST `/fx/clock/*`, and `bpm` /
+`isClockRunning` on the `fxState` frame — all of it master-1-only, kept for clients that
+predated the bank. It is all retired: `speedMasters.*` is the whole surface, and `fxState`
+carries no tempo.
 
 Masters are persisted per project (`speed_masters` table, portable in sync — the stored bpm
 is the *starting* tempo; live changes write through with a 750 ms trailing debounce).
@@ -89,8 +94,8 @@ enters the phase math, tempo is purely tick emission rate).
 | `bpm` | `StateFlow<Double>` | Current tempo (20-300 BPM) |
 | `isRunning` | `StateFlow<Boolean>` | Whether clock is active |
 | `tickFlow` | `SharedFlow<ClockTick>` | Emits 24 times per beat |
-| `beatFlow` | `SharedFlow<BeatEvent>` | Emits once per beat |
 | `currentTick` | `ClockTick` (`@Volatile`) | Most recent tick, sampled per pass by the bank |
+| `onTick` / `onBeat` | `(() -> Unit)?` / `((BeatEvent) -> Unit)?` | Callbacks the bank wires per clock: the wake nudge and the beat fan-out. There was a `beatFlow` alongside `tickFlow`; its only consumer was the retired `beatSync` push |
 
 ### Clock Resolution
 
@@ -931,14 +936,11 @@ This applies a rainbow cycle to all 4 heads of the quad mover bar, with each hea
 
 ### Clock Control
 
-```
-GET  /api/rest/fx/clock/status     → { bpm, isRunning }      (master 1)
-POST /api/rest/fx/clock/bpm        ← { bpm: 120.0 }          (master 1)
-POST /api/rest/fx/clock/tap        (tap tempo, master 1)
-```
-
-The legacy clock endpoints mean master 1 — the compatibility promise pinned by
-`SocketMessageWireFormatTest`. Master CRUD is project-scoped:
+There are no `/fx/clock/*` endpoints. Tempo is project-scoped, with the masters: `PUT`
+below is the "typed a number into a form" path — it sets the stored default *and*, when the
+project is live, retunes the running clock. Knob-drag and tap go over
+`speedMasters.setBpm`/`.tap` instead, which never touch the stored value. Master CRUD is
+project-scoped too:
 
 ```
 GET    /api/rest/project/{id}/speed-masters        → [SpeedMasterDto...]  (lazily seeds 4)
@@ -1024,9 +1026,7 @@ All fields are optional. Immutable fields (`effectType`, `parameters`, `beatDivi
 
 | Message | Description |
 |---------|-------------|
-| `fxState` | Request current FX state |
-| `setFxBpm` | Set BPM `{ bpm: 120.0 }` — **master 1** |
-| `tapTempo` | Tap for tempo — **master 1** |
+| `fxState` | Request the current active-effect list |
 | `speedMasters.state` | Request the full masters bank |
 | `speedMasters.setBpm` | Set one master's BPM `{ masterUuid?, bpm }` (uuid omitted → master 1) |
 | `speedMasters.tap` | Tap one master's tempo `{ masterUuid? }` |
@@ -1034,41 +1034,52 @@ All fields are optional. Immutable fields (`effectType`, `parameters`, `beatDivi
 | `pauseFx` | Pause effect `{ effectId }` |
 | `resumeFx` | Resume effect `{ effectId }` |
 | `clearFx` | Clear all effects |
-| `requestBeatSync` | Request a `beatSync` message on the next beat (e.g. after tab visibility change) |
-| `speedMasters.requestBeat` | Keyed twin of `requestBeatSync` — `{ masterUuid? }`, omitted uuid = master 1 |
+| `speedMasters.requestBeat` | Ask for one immediate beat frame — `{ masterUuid? }`, omitted uuid = master 1 |
 
 ### Server → Client
 
 | Message | Description |
 |---------|-------------|
-| `fxState` | Full FX state `{ bpm, isClockRunning, activeEffects }` — `bpm` is master 1; each effect carries `speedMasterUuid`/`speedMasterIndex` and `rateSpeedMasterUuid`/`rateSpeedMasterIndex` |
+| `fxState` | The active-effect list `{ activeEffects }`; each effect carries `speedMasterUuid`/`speedMasterIndex` and `rateSpeedMasterUuid`/`rateSpeedMasterIndex`. No tempo — it used to carry `bpm`/`isClockRunning` for master 1 |
 | `fxChanged` | Effect change notification `{ changeType, effectId }` |
-| `beatSync` | Beat sync for frontend clock `{ beatNumber, bpm, timestampMs }` — master 1 only |
 | `speedMasters.state` | Full bank `{ masters: [{ uuid, index, name, bpm, isRunning, source }] }` — sent on connect, on request, and as the reply to every `speedMasters.*` write |
 | `speedMasters.changed` | One master's tempo moved `{ masterUuid, index, bpm, source, timestampMs }` — the live-BPM stream; CRUD invalidation goes via `speedMasterListChanged` instead |
-| `speedMasters.beat` | One master crossed a beat boundary `{ masterUuid, index, beatNumber, bpm, timestampMs }` — the keyed analogue of `beatSync`, emitted for every master including master 1 |
+| `speedMasters.beat` | One master crossed a beat boundary `{ masterUuid, index, beatNumber, bpm, timestampMs }` — every master, master 1 included |
 | `speedMasterListChanged` | A master was created/renamed/deleted (cache-invalidation signal, never fired per tempo change) |
 
 ### Beat Sync
 
-The `beatSync` message enables the frontend to synchronize a local beat visualization with the backend's Master Clock. It is sent:
+`speedMasters.beat` lets the frontend synchronize a local beat visualization with a
+master's clock. It is sent:
 
 - Every 16 beats (~8 seconds at 120 BPM) for periodic drift correction
-- Immediately when BPM changes (with `beatNumber: -1` to distinguish from beat boundaries)
-- On-demand when the client sends `requestBeatSync`
+- On-demand when the client sends `speedMasters.requestBeat` for that master
 
-Between frames the client free-runs a local timer off the last `bpm` it was told. That
-interpolation is load-bearing: `SocketScope.sendNextBeat` used to be set at construction and
-never cleared, so the throttle was permanently bypassed and a frame went out on *every*
-beat. It is consumed with `getAndSet(false)` now, making the request the one-shot it was
-always documented to be.
+Between frames the client free-runs a local timer off the last `bpm` it was told, and each
+frame re-aligns it. That interpolation is load-bearing, and was not always exercised: the
+retired `beatSync` had a request flag set at construction and never cleared, so its throttle
+was permanently bypassed and a frame went out on *every* beat. `speedMasters.requestBeat`
+consumes its request (`pendingBeatRequests.remove`), so the throttle is real.
 
-`beatSync` is structurally master-1-only — it is wired to one `MasterClock` object, not
-addressed by uuid — so **`speedMasters.beat`** is the keyed superset. Same cadence rules,
-plus a `masterUuid`/`index` tag, fanned from `SpeedMasterBank.beats`: one flow for the whole
-bank, fed by a per-clock `onBeat` hook wired where `onTick` already is. A subscriber binds
-once and keeps working across a `load()`, because the tagging happens at emit time rather
-than being captured into a per-master collector.
+Frames are fanned from `SpeedMasterBank.beats` — one flow for the whole bank, fed by a
+per-clock `onBeat` hook wired where `onTick` already is. A subscriber binds once and keeps
+working across a `load()`, because the tagging happens at emit time rather than being
+captured into a per-master collector.
+
+**Outbound, master 1 is its real uuid — not null.** Inbound messages all take a null
+`masterUuid` to mean master 1, for a client with no uuid to hand. But beats are *tagged* from
+the bank entry, and after the first `load()` master 1's entry holds its row uuid; null appears
+only for the synthetic pre-load master. So a client can ask about master 1 with a null uuid,
+and must not expect to recognise its frames by one: anything matching frames on master 1's
+behalf resolves the real uuid first (`useMaster1Uuid` in `store/speedMasters.ts`). Subscribing
+with null would silently never match. This bit when `BeatIndicator` moved off `beatSync`,
+where the mismatch had been invisible because master 1 was the one master never using the
+keyed stream.
+
+`speedMasters.requestBeat` is the inbound half of that rule, and resolves an omitted uuid to
+`SpeedMasterBank.master1Uuid()` rather than parking `null` — the pending set is matched against
+the tagged frame, so a parked null would be an unsatisfiable request that also never leaves the
+set. Every client hits this: an indicator mounts before its master-1 lookup resolves.
 
 ## File Reference
 

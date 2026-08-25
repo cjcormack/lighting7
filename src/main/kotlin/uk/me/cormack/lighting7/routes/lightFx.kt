@@ -13,7 +13,6 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -21,36 +20,8 @@ import uk.me.cormack.lighting7.state.State
  */
 internal fun Route.routeApiRestFx(state: State) {
     route("/fx") {
-        // Master Clock endpoints
-        route("/clock") {
-            get<ClockStatus> {
-                val clock = state.show.fxEngine.masterClock
-                call.respond(ClockStatusResponse(
-                    bpm = clock.bpm.value,
-                    isRunning = clock.isRunning.value
-                ))
-            }
-
-            // The legacy clock endpoints mean master 1; routing through the bank keeps
-            // source tracking, the speedMasters.changed push, and write-through working.
-            post<ClockBpm> {
-                val request = call.receive<SetBpmRequest>()
-                state.show.fxEngine.speedMasters.setBpm(null, request.bpm, SpeedMasterSource.MANUAL)
-                call.respond(ClockStatusResponse(
-                    bpm = state.show.fxEngine.masterClock.bpm.value,
-                    isRunning = state.show.fxEngine.masterClock.isRunning.value
-                ))
-            }
-
-            post<ClockTap> {
-                state.show.fxEngine.speedMasters.tap(null)
-                call.respond(ClockStatusResponse(
-                    bpm = state.show.fxEngine.masterClock.bpm.value,
-                    isRunning = state.show.fxEngine.masterClock.isRunning.value
-                ))
-            }
-        }
-
+        // Tempo is not here. Speed masters own it: `PUT /project/{id}/speed-masters/{mid}`
+        // for a typed/stored tempo, and the `speedMasters.*` WS family for live control.
         // Active effects endpoints
         get<ActiveEffects> {
             val engine = state.show.fxEngine
@@ -219,15 +190,6 @@ internal fun Route.routeApiRestFx(state: State) {
 
 // Resource classes for type-safe routing
 
-@Resource("/clock/status")
-data object ClockStatus
-
-@Resource("/clock/bpm")
-data object ClockBpm
-
-@Resource("/clock/tap")
-data object ClockTap
-
 @Resource("/active")
 data object ActiveEffects
 
@@ -253,15 +215,6 @@ data object ClearAll
 data object EffectLibrary
 
 // Request/Response DTOs
-
-@Serializable
-data class ClockStatusResponse(
-    val bpm: Double,
-    val isRunning: Boolean
-)
-
-@Serializable
-data class SetBpmRequest(val bpm: Double)
 
 @Serializable
 data class AddEffectRequest(

@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.onEach
 import uk.me.cormack.lighting7.state.State
 import java.util.Collections
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Per-connection context handed to every domain handler and subscription setup.
@@ -31,14 +30,11 @@ class SocketScope(
 
     private val jobs = mutableListOf<Job>()
 
-    /** Set on `requestBeatSync`; consumed by the beat-sync subscription on the next beat. */
-    val sendNextBeat = AtomicBoolean(true)
-
     /**
-     * Masters this connection has asked for an immediate beat frame on (`null` = master 1),
-     * the keyed equivalent of [sendNextBeat]. A set rather than a flag because each master's
-     * indicator mounts independently, and consumed by `remove()` so a request really is
-     * one-shot — the throttle takes over again afterwards.
+     * Masters this connection has asked for an immediate beat frame on (`null` = master 1
+     * before the bank has loaded). A set rather than a flag because each master's indicator
+     * mounts independently, and consumed by `remove()` so a request really is one-shot — the
+     * throttle takes over again afterwards.
      */
     val pendingBeatRequests: MutableSet<UUID?> = Collections.synchronizedSet(HashSet())
 

@@ -19,9 +19,9 @@ enum class SpeedMasterSource {
 
 /**
  * A named tempo bus that FX instances *subscribe to* rather than owning speeds — the console
- * speed master. One row per master per project; `master_index` 1 is the global master that
- * every pre-existing entry point (`setFxBpm`, `tapTempo`, `fxState.bpm`, `beatSync`) maps to,
- * and every FX instance with no explicit master resolves to.
+ * speed master. One row per master per project; `master_index` 1 is the global master that the
+ * script API's `setBpm`/`tapTempo`, the AI `set_bpm` tool, and every FX instance with no
+ * explicit master all resolve to.
  *
  * The stored [bpm] is the master's *starting* tempo: the live value is owned by the runtime
  * bank and written through on change, so an export carries whatever the master was last set

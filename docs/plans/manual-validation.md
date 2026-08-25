@@ -225,23 +225,27 @@ redesign Session 5, 2026-08-14
 Session 5 shipped with a restart outstanding, so **no part of the speed-master bank has run against
 the rig**. `SpeedMasterBankTest` pins the tick-interval arithmetic (the old `toLong()` truncation
 ran 120 BPM at ~125, which with two masters is *relative* drift at 120:60 ⇒ 2.05:1) and
-`SocketMessageWireFormatTest` pins master-1 wire compatibility, but the single-engine-pass
+`SocketMessageWireFormatTest` pins the `speedMasters.*` wire format, but the single-engine-pass
 composition — one `ControllerTransaction` per frame however many masters ticked — has only ever
 been exercised by tests.
 
 **Coordinate the restart with the user first; it may be driving a live rig.**
 
-**Test**: restart → confirm the default bank seeds and the existing BPM tile still reads and taps
-master 1 (the wire-compat promise, from a client that never learned about masters). Then put a
-position wave on master 2 at half master 1's BPM and a dimmer chase on master 1, both on the same
-fixtures → confirm a visibly 2:1 ratio held over several minutes (drift is what the deadline timer
-fixes and only shows up over time). Tap master 2 → only its effect changes rate. Check the legacy
-surfaces still land on master 1: script `setBpm`, REST `/fx/clock/*`, WS `setFxBpm`.
+**Test**: restart → confirm the default bank seeds and the ShowBar masters strip reads and taps
+master 1. Then put a position wave on master 2 at half master 1's BPM and a dimmer chase on
+master 1, both on the same fixtures → confirm a visibly 2:1 ratio held over several minutes
+(drift is what the deadline timer fixes and only shows up over time). Tap master 2 → only its
+effect changes rate. Check the surviving master-1 entry points still land on master 1: script
+`setBpm`/`tapTempo`, the AI `set_bpm` tool, and `PUT /project/{id}/speed-masters/{mid}` with a
+`bpm` (which must retune the *live* clock, not just the stored default).
 
-While there, check the per-master beat dots — `BeatIndicator` pulses from the keyed
-`speedMasters.beat` stream, so the dot beside a master-2 effect should track master 2. Watch the
-**master 1** dot in particular: `beatSync` used to (accidentally) arrive every beat and now
-genuinely arrives every 16, so the client's local interpolation is load-bearing for the first time.
+While there, check the per-master beat dots — every `BeatIndicator` pulses from the keyed
+`speedMasters.beat` stream now, so the dot beside a master-2 effect should track master 2. Watch
+the **master 1** dots in particular (the strip's M1 tile *and* the FX panel's): sweep item D2
+moved them off `beatSync` onto the keyed stream, which needed master 1's real uuid resolved
+client-side — a dot that stays an empty ring forever is that resolution failing. The local
+interpolation is also load-bearing there for the first time: `beatSync` used to (accidentally)
+arrive every beat, and the keyed stream genuinely throttles to every 16.
 
 ## `FU-MANUAL-UPDATE-APPLY`
 

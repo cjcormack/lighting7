@@ -8,9 +8,10 @@ import java.util.concurrent.atomic.AtomicLong
  * One speed master's tempo clock.
  *
  * Historically the single global tempo; since the speed-masters work each clock is one
- * member of a [SpeedMasterBank], with the bank's slot 0 ("master 1") being the global
- * tempo every pre-existing surface (`setFxBpm`, `tapTempo`, `fxState.bpm`, `beatSync`)
- * maps to. The clock emits tick events (24 per beat, like MIDI clock) and beat events.
+ * member of a [SpeedMasterBank], with the bank's slot 0 ("master 1") being the global tempo
+ * that the script API's `setBpm`/`tapTempo`, the AI `set_bpm` tool, and every effect with no
+ * explicit master resolve to. The clock emits tick events on [tickFlow] (24 per beat, like
+ * MIDI clock), and reports beat boundaries through the [onBeat] callback.
  *
  * Tempo is expressed purely as tick **emission rate**: effect phase is a pure function of
  * the tick counter (see [phaseForDivision]), never of BPM, so a tempo change takes effect
@@ -82,11 +83,6 @@ class MasterClock {
     /** Emits on every tick (24 per beat) */
     val tickFlow: SharedFlow<ClockTick> = _tickFlow.asSharedFlow()
 
-    private val _beatFlow = MutableSharedFlow<BeatEvent>(replay = 0, extraBufferCapacity = 1)
-
-    /** Emits on every beat (quarter note) */
-    val beatFlow: SharedFlow<BeatEvent> = _beatFlow.asSharedFlow()
-
     /**
      * Most recent tick, readable without collecting [tickFlow]. The [SpeedMasterBank]
      * samples every clock's current tick into one coherent frame per engine pass.
@@ -105,9 +101,11 @@ class MasterClock {
     /**
      * Invoked on every beat boundary, off the flow machinery — the twin of [onTick], and
      * for the same reason. The bank fans every clock's beats into one keyed stream from
-     * here rather than collecting [beatFlow] per master, which would need a coroutine per
-     * clock and explicit cancel-on-reload bookkeeping. This callback is wired once per
-     * clock *instance*, so a rename or reorder that keeps the instance keeps the wiring.
+     * here; a `SharedFlow` per clock would need a collector coroutine per master and
+     * explicit cancel-on-reload bookkeeping (there was one, consumed only by the retired
+     * `beatSync` push, and it emitted per beat per master for nobody else). This callback is
+     * wired once per clock *instance*, so a rename or reorder that keeps the instance keeps
+     * the wiring.
      */
     @Volatile
     var onBeat: ((BeatEvent) -> Unit)? = null
@@ -202,9 +200,7 @@ class MasterClock {
                 _tickFlow.tryEmit(tick)
 
                 if (tickInBeat == 0) {
-                    val beat = BeatEvent(beatNumber, tick.timestampMs)
-                    _beatFlow.tryEmit(beat)
-                    onBeat?.invoke(beat)
+                    onBeat?.invoke(BeatEvent(beatNumber, tick.timestampMs))
                 }
 
                 onTick?.invoke()

@@ -73,9 +73,8 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
     )
 
     /**
-     * One master crossed a beat boundary — the keyed analogue of the master-1-only
-     * `beatSync`, so a client can pulse an indicator against the master its effect
-     * actually runs on.
+     * One master crossed a beat boundary, tagged with which master, so a client can pulse an
+     * indicator against the master its effect actually runs on.
      */
     data class Beat(
         val uuid: UUID?,
@@ -190,8 +189,16 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         )
     }
 
-    /** Master 1's clock — the compatibility surface for everything that predates the bank. */
+    /** Master 1's clock — the global tempo, and what a null reference resolves to. */
     fun master1(): MasterClock = bindings.slots[0].clock
+
+    /**
+     * Master 1's uuid, or null before [load] has run (the synthetic master has no row to name
+     * it). Callers that need to *match* master 1 against something tagged from a bank entry —
+     * a beat frame, say — have to go through this rather than assuming null, because a loaded
+     * master 1 is tagged with its real uuid like any other master.
+     */
+    fun master1Uuid(): UUID? = bindings.slots[0].uuid
 
     /**
      * Runtime slot for [uuid]; null or unknown resolves to master 1. This fallback is for
@@ -244,9 +251,12 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
      * exception is the synthetic pre-load master 1, which adopts the stored bpm on the
      * first load (nothing live has been tapped into a bank that was never loaded).
      *
-     * The row with `index == 1` keeps slot 0's clock instance, whatever its uuid was
-     * before: `beatSync` and `fxState` subscriptions hold that clock's StateFlows, and
-     * replacing the object would silently orphan them.
+     * The row with `index == 1` keeps slot 0's clock instance, whatever its uuid was before.
+     * `master1Clock`'s [MasterClock.onTick] and [MasterClock.onBeat] are wired once in this
+     * class's `init` and never re-wired here, so replacing the object would silently orphan
+     * the engine's wake nudge and the beat fan-out — master 1 would stop driving the engine
+     * at all. It is also the only way to say "keep the live tempo and tick counter" for
+     * master 1, whose uuid changes on the first load.
      */
     fun load(rows: List<SpeedMasterSnapshot>) {
         synchronized(lock) {
@@ -326,7 +336,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
     }
 
     /**
-     * Resolve a *write* target. Null means master 1 (the legacy unkeyed surfaces); a
+     * Resolve a *write* target. Null means master 1 (the script API, the strip's M1 tile); a
      * non-null uuid the bank doesn't know returns null so the write is DROPPED — falling
      * back to master 1 here would let a tap on a just-deleted master's stale UI tile
      * silently retune the global tempo. (Read paths keep the master-1 fallback; see

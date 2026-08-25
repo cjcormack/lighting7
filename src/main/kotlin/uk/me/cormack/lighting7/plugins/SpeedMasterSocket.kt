@@ -11,12 +11,15 @@ import java.util.UUID
 
 /**
  * The `speedMasters.*` WS family — live tempo control and streaming for the speed-master
- * bank. CRUD (create/rename/delete) is REST (`/project/{id}/speed-masters`) with a
- * `speedMasterListChanged` invalidation broadcast; this family carries only what changes
- * at performance rate: per-master BPM.
+ * bank, and the desk's only WS tempo surface. CRUD (create/rename/delete) is REST
+ * (`/project/{id}/speed-masters`) with a `speedMasterListChanged` invalidation broadcast;
+ * this family carries only what changes at performance rate: per-master BPM.
  *
- * The legacy unkeyed `setFxBpm`/`tapTempo`/`beatSync` messages stay bound to master 1
- * (see `FxSocket`) — this family is the keyed superset, not a replacement.
+ * A master is addressed by uuid throughout, with `null` meaning master 1 on every *inbound*
+ * message — for a client that has no uuid to hand yet. Note the asymmetry on the way out:
+ * `speedMasters.state` and `.beat` report master 1 by its real uuid once the bank has loaded,
+ * and `null` only for the synthetic pre-load master 1. So a client can *ask* about master 1
+ * with a null uuid, but must not expect to *recognise* its frames by one.
  */
 
 // ─── Inbound ────────────────────────────────────────────────────────────
@@ -44,9 +47,9 @@ data class SpeedMastersTapInMessage(
 ) : SpeedMasterInMessage()
 
 /**
- * Ask for one immediate beat frame for [masterUuid] (null/omitted → master 1), so a
- * freshly-mounted indicator doesn't wait out the throttle before it can lock phase. The
- * keyed twin of `requestBeatSync`.
+ * Ask for one immediate beat frame for [masterUuid] (null/omitted → master 1, resolved to its
+ * live uuid by the handler), so an indicator that has just mounted — or just come back from a
+ * backgrounded tab with a drifted local timer — doesn't wait out the throttle to lock phase.
  */
 @Serializable
 @SerialName("speedMasters.requestBeat")
@@ -78,7 +81,7 @@ data class SpeedMastersStateOutMessage(
     val masters: List<SpeedMasterStateJson>,
 ) : SpeedMasterOutMessage()
 
-/** One master's tempo moved. The per-master analogue of the master-1-only `beatSync` push. */
+/** One master's tempo moved — the live-BPM push, at tap rate. */
 @Serializable
 @SerialName("speedMasters.changed")
 data class SpeedMasterChangedOutMessage(
@@ -90,14 +93,12 @@ data class SpeedMasterChangedOutMessage(
 ) : SpeedMasterOutMessage()
 
 /**
- * One master crossed a beat boundary — the keyed analogue of `beatSync`, which is wired to
- * master 1's clock object and so can never speak for any other master.
+ * One master crossed a beat boundary.
  *
- * Throttled to one frame per [BEAT_FRAME_INTERVAL] beats (plus `speedMasters.requestBeat`),
- * on the same reasoning as `beatSync`: the client runs a local timer off [bpm] between
- * frames and only needs the server to correct its drift. Emitted for master 1 too, so the
- * stream is uniform for a client that would rather key everything the same way — the legacy
- * `beatSync` stays exactly as it was for clients that don't.
+ * Throttled to one frame per [BEAT_FRAME_INTERVAL] beats (plus `speedMasters.requestBeat`):
+ * the client runs a local timer off [bpm] between frames and only needs the server to correct
+ * its drift. Every master rides this stream, master 1 included — under its real uuid once the
+ * bank has loaded, so a client keys beats exactly as it keys `speedMasters.state`.
  */
 @Serializable
 @SerialName("speedMasters.beat")
@@ -109,7 +110,7 @@ data class SpeedMasterBeatOutMessage(
     val timestampMs: Long,
 ) : SpeedMasterOutMessage()
 
-/** Beats between unsolicited beat frames. Matches `beatSync`'s interval — ~8s at 120 BPM. */
+/** Beats between unsolicited beat frames — ~8s at 120 BPM. */
 private const val BEAT_FRAME_INTERVAL = 16L
 
 // ─── Handler ────────────────────────────────────────────────────────────
@@ -127,11 +128,18 @@ suspend fun handleSpeedMasters(scope: SocketScope, message: SpeedMasterInMessage
             scope.send(buildSpeedMastersState(bank))
         }
         is SpeedMastersRequestBeatInMessage -> {
+            // An omitted uuid resolves to master 1's *live* uuid rather than parking `null`.
+            // Requests are matched against `SpeedMasterBank.Beat.uuid`, which is tagged from
+            // the bank entry, so a loaded master 1 emits its real uuid — a parked `null`
+            // could never match, leaving the request silently unsatisfiable and the entry in
+            // the set for the life of the connection. Pre-load, `master1Uuid()` is itself
+            // null, which is exactly what the synthetic master's beats carry.
+            //
             // Unlike a tempo write, a garbled uuid here is harmless — it just parks a
             // request nothing will ever match — but drop it anyway rather than letting it
             // resolve to master 1 and pulse the wrong indicator.
             if (message.masterUuid == null) {
-                scope.pendingBeatRequests.add(null)
+                scope.pendingBeatRequests.add(bank.master1Uuid())
             } else {
                 speedMasterUuidOrNull(message.masterUuid)?.let { scope.pendingBeatRequests.add(it) }
             }
@@ -140,8 +148,8 @@ suspend fun handleSpeedMasters(scope: SocketScope, message: SpeedMasterInMessage
 }
 
 /**
- * Resolve a tempo-write target. Null/omitted means master 1 (the strip's M1 tile and the
- * legacy surfaces); a present-but-garbled uuid DROPS the write — degrading it to master 1
+ * Resolve a tempo-write target. Null/omitted means master 1 (the strip's M1 tile, and any
+ * caller with no uuid yet); a present-but-garbled uuid DROPS the write — degrading it to master 1
  * would let a corrupt frame retune the global tempo. (An unknown-but-well-formed uuid is
  * dropped one layer down, by [SpeedMasterBank]'s write resolution.) The state reply still
  * goes out either way, so a stale client re-syncs.

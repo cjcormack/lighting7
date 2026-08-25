@@ -85,8 +85,22 @@ class SpeedMasterBankTest {
         bank.load(listOf(snapshot(u1, 1, name = "House")))
         assertTrue(
             clockAfterFirstLoad === bank.master1(),
-            "beatSync/fxState subscriptions hold master 1's StateFlows — the instance must survive",
+            "master 1's onTick/onBeat are wired once in init and never re-wired by load — " +
+                "replacing the instance would orphan the engine's wake nudge and the beat fan-out",
         )
+    }
+
+    @Test
+    fun `master1Uuid reports the loaded uuid, not null`() {
+        val bank = SpeedMasterBank()
+        assertEquals(null, bank.master1Uuid(), "the synthetic pre-load master has no row to name it")
+
+        val u1 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1)))
+
+        // What `speedMasters.requestBeat` resolves an omitted uuid to. Beats are tagged from
+        // the bank entry, so a request parked as `null` could never match a loaded master 1.
+        assertEquals(u1, bank.master1Uuid())
     }
 
     @Test
@@ -184,7 +198,7 @@ class SpeedMasterBankTest {
         val beats = collectBeats(bank)
 
         // The whole point of the keyed stream: master 2's beats are distinguishable from
-        // master 1's, which `beatSync` can never be — it is wired to one clock object.
+        // master 1's, so an indicator can pulse against the master its effect runs on.
         val fromM1 = beats.filter { it.uuid == u1 }
         val fromM2 = beats.filter { it.uuid == u2 }
         assertTrue(fromM1.isNotEmpty(), "master 1 must appear on the keyed stream too")
