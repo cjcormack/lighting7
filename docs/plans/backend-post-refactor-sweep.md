@@ -391,12 +391,16 @@ the engine own the band.
 twice until then. **Fix:** parameterise on a phase supplier. (Distinct from
 `FU-PERF-FRAME-TXN-UNIFY`, which is about unifying the *loops* — leave that trigger-gated.)
 
-**E8. Tick-path error handling** — medium / P1 / S / opus
+~~**E8. Tick-path error handling**~~ — done, `c606cfc`. medium / P1 / S / opus
 `System.err.println` with no stack trace at 120/s for a misbehaving script effect
 (`FxEngine.kt:2101,2202` + 6 more), one fully-empty catch (`resetOne`, `:2498`). **Fix:** SLF4J,
 rate-limited, auto-pause an effect that throws N consecutive ticks. Also: move the `runBlocking`
 test shims (`processBeatTick`/`processWallClockTick`) to test code; note `fxEngine.start(GlobalScope)`
-(`Show.kt:238`) as accepted-for-now with a comment.
+(`Show.kt:238`) as accepted-for-now with a comment. Grew in the landing: the pass loops caught
+nothing at all, so one throw outside the per-effect try killed every effect on the desk for the
+life of the process; both levels now catch `Throwable` (a compiled script effect can raise an
+`Error`), and an auto-pause resets the effect's properties so a half-applied group frame isn't
+left frozen.
 
 **E9. Small structural items** — low / P3 / S / sonnet
 `FixturesChangeListener` 15-method interface → default methods (six implementers stub ~12 no-ops
@@ -507,7 +511,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
-| 2 | ~~D1–D6, D8, D9, A5–A10~~ **done**, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
+| 2 | ~~D1–D6, D8, D9, A5–A10, E8~~ **done**, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
