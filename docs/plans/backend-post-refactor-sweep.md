@@ -135,11 +135,7 @@ Honoured on click-apply (`projectTemplates.kt:300`) but `CueComposer.LayerConten
 (`CueComposer.kt:428-434`) and `SourceRow` (`:437-443`) drop it. **Fix:** carry the field through
 the cook so tracked layers fade like applied ones.
 
-**B2. Scripts cannot address speed masters** — high / P1 / M / opus
-No `FxBuilder`/`applyXxxFx` surface sets `speedMasterUuid`/`rateSpeedMasterUuid`
-(`FxExtensions.kt:120-209`, `group/GroupFxExtensions.kt`, `fxApplicationScriptDef.kt`) — every
-script-applied effect pins to master 1. **Fix:** add both parameters to the builder and extension
-signatures.
+~~**B2. Scripts cannot address speed masters**~~ — done, pulled forward and landed with D7 (same 24 signatures). high / P1 / M / opus
 
 **B3. `elementMode` settable on update but not add** — medium / P1 / S / sonnet
 `AddEffectRequest` (`lightFx.kt:251-262`) lacks the field `UpdateEffectRequest` has; a FLAT group
@@ -336,12 +332,7 @@ live, contra the original item: `LookRegistry`'s flattening layer
 sealed subclasses needs `--rerun-tasks` on the next build (a green build can still fail every
 serialization test otherwise).
 
-**D7. Kotlin effect classes in `fx/effects/` are NOT dead — reframe, don't delete** — low / P3 / S / opus
-They duplicate the `.fx.kts` resources (~1,000 lines) and have no speed-master surface, **but**
-`fx.effects.*` is a `defaultImports` entry in every script definition, so operator scripts stored
-in the DB may construct them. **Fix:** keep as the script-facing API; B2 gives scripts speed-master
-access at the apply site (timing lives on `FxInstance`, not the effect). Only revisit deletion
-after auditing DB-stored scripts on the real desk.
+~~**D7. Kotlin effect classes in `fx/effects/`: delete and replace the vocabulary**~~ — done, pulled forward and landed with B2. The DB audit the original item was gated on came back clean. low / P3 / S / opus
 
 **D8. Palette-era vestiges in `ProgrammerStore`** — low / P2 / S / sonnet
 `IncludedTarget.Kind.PALETTE` (never constructed), `paletteId`, `clearIncludeTargetForPalette`, and
@@ -513,10 +504,17 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6~~ **done**, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
-| 3 | C3–C7, B1, B2 | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. |
+| 3 | C3–C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
-| 6 | H1–H3, G4, D7, E9, F4 | Mechanical passes. |
+| 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
+
+**Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
+`effect: Effect` signatures, and neither touches the tick path, so pulling them out of waves 3
+and 6 spends neither the wave-0 baseline nor the re-capture wave 3 is waiting on. One thing to
+carry forward: that re-capture will be taken with the benchmark's effects living in
+`testsupport/TestEffects.kt` — byte-equivalent copies of what the 2026-04-22 baseline used, so
+still comparable, but the freeze is now a convention rather than a fact.
 
 **Re-sequencing note (2026-08-24).** C1+C2 were originally behind the retirements, on the
 "everything after moves less code" principle. They were pulled forward when C0 landed, for two
@@ -545,6 +543,12 @@ caller, `ProgrammerLookStack`'s local `isPreview` filter, and the unfiltered-sta
 in `ProgrammerScopeBand`/`LookRowStoreProvider` that `FU-PROG-FOCUS-PREVIEW-LAYER` flagged are all
 dead code now, not just unreachable),
 F1/F2/F3/F5 (renamed paths/messages/status codes), F6 (hand-copied admin prefix list).
+
+**D7.** `GET /fx/library` now returns each parameter's real `type`, `defaultValue` and
+`description` instead of `"string"`, `""`, `""`. Same payload shape, so nothing breaks and
+nothing needs changing — but the FX sheet consumes all three, so typed controls and prefilled
+defaults should start working on their own. Worth confirming the double-slider range at
+`EffectParameterForm.tsx:478` for parameters whose real defaults exceed 1.0.
 
 D1's frontend half, now that the backend is done (nothing here is urgent — the backend simply
 never answers 409 `CUE_EDIT_SESSION_OPEN` again, so the handlers are unreachable rather than

@@ -1231,14 +1231,10 @@ internal fun createInstanceFromPreset(
     overrideSpeedMasterUuid: java.util.UUID? = null,
     overrideRateSpeedMasterUuid: java.util.UUID? = null,
 ): FxInstance {
-    // On the request thread, before the effect can tick: see [prewarmTemplateColours].
-    val templates = state.show.templateRegistry
-    prewarmTemplateColours(templates, presetEffect.parameters)
-    val effect = state.show.fxRegistry.createEffect(
+    val effect = state.show.fxRegistry.createEffectWithTemplates(
+        state.show.templateRegistry,
         presetEffect.effectType,
         presetEffect.parameters,
-        resolveColourSource = templateColourSource(templates),
-        colourSourceVersion = { templates.version },
     )
     val timing = FxTiming(presetEffect.beatDivision)
     val blendMode = try {

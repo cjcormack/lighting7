@@ -1,9 +1,9 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fx.effects.SineWave
-import uk.me.cormack.lighting7.fx.effects.StaticValue
 import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.testsupport.SineSlider
+import uk.me.cormack.lighting7.testsupport.WindowedSlider
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -32,7 +32,7 @@ class FxInstanceTest {
     @Test
     fun `stepTiming false - beat division is total cycle time`() {
         val instance = FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = stubTarget,
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         )
@@ -53,7 +53,7 @@ class FxInstanceTest {
     @Test
     fun `stepTiming true - beat division scales by distinct slots`() {
         val instance = FxInstance(
-            effect = StaticValue(value = 200u),
+            effect = WindowedSlider(value = 200u),
             target = stubTarget,
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         )
@@ -76,7 +76,7 @@ class FxInstanceTest {
     @Test
     fun `stepTiming true with symmetric distribution uses distinctSlots not groupSize`() {
         val instance = FxInstance(
-            effect = StaticValue(value = 200u),
+            effect = WindowedSlider(value = 200u),
             target = stubTarget,
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         )
@@ -105,7 +105,7 @@ class FxInstanceTest {
     @Test
     fun `stepTiming has no effect for single-element groups`() {
         val instance = FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = stubTarget,
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         )
@@ -125,8 +125,8 @@ class FxInstanceTest {
 
     @Test
     fun `defaultStepTiming is respected by FxInstance`() {
-        val staticEffect = StaticValue(value = 200u)
-        val sineEffect = SineWave()
+        val staticEffect = WindowedSlider(value = 200u)
+        val sineEffect = SineSlider()
 
         val staticInstance = FxInstance(effect = staticEffect, target = stubTarget, timing = FxTiming())
         val sineInstance = FxInstance(effect = sineEffect, target = stubTarget, timing = FxTiming())

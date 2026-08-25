@@ -49,6 +49,34 @@ abstract class LightingScript(
     fun speedMaster(index: Int): MasterClock =
         speedMasters.clockFor(speedMasters.masterStates().indexOfFirst { it.index == index })
 
+    /**
+     * The uuid of the speed master at 1-based [index], for the `speedMasterUuid` /
+     * `rateSpeedMasterUuid` parameters on the `applyXxxFx` extensions. Null when no such master
+     * exists, which those parameters read as "master 1" and "unscaled".
+     */
+    fun speedMasterUuidAt(index: Int): java.util.UUID? =
+        speedMasters.masterStates().firstOrNull { it.index == index }?.uuid
+
+    /**
+     * Build an effect by registered type name, e.g. `effect("SineWave", "min" to "40")`.
+     *
+     * The registry is the single effect vocabulary — the same one the UI, cues and Looks use,
+     * including user effects from `fx_definitions`. Names match case-insensitively, ignoring
+     * spaces and underscores; `GET /api/rest/fx/library` lists each type's parameters.
+     *
+     * @throws IllegalArgumentException if no effect is registered under [id]
+     */
+    fun effect(id: String, params: Map<String, String>): Effect =
+        show.fxRegistry.createEffectWithTemplates(show.templateRegistry, id, params)
+
+    /**
+     * [effect] with parameters as pairs, and the no-parameter form `effect("Pulse")`.
+     * Deliberately not a default on the [Map] overload — that would make the bare
+     * `effect("Pulse")` call ambiguous between the two.
+     */
+    fun effect(id: String, vararg params: Pair<String, String>): Effect =
+        effect(id, params.toMap())
+
     fun controller(subnet: Int, universe: Int): DmxController = fixtures.controller(Universe(subnet, universe))
     inline fun <reified T: Fixture> fixture(key: String): T = fixtures.fixture(key)
     inline fun <reified T: Fixture> group(key: String): FixtureGroup<T> = fixtures.group(key)
@@ -64,7 +92,6 @@ object LightingScriptConfiguration : ScriptCompilationConfiguration(
             "uk.me.cormack.lighting7.fixture.hue.*",
             "uk.me.cormack.lighting7.fixture.group.*",
             "uk.me.cormack.lighting7.fx.*",
-            "uk.me.cormack.lighting7.fx.effects.*",
             "java.awt.Color",
             "uk.me.cormack.lighting7.dmx.*",
             "kotlinx.coroutines.*",

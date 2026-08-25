@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fx.effects.SineWave
+import uk.me.cormack.lighting7.testsupport.SineSlider
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -21,7 +21,7 @@ class FxRegistryTest {
             parameters = listOf(ParameterInfo("min", "ubyte", "0", "Min value")),
             compatibleProperties = listOf("dimmer"),
             factory = { params, _, _ ->
-                SineWave(
+                SineSlider(
                     min = params["min"]?.toIntOrNull()?.toUByte() ?: 0u,
                 )
             },
@@ -59,7 +59,7 @@ class FxRegistryTest {
     fun `createEffect returns correct type with parameters`() {
         val registry = createTestRegistry()
         val effect = registry.createEffect("test", mapOf("min" to "50"))
-        assertTrue(effect is SineWave)
+        assertTrue(effect is SineSlider)
         assertEquals(50.toUByte(), effect.min)
     }
 
@@ -83,7 +83,7 @@ class FxRegistryTest {
             compatibleProperties = listOf("rgbColour"),
             factory = { _, resolveColourSource, _ ->
                 received = resolveColourSource
-                SineWave() // dummy return
+                SineSlider() // dummy return
             },
         ))
 

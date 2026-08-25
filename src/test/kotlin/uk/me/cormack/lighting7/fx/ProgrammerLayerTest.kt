@@ -1,13 +1,13 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fx.LayerSource
-import uk.me.cormack.lighting7.fx.LayerSourceKind
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
-import uk.me.cormack.lighting7.fx.effects.StaticValue
+import uk.me.cormack.lighting7.fx.LayerSource
+import uk.me.cormack.lighting7.fx.LayerSourceKind
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.testsupport.WindowedSlider
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -127,7 +127,7 @@ class ProgrammerLayerTest {
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
         val effect = FxInstance(
-            effect = StaticValue(60u),
+            effect = WindowedSlider(60u),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
             blendMode = BlendMode.OVERRIDE,
@@ -181,7 +181,7 @@ class ProgrammerLayerTest {
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
         val effect = FxInstance(
-            effect = StaticValue(60u),
+            effect = WindowedSlider(60u),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
             blendMode = BlendMode.OVERRIDE,
@@ -223,7 +223,7 @@ class ProgrammerLayerTest {
 
         val effectId = rig.engine.addEffect(
             FxInstance(
-                effect = StaticValue(60u),
+                effect = WindowedSlider(60u),
                 target = SliderTarget("hex-a", "dimmer"),
                 timing = FxTiming(beatDivision = BeatDivision.QUARTER),
                 blendMode = BlendMode.OVERRIDE,
@@ -263,7 +263,7 @@ class ProgrammerLayerTest {
         val rig = newRig()
         val effectId = rig.engine.addEffect(
             FxInstance(
-                effect = StaticValue(60u),
+                effect = WindowedSlider(60u),
                 target = SliderTarget("hex-a", "dimmer"),
                 timing = FxTiming(beatDivision = BeatDivision.QUARTER),
                 blendMode = BlendMode.OVERRIDE,
@@ -301,7 +301,7 @@ class ProgrammerLayerTest {
         )
         rig.engine.addEffect(
             FxInstance(
-                effect = StaticValue(30u),
+                effect = WindowedSlider(30u),
                 target = SliderTarget("hex-a", "dimmer"),
                 timing = FxTiming(beatDivision = BeatDivision.QUARTER),
                 blendMode = BlendMode.ADDITIVE,
@@ -431,7 +431,7 @@ class ProgrammerLayerTest {
         val key = CueAssignmentResolver.Key.fixture("hex-a", "dimmer")
 
         val cueEffect = FxInstance(
-            effect = StaticValue(60u),
+            effect = WindowedSlider(60u),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
             blendMode = BlendMode.OVERRIDE,
@@ -446,7 +446,7 @@ class ProgrammerLayerTest {
         rig.engine.removeEffect(cueEffectId)
         rig.engine.addEffect(
             FxInstance(
-                effect = StaticValue(30u),
+                effect = WindowedSlider(30u),
                 target = SliderTarget("hex-a", "dimmer"),
                 timing = FxTiming(beatDivision = BeatDivision.QUARTER),
                 blendMode = BlendMode.OVERRIDE,
@@ -469,7 +469,7 @@ class ProgrammerLayerTest {
 
         val cueEffectId = rig.engine.addEffect(
             FxInstance(
-                effect = StaticValue(60u),
+                effect = WindowedSlider(60u),
                 target = SliderTarget("hex-a", "dimmer"),
                 timing = FxTiming(beatDivision = BeatDivision.QUARTER),
                 blendMode = BlendMode.OVERRIDE,
@@ -477,7 +477,7 @@ class ProgrammerLayerTest {
         )
         rig.engine.addEffect(
             FxInstance(
-                effect = StaticValue(30u),
+                effect = WindowedSlider(30u),
                 target = SliderTarget("hex-a", "dimmer"),
                 timing = FxTiming(beatDivision = BeatDivision.QUARTER),
                 blendMode = BlendMode.ADDITIVE,

@@ -388,14 +388,10 @@ private fun applyGroupEffect(
     request: AddGroupFxRequest
 ): Long {
     val engine = state.show.fxEngine
-    // On the request thread, before the effect can tick — see [prewarmTemplateColours].
-    val templates = state.show.templateRegistry
-    prewarmTemplateColours(templates, request.parameters)
-    val effect = state.show.fxRegistry.createEffect(
+    val effect = state.show.fxRegistry.createEffectWithTemplates(
+        state.show.templateRegistry,
         request.effectType,
         request.parameters,
-        resolveColourSource = templateColourSource(templates),
-        colourSourceVersion = { templates.version },
     )
     val timing = FxTiming(request.beatDivision)
     val blendMode = BlendMode.valueOf(request.blendMode)

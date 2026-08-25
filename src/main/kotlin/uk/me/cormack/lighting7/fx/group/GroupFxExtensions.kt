@@ -7,12 +7,16 @@ import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fx.*
+import java.util.UUID
 
 /**
  * Extension functions for applying effects to fixture groups.
  *
  * These functions create single group-level FxInstances that automatically
  * handle phase distribution across group members at processing time.
+ *
+ * As on the fixture side, every entry point takes `speedMasterUuid` and
+ * `rateSpeedMasterUuid` (sweep item **B2**); null means master 1 and unscaled respectively.
  */
 
 /**
@@ -26,6 +30,8 @@ import uk.me.cormack.lighting7.fx.*
  * @param timing Effect timing configuration
  * @param blendMode How to blend with existing values
  * @param distribution Strategy for distributing phases across members
+ * @param speedMasterUuid Speed master driving the effect's phase (null → master 1)
+ * @param rateSpeedMasterUuid Rate master scaling a WALL_CLOCK cycle (null → unscaled)
  * @return The effect ID for the group effect
  */
 fun <T> FixtureGroup<T>.applyDimmerFx(
@@ -33,11 +39,15 @@ fun <T> FixtureGroup<T>.applyDimmerFx(
     effect: Effect,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
-    distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
+    distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName),
+    speedMasterUuid: UUID? = null,
+    rateSpeedMasterUuid: UUID? = null,
 ): Long where T : GroupableFixture, T : WithDimmer {
     val target = SliderTarget.forGroup(name, "dimmer")
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         distributionStrategy = distribution
+        this.speedMasterUuid = speedMasterUuid
+        this.rateSpeedMasterUuid = rateSpeedMasterUuid
     }
     return engine.addEffect(instance)
 }
@@ -53,6 +63,8 @@ fun <T> FixtureGroup<T>.applyDimmerFx(
  * @param timing Effect timing configuration
  * @param blendMode How to blend with existing values
  * @param distribution Strategy for distributing phases across members
+ * @param speedMasterUuid Speed master driving the effect's phase (null → master 1)
+ * @param rateSpeedMasterUuid Rate master scaling a WALL_CLOCK cycle (null → unscaled)
  * @return The effect ID for the group effect
  */
 fun <T> FixtureGroup<T>.applyUvFx(
@@ -60,11 +72,15 @@ fun <T> FixtureGroup<T>.applyUvFx(
     effect: Effect,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
-    distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
+    distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName),
+    speedMasterUuid: UUID? = null,
+    rateSpeedMasterUuid: UUID? = null,
 ): Long where T : GroupableFixture, T : WithUv {
     val target = SliderTarget.forGroup(name, "uv")
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         distributionStrategy = distribution
+        this.speedMasterUuid = speedMasterUuid
+        this.rateSpeedMasterUuid = rateSpeedMasterUuid
     }
     return engine.addEffect(instance)
 }
@@ -80,6 +96,8 @@ fun <T> FixtureGroup<T>.applyUvFx(
  * @param timing Effect timing configuration
  * @param blendMode How to blend with existing values
  * @param distribution Strategy for distributing phases across members
+ * @param speedMasterUuid Speed master driving the effect's phase (null → master 1)
+ * @param rateSpeedMasterUuid Rate master scaling a WALL_CLOCK cycle (null → unscaled)
  * @return The effect ID for the group effect
  */
 fun <T> FixtureGroup<T>.applyColourFx(
@@ -87,11 +105,15 @@ fun <T> FixtureGroup<T>.applyColourFx(
     effect: Effect,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
-    distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
+    distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName),
+    speedMasterUuid: UUID? = null,
+    rateSpeedMasterUuid: UUID? = null,
 ): Long where T : GroupableFixture, T : WithColour {
     val target = ColourTarget.forGroup(name)
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         distributionStrategy = distribution
+        this.speedMasterUuid = speedMasterUuid
+        this.rateSpeedMasterUuid = rateSpeedMasterUuid
     }
     return engine.addEffect(instance)
 }
@@ -107,6 +129,8 @@ fun <T> FixtureGroup<T>.applyColourFx(
  * @param timing Effect timing configuration
  * @param blendMode How to blend with existing values
  * @param distribution Strategy for distributing phases across members
+ * @param speedMasterUuid Speed master driving the effect's phase (null → master 1)
+ * @param rateSpeedMasterUuid Rate master scaling a WALL_CLOCK cycle (null → unscaled)
  * @return The effect ID for the group effect
  */
 fun <T> FixtureGroup<T>.applyPositionFx(
@@ -114,11 +138,15 @@ fun <T> FixtureGroup<T>.applyPositionFx(
     effect: Effect,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
-    distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName)
+    distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName),
+    speedMasterUuid: UUID? = null,
+    rateSpeedMasterUuid: UUID? = null,
 ): Long where T : GroupableFixture, T : WithPosition {
     val target = PositionTarget.forGroup(name)
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         distributionStrategy = distribution
+        this.speedMasterUuid = speedMasterUuid
+        this.rateSpeedMasterUuid = rateSpeedMasterUuid
     }
     return engine.addEffect(instance)
 }
@@ -147,8 +175,8 @@ fun FixtureGroup<*>.clearFx(engine: FxEngine): Int {
  * Example:
  * ```kotlin
  * group.fx(fxEngine) {
- *     dimmer(Pulse(), BeatDivision.QUARTER, distribution = DistributionStrategy.LINEAR)
- *     colour(RainbowCycle(), BeatDivision.ONE_BAR, distribution = DistributionStrategy.UNIFIED)
+ *     dimmer(effect("Pulse"), BeatDivision.QUARTER, distribution = DistributionStrategy.LINEAR)
+ *     colour(effect("RainbowCycle"), BeatDivision.ONE_BAR, distribution = DistributionStrategy.UNIFIED)
  * }
  * ```
  */
@@ -167,11 +195,14 @@ class GroupFxBuilder<T : GroupableFixture> @PublishedApi internal constructor(
         effect: Effect,
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
-        distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
+        distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName),
+        speedMasterUuid: UUID? = null,
+        rateSpeedMasterUuid: UUID? = null,
     ): Long where R : GroupableFixture, R : WithDimmer {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyDimmerFx(
-            engine, effect, FxTiming(beatDivision), blendMode, distribution
+            engine, effect, FxTiming(beatDivision), blendMode, distribution,
+            speedMasterUuid, rateSpeedMasterUuid,
         ).also { effectIds.add(it) }
     }
 
@@ -183,11 +214,14 @@ class GroupFxBuilder<T : GroupableFixture> @PublishedApi internal constructor(
         effect: Effect,
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
-        distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
+        distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName),
+        speedMasterUuid: UUID? = null,
+        rateSpeedMasterUuid: UUID? = null,
     ): Long where R : GroupableFixture, R : WithColour {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyColourFx(
-            engine, effect, FxTiming(beatDivision), blendMode, distribution
+            engine, effect, FxTiming(beatDivision), blendMode, distribution,
+            speedMasterUuid, rateSpeedMasterUuid,
         ).also { effectIds.add(it) }
     }
 
@@ -199,11 +233,14 @@ class GroupFxBuilder<T : GroupableFixture> @PublishedApi internal constructor(
         effect: Effect,
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
-        distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
+        distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName),
+        speedMasterUuid: UUID? = null,
+        rateSpeedMasterUuid: UUID? = null,
     ): Long where R : GroupableFixture, R : WithUv {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyUvFx(
-            engine, effect, FxTiming(beatDivision), blendMode, distribution
+            engine, effect, FxTiming(beatDivision), blendMode, distribution,
+            speedMasterUuid, rateSpeedMasterUuid,
         ).also { effectIds.add(it) }
     }
 
@@ -215,11 +252,14 @@ class GroupFxBuilder<T : GroupableFixture> @PublishedApi internal constructor(
         effect: Effect,
         beatDivision: Double = BeatDivision.QUARTER,
         blendMode: BlendMode = BlendMode.OVERRIDE,
-        distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName)
+        distribution: DistributionStrategy = DistributionStrategy.fromName(group.metadata.defaultDistributionName),
+        speedMasterUuid: UUID? = null,
+        rateSpeedMasterUuid: UUID? = null,
     ): Long where R : GroupableFixture, R : WithPosition {
         val typedGroup = group.requireCapable<R>()
         return typedGroup.applyPositionFx(
-            engine, effect, FxTiming(beatDivision), blendMode, distribution
+            engine, effect, FxTiming(beatDivision), blendMode, distribution,
+            speedMasterUuid, rateSpeedMasterUuid,
         ).also { effectIds.add(it) }
     }
 

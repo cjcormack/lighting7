@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fx.effects.SineWave
+import uk.me.cormack.lighting7.testsupport.SineSlider
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -32,7 +32,7 @@ class WallClockTimingTest {
             category = "dimmer",
             outputType = FxOutputType.SLIDER,
             compatibleProperties = listOf("dimmer"),
-            factory = { _, _, _ -> SineWave() },
+            factory = { _, _, _ -> SineSlider() },
         )
         assertEquals(TimingSource.BEAT, reg.timingSource)
     }
@@ -46,7 +46,7 @@ class WallClockTimingTest {
             outputType = FxOutputType.SLIDER,
             timingSource = TimingSource.WALL_CLOCK,
             compatibleProperties = listOf("dimmer"),
-            factory = { _, _, _ -> SineWave() },
+            factory = { _, _, _ -> SineSlider() },
         )
         assertEquals(TimingSource.WALL_CLOCK, reg.timingSource)
     }
@@ -149,7 +149,7 @@ class WallClockTimingTest {
      */
     private fun wallClockInstance(cycleSeconds: Double): FxInstance =
         FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = SliderTarget(FxTargetRef.FixtureRef("test"), "dimmer"),
             timing = FxTiming(beatDivision = cycleSeconds),
         ).apply {

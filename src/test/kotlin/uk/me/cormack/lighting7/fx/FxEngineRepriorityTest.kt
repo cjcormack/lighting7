@@ -2,8 +2,8 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.PropertyCategory
-import uk.me.cormack.lighting7.fx.effects.SineWave
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.testsupport.SineSlider
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -95,7 +95,7 @@ class FxEngineRepriorityTest {
     }
 
     private fun makeEffect(cueId: Int?, priority: Int): FxInstance = FxInstance(
-        effect = SineWave(),
+        effect = SineSlider(),
         target = SliderTarget(FxTargetRef.fixture("fx-1"), "dimmer"),
         timing = FxTiming(beatDivision = BeatDivision.QUARTER),
     ).apply {

@@ -14,9 +14,9 @@ import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetRef
 import uk.me.cormack.lighting7.fx.FxTiming
 import uk.me.cormack.lighting7.fx.SliderTarget
-import uk.me.cormack.lighting7.fx.effects.SineWave
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import uk.me.cormack.lighting7.testsupport.SineSlider
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import uk.me.cormack.lighting7.testsupport.programmerChannel
@@ -181,7 +181,7 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
     private fun dimmerEffect(fixtureKey: String): FxInstance = sliderEffect(fixtureKey, "dimmer")
 
     private fun sliderEffect(fixtureKey: String, propertyName: String): FxInstance = FxInstance(
-        effect = SineWave(),
+        effect = SineSlider(),
         target = SliderTarget(FxTargetRef.fixture(fixtureKey), propertyName),
         timing = FxTiming(beatDivision = BeatDivision.QUARTER),
     )

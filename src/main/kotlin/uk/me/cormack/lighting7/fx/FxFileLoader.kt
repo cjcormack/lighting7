@@ -245,6 +245,9 @@ class FxFileLoader(
 
         private val FRONTMATTER_REGEX = Regex("""/\*---\s*\n(.*?)\n\s*---\*/""", RegexOption.DOT_MATCHES_ALL)
 
+        /** The keys a `parameters:` list item may carry; see [parseSimpleYaml]'s continuation branch. */
+        private val PARAM_KEYS = setOf("name", "type", "default", "description")
+
         /**
          * Parse an .fx.kts file into metadata and script body.
          *
@@ -311,11 +314,31 @@ class FxFileLoader(
                     continue
                 }
 
-                if (currentParam != null && (trimmed.startsWith("  ") || trimmed.startsWith("\t")) && !trimmed.startsWith("- ")) {
-                    // Continuation of current param
-                    val paramLine = trimmed.trim()
-                    if (paramLine.contains(":")) {
-                        val (k, v) = paramLine.split(":", limit = 2)
+                // Continuation of the current param: `type`, `default`, `description`. Indentation
+                // has to be read off the *raw* line — `trimmed` can never start with whitespace,
+                // and testing it here meant this branch never ran, so every built-in parameter
+                // parsed with type "string", no default and no description. Nothing noticed for a
+                // long time because the script bodies ask for a type explicitly
+                // (`params.ubyte("min")`) rather than dispatching on the declared one, and because
+                // every authoring surface sends a full parameter map. The cost was
+                // `TypedParams.raw`'s schema fallback being inert: an effect created without an
+                // explicit value got 0 / black / false rather than its documented default, so
+                // `effect("SineWave")` was a dead effect.
+                //
+                // Restricted to the keys a parameter actually has, because making the branch live
+                // also made it greedy: it absorbs *any* indented line while a parameter is open, so
+                // an indented top-level key written after the parameter list (`  compatibleProperties:
+                // [dimmer]`) would be swallowed and the effect would register with no compatible
+                // properties and no error. None of the 28 shipped files do that, but this parser has
+                // just cost the built-ins their whole metadata once; an unrecognised key falls
+                // through to the top-level `when` instead.
+                if (currentParam != null &&
+                    (line.startsWith("  ") || line.startsWith("\t")) &&
+                    !trimmed.startsWith("- ") &&
+                    trimmed.substringBefore(":").trim() in PARAM_KEYS
+                ) {
+                    if (trimmed.contains(":")) {
+                        val (k, v) = trimmed.split(":", limit = 2)
                         currentParam[k.trim()] = v.trim().removeSurrounding("\"")
                     }
                     continue

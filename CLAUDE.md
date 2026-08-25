@@ -197,16 +197,25 @@ Effect interfaces:
 - **StatefulEffect** - Tick-based with internal state: `(tick, deltaMs, context) → FxOutput` (e.g., CandleFlicker)
 - **CompositeEffect** - `(phase, context) → Map<FxOutputType, FxOutput>`, of which only the `outputType` entry is applied — one instance still drives one property (e.g., LightningStrike applies its dimmer half, not its colour half)
 
-Built-in effect types:
-- **Dimmer**: SineWave, Pulse, RampUp/Down, Triangle, Strobe, Flicker, Breathe, CandleFlicker
-- **Colour**: ColourCycle, RainbowCycle, ColourStrobe, ColourPulse, ColourFade
-- **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition
+Built-in effect types — **all 28 live as `.fx.kts` resources** under
+`src/main/resources/fx/`, compiled into the `FxRegistry` at startup by `FxFileLoader`. There are
+no compiled-in effect classes: the parallel `fx/effects/*.kt` set was deleted (sweep item D7)
+once it had drifted a file behind the resources and nothing but tests constructed it.
+- **Dimmer**: SineWave, Pulse, RampUp/Down, Triangle, SquareWave, Strobe, Flicker, Breathe,
+  CandleFlicker, FluorescentFlicker, StaticValue, StaticSetting
+- **Colour**: ColourCycle, RainbowCycle, ColourStrobe, ColourPulse, ColourFade, ColourFlicker,
+  StaticColour
+- **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition, StaticPosition
 - **Composite**: LightningStrike (dimmer; its colour half is computed but not applied)
 
-Scripts can apply effects using extension functions:
+Scripts name an effect rather than constructing one — `effect(id, params)` resolves it through the
+registry, so a script reaches the same vocabulary as the UI and cues, user effects included:
 ```kotlin
-fixture.applyDimmerFx(fxEngine, SineWave(), FxTiming(BeatDivision.HALF))
-fixture.applyColourFx(fxEngine, RainbowCycle(), FxTiming(BeatDivision.ONE_BAR))
+fixture.applyDimmerFx(fxEngine, effect("SineWave", "min" to "40"), FxTiming(BeatDivision.HALF))
+fixture.applyColourFx(fxEngine, effect("RainbowCycle"), FxTiming(BeatDivision.ONE_BAR))
+
+// Every apply site takes a speed master; null means master 1 (unscaled for the rate master)
+fixture.applyDimmerFx(fxEngine, effect("Pulse"), speedMasterUuid = speedMasterUuidAt(2))
 ```
 
 Scripts can also register custom effects that appear in the library API:
@@ -293,10 +302,10 @@ Applying effects to groups:
 val group = fixtures.group<HexFixture>("front-wash")
 
 // Pulse effect with linear distribution
-val effectId = group.applyDimmerFx(fxEngine, Pulse(), distribution = DistributionStrategy.LINEAR)
+val effectId = group.applyDimmerFx(fxEngine, effect("Pulse"), distribution = DistributionStrategy.LINEAR)
 
 // Unified colour across all fixtures
-group.applyColourFx(fxEngine, RainbowCycle(), distribution = DistributionStrategy.UNIFIED)
+group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = DistributionStrategy.UNIFIED)
 ```
 
 ## API Endpoints
@@ -459,23 +468,33 @@ sealed class MyFixture(...) : DmxFixture(...), MultiModeFixtureFamily<MyFixture.
 
 Three script types with focused API surfaces (controlled by `ScriptType` enum, stored per-script in DB):
 
-**`FX_APPLICATION`** — apply effects to fixtures (most common):
+**`FX_APPLICATION`** — apply effects to fixtures (most common). `effect(id, params)` resolves a
+name through the `FxRegistry`; `speedMasterUuidAt(n)` names a speed master by its 1-based index:
 ```kotlin
 val wash = fixture<HexFixture>("front-wash-1")
 wash.fx {
-    dimmer(SineWave(), BeatDivision.HALF)
-    colour(ColourCycle(), BeatDivision.ONE_BAR)
+    dimmer(effect("SineWave", "min" to "40"), BeatDivision.HALF)
+    colour(effect("ColourCycle"), BeatDivision.ONE_BAR, speedMasterUuid = speedMasterUuidAt(2))
 }
 setBpm(128.0)
 ```
 
-**`FX_DEFINITION`** — define custom effect types:
+**`FX_DEFINITION`** — define custom effect types. The factory returns an `Effect` the script
+implements itself; to build on a built-in, look its registration up via `fxRegistry` and call its
+own factory rather than reimplementing the maths:
 ```kotlin
 registerEffect(EffectRegistration(
     id = "my-effect", name = "My Effect",
     category = "dimmer", outputType = FxOutputType.SLIDER,
     compatibleProperties = listOf("dimmer"),
-    factory = { params, _, _ -> CandleFlicker(baseLevel = 180u) },
+    factory = { params, _, _ ->
+        object : Effect {
+            override val name = "My Effect"
+            override val outputType = FxOutputType.SLIDER
+            override fun calculate(phase: Double, context: EffectContext) =
+                FxOutput.Slider(if (phase < 0.5) 255u else 0u)
+        }
+    },
 ))
 ```
 

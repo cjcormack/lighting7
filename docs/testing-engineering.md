@@ -208,6 +208,16 @@ registry all persist per rig — sharing one would make the numbers order-depend
 | `[chase-beat]` / `[chase-wall]` | 40 × `LedLightbar12PixelFixture.Mode48Ch` in two groups (480 `RgbwPixel` elements), 4 group colour effects across two speed masters — FLAT and PER_FIXTURE on both tick loops | sweep C1 (per-tick target re-expansion), C2 (reflective property access on the colour write path), C6 (allocation bundle) |
 | `[crossfade]` | 168 `HexFixture`s, two cues × dimmer+colour rows (672 rows), 169 effects; drives `updateCueFadeWeights` at 62 fps | sweep C3 |
 
+The **effects** the harness applies are load-bearing for the same reason the rigs are, and they
+live in `testsupport/TestEffects.kt` rather than coming from the `FxRegistry`. Effect maths runs
+inside the measured loop, so a baseline is only comparable while that maths stays put — and the
+registry's 28 built-ins are `.fx.kts` resources that are expected to evolve. `SineSlider`,
+`WindowedSlider`, `HueSweepColour` and `SteppedColour` are frozen copies of the retired
+`fx.effects` classes the 2026-04-22 baseline was taken against (backend-sweep item D7). Don't
+"improve" their maths, and don't repoint the harness at the registry: either silently moves every
+number. Behaviour of the real built-ins is covered separately, against the real registry, in
+`fx/BuiltInEffectBehaviourTest`.
+
 The chase rig's fixture choice is load-bearing, not incidental. `Mode48Ch` implements
 `MultiElementFixture` and deliberately does *not* implement `WithColour` itself, which is what
 pushes `processGroupEffect` down the element-expansion branch; its `RgbwPixel` elements are

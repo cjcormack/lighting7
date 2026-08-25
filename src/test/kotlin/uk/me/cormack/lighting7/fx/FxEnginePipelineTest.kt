@@ -7,12 +7,12 @@ import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
-import uk.me.cormack.lighting7.fx.effects.SineWave
-import uk.me.cormack.lighting7.fx.effects.StaticColour
-import uk.me.cormack.lighting7.fx.effects.StaticValue
 import kotlinx.coroutines.runBlocking
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.testsupport.SineSlider
+import uk.me.cormack.lighting7.testsupport.WindowedColour
+import uk.me.cormack.lighting7.testsupport.WindowedSlider
 import java.awt.Color
 import java.util.UUID
 import kotlin.test.Test
@@ -31,7 +31,7 @@ import kotlin.test.assertTrue
  * [MockDmxController] already serves as the stub (main source), and [FxEngine.processBeatTick]
  * was relaxed to `internal` so this suite can pump ticks without the real-time loop.
  *
- * These tests are deliberately deterministic: they use [StaticValue] / [StaticColour] for
+ * These tests are deliberately deterministic: they use [WindowedSlider] / [WindowedColour] for
  * effect outputs so the asserted composition arithmetic does not depend on the phase of a
  * sine wave or the exact tick the loop lands on. The [TimingSource.WALL_CLOCK] path is driven
  * by calling [FxEngine.processWallClockTick] directly.
@@ -137,7 +137,7 @@ class FxEnginePipelineTest {
 
     private fun makeStaticDimmer(value: UByte, blendMode: BlendMode, priority: Int = 0): FxInstance =
         FxInstance(
-            effect = StaticValue(value),
+            effect = WindowedSlider(value),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
             blendMode = blendMode,
@@ -151,11 +151,11 @@ class FxEnginePipelineTest {
         // Park channel 1 at 128 before any effect runs.
         rig.parkSource.park(universe.universe, 1, 128u)
 
-        // SineWave on dimmer, OVERRIDE blend. The engine has no ParkManager wired in, so the
+        // SineSlider on dimmer, OVERRIDE blend. The engine has no ParkManager wired in, so the
         // effect still writes to the controller's raw `values` map; parking wins at transmit
         // time via `getEffectiveValue`.
         val effect = FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
             blendMode = BlendMode.OVERRIDE,
@@ -241,7 +241,7 @@ class FxEnginePipelineTest {
         )
 
         val whiteEffect = FxInstance(
-            effect = StaticValue(value = 90u),
+            effect = WindowedSlider(value = 90u),
             target = SliderTarget("hex-a", "white"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
             blendMode = BlendMode.OVERRIDE,
@@ -364,7 +364,7 @@ class FxEnginePipelineTest {
     // ─── Phase 0 smoke-check regression coverage ────────────────────────────
 
     @Test
-    fun `SineWave plus updateChannel at 180 — direct write remains visible as effect baseline`() {
+    fun `SineSlider plus updateChannel at 180 — direct write remains visible as effect baseline`() {
         val rig = newRig(firstChannel = 1)
         // updateChannel equivalent: the shim lifts the dimmer channel to a programmer entry.
         rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u))
@@ -374,7 +374,7 @@ class FxEnginePipelineTest {
         rig.controller.setValue(1, 180u, 0L)
 
         val effect = FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
             blendMode = BlendMode.OVERRIDE,
@@ -398,14 +398,14 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
 
         val low = FxInstance(
-            effect = StaticValue(value = 80u),
+            effect = WindowedSlider(value = 80u),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
             blendMode = BlendMode.OVERRIDE,
         ).also { it.priority = 1 }
 
         val high = FxInstance(
-            effect = StaticValue(value = 220u),
+            effect = WindowedSlider(value = 220u),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
             blendMode = BlendMode.OVERRIDE,
@@ -443,7 +443,7 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
 
         val effect = FxInstance(
-            effect = StaticValue(value = 111u),
+            effect = WindowedSlider(value = 111u),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = 1.0),
             blendMode = BlendMode.OVERRIDE,
@@ -675,12 +675,12 @@ class FxEnginePipelineTest {
         // Same beat division, different masters. Master 2's clock has advanced half a beat
         // while master 1 sits at the beat boundary.
         val onMaster1 = FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         )
         val onMaster2 = FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = SliderTarget("hex-a", "uv"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         ).also { it.speedMasterUuid = u2 }
@@ -709,7 +709,7 @@ class FxEnginePipelineTest {
         )
 
         val effect = FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         ).also { it.speedMasterUuid = u2 }
@@ -739,7 +739,7 @@ class FxEnginePipelineTest {
         )
 
         val effect = FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         ).also { it.speedMasterUuid = u2 }
@@ -767,7 +767,7 @@ class FxEnginePipelineTest {
         )
 
         val effect = FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         ).also { it.rateSpeedMasterUuid = u2 }
@@ -789,7 +789,7 @@ class FxEnginePipelineTest {
     fun `updateEffect's atomic swap preserves accumulated wall-clock time`() {
         val rig = newRig(firstChannel = 1)
         val effect = FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = 4.0),
         ).also { it.timingSource = TimingSource.WALL_CLOCK }
@@ -823,7 +823,7 @@ class FxEnginePipelineTest {
         )
 
         val effect = FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         )
@@ -936,7 +936,7 @@ class FxEnginePipelineTest {
         )
 
         val onWhite = FxInstance(
-            effect = StaticValue(90u),
+            effect = WindowedSlider(90u),
             target = SliderTarget("hex-a", "white"),
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
             blendMode = BlendMode.OVERRIDE,

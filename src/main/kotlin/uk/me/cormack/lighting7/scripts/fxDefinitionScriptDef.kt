@@ -15,16 +15,28 @@ import kotlin.script.experimental.jvm.jvmTarget
  * with the [FxRegistry]. They have a minimal API surface — no access to fixtures,
  * groups, the FX engine, tempo, or DMX.
  *
+ * The factory returns an [Effect] the script implements itself — there are no compiled-in effect
+ * classes to instantiate. To start from a built-in, look its registration up through [fxRegistry]
+ * and call its own factory rather than re-implementing its maths.
+ *
  * Example:
  * ```
  * registerEffect(EffectRegistration(
- *     id = "warm-candle",
- *     name = "Warm Candle",
+ *     id = "half-dimmer",
+ *     name = "Half Dimmer",
  *     category = "dimmer",
  *     outputType = FxOutputType.SLIDER,
+ *     parameters = listOf(ParameterInfo("max", "ubyte", "255", "Peak level")),
  *     compatibleProperties = listOf("dimmer"),
  *     factory = { params, _, _ ->
- *         CandleFlicker(baseLevel = params["baseLevel"]?.toUByteParam() ?: 180u)
+ *         val max = params["max"]?.toUByteParam() ?: 255u
+ *         object : Effect {
+ *             override val name = "Half Dimmer"
+ *             override val outputType = FxOutputType.SLIDER
+ *             override val parameters get() = mapOf("max" to max.toString())
+ *             override fun calculate(phase: Double, context: EffectContext): FxOutput =
+ *                 FxOutput.Slider(if (phase < 0.5) max else 0u)
+ *         }
  *     },
  * ))
  * ```
@@ -62,7 +74,6 @@ object FxDefinitionScriptConfiguration : ScriptCompilationConfiguration(
     {
         defaultImports(
             "uk.me.cormack.lighting7.fx.*",
-            "uk.me.cormack.lighting7.fx.effects.*",
             "java.awt.Color",
         )
 

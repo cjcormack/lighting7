@@ -47,8 +47,21 @@ class TypedParams(
     private val colourCache = ConcurrentHashMap<String, ExtendedColour>()
     private val colourListCache = ConcurrentHashMap<String, List<ExtendedColour>>()
 
-    /** Get the raw string value for a parameter, falling back to the schema default. */
-    fun raw(name: String): String = raw[name] ?: defaults[name] ?: ""
+    /**
+     * Get the raw string value for a parameter, falling back to the schema default.
+     *
+     * A **blank** stored value counts as absent, not as an override. That is not tidiness: while
+     * `FxFileLoader` was dropping every built-in's declared default (see its `parseSimpleYaml`),
+     * `GET /fx/library` served `defaultValue: ""`, the Add FX sheet seeded its form from that, and
+     * the resulting `{"min":"","max":""}` was persisted into `cue_effects` / `look_effects` /
+     * `cue_ad_hoc_effects` verbatim. Those rows exist on the desk today. Preferring a present-but-
+     * empty value over the schema default would leave every one of them dead — a `Breathe` parked
+     * at 0, a `Circle` with no radius — while an identical newly-added effect worked, with nothing
+     * in the UI to tell them apart. No effect parameter has a meaningful empty value, so treating
+     * blank as "not set" heals the stored rows and costs nothing.
+     */
+    fun raw(name: String): String =
+        raw[name]?.takeIf { it.isNotBlank() } ?: defaults[name] ?: ""
 
     /** Parse a UByte parameter (0-255). */
     fun ubyte(name: String): UByte = ubyteCache.getOrPut(name) {

@@ -11,13 +11,13 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
-import uk.me.cormack.lighting7.fx.effects.ColourCycle
-import uk.me.cormack.lighting7.fx.effects.RainbowCycle
-import uk.me.cormack.lighting7.fx.effects.SineWave
-import uk.me.cormack.lighting7.fx.effects.StaticValue
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.testsupport.HueSweepColour
+import uk.me.cormack.lighting7.testsupport.SineSlider
+import uk.me.cormack.lighting7.testsupport.SteppedColour
+import uk.me.cormack.lighting7.testsupport.WindowedSlider
 import java.awt.Color
 import java.util.UUID
 import kotlin.system.measureNanoTime
@@ -166,11 +166,11 @@ class FxEngineBenchmark {
         }
         engine.setCueAssignments(1, assignments)
 
-        // Two effects per fixture: one beat-synced SineWave, one wall-clock StaticValue.
+        // Two effects per fixture: one beat-synced SineSlider, one wall-clock WindowedSlider.
         val allFixtures = fixtures.fixtures
         for (f in allFixtures) {
             val beatFx = FxInstance(
-                effect = SineWave(),
+                effect = SineSlider(),
                 target = SliderTarget(f.key, "dimmer"),
                 timing = FxTiming(beatDivision = BeatDivision.QUARTER),
                 blendMode = BlendMode.MAX,
@@ -178,7 +178,7 @@ class FxEngineBenchmark {
             engine.addEffect(beatFx)
 
             val wallFx = FxInstance(
-                effect = StaticValue(value = 80u),
+                effect = WindowedSlider(value = 80u),
                 target = SliderTarget(f.key, "uv"),
                 timing = FxTiming(beatDivision = 1.0),
                 blendMode = BlendMode.OVERRIDE,
@@ -336,7 +336,7 @@ class FxEngineBenchmark {
         // constrained to `T : WithColour`, which the multi-element parent isn't — the
         // ergonomic API can't express this rig at all.
         val flatChase = FxInstance(
-            effect = RainbowCycle(),
+            effect = HueSweepColour(),
             target = ColourTarget.forGroup("bars-a"),
             timing = FxTiming(beatDivision = BeatDivision.ONE_BAR),
             blendMode = BlendMode.OVERRIDE,
@@ -348,7 +348,7 @@ class FxEngineBenchmark {
 
         // Second master, and the RANDOM strategy whose per-member Fisher-Yates C6 calls out.
         val randomChase = FxInstance(
-            effect = RainbowCycle(saturation = 0.8f),
+            effect = HueSweepColour(saturation = 0.8f),
             target = ColourTarget.forGroup("bars-b"),
             timing = FxTiming(beatDivision = BeatDivision.ONE_BAR),
             blendMode = BlendMode.OVERRIDE,
@@ -363,7 +363,7 @@ class FxEngineBenchmark {
         // `processWallClockElementKeys` and `SpeedMasterBank.rateScales()` against a bank with
         // more than one entry.
         val wallChase = FxInstance(
-            effect = ColourCycle(
+            effect = SteppedColour(
                 colours = listOf(
                     ExtendedColour(Color.RED),
                     ExtendedColour(Color.GREEN),
@@ -385,7 +385,7 @@ class FxEngineBenchmark {
         // one — so the wall-clock loop gets its own FLAT effect, otherwise half of what C1's
         // fix touches would be unmeasured.
         val wallFlatChase = FxInstance(
-            effect = RainbowCycle(brightness = 0.7f),
+            effect = HueSweepColour(brightness = 0.7f),
             target = ColourTarget.forGroup("bars-b"),
             timing = FxTiming(beatDivision = 4.0),
             blendMode = BlendMode.MAX,
@@ -582,7 +582,7 @@ class FxEngineBenchmark {
         for (f in fixtures.fixtures) {
             engine.addEffect(
                 FxInstance(
-                    effect = SineWave(),
+                    effect = SineSlider(),
                     target = SliderTarget(f.key, "dimmer"),
                     timing = FxTiming(beatDivision = BeatDivision.QUARTER),
                     blendMode = BlendMode.MAX,
@@ -591,7 +591,7 @@ class FxEngineBenchmark {
         }
         engine.addEffect(
             FxInstance(
-                effect = StaticValue(value = 120u),
+                effect = WindowedSlider(value = 120u),
                 target = SliderTarget.forGroup("all-hexes", "uv"),
                 timing = FxTiming(beatDivision = BeatDivision.WHOLE),
                 blendMode = BlendMode.OVERRIDE,
@@ -735,7 +735,7 @@ class FxEngineBenchmark {
         for (f in fixtures.fixtures) {
             engine.addEffect(
                 FxInstance(
-                    effect = ColourCycle(
+                    effect = SteppedColour(
                         colours = listOf(
                             ExtendedColour(Color.RED, white = 90u, amber = 40u, uv = 20u),
                             ExtendedColour(Color.GREEN, white = 30u, amber = 120u, uv = 60u),

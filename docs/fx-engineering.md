@@ -776,38 +776,54 @@ with dedicated calculate-only script base classes (`FxCalcScript`, `FxStatefulCa
 
 Apply effects with implicit `fxEngine` — no need to pass the engine to every call.
 
+Effects are **named, not constructed**: `effect(id, params)` resolves the type through the
+`FxRegistry`, so a script addresses the same vocabulary as the UI, cues and Looks, user effects
+from `fx_definitions` included. Omitted parameters take the type's declared defaults. There are no
+compiled-in effect classes to instantiate — the `fx/effects` package went with sweep item D7.
+
 ```kotlin
 val wash = fixture<HexFixture>("front-wash-1")
 val movers = group<MovingHead>("movers")
 
 wash.fx {
-    dimmer(SineWave(), BeatDivision.HALF)
-    colour(ColourCycle(), BeatDivision.ONE_BAR)
+    dimmer(effect("SineWave", "min" to "40"), BeatDivision.HALF)
+    colour(effect("ColourCycle"), BeatDivision.ONE_BAR)
 }
 
 movers.fx {
-    dimmer(Pulse(), BeatDivision.QUARTER, distribution = DistributionStrategy.CENTER_OUT)
-    colour(RainbowCycle(), BeatDivision.TWO_BAR, distribution = DistributionStrategy.LINEAR)
+    dimmer(effect("Pulse"), BeatDivision.QUARTER, distribution = DistributionStrategy.CENTER_OUT)
+    colour(
+        effect("RainbowCycle"), BeatDivision.TWO_BAR,
+        distribution = DistributionStrategy.LINEAR,
+        // Run this one off speed master 2 rather than the global tempo (sweep item B2).
+        speedMasterUuid = speedMasterUuidAt(2),
+    )
 }
 
 setBpm(128.0)
 ```
+
+Every apply site — `FxBuilder`, `GroupFxBuilder`, and all eight `applyXxxFx` extensions — takes
+`speedMasterUuid` and `rateSpeedMasterUuid`. Null means master 1 and unscaled respectively, which
+are the persisted "no explicit master" values; a uuid the bank no longer knows degrades to master 1
+at bind time rather than failing the apply. Note that a rate master is inert for a STATEFUL
+wall-clock effect — see `FU-SPEED-RATEMASTER-STATEFUL`.
 
 ### GENERAL Scripts (LightingScript)
 
 Full-power scripts with explicit `fxEngine` parameter:
 
 ```kotlin
-fixture.applyDimmerFx(fxEngine, SineWave(), FxTiming(BeatDivision.HALF))
+fixture.applyDimmerFx(fxEngine, effect("SineWave"), FxTiming(BeatDivision.HALF))
 fixture.fx(fxEngine) {
-    dimmer(Pulse(), BeatDivision.QUARTER)
-    colour(ColourCycle.PRIMARY, BeatDivision.WHOLE)
+    dimmer(effect("Pulse"), BeatDivision.QUARTER)
+    colour(effect("ColourCycle", "colours" to "#ff0000,#00ff00,#0000ff"), BeatDivision.WHOLE)
 }
 fixture.clearFx(fxEngine)
 
 // Group with distribution
 val group = fixtures.group<HexFixture>("front-wash")
-group.applyDimmerFx(fxEngine, Pulse(), distribution = DistributionStrategy.LINEAR)
+group.applyDimmerFx(fxEngine, effect("Pulse"), distribution = DistributionStrategy.LINEAR)
 ```
 
 ## Group Effect Processing
@@ -1108,10 +1124,8 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/FxExtensions.kt` | Script DSL helpers |
 | `fx/group/DistributionStrategy.kt` | Phase distribution strategies |
 | `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
-| `fx/effects/DimmerEffects.kt` | Slider effect implementations |
-| `fx/effects/ColourEffects.kt` | Color effect implementations |
-| `fx/effects/PositionEffects.kt` | Position effect implementations |
-| `fx/effects/CompositeEffects.kt` | Composite effect implementations (LightningStrike) |
+| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (28 files) |
+| `fx/TemplateColourSource.kt` | Colour-template resolution, and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
 | `fixture/trait/WithPosition.kt` | Position trait for moving heads |
 | `fixture/trait/WithDimmer.kt` | Dimmer trait |
 | `fixture/trait/WithColour.kt` | Colour trait |

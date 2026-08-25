@@ -127,3 +127,38 @@ fun prewarmTemplateColours(registry: TemplateRegistry, parameters: Map<String, S
         }
     }
 }
+
+/**
+ * Create an effect from a registered type name, with colour-template references resolved.
+ *
+ * This is the whole spawn contract in one place: pre-warm the `tmpl:` references off the tick
+ * thread, then hand the factory a live resolver and a version counter so a template edited later
+ * re-resolves without the effect being rebuilt. Every surface that names an effect by string goes
+ * through here — REST add and update, cue spawn, group add, and the script `effect()` helper —
+ * because a caller that assembles this by hand is one `resolveColourSource = null` away from a
+ * colour effect that silently ignores its template.
+ *
+ * @throws IllegalArgumentException if [effectType] is not registered (from [FxRegistry.createEffect]).
+ */
+fun FxRegistry.createEffectWithTemplates(
+    templates: TemplateRegistry,
+    effectType: String,
+    parameters: Map<String, String> = emptyMap(),
+): Effect {
+    // On the calling thread, before the effect can tick — see [prewarmTemplateColours]. The
+    // registration's declared defaults are pre-warmed too, not just what the caller supplied: an
+    // omitted parameter now falls back to its default (see `TypedParams.raw`), so a default that
+    // is itself a `tmpl:` reference would otherwise first resolve from the 50 Hz tick thread —
+    // exactly what pre-warming exists to prevent. No built-in declares one, but a user
+    // `fx_definitions` effect can, and `effect("my-fx")` with no parameters is now ordinary.
+    getRegistration(effectType)?.parameters?.let { schema ->
+        prewarmTemplateColours(templates, schema.associate { it.name to it.defaultValue })
+    }
+    prewarmTemplateColours(templates, parameters)
+    return createEffect(
+        effectType,
+        parameters,
+        resolveColourSource = templateColourSource(templates),
+        colourSourceVersion = { templates.version },
+    )
+}

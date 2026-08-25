@@ -395,9 +395,9 @@ class CueTriggerManager(
 
         // Set CueContext so effects created by the script are auto-tagged
         fxEngine.currentCueContext = CueContext(cueId, cueStackId)
+        // Outside the `try` so the `finally` can see it.
+        val beforeEffects = fxEngine.getActiveEffects().map { it.id }.toSet()
         try {
-            val beforeEffects = fxEngine.getActiveEffects().map { it.id }.toSet()
-
             // Run as FX_APPLICATION script (lightweight, implicit engine access)
             state.show.runLiteralScript(
                 literalScript = scriptBody,
@@ -405,13 +405,21 @@ class CueTriggerManager(
                 scriptType = ScriptType.FX_APPLICATION,
                 scriptId = scriptId,
             )
+        } finally {
+            fxEngine.currentCueContext = null
 
-            // Track any new effects created during script execution
+            // Track new effects in the `finally`, not after the script returns: a script that
+            // throws part-way has still applied everything up to the throw, and this list is the
+            // only thing `deactivateTriggersForCue` cleans up by — there is no per-cue sweep, only
+            // `removeEffectsForCueStack` when the whole stack is torn down. So a mid-script failure
+            // used to leave its already-applied effects running until the stack stopped.
+            //
+            // The window opened when effects stopped being compiled-in classes (sweep item D7): a
+            // typo'd effect name was a *compile* error, which threw before the script had applied
+            // anything, whereas `effect("SineWav")` throws at GO time with effects already live.
             val afterEffects = fxEngine.getActiveEffects().map { it.id }.toSet()
             val newEffectIds = afterEffects - beforeEffects
             synchronized(effectIds) { effectIds.addAll(newEffectIds) }
-        } finally {
-            fxEngine.currentCueContext = null
         }
     }
 

@@ -40,7 +40,6 @@ object FxCalcScriptConfiguration : ScriptCompilationConfiguration(
     {
         defaultImports(
             "uk.me.cormack.lighting7.fx.*",
-            "uk.me.cormack.lighting7.fx.effects.*",
             "java.awt.Color",
             "kotlin.math.*",
         )
@@ -94,7 +93,6 @@ object FxStatefulCalcScriptConfiguration : ScriptCompilationConfiguration(
     {
         defaultImports(
             "uk.me.cormack.lighting7.fx.*",
-            "uk.me.cormack.lighting7.fx.effects.*",
             "java.awt.Color",
             "kotlin.math.*",
         )
@@ -148,7 +146,6 @@ object FxCompositeCalcScriptConfiguration : ScriptCompilationConfiguration(
     {
         defaultImports(
             "uk.me.cormack.lighting7.fx.*",
-            "uk.me.cormack.lighting7.fx.effects.*",
             "java.awt.Color",
             "kotlin.math.*",
         )

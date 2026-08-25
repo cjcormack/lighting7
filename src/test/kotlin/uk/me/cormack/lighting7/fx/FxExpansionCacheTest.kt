@@ -3,9 +3,9 @@ package uk.me.cormack.lighting7.fx
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
-import uk.me.cormack.lighting7.fx.effects.StaticColour
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.testsupport.WindowedColour
 import java.awt.Color
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -98,7 +98,7 @@ class FxExpansionCacheTest {
         elementMode: ElementMode = ElementMode.FLAT,
         elementFilter: ElementFilter = ElementFilter.ALL,
     ) = FxInstance(
-        effect = StaticColour(ExtendedColour(PAINT)),
+        effect = WindowedColour(ExtendedColour(PAINT)),
         target = ColourTarget.forGroup("bars"),
         timing = FxTiming(beatDivision = BeatDivision.WHOLE),
         blendMode = BlendMode.OVERRIDE,
@@ -279,7 +279,7 @@ class FxExpansionCacheTest {
     fun `an effect naming a missing group covers nothing and survives repeated ticks`() {
         val rig = newRig(barCount = 1)
         val effect = FxInstance(
-            effect = StaticColour(ExtendedColour(PAINT)),
+            effect = WindowedColour(ExtendedColour(PAINT)),
             target = ColourTarget.forGroup("no-such-group"),
             timing = FxTiming(beatDivision = BeatDivision.WHOLE),
         )

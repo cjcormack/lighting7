@@ -109,14 +109,8 @@ internal fun Route.routeApiRestFx(state: State) {
                     // of and the whole update 400s.
                     val effectType = request.effectType ?: existing.effectTypeId
                     val params = request.parameters ?: existing.effect.parameters
-                    // On the request thread, before the effect can tick — see
-                    // [prewarmTemplateColours].
-                    val templates = state.show.templateRegistry
-                    prewarmTemplateColours(templates, params)
-                    state.show.fxRegistry.createEffect(
-                        effectType, params,
-                        resolveColourSource = templateColourSource(templates),
-                        colourSourceVersion = { templates.version },
+                    state.show.fxRegistry.createEffectWithTemplates(
+                        state.show.templateRegistry, effectType, params,
                     )
                 } else null
 
@@ -413,17 +407,12 @@ private fun createTargetFromRequest(
     return FxTargetFactory.forFixture(request.fixtureKey, request.propertyName, outputType, fixture)
 }
 
-private fun createEffectFromRequest(request: AddEffectRequest, state: State): Effect {
-    // On the request thread, before the effect can tick — see [prewarmTemplateColours].
-    val templates = state.show.templateRegistry
-    prewarmTemplateColours(templates, request.parameters)
-    return state.show.fxRegistry.createEffect(
+private fun createEffectFromRequest(request: AddEffectRequest, state: State): Effect =
+    state.show.fxRegistry.createEffectWithTemplates(
+        state.show.templateRegistry,
         request.effectType,
         request.parameters,
-        resolveColourSource = templateColourSource(templates),
-        colourSourceVersion = { templates.version },
     )
-}
 
 // Effect creation, parse helpers, and the effect library have moved to the fx package:
 // - fx/EffectParamUtils.kt (parseExtendedColour, parseColor, toUByteParam, toEasingCurveParam)

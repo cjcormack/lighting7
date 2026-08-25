@@ -17,7 +17,6 @@ import uk.me.cormack.lighting7.fx.FxTargetRef
 import uk.me.cormack.lighting7.fx.FxTiming
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
-import uk.me.cormack.lighting7.fx.effects.SineWave
 import uk.me.cormack.lighting7.fx.SliderTarget
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -26,6 +25,7 @@ import uk.me.cormack.lighting7.plugins.UpdateChannelInMessage
 import uk.me.cormack.lighting7.plugins.handleUpdateChannel
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import uk.me.cormack.lighting7.testsupport.SineSlider
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
@@ -841,7 +841,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
     /** A programmer-band sine on [target]'s dimmer — what busking an effect leaves running. */
     private fun programmerBandSine(target: FxTargetRef) = FxInstance(
-        effect = SineWave(),
+        effect = SineSlider(),
         target = SliderTarget(target, "dimmer"),
         timing = FxTiming(beatDivision = BeatDivision.QUARTER),
     ).apply { priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }

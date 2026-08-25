@@ -1,8 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fx.effects.SineWave
-import uk.me.cormack.lighting7.fx.effects.StaticValue
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.testsupport.SineSlider
+import uk.me.cormack.lighting7.testsupport.WindowedSlider
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -26,7 +26,7 @@ class FxEngineStompAndPriorityTest {
     ): FxInstance {
         val target = SliderTarget(FxTargetRef.fixture(targetKey), propertyName)
         return FxInstance(
-            effect = SineWave(),
+            effect = SineSlider(),
             target = target,
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         ).apply {
