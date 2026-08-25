@@ -1,7 +1,7 @@
 # Backend post-refactor architectural sweep — findings and cleanup plan
 
 > **Document status: BACKLOG, WAVE 0 COMPLETE (A1–A4, A11, C0 all done); WAVE 2 IN PROGRESS
-> (D1–D6 done).** This is the output of the
+> (D1–D6, D8, D9 done).** This is the output of the
 > post-refactor architectural sweep: a categorized backlog for later fix agents, organised into
 > execution waves. Items cite file:line as of `b5067e5`; expect drift as waves land. A matching
 > frontend sweep happens separately — the "Frontend-coordination register" at the bottom is its
@@ -338,9 +338,10 @@ serialization test otherwise).
 `IncludedTarget.Kind.PALETTE` (never constructed), `paletteId`, `clearIncludeTargetForPalette`, and
 `paletteUuid` holding a Look uuid. **Fix:** delete the arm, rename `paletteUuid` → `sourceUuid`.
 
-**D9. Permanently-empty wire fields** — low / P2 / S / sonnet
-`LookRepublishOutcome.programmerKeysUncovered` (always 0, self-documented); ~~`EffectDto.presetId`~~
-(gone with A2, along with `GroupEffectDto.presetId`); frontend types flagged for the frontend sweep.
+~~**D9. Permanently-empty wire fields**~~ — done, `10c51ae`. low / P2 / S / sonnet
+`LookRepublishOutcome.programmerKeysUncovered` (always 0, self-documented) removed — turned out to
+be dead in every sense: never actually on the wire despite its own doc comment's claim, and no test
+asserted on it either. ~~`EffectDto.presetId`~~ (gone with A2, along with `GroupEffectDto.presetId`).
 
 ## E — Architecture
 
@@ -503,7 +504,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
-| 2 | ~~D1–D6, D8~~ **done**, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
+| 2 | ~~D1–D6, D8, D9~~ **done**, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
