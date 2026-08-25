@@ -1690,9 +1690,13 @@ class FxEngine(
     /**
      * Update a running effect in place.
      *
-     * Mutable fields (phaseOffset, distributionStrategy, elementMode) are updated directly.
-     * Immutable fields (effect, timing, blendMode) trigger an atomic swap -
-     * a new FxInstance replaces the old one, preserving id, start time, and running state.
+     * Dynamics fields (phaseOffset, distributionStrategy, elementMode, elementFilter,
+     * stepTiming) are applied as **one** [FxInstance.updateDynamics] call, so a tick can
+     * never observe half of an update. Truly immutable fields (effect, timing, blendMode)
+     * trigger a swap — a new [FxInstance] replaces the old one, preserving id, start time,
+     * and (by sharing the old instance's dynamics cell) the running state and any
+     * concurrent pause/resume or dynamics edit. Speed-master reassignment is applied to
+     * whichever instance survives.
      *
      * @param effectId The effect ID to update
      * @param newEffect New effect (or null to keep existing)
@@ -1735,6 +1739,23 @@ class FxEngine(
     ): FxInstance? {
         val existing = activeEffects[effectId] ?: return null
 
+        // One atomic dynamics update covering both branches: the cell is shared across the
+        // swap below, so applying it up front reaches whichever instance survives — and a
+        // tick pass sees either none of this update or all of it, never half.
+        if (newPhaseOffset != null || newDistributionStrategy != null || newElementMode != null ||
+            newElementFilter != null || newStepTiming != null
+        ) {
+            existing.updateDynamics { dyn ->
+                dyn.copy(
+                    phaseOffset = newPhaseOffset ?: dyn.phaseOffset,
+                    distributionStrategy = newDistributionStrategy ?: dyn.distributionStrategy,
+                    elementMode = newElementMode ?: dyn.elementMode,
+                    elementFilter = newElementFilter ?: dyn.elementFilter,
+                    stepTiming = newStepTiming ?: dyn.stepTiming,
+                )
+            }
+        }
+
         // Determine if we need an atomic swap (immutable fields changed)
         val needsSwap = newEffect != null || newTiming != null || newBlendMode != null
 
@@ -1743,7 +1764,11 @@ class FxEngine(
                 effect = newEffect ?: existing.effect,
                 target = existing.target,
                 timing = newTiming ?: existing.timing,
-                blendMode = newBlendMode ?: existing.blendMode
+                blendMode = newBlendMode ?: existing.blendMode,
+                // The dynamics (running state, phase offset, distribution, element
+                // mode/filter, step timing) travel by this shared cell, not by copying —
+                // which is what makes a pause/resume racing this swap unlosable.
+                dynamicsRef = existing.dynamicsRef,
             ).apply {
                 id = existing.id
                 registrationId = newRegistrationId ?: existing.registrationId
@@ -1763,17 +1788,11 @@ class FxEngine(
                 intensityMultiplier = existing.intensityMultiplier
                 startedAtMs = existing.startedAtMs
                 startedAtBeat = existing.startedAtBeat
-                isRunning = existing.isRunning
                 lastPhase = existing.lastPhase
                 // Wall-clock phase derives from this and nothing else, so dropping it here
                 // would snap an edited wall-clock effect back to the start of its cycle —
                 // the very discontinuity the accumulator replaced `startedAtMs` to avoid.
                 accumulatedScaledMs = existing.accumulatedScaledMs
-                phaseOffset = newPhaseOffset ?: existing.phaseOffset
-                distributionStrategy = newDistributionStrategy ?: existing.distributionStrategy
-                elementMode = newElementMode ?: existing.elementMode
-                elementFilter = newElementFilter ?: existing.elementFilter
-                stepTiming = newStepTiming ?: existing.stepTiming
                 timingSource = existing.timingSource
                 // `expansion` is deliberately NOT carried across: the fresh instance rebuilds
                 // it on first read, which costs one walk and is the safe direction. Carrying it
@@ -1797,12 +1816,6 @@ class FxEngine(
                 }
             }
         } else {
-            // Only mutable fields changed - update in place
-            newPhaseOffset?.let { existing.phaseOffset = it }
-            newDistributionStrategy?.let { existing.distributionStrategy = it }
-            newElementMode?.let { existing.elementMode = it }
-            newElementFilter?.let { existing.elementFilter = it }
-            newStepTiming?.let { existing.stepTiming = it }
             newSpeedMasterUuid?.let {
                 existing.speedMasterUuid = it
                 existing.speedMasterSlot = speedMasters.slotFor(it)
@@ -2047,14 +2060,17 @@ class FxEngine(
         // master's tick; effects on the same master stay locked, effects on different
         // masters drift apart, which is the point.
         for (effect in beatEffects) {
-            if (!effect.isRunning) continue
+            // This effect's one dynamics read for the pass — everything below works from
+            // this snapshot, so a concurrent edit lands wholly on this pass or the next.
+            val dyn = effect.dynamics
+            if (!dyn.isRunning) continue
 
             val tick = frame.tick(effect.speedMasterSlot)
             try {
                 if (effect.isGroupEffect) {
-                    processGroupEffect(tick, effect, fixturesWithTx, deltaMs, suppression)
+                    processGroupEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression)
                 } else {
-                    processFixtureEffect(tick, effect, fixturesWithTx, deltaMs, suppression)
+                    processFixtureEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression)
                 }
             } catch (e: Exception) {
                 System.err.println("FX Engine error processing effect ${effect.id}: ${e.message}")
@@ -2149,13 +2165,15 @@ class FxEngine(
         val suppression = programmerSuppression()
 
         for (effect in wallClockEffects) {
-            if (!effect.isRunning) continue
+            // Same one-snapshot-per-pass rule as the beat loop.
+            val dyn = effect.dynamics
+            if (!dyn.isRunning) continue
 
             try {
                 if (effect.isGroupEffect) {
-                    processWallClockGroupEffect(syntheticTick, effect, fixturesWithTx, deltaMs, suppression)
+                    processWallClockGroupEffect(syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression)
                 } else {
-                    processWallClockFixtureEffect(syntheticTick, effect, fixturesWithTx, deltaMs, suppression)
+                    processWallClockFixtureEffect(syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression)
                 }
             } catch (e: Exception) {
                 System.err.println("FX Engine error processing wall-clock effect ${effect.id}: ${e.message}")
@@ -2171,15 +2189,16 @@ class FxEngine(
     private fun processWallClockFixtureEffect(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
+        dyn: FxDynamics,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long,
         suppression: Map<String, Set<String>> = emptyMap(),
     ) {
-        val expansion = expansionFor(effect)
+        val expansion = expansionFor(effect, dyn)
         when (expansion.kind) {
             FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
                 val fixtureKey = effect.target.targetKey
-                val effectPhase = effect.calculateWallClockPhase()
+                val effectPhase = effect.calculateWallClockPhase(dyn)
                 val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
                 if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
                     effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
@@ -2187,7 +2206,7 @@ class FxEngine(
             }
 
             FxTargetExpansion.Kind.FIXTURE_ELEMENTS ->
-                processWallClockElementKeys(tick, effect, fixturesWithTx, expansion.flat, deltaMs, suppression)
+                processWallClockElementKeys(tick, effect, dyn, fixturesWithTx, expansion.flat, deltaMs, suppression)
 
             FxTargetExpansion.Kind.NONE,
             FxTargetExpansion.Kind.GROUP_MEMBERS,
@@ -2202,6 +2221,7 @@ class FxEngine(
     private fun processWallClockElementKeys(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
+        dyn: FxDynamics,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         elementKeys: List<String>,
         deltaMs: Long,
@@ -2212,6 +2232,11 @@ class FxEngine(
         val filteredCount = elementKeys.size
         if (filteredCount == 0) return
 
+        val strategy = dyn.distributionStrategy
+        val hasSpread = strategy.hasSpread
+        val distinctSlots = strategy.distinctSlots(filteredCount)
+        val trianglePhase = strategy.usesTrianglePhase
+        var lastMemberPhase = 0.0
         for ((distributionIdx, elementKey) in elementKeys.withIndex()) {
             val memberInfo = object : DistributionMemberInfo {
                 override val index: Int = distributionIdx
@@ -2219,15 +2244,17 @@ class FxEngine(
                     if (filteredCount > 1) distributionIdx.toDouble() / (filteredCount - 1) else 0.5
             }
 
-            val memberPhase = effect.calculateWallClockPhaseForMember(memberInfo, filteredCount)
-            val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
+            val distOffset = strategy.calculateOffset(memberInfo, filteredCount)
+            val memberPhase = effect.calculateWallClockPhaseForMember(filteredCount, dyn, distOffset)
+            lastMemberPhase = memberPhase
 
-            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
+            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = hasSpread, numDistinctSlots = distinctSlots, trianglePhase = trianglePhase)
             val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
             if (!isSuppressed(suppression, elementKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode)
             }
         }
+        effect.lastPhase = lastMemberPhase
     }
 
     /**
@@ -2236,32 +2263,40 @@ class FxEngine(
     private fun processWallClockGroupEffect(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
+        dyn: FxDynamics,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long,
         suppression: Map<String, Set<String>> = emptyMap(),
     ) {
-        val expansion = expansionFor(effect)
+        val expansion = expansionFor(effect, dyn)
         when (expansion.kind) {
             FxTargetExpansion.Kind.GROUP_MEMBERS -> {
                 val allMembers = expansion.members
                 val groupSize = allMembers.size
+                val strategy = dyn.distributionStrategy
+                val hasSpread = strategy.hasSpread
+                val distinctSlots = strategy.distinctSlots(groupSize)
+                val trianglePhase = strategy.usesTrianglePhase
+                var lastMemberPhase = 0.0
                 for (member in allMembers) {
-                    val memberPhase = effect.calculateWallClockPhaseForMember(member, groupSize)
-                    val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
-                    val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
+                    val distOffset = strategy.calculateOffset(member, groupSize)
+                    val memberPhase = effect.calculateWallClockPhaseForMember(groupSize, dyn, distOffset)
+                    lastMemberPhase = memberPhase
+                    val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = hasSpread, numDistinctSlots = distinctSlots, trianglePhase = trianglePhase)
                     val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
                     if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
                         effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
                     }
                 }
+                if (allMembers.isNotEmpty()) effect.lastPhase = lastMemberPhase
             }
 
-            FxTargetExpansion.Kind.GROUP_ELEMENTS -> when (effect.elementMode) {
+            FxTargetExpansion.Kind.GROUP_ELEMENTS -> when (dyn.elementMode) {
                 ElementMode.PER_FIXTURE -> for (memberKeys in expansion.perFixture) {
-                    processWallClockElementKeys(tick, effect, fixturesWithTx, memberKeys, deltaMs, suppression)
+                    processWallClockElementKeys(tick, effect, dyn, fixturesWithTx, memberKeys, deltaMs, suppression)
                 }
                 ElementMode.FLAT ->
-                    processWallClockElementKeys(tick, effect, fixturesWithTx, expansion.flat, deltaMs, suppression)
+                    processWallClockElementKeys(tick, effect, dyn, fixturesWithTx, expansion.flat, deltaMs, suppression)
             }
 
             FxTargetExpansion.Kind.NONE,
@@ -2416,15 +2451,16 @@ class FxEngine(
     private fun processFixtureEffect(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
+        dyn: FxDynamics,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long = 0L,
         suppression: Map<String, Set<String>> = emptyMap(),
     ) {
-        val expansion = expansionFor(effect)
+        val expansion = expansionFor(effect, dyn)
         when (expansion.kind) {
             FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
                 val fixtureKey = effect.target.targetKey
-                val effectPhase = effect.calculatePhase(tick)
+                val effectPhase = effect.calculatePhase(tick, dyn)
                 val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
                 if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
                     effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
@@ -2432,7 +2468,7 @@ class FxEngine(
             }
 
             FxTargetExpansion.Kind.FIXTURE_ELEMENTS ->
-                processElementKeys(tick, effect, fixturesWithTx, expansion.flat, deltaMs, suppression)
+                processElementKeys(tick, effect, dyn, fixturesWithTx, expansion.flat, deltaMs, suppression)
 
             // Neither parent nor elements have the property, or the fixture is gone:
             // silently skip. The group kinds cannot reach this function.
@@ -2452,6 +2488,7 @@ class FxEngine(
     private fun processElementKeys(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
+        dyn: FxDynamics,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         elementKeys: List<String>,
         deltaMs: Long = 0L,
@@ -2463,6 +2500,11 @@ class FxEngine(
         val filteredCount = elementKeys.size
         if (filteredCount == 0) return
 
+        val strategy = dyn.distributionStrategy
+        val hasSpread = strategy.hasSpread
+        val distinctSlots = strategy.distinctSlots(filteredCount)
+        val trianglePhase = strategy.usesTrianglePhase
+        var lastMemberPhase = 0.0
         for ((distributionIdx, elementKey) in elementKeys.withIndex()) {
             val memberInfo = object : DistributionMemberInfo {
                 override val index: Int = distributionIdx
@@ -2470,17 +2512,17 @@ class FxEngine(
                     if (filteredCount > 1) distributionIdx.toDouble() / (filteredCount - 1) else 0.5
             }
 
-            val memberPhase = effect.calculatePhaseForMember(
-                tick, memberInfo, filteredCount
-            )
-            val distOffset = effect.distributionStrategy.calculateOffset(memberInfo, filteredCount)
+            val distOffset = strategy.calculateOffset(memberInfo, filteredCount)
+            val memberPhase = effect.calculatePhaseForMember(tick, filteredCount, dyn, distOffset)
+            lastMemberPhase = memberPhase
 
-            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(filteredCount), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
+            val context = EffectContext(groupSize = filteredCount, memberIndex = distributionIdx, distributionOffset = distOffset, hasDistributionSpread = hasSpread, numDistinctSlots = distinctSlots, trianglePhase = trianglePhase)
             val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
             if (!isSuppressed(suppression, elementKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode)
             }
         }
+        effect.lastPhase = lastMemberPhase
     }
 
     /**
@@ -2499,37 +2541,43 @@ class FxEngine(
     private fun processGroupEffect(
         tick: MasterClock.ClockTick,
         effect: FxInstance,
+        dyn: FxDynamics,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long = 0L,
         suppression: Map<String, Set<String>> = emptyMap(),
     ) {
-        val expansion = expansionFor(effect)
+        val expansion = expansionFor(effect, dyn)
         when (expansion.kind) {
             FxTargetExpansion.Kind.GROUP_MEMBERS -> {
                 val allMembers = expansion.members
                 val groupSize = allMembers.size
+                val strategy = dyn.distributionStrategy
+                val hasSpread = strategy.hasSpread
+                val distinctSlots = strategy.distinctSlots(groupSize)
+                val trianglePhase = strategy.usesTrianglePhase
+                var lastMemberPhase = 0.0
                 for (member in allMembers) {
-                    val memberPhase = effect.calculatePhaseForMember(
-                        tick, member, groupSize
-                    )
-                    val distOffset = effect.distributionStrategy.calculateOffset(member, groupSize)
-                    val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = effect.distributionStrategy.hasSpread, numDistinctSlots = effect.distributionStrategy.distinctSlots(groupSize), trianglePhase = effect.distributionStrategy.usesTrianglePhase)
+                    val distOffset = strategy.calculateOffset(member, groupSize)
+                    val memberPhase = effect.calculatePhaseForMember(tick, groupSize, dyn, distOffset)
+                    lastMemberPhase = memberPhase
+                    val context = EffectContext(groupSize = groupSize, memberIndex = member.index, distributionOffset = distOffset, hasDistributionSpread = hasSpread, numDistinctSlots = distinctSlots, trianglePhase = trianglePhase)
                     val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, context)
                     if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
                         effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
                     }
                 }
+                if (allMembers.isNotEmpty()) effect.lastPhase = lastMemberPhase
             }
 
-            FxTargetExpansion.Kind.GROUP_ELEMENTS -> when (effect.elementMode) {
+            FxTargetExpansion.Kind.GROUP_ELEMENTS -> when (dyn.elementMode) {
                 // Each fixture gets the effect independently across its own elements, so its
                 // own list size is the group size the phase calculation sees.
                 ElementMode.PER_FIXTURE -> for (memberKeys in expansion.perFixture) {
-                    processElementKeys(tick, effect, fixturesWithTx, memberKeys, deltaMs, suppression)
+                    processElementKeys(tick, effect, dyn, fixturesWithTx, memberKeys, deltaMs, suppression)
                 }
                 // All elements across all fixtures as one list.
                 ElementMode.FLAT ->
-                    processElementKeys(tick, effect, fixturesWithTx, expansion.flat, deltaMs, suppression)
+                    processElementKeys(tick, effect, dyn, fixturesWithTx, expansion.flat, deltaMs, suppression)
             }
 
             // Group missing, empty, or neither members nor their elements have the property.
@@ -2553,7 +2601,7 @@ class FxEngine(
      * @return true if this effect will be expanded to elements
      */
     fun isMultiElementExpanded(instance: FxInstance): Boolean =
-        expansionFor(instance).isElementExpanded
+        expansionFor(instance, instance.dynamics).isElementExpanded
 
     /**
      * Reset fixture properties that are no longer covered by any active effect.
@@ -2604,7 +2652,8 @@ class FxEngine(
      * [resolveEffectFixtureKeys] — used by Include to report which heads a spawned group
      * effect covers, so the sheet can select them.
      */
-    fun fixtureKeysCoveredBy(effect: FxInstance): List<String> = expansionFor(effect).coverageKeys
+    fun fixtureKeysCoveredBy(effect: FxInstance): List<String> =
+        expansionFor(effect, effect.dynamics).coverageKeys
 
     /**
      * Resolve all fixture/element keys that an effect was writing to.
@@ -2617,7 +2666,7 @@ class FxEngine(
      * [FxTargetExpansion.coverageKeys].
      */
     private fun resolveEffectFixtureKeys(effect: FxInstance): List<String> =
-        expansionFor(effect).coverageKeys
+        expansionFor(effect, effect.dynamics).coverageKeys
 
     /**
      * [effect]'s cached expansion, re-derived when the fixture register has been rebuilt under
@@ -2628,11 +2677,14 @@ class FxEngine(
      * already reads the instance, and there is no mutation site left to forget. `elementMode`
      * is not checked — both shapes it selects between are built up front. `distributionStrategy`
      * is not either: it moves the offsets, not which keys resolve. `target` is a `val`.
+     *
+     * The filter comes from [dyn], the caller's per-pass snapshot, so the expansion checked
+     * here and the element mode branching around it can't come from two different updates.
      */
-    private fun expansionFor(effect: FxInstance): FxTargetExpansion {
+    private fun expansionFor(effect: FxInstance, dyn: FxDynamics): FxTargetExpansion {
         // Read the version BEFORE the lookups it stamps — see [Fixtures.structureVersion].
         val version = fixtures.structureVersion
-        val filter = effect.elementFilter
+        val filter = dyn.elementFilter
         val cached = effect.expansion
         if (cached != null && cached.structureVersion == version && cached.elementFilter == filter) {
             return cached

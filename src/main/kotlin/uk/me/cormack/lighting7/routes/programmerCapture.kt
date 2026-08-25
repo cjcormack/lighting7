@@ -460,6 +460,10 @@ internal fun fxInstancesToCueChildren(
             if (!maskAllows(mask, group)) continue
         }
 
+        // One dynamics snapshot per row: reading a field twice (the != default comparisons)
+        // straddling a concurrent edit would record an explicit value equal to the default
+        // instead of the track-the-default null.
+        val dyn = effect.dynamics
         adHocEffects.add(
                 CueAdHocEffectDto(
                     targetType = targetType,
@@ -469,14 +473,14 @@ internal fun fxInstancesToCueChildren(
                     propertyName = effect.target.propertyName,
                     beatDivision = effect.timing.beatDivision,
                     blendMode = effect.blendMode.name,
-                    distribution = effect.distributionStrategy.javaClass.simpleName,
-                    phaseOffset = effect.phaseOffset,
-                    elementMode = if (effect.isGroupEffect) effect.elementMode.name else null,
-                    elementFilter = if (effect.elementFilter != uk.me.cormack.lighting7.fx.ElementFilter.ALL) {
-                        effect.elementFilter.name
+                    distribution = dyn.distributionStrategy.javaClass.simpleName,
+                    phaseOffset = dyn.phaseOffset,
+                    elementMode = if (effect.isGroupEffect) dyn.elementMode.name else null,
+                    elementFilter = if (dyn.elementFilter != uk.me.cormack.lighting7.fx.ElementFilter.ALL) {
+                        dyn.elementFilter.name
                     } else null,
-                    stepTiming = if (effect.stepTiming != effect.effect.defaultStepTiming) {
-                        effect.stepTiming
+                    stepTiming = if (dyn.stepTiming != effect.effect.defaultStepTiming) {
+                        dyn.stepTiming
                     } else null,
                     parameters = effect.effect.parameters,
                     sortOrder = adHocEffects.size,

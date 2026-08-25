@@ -408,6 +408,8 @@ internal fun writeLookEffects(look: DaoLook, effects: List<FxInstance>, mode: Re
     if (effects.isEmpty()) return
     var nextSort = (look.effects.maxOfOrNull { it.sortOrder } ?: -1) + 1
     for (effect in effects) {
+        // One dynamics snapshot per row — see the same pattern in programmerCapture.kt.
+        val dyn = effect.dynamics
         DaoLookEffect.new {
             this.look = look
             targetType = if (effect.isGroupEffect) TargetRef.Group.TYPE else TargetRef.Fixture.TYPE
@@ -417,14 +419,14 @@ internal fun writeLookEffects(look: DaoLook, effects: List<FxInstance>, mode: Re
             propertyName = effect.target.propertyName
             beatDivision = effect.timing.beatDivision
             blendMode = effect.blendMode.name
-            distribution = effect.distributionStrategy.javaClass.simpleName
-            phaseOffset = effect.phaseOffset
-            elementMode = if (effect.isGroupEffect) effect.elementMode.name else null
-            elementFilter = if (effect.elementFilter != ElementFilter.ALL) {
-                effect.elementFilter.name
+            distribution = dyn.distributionStrategy.javaClass.simpleName
+            phaseOffset = dyn.phaseOffset
+            elementMode = if (effect.isGroupEffect) dyn.elementMode.name else null
+            elementFilter = if (dyn.elementFilter != ElementFilter.ALL) {
+                dyn.elementFilter.name
             } else null
-            stepTiming = if (effect.stepTiming != effect.effect.defaultStepTiming) {
-                effect.stepTiming
+            stepTiming = if (dyn.stepTiming != effect.effect.defaultStepTiming) {
+                dyn.stepTiming
             } else null
             parameters = effect.effect.parameters
             speedMasterUuid = effect.speedMasterUuid

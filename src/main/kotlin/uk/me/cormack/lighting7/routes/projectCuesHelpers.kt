@@ -125,6 +125,8 @@ internal fun captureCurrentState(state: State): CapturedState {
                 targets.add(target)
             }
         } else {
+            // One dynamics snapshot per row — see the same pattern in programmerCapture.kt.
+            val dyn = effect.dynamics
             adHocEffects.add(CueAdHocEffectDto(
                 targetType = targetType,
                 targetKey = targetKey,
@@ -133,11 +135,11 @@ internal fun captureCurrentState(state: State): CapturedState {
                 propertyName = effect.target.propertyName,
                 beatDivision = effect.timing.beatDivision,
                 blendMode = effect.blendMode.name,
-                distribution = effect.distributionStrategy.javaClass.simpleName,
-                phaseOffset = effect.phaseOffset,
-                elementMode = if (effect.isGroupEffect) effect.elementMode.name else null,
-                elementFilter = if (effect.elementFilter != ElementFilter.ALL) effect.elementFilter.name else null,
-                stepTiming = if (effect.stepTiming != effect.effect.defaultStepTiming) effect.stepTiming else null,
+                distribution = dyn.distributionStrategy.javaClass.simpleName,
+                phaseOffset = dyn.phaseOffset,
+                elementMode = if (effect.isGroupEffect) dyn.elementMode.name else null,
+                elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
+                stepTiming = if (dyn.stepTiming != effect.effect.defaultStepTiming) dyn.stepTiming else null,
                 parameters = effect.effect.parameters,
                 speedMasterUuid = effect.speedMasterUuid?.toString(),
                 rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),

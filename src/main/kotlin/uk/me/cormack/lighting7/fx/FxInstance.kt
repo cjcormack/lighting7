@@ -1,8 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Filter for selecting which elements of a multi-element fixture receive an effect.
@@ -141,12 +141,80 @@ data class ProgrammerFxOrigin(
     }
 }
 
-class FxInstance(
+/**
+ * The parameters of a running [FxInstance] that request threads may change while the tick
+ * loops read them, grouped into one immutable value behind a single atomic reference
+ * ([FxInstance.dynamics]).
+ *
+ * One value rather than per-field `@Volatile`, for two reasons (sweep item A6):
+ *
+ * - **Torn passes.** These fields are read together, per member, on the tick path;
+ *   independent volatile fields let one calculation see field A's new value with field B's
+ *   old one — a step chase whose cycle length came from the new strategy under the old
+ *   [stepTiming] runs at the wrong speed for a frame. A pass takes [FxInstance.dynamics]
+ *   once and works from that snapshot throughout.
+ * - **Torn updates.** `FxEngine.updateEffect` changes several of these together; sequential
+ *   per-field stores would let a tick land in the middle of one logical update. Replacing
+ *   the whole value is atomic.
+ *
+ * The cell holding this also survives `updateEffect`'s instance swap (see
+ * [FxInstance.dynamicsRef]), which is what makes a concurrent [FxInstance.pause] unlosable.
+ */
+data class FxDynamics(
+    /** Whether the effect is painting. Gates the whole per-effect pass on both tick loops. */
+    val isRunning: Boolean = true,
+
+    /** Phase offset for syncing multiple effects (e.g., for chase effects). */
+    val phaseOffset: Double = 0.0,
+
+    /**
+     * Whether the beat division controls per-step timing rather than total cycle time.
+     * Initialised from [Effect.defaultStepTiming]; see there for full documentation.
+     */
+    val stepTiming: Boolean,
+
+    /**
+     * How group-member phase offsets are derived. Ignored for fixture targets.
+     */
+    val distributionStrategy: DistributionStrategy = DistributionStrategy.LINEAR,
+
+    /**
+     * Element mode for group effects on multi-element fixtures: distribution per fixture, or
+     * across all elements as one flat list. Deliberately *outside* [FxInstance.expansion]'s
+     * validity check — see that doc for why both shapes are built up front.
+     */
+    val elementMode: ElementMode = ElementMode.PER_FIXTURE,
+
+    /**
+     * Which elements receive the effect ([ElementFilter.ALL] = no filtering). Part of
+     * [FxInstance.expansion]'s validity check: changing it re-derives the expansion.
+     */
+    val elementFilter: ElementFilter = ElementFilter.ALL,
+)
+
+class FxInstance internal constructor(
     val effect: Effect,
     val target: FxTarget,
     val timing: FxTiming,
-    val blendMode: BlendMode = BlendMode.OVERRIDE
+    val blendMode: BlendMode,
+    /**
+     * The cell [dynamics] lives in. `FxEngine.updateEffect`'s swap branch hands the
+     * *existing* instance's cell to the replacement, so a pause/resume or dynamics edit
+     * racing the swap lands in the cell both instances share rather than dying with the old
+     * instance — the swap's read-copy-publish cannot lose it.
+     */
+    internal val dynamicsRef: AtomicReference<FxDynamics>,
 ) {
+    constructor(
+        effect: Effect,
+        target: FxTarget,
+        timing: FxTiming,
+        blendMode: BlendMode = BlendMode.OVERRIDE,
+    ) : this(
+        effect, target, timing, blendMode,
+        AtomicReference(FxDynamics(stepTiming = effect.defaultStepTiming)),
+    )
+
     init {
         // The only place every spawn path meets: routes, scripts, programmer Include, cue and
         // Look fire, MIDI. [FxTarget.acceptedOutputType] explains what a mismatch costs — the
@@ -251,8 +319,51 @@ class FxInstance(
     @Volatile
     var priority: Int = 0
 
-    /** Whether this effect is currently running */
-    var isRunning: Boolean = true
+    /**
+     * The mutable-under-the-tick parameters as one immutable snapshot.
+     *
+     * Tick-path readers must take this **once per pass** and read only the snapshot; any
+     * decision touching two of its fields must come from one snapshot, not two property
+     * reads. The convenience properties below re-read the cell per access and exist for
+     * cold paths and spawn-time configuration.
+     */
+    val dynamics: FxDynamics get() = dynamicsRef.get()
+
+    /**
+     * Atomically replace [dynamics]. This is how several fields change as one update —
+     * `FxEngine.updateEffect` funnels its dynamics changes through one call here.
+     * [transform] may run more than once under contention; keep it pure.
+     */
+    internal fun updateDynamics(transform: (FxDynamics) -> FxDynamics): FxDynamics =
+        dynamicsRef.updateAndGet(transform)
+
+    /** Whether this effect is currently running; see [pause]/[resume]. */
+    val isRunning: Boolean get() = dynamics.isRunning
+
+    /** View of [FxDynamics.phaseOffset]; each store is one atomic single-field update. */
+    var phaseOffset: Double
+        get() = dynamics.phaseOffset
+        set(value) { updateDynamics { it.copy(phaseOffset = value) } }
+
+    /** View of [FxDynamics.stepTiming]. */
+    var stepTiming: Boolean
+        get() = dynamics.stepTiming
+        set(value) { updateDynamics { it.copy(stepTiming = value) } }
+
+    /** View of [FxDynamics.distributionStrategy]. */
+    var distributionStrategy: DistributionStrategy
+        get() = dynamics.distributionStrategy
+        set(value) { updateDynamics { it.copy(distributionStrategy = value) } }
+
+    /** View of [FxDynamics.elementMode]. */
+    var elementMode: ElementMode
+        get() = dynamics.elementMode
+        set(value) { updateDynamics { it.copy(elementMode = value) } }
+
+    /** View of [FxDynamics.elementFilter]. */
+    var elementFilter: ElementFilter
+        get() = dynamics.elementFilter
+        set(value) { updateDynamics { it.copy(elementFilter = value) } }
 
     /**
      * Intensity multiplier (0.0 = silent, 1.0 = full). The FxEngine multiplies effect
@@ -265,67 +376,21 @@ class FxInstance(
     @Volatile
     var intensityMultiplier: Double = 1.0
 
-    /** Most recently calculated phase (for state reporting) */
-    var lastPhase: Double = 0.0
-
-    /** Phase offset for syncing multiple effects (e.g., for chase effects) */
-    var phaseOffset: Double = 0.0
-
     /**
-     * Whether the beat division controls per-step timing rather than total cycle time.
-     *
-     * Initialised from [Effect.defaultStepTiming] but can be overridden per-instance
-     * via the API. See [Effect.defaultStepTiming] for full documentation.
+     * Most recently calculated phase, for state reporting — the reverse direction from
+     * [dynamics]: the tick loops write it, request threads read it. Written once per effect
+     * per pass — the single-target calculators store it themselves, and for member
+     * expansions `FxEngine` stores the last member's phase after its loop — so the
+     * `@Volatile` store stays off the per-member path.
      */
-    var stepTiming: Boolean = effect.defaultStepTiming
+    @Volatile
+    var lastPhase: Double = 0.0
 
     /** Timestamp when the effect started (for timing calculations) */
     var startedAtMs: Long = System.currentTimeMillis()
 
     /** Beat number when the effect started (for beat-quantized start) */
     var startedAtBeat: Long = 0
-
-    /**
-     * Distribution strategy for group targets.
-     * Determines how phase offsets are calculated for each group member.
-     * Ignored for fixture targets.
-     */
-    var distributionStrategy: DistributionStrategy = DistributionStrategy.LINEAR
-
-    /**
-     * Element mode for group effects on multi-element fixtures.
-     *
-     * Determines whether distribution runs per-fixture (each fixture looks
-     * the same) or across all elements as a flat list (chase sweeps across
-     * all heads). Only relevant when group members are multi-element fixtures
-     * and the target property is at the element level.
-     *
-     * Ignored for fixture targets and groups where members directly have
-     * the target property.
-     *
-     * `@Volatile` for the same reason as [elementFilter], and more sharply: this one is
-     * deliberately *outside* [expansion]'s validity check, so the direct read in
-     * `FxEngine.processGroupEffect` / `processWallClockGroupEffect` is the only path by which a
-     * REST/WS mode change reaches the tick thread at all. A stale read there leaves a chase
-     * distributing across the wrong list indefinitely.
-     */
-    @Volatile
-    var elementMode: ElementMode = ElementMode.PER_FIXTURE
-
-    /**
-     * Optional filter to restrict which elements the effect applies to.
-     *
-     * When set, only elements whose indices match the filter will receive
-     * the effect. Other elements are skipped entirely during processing.
-     *
-     * `@Volatile` because it gates [expansion]'s validity: it is written from REST/WS threads
-     * and read once per effect per tick on `Dispatchers.Default`, and a stale read there means
-     * the tick keeps painting through the previous filter indefinitely.
-     *
-     * @see ElementFilter
-     */
-    @Volatile
-    var elementFilter: ElementFilter = ElementFilter.ALL
 
     /**
      * What this effect resolves to against the fixture register — the group/element expansion
@@ -351,6 +416,13 @@ class FxInstance(
      * WALL_CLOCK effects are processed on a separate fixed-interval loop (50Hz),
      * independent of BPM. Suitable for ambient/atmospheric effects that should
      * not be tied to the musical beat grid.
+     *
+     * Deliberately a plain `var`, not part of [dynamics]: every writer runs before the
+     * instance reaches `FxEngine`'s active map (the add paths, and `updateEffect`'s
+     * not-yet-published swap instance), and the map insert safely publishes it. Which loop
+     * processes the effect is decided by `rebuildSortedSnapshots`' partition, not by
+     * per-tick reads — so don't add a post-publication write here: it would do nothing
+     * until an unrelated rebuild.
      */
     var timingSource: TimingSource = TimingSource.BEAT
 
@@ -401,56 +473,84 @@ class FxInstance(
      * (`frame.tick(speedMasterSlot)`).
      *
      * @param tick The current clock tick of this effect's speed master
+     * @param dynamics The caller's per-pass snapshot; defaults to a fresh read, which is
+     *   safe here because only one field ([FxDynamics.phaseOffset]) is consulted
      * @return Phase from 0.0 to 1.0 within the effect cycle
      */
-    fun calculatePhase(tick: MasterClock.ClockTick): Double {
+    fun calculatePhase(tick: MasterClock.ClockTick, dynamics: FxDynamics = this.dynamics): Double {
         val basePhase = MasterClock.phaseForDivision(tick.tickNumber, timing.beatDivision)
-        val phase = (basePhase + phaseOffset) % 1.0
+        val phase = (basePhase + dynamics.phaseOffset) % 1.0
         lastPhase = phase
         return phase
     }
 
     /**
-     * Calculate the phase for a specific group member (includes distribution offset).
+     * Calculate the phase for a specific group member.
+     *
+     * [dynamics] is required rather than read here: the caller's whole member pass must run
+     * from one snapshot, and a fresh read per call would silently reintroduce the torn-pass
+     * race [FxDynamics] exists to close. [distributionOffset] comes in precomputed for the
+     * same reason — the caller already derives it from the same snapshot for
+     * [EffectContext.distributionOffset], and deriving it twice both doubles the work
+     * (RANDOM shuffles an O(n) permutation per call) and let the offset baked into the
+     * phase disagree with the one handed to the effect.
+     *
+     * Does not store [lastPhase] — the caller does, once per pass, after its member loop.
      *
      * @param tick The current clock tick of this effect's speed master
-     * @param memberInfo The member's distribution info (index and normalized position)
      * @param groupSize Total number of members in the group
+     * @param dynamics The caller's per-pass dynamics snapshot
+     * @param distributionOffset This member's offset, from the same snapshot's strategy
      * @return Phase from 0.0 to 1.0 within the effect cycle
      */
     fun calculatePhaseForMember(
         tick: MasterClock.ClockTick,
-        memberInfo: DistributionMemberInfo,
-        groupSize: Int
+        groupSize: Int,
+        dynamics: FxDynamics,
+        distributionOffset: Double,
     ): Double {
-        // For step-timed effects, scale the beat division by the number of
-        // distinct distribution slots so the beat division controls time-per-step
-        // rather than total cycle time.
-        val effectiveDivision = if (stepTiming && groupSize > 1) {
-            timing.beatDivision * distributionStrategy.distinctSlots(groupSize)
+        val basePhase =
+            MasterClock.phaseForDivision(tick.tickNumber, memberCycleDivision(dynamics, groupSize))
+        return shapeMemberPhase(basePhase, dynamics, distributionOffset, groupSize)
+    }
+
+    /**
+     * The effective beat division for a member pass: for step-timed effects, the beat
+     * division is scaled by the number of distinct distribution slots so it controls
+     * time-per-step rather than total cycle time.
+     */
+    private fun memberCycleDivision(dynamics: FxDynamics, groupSize: Int): Double =
+        if (dynamics.stepTiming && groupSize > 1) {
+            timing.beatDivision * dynamics.distributionStrategy.distinctSlots(groupSize)
         } else {
             timing.beatDivision
         }
-        var basePhase = MasterClock.phaseForDivision(tick.tickNumber, effectiveDivision)
 
+    /**
+     * The member-phase shaping shared by the beat and wall-clock forms, which differ only
+     * in where [basePhase] comes from.
+     */
+    private fun shapeMemberPhase(
+        basePhase: Double,
+        dynamics: FxDynamics,
+        distributionOffset: Double,
+        groupSize: Int,
+    ): Double {
         // PING_PONG: apply triangle wave remap to the base clock phase so that
         // ALL effects (not just static ones) sweep forward then backward.
         // Scale to [0, (N-1)/N] to match the LINEAR offset range and avoid
         // wrapping artifacts at the turnaround points.
-        if (distributionStrategy.usesTrianglePhase && groupSize > 1) {
-            val slots = distributionStrategy.distinctSlots(groupSize)
-            val tri = if (basePhase < 0.5) basePhase * 2.0 else 2.0 * (1.0 - basePhase)
-            basePhase = tri * (slots - 1.0) / slots
+        var shaped = basePhase
+        if (dynamics.distributionStrategy.usesTrianglePhase && groupSize > 1) {
+            val slots = dynamics.distributionStrategy.distinctSlots(groupSize)
+            val tri = if (shaped < 0.5) shaped * 2.0 else 2.0 * (1.0 - shaped)
+            shaped = tri * (slots - 1.0) / slots
         }
 
         // Subtract distribution offset so that higher-offset members are *behind*
         // in the cycle, making the visual sweep flow in the natural direction
         // (element 0 → element N for LINEAR, etc.).
-        val distributionOffset = distributionStrategy.calculateOffset(memberInfo, groupSize)
-
-        val phase = (basePhase + phaseOffset - distributionOffset + 1.0) % 1.0
-        lastPhase = phase // Store last calculated (might be last member)
-        return phase
+        return (shaped + dynamics.phaseOffset - distributionOffset + 1.0) % 1.0
     }
 
     /**
@@ -483,57 +583,51 @@ class FxInstance(
      * For wall-clock effects, [FxTiming.beatDivision] is reinterpreted as cycle
      * duration in seconds (e.g., 4.0 = 4 second cycle).
      *
+     * @param dynamics The caller's per-pass snapshot; defaults to a fresh read, which is
+     *   safe here because only one field ([FxDynamics.phaseOffset]) is consulted
      * @return Phase from 0.0 to 1.0 within the effect cycle
      */
-    fun calculateWallClockPhase(): Double {
+    fun calculateWallClockPhase(dynamics: FxDynamics = this.dynamics): Double {
         val cycleDurationMs = timing.beatDivision * 1000.0
         if (cycleDurationMs <= 0.0) return 0.0
-        val phase = ((accumulatedScaledMs % cycleDurationMs) / cycleDurationMs + phaseOffset) % 1.0
+        val phase =
+            ((accumulatedScaledMs % cycleDurationMs) / cycleDurationMs + dynamics.phaseOffset) % 1.0
         lastPhase = phase
         return phase
     }
 
     /**
-     * Calculate the wall-clock phase for a specific group member (includes distribution offset).
+     * Calculate the wall-clock phase for a specific group member. The parameter contract —
+     * required snapshot, precomputed offset, no [lastPhase] store — is
+     * [calculatePhaseForMember]'s; see there.
      *
-     * @param memberInfo The member's distribution info
      * @param groupSize Total number of members in the group
+     * @param dynamics The caller's per-pass dynamics snapshot
+     * @param distributionOffset This member's offset, from the same snapshot's strategy
      * @return Phase from 0.0 to 1.0 within the effect cycle
      */
     fun calculateWallClockPhaseForMember(
-        memberInfo: DistributionMemberInfo,
         groupSize: Int,
+        dynamics: FxDynamics,
+        distributionOffset: Double,
     ): Double {
-        val effectiveDivision = if (stepTiming && groupSize > 1) {
-            timing.beatDivision * distributionStrategy.distinctSlots(groupSize)
-        } else {
-            timing.beatDivision
-        }
-        val cycleDurationMs = effectiveDivision * 1000.0
+        val cycleDurationMs = memberCycleDivision(dynamics, groupSize) * 1000.0
         if (cycleDurationMs <= 0.0) return 0.0
-
-        var basePhase = (accumulatedScaledMs % cycleDurationMs) / cycleDurationMs
-
-        if (distributionStrategy.usesTrianglePhase && groupSize > 1) {
-            val slots = distributionStrategy.distinctSlots(groupSize)
-            val tri = if (basePhase < 0.5) basePhase * 2.0 else 2.0 * (1.0 - basePhase)
-            basePhase = tri * (slots - 1.0) / slots
-        }
-
-        val distributionOffset = distributionStrategy.calculateOffset(memberInfo, groupSize)
-        val phase = (basePhase + phaseOffset - distributionOffset + 1.0) % 1.0
-        lastPhase = phase
-        return phase
+        val basePhase = (accumulatedScaledMs % cycleDurationMs) / cycleDurationMs
+        return shapeMemberPhase(basePhase, dynamics, distributionOffset, groupSize)
     }
 
-    /** Pause the effect */
+    /**
+     * Pause the effect. Atomic against concurrent dynamics edits, and — because the
+     * dynamics cell is shared across `updateEffect` swaps — cannot be lost to one.
+     */
     fun pause() {
-        isRunning = false
+        updateDynamics { it.copy(isRunning = false) }
     }
 
-    /** Resume the effect */
+    /** Resume the effect. Same guarantees as [pause]. */
     fun resume() {
-        isRunning = true
+        updateDynamics { it.copy(isRunning = true) }
     }
 
     companion object {

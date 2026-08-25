@@ -610,6 +610,26 @@ Sorted snapshots are cached in `@Volatile` fields (`sortedBeatEffects`, `sortedW
 and rebuilt under a `synchronized` block on every mutation. The tick readers are therefore
 lock-free.
 
+### Instance dynamics
+
+The per-instance parameters that request threads may change while the tick loops read them —
+`isRunning`, `phaseOffset`, `stepTiming`, `distributionStrategy`, `elementMode`,
+`elementFilter` — live in one immutable `FxDynamics` value behind a single atomic reference
+(`FxInstance.dynamics`), not in individual fields. A tick pass reads the snapshot once per
+effect and works from it throughout (the member phase functions *require* it as a parameter),
+so a concurrent edit lands wholly on one pass or the next, never half-way through; writers
+replace the whole value atomically, so `updateEffect`'s multi-field changes are indivisible.
+The cell is shared across `updateEffect`'s instance swap, which is what makes a pause/resume
+racing a swap unlosable. Everything else on `FxInstance` is either immutable, written only
+before the instance is published to the engine (`timingSource`), an independent `@Volatile`
+scalar with no cross-field coupling (`intensityMultiplier`, `priority`, the master slots,
+`accumulatedScaledMs`), or tick-written diagnostics (`lastPhase`, stored once per pass).
+
+Anything that persists or reports several dynamics fields together (Record, programmer
+capture, cue capture) must also read them from one snapshot — the `!= default → else null`
+idiom read twice across a concurrent edit records an explicit value where track-the-default
+`null` was meant.
+
 ### Phase Calculation
 
 The phase passed to each effect determines where in the cycle it evaluates. For group/multi-element
@@ -1034,7 +1054,15 @@ The `stepTiming` field is optional. When provided, it overrides the effect's def
 }
 ```
 
-All fields are optional. Immutable fields (`effectType`, `parameters`, `beatDivision`, `blendMode`, `stepTiming`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and running state. Mutable fields (`phaseOffset`, `distributionStrategy`, `elementMode`, `speedMasterUuid`, `rateSpeedMasterUuid`) are updated in place. Both master fields follow the same null-means-no-change convention; to return an effect to the default, send master 1's uuid (master 1 always exists and behaves identically to the null default).
+All fields are optional. Truly immutable fields (`effectType`, `parameters`, `beatDivision`,
+`blendMode`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and — because
+the dynamics cell is shared across the swap (see "Instance dynamics" above) — the running state
+and any concurrently racing pause/resume. Dynamics fields (`phaseOffset`, `distributionStrategy`,
+`elementMode`, `elementFilter`, `stepTiming`) are updated in place as **one** atomic snapshot
+replacement, so a tick pass never observes half of an update. `speedMasterUuid` /
+`rateSpeedMasterUuid` are also updated in place; both follow the same null-means-no-change
+convention, and to return an effect to the default, send master 1's uuid (master 1 always exists
+and behaves identically to the null default).
 
 ## WebSocket Messages
 

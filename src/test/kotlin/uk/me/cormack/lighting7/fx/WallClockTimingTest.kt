@@ -193,13 +193,29 @@ class WallClockTimingTest {
             override val normalizedPosition = 0.0
         }
 
+        // As the engine's member loop does: one dynamics snapshot supplies both the offset
+        // and the phase call.
         val unscaled = wallClockInstance(cycleSeconds = 4.0)
         unscaled.advanceWallClock(1_000, 1.0)
-        assertEquals(0.25, unscaled.calculateWallClockPhaseForMember(member, 1), 1e-9)
+        val unscaledDyn = unscaled.dynamics
+        assertEquals(
+            0.25,
+            unscaled.calculateWallClockPhaseForMember(
+                1, unscaledDyn, unscaledDyn.distributionStrategy.calculateOffset(member, 1),
+            ),
+            1e-9,
+        )
 
         val fast = wallClockInstance(cycleSeconds = 4.0)
         fast.advanceWallClock(1_000, 2.0)
-        assertEquals(0.5, fast.calculateWallClockPhaseForMember(member, 1), 1e-9)
+        val fastDyn = fast.dynamics
+        assertEquals(
+            0.5,
+            fast.calculateWallClockPhaseForMember(
+                1, fastDyn, fastDyn.distributionStrategy.calculateOffset(member, 1),
+            ),
+            1e-9,
+        )
     }
 
     /**
