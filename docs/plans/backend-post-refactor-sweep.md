@@ -106,9 +106,8 @@ existing pattern for its equivalent skips. `CueStackManager.kt` had no logger �
 an invariant currently held by luck. **Fix:** add the `amount > 0` filter; clear suppression on
 deactivate.
 
-**A10. `TemplateRegistry.version++` is not atomic** — low / P2 / S / sonnet
-`TemplateRegistry.kt:83,88`: `@Volatile` + `++` can lose a bump the class doc relies on. **Fix:**
-`AtomicLong`. (Coordinates with C4, which may change this mechanism anyway.)
+~~**A10. `TemplateRegistry.version++` is not atomic**~~ — done, `1239117` (landed inside A5's
+sweep, not its own commit). low / P2 / S / sonnet
 
 ~~**A11. Every position effect silently produces nothing when applied to `pan`/`tilt`**~~ — done, `d0d0cc5`. high / P0 / S / opus
 All seven `src/main/resources/fx/position/*.fx.kts` declare `outputType: POSITION` with
@@ -508,7 +507,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
-| 2 | ~~D1–D6, D8, D9, A5, A6, A7, A8~~ **done**, A9, A10, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
+| 2 | ~~D1–D6, D8, D9, A5–A10~~ **done**, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
