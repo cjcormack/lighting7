@@ -299,12 +299,39 @@ further main-source files referenced the family: `ChannelSocket`, `SocketScope`,
 `-Dcueedit.profile=true`, forwarded from `build.gradle.kts`) and the twelve test files — five
 dedicated, seven referencing. Grep before trusting a removal list.
 
-**D2. Retire the legacy tempo surface, both sides** *(decision taken)* — high / P1 / M / opus
+~~**D2. Retire the legacy tempo surface, both sides**~~ — done, `db937f6` (+ lighting-react `179280e`). high / P1 / M / opus
 Backend: `setFxBpm`/`tapTempo`/`beatSync`/`requestBeatSync` (`FxSocket.kt`), REST
 `GET/POST /fx/clock/status|bpm|tap` (`lightFx.kt:27-46`), and `fxState.bpm` if nothing else reads
 it. Frontend (coordinate or do inline — two components): `BeatIndicator.tsx`,
 `EffectsOverviewPanel.tsx`, `store/fx.ts` → `speedMasters.*` (master 1 = null uuid already works).
 Update CLAUDE.md's endpoint list and `docs/fx-engineering.md`.
+
+Four corrections to the above, and one thing it didn't mention:
+
+- **`fxState.bpm` and `isClockRunning` both went.** `bpm`'s only consumer was
+  `EffectsOverviewPanel`'s readout, migrated to the live bank in the same change (and it carried
+  the hardcoded-120 default that the ShowBar was already moved off); `isClockRunning` had no
+  consumer in either repo.
+- **"Master 1 = null uuid already works" was false for the beat stream** — the one place this item
+  actually needed it. `speedMasters.beat` tags frames from the bank entry, and post-`load()` master
+  1's entry holds its real row uuid; null is only the pre-load master. So a null-keyed subscriber
+  never matched a frame, and a `requestBeat` with an omitted uuid never satisfied the throttle.
+  Latent because master 1 was the only master not using the keyed stream. Resolved client-side
+  for *matching* (`useMaster1Uuid`) rather than by normalizing the wire, keeping "a uuid names one
+  master" true across `state`/`changed`/`beat`; and server-side for *asking*, since
+  `speedMasters.requestBeat` with an omitted uuid parked a `null` that no tagged frame could ever
+  match — an unsatisfiable request that also never left the per-connection set, and one every
+  client sent, because an indicator mounts before its master-1 lookup resolves. The rule is now
+  stated once: null is fine inbound, never outbound. The frontend's own test had encoded the
+  wrong convention.
+- **The frontend was ten files, not two components** — five substantive (`api/fxApi.ts` is the
+  transport and the item didn't name it, plus `store/speedMasters.ts` for the new hook), three
+  tests, five doc-comment-only.
+- **`MasterClock.beatFlow` died with it**, its only consumer being the `beatSync` push — one
+  `SharedFlow` emit per beat per master off the tick path.
+- Script `setBpm`/`tapTempo` (`scriptDef.kt`, `fxApplicationScriptDef.kt`) share names with the
+  deleted WS messages and had to survive; CLAUDE.md's `FX_APPLICATION` example calls `setBpm`. A
+  grep-driven deletion on those names would have taken the script API with it.
 
 **D3. `GroupSocket` is dead in both directions** — medium / P1 / S / sonnet
 No `setupGroupSubscriptions` exists, so `groupsState` is never pushed nor requested; `addGroupFx`
@@ -516,7 +543,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
-| 2 | ~~D1~~ **done**, D2–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 is done, so cueEdit-adjacent work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
+| 2 | ~~D1, D2~~ **done**, D3–D6, D8, D9, A5–A10, E8, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, B2 | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
@@ -541,8 +568,9 @@ The cost of the swap is that C1+C2 rewrite code the retirements would not have d
 so it is close to free; the benefit is one clean before/after on the two items with the largest
 expected win.
 
-Frontend-coordination register (hand to the frontend sweep): D1 (409 handler), D2 (two
-components + store/fx.ts), D3/D9 (dead stubs, groupFxAdded, presetId types, rateSpeedMasterIndex),
+Frontend-coordination register (hand to the frontend sweep): D1 (409 handler), ~~D2~~ (done in the
+same change — ten files, not two components), D3/D9 (dead stubs, groupFxAdded, presetId types,
+rateSpeedMasterIndex),
 F1/F2/F3/F5 (renamed paths/messages/status codes), F6 (hand-copied admin prefix list).
 
 D1's frontend half, now that the backend is done (nothing here is urgent — the backend simply

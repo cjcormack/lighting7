@@ -92,9 +92,9 @@ backlog are listed in §14 only.
 | `FS-TEST-PUBLICPATH` | The publicPath auth/boot-gate bypass predicate is untested and unexported | S2 | P2 | C2 | sonnet |
 | `FS-COORD-CUEEDIT-RETIRE` | Delete the client's cueEdit remnants when backend D1 lands | S3 | P1 | C1 | sonnet |
 | `FS-COORD-GROUPS-WS` | Delete the whole client groups WS layer when backend D3 deletes `GroupSocket` — after ans… | S3 | P1 | C1 | sonnet |
-| `FS-COORD-LEGACY-TEMPO` | Migrate the three legacy-tempo consumers to `speedMasters.*` when backend D2 lands | S3 | P1 | C2 | sonnet |
+| ~~`FS-COORD-LEGACY-TEMPO`~~ **done** | Migrated with backend D2 — see the item | S3 | P1 | C2 | sonnet |
 | `FS-EDITOR-DEBOUNCE-DIRTY` | onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every Compil… | S3 | P1 | C2 | sonnet |
-| `FS-PERF-BPM-INVALIDATION` | Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects` | S3 | P1 | C2 | sonnet |
+| `FS-PERF-BPM-INVALIDATION` | Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects` — **tempo half gone with D2**; only the `FxBadge` consolidation is left | S3 | P2 | C2 | sonnet |
 | `FS-TYPES-TEMPLATE-TOGGLE-MASK` | Template toggle discards the client's `propertyMask` and the server derives none, so ever… | S3 | P1 | C1 | sonnet |
 | `FS-WS-ERROR-ISOLATION` | `notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registe… | S3 | P1 | C1 | sonnet |
 | `FS-ARCH-ALERTDIALOG-DEP` | `@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting fro… | S3 | P2 | C1 | haiku |
@@ -167,7 +167,7 @@ backlog are listed in §14 only.
 | `FS-RES-RUNNER-DIR` | `components/runner/`'s `program/` and `run/` subdirs are named for deleted routes | S4 | P2 | C2 | sonnet |
 | `FS-ARCH-SURFACES-PATTERN` | `store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the… | S4 | P3 | C2 | sonnet |
 | `FS-CHROME-BEAT-MAP-PRUNE` | Per-master beat subscribables are never pruned, so reconnects re-request beats nothing wa… | S4 | P3 | C2 | sonnet |
-| `FS-CHROME-BEAT-RESUBSCRIBE` | `BeatIndicator` tears down and re-creates its WS subscription on every sync transition | S4 | P3 | C2 | sonnet |
+| ~~`FS-CHROME-BEAT-RESUBSCRIBE`~~ **done** | Folded into `FS-COORD-LEGACY-TEMPO`, as that item said to | S4 | P3 | C2 | sonnet |
 | `FS-COORD-PING` | Backend D5 deletes the WS `ping` type; this client sends it | S4 | P3 | C1 | haiku |
 | `FS-DEAD-CSS` | `.scrollbar-thin` and its three webkit child rules serve a deleted palette strip | S4 | P3 | C1 | haiku |
 | `FS-DEAD-EXPORT-KEYWORD` | Ten symbols exported but used only inside their own module | S4 | P3 | C1 | haiku |
@@ -224,7 +224,7 @@ load-bearing. The completeness critic mapped these; verified and consolidated:
 9. **Any `cueUtils` edit keeps the field-by-field pin shape** (never tidy it into a deep-equal) and
    takes `FS-TEST-CUEUTILS-TRIGGERS` along.
 10. **Backend-coordinated items wait for their wave** (§14): the `FS-COORD-*` items ship with
-    backend D1/D2/D3/D5/F-wave changes; `FS-PERF-BPM-INVALIDATION` is superseded if D2 lands first;
+    backend D1/D2/D3/D5/F-wave changes; `FS-PERF-BPM-INVALIDATION`'s tempo half went with D2;
     `FS-PERF-PROVENANCE-REFETCH` is re-measured after backend C3.
 
 A reasonable dispatch order for what's left after those constraints: the independent P1 bugs first
@@ -727,12 +727,13 @@ touching `effects` keep the full set (a Look gaining its first effect of a famil
 module-level bridges answer with tag invalidations. Tempo cannot change which effects exist. The
 worst case in the finding's original form (~60 GETs per tap) needs a second client parked on the
 fixture-cards page; in the same tab a tap costs one redundant `fx/active` refetch — real but
-smaller. **Fix**: split tempo notifications from effect-list notifications (a `subscribeToTempo`, or
-gate the invalidation bridges on the effect half of the frame). Consider `FxBadge` reading the
-rig-wide `useActiveEffectsQuery` rather than a per-fixture query, which removes the fan-out class
-entirely. Don't break `useFxStateQuery` consumers. **Backend D2 (decision taken) retires `beatSync`
-altogether**, which deletes this finding's trigger — take the invalidation-gating half only if it
-lands before `FS-COORD-LEGACY-TEMPO`; the `FxBadge` consolidation stands regardless.
+smaller.
+
+**The tempo half is gone**: D2 / `FS-COORD-LEGACY-TEMPO` retired `beatSync` and stripped `bpm`
+from the `fxState` frame, so a tap no longer notifies the fx state at all and there is nothing to
+gate. What remains of this finding is only the `FxBadge` consolidation — read the rig-wide
+`useActiveEffectsQuery` rather than a per-fixture query, which removes the fan-out class for
+genuine effect changes too. Don't break `useFxStateQuery` consumers.
 
 ### `FS-PERF-PROVENANCE-REFETCH`
 **Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab** ·
@@ -874,17 +875,21 @@ Fixture/group/park/channel-mapping invalidations refetch lists and re-render the
 that display none of them, and the entries can never be evicted. Skip the data queries until first
 open (latch so reopens stay instant); check nothing relies on the palette keeping a list warm.
 
-### `FS-CHROME-BEAT-RESUBSCRIBE`
+### ~~`FS-CHROME-BEAT-RESUBSCRIBE`~~ — **landed, folded into `FS-COORD-LEGACY-TEMPO`**
 **`BeatIndicator` tears down and re-creates its WS subscription on every sync transition** · S4 ·
 P3 · C2 · sonnet
-`src/components/BeatIndicator.tsx`
 
-`synced` sits in the subscribe effect's deps purely so the closure can read it; each regain of sync
-re-subscribes and sends one redundant `requestBeat`. (No dropped-frame window — cleanup and setup
-run in one synchronous flush; the tab-switch storm in the original claim was misattributed.) Hold
-the flag in a ref so the subscription is keyed on `keyedUuid` alone. `BeatIndicator.test.tsx` pins
-the stream choice and resubscribe-on-master-change. **Fold into `FS-COORD-LEGACY-TEMPO`** — the
-subscription effect is rewritten in that migration anyway.
+`synced` now lives in a ref (`syncedRef`) alongside the state, so the subscribe effect keys on the
+target master alone. `BeatIndicator.test.tsx` gained a case pinning it: delivering a beat must not
+re-subscribe.
+
+**The item's "one redundant `requestBeat`" was only true of an ordinary sync regain.** The
+re-subscribe on the *visibility* transition was the mechanism that recovered a drifted local timer
+after a tab switch — `setSynced(false)` flipped a dep, the effect re-ran, and `subscribeBeat` sent
+the request as a side effect. Taking `synced` out of the deps removed it silently, leaving the dot
+an empty ring for up to 16 beats. The recovery is now explicit: `requestSpeedMasterBeat` (a new
+`requestBeat` on the WS api) asks for a frame without re-binding a subscription that was never the
+problem. Pinned by a test.
 
 ### `FS-CHROME-BEAT-MAP-PRUNE`
 **Per-master beat subscribables are never pruned, so reconnects re-request beats nothing watches** ·
@@ -1852,18 +1857,27 @@ Delete both in the same change as, or immediately after, D1 — and write
 `FS-DOCS-CLAUDEMD-CUE-ARM`'s CLAUDE.md rewrite so it doesn't enshrine a keep that is about to
 evaporate.
 
-### `FS-COORD-LEGACY-TEMPO`
-**Migrate the three legacy-tempo consumers to `speedMasters.*` when backend D2 lands** *(wave 1)* ·
-S3 · P1 · C2 · sonnet
-`src/components/BeatIndicator.tsx`, `src/components/EffectsOverviewPanel.tsx`, `src/store/fx.ts`
+### ~~`FS-COORD-LEGACY-TEMPO`~~ — **landed with backend D2**
+**Migrate the legacy-tempo consumers to `speedMasters.*`** *(wave 1)* · S3 · P1 · C2 · sonnet
 
-Decision taken; backend D2 deletes `setFxBpm`/`tapTempo`/`beatSync`/`requestBeatSync` and the REST
-clock routes. Client half: `BeatIndicator`'s legacy unkeyed path moves to the keyed
-`speedMasters.beat` stream with master 1's `''` key (null uuid already means master 1), the tempo
-reads/writes in `store/fx.ts` move to the speed-master endpoints, and the client senders go.
-Resolves the `beatSync` half of `FS-PERF-BPM-INVALIDATION` by deletion (the `fxState` invalidation
-half stands on its own), and is the natural home for `FS-CHROME-BEAT-RESUBSCRIBE`'s ref fix —
-BeatIndicator's subscription effect is being rewritten anyway.
+Landed as the client half of backend sweep D2, in one change across both repos. Two corrections
+worth keeping, because both were premises of this item as written:
+
+- It was **ten files, not three**. Substantive: `api/fxApi.ts` (the transport — the `beatSync`
+  message type and the `requestBeatSync`/`setFxBpm`/`tapTempo` senders), `store/fx.ts`,
+  `store/speedMasters.ts`, `BeatIndicator.tsx`, `EffectsOverviewPanel.tsx`, plus their three
+  tests. Doc-comment-only: `speedMastersApi.ts`, `speedMastersWsApi.ts`, `components/SpeedMasters.tsx`.
+- **"Master 1's `''` key (null uuid already means master 1)" was wrong.** Null means master 1 on
+  the *write* messages only. `speedMasters.beat` tags each frame from the bank entry, and after
+  the first `load()` master 1's entry holds its real row uuid — so an `''`-keyed subscriber
+  never matches a frame, and a `requestBeat` with an omitted uuid never satisfies the throttle.
+  Invisible until this change, because master 1 was the one master that never used the keyed
+  stream. Fixed client-side (`useMaster1Uuid` in `store/speedMasters.ts`) rather than by
+  normalizing the wire, so a uuid keeps naming exactly one master across `state`/`changed`/`beat`.
+  `speedMastersWsApi.test.ts` had encoded the wrong convention and was corrected.
+
+Also resolved the `beatSync` half of `FS-PERF-BPM-INVALIDATION` by deletion, and folded in
+`FS-CHROME-BEAT-RESUBSCRIBE` as that item asked.
 
 ### `FS-COORD-GROUPS-WS`
 **Delete the whole client groups WS layer when backend D3 deletes `GroupSocket` — after answering
@@ -1982,7 +1996,7 @@ the site or in CLAUDE.md), or was checked and holds:
   documented non-duplicates; the reasons at each site still hold.
 - **`SpeedMasters` mounting all responsive arms simultaneously** — documented at the site as
   deliberate (CSS-only switching so the arms can't drift); the *costs* that ride on it are covered
-  by `FS-PERF-FADE-IN-SHOWBAR` and `FS-CHROME-BEAT-RESUBSCRIBE`, not by un-mounting arms.
+  by `FS-PERF-FADE-IN-SHOWBAR` and (landed) `FS-CHROME-BEAT-RESUBSCRIBE`, not by un-mounting arms.
 - **`ProgrammerGrid`'s per-render `editorContext` literal** — absorbed by `EditorContext`'s
   field-wise memo; benign.
 - **Release notes rendering as plain text** — the sweep noted `react-markdown` is now in the tree
