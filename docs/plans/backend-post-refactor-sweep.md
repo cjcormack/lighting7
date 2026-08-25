@@ -135,7 +135,7 @@ Honoured on click-apply (`projectTemplates.kt:300`) but `CueComposer.LayerConten
 (`CueComposer.kt:428-434`) and `SourceRow` (`:437-443`) drop it. **Fix:** carry the field through
 the cook so tracked layers fade like applied ones.
 
-~~**B2. Scripts cannot address speed masters**~~ — done, pulled forward and landed with D7 (same 24 signatures). high / P1 / M / opus
+~~**B2. Scripts cannot address speed masters**~~ — done, `84885df`, pulled forward and landed with D7 (same 24 signatures). high / P1 / M / opus
 
 **B3. `elementMode` settable on update but not add** — medium / P1 / S / sonnet
 `AddEffectRequest` (`lightFx.kt:251-262`) lacks the field `UpdateEffectRequest` has; a FLAT group
@@ -332,7 +332,7 @@ live, contra the original item: `LookRegistry`'s flattening layer
 sealed subclasses needs `--rerun-tasks` on the next build (a green build can still fail every
 serialization test otherwise).
 
-~~**D7. Kotlin effect classes in `fx/effects/`: delete and replace the vocabulary**~~ — done, pulled forward and landed with B2. The DB audit the original item was gated on came back clean. low / P3 / S / opus
+~~**D7. Kotlin effect classes in `fx/effects/`: delete and replace the vocabulary**~~ — done, pulled forward and landed with B2, `84885df`. The DB audit the original item was gated on came back clean. low / P3 / S / opus
 
 **D8. Palette-era vestiges in `ProgrammerStore`** — low / P2 / S / sonnet
 `IncludedTarget.Kind.PALETTE` (never constructed), `paletteId`, `clearIncludeTargetForPalette`, and
