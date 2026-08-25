@@ -320,7 +320,13 @@ class CueTriggerManager(
         val effectSpec = lookEffect.toEffectSpec()
         val fxTarget = try {
             resolveTargetForCue(state, CueTargetDto(target), effectSpec)
-        } catch (_: Exception) { null } ?: return
+        } catch (e: Exception) {
+            logger.warn(
+                "cue {}: timed layer on '{}' — target '{}' unresolvable — skipping effect: {}",
+                cueId, layer.source.name, target.key, e.message,
+            )
+            null
+        } ?: return
 
         val instance = createInstanceFromPreset(
             effectSpec, fxTarget, state = state,
@@ -368,7 +374,13 @@ class CueTriggerManager(
 
         val fxTarget = try {
             resolveTargetForCue(state, toggleTarget, presetEffect)
-        } catch (_: Exception) { null } ?: return
+        } catch (e: Exception) {
+            logger.warn(
+                "cue {}: timed ad-hoc effect on '{}' — target unresolvable — skipping: {}",
+                cueId, effect.targetKey, e.message,
+            )
+            null
+        } ?: return
 
         val instance = createInstanceFromPreset(presetEffect, fxTarget, state)
         instance.cueId = cueId

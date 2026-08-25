@@ -12,7 +12,10 @@ import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.*
 import uk.me.cormack.lighting7.state.State
+import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
+
+private val logger = LoggerFactory.getLogger("CueStackManager")
 
 /**
  * A cue stack's *run state* — what is live, what the next GO will fire, and how far through a
@@ -218,7 +221,13 @@ class CueStackManager(
             val effectSpec = lookEffect.toEffectSpec()
             val fxTarget = try {
                 resolveTargetForCue(state, CueTargetDto(target), effectSpec)
-            } catch (_: Exception) { null } ?: continue
+            } catch (e: Exception) {
+                logger.warn(
+                    "cue {}: layer on '{}' — target '{}' unresolvable — skipping effect: {}",
+                    cueData.cueId, layer.source.name, target.key, e.message,
+                )
+                null
+            } ?: continue
 
             val instance = createInstanceFromPreset(
                 effectSpec, fxTarget, state = state,
@@ -257,7 +266,13 @@ class CueStackManager(
             )
             val fxTarget = try {
                 resolveTargetForCue(state, target, presetEffectDto)
-            } catch (_: Exception) { null } ?: continue
+            } catch (e: Exception) {
+                logger.warn(
+                    "cue {}: ad-hoc effect on '{}' — target unresolvable — skipping: {}",
+                    cueData.cueId, adHoc.targetKey, e.message,
+                )
+                null
+            } ?: continue
 
             val instance = createInstanceFromPreset(presetEffectDto, fxTarget, state)
             instance.cueId = cueData.cueId
@@ -770,8 +785,9 @@ class CueStackManager(
             delay(delayMs)
             try {
                 advanceStack(state, stackId, AdvanceDirection.FORWARD, scope)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 // Stack may have been deactivated or cue deleted
+                logger.warn("stack {}: auto-advance failed — {}", stackId, e.message)
             }
         }
     }

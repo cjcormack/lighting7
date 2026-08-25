@@ -488,7 +488,11 @@ class ProgrammerLayerStack(
             .let { if (beatDivisionOverride == null) it else it.copy(beatDivision = beatDivisionOverride) }
         val fxTarget = try {
             resolveTargetForCue(st, CueTargetDto(target), spec)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logger.warn(
+                "programmer layer on '{}' — target '{}' unresolvable — skipping effect: {}",
+                layer.source.name, target.key, e.message,
+            )
             null
         } ?: return null
 

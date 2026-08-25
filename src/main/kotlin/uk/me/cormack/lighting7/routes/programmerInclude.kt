@@ -287,7 +287,11 @@ private fun spawnIncludedFx(
 
         val fxTarget = try {
             resolveTargetForCue(state, CueTargetDto(target), presetEffect)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logger.warn(
+                "cue {}: included fx on '{}' — target unresolvable — skipping: {}",
+                cueData.cueId, target.key, e.message,
+            )
             null
         } ?: return
 
