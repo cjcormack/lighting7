@@ -110,34 +110,23 @@ sealed interface ProgrammerValue {
  * What Include last pulled into the programmer, and therefore what Update writes back to
  * when no explicit targets are given (Mode A).
  *
- * [targetId] is a cue id, a palette id or a Look id depending on [kind]; [cueId] / [paletteId] /
- * [lookId] narrow it. [cueStackId] is carried so the client can name the stack in the indicator
- * without a second lookup, and [paletteUuid] so a re-import can't leave the indicator pointing at
- * a stranger.
- *
- * [Kind.LOOK] and [Kind.PALETTE] are separate arms rather than one, even though a migrated
- * palette's uuid *is* its Look's: the ids come from different tables, and Update writes back
- * through different code (the palette arm into `DaoPalette`, the Look arm not at all until the
- * record rewrite lands). Collapsing them would let a Look-shaped include be written back into a
- * palette row nothing reads.
+ * [targetId] is a cue id or a Look id depending on [kind]; [cueId] / [lookId] narrow it.
+ * [cueStackId] is carried so the client can name the stack in the indicator without a second
+ * lookup, and [sourceUuid] so a re-import can't leave the indicator pointing at a stranger.
  */
 data class IncludedTarget(
     val kind: Kind,
     val targetId: Int,
     val cueStackId: Int? = null,
-    val paletteUuid: UUID? = null,
+    val sourceUuid: UUID? = null,
 ) {
     enum class Kind {
         CUE,
-        PALETTE,
         LOOK,
     }
 
     /** The cue id, or null when something else is included. */
     val cueId: Int? get() = targetId.takeIf { kind == Kind.CUE }
-
-    /** The palette id, or null when something else is included. */
-    val paletteId: Int? get() = targetId.takeIf { kind == Kind.PALETTE }
 
     /** The Look id, or null when something else is included. */
     val lookId: Int? get() = targetId.takeIf { kind == Kind.LOOK }
@@ -145,11 +134,8 @@ data class IncludedTarget(
     companion object {
         fun cue(cueId: Int, cueStackId: Int?) = IncludedTarget(Kind.CUE, cueId, cueStackId)
 
-        fun palette(paletteId: Int, paletteUuid: UUID) =
-            IncludedTarget(Kind.PALETTE, paletteId, paletteUuid = paletteUuid)
-
         fun look(lookId: Int, lookUuid: UUID) =
-            IncludedTarget(Kind.LOOK, lookId, paletteUuid = lookUuid)
+            IncludedTarget(Kind.LOOK, lookId, sourceUuid = lookUuid)
     }
 }
 
@@ -279,11 +265,6 @@ class ProgrammerStore {
      */
     fun clearIncludeTargetForCue(cueId: Int) {
         _lastIncludedTarget.value = _lastIncludedTarget.value?.takeIf { it.cueId != cueId }
-    }
-
-    /** As [clearIncludeTargetForCue], for a deleted palette. */
-    fun clearIncludeTargetForPalette(paletteId: Int) {
-        _lastIncludedTarget.value = _lastIncludedTarget.value?.takeIf { it.paletteId != paletteId }
     }
 
     /** As [clearIncludeTargetForCue], for a deleted Look. */
