@@ -342,9 +342,8 @@ internal data class ProjectTemplateResource(
 )
 
 /**
- * Unambiguous against [ProjectTemplateResource] despite sitting at the same depth, on the same
- * reasoning `LookPreviewResource` records: nothing serves `POST /{templateId}`, and `templateId` is
- * an `Int` that `"resolve"` cannot parse as.
+ * Unambiguous against [ProjectTemplateResource] despite sitting at the same depth: nothing serves
+ * `POST /{templateId}`, and `templateId` is an `Int` that `"resolve"` cannot parse as.
  */
 @Resource("/resolve")
 internal data class TemplateResolveResource(val parent: ProjectTemplatesResource)

@@ -276,8 +276,6 @@ data class ProgrammerLayerDto(
     val rateSpeedMasterUuid: String? = null,
     /** Set when Include minted this from a cue's layer — Update's diff key. */
     val sourceCueLayerId: Int? = null,
-    /** The Look editor's live preview. Always last, and never recorded. */
-    val isPreview: Boolean = false,
 )
 
 /**
@@ -450,7 +448,6 @@ private fun ProgrammerLayer.toDto() = ProgrammerLayerDto(
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
     sourceCueLayerId = sourceCueLayerId,
-    isPreview = isPreview,
 )
 
 // ── Domain dispatcher ───────────────────────────────────────────────────────

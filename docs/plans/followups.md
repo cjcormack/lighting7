@@ -41,7 +41,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a two-wheel head's second wheel is wanted |
 | [`FU-CUE-APPLYDATA-ONE-BUILDER`](#fu-cue-applydata-one-builder) | Ready | Cue | — |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
-| [`FU-PROG-FOCUS-PREVIEW-LAYER`](#fu-prog-focus-preview-layer) | Ready | Prog | — |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
 | [`FU-AUTH-ATTRIBUTION`](#fu-auth-attribution) | Trigger | Auth | two accounts co-author, or any `formatVersion` bump |
@@ -1152,31 +1151,6 @@ real loss is the multi-layer row.
 **Trigger**: an operator reads a cue drawn from two looks and concludes neither is involved. On a
 show whose cues each layer one look, this never fires.
 
-### `FU-PROG-FOCUS-PREVIEW-LAYER`
-
-**The grid can be focused on the Look editor's preview layer** · Ready · desk-simplification session
-2a, 2026-08-23
-
-`ProgrammerScope.focusLayer` guards against a `layerId` that is not in the programmer's stack —
-because `ProvenanceEntry.layerId` is present for a *cue's* layers too — by testing membership in
-`useProgrammerLayersQuery()`. That query returns the **unfiltered** stack, preview layer included;
-`ProgrammerLookStack` filters `isPreview` out locally for display. So the guard admits the preview
-layer.
-
-**It is reachable, not theoretical.** The preview layer asserts real values, so it can win a key and
-be named in provenance — and clicking that cell in Output scope then focuses it. The grid would show
-the Look editor's *unsaved draft* as though it were a composed layer, and a layer-scope edit would
-`PUT` the Look the editor is mid-draft on. `ProgrammerScopeBand` and `LookRowStoreProvider` both look
-the layer up unfiltered too, so both would happily name it.
-
-Nothing was observed doing this — the preview layer only exists while the Look editor is open, and
-its rows usually lose to the local values above them — which is why this is Ready rather than a bug
-fixed on the spot.
-
-**Fix**: filter `isPreview` in `focusLayer`'s membership test, and in the two lookups that resolve a
-focused layer for display. The filtered list is the one every other consumer already uses; the
-unfiltered query is the outlier.
-
 ---
 
 ## Completed
@@ -1188,6 +1162,10 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 - `FU-TEST-MULTI-CONN-CUEEDIT` — retired without implementation: sweep item D1 removed the
   `cueEdit.*` family, so there is no `beginEdit` for two connections to race on
+- `FU-PROG-FOCUS-PREVIEW-LAYER` — retired without implementation: sweep item D4 removed the
+  programmer's preview layer entirely (`installPreview`, the `isPreview` flag, and the
+  `POST`/`DELETE /project/{id}/looks/preview` routes), so there is no unfiltered preview layer left
+  for `focusLayer` to admit
 - `FU-PAL-POSITIONAL-CONVERSION` — **closed done-differently.** The entry asked for a tool to convert
   positional `P1`/`P2` colour lists into named palettes, waiting on "a show maintaining the same
   colours in both forms". Templates (desk-simplification session 3) made that signal moot by making

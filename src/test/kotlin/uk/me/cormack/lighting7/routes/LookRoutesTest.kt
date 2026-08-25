@@ -348,51 +348,6 @@ class LookRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.NotFound, missing.status)
     }
 
-    // ── Preview ─────────────────────────────────────────────────────────────
-
-    @Test
-    fun `preview writes the draft to the slot and clearing releases it`() = testApplication {
-        mountTestApp(state)
-        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        state.show.fixtures.patchListChanged()
-        val client = jsonClient()
-
-        // Whole-desired-state, and no stored look involved at all — which is exactly why this
-        // route could reuse the preset editor's preview slot rather than growing new logic.
-        val pushed = client.post("${base()}/preview") {
-            contentType(ContentType.Application.Json)
-            setBody(
-                LookPreviewRequest(
-                    propertyAssignments = listOf(
-                        LookPreviewRowDto(
-                            propertyName = "dimmer", value = "128",
-                        ),
-                    ),
-                    targets = listOf(CueTargetDto("fixture", "hex-1")),
-                )
-            )
-        }
-        assertEquals(HttpStatusCode.OK, pushed.status, pushed.bodyAsText())
-        assertTrue(pushed.body<LookPreviewResponse>().writeCount > 0)
-
-        assertEquals(HttpStatusCode.OK, client.delete("${base()}/preview").status)
-    }
-
-    @Test
-    fun `preview does not collide with the look-id routes`() = testApplication {
-        mountTestApp(state)
-        val client = jsonClient()
-
-        // `/preview` and `/{lookId}` sit at the same depth. Nothing serves `POST /{lookId}` and
-        // `lookId` is an Int that "preview" cannot parse as, so the two are unambiguous — but a
-        // future `POST /{lookId}` would shadow this route silently, so pin it.
-        val resp = client.post("${base()}/preview") {
-            contentType(ContentType.Application.Json)
-            setBody(LookPreviewRequest())
-        }
-        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
-    }
-
     // ── Include ─────────────────────────────────────────────────────────────
 
     @Test

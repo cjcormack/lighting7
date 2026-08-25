@@ -129,7 +129,7 @@ internal fun includeCueIntoProgrammer(
 
     val nothingIncluded = writes.isEmpty() &&
         fx.spawned == 0 && fx.alreadyRunning == 0 &&
-        state.show.programmerStore.layers.none { !it.isPreview }
+        state.show.programmerStore.layers.isEmpty()
     if (nothingIncluded) {
         warnings += "Cue '${cueData.cueName}' has nothing to include" +
             if (mask != null) " under this mask" else ""
@@ -144,7 +144,7 @@ internal fun includeCueIntoProgrammer(
         fxSpawned = fx.spawned + layerOutcome.effectsSpawned,
         fxAlreadyRunning = fx.alreadyRunning,
         fxTimedSkipped = fx.timedSkipped + timedLayersSkipped,
-        layersInstalled = state.show.programmerStore.layers.count { !it.isPreview },
+        layersInstalled = state.show.programmerStore.layers.size,
         skipped = skipped,
         warnings = warnings,
     )

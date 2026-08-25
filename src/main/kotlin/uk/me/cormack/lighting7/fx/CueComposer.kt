@@ -213,23 +213,9 @@ internal object CueComposer {
         templateRegistry: TemplateRegistry? = null,
         includeTimed: Set<Int> = emptySet(),
         /**
-         * How a LOOK layer's `source.uuid` becomes a [LookSnapshot]. Defaults to [lookRegistry],
-         * which is what every cue path wants.
-         *
-         * The programmer overrides it for one case the registry cannot serve: the Look editor's
-         * **live preview** is an *unsaved* draft, so it has no row to load and no uuid the registry
-         * has ever heard of. Passing a resolver keeps that a layer like any other — composing above
-         * the real stack, blending and masking by the same rules — instead of a second write path
-         * with its own precedence.
-         */
-        resolveLook: (UUID) -> LookSnapshot? = { lookRegistry?.snapshot(it) },
-        /**
-         * How a TEMPLATE layer's `source.uuid` becomes a [TemplateSnapshot].
-         *
-         * Separate from [resolveLook] rather than one polymorphic resolver, so the live-preview
-         * override above keeps working untouched: it substitutes an unsaved *Look*, and folding the
-         * two would make every caller of that override state a template resolver it has no opinion
-         * about.
+         * How a TEMPLATE layer's `source.uuid` becomes a [TemplateSnapshot]. Defaults to
+         * [templateRegistry], which is what every caller wants; a test can pass a plain map lookup
+         * instead of building a registry.
          */
         resolveTemplate: (UUID) -> TemplateSnapshot? = { templateRegistry?.snapshot(it) },
     ): CookResult {
@@ -251,7 +237,7 @@ internal object CueComposer {
         val asserted = ArrayList<LayerAssertions>(contributing.size)
 
         for ((index, layer) in contributing.withIndex()) {
-            val content = resolveContent(layer.source, resolveLook, resolveTemplate)
+            val content = resolveContent(layer.source, lookRegistry, resolveTemplate)
             if (content == null) {
                 logger.warn(
                     "cue {}: {} '{}' ({}) could not be loaded — skipping layer",
@@ -367,8 +353,6 @@ internal object CueComposer {
         layers: List<CookLayer>,
         lookRegistry: LookRegistry?,
         includeTimed: Set<Int> = emptySet(),
-        /** As [cook]'s — see there for the one caller that overrides it. */
-        resolveLook: (UUID) -> LookSnapshot? = { lookRegistry?.snapshot(it) },
     ): List<Triple<CookLayer, LookEffectEntry, TargetRef>> {
         val out = ArrayList<Triple<CookLayer, LookEffectEntry, TargetRef>>()
         for (layer in layers.filter { it.enabled }.sortedBy { it.sortOrder }) {
@@ -379,7 +363,7 @@ internal object CueComposer {
             // Templates hold no effects at all (D7 — effects live in a Look or on a cue), so a
             // template layer contributes nothing here rather than being resolved and found empty.
             if (layer.source.isTemplate) continue
-            val look = resolveLook(layer.source.uuid) ?: continue
+            val look = lookRegistry?.snapshot(layer.source.uuid) ?: continue
             val layerTargets = layer.targets.map { it.target }
             for (effect in look.effects) {
                 val effectTarget = effect.target
@@ -444,10 +428,10 @@ internal object CueComposer {
 
     private fun resolveContent(
         source: LayerSource,
-        resolveLook: (UUID) -> LookSnapshot?,
+        lookRegistry: LookRegistry?,
         resolveTemplate: (UUID) -> TemplateSnapshot?,
     ): LayerContent? = when (source.kind) {
-        LayerSourceKind.LOOK -> resolveLook(source.uuid)?.let { LayerContent.OfLook(it) }
+        LayerSourceKind.LOOK -> lookRegistry?.snapshot(source.uuid)?.let { LayerContent.OfLook(it) }
         LayerSourceKind.TEMPLATE -> resolveTemplate(source.uuid)?.let { LayerContent.OfTemplate(it) }
     }
 

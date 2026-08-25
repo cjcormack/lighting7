@@ -46,12 +46,6 @@ data class ProgrammerLayer(
      * documents it.
      */
     val beatDivisionOverride: Double? = null,
-    /**
-     * True for the editor's live-preview layer: at most one, always last, never recorded.
-     *
-     * Successor to `presetPreviewStates` — see [ProgrammerLayerStack.installPreview].
-     */
-    val isPreview: Boolean = false,
 ) {
     internal fun toCookLayer() = CookLayer(
         source = source,
@@ -160,25 +154,6 @@ class ProgrammerLayerStack(
      */
     private val programmerCookCueId = -1
 
-    /**
-     * The unsaved draft behind the preview layer, when one is installed.
-     *
-     * The Look editor previews contents that have no row in the database — that is the whole point
-     * of a live preview — so the registry cannot resolve them. Holding the snapshot here and passing
-     * a resolver to [CueComposer.cook] keeps the preview an ordinary layer: it composes above the
-     * real stack under the same blending, masking and ordering rules, rather than being a second
-     * write path with its own precedence to reason about.
-     */
-    @Volatile
-    private var previewSnapshot: LookSnapshot? = null
-
-    /** Synthetic uuid for the preview layer. Never stored, never collides with a real Look. */
-    private val previewLookUuid: UUID = UUID(0L, 0L)
-
-    /** Resolve a layer's Look, preferring the unsaved preview draft. */
-    private fun resolveLook(uuid: UUID): LookSnapshot? =
-        if (uuid == previewLookUuid) previewSnapshot else lookRegistry().snapshot(uuid)
-
     // ── Mutations ───────────────────────────────────────────────────────────
 
     /** Append a layer to the top of the stack. */
@@ -208,9 +183,7 @@ class ProgrammerLayerStack(
             beatDivisionOverride = beatDivisionOverride,
         )
         val (next, _) = store.mutateLayers { current ->
-            // A preview layer is always last, so a real layer is inserted beneath it.
-            val (real, preview) = current.partition { !it.isPreview }
-            renumber(real + layer + preview) to Unit
+            renumber(current + layer) to Unit
         }
         return layer to recook(next, fadeMs)
     }
@@ -218,7 +191,7 @@ class ProgrammerLayerStack(
     /**
      * The busking pad's gesture: put this Look or template on these targets, or take it off again.
      *
-     * "Already on" means **a non-preview layer with the same source and the same target set** — the
+     * "Already on" means **a layer with the same source and the same target set** — the
      * pad's own reading, and the one that lets the same Look sit on two different target sets as two
      * independently-toggleable pads. Matching on the whole [LayerSource] rather than on an id is
      * what keeps a Look and a template that happen to share an int PK from cancelling each other.
@@ -235,7 +208,7 @@ class ProgrammerLayerStack(
         beatDivisionOverride: Double? = null,
     ): Pair<String, Int> {
         val existing = store.layers.firstOrNull {
-            !it.isPreview && it.source == source && it.targets == targets
+            it.source == source && it.targets == targets
         }
         return if (existing != null) {
             "removed" to remove(existing.layerId).effectsRetracted
@@ -256,16 +229,15 @@ class ProgrammerLayerStack(
         return recook(next, fadeMs)
     }
 
-    /** Move a layer to [toIndex] among the non-preview layers, renumbering the whole list. */
+    /** Move a layer to [toIndex], renumbering the whole list. */
     fun move(layerId: Int, toIndex: Int): ProgrammerLayerOutcome {
         val (next, _) = store.mutateLayers { current ->
-            val (real, preview) = current.partition { !it.isPreview }
-            val from = real.indexOfFirst { it.layerId == layerId }
+            val from = current.indexOfFirst { it.layerId == layerId }
             if (from < 0) return@mutateLayers current to Unit
-            val moving = real[from]
-            val rest = real.toMutableList().apply { removeAt(from) }
+            val moving = current[from]
+            val rest = current.toMutableList().apply { removeAt(from) }
             rest.add(toIndex.coerceIn(0, rest.size), moving)
-            renumber(rest + preview) to Unit
+            renumber(rest) to Unit
         }
         return recook(next)
     }
@@ -301,8 +273,7 @@ class ProgrammerLayerStack(
      * Replace the stack with a cue's layers — Include.
      *
      * Each becomes a programmer layer carrying `sourceCueLayerId`, which is how Update's structural
-     * diff later tells an edited layer from a newly added one. The **preview layer survives**: it
-     * belongs to the editor sheet the operator has open, not to the cue being included.
+     * diff later tells an edited layer from a newly added one.
      *
      * **Timed layers are dropped, not held.** A programmer layer is always immediate — there is no
      * trigger manager for the programmer — so a delayed layer has nothing to fire it here. Include
@@ -319,7 +290,6 @@ class ProgrammerLayerStack(
         val immediate = layers.filterNot { it.isTimed }
         val skipped = layers.size - immediate.size
         val (next, _) = store.mutateLayers { current ->
-            val preview = current.filter { it.isPreview }
             val installed = immediate.sortedBy { it.sortOrder }.map { layer ->
                 ProgrammerLayer(
                     layerId = store.mintLayerId(),
@@ -336,64 +306,9 @@ class ProgrammerLayerStack(
                     sourceCueLayerId = layer.layerId,
                 )
             }
-            renumber(installed + preview) to Unit
+            renumber(installed) to Unit
         }
         return skipped to recook(next, fadeMs)
-    }
-
-    /**
-     * Install (or replace, or clear) the single preview layer — the editor's live preview.
-     *
-     * Successor to `swapPresetPreviewSlot`, and it keeps that function's contract:
-     *
-     * - the decide-clear-install sequence is atomic, here by [ProgrammerStore.mutateLayers] rather
-     *   than `ConcurrentHashMap.compute`;
-     * - **an equal request is a no-op that preserves the existing layer's identity.** Not cosmetic:
-     *   the editor debounces at 80 ms and its trailing tick re-sends an identical payload, so
-     *   re-materialising would restart any fade in flight;
-     * - a null [lookUuid] removes the entry rather than storing an empty one.
-     *
-     * The per-project keying is gone, and that is a strengthening rather than a loss: `Show` is
-     * per project and both preview routes sit behind `withCurrentProject`, so cross-project
-     * interference is now impossible by construction rather than by a map key.
-     */
-    fun installPreview(
-        snapshot: LookSnapshot?,
-        targets: List<CueTargetDto> = emptyList(),
-        propertyMask: String? = null,
-    ): ProgrammerLayerOutcome {
-        val (next, unchanged) = store.mutateLayers { current ->
-            val existing = current.firstOrNull { it.isPreview }
-            if (snapshot == null || (snapshot.rows.isEmpty() && snapshot.effects.isEmpty())) {
-                if (existing == null) return@mutateLayers current to true
-                previewSnapshot = null
-                return@mutateLayers renumber(current.filterNot { it.isPreview }) to false
-            }
-            if (existing != null &&
-                previewSnapshot == snapshot &&
-                existing.targets == targets &&
-                existing.propertyMask == propertyMask
-            ) {
-                // Identical request: return the list containing the *same instance*, and skip the
-                // recook entirely.
-                return@mutateLayers current to true
-            }
-            previewSnapshot = snapshot
-            val preview = ProgrammerLayer(
-                layerId = existing?.layerId ?: store.mintLayerId(),
-                // Always a LOOK: the preview slot exists for an *unsaved Look draft*, which is why
-                // it carries the sentinel uuid `resolveLook` special-cases. A template's editor has
-                // no rig preview — its "resolves to" panel is a computation, not a stage write.
-                source = LayerSource.look(snapshot.lookId, previewLookUuid, snapshot.name),
-                sortOrder = 0,
-                targets = targets,
-                propertyMask = propertyMask,
-                isPreview = true,
-            )
-            renumber(current.filterNot { it.isPreview } + preview) to false
-        }
-        if (unchanged) return ProgrammerLayerOutcome(0, 0, 0, 0)
-        return recook(next)
     }
 
     /**
@@ -407,7 +322,6 @@ class ProgrammerLayerStack(
      */
     fun reset() {
         store.mutateLayers { emptyList<ProgrammerLayer>() to Unit }
-        previewSnapshot = null
         synchronized(effectsLock) { effectInstances.clear() }
         // Cleared explicitly rather than left to the next recook, because this is the one mutation
         // that deliberately doesn't recook. It would be inert either way — `mintLayerId` is
@@ -471,7 +385,6 @@ class ProgrammerLayerStack(
             localRows = emptyList(),
             lookRegistry = lookRegistry(),
             templateRegistry = templateRegistry(),
-            resolveLook = ::resolveLook,
         )
         engine().setProgrammerStompSuppression(cooked.stompSuppression)
         return store.putLayerSlots(
@@ -506,9 +419,7 @@ class ProgrammerLayerStack(
         effectInstances.values.retainAll { it in liveIds }
 
         val cookLayers = layers.map { it.toCookLayer() }
-        val desired = CueComposer.cookEffects(
-            fixtures(), programmerCookCueId, cookLayers, lookRegistry(), resolveLook = ::resolveLook,
-        )
+        val desired = CueComposer.cookEffects(fixtures(), programmerCookCueId, cookLayers, lookRegistry())
 
         // Rank each layer among the ones that contribute, matching CookWinner.index.
         val rankOf = cookLayers

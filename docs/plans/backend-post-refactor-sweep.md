@@ -570,7 +570,11 @@ expected win.
 
 Frontend-coordination register (hand to the frontend sweep): D1 (409 handler), ~~D2~~ (done in the
 same change — ten files, not two components), D3/D9 (dead stubs, groupFxAdded, presetId types,
-rateSpeedMasterIndex),
+rateSpeedMasterIndex), D4 (`POST`/`DELETE /project/{id}/looks/preview` are gone and
+`programmer.layerState`'s `isPreview` field no longer exists — the Look editor's live-preview
+caller, `ProgrammerLookStack`'s local `isPreview` filter, and the unfiltered-stack special-casing
+in `ProgrammerScopeBand`/`LookRowStoreProvider` that `FU-PROG-FOCUS-PREVIEW-LAYER` flagged are all
+dead code now, not just unreachable),
 F1/F2/F3/F5 (renamed paths/messages/status codes), F6 (hand-copied admin prefix list).
 
 D1's frontend half, now that the backend is done (nothing here is urgent — the backend simply

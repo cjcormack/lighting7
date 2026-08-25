@@ -23,8 +23,6 @@ import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
-import uk.me.cormack.lighting7.fx.LookRowEntry
-import uk.me.cormack.lighting7.fx.LookSnapshot
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
@@ -388,75 +386,15 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
         }
     }
 
-    // POST /project/{id}/looks/preview — the Look editor's "live preview" toggle.
-    //
-    // Whole-desired-state: the request carries the rows, the colour list and the targets, and an
-    // empty one collapses to a clear. It needs no stored Look, which is exactly why the preview is
-    // a layer holding an *inline* snapshot rather than one resolved through `LookRegistry` — the
-    // draft being previewed has no row to load. Being a layer is what makes it compose above the
-    // rest of the stack under the same rules, instead of a second write path with its own
-    // precedence.
-    post<LookPreviewResource> { resource ->
-        withCurrentProject(
-            state,
-            resource.parent.projectId,
-            { p -> "Cannot preview looks in project '${p.name}' - only the current project can be previewed" },
-        ) {
-            val request = call.receive<LookPreviewRequest>()
-            val outcome = state.show.programmerLayerStack.installPreview(
-                snapshot = request.toPreviewSnapshot(),
-                targets = request.targets.map { CueTargetDto(it.type, it.key) },
-            )
-            call.respond(LookPreviewResponse(outcome.keysRepublished))
-        }
-    }
-
-    // DELETE /project/{id}/looks/preview
-    delete<LookPreviewResource> { resource ->
-        withCurrentProject(
-            state,
-            resource.parent.projectId,
-            { p -> "Cannot clear preview in project '${p.name}' - only the current project can be previewed" },
-        ) {
-            state.show.programmerLayerStack.installPreview(snapshot = null)
-            call.respond(HttpStatusCode.OK)
-        }
-    }
 }
 
-/**
- * The editor's unsaved draft as a [LookSnapshot], for the preview layer.
- *
- * Every row is **deferred**: the preview request carries the targets separately, exactly as a
- * layer does, so the rows describe *what* to assert and the layer decides *where*. An empty draft
- * produces an empty snapshot, which [ProgrammerLayerStack.installPreview] reads as a clear.
- */
-private fun LookPreviewRequest.toPreviewSnapshot(): LookSnapshot? {
-    if (propertyAssignments.isEmpty() || targets.isEmpty()) return null
-    return LookSnapshot(
-        lookId = 0,
-        lookUuid = java.util.UUID(0L, 0L),
-        name = "preview",
-        rows = propertyAssignments.map {
-            LookRowEntry(
-                target = null,
-                propertyName = it.propertyName,
-                value = it.value,
-                fadeDurationMs = it.fadeDurationMs,
-                elementKey = it.elementKey,
-            )
-        },
-        effects = emptyList(),
-    )
-}
-
-// ─── Toggle and preview wire shapes ─────────────────────────────────────
+// ─── Toggle wire shapes ──────────────────────────────────────────────────
 //
-// These lived in `routes/projectFxPresets.kt` as `TogglePresetRequest` / `TogglePresetResponse` /
-// `PresetPreviewRequest` / `PresetPreviewResponse`, kept behind after that file's route function was
-// unmounted precisely so the desk would not have to change across the Looks rewrite. Session 4
-// deleted the file; the shapes moved here and took Look names. **Every JSON field name is
-// unchanged**, so this is a Kotlin-side rename only and no client had to move with it.
+// These lived in `routes/projectFxPresets.kt` as `TogglePresetRequest` / `TogglePresetResponse`,
+// kept behind after that file's route function was unmounted precisely so the desk would not have
+// to change across the Looks rewrite. Session 4 deleted the file; the shapes moved here and took
+// Look names. **Every JSON field name is unchanged**, so this is a Kotlin-side rename only and no
+// client had to move with it.
 //
 // `TogglePresetTarget` did *not* come with them: it was field-for-field identical to
 // [CueTargetDto], down to the `TargetRef` constructor and accessor, so it collapsed into it rather
@@ -476,38 +414,6 @@ internal data class ToggleLookResponse(
     val effectCount: Int,
 )
 
-/**
- * One row of an **unsaved** Look draft, for the editor's live preview.
- *
- * Deliberately not [LookRowDto]: that one requires a `targetType` / `targetKey`, and a preview
- * request carries its targets separately — exactly as a layer does — so its rows say *what* to
- * assert and the request says *where*. The wire field is still called `propertyAssignments`, which
- * is what the desk sends.
- */
-@Serializable
-internal data class LookPreviewRowDto(
-    val propertyName: String,
-    val value: String,
-    val fadeDurationMs: Long? = null,
-    val elementKey: String? = null,
-    val sortOrder: Int = 0,
-)
-
-/**
- * Complete desired state for the project's preview slot — replaces any prior preview writes.
- * Empty `targets` (or `propertyAssignments`) collapses to a clear.
- */
-@Serializable
-internal data class LookPreviewRequest(
-    val propertyAssignments: List<LookPreviewRowDto> = emptyList(),
-    val targets: List<CueTargetDto> = emptyList(),
-)
-
-@Serializable
-internal data class LookPreviewResponse(
-    val writeCount: Int,
-)
-
 // ─── Resources ──────────────────────────────────────────────────────────
 
 @Resource("/{projectId}/looks")
@@ -525,13 +431,6 @@ internal data class CopyLookResource(val parent: ProjectLooksResource, val lookI
 
 @Resource("/{lookId}/toggle")
 internal data class ToggleLookResource(val parent: ProjectLooksResource, val lookId: Int)
-
-/**
- * Unambiguous against [ProjectLookResource] despite sitting at the same depth: nothing serves
- * `POST /{lookId}`, and `lookId` is an `Int` that `"preview"` cannot parse as.
- */
-@Resource("/preview")
-internal data class LookPreviewResource(val parent: ProjectLooksResource)
 
 // ─── DTOs ───────────────────────────────────────────────────────────────
 

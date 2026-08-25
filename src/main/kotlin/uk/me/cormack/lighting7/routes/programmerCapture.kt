@@ -375,9 +375,7 @@ internal fun collectProgrammerRecording(
     val layers: List<CueLayerDto> = if (source == RecordSource.ALL) {
         emptyList()
     } else {
-        state.show.programmerStore.layers
-            .filterNot { it.isPreview }
-            .map { it.toCueLayerDto() }
+        state.show.programmerStore.layers.map { it.toCueLayerDto() }
     }
 
     return ProgrammerRecording(

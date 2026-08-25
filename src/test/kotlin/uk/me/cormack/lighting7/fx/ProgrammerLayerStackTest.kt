@@ -79,17 +79,6 @@ class ProgrammerLayerStackTest {
         return uuid
     }
 
-    /** An unsaved editor draft — deferred rows, no registry entry. */
-    private fun draft(dimmer: Int) = LookSnapshot(
-        lookId = 0,
-        lookUuid = UUID(0L, 0L),
-        name = "preview",
-        rows = listOf(
-            LookRowEntry(target = null, propertyName = "dimmer", value = dimmer.toString()),
-        ),
-        effects = emptyList(),
-    )
-
     private fun Rig.add(name: String, dimmer: Int, vararg fixtureKeys: String) =
         stack.add(
             source = LayerSource.look(name.hashCode(), look(name, dimmer), name),
@@ -261,93 +250,6 @@ class ProgrammerLayerStackTest {
         assertEquals(200, rig.valueOf("hex-1"))
     }
 
-    // ─── Preview ────────────────────────────────────────────────────────
-
-    @Test
-    fun `the preview layer sits on top of every real layer`() {
-        val rig = newRig()
-        rig.add("Warm", 200, "hex-1")
-
-        rig.stack.installPreview(draft(12), targets = listOf(CueTargetDto("fixture", "hex-1")))
-
-        assertEquals(12, rig.valueOf("hex-1"))
-        assertTrue(rig.store.layers.last().isPreview)
-    }
-
-    @Test
-    fun `the preview cooks from an inline draft the registry has never heard of`() {
-        // The whole reason the preview carries its own snapshot: the editor previews contents that
-        // have no row yet, so there is nothing for `LookRegistry` to load. Being a layer anyway is
-        // what makes it compose above the stack under the same rules.
-        val rig = newRig()
-        rig.add("Warm", 200, "hex-1")
-
-        rig.stack.installPreview(draft(33), targets = listOf(CueTargetDto("fixture", "hex-1")))
-
-        assertEquals(33, rig.valueOf("hex-1"))
-        assertTrue(rig.looks.isEmpty() || rig.looks.keys.none { it == UUID(0L, 0L) })
-    }
-
-    @Test
-    fun `an identical preview request is a no-op that preserves the layer's identity`() {
-        // Not cosmetic: the editor debounces at 80 ms and its trailing tick re-sends the same
-        // payload. Re-materialising would restart any fade in flight — the contract
-        // `PresetPreviewSlotTest` pinned with assertSame, carried over from `swapPresetPreviewSlot`.
-        val rig = newRig()
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
-        rig.stack.installPreview(draft(12), targets = targets)
-        val first = rig.store.layers.single { it.isPreview }
-
-        val outcome = rig.stack.installPreview(draft(12), targets = targets)
-
-        assertEquals(ProgrammerLayerOutcome(0, 0, 0, 0), outcome, "nothing was republished")
-        assertTrue(first === rig.store.layers.single { it.isPreview }, "same instance, not an equal one")
-    }
-
-    @Test
-    fun `a changed preview replaces the old one rather than stacking`() {
-        val rig = newRig()
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
-        rig.stack.installPreview(draft(12), targets = targets)
-        rig.stack.installPreview(draft(99), targets = targets)
-
-        assertEquals(1, rig.store.layers.count { it.isPreview })
-        assertEquals(99, rig.valueOf("hex-1"))
-    }
-
-    @Test
-    fun `clearing the preview removes the entry rather than storing an empty one`() {
-        val rig = newRig()
-        rig.add("Warm", 200, "hex-1")
-        rig.stack.installPreview(draft(12), targets = listOf(CueTargetDto("fixture", "hex-1")))
-
-        rig.stack.installPreview(snapshot = null)
-
-        assertTrue(rig.store.layers.none { it.isPreview })
-        assertEquals(200, rig.valueOf("hex-1"), "the real layer underneath is what shows")
-    }
-
-    @Test
-    fun `clearing a preview that was never installed is a no-op`() {
-        val rig = newRig()
-        val outcome = rig.stack.installPreview(snapshot = null)
-        assertEquals(ProgrammerLayerOutcome(0, 0, 0, 0), outcome)
-    }
-
-    @Test
-    fun `an empty draft reads as a clear`() {
-        // The route collapses an empty request to a clear, and so does this: a draft with no rows
-        // describes nothing to assert.
-        val rig = newRig()
-        rig.add("Warm", 200, "hex-1")
-        rig.stack.installPreview(draft(12), targets = listOf(CueTargetDto("fixture", "hex-1")))
-
-        rig.stack.installPreview(draft(12).copy(rows = emptyList()))
-
-        assertTrue(rig.store.layers.none { it.isPreview })
-        assertEquals(200, rig.valueOf("hex-1"))
-    }
-
     // ─── The pad gesture ────────────────────────────────────────────────
 
     @Test
@@ -381,15 +283,5 @@ class ProgrammerLayerStackTest {
         assertEquals(1, rig.store.layers.size)
         assertNull(rig.valueOf("hex-1"))
         assertEquals(200, rig.valueOf("hex-2"), "the other pad is still on")
-    }
-
-    @Test
-    fun `toggle ignores the preview layer when deciding whether a Look is already on`() {
-        val rig = newRig()
-        val uuid = rig.look("Warm", 200)
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
-        rig.stack.installPreview(draft(12), targets = targets)
-
-        assertEquals("applied", rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), targets).first)
     }
 }

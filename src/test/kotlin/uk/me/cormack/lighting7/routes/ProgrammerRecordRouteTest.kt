@@ -824,33 +824,6 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         assertEquals(2, response.cue.layers.size)
     }
 
-    @Test
-    fun `the preview layer is never recorded`() = testApplication {
-        // It belongs to the editor sheet the operator has open, not to the look being saved.
-        mountTestApp(state)
-        val client = jsonClient()
-        seedHex("hex-1", 1)
-        state.show.programmerLayerStack.installPreview(
-            snapshot = uk.me.cormack.lighting7.fx.LookSnapshot(
-                lookId = 0, lookUuid = java.util.UUID(0L, 0L), name = "preview",
-                rows = listOf(
-                    uk.me.cormack.lighting7.fx.LookRowEntry(null, "dimmer", "77"),
-                ),
-                effects = emptyList(),
-            ),
-            targets = listOf(CueTargetDto("fixture", "hex-1")),
-        )
-
-        val response: ProgrammerRecordResponse = client.record(
-            ProgrammerRecordRequest(
-                projectId = projectId.toString(), mode = "CREATE",
-                cueStackId = createStack(client, "s"), name = "no-preview",
-            )
-        ).body()
-
-        assertTrue(response.cue.layers.isEmpty(), "a preview is not content")
-    }
-
     private suspend fun HttpClient.record(request: ProgrammerRecordRequest) =
         post("/api/rest/programmer/record") {
             contentType(ContentType.Application.Json)

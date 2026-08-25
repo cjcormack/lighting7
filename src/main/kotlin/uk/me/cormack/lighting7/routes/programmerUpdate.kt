@@ -318,7 +318,6 @@ internal fun writeLayerStackIntoCue(
     current: List<ProgrammerLayer>,
     baseline: List<ProgrammerLayer>,
 ): LayerDiffOutcome {
-    val live = current.filterNot { it.isPreview }
     val storedById = cue.layers.filterNot { it.isTimed }.associateBy { it.id.value }
     val timedPreserved = cue.layers.count { it.isTimed }
 
@@ -329,12 +328,12 @@ internal fun writeLayerStackIntoCue(
 
     // Removed: in the baseline, gone from the stack. Read from the baseline rather than from the
     // cue's rows so a layer added to the cue by something else since the Include is left alone.
-    val survivingSourceIds = live.mapNotNull { it.sourceCueLayerId }.toSet()
+    val survivingSourceIds = current.mapNotNull { it.sourceCueLayerId }.toSet()
     for (gone in baseline.mapNotNull { it.sourceCueLayerId }.filterNot { it in survivingSourceIds }) {
         storedById[gone]?.let { it.delete(); removed++ }
     }
 
-    for ((index, layer) in live.withIndex()) {
+    for ((index, layer) in current.withIndex()) {
         val stored = layer.sourceCueLayerId?.let { storedById[it] }
         if (stored == null) {
             val resolved = resolveLayerSourceRecords(layer.source) ?: continue
