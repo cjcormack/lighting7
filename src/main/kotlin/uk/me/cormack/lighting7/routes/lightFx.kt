@@ -48,6 +48,9 @@ internal fun Route.routeApiRestFx(state: State) {
                 request.distributionStrategy?.let {
                     instance.distributionStrategy = DistributionStrategy.fromName(it)
                 }
+                request.elementMode?.let {
+                    instance.elementMode = ElementMode.valueOf(it)
+                }
                 request.elementFilter?.let {
                     instance.elementFilter = ElementFilter.fromName(it)
                 }
@@ -206,6 +209,7 @@ data class AddEffectRequest(
     val phaseOffset: Double = 0.0,
     val parameters: Map<String, String> = emptyMap(),
     val distributionStrategy: String? = null,
+    val elementMode: String? = null,
     val elementFilter: String? = null,
     val stepTiming: Boolean? = null,
     /** Speed master to subscribe to, as the master's uuid (null → master 1). */
