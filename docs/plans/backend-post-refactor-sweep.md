@@ -445,11 +445,18 @@ outgoing one and whose next cue came from the incoming one; and `CueCrossfadeDri
 published its job after `scope.launch` returned, so a concurrent cancel cancelled nothing and left
 an orphaned fade to pin a superseded cue back to weight 1.0.
 
-**E4. One param-coercion layer** — medium / P2 / M / opus
+~~**E4. One param-coercion layer**~~ — done, `0ce10d9`. medium / P2 / M / opus
 `BlendMode`/`DistributionStrategy`/`ElementMode`/`ElementFilter` parsing appears in
 `projectCuesHelpers.kt` (silent default), `lightFx.kt` (400), `lightGroups.kt` (500) — same bad
 string, three outcomes. `TypedParams.ubyte` also reimplements `EffectParamUtils.toUByteParam`.
 **Fix:** one `EffectSpecCoercion` object used by all four call sites; collapse the two util layers.
+
+Grew in the landing: the coercion object carries **two named policies** rather than one, because
+the three outcomes were not all wrong. `Strict` rejects (request bodies); `Lenient` warns and
+defaults (stored rows, where the cue still has to fire). Both sit on one nullable lookup, so the
+vocabulary is single even where the policy is not. The review then found that the *authoring*
+endpoints write these fields to the DB with no validation at all, which is where the bad string
+actually enters — filed as E10 rather than folded in here.
 
 **E5. Single source for layer ranking and cook priorities** — medium / P2 / S / opus
 The contributing-layer predicate is implemented three times (`CueComposer.cook:242`,
@@ -486,6 +493,20 @@ left frozen.
 each); extract `TapTempo` from `MasterClock`; name the magic-number relationships
 (`PROGRAMMER_FX_PRIORITY_BASE` band vs the 100k rank clamp; `MAX_CATCHUP_MS` vs 300 BPM;
 `DEFAULT_BPM` doubling as the rate-scale reference).
+
+**E10. Authoring endpoints store effect enums unvalidated** — medium / P2 / M / opus
+E4 gave the four effect enum fields one coercion layer with two policies, and wired `Strict` into
+the three REST *apply* endpoints. The endpoints that **write the stored rows** were not in its
+scope and still pass `blendMode` / `distribution` / `elementMode` / `elementFilter` from the
+request body straight into `varchar(50)`: `projectLooks.kt:671`, `projectCuesHelpers.kt:458,477`,
+`plugins/ProgrammerSocket.kt:676`, `ai/AiTools.kt:440,682,700`. So `POST …/looks/{id}/effects`
+with `blendMode: "ADD"` succeeds, the row reads back `"ADD"`, `LookStack.tsx` renders "ADD" as the
+layer's blend — and every spawn warns and silently plays `OVERRIDE`. The value the operator sees
+and the value the desk plays disagree permanently, which is the failure `Lenient` is designed to
+survive rather than one it should have to. **Fix:** `EffectSpecCoercion.Strict` at every write
+site, so a bad value is rejected where it enters and `Lenient` is left covering only rows written
+by an older build. The WS and AI surfaces have no 400 to return, so each needs its own error path
+— that, and the seven call sites, is why this is its own item and not part of E4.
 
 ## F — API consistency *(decision: normalize hard, no aliases)*
 
@@ -592,7 +613,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 1 | ~~C1–C2~~ **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
-| 4 | ~~E2–E3~~ **done**, E4–E7, C8, B6, B7, F6, E1 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
+| 4 | ~~E2–E4~~ **done**, E5–E7, C8, B6, B7, F6, E10, E1 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
 
@@ -635,7 +656,10 @@ F1/F2/F3/F5 (renamed paths/messages/status codes), F6 (hand-copied admin prefix 
 `EffectDto`/`IndirectEffectDto` — now null out whichever field the effect's `timingSource` doesn't
 consume, instead of echoing both), B5 (`scriptListChanged` / `fxDefinitionListChanged`: two new WS
 broadcast messages, script and FX-definition CRUD now invalidate a second client's caches instead
-of leaving them stale forever).
+of leaving them stale forever), E4 (`POST /fx/add`, `PUT /fx/{id}` and `POST /groups/{name}/fx`
+now **400** an unrecognised `distributionStrategy` or `elementFilter` instead of quietly using
+LINEAR / ALL — the shipped UI only sends canonical names so nothing needs changing, but any
+hand-built or replayed request with a legacy value now loses the whole effect).
 
 **D7.** `GET /fx/library` now returns each parameter's real `type`, `defaultValue` and
 `description` instead of `"string"`, `""`, `""`. Same payload shape, so nothing breaks and
@@ -763,6 +787,14 @@ now fire them. Also, per the review pass and confirmed with the user:
 `FixturesChangeListener`'s 16 members now all default to a no-op, and the five other implementers
 (`GlobalScalerState`, `SurfaceFeedbackPublisher`, `Show.kt`'s two registry listeners, `State`'s
 binding-health listener) were trimmed to only the overrides they actually use.
+
+E4 (`0ce10d9`) — the four effect enum fields now have one parser, `fx/EffectSpecCoercion.kt`, with
+two named policies: `Strict` (request bodies, rejects) and `Lenient` (stored rows, warns and
+defaults). Frontend-visible only in that the three REST apply endpoints got *stricter*:
+`distributionStrategy` and `elementFilter` used to degrade an unrecognised value to LINEAR / ALL
+and add the effect, and now 400 the request, matching what `blendMode` always did. Casing is now
+tolerated everywhere, which it was not on the two throwing fields. The authoring endpoints that
+write these values to the DB are still unvalidated — E10.
 
 ## Verification
 
