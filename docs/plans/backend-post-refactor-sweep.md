@@ -432,10 +432,18 @@ moved with it, to `fixture/group/` and `models/cues.kt`. Still open: `fx/` no lo
 edge survives transitively through `fixture/group/GroupProperties.kt` — relocating
 `PropertyDescriptor`/`ChannelRef` is its own item.
 
-**E3. Split `CueStackManager` (827 lines, four jobs)** — medium / P2 / M / opus
+~~**E3. Split `CueStackManager` (827 lines, four jobs)**~~ — done, `617f35c`. medium / P2 / M / opus
 DB reads, effect spawning, Layer-4 publishing, crossfade animation, auto-advance timers, standby
 arming, run-state broadcast; `activateCueInStack` alone is 267 lines. **Fix:** extract the
 crossfade driver and the standby/run-state half.
+
+Grew in the landing: the review found two latent races in the moved code, both pre-existing and
+neither a regression, and both were fixed here rather than filed — they sit inside the new classes
+and one contradicted the KDoc the extraction had just added. `runStateFor` read the live stack
+twice, so an activation landing between the two reads produced a frame whose live cue was the
+outgoing one and whose next cue came from the incoming one; and `CueCrossfadeDriver.start`
+published its job after `scope.launch` returned, so a concurrent cancel cancelled nothing and left
+an orphaned fade to pin a superseded cue back to weight 1.0.
 
 **E4. One param-coercion layer** — medium / P2 / M / opus
 `BlendMode`/`DistributionStrategy`/`ElementMode`/`ElementFilter` parsing appears in
@@ -584,7 +592,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 1 | ~~C1–C2~~ **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
-| 4 | ~~E2~~ **done**, E3–E7, C8, B6, B7, F6, E1 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
+| 4 | ~~E2–E3~~ **done**, E4–E7, C8, B6, B7, F6, E1 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
 
