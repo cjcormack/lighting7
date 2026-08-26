@@ -42,13 +42,24 @@ enum class ElementFilter {
     }
 
     companion object {
-        fun fromName(name: String): ElementFilter {
-            return try {
-                valueOf(name.uppercase())
-            } catch (_: IllegalArgumentException) {
-                ALL
-            }
-        }
+        /**
+         * Parse a filter from a string name, or null if the name names none.
+         *
+         * The nullable form is the primitive: [EffectSpecCoercion] layers the strict (reject)
+         * and lenient (default + log) policies on top of it, so that a bad string has one
+         * outcome per policy rather than one per call site.
+         */
+        fun byName(name: String): ElementFilter? =
+            entries.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }
+
+        /**
+         * Parse a filter from a string name, falling back to [ALL].
+         *
+         * Anything reading a request body or a stored spec should go through
+         * [EffectSpecCoercion] instead, so the fallback is a stated policy rather than a
+         * property of this enum.
+         */
+        fun fromName(name: String): ElementFilter = byName(name) ?: ALL
     }
 }
 

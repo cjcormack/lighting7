@@ -11,6 +11,16 @@ import java.util.concurrent.ConcurrentHashMap
  * resolved lazily with colour-source version caching — they only re-resolve
  * when a referenced template is edited.
  *
+ * Where `EffectParamUtils.kt` already owns a parser, this class caches it rather than restating
+ * it: [ubyte] and [easingCurve] call [toUByteParam] / [toEasingCurveParam], which an FX calc
+ * script can equally apply to `params.string(…)` itself. They used to reimplement those bodies
+ * inline — identically, but with nothing keeping them so.
+ *
+ * [int], [double], [float] and [boolean] have no such extension and parse inline, and they differ
+ * from [ubyte] in one way worth knowing: a present-but-unparsable value falls back to the schema
+ * default, where [ubyte] yields `0u`. So `{"speed":"abc"}` reads as the declared speed while
+ * `{"min":"abc"}` reads as zero.
+ *
  * Usage in FX calc scripts:
  * ```kotlin
  * val min = params.ubyte("min")
@@ -74,7 +84,7 @@ class TypedParams(
 
     /** Parse a UByte parameter (0-255). */
     fun ubyte(name: String): UByte = ubyteCache.getOrPut(name) {
-        raw(name).toIntOrNull()?.coerceIn(0, 255)?.toUByte() ?: 0u
+        raw(name).toUByteParam() ?: 0u
     }
 
     /** Parse an Int parameter. */
@@ -141,12 +151,7 @@ class TypedParams(
 
     /** Parse an EasingCurve parameter. */
     fun easingCurve(name: String): EasingCurve = easingCurveCache.getOrPut(name) {
-        val value = raw(name)
-        try {
-            EasingCurve.valueOf(value.uppercase())
-        } catch (_: IllegalArgumentException) {
-            EasingCurve.LINEAR
-        }
+        raw(name).toEasingCurveParam() ?: EasingCurve.LINEAR
     }
 
     /**

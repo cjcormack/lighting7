@@ -351,9 +351,9 @@ private fun applyGroupEffect(
         request.parameters,
     )
     val timing = FxTiming(request.beatDivision)
-    val blendMode = BlendMode.valueOf(request.blendMode)
-    val distribution = DistributionStrategy.fromName(request.distribution)
-    val elementMode = ElementMode.valueOf(request.elementMode)
+    val blendMode = EffectSpecCoercion.Strict.blendMode(request.blendMode)
+    val distribution = EffectSpecCoercion.Strict.distribution(request.distribution)
+    val elementMode = EffectSpecCoercion.Strict.elementMode(request.elementMode)
 
     // Validate property support (direct or via elements)
     if (!groupSupportsProperty(group, request.propertyName)) {
@@ -371,7 +371,7 @@ private fun applyGroupEffect(
     )
     requireOutputTypeMatch(effect, target)
 
-    val elFilter = ElementFilter.fromName(request.elementFilter)
+    val elFilter = EffectSpecCoercion.Strict.elementFilter(request.elementFilter)
 
     // Create SINGLE FxInstance for the entire group
     val instance = FxInstance(effect, target, timing, blendMode).apply {

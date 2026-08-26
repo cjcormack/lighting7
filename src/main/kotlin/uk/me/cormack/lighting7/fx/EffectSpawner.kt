@@ -3,7 +3,6 @@ package uk.me.cormack.lighting7.fx
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.detectCapabilities
-import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.models.TargetRef
@@ -118,26 +117,15 @@ internal object EffectSpawner {
             presetEffect.parameters,
         )
         val timing = FxTiming(presetEffect.beatDivision)
-        val blendMode = try {
-            BlendMode.valueOf(presetEffect.blendMode)
-        } catch (_: Exception) {
-            BlendMode.OVERRIDE
-        }
-        val distribution = try {
-            DistributionStrategy.fromName(presetEffect.distribution)
-        } catch (_: Exception) {
-            DistributionStrategy.LINEAR
-        }
-        val elementMode = try {
-            presetEffect.elementMode?.let { ElementMode.valueOf(it) } ?: ElementMode.PER_FIXTURE
-        } catch (_: Exception) {
-            ElementMode.PER_FIXTURE
-        }
-        val elementFilter = try {
-            presetEffect.elementFilter?.let { ElementFilter.fromName(it) } ?: ElementFilter.ALL
-        } catch (_: Exception) {
-            ElementFilter.ALL
-        }
+
+        // Lenient, not strict: these fields come off a stored row, and a spec written by an older
+        // build (or hand-edited) must still fire rather than take the cue down. The warn names the
+        // effect type, which is as much identity as a `LookEffectSpec` carries here.
+        val context = { "look effect '${presetEffect.effectType}'" }
+        val blendMode = EffectSpecCoercion.Lenient.blendMode(presetEffect.blendMode, context)
+        val distribution = EffectSpecCoercion.Lenient.distribution(presetEffect.distribution, context)
+        val elementMode = EffectSpecCoercion.Lenient.elementMode(presetEffect.elementMode, context)
+        val elementFilter = EffectSpecCoercion.Lenient.elementFilter(presetEffect.elementFilter, context)
 
         // Propagate timing source from the effect's registration
         val registration = state.show.fxRegistry.getRegistration(presetEffect.effectType)

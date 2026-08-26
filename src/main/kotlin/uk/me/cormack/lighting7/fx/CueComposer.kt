@@ -699,10 +699,7 @@ internal object CueComposer {
      * plan's four modes are the subset the UI offers.
      */
     private fun parseLayerBlendMode(raw: String, sourceName: String, cueId: Int): BlendMode =
-        BlendMode.entries.firstOrNull { it.name.equals(raw.trim(), ignoreCase = true) } ?: run {
-            logger.warn("cue {}: layer on '{}' has unknown blend mode '{}' — using OVERRIDE", cueId, sourceName, raw)
-            BlendMode.OVERRIDE
-        }
+        EffectSpecCoercion.Lenient.blendMode(raw) { "cue $cueId layer on '$sourceName'" }
 
     /**
      * Combine [incoming] over [below] under [mode], then mix that result back over [below] by

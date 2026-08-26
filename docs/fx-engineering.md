@@ -516,6 +516,30 @@ How effect output combines with fixture's base value:
 | `MAX` | Maximum of both | Ensure minimums |
 | `MIN` | Minimum of both | Limit maximums |
 
+### Reading `blendMode` and friends out of a string
+
+`blendMode`, `distributionStrategy`, `elementMode` and `elementFilter` all arrive as strings —
+from a REST body, from a stored `look_effects` / `cue_effects` / `cue_layers` row — and
+`fx/EffectSpecCoercion.kt` is the only place any of them is parsed. It offers exactly two named
+policies, because there are exactly two situations:
+
+* **`Strict`** — a request body stated the value, so an unrecognised one is the caller's bug and
+  throws `IllegalArgumentException`. Used by `POST /fx/add`, `PUT /fx/{id}` and
+  `POST /groups/{name}/fx`, each of which answers **400**. Note the 400 comes from the handler's
+  own `catch`, not from `plugins/ErrorHandling.kt` — it registers no `IllegalArgumentException`
+  clause, so a *new* strict call site needs its own.
+* **`Lenient`** — a stored row is already on the desk and the cue has to fire, so an unrecognised
+  value warns and takes the field's default. Used by `EffectSpawner.createInstanceFromPreset` and
+  `CueComposer`'s layer blend. A `null` optional field is silent; a present-but-blank one warns,
+  since every column that holds these is either nullable or NOT NULL with a default, so `""` means
+  a row was written wrong.
+
+Both accept any casing and tolerate surrounding whitespace. **The strict path is stricter than it
+was before sweep item E4**: `distributionStrategy` and `elementFilter` used to degrade an
+unrecognised value to `LINEAR` / `ALL` and add the effect anyway, so a legacy or typo'd value from
+a MIDI, AI or third-party caller now loses the whole request instead of one attribute. The shipped
+UI only ever sends canonical names, so nothing in-tree changes.
+
 ### Property Reset
 
 Before processing effects each tick, the engine resets all FX-controlled properties to

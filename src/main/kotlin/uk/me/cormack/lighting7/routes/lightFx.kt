@@ -7,7 +7,6 @@ import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.resources.post
 import io.ktor.server.resources.put
-import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
@@ -41,18 +40,18 @@ internal fun Route.routeApiRestFx(state: State) {
                     beatDivision = request.beatDivision,
                     startOnBeat = request.startOnBeat
                 )
-                val blendMode = BlendMode.valueOf(request.blendMode)
+                val blendMode = EffectSpecCoercion.Strict.blendMode(request.blendMode)
 
                 val instance = FxInstance(effect, target, timing, blendMode)
                 instance.phaseOffset = request.phaseOffset
                 request.distributionStrategy?.let {
-                    instance.distributionStrategy = DistributionStrategy.fromName(it)
+                    instance.distributionStrategy = EffectSpecCoercion.Strict.distribution(it)
                 }
                 request.elementMode?.let {
-                    instance.elementMode = ElementMode.valueOf(it)
+                    instance.elementMode = EffectSpecCoercion.Strict.elementMode(it)
                 }
                 request.elementFilter?.let {
-                    instance.elementFilter = ElementFilter.fromName(it)
+                    instance.elementFilter = EffectSpecCoercion.Strict.elementFilter(it)
                 }
                 request.stepTiming?.let {
                     instance.stepTiming = it
@@ -123,10 +122,10 @@ internal fun Route.routeApiRestFx(state: State) {
                 newEffect?.let { requireOutputTypeMatch(it, existing.target) }
 
                 val newTiming = request.beatDivision?.let { FxTiming(it, existing.timing.startOnBeat) }
-                val newBlendMode = request.blendMode?.let { BlendMode.valueOf(it) }
-                val newDistribution = request.distributionStrategy?.let { DistributionStrategy.fromName(it) }
-                val newElementMode = request.elementMode?.let { ElementMode.valueOf(it) }
-                val newElementFilter = request.elementFilter?.let { ElementFilter.fromName(it) }
+                val newBlendMode = request.blendMode?.let { EffectSpecCoercion.Strict.blendMode(it) }
+                val newDistribution = request.distributionStrategy?.let { EffectSpecCoercion.Strict.distribution(it) }
+                val newElementMode = request.elementMode?.let { EffectSpecCoercion.Strict.elementMode(it) }
+                val newElementFilter = request.elementFilter?.let { EffectSpecCoercion.Strict.elementFilter(it) }
 
                 val updated = engine.updateEffect(
                     effectId = resource.id,

@@ -261,13 +261,16 @@ sealed interface DistributionStrategy {
 
     companion object {
         /**
-         * Parse a distribution strategy from a string name.
+         * Parse a distribution strategy from a string name, or null if the name names none.
+         *
+         * The nullable form is the primitive: [uk.me.cormack.lighting7.fx.EffectSpecCoercion] layers the strict
+         * (reject) and lenient (default + log) policies on top of it, so that a bad string
+         * has one outcome per policy rather than one per call site.
          *
          * @param name Strategy name (case-insensitive)
-         * @return The distribution strategy, or LINEAR if not found
          */
-        fun fromName(name: String): DistributionStrategy {
-            return when (name.uppercase()) {
+        fun byName(name: String): DistributionStrategy? {
+            return when (name.trim().uppercase()) {
                 "LINEAR" -> LINEAR
                 "UNIFIED" -> UNIFIED
                 "CENTER_OUT" -> CENTER_OUT
@@ -277,9 +280,21 @@ sealed interface DistributionStrategy {
                 "REVERSE" -> REVERSE
                 "SPLIT" -> SPLIT
                 "POSITIONAL" -> POSITIONAL
-                else -> LINEAR
+                else -> null
             }
         }
+
+        /**
+         * Parse a distribution strategy from a string name, falling back to [LINEAR].
+         *
+         * Kept for the places whose input is internal rather than a boundary — a group's own
+         * `defaultDistributionName` metadata — where there is no caller to report to. Anything
+         * reading a request body or a stored spec should go through [uk.me.cormack.lighting7.fx.EffectSpecCoercion].
+         *
+         * @param name Strategy name (case-insensitive)
+         * @return The distribution strategy, or LINEAR if not found
+         */
+        fun fromName(name: String): DistributionStrategy = byName(name) ?: LINEAR
 
         /**
          * All available strategy names for API documentation.
