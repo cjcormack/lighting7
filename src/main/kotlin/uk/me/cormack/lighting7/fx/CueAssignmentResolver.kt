@@ -64,6 +64,19 @@ class CueAssignmentResolver {
          * local rows belong to no layer, which is the same thing as "not attributable to one".
          */
         val layerWinner: CookWinner? = null,
+        /**
+         * How long this row's value should take to arrive on the rig, or null to snap.
+         *
+         * Composition ignores it, like [layerWinner] — it is a transmit-time instruction, not an
+         * input. Read only by the publish paths, and only for the *winning* contributor per key:
+         * a fade is a property of the row that decided the value, so a losing row's fade has
+         * nothing to apply to. See [LayerResolver.CueLayerSnapshot.fadeDurations].
+         *
+         * Distinct from the per-cue `fadeDurationMs` a crossfade uses, which weights whole cues
+         * against each other rather than ramping one channel; the two never run on one key at
+         * once (see `FxEngine.publishCueLayerToControllers`).
+         */
+        val fadeDurationMs: Long? = null,
     )
 
     /**
@@ -295,6 +308,40 @@ class CueAssignmentResolver {
                 }
             }
             out[target.targetKey] = composed
+        }
+        return out
+    }
+
+    /**
+     * The per-key transmit ramps for one [cook]: each key's winning row's
+     * [Assignment.fadeDurationMs], **except** where no single row is the source of the composed
+     * value.
+     *
+     * That exception is the whole point of routing this through the cook rather than reading
+     * [Assignment.fadeDurationMs] straight off the winner map. [winners] is LTP-shaped — highest
+     * (priority, fadeWeight), which [composeLtp] follows exactly — and under
+     * [CompositionRule.HTP] with more than one contributor [composeHtp] ignores priority
+     * altogether and takes a weight-scaled `max` or sum. The winner is then an *attribution*
+     * approximation, which is fine for provenance and not fine for timing: cue A's 3 s fade
+     * would time a value cue B supplied. So a genuinely blended HTP bucket snaps.
+     *
+     * A **single-contributor** HTP bucket does not snap, and must not: `composeHtp` returns that
+     * one row's value, so it is the source. That case is the common one — `DIMMER` is HTP, so
+     * treating every HTP bucket as sourceless would mean a Look's 2 s fade-up never faded.
+     *
+     * Keys asking for no ramp are absent rather than zero-valued; the publish paths read absence
+     * as "snap".
+     */
+    fun fadeDurationsFor(cook: Cook, winners: Map<Key, Assignment>): Map<Key, Long> {
+        if (winners.values.none { (it.fadeDurationMs ?: 0L) > 0L }) return emptyMap()
+        val out = HashMap<Key, Long>()
+        for (target in cook.targets) {
+            for (bucket in target.properties) {
+                if (bucket.rule == CompositionRule.HTP && bucket.contributors.size > 1) continue
+                val key = Key.fixture(target.targetKey, bucket.propertyName)
+                val fade = winners[key]?.fadeDurationMs ?: continue
+                if (fade > 0L) out[key] = fade
+            }
         }
         return out
     }

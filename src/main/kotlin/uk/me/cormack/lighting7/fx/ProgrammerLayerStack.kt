@@ -186,7 +186,7 @@ class ProgrammerLayerStack(
         val (next, _) = store.mutateLayers { current ->
             renumber(current + layer) to Unit
         }
-        return layer to recook(next, fadeMs)
+        return layer to recook(next, fadeMs, arrival = true)
     }
 
     /**
@@ -312,7 +312,7 @@ class ProgrammerLayerStack(
             }
             renumber(installed) to Unit
         }
-        return skipped to recook(next, fadeMs)
+        return skipped to recook(next, fadeMs, arrival = true)
     }
 
     /**
@@ -355,17 +355,53 @@ class ProgrammerLayerStack(
         // both tables, so a caller republishing after an edit does not have to say which kind of
         // thing it edited. The template path uses this unchanged.
         if (layers.none { it.source.uuid == sourceUuid }) return emptySet()
-        return materialise(layers)
+        // Keys only. The per-key fades are deliberately dropped: `republishForLookEdit` folds these
+        // into one publish across the programmer *and* every live cue, and a Look edit touring to
+        // an already-applied layer is not the layer arriving — re-timing it would make every nudge
+        // of a colour crossfade on stage.
+        return materialise(layers).moved
     }
 
     // ── The cook ────────────────────────────────────────────────────────────
 
-    private fun recook(layers: List<ProgrammerLayer>, fadeMs: Long = 0): ProgrammerLayerOutcome {
-        val moved = materialise(layers)
+    /**
+     * @param arrival whether this mutation puts a source *on stage* — [add] (so [toggle]'s applied
+     *   arm) and [installFromCue]. Only an arrival lets the cooked rows' own `fadeDurationMs` ramp
+     *   the publish; [patch], [move] and [remove] must not, and the reason is the same one
+     *   `FxEngine.republishCueAssignments` gates on: `amount` is folded into the cooked value, so
+     *   an operator dragging a layer's Amount slider over a Look with a 2 s dimmer row would
+     *   restart that ramp on every drag event and the rig would never track the slider.
+     */
+    private fun recook(
+        layers: List<ProgrammerLayer>,
+        fadeMs: Long = 0,
+        arrival: Boolean = false,
+    ): ProgrammerLayerOutcome {
+        val (moved, rowFades) = materialise(layers)
         val fx = syncEffects(layers)
-        if (moved.isNotEmpty()) engine().republishProgrammerKeys(moved, fadeMs)
+        if (moved.isNotEmpty()) {
+            val eng = engine()
+            if (!arrival || rowFades.isEmpty() || fadeMs > 0) {
+                // A caller-supplied `fadeMs` covers every key and wins outright: an explicit fade on
+                // Include is the operator's instruction, and it overrides the source's stored
+                // default exactly as `POST /templates/{id}/apply` does with `request.fadeMs`.
+                eng.republishProgrammerKeys(moved, fadeMs)
+            } else {
+                eng.republishProgrammerKeys(moved, rowFades)
+            }
+        }
         return ProgrammerLayerOutcome(moved.size, fx.spawned, fx.retracted, fx.repriorised)
     }
+
+    /**
+     * What one [materialise] moved: the keys to publish, and the per-key fade the winning row asked
+     * for. Keys asking for no fade are absent from [rowFades] — see
+     * [LayerResolver.CueLayerSnapshot.fadeDurations] for the same convention on the cue side.
+     */
+    private data class Materialised(
+        val moved: Set<CueAssignmentResolver.Key>,
+        val rowFades: Map<CueAssignmentResolver.Key, Long>,
+    )
 
     /**
      * Cook the stack to values and swap them into the store. No publish.
@@ -375,7 +411,7 @@ class ProgrammerLayerStack(
      * each layer asserted, and `syncEffects` deliberately does not rebuild on a mask, amount or
      * order change — all three of which move the suppression set.
      */
-    private fun materialise(layers: List<ProgrammerLayer>): Set<CueAssignmentResolver.Key> {
+    private fun materialise(layers: List<ProgrammerLayer>): Materialised {
         val cookLayers = layers.map { it.toCookLayer() }
         val cooked = CueComposer.cook(
             fixtures = fixtures(),
@@ -391,7 +427,7 @@ class ProgrammerLayerStack(
             templateRegistry = templateRegistry(),
         )
         engine().setProgrammerStompSuppression(cooked.stompSuppression)
-        return store.putLayerSlots(
+        val moved = store.putLayerSlots(
             cooked.rows.map { row ->
                 ProgrammerStore.LayerSlotWrite(
                     fixtureKey = row.targetKey,
@@ -403,6 +439,19 @@ class ProgrammerLayerStack(
                 )
             }
         )
+        // Only the keys that actually moved need a fade: a slot the cook left where it was is not
+        // republished, so timing it would be timing nothing.
+        val rowFades = if (moved.isEmpty()) {
+            emptyMap()
+        } else {
+            cooked.rows.mapNotNull { row ->
+                val fade = row.fadeDurationMs?.takeIf { it > 0 } ?: return@mapNotNull null
+                CueAssignmentResolver.Key.fixture(row.targetKey, row.propertyName)
+                    .takeIf { it in moved }
+                    ?.let { it to fade }
+            }.toMap()
+        }
+        return Materialised(moved, rowFades)
     }
 
     private data class EffectSync(val spawned: Int, val retracted: Int, val repriorised: Int)

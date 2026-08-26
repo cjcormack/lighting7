@@ -286,6 +286,10 @@ class CueStackManager(
             fxEngine.setCueAssignments(
                 cueData.cueId, cooked.rows, incomingStartWeight, cueStackId = stackId,
                 stompSuppression = cooked.stompSuppression,
+                // An arrival, so the rows' own fades time it — **unless** the cue is crossfading in,
+                // where the cue-level fade is already the transition and this publish only lands
+                // the weight-0 frame a tick later overwrites. The two never compound on one key.
+                honourRowFades = !useCrossfade,
             )
         } else {
             fxEngine.removeCueAssignments(cueData.cueId)

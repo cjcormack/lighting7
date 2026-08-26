@@ -768,6 +768,10 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             cueData.cueId, cooked.rows,
             cueStackId = cueData.cueStackId,
             stompSuppression = cooked.stompSuppression,
+            // An arrival: this cue is going on stage now, so its rows' own fades time it. The
+            // Record/Update rewrite of an already-live cue (`republishCueLayer`) deliberately does
+            // not, being an edit rather than an entrance.
+            honourRowFades = true,
         )
     } else {
         // Re-applying a cue that lost its assignments must clear any stale state.
@@ -1038,6 +1042,10 @@ internal fun buildCueAssignmentsForCue(
             compositionOverride = override,
             value = value,
             moveInDark = assignment.moveInDark,
+            // The stored row's own fade. Dropped here until sweep item B1: the column, the DTO, the
+            // exporter and the cue routes all carried it, and the one hop into the composition
+            // layer did not — so a cue's local row snapped while a clicked template faded.
+            fadeDurationMs = assignment.fadeDurationMs,
         )
 
         // Until session 4 a per-fixture branch sat here: a value of `ref:{uuid}` had to be resolved

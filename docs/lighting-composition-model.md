@@ -483,7 +483,55 @@ When a cue transitions (outgoing → incoming), each property's Layer 4 contribu
 
 For `HTP` categories across multiple contributors, each contributor's value is scaled by its own fade weight before being folded with `max`.
 
-Fade time source: cue-level fade time by default. The data model supports per-property fade-time override on individual assignments; authoring UX for that is out of scope for Phase 0.
+### Per-row fade time
+
+Two different things are called a fade here, and they operate at different scopes:
+
+- The **cue-level** fade time drives the crossfade above: a weight in `[0, 1]` per cue, blending
+  whole cues against each other. Everything in this section so far is that one.
+- A **per-row** fade — `fadeDurationMs` on a Look row, on a template, or on a cue's own property
+  assignment — is a *transmit-time* instruction on one `(fixture, property)`: how long that value
+  should take to arrive, driving the same per-channel `DmxController` ramp the programmer's
+  [Fades](#fades) use.
+
+The per-row fade survives the cook (`CueComposer`), which is what makes a **tracked** source behave
+like an **applied** one: clicking a template chip writes literals into the programmer with the
+template's fade, and ⌥clicking the same chip adds a layer — which used to snap, because the field
+stopped at `SourceRow`. It belongs to the row that **won** the key, alongside `CookWinner`: one
+winning row supplies the value, the attribution and the fade. A template's fade sits on the template
+rather than the row, so every row of one template moves together.
+
+**Arrival, not every publish.** Only a publish that puts a source *on stage* may ramp: a cue GO
+(`applyCue`, and `CueStackManager` on the snap path), a timed layer firing
+(`CueTriggerManager`), and `add` / Include on the programmer's layer stack. Everything else snaps,
+each for its own reason:
+
+| Publish | Ramps? | Why not |
+| --- | --- | --- |
+| Cue GO / immediate apply | yes | the arrival the fade times |
+| Timed layer firing | yes | the layer's rows reach the stage for the first time |
+| Programmer `add` / Include | yes | ⌥click and the busking pads — the case the item exists for |
+| Cue GO **with** a cue-level crossfade | no | the crossfade *is* the transition; the two must not compound |
+| Crossfade weight tick | no | ~62 fps — a ramp restarted every frame never arrives |
+| Look-content edit tour | no | one drag of a colour picker would set a 2 s crossfade running |
+| Record / Update rewrite of a live cue | no | an edit, not an entrance |
+| Programmer `patch` / `move` | no | `amount` folds into the value, so the rig would lag the slider |
+| Any removal or release | no | the key releases to what sits underneath, which the departing row does not own |
+
+**No single source, no ramp.** The per-key fade map comes from `CueAssignmentResolver.fadeDurationsFor`,
+which reads the cook rather than the winner map alone. The winner map is LTP-shaped — highest
+`(priority, fadeWeight)`, exactly what `composeLtp` follows — but `composeHtp` ignores priority and
+takes a weight-scaled `max` or sum, so with **more than one** contributor on an HTP key the winner is
+an attribution approximation. That is fine for provenance and not fine for timing (cue A's 3 s fade
+would time a value cue B supplied), so a genuinely blended HTP bucket snaps. A *single-contributor*
+HTP bucket does not, and must not: `DIMMER` is HTP, so treating every HTP key as sourceless would
+mean a Look's fade-up never faded.
+
+Settings (discrete wheels) always snap, as they do for every other fade. On the programmer side one
+publish carries the whole gesture — `FxEngine.republishProgrammerKeys` takes a per-key fade map, so a
+Look whose colour row fades over 2 s beside a snapping dimmer row still lands in one
+`ControllerTransaction`. An explicit `fadeMs` from the caller (Include's, say) overrides the source's
+stored default, exactly as `POST /templates/{id}/apply` does with `request.fadeMs`.
 
 ## Stomp
 

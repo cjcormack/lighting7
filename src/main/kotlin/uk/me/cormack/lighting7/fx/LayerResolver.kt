@@ -63,6 +63,19 @@ class LayerResolver(
          * to nothing" two spellings of one thing.
          */
         val layerWinners: Map<CueAssignmentResolver.Key, CookWinner>,
+        /**
+         * The winning contributor's [CueAssignmentResolver.Assignment.fadeDurationMs] per composed
+         * key — a transmit-time ramp, not a composition input.
+         *
+         * Built by [CueAssignmentResolver.fadeDurationsFor] from the *cook* rather than from
+         * [winners] alone, and the difference is load-bearing: the winner map is an LTP-shaped
+         * attribution, and a blended HTP bucket has no single source row to take a ramp from. See
+         * there.
+         *
+         * Keys asking for no fade are **absent**, not zero-valued: the publish paths treat absence
+         * as "snap", and a zero entry would mean the same thing twice.
+         */
+        val fadeDurations: Map<CueAssignmentResolver.Key, Long>,
     ) {
         /**
          * [index] flattened to (targetKey, propertyName) keys, derived on first read.
@@ -76,7 +89,7 @@ class LayerResolver(
         }
 
         internal companion object {
-            val EMPTY = CueLayerSnapshot(emptyMap(), emptyMap(), emptyMap())
+            val EMPTY = CueLayerSnapshot(emptyMap(), emptyMap(), emptyMap(), emptyMap())
         }
     }
 
@@ -114,6 +127,7 @@ class LayerResolver(
             weights,
             winners = winners.mapValues { (_, a) -> a.cueId },
             layerWinners = winners.mapNotNull { (key, a) -> a.layerWinner?.let { key to it } }.toMap(),
+            fadeDurations = cueAssignmentResolver.fadeDurationsFor(cooked, winners),
         )
     }
 
@@ -141,7 +155,7 @@ class LayerResolver(
             return
         }
         val previous = cueLayer
-        publish(cooked, weights, previous.winners, previous.layerWinners)
+        publish(cooked, weights, previous.winners, previous.layerWinners, previous.fadeDurations)
     }
 
     /**
@@ -154,11 +168,13 @@ class LayerResolver(
         weights: CueAssignmentResolver.FadeWeights,
         winners: Map<CueAssignmentResolver.Key, Int>,
         layerWinners: Map<CueAssignmentResolver.Key, CookWinner>,
+        fadeDurations: Map<CueAssignmentResolver.Key, Long>,
     ) {
         cueLayer = CueLayerSnapshot(
             index = cueAssignmentResolver.compose(cooked, weights),
             winners = winners,
             layerWinners = layerWinners,
+            fadeDurations = fadeDurations,
         )
     }
 
@@ -225,6 +241,13 @@ class LayerResolver(
      */
     val currentCueLayerLayerWinners: Map<CueAssignmentResolver.Key, CookWinner>
         get() = cueLayer.layerWinners
+
+    /**
+     * Per-key fade of the winning contributor — the transmit-time instruction the Layer 4
+     * publish reads. Absent means snap. See [CueLayerSnapshot.fadeDurations].
+     */
+    val currentCueLayerFadeDurations: Map<CueAssignmentResolver.Key, Long>
+        get() = cueLayer.fadeDurations
 
     /**
      * Resolve the fallback [FxOutput] for the given target + fixture. Returned value is what

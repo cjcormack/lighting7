@@ -60,6 +60,7 @@ class FxEnginePublishCueLayerTest {
         propertyName: String = "dimmer",
         value: UByte,
         category: PropertyCategory = PropertyCategory.DIMMER,
+        fadeDurationMs: Long? = null,
     ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
@@ -69,7 +70,124 @@ class FxEnginePublishCueLayerTest {
         propertyName = propertyName,
         category = category,
         value = CueAssignmentResolver.PropertyValue.Slider(value),
+        fadeDurationMs = fadeDurationMs,
     )
+
+    // ─── Per-row fades (sweep item B1) ──────────────────────────────────
+
+    @Test
+    fun `a row's own fade ramps the channel when the cue arrives`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(
+            10,
+            listOf(slider(cueId = 10, value = 180u, fadeDurationMs = 2_500)),
+            honourRowFades = true,
+        )
+        assertEquals(
+            2_500L, rig.controller.changesTo(1).last().fadeMs,
+            "the winning row's fadeDurationMs must reach the controller as a ramp",
+        )
+    }
+
+    @Test
+    fun `a single-contributor HTP key still fades`() {
+        // DIMMER is HTP, so treating every HTP bucket as sourceless would mean a Look's fade-up
+        // never faded. `composeHtp` on one contributor returns that row's value — it *is* the source.
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(
+            10,
+            listOf(slider(cueId = 10, value = 180u, category = PropertyCategory.DIMMER, fadeDurationMs = 900)),
+            honourRowFades = true,
+        )
+        assertEquals(900L, rig.controller.changesTo(1).last().fadeMs)
+    }
+
+    @Test
+    fun `a blended HTP key snaps, because no single row is its source`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 40u)))
+        // Two live cues on one HTP dimmer key: `composeHtp` ignores priority, so the LTP-shaped
+        // winner map cannot say which row the composed value came from. Timing it off the winner
+        // would apply cue 11's 5 s ramp to a max() of both.
+        rig.engine.setCueAssignments(
+            11,
+            listOf(slider(cueId = 11, priority = 2, value = 200u, fadeDurationMs = 5_000)),
+            honourRowFades = true,
+        )
+        assertEquals(0L, rig.controller.changesTo(1).last().fadeMs)
+    }
+
+    @Test
+    fun `a row with no fade still snaps`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(
+            10, listOf(slider(cueId = 10, value = 180u)), honourRowFades = true,
+        )
+        assertEquals(0L, rig.controller.changesTo(1).last().fadeMs)
+    }
+
+    @Test
+    fun `a Record or Update rewrite of a live cue snaps rather than re-running the fade`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(
+            10, listOf(slider(cueId = 10, value = 100u, fadeDurationMs = 2_000)), honourRowFades = true,
+        )
+        // `republishCueLayer`'s shape: same cue, new rows, no arrival flag. Honouring the fade here
+        // would set a 2 s crossfade running on every cue-edit persist.
+        rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 220u, fadeDurationMs = 2_000)))
+        assertEquals(220u.toUByte(), rig.controller.currentValues[1])
+        assertEquals(0L, rig.controller.changesTo(1).last().fadeMs)
+    }
+
+    @Test
+    fun `an edit tour republish snaps but a timed-layer fire does not`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, value = 100u, fadeDurationMs = 2_000)))
+
+        // `republishForLookEdit`: the operator nudged a live Look's value. An edit, not an entrance.
+        rig.engine.replaceCueAssignments(
+            mapOf(10 to listOf(slider(cueId = 10, value = 220u, fadeDurationMs = 2_000))),
+            emptyMap(),
+        )
+        assertEquals(220u.toUByte(), rig.controller.currentValues[1])
+        assertEquals(0L, rig.controller.changesTo(1).last().fadeMs)
+
+        // `CueTriggerManager` firing a timed layer through the same entry point: an arrival.
+        rig.engine.replaceCueAssignments(
+            mapOf(10 to listOf(slider(cueId = 10, value = 60u, fadeDurationMs = 2_000))),
+            emptyMap(),
+            honourRowFades = true,
+        )
+        assertEquals(2_000L, rig.controller.changesTo(1).last().fadeMs)
+    }
+
+    @Test
+    fun `a crossfade weight tick never ramps a per-row fade`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 200u)))
+        rig.engine.setCueAssignments(
+            11,
+            listOf(slider(cueId = 11, priority = 2, value = 90u, fadeDurationMs = 3_000)),
+            weight = 0.0,
+            honourRowFades = true,
+        )
+        rig.engine.updateCueFadeWeights(mapOf(10 to 0.5, 11 to 0.5))
+        assertTrue(
+            rig.controller.changesTo(1).all { it.fadeMs == 0L },
+            "a ramp restarted every crossfade frame never arrives: ${rig.controller.changesTo(1)}",
+        )
+    }
+
+    @Test
+    fun `releasing a key snaps, whatever fade the departing row asked for`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(
+            10, listOf(slider(cueId = 10, value = 180u, fadeDurationMs = 4_000)), honourRowFades = true,
+        )
+        rig.engine.removeCueAssignments(10)
+        assertEquals(0u.toUByte(), rig.controller.currentValues[1])
+        assertEquals(0L, rig.controller.changesTo(1).last().fadeMs)
+    }
 
     @Test
     fun `setCueAssignments writes dimmer value to controller with no effects running`() {

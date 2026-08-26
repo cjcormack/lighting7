@@ -140,6 +140,10 @@ class CueTriggerManager(
                 fxEngine.replaceCueAssignments(
                     mapOf(cueId to cooked.rows),
                     mapOf(cueId to cooked.stompSuppression),
+                    // An arrival: a timed layer asserts nothing until it fires, so this publish is
+                    // the moment its rows reach the stage — and a row asking for a 2 s fade should
+                    // get one here for the same reason a cue GO does.
+                    honourRowFades = true,
                 )
             }
             if (job != null) jobs.add(job)

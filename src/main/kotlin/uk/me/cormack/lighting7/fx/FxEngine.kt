@@ -801,6 +801,13 @@ class FxEngine(
          * list belongs to no layer, so nothing can stomp it.
          */
         stompSuppression: LayerStompSuppression = emptyMap(),
+        /**
+         * True only when this publish is the cue **arriving** — a GO, or an immediate apply. False
+         * for the cue-edit and Record/Update rewrites of an already-live cue that come through
+         * `republishCueLayer`, which are edits rather than entrances. See
+         * [republishCueAssignments].
+         */
+        honourRowFades: Boolean = false,
     ) {
         synchronized(cueAssignmentsLock) {
             if (assignments.isEmpty()) {
@@ -820,7 +827,7 @@ class FxEngine(
             } else {
                 cueFadeWeights[cueId] = clamped
             }
-            republishCueAssignments()
+            republishCueAssignments(honourRowFades = honourRowFades)
         }
     }
 
@@ -848,6 +855,14 @@ class FxEngine(
          * stomping layer.
          */
         stompSuppression: Map<Int, LayerStompSuppression> = emptyMap(),
+        /**
+         * True only when this publish is a source **arriving** — `CueTriggerManager` firing a timed
+         * layer, whose rows appear on stage for the first time at that moment. False for
+         * `republishForLookEdit`, which tours every live cue layering an edited Look and would
+         * otherwise re-ramp the stage once per drag of a colour picker. See
+         * [republishCueAssignments].
+         */
+        honourRowFades: Boolean = false,
     ): Set<Int> {
         if (updates.isEmpty()) return emptySet()
         val replaced = LinkedHashSet<Int>()
@@ -868,7 +883,7 @@ class FxEngine(
                 replaced.add(cueId)
             }
             if (stompChanged) rebuildStompFlatLocked()
-            if (replaced.isNotEmpty()) republishCueAssignments()
+            if (replaced.isNotEmpty()) republishCueAssignments(honourRowFades = honourRowFades)
         }
         return replaced
     }
@@ -1510,7 +1525,32 @@ class FxEngine(
         emitProvenanceUpdate()
     }
 
-    private fun publishCascadeForKeys(keys: Set<CueAssignmentResolver.Key>, fadeMs: Long = 0) {
+    /**
+     * As [republishProgrammerKeys], but with a **per-key** ramp: [fadeMs] is the default and
+     * [perKeyFadeMs] overrides it for the keys it names.
+     *
+     * One call rather than one per distinct fade, because a gesture is one transaction: a Look
+     * whose colour row fades over 2 s beside a snapping dimmer row is still one arrival, and
+     * splitting it would let the 50 Hz tick run between the halves and put them in different
+     * ArtNet frames. See `ProgrammerLayerStack.recook`, its only caller.
+     */
+    fun republishProgrammerKeys(
+        keys: Set<CueAssignmentResolver.Key>,
+        perKeyFadeMs: Map<CueAssignmentResolver.Key, Long>,
+        fadeMs: Long = 0,
+    ) {
+        if (keys.isEmpty()) return
+        synchronized(cueAssignmentsLock) {
+            publishCascadeForKeys(keys, fadeMs, perKeyFadeMs)
+        }
+        emitProvenanceUpdate()
+    }
+
+    private fun publishCascadeForKeys(
+        keys: Set<CueAssignmentResolver.Key>,
+        fadeMs: Long = 0,
+        perKeyFadeMs: Map<CueAssignmentResolver.Key, Long> = emptyMap(),
+    ) {
         if (keys.isEmpty()) return
 
         val coveredByEffects = coveredByRunningEffects()
@@ -1541,7 +1581,7 @@ class FxEngine(
 
             try {
                 val fallback = layerResolver.fallbackFor(target, fixture, key.targetKey)
-                target.resetToFallback(fixture, fallback, fadeMs)
+                target.resetToFallback(fixture, fallback, perKeyFadeMs[key] ?: fadeMs)
                 wrote = true
             } catch (e: Exception) {
                 logThrottled("cascade-publish-${key.targetKey}.${key.propertyName}", e) {
@@ -1592,8 +1632,19 @@ class FxEngine(
      * cook per frame: new row objects are a new row *set* as far as the resolver can tell.
      * [cueFadeWeights] is handed over directly and read synchronously under the lock the
      * caller already holds.
+     *
+     * @param honourRowFades whether the winning rows' own `fadeDurationMs` may ramp this publish.
+     *   Defaults to false, and only a caller that knows this publish is a **source arriving** —
+     *   a cue GO, a timed layer firing, an operator putting a Look on a pad — may pass true. Every
+     *   other republish snaps, each for its own reason: a crossfade weight tick runs at ~62 fps and
+     *   a ramp restarted every frame never arrives; a Look-content edit tours every live cue that
+     *   layers it, so an operator dragging a colour picker would set a 2 s crossfade running per
+     *   drag step; a Record/Update rewrite of a live cue is an edit, not an entrance; and a removal
+     *   or a reveal releases keys to whatever sits underneath, which the row that stopped
+     *   contributing has no business timing. `ProgrammerLayerStack` splits the same way, on the same
+     *   arrival-versus-edit line.
      */
-    private fun republishCueAssignments(weightsOnly: Boolean = false) {
+    private fun republishCueAssignments(weightsOnly: Boolean = false, honourRowFades: Boolean = false) {
         val before = layerResolver.current
         val weights = CueAssignmentResolver.FadeWeights(cueFadeWeights)
         if (cueAssignments.isEmpty()) {
@@ -1605,7 +1656,10 @@ class FxEngine(
             for (list in cueAssignments.values) flat.addAll(list)
             layerResolver.applyAssignments(flat, weights)
         }
-        publishCueLayerToControllers(before, layerResolver.current)
+        // `&& !weightsOnly` belongs here rather than to the callers: a weight tick is a republish
+        // no caller describes as an arrival, and the guarantee that the two fade mechanisms never
+        // compound on one key should not rest on every call site remembering it.
+        publishCueLayerToControllers(before, layerResolver.current, honourRowFades && !weightsOnly)
         emitProvenanceUpdate()
     }
 
@@ -1637,12 +1691,17 @@ class FxEngine(
     private fun publishCueLayerToControllers(
         before: LayerResolver.CueLayerSnapshot,
         after: LayerResolver.CueLayerSnapshot,
+        honourRowFades: Boolean,
     ) {
         val beforeIndex = before.index
         val afterIndex = after.index
         if (beforeIndex.isEmpty() && afterIndex.isEmpty()) return
 
         val coveredByEffects = coveredByRunningEffects()
+        // Empty for every cue whose rows asked for no fade, which is the common case — so the
+        // compound-key allocation `publishKey` otherwise avoids is skipped entirely rather than
+        // done and discarded.
+        val rowFades = if (honourRowFades) after.fadeDurations else emptyMap()
 
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
@@ -1669,7 +1728,15 @@ class FxEngine(
                 val fixture = fixturesWithTx.untypedGroupableFixture(fixtureKey)
                 if (allChannelsParked(target, fixture)) return
                 val fallback = layerResolver.fallbackFor(target, fixture, fixtureKey)
-                target.resetToFallback(fixture, fallback)
+                // A released key (`afterValue == null`) snaps: its fade belonged to the row that
+                // has just stopped contributing, and what it releases *to* is whatever sits
+                // underneath — not something that row gets to time.
+                val fadeMs = if (rowFades.isEmpty() || afterValue == null) {
+                    0L
+                } else {
+                    rowFades[CueAssignmentResolver.Key.fixture(fixtureKey, propertyName)] ?: 0L
+                }
+                target.resetToFallback(fixture, fallback, fadeMs)
                 wrote = true
             } catch (e: Exception) {
                 logThrottled("layer4-publish-$fixtureKey.$propertyName", e) {

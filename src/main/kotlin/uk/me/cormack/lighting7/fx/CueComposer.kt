@@ -173,6 +173,12 @@ internal object CueComposer {
         val moveInDark: Boolean = false,
         /** Which layer last wrote this key. Null once a local row has overlaid it. */
         val winner: CookWinner? = null,
+        /**
+         * The winning row's fade, or null to snap. Belongs to the *winner*, not the key: a MAX
+         * blend that kept the value beneath still had the later layer decide the outcome, and
+         * [winner] already records that reading.
+         */
+        val fadeDurationMs: Long? = null,
     )
 
     private data class Key(val targetKey: String, val propertyName: String)
@@ -265,6 +271,9 @@ internal object CueComposer {
                 // Explicitly null: a local row belongs to no layer, and leaving a layer's winner
                 // in place here would report the overwritten layer as the reason for the value.
                 winner = null,
+                // Pass-through, not null: the overlay must not silently discard a fade the caller
+                // put on its own row, the way it deliberately discards the layer attribution.
+                fadeDurationMs = row.fadeDurationMs,
             )
         }
 
@@ -283,6 +292,7 @@ internal object CueComposer {
                 value = c.value,
                 moveInDark = c.moveInDark,
                 layerWinner = c.winner,
+                fadeDurationMs = c.fadeDurationMs,
             )
         }
         return CookResult(
@@ -404,7 +414,10 @@ internal object CueComposer {
         /** A Look: literal values and its own effects. */
         class OfLook(val look: LookSnapshot) : LayerContent {
             override val rows: List<SourceRow> = look.rows.map {
-                SourceRow(it.target, it.propertyName, it.value, it.elementKey)
+                // A Look carries its fade **per row**, so two rows of one Look can move at
+                // different speeds — the reason [SourceRow] holds the field rather than
+                // [LayerContent] doing.
+                SourceRow(it.target, it.propertyName, it.value, it.elementKey, it.fadeDurationMs)
             }
         }
 
@@ -413,7 +426,10 @@ internal object CueComposer {
             // A template has no element rows by construction — the column does not exist — so the
             // element skip in `applyLayer` simply never fires for this arm.
             override val rows: List<SourceRow> = template.rows.map {
-                SourceRow(it.target, it.propertyName, it.value, elementKey = null)
+                // A template's fade sits on the template, not the row (see
+                // `DaoTemplates.fadeDurationMs`): it is one gesture, so every row it writes moves
+                // together. Copying it onto each row is what lets `applyLayer` treat both arms alike.
+                SourceRow(it.target, it.propertyName, it.value, elementKey = null, template.fadeDurationMs)
             }
         }
     }
@@ -424,6 +440,15 @@ internal object CueComposer {
         val propertyName: String,
         val value: String,
         val elementKey: String?,
+        /**
+         * How long this row's value should take to arrive, or null to snap.
+         *
+         * Carried through the cook because a *tracked* source has to fade like an *applied* one:
+         * clicking a template writes literals into the programmer with the template's fade
+         * (`applyTemplateToProgrammer`), and ⌥clicking the same chip adds a layer that tracks it —
+         * which used to snap, because the field stopped here (sweep item B1).
+         */
+        val fadeDurationMs: Long?,
     )
 
     private fun resolveContent(
@@ -442,6 +467,8 @@ internal object CueComposer {
         val rawValue: String,
         /** The group this contribution arrived through, or null when the row named the fixture. */
         val groupKey: String?,
+        /** The originating row's [SourceRow.fadeDurationMs]. */
+        val fadeDurationMs: Long?,
     ) {
         val isGroupOrigin: Boolean get() = groupKey != null
     }
@@ -493,14 +520,14 @@ internal object CueComposer {
                     continue
                 }
                 for (e in layerFixtures) {
-                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey))
+                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey, row.fadeDurationMs))
                 }
             } else {
                 val rowFixtures = expandTargets(fixtures, cueId, layer, listOf(rowTarget))
                 val allowed = layerFixtures?.mapTo(HashSet()) { it.fixture.key }
                 for (e in rowFixtures) {
                     if (allowed != null && e.fixture.key !in allowed) continue
-                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey))
+                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey, row.fadeDurationMs))
                 }
             }
         }
@@ -587,6 +614,7 @@ internal object CueComposer {
                 // that kept the value beneath still decided the outcome, so it is the honest answer
                 // to "why is this fixture like this?".
                 winner = CookWinner(layerIndex, layer.layerId, layer.source),
+                fadeDurationMs = p.fadeDurationMs,
             )
         }
     }
