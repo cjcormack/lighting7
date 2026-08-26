@@ -202,7 +202,7 @@ multi-element walkers once the lists arrived pre-resolved, so both were deleted 
 `processElementKeys` / `processWallClockElementKeys`. Numbers, and why `[chase-beat]` moved only
 ~6 %, in `docs/testing-engineering.md` §"Recorded baselines".
 
-**C2. Reflective property access on the DMX write path** — high / P1 / L / fable
+~~**C2. Reflective property access on the DMX write path**~~ — done, `503b50d`, high / P1 / L / fable
 `FxTarget.kt:465-521`: `fixtureProperties.find{}` linear scan + `KProperty1.call` per fixture per
 tick (a colour effect pays ~6/fixture/tick); `getSlider`/`getSetting` re-resolve per call. **Fix:**
 memoise per-(fixture-class, property) accessors the way `elementCatalogues` already does.
