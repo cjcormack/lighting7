@@ -1,7 +1,6 @@
 # Backend post-refactor architectural sweep — findings and cleanup plan
 
-> **Document status: BACKLOG, WAVE 0 COMPLETE (A1–A4, A11, C0 all done); WAVE 2 IN PROGRESS
-> (D1–D6, D8, D9 done).** This is the output of the
+> **Document status: BACKLOG, WAVES 0–2 COMPLETE.** This is the output of the
 > post-refactor architectural sweep: a categorized backlog for later fix agents, organised into
 > execution waves. Items cite file:line as of `b5067e5`; expect drift as waves land. A matching
 > frontend sweep happens separately — the "Frontend-coordination register" at the bottom is its
@@ -140,19 +139,31 @@ the cook so tracked layers fade like applied ones.
 
 ~~**B2. Scripts cannot address speed masters**~~ — done, `84885df`, pulled forward and landed with D7 (same 24 signatures). high / P1 / M / opus
 
-**B3. `elementMode` settable on update but not add** — medium / P1 / S / sonnet
+~~**B3. `elementMode` settable on update but not add**~~ — done, `39f4d7c`. medium / P1 / S / sonnet
 `AddEffectRequest` (`lightFx.kt:251-262`) lacks the field `UpdateEffectRequest` has; a FLAT group
 effect needs add-then-PUT. **Fix:** add the field to add.
 
-**B4. `FxInstanceState` reports both master fields regardless of `timingSource`** — low / P2 / S / sonnet
+~~**B4. `FxInstanceState` reports both master fields regardless of `timingSource`**~~ — done,
+`54fdc8a`. low / P2 / S / sonnet
 `FxEngine.kt:1574-1581`: BEAT effects read only `speedMasterSlot`, WALL_CLOCK only
 `rateMasterSlot`, but state reports both, so the FX sheet shows a live chip for a field the effect
 cannot read. **Fix:** report only the consumed field.
 
-**B5. Scripts and FX definitions mutate with no WS broadcast** — medium / P1 / S / sonnet
+Grew in the landing: the review pass found `FxSocket.kt`'s `buildFxStateMessage` (the WS
+reconnect/request answer, sharing a documented "can't disagree" invariant with the push stream)
+had the identical defect and was fixed alongside it. Independently, `lightFx.kt`'s REST-facing
+`toDto()`/`toIndirectDto()` had the same defect too — not named by the item text or the review,
+confirmed with the user before including it here rather than filing a follow-up.
+
+~~**B5. Scripts and FX definitions mutate with no WS broadcast**~~ — done, `47dcb83`. medium / P1 / S / sonnet
 `projectScripts.kt` and `fxDefinitions.kt` CRUD fire nothing while every sibling resource fires a
 `*ListChanged`; a second client's script list and effect library go stale forever. **Fix:** add
 `scriptListChanged` / `fxDefinitionListChanged` through `BroadcastSocket`.
+
+Grew in the landing: the review pass flagged that `FixturesChangeListener` has no default no-op
+bodies, so the two new methods forced empty override stubs at five other implementers. Confirmed
+with the user, who took the refactor now — every member defaults to a no-op and each implementer
+overrides only what it uses.
 
 **B6. Deferred Look *rows* are half-retired** — medium / P2 / M / opus
 Write-boundary rejects them (`projectLooks.kt:719`) but `LookRegistry.loadLookSnapshot`,
@@ -511,7 +522,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 |---|---|---|
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
-| 2 | ~~D1–D6, D8, D9, A5–A10, E8~~ **done**, B3–B5 | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
+| 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | C3–C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
@@ -550,7 +561,13 @@ rateSpeedMasterIndex), D4 (`POST`/`DELETE /project/{id}/looks/preview` are gone 
 caller, `ProgrammerLookStack`'s local `isPreview` filter, and the unfiltered-stack special-casing
 in `ProgrammerScopeBand`/`LookRowStoreProvider` that `FU-PROG-FOCUS-PREVIEW-LAYER` flagged are all
 dead code now, not just unreachable),
-F1/F2/F3/F5 (renamed paths/messages/status codes), F6 (hand-copied admin prefix list).
+F1/F2/F3/F5 (renamed paths/messages/status codes), F6 (hand-copied admin prefix list), B3
+(`elementMode` now accepted on `POST /fx/add`, matching `PUT`), B4 (`speedMasterUuid` /
+`rateSpeedMasterUuid` — on the WS `fxState` push and reconnect answer, and on the REST
+`EffectDto`/`IndirectEffectDto` — now null out whichever field the effect's `timingSource` doesn't
+consume, instead of echoing both), B5 (`scriptListChanged` / `fxDefinitionListChanged`: two new WS
+broadcast messages, script and FX-definition CRUD now invalidate a second client's caches instead
+of leaving them stale forever).
 
 **D7.** `GET /fx/library` now returns each parameter's real `type`, `defaultValue` and
 `description` instead of `"string"`, `""`, `""`. Same payload shape, so nothing breaks and
@@ -657,6 +674,27 @@ two now-dead wire-format tests. No sealed-subclass rerun needed — `InMessage`/
 open sealed classes with no separate registration list. Suite 1764, 0 failures. Frontend stubs
 (`groupsApi.addFx`/`clearFx`, the `groupFxAdded` branch, `GroupsInMessage`) left for the frontend
 sweep, per the register below.
+
+B3 (`39f4d7c`) — `AddEffectRequest` gained the `elementMode` field `UpdateEffectRequest` already
+had; `POST /fx/add` (and the group add route, which shares the DTO) can now set FLAT mode without
+a follow-up `PUT`.
+
+B4 (`54fdc8a`) — `speedMasterUuid`/`rateSpeedMasterUuid` are now gated on `timingSource` in all
+three producers of this shape: `FxEngine.emitStateUpdate` (the WS `fxState` push), `FxSocket`'s
+`buildFxStateMessage` (the WS reconnect/request answer — not named by the item text, but shares a
+documented "the two `FxEffectState` producers can't disagree" invariant with the push, so it had
+to move too), and `lightFx.kt`'s `toDto()`/`toIndirectDto()` (REST `GET /fx/active` and the
+add/update response body — same defect, found independently while landing the item, confirmed
+with the user before folding it in). The paired `*Index` display fields were deliberately left
+unconditional — see the item body above.
+
+B5 (`47dcb83`) — `scriptListChanged`/`fxDefinitionListChanged` added to `FixturesChangeListener`
+and `BroadcastSocket`; script CRUD (`projectScripts.kt`, including the cross-project copy
+endpoint, gated on the target project being current) and FX-definition CRUD (`fxDefinitions.kt`)
+now fire them. Also, per the review pass and confirmed with the user:
+`FixturesChangeListener`'s 16 members now all default to a no-op, and the five other implementers
+(`GlobalScalerState`, `SurfaceFeedbackPublisher`, `Show.kt`'s two registry listeners, `State`'s
+binding-health listener) were trimmed to only the overrides they actually use.
 
 ## Verification
 
