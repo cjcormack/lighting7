@@ -122,7 +122,7 @@ last resort — it's what this change removed.
 The positional colour list is gone and an effect's colour parameter names a **colour template**
 instead (`tmpl:{uuid}`). `TemplateColourSourceTest` covers the grammar, the fixture-free resolution
 and the cache invalidation, but the payoff is a rig behaviour and the path is long: registry
-invalidation → `TemplateRegistry.version` → `TypedParams.invalidateColourCacheIfStale` → the next
+invalidation → `TemplateRegistry.versionFor(refs)` → `TypedParams`'s colour caches → the next
 tick's `calculate`. A stale cache looks exactly like "nothing happened".
 
 **The check.** Create a generic colour template on `/templates`. Add a `ColourCycle` ad-hoc effect
@@ -144,6 +144,15 @@ Three things worth checking in the same sitting, each of which a single-effect r
 3. **The delete guard sees the reference.** Deleting a template an effect parameter names should 409
    with an `fxReferenceCount`, not succeed and leave the chase running white. This is the one arm
    with no unit coverage of its JSON scan.
+4. **A template *list* change still reaches the chase** (sweep item C4, 2026-08-26). The colour
+   version is now per template uuid, so editing an *unrelated* template must leave the chase
+   running (that is the point), while creating, renaming or deleting one — which drops the whole
+   cache — must still move it. The sharpest case: point a `colours` entry at a uuid that has no
+   template, confirm it runs white, then create a template *with that uuid* (import or clone) and
+   confirm the chase picks it up. Watch for a stutter in the same sitting: `invalidateAll` now
+   re-reads every requested template on the route thread *before* publishing the bump, so a list
+   change on a template-heavy show costs N transactions at once against a size-1 pool
+   (`FU-TMPL-REWARM-BOUND` holds the bound if it bites).
 
 **If it fails at step 1**, suspect the pre-warm: `prewarmTemplateColours` runs on the request thread
 at every spawn site, and a missed one means the first resolve happens on the 50 Hz loop.

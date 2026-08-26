@@ -151,12 +151,17 @@ class TemplateColourSourceTest {
 
     // ─── What TypedParams does with the answers ─────────────────────────
 
-    private fun params(raw: Map<String, String>, registry: TemplateRegistry) = TypedParams(
-        raw = raw,
-        schema = emptyList(),
-        resolveColourSource = templateColourSource(registry),
-        colourSourceVersion = { registry.version },
-    )
+    private fun params(raw: Map<String, String>, registry: TemplateRegistry): TypedParams {
+        // Scoped exactly as `createEffectWithTemplates` scopes it: the version this effect's
+        // colour cache watches covers only the templates its own parameters name.
+        val refs = templateColourRefsIn(raw)
+        return TypedParams(
+            raw = raw,
+            schema = emptyList(),
+            resolveColourSource = templateColourSource(registry),
+            colourSourceVersion = { registry.versionFor(refs) },
+        )
+    }
 
     @Test
     fun `colourList mixes literals and references, and drops a reference it cannot resolve`() {
@@ -191,7 +196,132 @@ class TemplateColourSourceTest {
         assertEquals(Color.RED, p.colour("colour").color)
 
         stored = "#0000ff;policy=rgbonly"
-        registry.invalidate(templateUuid)
+        registry.refresh(templateUuid)
         assertEquals(Color.BLUE, p.colour("colour").color, "the cached colour must not outlive the edit")
+    }
+
+    // ─── Which effects an edit actually reaches ─────────────────────────
+
+    @Test
+    fun `an edit to one template leaves an effect naming another one alone`() {
+        // The reason the version is per uuid. With one global counter this reload happened on every
+        // template edit on the desk, for every running colour effect — each one a `snapshot` miss,
+        // and (with nothing re-warming) a DB read from whichever thread got there first.
+        val other = UUID.fromString("2f1c8a3e-0000-4000-8000-00000000000a")
+        var stored = "#ff0000;policy=rgbonly"
+        val loaded = mutableListOf<UUID>()
+        val registry = TemplateRegistry(loader = { uuid ->
+            loaded += uuid
+            template(colourRow(value = stored), uuid = uuid)
+        })
+        val p = params(mapOf("colour" to "tmpl:$templateUuid"), registry)
+        assertEquals(Color.RED, p.colour("colour").color)
+        loaded.clear()
+
+        stored = "#0000ff;policy=rgbonly"
+        registry.refresh(other)
+        assertEquals(Color.RED, p.colour("colour").color, "an unrelated template's edit is not this effect's")
+        assertEquals(listOf(other), loaded, "and this effect's template was not re-read at all")
+    }
+
+    @Test
+    fun `an effect naming no template never re-resolves`() {
+        var loads = 0
+        val registry = TemplateRegistry(loader = { loads++; null })
+        val p = params(mapOf("colour" to "#ff0000"), registry)
+        assertEquals(Color.RED, p.colour("colour").color)
+        assertEquals(0, loads, "a literal has nothing to load")
+
+        registry.invalidateAll()
+        assertEquals(0L, registry.versionFor(emptySet()), "no references means a constant version")
+        assertEquals(Color.RED, p.colour("colour").color)
+        assertEquals(0, loads, "and nothing to re-read when the template list changes")
+    }
+
+    @Test
+    fun `a list change moves every scoped version, including one whose template does not exist yet`() {
+        // An effect is allowed to name a uuid before the template exists — its colour cache holds
+        // the white fallback, and the create that gives it a template has to reach it. Only
+        // `invalidateAll` can, since there is no per-uuid edit to bump.
+        val registry = registryOf(template(colourRow()))
+        val absent = UUID.fromString("2f1c8a3e-0000-4000-8000-00000000000b")
+        val before = registry.versionFor(setOf(absent))
+        registry.invalidateAll()
+        assertTrue(registry.versionFor(setOf(absent)) > before, "a create must reach a reference that missed")
+    }
+
+    @Test
+    fun `invalidateAll reloads what it dropped before it publishes the bump`() {
+        // The half of C4 that is about *where* the load happens: `invalidateAll` runs on a route
+        // thread (`Fixtures.templateListChanged`), and `loadTemplateSnapshot` opens a transaction,
+        // so a cached entry has to be re-read there — and published together with the version
+        // bump that invalidates the colour caches watching it, or the next tick misses anyway.
+        val loaded = mutableListOf<UUID>()
+        val versionsSeenWhileLoading = mutableListOf<Long>()
+        lateinit var registry: TemplateRegistry
+        registry = TemplateRegistry(loader = { uuid ->
+            loaded += uuid
+            versionsSeenWhileLoading += registry.versionFor(setOf(uuid))
+            template(colourRow(), uuid = uuid)
+        })
+        registry.snapshot(templateUuid)
+        assertEquals(listOf(templateUuid), loaded)
+        val versionBefore = registry.versionFor(setOf(templateUuid))
+
+        registry.invalidateAll()
+        assertEquals(listOf(templateUuid, templateUuid), loaded, "the dropped entry reloads on this thread")
+        assertEquals(
+            listOf(versionBefore, versionBefore), versionsSeenWhileLoading,
+            "and it reloads *before* the bump, so no reader ever sees the new version over an empty cache",
+        )
+        assertTrue(registry.versionFor(setOf(templateUuid)) > versionBefore)
+
+        registry.snapshot(templateUuid)
+        assertEquals(2, loaded.size, "the published cache is warm, so a later read does not load")
+    }
+
+    @Test
+    fun `a reference that resolved to nothing is re-warmed once its template exists`() {
+        // The case the un-scoped epoch bump is justified by, and the one a cache-keys-only re-warm
+        // cannot reach: an effect names a uuid before the template exists (import, clone), so the
+        // miss is never cached. The create has to both invalidate its colour cache *and* leave a
+        // warm entry behind, or the effect's first re-resolve is a DB read from the tick loop.
+        var exists = false
+        val loaded = mutableListOf<UUID>()
+        val registry = TemplateRegistry(loader = { uuid ->
+            loaded += uuid
+            if (exists) template(colourRow(), uuid = uuid) else null
+        })
+        assertNull(registry.snapshot(templateUuid), "no template yet")
+        loaded.clear()
+
+        exists = true
+        registry.invalidateAll()
+        assertEquals(listOf(templateUuid), loaded, "the create re-reads the uuid that missed")
+
+        registry.snapshot(templateUuid)
+        assertEquals(1, loaded.size, "and it is cached, so the next read — a tick's — does not load")
+    }
+
+    @Test
+    fun `a re-warm read that fails is logged, not thrown at the listener chain`() {
+        // `invalidateAll` was a pure memory swap before C4 and is called from an unguarded
+        // `Fixtures.templateListChanged` loop, ahead of the listener that broadcasts the change.
+        // A transient DB error during the re-warm must not cost every client its notification.
+        var fail = false
+        val registry = TemplateRegistry(loader = { uuid ->
+            if (fail) throw IllegalStateException("SQLITE_BUSY")
+            template(colourRow(), uuid = uuid)
+        })
+        registry.snapshot(templateUuid)
+
+        fail = true
+        registry.invalidateAll()
+
+        fail = false
+        assertEquals(
+            templateUuid, registry.snapshot(templateUuid)?.templateUuid,
+            "the failed re-warm left the entry uncached, not the registry broken",
+        )
     }
 }

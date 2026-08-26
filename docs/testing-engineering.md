@@ -394,3 +394,14 @@ every scenario, unchanged code included — the same environment effect the C0 b
 And the crossfade rig runs its `FxEngine` without `start()`, so `emitProvenanceUpdate` computes
 provenance *synchronously inside every measured frame* rather than coalescing as it does live —
 `[crossfade]` numbers include a per-frame provenance recompute a real desk pays ~20×/s at most.
+
+**2026-08-26 — sweep item C4 (template colour-cache versioning): no comparison taken, and why.**
+C4's cost lives on the *invalidation* path — a template edit re-resolving `tmpl:` colour parameters,
+and the DB read that resolve opens — and none of the five scenarios has a `tmpl:` parameter in it.
+The harness's effects are the frozen `testsupport/TestEffects.kt` copies, which do not go through
+`TypedParams` at all, so nothing here calls `colourSourceVersion` once, let alone 50×/s. A
+before/after pair would have measured run-to-run noise and then sat in this section looking like
+evidence. What C4 would need is a sixth scenario — effects with template-referencing colour
+parameters, ticking across a template edit — which nobody has needed enough to build; its unit
+coverage is the load-count assertions in `TemplateColourSourceTest`, and its rig behaviour is
+`FU-MANUAL-FX-TEMPLATE-COLOUR` step 4.

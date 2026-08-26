@@ -104,8 +104,10 @@ class ExpandedLook(
  *   membership — the failure mode is a fixture added to a group not picking up the Look, which
  *   looks like a Look bug and isn't.
  *
- * [version] increments on every invalidation, mirroring [TemplateRegistry.version] / the
- * `TypedParams.invalidateColourCacheIfStale` idiom.
+ * [version] increments on every invalidation. [TemplateRegistry] is the same idiom one step
+ * further on: it versions per template uuid ([TemplateRegistry.versionFor]), because a running
+ * effect's colour cache watches its *own* references rather than the whole registry. A Look has no
+ * such consumer — an expansion is read at cook, not per tick — so one counter is enough here.
  *
  * Misses are deliberately *not* cached: a dangling reference costs one small query per apply, and
  * caching the absence would need a third invalidation trigger to ever recover.

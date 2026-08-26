@@ -111,6 +111,24 @@ private fun resolveTemplateColour(registry: TemplateRegistry, uuid: UUID): Exten
 }
 
 /**
+ * Every template uuid the `tmpl:` references in [parameters] name — the whole set a spawning
+ * effect depends on, which is both what has to be pre-warmed and what its colour cache's version
+ * is scoped to ([TemplateRegistry.versionFor]).
+ *
+ * A malformed reference contributes nothing: it resolves to the literal parser at tick time and
+ * has no template whose edit could change that.
+ */
+fun templateColourRefsIn(parameters: Map<String, String>): Set<UUID> {
+    val refs = LinkedHashSet<UUID>()
+    parameters.values.forEach { value ->
+        value.split(",").forEach { entry ->
+            parseTemplateColourRefUuid(entry)?.let { refs += it }
+        }
+    }
+    return refs
+}
+
+/**
  * Read every `tmpl:` reference in [parameters] through [registry] once, so the registry's cache is
  * warm before the effect starts ticking.
  *
@@ -121,11 +139,7 @@ private fun resolveTemplateColour(registry: TemplateRegistry, uuid: UUID): Exten
  * 50 Hz loop.
  */
 fun prewarmTemplateColours(registry: TemplateRegistry, parameters: Map<String, String>) {
-    parameters.values.forEach { value ->
-        value.split(",").forEach { entry ->
-            parseTemplateColourRefUuid(entry)?.let { registry.snapshot(it) }
-        }
-    }
+    templateColourRefsIn(parameters).forEach { registry.snapshot(it) }
 }
 
 /**
@@ -145,20 +159,26 @@ fun FxRegistry.createEffectWithTemplates(
     effectType: String,
     parameters: Map<String, String> = emptyMap(),
 ): Effect {
-    // On the calling thread, before the effect can tick — see [prewarmTemplateColours]. The
-    // registration's declared defaults are pre-warmed too, not just what the caller supplied: an
-    // omitted parameter now falls back to its default (see `TypedParams.raw`), so a default that
-    // is itself a `tmpl:` reference would otherwise first resolve from the 50 Hz tick thread —
-    // exactly what pre-warming exists to prevent. No built-in declares one, but a user
-    // `fx_definitions` effect can, and `effect("my-fx")` with no parameters is now ordinary.
-    getRegistration(effectType)?.parameters?.let { schema ->
-        prewarmTemplateColours(templates, schema.associate { it.name to it.defaultValue })
-    }
-    prewarmTemplateColours(templates, parameters)
+    // The values `TypedParams` will actually read, resolved by its own rule: a supplied value
+    // wins unless it is blank, otherwise the schema default (see `TypedParams.raw`). Declared
+    // defaults have to be in here — a default that is itself a `tmpl:` reference would otherwise
+    // first resolve from the 50 Hz tick thread, exactly what pre-warming exists to prevent (no
+    // built-in declares one, but a user `fx_definitions` effect can, and `effect("my-fx")` with
+    // no parameters is ordinary) — and an *overridden* default has to be out, or an effect whose
+    // colour is a literal would still be dropped by an edit to the template it shadowed.
+    val effective = LinkedHashMap<String, String>()
+    getRegistration(effectType)?.parameters?.forEach { effective[it.name] = it.defaultValue }
+    parameters.forEach { (name, value) -> if (value.isNotBlank()) effective[name] = value }
+    val refs = templateColourRefsIn(effective)
+    // On the calling thread, before the effect can tick — see [prewarmTemplateColours].
+    refs.forEach { templates.snapshot(it) }
     return createEffect(
         effectType,
         parameters,
         resolveColourSource = templateColourSource(templates),
-        colourSourceVersion = { templates.version },
+        // Scoped to this effect's own references, not the registry's global counter: an effect
+        // naming no template never re-resolves, and one naming template A is not dropped by an
+        // edit to B. See [TemplateRegistry.versionFor].
+        colourSourceVersion = { templates.versionFor(refs) },
     )
 }

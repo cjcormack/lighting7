@@ -21,6 +21,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-DIST-NO-BUNDLED-JRE`](#fu-dist-no-bundled-jre) | Rejected | Dist | decision record — do not re-propose |
 | [`FU-PERF-FRAME-TXN-UNIFY`](#fu-perf-frame-txn-unify) | Trigger | Perf | visible flicker where beat + wall-clock share a universe |
 | [`FU-FX-ELEMENT-BUNDLED-COLOUR`](#fu-fx-element-bundled-colour) | Ready | Perf | — |
+| [`FU-TMPL-REWARM-BOUND`](#fu-tmpl-rewarm-bound) | Trigger | Perf | a template list change visibly stalls a template-heavy show |
 | [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Trigger | FE | operator asks for it |
 | [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 4th surface renders `AssignmentHealth` |
 | [`FU-FE-USE-TARGET-PROPERTIES`](#fu-fe-use-target-properties) | Trigger | FE | a 6th consumer of fixture/group property lookup |
@@ -127,6 +128,25 @@ which now exists and is the same shape. Worth checking whether `isPropertyFullyP
 **Not** done under C2: that item was a performance change measured on allocation, and folding a
 behaviour fix into it would have made the numbers unattributable. Needs a test on element colour
 output before the wire behaviour changes — nothing currently asserts an element's white channel.
+
+### `FU-TMPL-REWARM-BOUND`
+
+**Bound `TemplateRegistry.invalidateAll`'s re-warm** · Trigger: a template list change visibly
+stalls a template-heavy show · found in sweep item C4's review, 2026-08-26
+
+C4 made `invalidateAll` re-read every requested template on the calling thread before it publishes
+the version bump, so the 50 Hz FX pass never takes that transaction. The reads are unbounded and
+synchronous, and HikariCP runs `maximumPoolSize = 1` (SQLite has one writer), so a create / rename
+/ delete on a show with many templates serialises N round trips against the single connection —
+ahead of the cook, the tick pass and any concurrent route.
+
+Deliberately left alone at the time: real shows have tens of templates, the reads are a primary-key
+lookup each, and the obvious alternative (hand the re-warm to a background dispatcher) puts the
+bump back ahead of the warm cache, which is the ordering bug the review caught in the first place.
+If it does bite, the shape that keeps the ordering is a cap plus a log of what was dropped — the
+dropped tail then misses on the tick, so the cap is a trade rather than a fix.
+
+The operator-visible symptom to watch for is in `FU-MANUAL-FX-TEMPLATE-COLOUR` step 4.
 
 ---
 

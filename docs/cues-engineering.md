@@ -147,8 +147,15 @@ Every effect, wherever it is spawned from, gets the **same** colour source:
 
 ```kotlin
 resolveColourSource = templateColourSource(state.show.templateRegistry)
-colourSourceVersion = { state.show.templateRegistry.version }
+colourSourceVersion = { state.show.templateRegistry.versionFor(refs) }
 ```
+
+`refs` is the set of template uuids *this* effect's parameters name (including its registration's
+declared defaults) — `createEffectWithTemplates` computes it once and uses it for both the pre-warm
+and the version. Scoping it is what keeps an edit to one template from re-resolving every colour
+parameter on the desk, and an effect naming no template from re-resolving at all. A template *list*
+change (create / rename / delete) still moves every scoped version by one, because an effect is
+allowed to name a uuid that has no template yet.
 
 There were two `createInstanceFromPreset` variants until the positional list went — a cue-scoped one
 resolving `P1` against `getCuePalette(cueId) ?: getPalette()`, and a second one Include needed
