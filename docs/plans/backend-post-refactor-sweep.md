@@ -249,13 +249,23 @@ made a weight reaching 1.0 force a full republish so winner attribution can't st
 end-of-fade when the outgoing cue had no Layer 4 rows. The per-frame row copies + regroup that
 remain are filed under C6. Operator check: `FU-MANUAL-CROSSFADE-C3`.
 
-**C4. Template edits can open a JDBC transaction on the 50 Hz tick loop** — high / P1 / M / opus
+~~**C4. Template edits can open a JDBC transaction on the 50 Hz tick loop**~~ — done, `638c0cb`. high / P1 / M / opus
 `templateListChanged → registry.invalidateAll()` clears the cache and bumps the *global* version;
 `TypedParams.invalidateColourCacheIfStale` (`TypedParams.kt:132-139`) then misses and
 `loadTemplateSnapshot` opens a transaction from the tick — the exact thing
 `TemplateColourSource.kt:33` forbids. The global version also invalidates *every* effect's colour
 cache on any single-template edit. **Fix:** re-warm after `invalidateAll` (the single-template path
 at `lookRepublish.kt:83` already does), and version per template uuid.
+Grew in the landing: the review caught that re-warming *after* the version bump is the same bug in
+miniature — the bump reaches the tick before the warm cache does — so both paths now read first and
+publish the bump with the snapshot together, which turned the cited precedent (`invalidate` then a
+caller-side `snapshot`) into one `refresh` call. The re-warm covers every uuid *asked* for rather
+than every uuid cached, because a miss is not cached and the not-yet-created template is exactly the
+case the un-scoped bump exists for. A re-warm read that fails is logged, not thrown, since
+`invalidateAll` runs ahead of the WS broadcast in an unguarded listener chain. The re-warm's
+unbounded synchronous cost against the size-1 pool is `FU-TMPL-REWARM-BOUND`. No benchmark
+comparison — reasoned out in `docs/testing-engineering.md` §"Recorded baselines". Operator check:
+`FU-MANUAL-FX-TEMPLATE-COLOUR` step 4.
 
 **C5. Timed-layer fires re-cook the whole cue and hit the DB per fire** — medium / P1 / M / opus
 `CueTriggerManager.kt:129-141`: each fire = `buildCueAssignmentsForCue` + full `CueComposer.cook`
@@ -533,7 +543,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
-| 3 | ~~C3~~ (`d317d93`), C4–C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
+| 3 | ~~C3~~ (`d317d93`), ~~C4~~ (`638c0cb`), C5–C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
