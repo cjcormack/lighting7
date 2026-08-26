@@ -3086,9 +3086,16 @@ class FxEngine(
                 cueId = instance.cueId,
                 cueStackId = instance.cueStackId,
                 timingSource = instance.timingSource.name,
-                speedMasterUuid = instance.speedMasterUuid?.toString(),
+                // BEAT effects read only speedMasterSlot, WALL_CLOCK only rateMasterSlot — report
+                // just the consumed identity, not both, so the FX sheet doesn't show a live chip
+                // for a field the effect cannot read. The paired *Index* field stays unconditional
+                // (matching the null-uuid → index-1 "master 1" convention used everywhere else in
+                // this DTO) rather than a second gate that could disagree with it.
+                speedMasterUuid = if (instance.timingSource == TimingSource.BEAT)
+                    instance.speedMasterUuid?.toString() else null,
                 speedMasterIndex = masterStates.getOrNull(instance.speedMasterSlot)?.index ?: 1,
-                rateSpeedMasterUuid = instance.rateSpeedMasterUuid?.toString(),
+                rateSpeedMasterUuid = if (instance.timingSource == TimingSource.WALL_CLOCK)
+                    instance.rateSpeedMasterUuid?.toString() else null,
                 rateSpeedMasterIndex = masterStates.getOrNull(instance.rateMasterSlot)?.index ?: 1,
             )
         }

@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.plugins
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.state.State
 
 // ─── Inbound ────────────────────────────────────────────────────────────
@@ -156,9 +157,15 @@ private fun buildFxStateMessage(state: State): FxStateOutMessage {
             cueId = effect.cueId,
             cueStackId = effect.cueStackId,
             timingSource = effect.timingSource.name,
-            speedMasterUuid = effect.speedMasterUuid?.toString(),
+            // BEAT effects read only speedMasterSlot, WALL_CLOCK only rateMasterSlot — report
+            // just the consumed identity, not both (sweep item B4). Must match
+            // FxEngine.emitStateUpdate's gating exactly, or a reconnect answer and the next live
+            // push disagree. The paired *Index* field stays unconditional, same as there.
+            speedMasterUuid = if (effect.timingSource == TimingSource.BEAT)
+                effect.speedMasterUuid?.toString() else null,
             speedMasterIndex = masterStates.getOrNull(effect.speedMasterSlot)?.index ?: 1,
-            rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
+            rateSpeedMasterUuid = if (effect.timingSource == TimingSource.WALL_CLOCK)
+                effect.rateSpeedMasterUuid?.toString() else null,
             rateSpeedMasterIndex = masterStates.getOrNull(effect.rateMasterSlot)?.index ?: 1,
         )
     }

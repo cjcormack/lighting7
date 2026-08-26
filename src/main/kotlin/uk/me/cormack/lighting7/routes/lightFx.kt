@@ -377,8 +377,11 @@ private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDt
     timingSource = timingSource.name,
     programmerOwned = FxEngine.isProgrammerFxPriority(priority),
     intensityMultiplier = intensityMultiplier,
-    speedMasterUuid = speedMasterUuid?.toString(),
-    rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+    // BEAT effects read only speedMasterUuid, WALL_CLOCK only rateSpeedMasterUuid — report just
+    // the consumed identity, not both (sweep item B4; matches FxEngine.emitStateUpdate's gating
+    // for the WS-facing FxInstanceState).
+    speedMasterUuid = if (timingSource == TimingSource.BEAT) speedMasterUuid?.toString() else null,
+    rateSpeedMasterUuid = if (timingSource == TimingSource.WALL_CLOCK) rateSpeedMasterUuid?.toString() else null,
 )
 
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(
@@ -396,8 +399,8 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     stepTiming = stepTiming,
     programmerOwned = FxEngine.isProgrammerFxPriority(priority),
     intensityMultiplier = intensityMultiplier,
-    speedMasterUuid = speedMasterUuid?.toString(),
-    rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+    speedMasterUuid = if (timingSource == TimingSource.BEAT) speedMasterUuid?.toString() else null,
+    rateSpeedMasterUuid = if (timingSource == TimingSource.WALL_CLOCK) rateSpeedMasterUuid?.toString() else null,
 )
 
 private fun createTargetFromRequest(
