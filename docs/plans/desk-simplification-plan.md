@@ -673,8 +673,8 @@ finish all three families.
 - [`FU-LOOK-ELEMENT-ROWS`](followups.md#fu-look-element-rows) (Ready) collides with the scoped grid:
   a Look's element rows compose nowhere, so per-head rows in a focused layer will render as empty.
   Either pick it up inside Session 2 or state in the UI that element rows are not composed.
-- [`FU-CUE-APPLYDATA-ONE-BUILDER`](followups.md#fu-cue-applydata-one-builder) (Ready) sits in the
-  cook path the Output scope reads. Cheap to absorb while that path is open.
+- ~~[`FU-CUE-APPLYDATA-ONE-BUILDER`](followups.md#fu-cue-applydata-one-builder)~~ — landed inside
+  backend sweep item C5, `ab8c791`; there is one builder now.
 - New, from Session 2: the shared-Look edit guard needs a **usage count** at the point of edit. If
   that is not already cheap to ask for, log it rather than fetching a Look's full detail per keystroke.
 - New, from Session 3: the wheel-snap ΔE shown in the editor and the value actually written at cook

@@ -40,7 +40,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Tmpl | two heads whose strobe rates need to match |
 | [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a two-wheel head's second wheel is wanted |
-| [`FU-CUE-APPLYDATA-ONE-BUILDER`](#fu-cue-applydata-one-builder) | Ready | Cue | — |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
@@ -478,37 +477,6 @@ Not obviously worth fixing: a colour template asks "be this colour", and answeri
 once is a mixing problem the fixture's own manual barely addresses.
 
 **Trigger**: an operator asks for the second wheel by name.
-
-### `FU-CUE-APPLYDATA-ONE-BUILDER`
-
-**`CueApplyData` is constructed in three places; a new field reached only one** · Ready ·
-Looks-and-layers session 1 review, 2026-08-21
-
-`buildCueApplyData` (`routes/projectCuesHelpers.kt`) is the documented builder, and
-`CueStackManager.goToCueInStack` hand-rolls a second, near-identical construction. Session 1 added
-a `layers` field and populated only the first, so **every Look layer was inert on the stack GO
-path** — the primary firing path — while the standalone apply-cue route worked. Caught in review,
-not by a test.
-
-**There is a third**, found while implementing `FU-LOOK-STOMP-WITHIN-CUE`: `AiTools.applyCue`
-(`ai/AiTools.kt`, ~line 505) hand-rolls its own, and carries a comment recording that it hit this
-exact bug — "without this the tool applies the cue with an empty layer stack". Two independent
-authors reproducing one omission is the strongest argument the entry has; count on a fourth.
-
-This is the same shape of rot `CLAUDE.md` warns about for project cloning ("never add a
-table-by-table clone path"), and the same failure mode `buildCueInput` carries a comment about on
-the frontend: a field-by-field rebuild silently drops whatever the author forgot.
-
-They are not trivially collapsible, which is why this is a follow-up rather than part of the fix:
-`buildCueApplyData` leaves `fadeDurationMs`, `fadeCurve`, `autoAdvance` and `autoAdvanceDelayMs` at
-their defaults, and `CueStackManager` needs all four to drive crossfade and auto-advance. So either
-`buildCueApplyData` gains those fields (check first whether `applyCue` seeing a real
-`fadeDurationMs` changes standalone-apply behaviour — it may be a deliberate omission), or it takes
-a flag, or `CueStackManager` calls it and `.copy()`s the four on top. The last is the smallest and
-cannot drift.
-
-Worth a test either way: apply one cue through both paths and assert the resulting `CueApplyData` —
-or the published Layer 4 rows — agree.
 
 ## Desk accounts
 
@@ -1186,6 +1154,7 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-08
 
+- `FU-CUE-APPLYDATA-ONE-BUILDER` — landed inside sweep item C5, `ab8c791`. `CueStackManager.activateCueInStack` and `AiTools.applyCue` now call `buildCueApplyData`, which gained the four fade/auto-advance fields whose absence forced the second builder; guarded by `CueApplyDataBuilderTest`
 - `FU-TEST-MULTI-CONN-CUEEDIT` — retired without implementation: sweep item D1 removed the
   `cueEdit.*` family, so there is no `beginEdit` for two connections to race on
 - `FU-PROG-FOCUS-PREVIEW-LAYER` — retired without implementation: sweep item D4 removed the
