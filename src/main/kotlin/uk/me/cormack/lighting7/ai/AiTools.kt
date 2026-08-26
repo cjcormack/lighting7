@@ -479,45 +479,34 @@ class AiTools(private val state: State) {
 
         val cueData = transaction(state.database) {
             val cue = DaoCue.findById(cueId) ?: return@transaction null
-            CueApplyData(
-                cueId = cue.id.value,
-                cueName = cue.name,
-                // Without this the tool applies the cue with an empty layer stack — none of its
-                // Looks contribute values or spawn effects. `applyCue` reads only `layers`.
-                layers = cue.layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
-                adHocEffects = cue.adHocEffects.map { effect ->
-                    CueAdHocEffectDto(
-                        targetType = effect.targetType,
-                        targetKey = effect.targetKey,
-                        effectType = effect.effectType,
-                        category = effect.category,
-                        propertyName = effect.propertyName,
-                        beatDivision = effect.beatDivision,
-                        blendMode = effect.blendMode,
-                        distribution = effect.distribution,
-                        phaseOffset = effect.phaseOffset,
-                        elementMode = effect.elementMode,
-                        elementFilter = effect.elementFilter,
-                        stepTiming = effect.stepTiming,
-                        parameters = effect.parameters,
-                    )
-                },
-                stomp = cue.stomp,
-                cueStackId = cue.cueStack?.id?.value,
-                sortOrder = cue.sortOrder,
-            )
+            // The one builder — this was a third hand-rolled construction, and it silently
+            // dropped the cue's own property assignments and its triggers, plus every timing and
+            // speed-master field on an ad-hoc effect. See `buildCueApplyData`.
+            buildCueApplyData(cue)
         } ?: return errorResult("Cue not found: $cueId")
 
         val result = applyCue(state, cueData, replaceAll)
 
+        // `applyCue` is the standalone apply path: it fires the immediate half and leaves the
+        // timed half alone (a timed layer is excluded from its cook, a timed ad-hoc effect by
+        // `delayMs == null && intervalMs == null`). Only a stack GO owns the timers, and their
+        // teardown. Reported rather than dropped in silence: until this builder collapse the
+        // hand-rolled DTO omitted the timing fields, so a delayed effect fired *instantly* here —
+        // an operator who relied on that needs to see why it stopped.
+        val skippedTimed = cueData.adHocEffects.count { it.delayMs != null || it.intervalMs != null } +
+            cueData.layers.count { it.enabled && it.amount > 0.0 && it.isTimed }
+        val timedNote = if (skippedTimed == 0) "" else
+            "; $skippedTimed timed item(s) skipped — timed content only runs from a stack GO"
+
         return ToolExecutionResult(
             success = true,
             description = "Applied cue '${result.cueName}' (${result.effectCount} effects)" +
-                if (replaceAll) " [replaced all other cues]" else "",
+                (if (replaceAll) " [replaced all other cues]" else "") + timedNote,
             result = buildJsonObject {
                 put("cueName", result.cueName)
                 put("effectCount", result.effectCount)
                 put("replaceAll", replaceAll)
+                put("skippedTimed", skippedTimed)
             }.toString()
         )
     }

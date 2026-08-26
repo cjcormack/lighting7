@@ -146,33 +146,10 @@ class CueStackManager(
                 throw IllegalArgumentException("Cannot go-to a MARKER cue")
             }
 
-            CueApplyData(
-                cueId = cue.id.value,
-                cueName = cue.name,
-                adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
-                // Load-bearing: `cookEffects` and `cook` below both read `cueData.layers`, so
-                // omitting this makes every Look layer inert on the stack GO path — the primary
-                // firing path — while the standalone apply-cue route works fine.
-                layers = cue.layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
-                propertyAssignments = cue.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
-                triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
-                    CueTriggerDto(
-                        triggerType = trigger.triggerType.name,
-                        delayMs = trigger.delayMs,
-                        intervalMs = trigger.intervalMs,
-                        randomWindowMs = trigger.randomWindowMs,
-                        scriptId = trigger.script.id.value,
-                        sortOrder = trigger.sortOrder,
-                    )
-                },
-                autoAdvance = cue.autoAdvance,
-                autoAdvanceDelayMs = cue.autoAdvanceDelayMs,
-                fadeDurationMs = cue.fadeDurationMs,
-                fadeCurve = cue.fadeCurve,
-                stomp = cue.stomp,
-                cueStackId = cue.cueStack.id.value,
-                sortOrder = cue.sortOrder,
-            )
+            // The one builder. This used to be a hand-rolled second construction, and `layers`
+            // — added later, to the other one — was inert on this path, the primary firing path,
+            // for a whole session. See `buildCueApplyData`.
+            buildCueApplyData(cue)
         }
 
         // Cancel any in-progress crossfade for this stack. A crossfade cancelled mid-flight

@@ -107,6 +107,10 @@ class CueTriggerManager(
         val fired: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         firedTimedLooks[cueId] = fired
 
+        // Shared by every timed layer of this cue, and dies with the activation — the jobs below
+        // are the only holders, and `deactivateTriggersForCue` cancels them.
+        val fireCook = TimedFireCook(state, cueId, priority, cueData)
+
         // A timed layer contributes to Layer 4 by joining the cue's fired set and re-cooking, so
         // the published rows are always a single cook of "apply-time layers + whatever has fired".
         // Recurring fires are therefore idempotent on Layer 4 — only the effects re-trigger — and
@@ -129,19 +133,7 @@ class CueTriggerManager(
                     applyLookEffectToTarget(firedLayer, lookEffect, target, cueId, cueStackId, effectIds)
                 }
 
-                val localRows = uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue(
-                    state.show.fixtures, cueData,
-                )
-                val cooked = CueComposer.cook(
-                    fixtures = state.show.fixtures,
-                    cueId = cueId,
-                    priority = priority,
-                    layers = cueData.layers,
-                    localRows = localRows,
-                    lookRegistry = state.show.lookRegistry,
-                    templateRegistry = state.show.templateRegistry,
-                    includeTimed = fired.toSet(),
-                )
+                val cooked = fireCook.cook(fired.toSet())
                 // Suppression rides along with the rows: a timed layer asserts nothing until it
                 // fires, so its arrival is exactly when a `stomp` on it must silence the layers
                 // below — and a recurring fire re-states it rather than accumulating.
@@ -454,6 +446,97 @@ class CueTriggerManager(
             val offset = Random.nextLong(-windowMs, windowMs + 1)
             return (baseMs + offset).coerceAtLeast(MINIMUM_INTERVAL_MS)
         }
+    }
+}
+
+/**
+ * One activation's memo of the fire path's cook.
+ *
+ * Firing a timed layer re-cooks the **whole** cue (see [CueTriggerManager.firedTimedLooks] for why
+ * appending is not an option), and a recurring layer does that at up to 10/s. But the cook is a
+ * pure function of the activation-time [CueApplyData], the live patch and the two registries — so
+ * once a layer's *first* fire has been cooked, every later fire of the same layer is asking for a
+ * result that is already in hand.
+ *
+ * Keyed on the fired **set**, not on a "static half plus an overlay": [CueComposer.cook] ranks all
+ * contributing layers by `sortOrder` together, so a timed layer below a static one has to lose to
+ * it, and both `CookWinner.index` and the stomp suppression are derived from that shared rank.
+ * Overlaying a fired layer's rows onto a cached static cook would invert all three. Memoising the
+ * whole cook instead keeps the output byte-identical to cooking every time; the distinct fired sets
+ * one activation can reach are bounded by its timed-layer count, since a set only ever grows.
+ *
+ * [localRows] is memoised separately because it does not depend on the fired set at all — one build
+ * per activation rather than one per fire.
+ *
+ * **Invalidation is a stamp, not a listener.** Anything a cook reads besides the fixed
+ * [CueApplyData] carries a version: the patch register ([Fixtures.structureVersion]), the Look
+ * cache ([LookRegistry.version]) and, scoped to the templates this cue actually names,
+ * [TemplateRegistry.versionFor]. A mid-cue Look edit republishes the cue through
+ * `republishForLookEdit` *and* bumps that version, so the next fire re-cooks rather than serving a
+ * pre-edit result and quietly reverting the operator's save.
+ *
+ * That last guarantee rests on [LookRegistry.version] bumping on **both** sides of its eviction: a
+ * stamp taken in the window where the counter has already moved but the pre-edit entry is still
+ * cached would otherwise go on matching forever. See its KDoc — this is the consumer it names.
+ */
+private class TimedFireCook(
+    private val state: State,
+    private val cueId: Int,
+    private val priority: Int,
+    private val cueData: uk.me.cormack.lighting7.routes.CueApplyData,
+) {
+    /** Scoped so an edit to some *other* template doesn't drop this cue's memo. */
+    private val templateUuids: List<java.util.UUID> = cueData.layers
+        .filter { it.source.isTemplate }
+        .map { it.source.uuid }
+        .distinct()
+
+    private data class Stamp(val structure: Long, val looks: Long, val templates: Long)
+
+    private var stamp: Stamp? = null
+    private var localRows: List<CueAssignmentResolver.Assignment>? = null
+    private var firedKey: Set<Int>? = null
+    private var cooked: CookResult? = null
+
+    /**
+     * The cook for [fired], from the memo when it still applies.
+     *
+     * `synchronized` rather than volatile fields: a cue's timed layers each fire on their own
+     * coroutine, so two can land together, and the four fields have to move as one. Contention is
+     * a non-issue at fire rates.
+     */
+    @Synchronized
+    fun cook(fired: Set<Int>): CookResult {
+        // Read the versions *before* the lookups they stamp — see [Fixtures.structureVersion].
+        val now = Stamp(
+            structure = state.show.fixtures.structureVersion,
+            looks = state.show.lookRegistry.version,
+            templates = state.show.templateRegistry.versionFor(templateUuids),
+        )
+        if (now != stamp) {
+            stamp = now
+            localRows = null
+            firedKey = null
+            cooked = null
+        }
+        cooked?.let { if (firedKey == fired) return it }
+
+        val rows = localRows
+            ?: uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue(state.show.fixtures, cueData)
+                .also { localRows = it }
+        val result = CueComposer.cook(
+            fixtures = state.show.fixtures,
+            cueId = cueId,
+            priority = priority,
+            layers = cueData.layers,
+            localRows = rows,
+            lookRegistry = state.show.lookRegistry,
+            templateRegistry = state.show.templateRegistry,
+            includeTimed = fired,
+        )
+        firedKey = fired
+        cooked = result
+        return result
     }
 }
 

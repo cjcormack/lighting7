@@ -5,7 +5,6 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.fx.CookResult
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.LayerStompSuppression
 import uk.me.cormack.lighting7.models.DaoCueLayer
@@ -126,9 +125,14 @@ private fun republishForSourceEdit(
         if (referencingCues.isEmpty()) continue
         val rebuilt = LinkedHashMap<Int, List<CueAssignmentResolver.Assignment>>()
         val rebuiltStomp = LinkedHashMap<Int, LayerStompSuppression>()
+        // One transaction and one query per relation for the whole set. Per cue it was a
+        // transaction each, plus a Look/template lookup per layer inside it — an edit touching a
+        // dozen live cues took dozens of round-trips against a size-1 pool while the operator
+        // waited on the save.
+        val applyDataByCue = transaction(state.database) { buildCueApplyDataForCues(referencingCues) }
         for (cueId in referencingCues) {
-            val cooked = rebuildCueLayerRows(state, cueId)
-            if (cooked == null) {
+            val applyData = applyDataByCue[cueId]
+            if (applyData == null) {
                 // The cue's row vanished between the referencing query and the rebuild. Nothing
                 // to republish for it, but never silently: its live Layer 4 rows (if any) are
                 // the delete path's to tear down, and this log is the only trace if they leak.
@@ -138,6 +142,7 @@ private fun republishForSourceEdit(
                 )
                 continue
             }
+            val cooked = buildCombinedCueLayerRows(state, cueId, applyData)
             rebuilt[cueId] = cooked.rows
             // Carried per cue, and *always* — including when it is empty. An edit that deleted the
             // rows a stomping layer used to assert must shrink its suppression set too, and
@@ -211,17 +216,4 @@ internal fun activeCuesReferencingTemplate(
             (DaoCueLayers.cue inList activeCueIds.toList()) and (DaoCueLayers.template eq template.id)
         }.map { it.cue.id.value }.toSet()
     }
-}
-
-/**
- * Rebuild one live cue's cook from its persisted state, or null when the cue has gone.
- *
- * Mirrors [republishCueLayer]'s composition (the cooked layer stack plus local rows) but *returns*
- * it instead of publishing, so a Look edit spanning several cues can publish once.
- */
-internal fun rebuildCueLayerRows(state: State, cueId: Int): CookResult? {
-    val applyData = transaction(state.database) {
-        uk.me.cormack.lighting7.models.DaoCue.findById(cueId)?.let { buildCueApplyData(it) }
-    } ?: return null
-    return buildCombinedCueLayerRows(state, cueId, applyData)
 }

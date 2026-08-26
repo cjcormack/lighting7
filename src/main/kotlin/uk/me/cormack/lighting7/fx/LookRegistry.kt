@@ -104,7 +104,8 @@ class ExpandedLook(
  *   membership — the failure mode is a fixture added to a group not picking up the Look, which
  *   looks like a Look bug and isn't.
  *
- * [version] increments on every invalidation. [TemplateRegistry] is the same idiom one step
+ * [version] increments on every invalidation — twice, once either side of the eviction; see its
+ * own KDoc for why both are load-bearing. [TemplateRegistry] is the same idiom one step
  * further on: it versions per template uuid ([TemplateRegistry.versionFor]), because a running
  * effect's colour cache watches its *own* references rather than the whole registry. A Look has no
  * such consumer — an expansion is read at cook, not per tick — so one counter is enough here.
@@ -119,9 +120,28 @@ class LookRegistry(
     private val logger = LoggerFactory.getLogger(LookRegistry::class.java)
     private val cache = ConcurrentHashMap<UUID, ExpandedLook>()
 
-    @Volatile
-    var version: Long = 0L
-        private set
+    /**
+     * Bumped **twice** per invalidation — once on each side of the eviction — and atomic.
+     *
+     * The pre-eviction bump is [expanded]'s in-flight-load guard; see its KDoc for the
+     * permanently-stale-cache race that ordering closes.
+     *
+     * The post-eviction bump exists for the other direction, and for a different consumer:
+     * `CueTriggerManager.TimedFireCook` stamps a memoised cook with this counter. Between the first
+     * bump and the eviction this registry reports the **new** version while still serving the
+     * **pre-edit** expansion, so a cook landing in that window would be stamped with a version it
+     * then keeps matching — a recurring timed layer would republish pre-edit rows over the
+     * operator's save, permanently. Bumping again once the eviction has completed makes the
+     * settled version strictly greater than any version observable while stale content was still
+     * reachable, which is exactly what a stamp needs.
+     *
+     * `AtomicLong` rather than a `@Volatile var` with `++`, for the reason
+     * [uk.me.cormack.lighting7.show.Fixtures.structureVersion] gives: two concurrent invalidations
+     * doing a read-modify-write can lose an update *and* momentarily move the counter backwards,
+     * which is precisely how a stamped cache revalidates against content that has changed.
+     */
+    private val versionCounter = java.util.concurrent.atomic.AtomicLong(0L)
+    val version: Long get() = versionCounter.get()
 
     /**
      * The flattened Look, filling the cache on a miss.
@@ -167,18 +187,21 @@ class LookRegistry(
         expanded(lookUuid)?.literalFor(fixtureKey, propertyName)
 
     fun invalidate(lookUuid: UUID) {
-        // Bump before evicting — see [expanded]. Reversing these two lines reopens the
-        // permanently-stale-cache race.
-        version++
+        // Bump, evict, bump. Neither bump is redundant and they are not interchangeable — see
+        // [version]: the first is [expanded]'s in-flight-load guard, the second is what stops a
+        // stamp taken over the still-visible pre-edit entry from surviving the eviction.
+        versionCounter.incrementAndGet()
         cache.remove(lookUuid)
+        versionCounter.incrementAndGet()
     }
 
     fun invalidateAll() {
-        version++
+        versionCounter.incrementAndGet()
         if (cache.isNotEmpty()) {
             cache.clear()
             logger.debug("look cache cleared")
         }
+        versionCounter.incrementAndGet()
     }
 
     companion object {

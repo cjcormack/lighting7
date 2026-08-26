@@ -405,3 +405,14 @@ evidence. What C4 would need is a sixth scenario — effects with template-refer
 parameters, ticking across a template edit — which nobody has needed enough to build; its unit
 coverage is the load-count assertions in `TemplateColourSourceTest`, and its rig behaviour is
 `FU-MANUAL-FX-TEMPLATE-COLOUR` step 4.
+
+**2026-08-26 — sweep item C5 (timed-layer fires, `CueApplyData` builders, Look-edit republish): no
+comparison taken, and why.** Every cost C5 removes sits off the FX tick — a timed layer's fire
+coroutine, the DB reads a route thread pays building `CueApplyData`, and the per-cue transaction a
+Look edit used to open. `FxEngineBenchmark` drives `FxEngine` tick and crossfade-frame paths
+directly and never activates a cue through `CueStackManager`, so all five scenarios are structurally
+blind to it: a before/after pair would have measured run-to-run noise. The unit coverage is
+`CueApplyDataBuilderTest` (the one builder carries every field, and GO and standalone apply agree)
+and `TimedLayerFireCookTest` (a Look edit between two fires survives the next one — the memo's
+staleness hazard). Measuring C5 properly would need a scenario that GOes a cue holding a recurring
+timed layer and counts queries, not µs.

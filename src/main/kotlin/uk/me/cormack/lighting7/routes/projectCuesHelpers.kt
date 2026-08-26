@@ -5,6 +5,8 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
+import org.jetbrains.exposed.v1.dao.Entity
+import org.jetbrains.exposed.v1.dao.load
 import org.jetbrains.exposed.v1.dao.with
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
@@ -24,6 +26,7 @@ import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
+import kotlin.reflect.KProperty1
 
 private val logger = LoggerFactory.getLogger("projectCues")
 
@@ -307,16 +310,64 @@ internal fun captureCueAssignmentsFromSnapshot(
 // ─── Entity helpers ─────────────────────────────────────────────────────
 
 /**
+ * Every reference [toCueApplyData] dereferences, eager-loaded in one query per relation.
+ *
+ * Without this a build costs a query *per layer* (each layer's Look or template, for its uuid and
+ * name — see [DaoCueLayer.source]) and *per trigger* (its script, for an id). A cue with a dozen
+ * layers therefore cost a dozen round-trips against a size-1 pool, on the GO path and on every
+ * Look-edit republish.
+ */
+private val CUE_APPLY_RELATIONS: Array<KProperty1<out Entity<*>, Any?>> = arrayOf(
+    DaoCue::cueStack,
+    DaoCue::layers,
+    DaoCueLayer::look,
+    DaoCueLayer::template,
+    DaoCue::adHocEffects,
+    DaoCue::propertyAssignments,
+    DaoCue::triggers,
+    DaoCueTrigger::script,
+)
+
+/**
  * Build a [CueApplyData] snapshot from a [DaoCue] entity. Must be called inside an Exposed
  * transaction — dereferences the cue's child collections eagerly.
+ *
+ * **This is the only builder.** `CueStackManager.activateCueInStack` and `AiTools.applyCue` each
+ * hand-rolled a near-identical one, and each in turn shipped with a field the author forgot:
+ * `layers`, added later, was inert on the stack GO path — the primary firing path — while the
+ * standalone apply-cue route worked. Two independent authors reproducing one omission is why a
+ * field-by-field rebuild is not allowed to exist here; see `FU-CUE-APPLYDATA-ONE-BUILDER`.
+ *
+ * That collapse is why [CueApplyData.fadeDurationMs], [CueApplyData.fadeCurve],
+ * [CueApplyData.autoAdvance] and [CueApplyData.autoAdvanceDelayMs] are populated even though only
+ * `CueStackManager` reads them: leaving them at their defaults here is precisely what forced the
+ * second builder into existence.
  */
-internal fun buildCueApplyData(cue: DaoCue): CueApplyData = CueApplyData(
-    cueId = cue.id.value,
-    cueName = cue.name,
-    adHocEffects = cue.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
-    layers = cue.layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
-    propertyAssignments = cue.propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
-    triggers = cue.triggers.sortedBy { it.sortOrder }.map { trigger ->
+internal fun buildCueApplyData(cue: DaoCue): CueApplyData =
+    cue.load(*CUE_APPLY_RELATIONS).toCueApplyData()
+
+/**
+ * The batched form: one query per relation for the whole set, rather than one transaction and a
+ * fresh relation load per cue. A Look edit republishing every live cue that layers it is the
+ * caller that needs this — see `republishForSourceEdit`.
+ *
+ * Ids with no surviving cue are simply absent from the result; the caller decides what that means.
+ */
+internal fun buildCueApplyDataForCues(cueIds: Collection<Int>): Map<Int, CueApplyData> {
+    if (cueIds.isEmpty()) return emptyMap()
+    return DaoCue.find { DaoCues.id inList cueIds.toList() }
+        .with(*CUE_APPLY_RELATIONS)
+        .associate { it.id.value to it.toCueApplyData() }
+}
+
+/** The shared body. Assumes [CUE_APPLY_RELATIONS] are already loaded. */
+private fun DaoCue.toCueApplyData(): CueApplyData = CueApplyData(
+    cueId = id.value,
+    cueName = name,
+    adHocEffects = adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+    layers = layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
+    propertyAssignments = propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
+    triggers = triggers.sortedBy { it.sortOrder }.map { trigger ->
         CueTriggerDto(
             triggerType = trigger.triggerType.name,
             delayMs = trigger.delayMs,
@@ -326,9 +377,13 @@ internal fun buildCueApplyData(cue: DaoCue): CueApplyData = CueApplyData(
             sortOrder = trigger.sortOrder,
         )
     },
-    stomp = cue.stomp,
-    cueStackId = cue.cueStack?.id?.value,
-    sortOrder = cue.sortOrder,
+    autoAdvance = autoAdvance,
+    autoAdvanceDelayMs = autoAdvanceDelayMs,
+    fadeDurationMs = fadeDurationMs,
+    fadeCurve = fadeCurve,
+    stomp = stomp,
+    cueStackId = cueStack.id.value,
+    sortOrder = sortOrder,
 )
 
 /**

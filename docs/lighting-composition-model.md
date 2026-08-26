@@ -404,6 +404,22 @@ an in-flight crossfade weight to fully-in.
 
 A recurring layer is therefore idempotent on Layer 4: only its effects re-trigger.
 
+That idempotence is what makes the fire path cheap. A recurring layer re-cooks at up to 10/s, so
+`CueTriggerManager.TimedFireCook` memoises the cook **keyed on the fired-layer set** — a repeat fire
+of an already-fired layer asks for a result already in hand, and the distinct sets one activation
+can reach are bounded by its timed-layer count. It is deliberately not a cached "static half" with
+the fired layers overlaid on top: `CueComposer.cook` ranks *all* contributing layers by `sortOrder`
+together, so a timed layer below a static one has to lose to it, and `CookWinner.index` and the
+stomp suppression are derived from that same shared rank. Overlaying would invert all three.
+
+The memo's one hazard is staleness, and it is closed by a stamp rather than a listener: the patch
+register's `Fixtures.structureVersion`, `LookRegistry.version`, and `TemplateRegistry.versionFor`
+scoped to the templates the cue actually names. A Look edit republishes the cue *and* bumps that
+version, so the next fire re-cooks instead of replaying a pre-edit result over the operator's save.
+That is also why `LookRegistry` bumps its counter on *both* sides of an eviction: between a
+single pre-eviction bump and the eviction itself the registry reports the new version while still
+serving pre-edit content, and a stamp taken there would match forever.
+
 ### Editing a Look
 
 Because resolved values are cached, editing a Look re-resolves and republishes its live consumers
