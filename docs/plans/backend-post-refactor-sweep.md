@@ -1,6 +1,6 @@
 # Backend post-refactor architectural sweep — findings and cleanup plan
 
-> **Document status: BACKLOG, WAVES 0–2 COMPLETE.** This is the output of the
+> **Document status: BACKLOG, WAVES 0–3 COMPLETE.** This is the output of the
 > post-refactor architectural sweep: a categorized backlog for later fix agents, organised into
 > execution waves. Items cite file:line as of `b5067e5`; expect drift as waves land. A matching
 > frontend sweep happens separately — the "Frontend-coordination register" at the bottom is its
@@ -132,10 +132,19 @@ items here, because D1 was going to delete the file. It has.)*
 
 ## B — Functional gaps
 
-**B1. Template/Look-row `fadeDurationMs` ignored when a layer tracks it** — medium / P1 / M / opus
+~~**B1. Template/Look-row `fadeDurationMs` ignored when a layer tracks it**~~ — done, `bd659fd`. medium / P1 / M / opus
 Honoured on click-apply (`projectTemplates.kt:300`) but `CueComposer.LayerContent.OfTemplate`
 (`CueComposer.kt:428-434`) and `SourceRow` (`:437-443`) drop it. **Fix:** carry the field through
 the cook so tracked layers fade like applied ones.
+
+Grew in the landing: three additions, all confirmed with the operator. The cue's own local rows had
+the identical dead field (`buildCueAssignmentsForCue` dropped it), so they are included rather than
+left as a follow-up. `CueTriggerManager`'s timed-layer fire counts as an arrival and gets the flag,
+which meant `replaceCueAssignments` needed it too. And the review pass found the per-key fade map
+could not come from the LTP-shaped winner map alone — `composeHtp` ignores priority, so a *blended*
+HTP bucket has no single source row and snaps, while a single-contributor one (the common case, since
+DIMMER is HTP) still fades. Which publishes may ramp at all is now an arrival-versus-edit decision at
+the call sites; `docs/lighting-composition-model.md` §"Per-row fade time" has the table.
 
 ~~**B2. Scripts cannot address speed masters**~~ — done, `84885df`, pulled forward and landed with D7 (same 24 signatures). high / P1 / M / opus
 
@@ -564,7 +573,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1–C2~~ **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
-| 3 | ~~C3–C7~~, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
+| 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
