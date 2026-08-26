@@ -1855,6 +1855,39 @@ class FxEngine(
      * @return The assigned effect ID
      */
     fun addEffect(effect: FxInstance): Long {
+        val id = insert(effect)
+        rebuildSortedSnapshots()
+        emitStateUpdate()
+        return id
+    }
+
+    /**
+     * Add several effects as **one** mutation, returning their IDs in the order given.
+     *
+     * Spawning a cue's or a programmer stack's effects one at a time made
+     * [rebuildSortedSnapshots] and [emitStateUpdate] run once per effect, and each of those
+     * walks *every* active effect — [emitStateUpdate] with a group/multi-element lookup per
+     * entry — so a cue with N effects cost O(N²) (sweep item C7). Batching the inserts leaves
+     * exactly one rebuild and one broadcast for the whole spawn.
+     *
+     * IDs still come from [nextEffectId] in list order, which is what keeps spawn order equal
+     * to composition order for same-priority effects — see the note on `sortedEffectsComparator`
+     * at the cue apply sites. The one rebuild lands before any repaint or Layer 4 publish the
+     * calling flow goes on to do, which is the invariant [rebuildSortedSnapshots] documents.
+     */
+    fun addEffects(effects: List<FxInstance>): List<Long> {
+        if (effects.isEmpty()) return emptyList()
+        val ids = effects.map { insert(it) }
+        rebuildSortedSnapshots()
+        emitStateUpdate()
+        return ids
+    }
+
+    /**
+     * Stamp an instance and put it in [activeEffects], without rebuilding or broadcasting.
+     * Every caller must follow with [rebuildSortedSnapshots] then [emitStateUpdate].
+     */
+    private fun insert(effect: FxInstance): Long {
         val id = nextEffectId.incrementAndGet()
         effect.id = id
         effect.startedAtMs = System.currentTimeMillis()
@@ -1881,8 +1914,6 @@ class FxEngine(
         effect.rateMasterSlot = rateSlotFor(effect.rateSpeedMasterUuid)
 
         activeEffects[id] = effect
-        rebuildSortedSnapshots()
-        emitStateUpdate()
         return id
     }
 

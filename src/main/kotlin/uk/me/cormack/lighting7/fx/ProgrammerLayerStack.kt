@@ -433,9 +433,13 @@ class ProgrammerLayerStack(
             .associate { (index, layer) -> layer.layerId to index }
 
         val byLayerId = layers.associateBy { it.layerId }
-        var spawned = 0
         val wanted = HashSet<EffectKey>(desired.size)
         val repriorities = HashMap<Long, Int>()
+        // Built here, added in one `addEffects` below: a per-instance add rebuilt the engine's
+        // sorted snapshots and re-broadcast the whole active-effect list once per effect, which
+        // is O(N²) over a stack of any size (sweep item C7). Build order is add order, so the
+        // layer-rank priorities still decide composition exactly as before.
+        val spawning = mutableListOf<Pair<EffectKey, FxInstance>>()
 
         for ((layer, effect, target) in desired) {
             val key = EffectKey(layer.layerId, effect, target.key)
@@ -449,10 +453,18 @@ class ProgrammerLayerStack(
                 continue
             }
             val override = byLayerId[layer.layerId]?.beatDivisionOverride
-            val id = spawn(layer, effect, target, priority, override) ?: continue
-            effectInstances[key] = id
-            spawned++
+            val instance = build(layer, effect, target, priority, override) ?: continue
+            spawning += key to instance
         }
+
+        val spawnedIds = eng.addEffects(spawning.map { (_, instance) -> instance })
+        // Zipped rather than indexed: the pairing is what makes each key point at its own
+        // instance, and a `spawnedIds[index]` read would go quietly wrong if `addEffects` ever
+        // returned anything but one id per input.
+        for ((entry, id) in spawning.zip(spawnedIds)) {
+            effectInstances[entry.first] = id
+        }
+        val spawned = spawning.size
 
         var retracted = 0
         val gone = effectInstances.keys.filterNot { it in wanted }
@@ -476,13 +488,17 @@ class ProgrammerLayerStack(
     private fun priorityFor(rank: Int): Int =
         FxEngine.PROGRAMMER_FX_PRIORITY_BASE + rank.coerceIn(0, 100_000)
 
-    private fun spawn(
+    /**
+     * Build the instance a programmer layer's effect wants, or null if it can't be built.
+     * The caller adds it — see the batched `addEffects` in [syncEffects].
+     */
+    private fun build(
         layer: CookLayer,
         effect: LookEffectEntry,
         target: TargetRef,
         priority: Int,
         beatDivisionOverride: Double?,
-    ): Long? {
+    ): FxInstance? {
         val st = state() ?: return null
         val spec = effect.toEffectSpec()
             .let { if (beatDivisionOverride == null) it else it.copy(beatDivision = beatDivisionOverride) }
@@ -519,11 +535,11 @@ class ProgrammerLayerStack(
         }
         // `lookId` and `programmerLayerId` are the honest fields for where this came from.
         // Only a Look can own an effect (D7), so only a Look id belongs here — a template layer
-        // never reaches `spawn` because a template holds no effects to spawn.
+        // never reaches `build` because a template holds no effects to spawn.
         instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }
         instance.programmerLayerId = layer.layerId
         instance.priority = priority
-        return engine().addEffect(instance)
+        return instance
     }
 
     private fun renumber(layers: List<ProgrammerLayer>): List<ProgrammerLayer> =

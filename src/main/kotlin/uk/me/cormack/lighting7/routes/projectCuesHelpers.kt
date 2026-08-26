@@ -711,7 +711,11 @@ internal fun deletePromptBookAnchorsForCue(cue: DaoCue): Int =
  */
 internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean = false): ApplyCueResponse {
     val engine = state.show.fxEngine
-    var effectCount = 0
+    // Instances are collected and added in one `addEffects` call: adding them one at a time
+    // rebuilt the sorted snapshots and re-broadcast the whole active-effect list per effect,
+    // which is O(N²) for a cue of any size (sweep item C7). List order is still spawn order,
+    // so layer order still decides composition.
+    val spawning = mutableListOf<FxInstance>()
 
     // Pre-apply validation: warn once per cue-apply when any assignment targets a
     // removed/renamed fixture / group / property. The per-row warns inside the build helpers
@@ -798,8 +802,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         instance.cueLayerId = layer.layerId
         instance.cueId = cueData.cueId
         instance.priority = priority
-        engine.addEffect(instance)
-        effectCount++
+        spawning += instance
     }
 
     // 4. Apply immediate ad-hoc effects
@@ -828,11 +831,12 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         val instance = createInstanceFromPreset(presetEffectDto, fxTarget, state)
         instance.cueId = cueData.cueId
         instance.priority = priority
-        engine.addEffect(instance)
-        effectCount++
+        spawning += instance
     }
 
-    return ApplyCueResponse(effectCount = effectCount, cueName = cueData.cueName)
+    engine.addEffects(spawning)
+
+    return ApplyCueResponse(effectCount = spawning.size, cueName = cueData.cueName)
 }
 
 /**

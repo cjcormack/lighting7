@@ -199,7 +199,7 @@ Note `:test` rather than `test`: the latter also runs `:launcher:test`, which fa
 
 ### `FxEngineBenchmark` scenarios
 
-Three independent rigs, one per `@Test`, because engine state, cue assignments and the effect
+Five independent rigs, one per `@Test`, because engine state, cue assignments and the effect
 registry all persist per rig — sharing one would make the numbers order-dependent.
 
 | Scenario | Rig | Exists for |
@@ -207,6 +207,13 @@ registry all persist per rig — sharing one would make the numbers order-depend
 | `[beat]` / `[wall]` | 4 universes × `HexFixture`, one beat + one wall-clock `SliderTarget` each (168 fixtures, 336 effects) | the original Phase 5 harness — **frozen**, it is what the 2026-04-22 baseline was measured on |
 | `[chase-beat]` / `[chase-wall]` | 40 × `LedLightbar12PixelFixture.Mode48Ch` in two groups (480 `RgbwPixel` elements), 4 group colour effects across two speed masters — FLAT and PER_FIXTURE on both tick loops | sweep C1 (per-tick target re-expansion), C2 (reflective property access on the colour write path), C6 (allocation bundle) |
 | `[crossfade]` | 168 `HexFixture`s, two cues × dimmer+colour rows (672 rows), 169 effects; drives `updateCueFadeWeights` at 62 fps | sweep C3 |
+| `[colour-beat]` | 168 `HexFixture`s with colour effects and a half-covered programmer band | sweep C2 — scenario 2 was claimed to cover it and does not |
+| `[spawn-each]` / `[spawn-batch]` | scenario 1's fixtures, a **fresh** engine per sample, 168 dimmer effects put up as one cue GO would | sweep C7 — the only scenario that measures *adding* effects rather than ticking them |
+
+`[spawn-each]`/`[spawn-batch]` is shaped differently from the other four on purpose: it reports
+both the per-effect and the batched add in the same run, so it carries its own before/after and
+does not depend on a historical block. Every other scenario spawns its effects in rig setup,
+outside the measured window, which is why none of them could see C7 at all.
 
 The **effects** the harness applies are load-bearing for the same reason the rigs are, and they
 live in `testsupport/TestEffects.kt` rather than coming from the `FxRegistry`. Effect maths runs
@@ -449,3 +456,24 @@ is waiting on anyway.
 Both `[beat]` and `[wall]` move about 9% on allocation despite being single-fixture `SliderTarget`
 rigs with no group expansion at all — that is the `resetActiveProperties` scratch reuse, which is
 the only part of C6 those two scenarios can see.
+
+**2026-08-26, selwyn.local, JDK 25** — sweep item C7 (`emitStateUpdate` makes cue apply O(N²)).
+Both sides in one run of the new `cue spawn cost` scenario: 168 effects put up on a fresh engine,
+8 samples a side after 3 warmups, engine and instances built outside the timed window.
+
+```
+              p50        p99        mean       allocBytes/spawn
+[spawn-each]  8,519 µs   14,724 µs  8,704 µs   7,353,990
+[spawn-batch]   106 µs      163 µs    112 µs     162,843
+```
+
+~80× on p50 and ~45× on allocation, for the 168-effect case. The shape is the point rather than
+the multiplier: `[spawn-each]` is quadratic, so the factor grows with the cue — every `addEffect`
+re-sorted the snapshots *and* rebuilt an `FxInstanceState` for every effect already up, each with
+a group / multi-element lookup. A batched add pays that once.
+
+The five tick scenarios are structurally blind to this and were confirmed flat; their numbers from
+this session are not recorded, because `--rerun-tasks` compile load was running alongside them and
+their p99s (`[chase-wall]` 19.8 ms) measured the machine. C7 does not touch a tick path — `insert`
+does exactly what `addEffect`'s body did, and the one rebuild still lands before anything the
+calling flow publishes.

@@ -26,7 +26,7 @@ import kotlin.test.Test
 /**
  * Per-tick allocation & latency benchmark for [FxEngine]'s hot paths.
  *
- * Four independent scenarios, each with its own rig (engine state, cue assignments and the
+ * Five independent scenarios, each with its own rig (engine state, cue assignments and the
  * effect registry all persist per rig, so sharing one would make the numbers order-dependent):
  *
  * 1. **`beat and wall-clock tick throughput`** — the original scenario. 4 universes of
@@ -38,6 +38,10 @@ import kotlin.test.Test
  * 4. **`colour write path with bundled extended channels`** — sweep item C2's reflective
  *    property resolution. Scenario 2 was originally claimed to cover this; it does not, for
  *    the reason set out on [newColourRig].
+ * 5. **`cue spawn cost`** — sweep item C7. The only scenario that measures *adding* effects
+ *    rather than ticking them: scenarios 1-4 spawn in their rig setup, outside every measured
+ *    window, so none of them can see this path at all. It reports both shapes side by side in
+ *    one run, which is what makes it a self-contained before/after.
  *
  * See `docs/plans/backend-post-refactor-sweep.md` §C. Scenarios 2-4 exist because the
  * original rig touches none of those paths: measuring a C-wave "before" on scenario 1 alone
@@ -86,6 +90,15 @@ class FxEngineBenchmark {
 
         /** Colour rig: same fixture count as scenario 1, same tick budget as scenario 2. */
         const val COLOUR_BEAT_TICKS = 1_200
+
+        /**
+         * Spawn rig: how many effects one cue GO puts up, and how many whole spawns are
+         * measured. One effect per fixture is a plausible full-rig cue; the quadratic this
+         * scenario exists to catch is 1+2+…+N, so N is the only knob that matters.
+         */
+        const val SPAWN_EFFECTS = 168
+        const val SPAWN_REPEATS = 8
+        const val WARMUP_SPAWNS = 3
         const val OUTGOING_CUE = 1
         const val INCOMING_CUE = 2
 
@@ -127,8 +140,10 @@ class FxEngineBenchmark {
         val fixtures: Fixtures,
     )
 
-    private fun newRig(): Rig {
-        val controllers = (0 until UNIVERSES).map { MockDmxController(Universe(0, it)) }
+    /** Scenario 1's fixture rig, shared with scenario 5 so both measure the same population. */
+    private fun newRigFixtures(
+        controllers: List<MockDmxController> = (0 until UNIVERSES).map { MockDmxController(Universe(0, it)) },
+    ): Fixtures {
         val fixtures = Fixtures()
         fixtures.register {
             controllers.forEach { addController(it) }
@@ -141,6 +156,12 @@ class FxEngineBenchmark {
                 }
             }
         }
+        return fixtures
+    }
+
+    private fun newRig(): Rig {
+        val controllers = (0 until UNIVERSES).map { MockDmxController(Universe(0, it)) }
+        val fixtures = newRigFixtures(controllers)
         val programmerStore = ProgrammerStore()
         val engine = FxEngine(
             fixtures = fixtures,
@@ -826,5 +847,67 @@ class FxEngineBenchmark {
         val stats = summarize("colour-beat", timings, alloc, sampleName = "tick")
 
         check(stats.p99Ns < 1_000_000_000L) { "colour-beat p99 tick > 1s: ${stats.p99Ns} ns" }
+    }
+
+    /**
+     * A fresh engine over [fixtures], with no effects — one cue GO's starting point, since a
+     * stack GO drops the outgoing cue's effects before spawning the incoming cue's.
+     */
+    private fun newSpawnEngine(fixtures: Fixtures): FxEngine {
+        val programmerStore = ProgrammerStore()
+        return FxEngine(
+            fixtures = fixtures,
+            speedMasters = SpeedMasterBank(),
+            programmerStore = programmerStore,
+            layerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
+        )
+    }
+
+    private fun spawnInstances(fixtures: Fixtures): List<FxInstance> =
+        fixtures.fixtures.take(SPAWN_EFFECTS).map { f ->
+            FxInstance(
+                effect = SineSlider(),
+                target = SliderTarget(f.key, "dimmer"),
+                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                blendMode = BlendMode.MAX,
+            )
+        }
+
+    /**
+     * Sweep item C7: the cost of putting a cue's effects up.
+     *
+     * `[spawn-each]` is the pre-C7 shape — one `addEffect` per effect, each rebuilding the
+     * sorted snapshots and re-broadcasting the whole active-effect list, so the Nth add walks
+     * N entries. `[spawn-batch]` is the same effects through `addEffects`: one rebuild, one
+     * broadcast. Both run against a fresh engine per sample so neither inherits the other's
+     * population, and both run in the same JVM in the same sitting — the only comparison at
+     * this resolution that means anything (see `docs/testing-engineering.md`).
+     */
+    @Test
+    fun `cue spawn cost`() {
+        assumeBenchmarkEnabled()
+
+        val fixtures = newRigFixtures()
+        println("[setup] universes=$UNIVERSES fixtures=${fixtures.fixtures.size} spawnEffects=$SPAWN_EFFECTS")
+
+        fun measure(label: String, spawn: (FxEngine, List<FxInstance>) -> Unit) {
+            repeat(WARMUP_SPAWNS) { spawn(newSpawnEngine(fixtures), spawnInstances(fixtures)) }
+
+            val timings = LongArray(SPAWN_REPEATS)
+            val allocBefore = allocatedBytes()
+            for (i in 0 until SPAWN_REPEATS) {
+                // Engine and instances are built outside the timed window: the measurement is
+                // the add, not the cook that precedes it (that is C8's territory).
+                val engine = newSpawnEngine(fixtures)
+                val instances = spawnInstances(fixtures)
+                timings[i] = measureNanoTime { spawn(engine, instances) }
+            }
+            val alloc = allocatedBytes().takeIf { it >= 0 && allocBefore >= 0 }
+                ?.let { it - allocBefore } ?: -1L
+            summarize(label, timings, alloc, sampleName = "spawn")
+        }
+
+        measure("spawn-each") { engine, instances -> instances.forEach { engine.addEffect(it) } }
+        measure("spawn-batch") { engine, instances -> engine.addEffects(instances) }
     }
 }

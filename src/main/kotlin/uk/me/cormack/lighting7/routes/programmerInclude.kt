@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerFxOrigin
@@ -229,7 +230,11 @@ private fun spawnIncludedFx(
     mask: Set<PropertyMaskGroup>?,
 ): IncludedFxOutcome {
     val engine = state.show.fxEngine
-    var spawned = 0
+    // Instances are collected here and added in one `addEffects` below: adding them one at a
+    // time rebuilt the engine's sorted snapshots and re-broadcast the whole active-effect list
+    // per effect (sweep item C7). The duplicate guard reads the pre-loop `running` snapshot and
+    // never the instances this loop makes, so deferring the adds changes nothing it decides.
+    val spawning = mutableListOf<FxInstance>()
     var alreadyRunning = 0
     val covered = LinkedHashSet<String>()
     val groupKeys = LinkedHashSet<String>()
@@ -298,8 +303,7 @@ private fun spawnIncludedFx(
         val instance = createInstanceFromPreset(presetEffect, fxTarget, state)
         uk.me.cormack.lighting7.routes.markProgrammerOwned(instance, true)
         instance.programmerOrigin = origin
-        engine.addEffect(instance)
-        spawned++
+        spawning += instance
 
         if (target is TargetRef.Group) groupKeys += target.key
         covered += engine.fixtureKeysCoveredBy(instance)
@@ -313,6 +317,9 @@ private fun spawnIncludedFx(
             ProgrammerFxOrigin(cueData.cueId, ProgrammerFxOrigin.Kind.AD_HOC, adHoc.sortOrder),
         )
     }
+
+    engine.addEffects(spawning)
+    val spawned = spawning.size
 
     if (spawned > 0) {
         logger.debug("include: spawned {} programmer-band effect(s) from cue {}", spawned, cueData.cueId)

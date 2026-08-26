@@ -184,7 +184,12 @@ class CueStackManager(
         fxEngine.removeEffectsForCueStack(stackId)
 
         // 2. Apply cue effects
-        var effectCount = 0
+        //
+        // Instances are collected and handed to `addEffects` in one go: adding them one at a
+        // time rebuilt the sorted snapshots and re-broadcast the whole active-effect list per
+        // effect, which is O(N²) for a cue of any size (sweep item C7). List order is still
+        // spawn order, so layer order still decides composition.
+        val spawning = mutableListOf<FxInstance>()
 
         val (immediateAdHoc, timedAdHoc) = cueData.adHocEffects.partition {
             it.delayMs == null && it.intervalMs == null
@@ -219,8 +224,7 @@ class CueStackManager(
             // a template id into a field named `lookId`.
             instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }
             instance.cueLayerId = layer.layerId
-            fxEngine.addEffect(instance)
-            effectCount++
+            spawning += instance
         }
 
         // Apply immediate ad-hoc effects
@@ -254,9 +258,11 @@ class CueStackManager(
             val instance = createInstanceFromPreset(presetEffectDto, fxTarget, state)
             instance.cueId = cueData.cueId
             instance.cueStackId = stackId
-            fxEngine.addEffect(instance)
-            effectCount++
+            spawning += instance
         }
+
+        fxEngine.addEffects(spawning)
+        val effectCount = spawning.size
 
         // Apply Layer 4 for the incoming cue. Under crossfade the incoming starts at weight 0
         // atomically with the insert; `runCrossfade` ticks it up from there. Stomp runs off
