@@ -72,6 +72,16 @@ data object StageRegionListChangedOutMessage : BroadcastOutMessage()
 @SerialName("speedMasterListChanged")
 data object SpeedMasterListChangedOutMessage : BroadcastOutMessage()
 
+/** A script was created, renamed, edited or deleted. */
+@Serializable
+@SerialName("scriptListChanged")
+data object ScriptListChangedOutMessage : BroadcastOutMessage()
+
+/** An FX definition (user-created effect) was created, edited or deleted. */
+@Serializable
+@SerialName("fxDefinitionListChanged")
+data object FxDefinitionListChangedOutMessage : BroadcastOutMessage()
+
 @Serializable
 @SerialName("showChanged")
 data class ShowChangedOutMessage(
@@ -168,6 +178,8 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         override fun riggingListChanged() = fire(RiggingListChangedOutMessage)
         override fun stageRegionListChanged() = fire(StageRegionListChangedOutMessage)
         override fun speedMasterListChanged() = fire(SpeedMasterListChangedOutMessage)
+        override fun scriptListChanged() = fire(ScriptListChangedOutMessage)
+        override fun fxDefinitionListChanged() = fire(FxDefinitionListChangedOutMessage)
 
         override fun showChanged(
             projectId: Int,

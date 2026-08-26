@@ -12,17 +12,23 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
+/**
+ * Every member defaults to a no-op so an implementer overrides only the events it cares about.
+ * Without that, each new signal (most recently [scriptListChanged] / [fxDefinitionListChanged],
+ * sweep item B5) forces a matching empty override at every existing implementer regardless of
+ * whether it's relevant there — a maintenance tax flagged in the B3-B5 sweep review.
+ */
 interface FixturesChangeListener {
-    fun channelsChanged(universe: Universe, changes: Map<Int, UByte>)
-    fun controllersChanged()
-    fun fixturesChanged()
+    fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) {}
+    fun controllersChanged() {}
+    fun fixturesChanged() {}
     /**
      * A Look was created, renamed or deleted. Collapses what used to be two separate signals
      * (`presetListChanged` + `paletteListChanged`) now that FX presets and named palettes are one
      * entity. A Look's *contents* changing goes through `republishForLookEdit` instead, which
      * invalidates the one Look directly rather than dropping every expansion.
      */
-    fun lookListChanged()
+    fun lookListChanged() {}
 
     /**
      * A template was created, renamed or deleted.
@@ -36,18 +42,22 @@ interface FixturesChangeListener {
      * A template's *contents* changing goes through `republishForTemplateEdit` instead, which
      * invalidates the one template directly.
      */
-    fun templateListChanged()
-    fun speedMasterListChanged()
-    fun cueListChanged()
-    fun cueStackListChanged()
-    fun cueSlotListChanged()
-    fun patchListChanged()
-    fun riggingListChanged()
-    fun stageRegionListChanged()
-    fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?)
+    fun templateListChanged() {}
+    fun speedMasterListChanged() {}
+    fun cueListChanged() {}
+    fun cueStackListChanged() {}
+    fun cueSlotListChanged() {}
+    fun patchListChanged() {}
+    fun riggingListChanged() {}
+    fun stageRegionListChanged() {}
+    /** A script was created, renamed, edited or deleted. */
+    fun scriptListChanged() {}
+    /** An FX definition (user-created effect) was created, edited or deleted. */
+    fun fxDefinitionListChanged() {}
+    fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {}
     /** A cue stack's live cue, armed next, or fade progress changed. */
-    fun cueRunStateChanged(runState: CueRunState)
-    fun promptBookChanged()
+    fun cueRunStateChanged(runState: CueRunState) {}
+    fun promptBookChanged() {}
 }
 
 class Fixtures {
@@ -385,6 +395,18 @@ class Fixtures {
     fun speedMasterListChanged() {
         changeListeners.forEach {
             it.speedMasterListChanged()
+        }
+    }
+
+    fun scriptListChanged() {
+        changeListeners.forEach {
+            it.scriptListChanged()
+        }
+    }
+
+    fun fxDefinitionListChanged() {
+        changeListeners.forEach {
+            it.fxDefinitionListChanged()
         }
     }
 

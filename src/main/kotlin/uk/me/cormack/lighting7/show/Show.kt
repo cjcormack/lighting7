@@ -72,24 +72,9 @@ class Show(
 
             // Covers create and delete. A *contents* change goes through
             // `republishForLookEdit`, which invalidates the one Look directly.
+            // `templateListChanged` is deliberately not handled here — a Look expansion holds no
+            // template data; `templateRegistry` below has its own listener for that.
             override fun lookListChanged() = registry.invalidateAll()
-
-            // Nothing: a Look expansion holds no template data. `templateRegistry` below has its
-            // own listener for this, which is the point of the two signals being separate.
-            override fun templateListChanged() {}
-
-            override fun speedMasterListChanged() {}
-
-            override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) {}
-            override fun controllersChanged() {}
-            override fun cueListChanged() {}
-            override fun cueStackListChanged() {}
-            override fun cueSlotListChanged() {}
-            override fun riggingListChanged() {}
-            override fun stageRegionListChanged() {}
-            override fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {}
-            override fun cueRunStateChanged(runState: CueRunState) {}
-            override fun promptBookChanged() {}
         })
     }
 
@@ -107,21 +92,6 @@ class Show(
     ).also { registry ->
         fixtures.registerListener(object : FixturesChangeListener {
             override fun templateListChanged() = registry.invalidateAll()
-
-            override fun fixturesChanged() {}
-            override fun patchListChanged() {}
-            override fun lookListChanged() {}
-            override fun speedMasterListChanged() {}
-            override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) {}
-            override fun controllersChanged() {}
-            override fun cueListChanged() {}
-            override fun cueStackListChanged() {}
-            override fun cueSlotListChanged() {}
-            override fun riggingListChanged() {}
-            override fun stageRegionListChanged() {}
-            override fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {}
-            override fun cueRunStateChanged(runState: CueRunState) {}
-            override fun promptBookChanged() {}
         })
     }
 

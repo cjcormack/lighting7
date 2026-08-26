@@ -12,7 +12,6 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import java.util.concurrent.atomic.AtomicReference
@@ -61,25 +60,8 @@ class GlobalScalerState(
     private val controllers = mutableListOf<DmxController>()
 
     private val listener = object : FixturesChangeListener {
-        override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) {}
         override fun controllersChanged() { reattach() }
         override fun fixturesChanged() { refreshClassification() }
-        override fun lookListChanged() {}
-        override fun templateListChanged() {}
-        override fun speedMasterListChanged() {}
-        override fun cueListChanged() {}
-        override fun cueStackListChanged() {}
-        override fun cueSlotListChanged() {}
-        override fun patchListChanged() {}
-        override fun riggingListChanged() {}
-        override fun stageRegionListChanged() {}
-        override fun showChanged(
-            projectId: Int,
-            activeStackId: Int?,
-            activeStackName: String?,
-        ) {}
-        override fun cueRunStateChanged(runState: CueRunState) {}
-        override fun promptBookChanged() {}
     }
 
     /**

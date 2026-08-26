@@ -56,6 +56,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
                     scriptType = try { ScriptType.valueOf(newScript.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
                 }.toScriptDetails(isCurrentProject = true) // Only current project can create
             }
+            state.show.fixtures.scriptListChanged()
             call.respond(HttpStatusCode.Created, scriptDetails)
         }
     }
@@ -108,6 +109,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
             }
 
             if (scriptDetails != null) {
+                state.show.fixtures.scriptListChanged()
                 call.respond(scriptDetails)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
@@ -138,7 +140,10 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
 
             when (result) {
                 ScriptDeleteResult.NOT_FOUND -> call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
-                ScriptDeleteResult.SUCCESS -> call.respond(HttpStatusCode.OK)
+                ScriptDeleteResult.SUCCESS -> {
+                    state.show.fixtures.scriptListChanged()
+                    call.respond(HttpStatusCode.OK)
+                }
             }
         }
     }
@@ -187,6 +192,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
 
         val request = call.receive<CopyScriptRequest>()
 
+        var copyTargetProject: DaoProject? = null
         val result = transaction(state.database) {
             val sourceScript = DaoScript.findById(resource.scriptId)
                 ?: return@transaction null to "Script not found"
@@ -218,6 +224,8 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
                 project = targetProject
             }
 
+            copyTargetProject = targetProject
+
             CopyScriptResponse(
                 scriptId = newScript.id.value,
                 scriptName = newScript.name,
@@ -229,6 +237,11 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
 
         val (response, error) = result
         if (response != null) {
+            // Only the current project's Fixtures instance has listeners attached; a copy into
+            // a non-current project has no live client to notify.
+            if (copyTargetProject?.let { state.isCurrentProject(it) } == true) {
+                state.show.fixtures.scriptListChanged()
+            }
             call.respond(HttpStatusCode.Created, response)
         } else {
             val statusCode = when (error) {

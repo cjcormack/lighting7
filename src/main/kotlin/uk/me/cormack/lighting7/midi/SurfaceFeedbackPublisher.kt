@@ -12,7 +12,6 @@ import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
@@ -180,22 +179,10 @@ class SurfaceFeedbackPublisher(
     private val fixtureListener = object : FixturesChangeListener {
         override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) =
             onChannelsChanged(universe, changes)
-        override fun controllersChanged() {}
         override fun fixturesChanged() { rebuildIndex() }
-        override fun lookListChanged() {}
-        override fun templateListChanged() {}
         // A rename is cosmetic, but a create/delete changes which master uuids resolve — and
         // a tempo-bound encoder pointing at a deleted master must stop being fed.
         override fun speedMasterListChanged() { rebuildIndex() }
-        override fun cueListChanged() {}
-        override fun cueStackListChanged() {}
-        override fun cueSlotListChanged() {}
-        override fun patchListChanged() {}
-        override fun riggingListChanged() {}
-        override fun stageRegionListChanged() {}
-        override fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {}
-        override fun cueRunStateChanged(runState: CueRunState) {}
-        override fun promptBookChanged() {}
     }
 
     private val jobs = mutableListOf<Job>()

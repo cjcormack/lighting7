@@ -19,7 +19,6 @@ import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.auth.AuthService
 import uk.me.cormack.lighting7.auth.DEFAULT_BCRYPT_COST
-import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.fx.CueTriggerManager
 import uk.me.cormack.lighting7.midi.ActiveBankState
 import uk.me.cormack.lighting7.midi.BindingHealthEvaluator
@@ -41,7 +40,6 @@ import uk.me.cormack.lighting7.perf.MidiLatencyTracker
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
-import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.sync.AutoSyncScheduler
 import uk.me.cormack.lighting7.sync.ConflictSession
 import uk.me.cormack.lighting7.sync.RemoteSyncEngine
@@ -716,21 +714,10 @@ class State(val config: ApplicationConfig) {
      */
     private var bindingHealthFixtures: Fixtures? = null
     private val bindingHealthListener = object : FixturesChangeListener {
-        override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) {}
-        override fun controllersChanged() {}
         override fun fixturesChanged() = refreshActiveProjectBindingHealth()
-        override fun lookListChanged() {}
-        override fun templateListChanged() {}
-        override fun speedMasterListChanged() {}
         override fun cueListChanged() = refreshActiveProjectBindingHealth()
         override fun cueStackListChanged() = refreshActiveProjectBindingHealth()
-        override fun cueSlotListChanged() {}
         override fun patchListChanged() = refreshActiveProjectBindingHealth()
-        override fun riggingListChanged() {}
-        override fun stageRegionListChanged() {}
-        override fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {}
-        override fun cueRunStateChanged(runState: CueRunState) {}
-        override fun promptBookChanged() {}
     }
 
     private fun attachBindingHealthListener() {

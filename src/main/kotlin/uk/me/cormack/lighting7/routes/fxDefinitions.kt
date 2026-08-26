@@ -94,6 +94,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             return@post
         }
 
+        state.show.fixtures.fxDefinitionListChanged()
         call.respond(HttpStatusCode.Created, transaction(state.database) { definition.toDto() })
     }
 
@@ -169,6 +170,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             return@put
         }
 
+        state.show.fixtures.fxDefinitionListChanged()
         call.respond(transaction(state.database) { definition.toDto() })
     }
 
@@ -189,6 +191,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("FX definition not found"))
             return@delete
         }
+        state.show.fixtures.fxDefinitionListChanged()
         call.respond(HttpStatusCode.NoContent)
     }
 
