@@ -100,6 +100,9 @@ class CueAssignmentResolver {
     }
 
     companion object {
+        /** No rows — composes to nothing at any weights. */
+        val EMPTY_COOK = Cook(emptyList(), emptySet())
+
         /**
          * Flatten a [resolveIndexed]-shaped map to per-[Key] entries. The one place the
          * nested→flat key construction lives — [resolve] and
@@ -177,28 +180,73 @@ class CueAssignmentResolver {
     }
 
     /**
-     * Resolve a flat list of assignments to composed values, indexed
-     * `targetKey → propertyName → value` — the shape [LayerResolver]'s hot-path index wants,
-     * built directly so a publish doesn't also materialise a flat [Key]-keyed duplicate of
-     * the same data (or a compound [Key] per row).
+     * Per-cue crossfade weights layered on top of each row's own [Assignment.fadeWeight].
+     *
+     * The engine used to fold these in by `copy`-ing every fading row before composing, which
+     * on a crossfade frame meant one new [Assignment] per live row at ~62 fps *and* a fresh
+     * [Cook] each time, because the copies were new objects. Passing the lookup down instead
+     * leaves the row set — and therefore the cook — untouched for the whole fade.
+     *
+     * Only cues mid-fade have an entry; a missing one means 1.0, and an empty map is the
+     * steady state, which short-circuits to the row's own weight.
+     */
+    @JvmInline
+    value class FadeWeights(private val byCue: Map<Int, Double>) {
+        /** [assignment]'s effective weight for this frame. */
+        fun of(assignment: Assignment): Double =
+            if (byCue.isEmpty()) assignment.fadeWeight
+            else assignment.fadeWeight * (byCue[assignment.cueId] ?: 1.0)
+
+        companion object {
+            /** No crossfade in flight — every row composes at its own weight. */
+            val NONE = FadeWeights(emptyMap())
+        }
+    }
+
+    /**
+     * The weight-independent half of [resolveIndexed]: the specificity-filtered, per-target,
+     * per-property contributor buckets with their composition rule already chosen, plus the
+     * moveInDark armed set.
+     *
+     * Every input to all three is the row set alone — `targetIsGroup`, `category`,
+     * `compositionOverride`, `moveInDark`, and the asserted values — so a crossfade can cook
+     * once when the rows change and recompose per frame at new [FadeWeights]. See
+     * [LayerResolver.reweightAssignments], which owns the cached instance and the invariant
+     * that keeps it valid.
+     */
+    class Cook internal constructor(
+        internal val targets: List<CookedTarget>,
+        internal val moveInDarkArmed: Set<String>,
+    )
+
+    /** One target's buckets — the outer level of [resolveIndexed]'s output. */
+    internal class CookedTarget(
+        val targetKey: String,
+        val properties: List<Bucket>,
+    )
+
+    /** One (target, property)'s contributors and the rule that combines them. */
+    internal class Bucket(
+        val propertyName: String,
+        val contributors: List<Assignment>,
+        val rule: CompositionRule,
+    )
+
+    /**
+     * Group [assignments] by target then property, apply specificity, and pick each bucket's
+     * composition rule — everything [compose] can do before it knows the frame's weights.
      *
      * Specificity rule: when a cue asserts both a group assignment (expanded to member rows
      * with `targetIsGroup = true`) and a direct fixture-level row for the same member, the
      * fixture-level row wins. See [applySpecificity].
-     *
-     * Complexity: O(n) over assignments, grouped into O(distinct (key, property)) output
-     * entries. This runs on cue apply *and once per crossfade frame (~62 fps)* — a crossfade
-     * tick recomposes every live row at the frame's weights — so the nested maps and
-     * short-lived per-group lists it allocates land on a hot path; keep it lean.
      */
-    fun resolveIndexed(assignments: List<Assignment>): Map<String, Map<String, PropertyValue>> {
-        if (assignments.isEmpty()) return emptyMap()
+    fun cook(assignments: List<Assignment>): Cook {
+        if (assignments.isEmpty()) return EMPTY_COOK
 
         // Pre-pass: determine which fixture targets have a moveInDark Position assignment
         // armed by an outgoing dimmer asserting value 0. See [computeMoveInDarkArmed].
         val moveInDarkArmed = computeMoveInDarkArmed(assignments)
 
-        // Group by target then property, then apply specificity (fixture beats group).
         val grouped = HashMap<String, HashMap<String, MutableList<Assignment>>>()
         for (a in assignments) {
             grouped.getOrPut(a.targetKey) { HashMap() }
@@ -206,27 +254,58 @@ class CueAssignmentResolver {
                 .add(a)
         }
 
-        val out = HashMap<String, HashMap<String, PropertyValue>>(grouped.size)
+        val targets = ArrayList<CookedTarget>(grouped.size)
         for ((targetKey, properties) in grouped) {
-            val composed = HashMap<String, PropertyValue>(properties.size)
+            val buckets = ArrayList<Bucket>(properties.size)
             for ((propertyName, contributors) in properties) {
                 val effective = applySpecificity(contributors)
                 if (effective.isEmpty()) continue
-                val rule = effective.first().let { it.compositionOverride.takeUnless { it == CompositionRule.UNSET } ?: it.category.defaultComposition }
-                composed[propertyName] = when (rule) {
-                    CompositionRule.HTP -> composeHtp(effective)
-                    CompositionRule.LTP -> composeLtp(effective, moveInDarkArmed)
-                    CompositionRule.UNSET -> composeLtp(effective, moveInDarkArmed) // defensive
+                val rule = effective.first().let {
+                    it.compositionOverride.takeUnless { r -> r == CompositionRule.UNSET }
+                        ?: it.category.defaultComposition
+                }
+                buckets.add(Bucket(propertyName, effective, rule))
+            }
+            if (buckets.isNotEmpty()) targets.add(CookedTarget(targetKey, buckets))
+        }
+        return Cook(targets, moveInDarkArmed)
+    }
+
+    /**
+     * Compose a [Cook] at one frame's [weights], indexed `targetKey → propertyName → value` —
+     * the shape [LayerResolver]'s hot-path index wants, built directly so a publish doesn't
+     * also materialise a flat [Key]-keyed duplicate of the same data (or a compound [Key] per
+     * row).
+     *
+     * Complexity: O(n) over contributors, into O(distinct (key, property)) output entries.
+     * This runs on cue apply *and once per crossfade frame (~62 fps)* — the nested maps it
+     * allocates land on a hot path; keep it lean.
+     */
+    fun compose(cook: Cook, weights: FadeWeights): Map<String, Map<String, PropertyValue>> {
+        if (cook.targets.isEmpty()) return emptyMap()
+        val out = HashMap<String, Map<String, PropertyValue>>(cook.targets.size)
+        for (target in cook.targets) {
+            val composed = HashMap<String, PropertyValue>(target.properties.size)
+            for (bucket in target.properties) {
+                composed[bucket.propertyName] = when (bucket.rule) {
+                    CompositionRule.HTP -> composeHtp(bucket.contributors, weights)
+                    CompositionRule.LTP -> composeLtp(bucket.contributors, weights, cook.moveInDarkArmed)
+                    CompositionRule.UNSET ->
+                        composeLtp(bucket.contributors, weights, cook.moveInDarkArmed) // defensive
                 }
             }
-            if (composed.isNotEmpty()) out[targetKey] = composed
+            out[target.targetKey] = composed
         }
         return out
     }
 
+    /** One-shot [cook] + [compose] at the rows' own weights. */
+    fun resolveIndexed(assignments: List<Assignment>): Map<String, Map<String, PropertyValue>> =
+        compose(cook(assignments), FadeWeights.NONE)
+
     /**
      * [resolveIndexed] flattened to a per-[Key] map — for one-shot composition sites (cue
-     * preview) and tests. The engine's publish path uses [resolveIndexed] directly.
+     * preview) and tests. The engine's publish path uses [compose] directly.
      */
     fun resolve(assignments: List<Assignment>): Map<Key, PropertyValue> =
         flattenIndexed(resolveIndexed(assignments))
@@ -307,24 +386,25 @@ class CueAssignmentResolver {
      * [PropertyValue.Colour] maxes each R/G/B/W/A/UV independently. [PropertyValue.Position]
      * falls through to LTP — HTP isn't meaningful on axis values.
      */
-    private fun composeHtp(contributors: List<Assignment>): PropertyValue {
+    private fun composeHtp(contributors: List<Assignment>, weights: FadeWeights): PropertyValue {
         val first = contributors.first().value
         // Epsilon tolerates floating-point sums like `0.5 + 0.5 = 1.0000000000000002`.
-        val weightSum = contributors.sumOf { it.fadeWeight }
+        var weightSum = 0.0
+        for (a in contributors) weightSum += weights.of(a)
         val isCrossfadeBlend = weightSum <= 1.0 + 1e-9
         return when (first) {
             is PropertyValue.Slider -> PropertyValue.Slider(
-                composeHtpScalar(contributors, isCrossfadeBlend) { (it.value as PropertyValue.Slider).value.toInt() }
+                composeHtpScalar(contributors, weights, isCrossfadeBlend) { (it.value as PropertyValue.Slider).value.toInt() }
             )
             is PropertyValue.Setting -> PropertyValue.Setting(
-                composeHtpScalar(contributors, isCrossfadeBlend) { (it.value as PropertyValue.Setting).channelValue.toInt() }
+                composeHtpScalar(contributors, weights, isCrossfadeBlend) { (it.value as PropertyValue.Setting).channelValue.toInt() }
             )
             is PropertyValue.Colour -> {
                 var r = 0; var g = 0; var b = 0
                 var w = 0; var amber = 0; var uv = 0
                 for (a in contributors) {
                     val c = (a.value as PropertyValue.Colour).value
-                    val wf = a.fadeWeight
+                    val wf = weights.of(a)
                     r = maxOf(r, (c.color.red * wf).toInt().coerceIn(0, 255))
                     g = maxOf(g, (c.color.green * wf).toInt().coerceIn(0, 255))
                     b = maxOf(b, (c.color.blue * wf).toInt().coerceIn(0, 255))
@@ -334,24 +414,25 @@ class CueAssignmentResolver {
                 }
                 PropertyValue.Colour(ExtendedColour(Color(r, g, b), w.toUByte(), amber.toUByte(), uv.toUByte()))
             }
-            is PropertyValue.Position -> composeLtp(contributors) // positions don't combine
+            is PropertyValue.Position -> composeLtp(contributors, weights) // positions don't combine
         }
     }
 
     /** HTP scalar composition shared by Slider and Setting — see [composeHtp]. */
     private inline fun composeHtpScalar(
         contributors: List<Assignment>,
+        weights: FadeWeights,
         isCrossfadeBlend: Boolean,
         extract: (Assignment) -> Int,
     ): UByte {
         val value = if (isCrossfadeBlend) {
             var acc = 0.0
-            for (a in contributors) acc += extract(a) * a.fadeWeight
+            for (a in contributors) acc += extract(a) * weights.of(a)
             acc.toInt().coerceIn(0, 255)
         } else {
             var maxVal = 0
             for (a in contributors) {
-                val scaled = (extract(a) * a.fadeWeight).toInt().coerceIn(0, 255)
+                val scaled = (extract(a) * weights.of(a)).toInt().coerceIn(0, 255)
                 if (scaled > maxVal) maxVal = scaled
             }
             maxVal
@@ -376,7 +457,11 @@ class CueAssignmentResolver {
      * When only one contributor is present, its value is returned unchanged regardless of
      * fadeWeight — the incoming-cue fade-in is handled at the caller / cue-apply level, not here.
      */
-    private fun composeLtp(contributors: List<Assignment>, moveInDarkArmed: Set<String> = emptySet()): PropertyValue {
+    private fun composeLtp(
+        contributors: List<Assignment>,
+        weights: FadeWeights,
+        moveInDarkArmed: Set<String> = emptySet(),
+    ): PropertyValue {
         // Snap before the winner-by-priority logic: at fade start the outgoing cue wins on
         // fadeWeight tie-break and would short-circuit to outgoing.value, but moveInDark
         // wants the incoming position immediately.
@@ -390,24 +475,35 @@ class CueAssignmentResolver {
             if (moveInDark != null) return moveInDark.value
         }
 
-        // Winner = highest priority; tie-break = highest fade weight (more recent).
-        val winner = contributors.maxWithOrNull(
-            compareBy<Assignment>({ it.priority }, { it.fadeWeight })
-        ) ?: return contributors.first().value
+        // Winner = highest priority; tie-break = highest fade weight (more recent). Hand-rolled
+        // rather than `maxWithOrNull(compareBy(…))`: this runs per composed key per crossfade
+        // frame, and the comparator would be a fresh capture of [weights] each time.
+        var winner = firstContributor
+        var winnerWeight = weights.of(firstContributor)
+        for (i in 1 until contributors.size) {
+            val a = contributors[i]
+            val w = weights.of(a)
+            if (a.priority > winner.priority || (a.priority == winner.priority && w > winnerWeight)) {
+                winner = a
+                winnerWeight = w
+            }
+        }
 
         // Any still-contributing contributor (fadeWeight > 0) other than the winner is treated as
         // an outgoing candidate — including steady-state weight=1.0. Crossfade start has
         // outgoing at exactly 1.0 and incoming (winner) at 0.0; the earlier `< 1.0` bound
         // would exclude the outgoing and snap-cut to the incoming value. End-of-fade is
         // guarded below by `winner.fadeWeight >= 1.0`.
-        val outgoing = contributors
-            .filter { it !== winner && it.fadeWeight > 0.0 }
-            .maxByOrNull { it.priority }
+        var outgoing: Assignment? = null
+        for (a in contributors) {
+            if (a === winner || weights.of(a) <= 0.0) continue
+            if (outgoing == null || a.priority > outgoing.priority) outgoing = a
+        }
 
         // No crossfade in flight — winner's value stands.
-        if (outgoing == null || winner.fadeWeight >= 1.0) return winner.value
+        if (outgoing == null || winnerWeight >= 1.0) return winner.value
 
-        val progress = winner.fadeWeight.coerceIn(0.0, 1.0)
+        val progress = winnerWeight.coerceIn(0.0, 1.0)
 
         return when (val w = winner.value) {
             is PropertyValue.Slider -> {

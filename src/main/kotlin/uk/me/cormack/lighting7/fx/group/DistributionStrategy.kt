@@ -62,6 +62,18 @@ sealed interface DistributionStrategy {
     fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double
 
     /**
+     * Every member's offset in one call — what the FX tick path actually wants, and the hook a
+     * strategy overrides when doing the whole list at once beats doing it one member at a time
+     * (see [RANDOM], whose per-member form derives an O(n) permutation).
+     *
+     * @param members The members to calculate for, in the order the offsets are wanted
+     * @param groupSize Total number of members in the group, which is [members]`.size` on every
+     *   current call site but stays explicit to match [calculateOffset]'s contract
+     */
+    fun offsets(members: List<DistributionMemberInfo>, groupSize: Int): DoubleArray =
+        DoubleArray(members.size) { calculateOffset(members[it], groupSize) }
+
+    /**
      * Linear distribution: evenly spaced phases across the group.
      *
      * Creates a classic chase effect where each fixture fires in sequence.
@@ -141,16 +153,48 @@ sealed interface DistributionStrategy {
      * @param seed Random seed for offset calculation
      */
     data class RANDOM(val seed: Int = 0) : DistributionStrategy {
-        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
-            if (groupSize <= 1) return 0.0
+        /** One group size's permutation, published as a unit so a read can't tear across the two. */
+        private class Permutation(val groupSize: Int, val order: IntArray)
+
+        /**
+         * Last permutation derived, memoised because the shuffle is O(n) and the offset it
+         * serves is asked for once per member. Deliberately outside the data class's identity
+         * (constructor properties only), so two `RANDOM(seed)` instances stay equal — the FX
+         * plan cache compares strategies by equality.
+         *
+         * One entry, not a map: the sizes asked for come from one effect's expansion, and the
+         * only shape that alternates between them is a `GROUP_ELEMENTS` per-fixture build over
+         * members with *different* element counts — which happens once per plan build, off the
+         * tick. A miss re-shuffles rather than misanswering, and a race just recomputes the
+         * same values.
+         */
+        @Volatile
+        private var cached: Permutation? = null
+
+        private fun permutation(groupSize: Int): IntArray {
+            cached?.let { if (it.groupSize == groupSize) return it.order }
             // Deterministic Fisher-Yates shuffle to get evenly-spaced offsets in random order
             val rng = java.util.Random(seed.toLong() * 31 + groupSize)
-            val perm = (0 until groupSize).toMutableList()
-            for (i in perm.size - 1 downTo 1) {
+            val order = IntArray(groupSize) { it }
+            for (i in groupSize - 1 downTo 1) {
                 val j = rng.nextInt(i + 1)
-                perm[i] = perm[j].also { perm[j] = perm[i] }
+                val swap = order[i]
+                order[i] = order[j]
+                order[j] = swap
             }
-            return perm[member.index].toDouble() / groupSize
+            cached = Permutation(groupSize, order)
+            return order
+        }
+
+        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
+            if (groupSize <= 1) return 0.0
+            return permutation(groupSize)[member.index].toDouble() / groupSize
+        }
+
+        override fun offsets(members: List<DistributionMemberInfo>, groupSize: Int): DoubleArray {
+            if (groupSize <= 1) return DoubleArray(members.size)
+            val order = permutation(groupSize)
+            return DoubleArray(members.size) { order[members[it].index].toDouble() / groupSize }
         }
     }
 

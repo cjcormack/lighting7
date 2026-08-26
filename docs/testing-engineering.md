@@ -416,3 +416,36 @@ blind to it: a before/after pair would have measured run-to-run noise. The unit 
 and `TimedLayerFireCookTest` (a Look edit between two fires survives the next one — the memo's
 staleness hazard). Measuring C5 properly would need a scenario that GOes a cue holding a recurring
 timed layer and counts queries, not µs.
+
+**2026-08-26, selwyn.local, JDK 25** — sweep item C6 (per-tick allocation bundle). Median of
+**eight** runs each side, all in one sitting; the "before" side ran from a `git worktree` at the
+same commit rather than a stash, so the working tree was never disturbed.
+
+```
+             p50                      allocBytes/tick
+[beat]        98 →  101 µs      349,245 →  319,079   (-8.6%)
+[wall]        98 →   92 µs      341,233 →  309,562   (-9.3%)
+[chase-beat] 640 →  360 µs    2,191,854 →  921,775  (-57.9%)
+[chase-wall] 274 →  329 µs    1,038,583 →  925,855  (-10.9%)
+[crossfade]  556 →  494 µs      908,334 →  748,256  (-17.6%)   per *frame*
+[colour-beat] 224 → 220 µs      720,396 →  671,705   (-6.8%)
+```
+
+`[chase-beat]` is the headline: its per-tick allocation drops by well over half, because that
+scenario is the one with 240 elements per group and it was building a synthetic
+`DistributionMemberInfo` *and* an `EffectContext` for every one of them on every tick. Caching
+both per (expansion, strategy) removes essentially all of it. `[crossfade]`'s 160 kB is the row
+copies and the re-cook a weight tick no longer pays.
+
+**`[chase-wall]`'s p50 went the wrong way and is not explained.** Eight runs a side puts the
+medians at 274 → 329 µs while its allocation falls 11%, and the two sides' ranges (264–327 before,
+255–459 after) overlap heavily. It is the least trustworthy window in the suite — 500 ticks rather
+than 1200, so the least JIT-warmed, and its p99 swings 20× run to run. The obvious hypothesis, that
+the now-long-lived `EffectContext` array is read from old-gen memory instead of a hot TLAB, does
+not survive `[chase-beat]` improving 44% on the same structure over twice as many elements. Left
+recorded rather than explained; if it matters it needs the quieter measurement `FU-TEST-FX-BENCH-CI-GATE`
+is waiting on anyway.
+
+Both `[beat]` and `[wall]` move about 9% on allocation despite being single-fixture `SliderTarget`
+rigs with no group expansion at all — that is the `resetActiveProperties` scratch reuse, which is
+the only part of C6 those two scenarios can see.

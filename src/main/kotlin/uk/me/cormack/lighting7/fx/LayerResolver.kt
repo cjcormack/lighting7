@@ -83,41 +83,65 @@ class LayerResolver(
     @Volatile
     private var cueLayer: CueLayerSnapshot = CueLayerSnapshot.EMPTY
 
+    /**
+     * The [CueAssignmentResolver.Cook] of the last [applyAssignments] — the weight-independent
+     * grouping [reweightAssignments] recomposes. Null means "no rows", the same state
+     * [CueLayerSnapshot.EMPTY] describes.
+     *
+     * Not volatile, unlike [cueLayer]: nothing outside this class reads it, and every writer
+     * and reader is one of the three mutators below, which `FxEngine` only ever reaches from
+     * inside `cueAssignmentsLock`. That is the same lock the "row set unchanged since the last
+     * full publish" invariant rests on, so if it were ever not held the reuse would already be
+     * unsound for reasons a `@Volatile` would not fix.
+     */
+    private var cook: CueAssignmentResolver.Cook? = null
+
     /** Replace the Layer 4 state from the current set of assignments. Called on cue apply. */
-    fun applyAssignments(assignments: List<CueAssignmentResolver.Assignment>) {
+    fun applyAssignments(
+        assignments: List<CueAssignmentResolver.Assignment>,
+        weights: CueAssignmentResolver.FadeWeights = CueAssignmentResolver.FadeWeights.NONE,
+    ) {
         if (assignments.isEmpty()) {
+            cook = null
             cueLayer = CueLayerSnapshot.EMPTY
             return
         }
-        val winners = selectWinners(assignments)
+        val cooked = cueAssignmentResolver.cook(assignments)
+        cook = cooked
+        val winners = selectWinners(assignments, weights)
         publish(
-            assignments,
+            cooked,
+            weights,
             winners = winners.mapValues { (_, a) -> a.cueId },
             layerWinners = winners.mapNotNull { (key, a) -> a.layerWinner?.let { key to it } }.toMap(),
         )
     }
 
     /**
-     * Recompose the Layer 4 values from [assignments], carrying the previous snapshot's
-     * winner maps forward — the crossfade weight-tick path (~62 fps), where the assignment
-     * *set* is unchanged since the last [applyAssignments] and only per-cue weights moved.
+     * Recompose the Layer 4 values at new per-cue [weights], reusing the previous
+     * [applyAssignments]' cook *and* winner maps — the crossfade weight-tick path (~62 fps),
+     * where the assignment *set* is unchanged and only per-cue weights moved.
      *
      * Only valid under that invariant, which [FxEngine] guarantees by holding its
      * `cueAssignmentsLock` across every mutation + republish pair: any change to the row set
-     * republishes through [applyAssignments] first. Reuse is exact for the composed key set
-     * (it derives from the rows alone, not their weights); the winner *attribution* stays
-     * pinned at the weights of the last full publish rather than flipping mid-fade on a
+     * republishes through [applyAssignments] first. Reuse is exact for the cook (it derives
+     * from the rows alone, not their weights); the winner *attribution* stays pinned at the
+     * weights of the last full publish rather than flipping mid-fade on a
      * (priority, fadeWeight) tie — within the "dominant contributor" approximation
      * [CueLayerSnapshot.winners] already documents, and recomputed at end-of-fade when the
      * outgoing cue's removal republishes fully.
      */
-    fun reweightAssignments(assignments: List<CueAssignmentResolver.Assignment>) {
-        if (assignments.isEmpty()) {
+    fun reweightAssignments(weights: CueAssignmentResolver.FadeWeights) {
+        // No cook means no rows — the same state the empty-list arm of [applyAssignments]
+        // publishes. The one way to reach it with rows still live is [clearAssignments]; see
+        // there.
+        val cooked = cook
+        if (cooked == null) {
             cueLayer = CueLayerSnapshot.EMPTY
             return
         }
         val previous = cueLayer
-        publish(assignments, previous.winners, previous.layerWinners)
+        publish(cooked, weights, previous.winners, previous.layerWinners)
     }
 
     /**
@@ -126,12 +150,13 @@ class LayerResolver(
      * missed on the ~62 fps [reweightAssignments] path.
      */
     private fun publish(
-        assignments: List<CueAssignmentResolver.Assignment>,
+        cooked: CueAssignmentResolver.Cook,
+        weights: CueAssignmentResolver.FadeWeights,
         winners: Map<CueAssignmentResolver.Key, Int>,
         layerWinners: Map<CueAssignmentResolver.Key, CookWinner>,
     ) {
         cueLayer = CueLayerSnapshot(
-            index = cueAssignmentResolver.resolveIndexed(assignments),
+            index = cueAssignmentResolver.compose(cooked, weights),
             winners = winners,
             layerWinners = layerWinners,
         )
@@ -139,6 +164,7 @@ class LayerResolver(
 
     private fun selectWinners(
         assignments: List<CueAssignmentResolver.Assignment>,
+        weights: CueAssignmentResolver.FadeWeights,
     ): Map<CueAssignmentResolver.Key, CueAssignmentResolver.Assignment> {
         if (assignments.isEmpty()) return emptyMap()
         val winners = HashMap<CueAssignmentResolver.Key, CueAssignmentResolver.Assignment>()
@@ -151,8 +177,8 @@ class LayerResolver(
             if (current == null ||
                 a.priority > current.priority ||
                 (a.priority == current.priority && (
-                    a.fadeWeight > current.fadeWeight ||
-                    (a.fadeWeight == current.fadeWeight && a.cueId > current.cueId)
+                    weights.of(a) > weights.of(current) ||
+                    (weights.of(a) == weights.of(current) && a.cueId > current.cueId)
                 ))
             ) {
                 winners[key] = a
@@ -161,8 +187,18 @@ class LayerResolver(
         return winners
     }
 
-    /** Clear the Layer 4 state — equivalent to "no cue contributing". */
+    /**
+     * Clear the Layer 4 state — equivalent to "no cue contributing".
+     *
+     * **Currently unused, and only safe from a caller that also drops `FxEngine.cueAssignments`.**
+     * Dropping [cook] here is what makes it a real clear rather than a snapshot that the next
+     * full republish would recompute anyway — but it also means a later crossfade tick, whose
+     * `weightsOnly` branch fires because the engine still holds rows, finds no cook and blanks
+     * Layer 4 for the rest of the fade instead of recomposing. `FxEngine` clears by publishing
+     * an empty row list through [applyAssignments], which keeps the two sides in step.
+     */
     fun clearAssignments() {
+        cook = null
         cueLayer = CueLayerSnapshot.EMPTY
     }
 

@@ -21,6 +21,7 @@ as a one-line row.
 | [`FU-MANUAL-DEAD-ASSIGNMENTS`](#fu-manual-dead-assignments) | dead markers render after a fixture rename | Cue-authoring P6 |
 | [`FU-MANUAL-RUN-STATE-TWO-SESSIONS`](#fu-manual-run-state-two-sessions) | desk, tablet and MIDI surface agree on what GO fires | Server-owned Next, 2026-08-20 |
 | [`FU-MANUAL-CROSSFADE-C3`](#fu-manual-crossfade-c3) | crossfades stay smooth and provenance names the right cue after the C3 republish rework | Sweep C3, 2026-08-26 |
+| [`FU-MANUAL-WALLCLOCK-RATE`](#fu-manual-wallclock-rate) | an unassigned wall-clock effect no longer follows master 1's tempo | Sweep C6, 2026-08-26 |
 
 ---
 
@@ -346,6 +347,23 @@ a handful of effects running. Confirm the fade reads as smooth (no stepping, no 
 effect-covered keys), pause/resume an effect mid-fade and confirm its keys hand over cleanly, and
 at fade end check the provenance/Update views name the incoming cue — not the outgoing one — as
 the owner of shared keys. 10 minutes.
+
+---
+
+## `FU-MANUAL-WALLCLOCK-RATE`
+
+**Wall-clock effects with no rate master run unscaled** · Sweep item C6, 2026-08-26
+
+`slotFor(null)` is slot 0 — master 1 — so a wall-clock effect with no rate master was being
+scaled by master 1's `bpm / 120`. C6 gave `rateMasterSlot` a `NO_RATE_MASTER` sentinel, so it is
+now genuinely unscaled. Both shipped wall-clock effects (`CandleFlicker`, `FluorescentFlicker`)
+are STATEFUL and never read a phase, so nothing in-tree exercised the old behaviour — which is
+also why this can only be judged on the rig, with an effect written for it.
+
+**Test**: author a STANDARD + WALL_CLOCK `.fx.kts` definition (a slow colour fade over, say, 8 s)
+and run it with no rate master assigned. Move master 1 from 120 to 200 BPM and back. The effect's
+speed must not change. Then assign master 1 as its *rate* master and repeat: now it must speed up
+and slow down with the fader. 10 minutes.
 
 ---
 

@@ -231,7 +231,8 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
     /**
      * Just the per-slot rate scales (`bpm / 120`) — the wall-clock pass's snapshot. It never
      * reads ticks, so handing it a full [Frame] would allocate a per-master tick array 50
-     * times a second purely to discard it.
+     * times a second purely to discard it. The pass skips this call entirely when no effect
+     * has a rate master, which is the usual case.
      */
     fun rateScales(): DoubleArray {
         val current = bindings.slots

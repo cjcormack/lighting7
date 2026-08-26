@@ -655,6 +655,36 @@ class FxEnginePipelineTest {
         )
     }
 
+    /**
+     * A crossfade frame recomposes from the resolver's cached [CueAssignmentResolver.Cook]
+     * at the frame's weights, rather than from `copy`-ing every fading row and re-cooking.
+     * The cook is only reusable because it is a pure function of the *rows*, so a weight-only
+     * republish must land on exactly what a full one at the same weights would.
+     *
+     * The failure this catches is a field slipping into the cook that isn't weight-independent:
+     * the fade then quantises to whatever the weights were when the cue was applied, and only
+     * snaps right at end-of-fade, when the outgoing cue's removal republishes fully.
+     */
+    @Test
+    fun `a weight-only republish composes what a full republish at those weights would`() {
+        val rig = newRig(firstChannel = 1)
+        val outgoing = colourAssignment(cueId = 10, priority = 1, color = Color(255, 0, 0))
+        val incoming = colourAssignment(cueId = 20, priority = 2, color = Color(0, 0, 255))
+        rig.engine.setCueAssignments(10, listOf(outgoing))
+        rig.engine.setCueAssignments(20, listOf(incoming))
+
+        // Weight-only path: neither weight reaches 1.0, so nothing completes.
+        rig.engine.updateCueFadeWeights(mapOf(10 to 0.35, 20 to 0.65))
+        val fromReweight = rig.engine.layerResolver.current.index
+
+        // Same weights, but re-asserting the rows forces the full applyAssignments path.
+        // The weight has to be restated: setCueAssignments defaults to 1.0, which ends the fade.
+        rig.engine.setCueAssignments(20, listOf(incoming), weight = 0.65)
+        val fromFullPublish = rig.engine.layerResolver.current.index
+
+        assertEquals(fromFullPublish, fromReweight)
+    }
+
     // ─── Speed masters: one pass, N timebases ────────────────────────────────
 
     /** Frame whose slot 0 sees [tick0] and slot 1 sees [tick1]. */
@@ -804,6 +834,50 @@ class FxEnginePipelineTest {
 
         assertEquals(3_000.0, updated?.accumulatedScaledMs ?: -1.0, 1e-9, "the swap must carry the accumulator")
         assertEquals(0.75, updated?.calculateWallClockPhase() ?: -1.0, 1e-9, "so the phase does not snap to 0")
+    }
+
+    /**
+     * `rateSpeedMasterUuid == null` means **unscaled**, which is not the same as "master 1".
+     * `SpeedMasterBank.slotFor(null)` is slot 0 — master 1 — so before [FxInstance.NO_RATE_MASTER]
+     * every wall-clock effect without a rate master silently followed master 1's tempo. Invisible
+     * at the default 120 BPM (the scale is then exactly 1.0) and a rig-wide speed change the
+     * moment anything tapped master 1.
+     */
+    @Test
+    fun `a wall-clock effect with no rate master ignores master 1's tempo`() {
+        val rig = newRig(firstChannel = 1)
+        val u1 = UUID.randomUUID()
+        rig.speedMasters.load(
+            listOf(SpeedMasterSnapshot(u1, 1, "Master 1", 240.0, SpeedMasterSource.MANUAL))
+        )
+
+        fun wallClock(property: String) = FxInstance(
+            effect = SineSlider(),
+            target = SliderTarget("hex-a", property),
+            timing = FxTiming(beatDivision = 4.0),
+        ).apply { timingSource = TimingSource.WALL_CLOCK }
+
+        val unscaled = wallClock("dimmer")
+        val onMaster1 = wallClock("uv").apply { rateSpeedMasterUuid = u1 }
+        rig.engine.addEffect(unscaled)
+        rig.engine.addEffect(onMaster1)
+
+        assertEquals(FxInstance.NO_RATE_MASTER, unscaled.rateMasterSlot, "no uuid, no rate master")
+        assertEquals(0, onMaster1.rateMasterSlot, "master 1's uuid still resolves to slot 0")
+
+        // The first pass only stamps the clock (deltaMs is 0 by construction); the second
+        // carries a real elapsed time, which the sleep makes non-zero.
+        rig.engine.processWallClockTick()
+        Thread.sleep(5)
+        rig.engine.processWallClockTick()
+
+        assertTrue(unscaled.accumulatedScaledMs > 0.0, "the pass must have advanced something")
+        assertEquals(
+            2.0 * unscaled.accumulatedScaledMs,
+            onMaster1.accumulatedScaledMs,
+            1e-9,
+            "master 1 at 240 BPM scales its own subscriber x2 and leaves the other alone",
+        )
     }
 
     /**

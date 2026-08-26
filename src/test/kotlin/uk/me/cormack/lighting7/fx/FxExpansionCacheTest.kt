@@ -97,6 +97,7 @@ class FxExpansionCacheTest {
     private fun groupColourEffect(
         elementMode: ElementMode = ElementMode.FLAT,
         elementFilter: ElementFilter = ElementFilter.ALL,
+        distribution: DistributionStrategy = DistributionStrategy.UNIFIED,
     ) = FxInstance(
         effect = WindowedColour(ExtendedColour(PAINT)),
         target = ColourTarget.forGroup("bars"),
@@ -105,7 +106,7 @@ class FxExpansionCacheTest {
     ).apply {
         this.elementMode = elementMode
         this.elementFilter = elementFilter
-        distributionStrategy = DistributionStrategy.UNIFIED
+        distributionStrategy = distribution
     }
 
     private fun tick(n: Long): MasterClock.ClockTick {
@@ -288,6 +289,59 @@ class FxExpansionCacheTest {
         repeat(50) { rig.engine.processBeatTick(tick(it.toLong())) }
 
         assertEquals(emptyList(), rig.engine.fixtureKeysCoveredBy(effect))
+    }
+
+    // ---------------------------------------------------------------- distribution plans
+
+    /**
+     * The per-member offsets and [EffectContext]s ([FxDistributionPlans]) are cached on the
+     * instance beside the expansion and validated against it *by identity*, plus equality on
+     * the distribution strategy. Those are the two ways they can go stale, and neither is
+     * covered by anything above: the expansion tests all run [DistributionStrategy.UNIFIED],
+     * whose offsets are zero whatever the member count.
+     */
+    @Test
+    fun `changing the distribution strategy moves the offsets on the next tick`() {
+        val rig = newRig(barCount = 2)
+        val effect = groupColourEffect(distribution = DistributionStrategy.LINEAR)
+        rig.engine.addEffect(effect)
+
+        // 24 flat elements, step-timed, WHOLE (4 beats) each: one cycle is 24 × 4 × 24 = 2304
+        // ticks, so each element owns a 96-tick window and tick 12 sits inside the first one.
+        // Mid-window rather than on the boundary: at tick 0 the last element's offset lands
+        // exactly on the window edge and whether it paints is a floating-point coin toss.
+        rig.engine.processBeatTick(tick(12))
+        assertEquals(listOf(0), rig.paintedPixels(bar = 0))
+        assertEquals(emptyList(), rig.paintedPixels(bar = 1))
+
+        effect.distributionStrategy = DistributionStrategy.REVERSE
+        rig.clearChannels(bars = 2)
+        rig.engine.processBeatTick(tick(12))
+
+        // REVERSE puts offset 0 on the *last* element. A plan cached under LINEAR would keep
+        // painting bar 0 pixel 0 — the strategy edit would appear to do nothing.
+        assertEquals(emptyList(), rig.paintedPixels(bar = 0))
+        assertEquals(listOf(PIXELS_PER_BAR - 1), rig.paintedPixels(bar = 1))
+    }
+
+    @Test
+    fun `a repatch that grows the group rebuilds the offsets, not just the key list`() {
+        val rig = newRig(barCount = 2)
+        val effect = groupColourEffect(distribution = DistributionStrategy.LINEAR)
+        rig.engine.addEffect(effect)
+        rig.engine.processBeatTick(tick(12))
+
+        rig.fixtures.patchBars(rig.controller, barCount = 3)
+        rig.clearChannels(bars = 3)
+
+        // 36 elements now, so one cycle is 36 × 4 × 24 = 3456 ticks and flat element 24 —
+        // bar 2's first pixel — owns ticks 2304..2399. 2352 is the middle of that window.
+        rig.engine.processBeatTick(tick(2352))
+
+        // A plan still sized for 24 elements indexes out of bounds at the 25th, which the
+        // per-effect catch swallows: the new bar simply never lights.
+        assertEquals(listOf(0), rig.paintedPixels(bar = 2))
+        assertEquals(emptyList(), rig.paintedPixels(bar = 0))
     }
 
     // ---------------------------------------------------------------- version contract

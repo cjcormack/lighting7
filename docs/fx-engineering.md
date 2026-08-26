@@ -1424,6 +1424,14 @@ clock reading — pins it exactly, with no jitter tolerance.
 The rate master scales the effect's *internal cycle* only: cue-trigger scheduling
 (`delayMs`/`intervalMs`/`randomWindowMs`) is deliberately never scaled by any master.
 
+"Null → unscaled" needs a sentinel to be true. `SpeedMasterBank.slotFor(null)` is slot 0, which
+is master 1, so binding a null `rateSpeedMasterUuid` through it made every unassigned wall-clock
+effect follow master 1's tempo — exactly 1.0 at the default 120 BPM, and a rig-wide speed change
+the moment anything tapped it. `FxInstance.rateMasterSlot` therefore defaults to
+`FxInstance.NO_RATE_MASTER` (-1) and the engine binds it through `rateSlotFor`, not `slotFor`
+(sweep item C6). The wall-clock pass skips sampling `rateScales()` altogether when no effect
+holds a real slot, which is the usual case.
+
 `rateSpeedMasterUuid` is settable everywhere `speedMasterUuid` is — REST add/update, look
 effects, cue ad-hoc effects, per-application overrides, cue-edit, and sync. The two coexist
 rather than excluding each other, so an effect whose `timingSource` changes keeps both

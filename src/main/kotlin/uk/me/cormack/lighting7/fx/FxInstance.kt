@@ -418,6 +418,19 @@ class FxInstance internal constructor(
     internal var expansion: FxTargetExpansion? = null
 
     /**
+     * The per-member phase offsets and [EffectContext]s derived from [expansion] under the
+     * current [FxDynamics.distributionStrategy], cached so the tick loops stop rebuilding a
+     * synthetic member and a context per element per tick.
+     *
+     * Owned by `FxEngine.plansFor`, which is also the only thing that should read it. It
+     * validates by identity against the [expansion] the plans were built from — so an
+     * expansion rebuild invalidates these too, with no second version stamp to keep in step —
+     * plus equality on the strategy, which is the only other input.
+     */
+    @Volatile
+    internal var distributionPlans: FxDistributionPlans? = null
+
+    /**
      * Timing source for this effect.
      *
      * BEAT effects are processed on the Master Clock's BPM-synced tick loop.
@@ -445,7 +458,8 @@ class FxInstance internal constructor(
 
     /**
      * Optional rate master for WALL_CLOCK effects: the effective cycle is scaled by the
-     * master's `bpm / 120`. Null → unscaled (current behaviour preserved).
+     * master's `bpm / 120`. Null → unscaled, via the [NO_RATE_MASTER] sentinel — resolving it
+     * to slot 0 instead would silently mean "master 1".
      */
     var rateSpeedMasterUuid: java.util.UUID? = null
 
@@ -457,9 +471,17 @@ class FxInstance internal constructor(
     @Volatile
     var speedMasterSlot: Int = 0
 
-    /** Runtime slot of [rateSpeedMasterUuid]; see [speedMasterSlot]. */
+    /**
+     * Runtime slot of [rateSpeedMasterUuid], or [NO_RATE_MASTER] when there isn't one; see
+     * [speedMasterSlot].
+     *
+     * The sentinel is why this can't just default to 0 the way [speedMasterSlot] does: slot 0
+     * is master 1, so "no rate master" resolving to it scaled every unassigned wall-clock
+     * effect by master 1's tempo — the opposite of the unscaled default [rateSpeedMasterUuid]
+     * documents.
+     */
     @Volatile
-    var rateMasterSlot: Int = 0
+    var rateMasterSlot: Int = NO_RATE_MASTER
 
     /**
      * Whether this effect targets a group (vs individual fixture).
@@ -640,5 +662,8 @@ class FxInstance internal constructor(
 
     companion object {
         private val logger = LoggerFactory.getLogger(FxInstance::class.java)
+
+        /** [rateMasterSlot] when no rate master is assigned: the effect runs unscaled. */
+        const val NO_RATE_MASTER: Int = -1
     }
 }

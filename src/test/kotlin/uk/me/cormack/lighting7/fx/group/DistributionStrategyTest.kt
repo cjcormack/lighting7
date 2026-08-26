@@ -206,6 +206,62 @@ class DistributionStrategyTest {
         assertEquals(1.0, offsets[3], 0.001)
     }
 
+    /**
+     * [DistributionStrategy.offsets] is the whole-list form the FX tick path uses, and the
+     * default implementation just maps [DistributionStrategy.calculateOffset]. [RANDOM]
+     * overrides it — its per-member form derives an O(n) permutation, so asking n times was
+     * O(n²) — and the two must not be allowed to drift apart.
+     */
+    @Test
+    fun `offsets agrees with calculateOffset for every strategy`() {
+        val strategies = listOf(
+            DistributionStrategy.LINEAR,
+            DistributionStrategy.UNIFIED,
+            DistributionStrategy.CENTER_OUT,
+            DistributionStrategy.EDGES_IN,
+            DistributionStrategy.REVERSE,
+            DistributionStrategy.SPLIT,
+            DistributionStrategy.PING_PONG,
+            DistributionStrategy.POSITIONAL,
+            DistributionStrategy.RANDOM(42),
+        )
+
+        for (groupSize in listOf(1, 2, 7, 16)) {
+            val members = (0 until groupSize).map { createMember(it, groupSize) }
+            for (strategy in strategies) {
+                assertEquals(
+                    members.map { strategy.calculateOffset(it, groupSize) },
+                    strategy.offsets(members, groupSize).toList(),
+                    "$strategy disagrees with itself at groupSize=$groupSize",
+                )
+            }
+        }
+    }
+
+    /**
+     * [RANDOM] memoises the last permutation it derived. The memo is keyed on group size and
+     * lives outside the data class's identity, so it must neither serve one size's permutation
+     * for another nor make two `RANDOM(seed)` instances unequal — the FX plan cache compares
+     * strategies by equality and would rebuild every tick if they were.
+     */
+    @Test
+    fun `RANDOM memoises per group size without changing identity`() {
+        val strategy = DistributionStrategy.RANDOM(7)
+        val small = (0 until 4).map { createMember(it, 4) }
+        val large = (0 until 9).map { createMember(it, 9) }
+
+        val smallFirst = strategy.offsets(small, 4).toList()
+        val largeOffsets = strategy.offsets(large, 9).toList()
+        val smallAgain = strategy.offsets(small, 4).toList()
+
+        assertEquals(smallFirst, smallAgain, "switching size and back must give the same offsets")
+        assertEquals(smallFirst, DistributionStrategy.RANDOM(7).offsets(small, 4).toList())
+        assertEquals(4, smallFirst.toSet().size, "a permutation gives every member a distinct slot")
+        assertEquals(9, largeOffsets.toSet().size)
+        assertEquals(DistributionStrategy.RANDOM(7), strategy, "the memo is not part of equality")
+        assertEquals(DistributionStrategy.RANDOM(7).hashCode(), strategy.hashCode())
+    }
+
     @Test
     fun `fromName returns correct strategy`() {
         assertEquals(DistributionStrategy.LINEAR, DistributionStrategy.fromName("LINEAR"))
