@@ -101,6 +101,25 @@ class CueAssignmentResolver {
 
     companion object {
         /**
+         * Flatten a [resolveIndexed]-shaped map to per-[Key] entries. The one place the
+         * nested→flat key construction lives — [resolve] and
+         * [LayerResolver.CueLayerSnapshot.state] must agree on key identity, and two copies
+         * of this loop would let them silently diverge.
+         */
+        fun flattenIndexed(
+            indexed: Map<String, Map<String, PropertyValue>>,
+        ): Map<Key, PropertyValue> {
+            if (indexed.isEmpty()) return emptyMap()
+            val out = HashMap<Key, PropertyValue>()
+            for ((targetKey, properties) in indexed) {
+                for ((propertyName, value) in properties) {
+                    out[Key.fixture(targetKey, propertyName)] = value
+                }
+            }
+            return out
+        }
+
+        /**
          * Parse the canonical string form of a [CuePropertyAssignment][uk.me.cormack.lighting7.models.CuePropertyAssignmentDto]
          * value into a typed [PropertyValue].
          *
@@ -158,43 +177,59 @@ class CueAssignmentResolver {
     }
 
     /**
-     * Resolve a flat list of assignments to a per-(targetKey, propertyName) composed value.
+     * Resolve a flat list of assignments to composed values, indexed
+     * `targetKey → propertyName → value` — the shape [LayerResolver]'s hot-path index wants,
+     * built directly so a publish doesn't also materialise a flat [Key]-keyed duplicate of
+     * the same data (or a compound [Key] per row).
      *
      * Specificity rule: when a cue asserts both a group assignment (expanded to member rows
      * with `targetIsGroup = true`) and a direct fixture-level row for the same member, the
      * fixture-level row wins. See [applySpecificity].
      *
      * Complexity: O(n) over assignments, grouped into O(distinct (key, property)) output
-     * entries. Allocates one [HashMap] per call and short-lived lists per group — acceptable
-     * because this runs on cue apply (rare), not per tick.
+     * entries. This runs on cue apply *and once per crossfade frame (~62 fps)* — a crossfade
+     * tick recomposes every live row at the frame's weights — so the nested maps and
+     * short-lived per-group lists it allocates land on a hot path; keep it lean.
      */
-    fun resolve(assignments: List<Assignment>): Map<Key, PropertyValue> {
+    fun resolveIndexed(assignments: List<Assignment>): Map<String, Map<String, PropertyValue>> {
         if (assignments.isEmpty()) return emptyMap()
 
         // Pre-pass: determine which fixture targets have a moveInDark Position assignment
         // armed by an outgoing dimmer asserting value 0. See [computeMoveInDarkArmed].
         val moveInDarkArmed = computeMoveInDarkArmed(assignments)
 
-        // Group by (targetKey, propertyName), then apply specificity (fixture beats group).
-        val grouped = HashMap<Key, MutableList<Assignment>>()
+        // Group by target then property, then apply specificity (fixture beats group).
+        val grouped = HashMap<String, HashMap<String, MutableList<Assignment>>>()
         for (a in assignments) {
-            val key = Key.fixture(a.targetKey, a.propertyName)
-            grouped.getOrPut(key) { mutableListOf() }.add(a)
+            grouped.getOrPut(a.targetKey) { HashMap() }
+                .getOrPut(a.propertyName) { mutableListOf() }
+                .add(a)
         }
 
-        val out = HashMap<Key, PropertyValue>(grouped.size)
-        for ((key, contributors) in grouped) {
-            val effective = applySpecificity(contributors)
-            if (effective.isEmpty()) continue
-            val rule = effective.first().let { it.compositionOverride.takeUnless { it == CompositionRule.UNSET } ?: it.category.defaultComposition }
-            out[key] = when (rule) {
-                CompositionRule.HTP -> composeHtp(effective)
-                CompositionRule.LTP -> composeLtp(effective, moveInDarkArmed)
-                CompositionRule.UNSET -> composeLtp(effective, moveInDarkArmed) // defensive
+        val out = HashMap<String, HashMap<String, PropertyValue>>(grouped.size)
+        for ((targetKey, properties) in grouped) {
+            val composed = HashMap<String, PropertyValue>(properties.size)
+            for ((propertyName, contributors) in properties) {
+                val effective = applySpecificity(contributors)
+                if (effective.isEmpty()) continue
+                val rule = effective.first().let { it.compositionOverride.takeUnless { it == CompositionRule.UNSET } ?: it.category.defaultComposition }
+                composed[propertyName] = when (rule) {
+                    CompositionRule.HTP -> composeHtp(effective)
+                    CompositionRule.LTP -> composeLtp(effective, moveInDarkArmed)
+                    CompositionRule.UNSET -> composeLtp(effective, moveInDarkArmed) // defensive
+                }
             }
+            if (composed.isNotEmpty()) out[targetKey] = composed
         }
         return out
     }
+
+    /**
+     * [resolveIndexed] flattened to a per-[Key] map — for one-shot composition sites (cue
+     * preview) and tests. The engine's publish path uses [resolveIndexed] directly.
+     */
+    fun resolve(assignments: List<Assignment>): Map<Key, PropertyValue> =
+        flattenIndexed(resolveIndexed(assignments))
 
     /**
      * Returns the fixture targets for which a `moveInDark`-flagged `position` row should snap
@@ -250,8 +285,12 @@ class CueAssignmentResolver {
      * Within a (targetKey, propertyName) bucket, drop group-expanded rows when any direct
      * fixture-level row is present — the direct row wins. If all rows share the same origin
      * (all direct, or all from group expansion), everything passes through.
+     *
+     * The no-group-rows fast path is load-bearing: this runs per composed key per crossfade
+     * frame, and all-direct buckets (the common case) must not pay a list copy each time.
      */
     private fun applySpecificity(contributors: List<Assignment>): List<Assignment> {
+        if (contributors.none { it.targetIsGroup }) return contributors
         val hasFixtureLevel = contributors.any { !it.targetIsGroup }
         return if (hasFixtureLevel) contributors.filter { !it.targetIsGroup } else contributors
     }

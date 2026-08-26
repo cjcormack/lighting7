@@ -199,6 +199,8 @@ class FxEngine(
         if (failures >= MAX_CONSECUTIVE_TICK_FAILURES) {
             effect.consecutiveTickFailures = 0
             effect.pause()
+            // isRunning is part of effect coverage; see [rebuildSortedSnapshots].
+            effectListEpoch.incrementAndGet()
 
             // An effect can throw part-way through its own targets — a group effect that dies on
             // member 7 has already painted 0..6 this pass. From the next pass on, a paused effect
@@ -265,6 +267,56 @@ class FxEngine(
     }
 
     /**
+     * The (fixtureKey, propertyName) set running effects cover, and the stamps it was built
+     * from, published as ONE reference — the same single-snapshot reasoning as
+     * [SuppressionSnapshot].
+     */
+    private class EffectCoverageSnapshot(
+        val covered: Set<Pair<String, String>>,
+        val effectListEpoch: Long,
+        val structureVersion: Long,
+    )
+
+    // Effect-coverage snapshot for the Layer 4 / cascade publish paths, cached until the
+    // effect list or the fixture register moves. Crossfade republishes consult this at
+    // ~62 fps and used to rebuild it per frame from a [resolveEffectFixtureKeys] walk over
+    // every active effect (sweep item C3). [effectListEpoch] is bumped immediately *after*
+    // each mutation and *before* any repaint or publish the same flow goes on to do — in
+    // [rebuildSortedSnapshots] for the map mutations, explicitly at the isRunning flips and
+    // [updateEffect]'s non-swap path (see [rebuildSortedSnapshots] for why not
+    // [emitStateUpdate]). A rebuild racing a cross-thread mutation publishes the older epoch
+    // with its set, so the next read detects the mismatch and rebuilds — one stale publish
+    // at worst, never a latch, and the mutating flow's own repaint runs on fresh coverage.
+    @Volatile private var effectCoverageCache =
+        EffectCoverageSnapshot(emptySet(), effectListEpoch = -1L, structureVersion = -1L)
+    private val effectListEpoch = java.util.concurrent.atomic.AtomicLong(0L)
+
+    /** The (fixtureKey, propertyName) pairs running effects cover — see [effectCoverageCache]. */
+    private fun coveredByRunningEffects(): Set<Pair<String, String>> {
+        // Read the stamps BEFORE the scan they cover, so a mutation landing mid-scan leaves
+        // this rebuild carrying the older stamp and the next read rebuilds.
+        val epoch = effectListEpoch.get()
+        val version = fixtures.structureVersion
+        val cached = effectCoverageCache
+        if (cached.effectListEpoch == epoch && cached.structureVersion == version) {
+            return cached.covered
+        }
+        val covered: Set<Pair<String, String>> = if (activeEffects.isEmpty()) {
+            emptySet()
+        } else buildSet {
+            for (effect in activeEffects.values) {
+                if (!effect.isRunning) continue
+                val propertyName = effect.target.propertyName
+                for (fixtureKey in resolveEffectFixtureKeys(effect)) {
+                    add(fixtureKey to propertyName)
+                }
+            }
+        }
+        effectCoverageCache = EffectCoverageSnapshot(covered, epoch, version)
+        return covered
+    }
+
+    /**
      * Should [effect] skip painting `(fixtureKey, propertyName)` this tick?
      *
      * Two independent reasons, and the order matters:
@@ -319,6 +371,14 @@ class FxEngine(
     }
 
     private fun rebuildSortedSnapshots() {
+        // Every mutation of [activeEffects] calls this immediately afterwards — before any
+        // repaint or Layer 4 publish the same flow goes on to do — which makes it the earliest
+        // reliable place to invalidate the effect-coverage cache. Bumping later (say, in
+        // [emitStateUpdate]) leaves the mutation→bump window spanning those publishes, and a
+        // publish reading stale coverage skips keys nothing will repaint. The isRunning flips
+        // ([pauseEffect]/[resumeEffect]/the tick-failure auto-pause) and [updateEffect]'s
+        // non-swap path don't come through here and bump [effectListEpoch] themselves.
+        effectListEpoch.incrementAndGet()
         synchronized(effectSnapshotLock) {
             val beat = ArrayList<FxInstance>(activeEffects.size)
             val wall = ArrayList<FxInstance>()
@@ -505,14 +565,22 @@ class FxEngine(
         val effectByKey = highestPriorityEffectByKey()
 
         // One snapshot for all three maps — this runs outside [cueAssignmentsLock], so
-        // reading them as separate fields could straddle a concurrent cue apply.
+        // reading them as separate fields could straddle a concurrent cue apply. Reads the
+        // nested [LayerResolver.CueLayerSnapshot.index], never the lazy flat `state`: this
+        // recomputes per coalesced emit during a crossfade, and only ever needs the keys and
+        // membership, so forcing the flat map would rebuild per snapshot the very duplicate
+        // sweep item C3 removed from the publish path.
         val cueLayer = layerResolver.current
-        val cueLayerState = cueLayer.state
+        val cueLayerIndex = cueLayer.index
         val cueLayerWinners = cueLayer.winners
         val cueLayerLayerWinners = cueLayer.layerWinners
 
         val keys = HashSet<CueAssignmentResolver.Key>(programmerKeys)
-        keys.addAll(cueLayerState.keys)
+        for ((targetKey, properties) in cueLayerIndex) {
+            for (propertyName in properties.keys) {
+                keys.add(CueAssignmentResolver.Key.fixture(targetKey, propertyName))
+            }
+        }
         for ((pair, _) in effectByKey) {
             keys.add(CueAssignmentResolver.Key.fixture(pair.first, pair.second))
         }
@@ -547,7 +615,7 @@ class FxEngine(
                     key.targetKey, key.propertyName, ProvenanceSource.EFFECT,
                     cueId = effect.cueId, cueStackId = effect.cueStackId, effectId = effect.id,
                 )
-                key in cueLayerState -> {
+                cueLayerIndex[key.targetKey]?.containsKey(key.propertyName) == true -> {
                     val winningCueId = cueLayerWinners[key]
                     val layer = cueLayerLayerWinners[key]
                     ProvenanceEntry(
@@ -819,6 +887,7 @@ class FxEngine(
         if (updates.isEmpty()) return
         synchronized(cueAssignmentsLock) {
             var changed = false
+            var anyCompleted = false
             for ((cueId, rawWeight) in updates) {
                 if (cueId !in cueAssignments) continue
                 val weight = rawWeight.coerceIn(0.0, 1.0)
@@ -826,12 +895,18 @@ class FxEngine(
                 if (previous == weight) continue
                 if (weight >= 1.0) {
                     cueFadeWeights.remove(cueId)
+                    anyCompleted = true
                 } else {
                     cueFadeWeights[cueId] = weight
                 }
                 changed = true
             }
-            if (changed) republishCueAssignments()
+            // A weight reaching 1.0 ends that cue's fade, and it may be the *last* Layer 4
+            // publish of the crossfade: the outgoing cue's removal is a silent no-op when it
+            // contributed no rows (an effects-only cue), so nothing downstream is guaranteed
+            // to re-resolve the winner maps a weight-only republish carries forward. Resolve
+            // them here — once per fade end, not per frame.
+            if (changed) republishCueAssignments(weightsOnly = !anyCompleted)
         }
     }
 
@@ -1436,18 +1511,7 @@ class FxEngine(
     private fun publishCascadeForKeys(keys: Set<CueAssignmentResolver.Key>, fadeMs: Long = 0) {
         if (keys.isEmpty()) return
 
-        // Empty effects is the common preset-toggle case; skip the scan and transaction alloc.
-        val coveredByEffects = if (activeEffects.isEmpty()) {
-            emptySet()
-        } else buildSet {
-            for (effect in activeEffects.values) {
-                if (!effect.isRunning) continue
-                val propertyName = effect.target.propertyName
-                for (fixtureKey in resolveEffectFixtureKeys(effect)) {
-                    add(fixtureKey to propertyName)
-                }
-            }
-        }
+        val coveredByEffects = coveredByRunningEffects()
 
         if (coveredByEffects.isNotEmpty() &&
             keys.all { (it.targetKey to it.propertyName) in coveredByEffects }) {
@@ -1514,9 +1578,15 @@ class FxEngine(
         }
     }
 
-    /** Callers hold [cueAssignmentsLock]. */
-    private fun republishCueAssignments() {
-        val beforeState = layerResolver.currentCueLayerState
+    /**
+     * Callers hold [cueAssignmentsLock]. [weightsOnly] marks a crossfade weight tick: the
+     * assignment set is unchanged since the last full republish, so the winner-set resolve
+     * is skipped and the previous snapshot's winner maps are carried forward — see
+     * [LayerResolver.reweightAssignments]. Every mutation of [cueAssignments] republishes
+     * with `weightsOnly = false`, under the same lock, which is what keeps that reuse valid.
+     */
+    private fun republishCueAssignments(weightsOnly: Boolean = false) {
+        val before = layerResolver.current
         if (cueAssignments.isEmpty()) {
             layerResolver.applyAssignments(emptyList())
         } else {
@@ -1531,10 +1601,13 @@ class FxEngine(
                     }
                 }
             }
-            layerResolver.applyAssignments(flat)
+            if (weightsOnly) {
+                layerResolver.reweightAssignments(flat)
+            } else {
+                layerResolver.applyAssignments(flat)
+            }
         }
-        val afterState = layerResolver.currentCueLayerState
-        publishCueLayerToControllers(beforeState, afterState)
+        publishCueLayerToControllers(before, layerResolver.current)
         emitProvenanceUpdate()
     }
 
@@ -1546,12 +1619,14 @@ class FxEngine(
      * cascade onto controllers.
      *
      * Walks the union of (fixtureKey, propertyName) keys from the before and after cue-layer
-     * snapshots. Skips keys a currently-running effect covers (the effect tick will paint
-     * them) and fully-parked targets (park wins at transmit regardless). Otherwise opens a
-     * single [ControllerTransaction] and writes the resolved fallback via
+     * snapshots' indexes, without materialising a union key set — crossfade ticks run this
+     * per frame. Skips keys a currently-running effect covers (the effect tick will paint
+     * them; the set comes from [coveredByRunningEffects], cached until the effect list or
+     * fixture register moves) and fully-parked targets (park wins at transmit regardless).
+     * Otherwise opens a single [ControllerTransaction] and writes the resolved fallback via
      * [FxTarget.resetToFallback] — same mechanism [resetActiveProperties] uses.
      *
-     * Release semantics: when a key is in [beforeState] but not [afterState],
+     * Release semantics: when a key is in [before] but not [after],
      * [LayerResolver.fallbackFor] naturally falls through to the programmer (Layer 2, sticky
      * direct writes included) then Layer 5 (baseline), so the channel releases to whatever's
      * underneath rather than to zero.
@@ -1562,56 +1637,61 @@ class FxEngine(
      * through to the controller synchronously.
      */
     private fun publishCueLayerToControllers(
-        beforeState: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
-        afterState: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
+        before: LayerResolver.CueLayerSnapshot,
+        after: LayerResolver.CueLayerSnapshot,
     ) {
-        if (beforeState.isEmpty() && afterState.isEmpty()) return
+        val beforeIndex = before.index
+        val afterIndex = after.index
+        if (beforeIndex.isEmpty() && afterIndex.isEmpty()) return
 
-        val keys = HashSet<CueAssignmentResolver.Key>(beforeState.size + afterState.size)
-        keys.addAll(beforeState.keys)
-        keys.addAll(afterState.keys)
-
-        // Precompute the (fixtureKey, propertyName) set covered by running effects — one walk
-        // instead of re-scanning effects per Layer 4 key. The resolver already handles group
-        // expansion + multi-element keys, matching the behaviour of [isPropertyCoveredByAny].
-        val coveredByEffects = buildSet {
-            for (effect in activeEffects.values) {
-                if (!effect.isRunning) continue
-                val propertyName = effect.target.propertyName
-                for (fixtureKey in resolveEffectFixtureKeys(effect)) {
-                    add(fixtureKey to propertyName)
-                }
-            }
-        }
+        val coveredByEffects = coveredByRunningEffects()
 
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
         var wrote = false
 
-        for (key in keys) {
-            if ((key.targetKey to key.propertyName) in coveredByEffects) continue
-
-            val before = beforeState[key]
-            val after = afterState[key]
+        fun publishKey(
+            fixtureKey: String,
+            propertyName: String,
+            beforeValue: CueAssignmentResolver.PropertyValue?,
+            afterValue: CueAssignmentResolver.PropertyValue?,
+        ) {
             // Skip keys whose composed Layer 4 value didn't actually change. Crossfade ticks
             // call republish at ~60 fps; mid-fade the eased weight often quantises to the
             // same UByte for several ticks in a row, and any cue not involved in the fade
             // keeps a constant composed value the whole way through. Equality is a cheap
             // data-class check.
-            if (before == after) continue
+            if (beforeValue == afterValue) return
+            if ((fixtureKey to propertyName) in coveredByEffects) return
 
-            val typeSource = after ?: before ?: continue
-            val target = resolveTargetForCueLayerKey(key, typeSource)
+            val typeSource = afterValue ?: beforeValue ?: return
+            val target = resolveTargetForCueLayerKey(fixtureKey, propertyName, typeSource)
 
             try {
-                val fixture = fixturesWithTx.untypedGroupableFixture(key.targetKey)
-                if (allChannelsParked(target, fixture)) continue
-                val fallback = layerResolver.fallbackFor(target, fixture, key.targetKey)
+                val fixture = fixturesWithTx.untypedGroupableFixture(fixtureKey)
+                if (allChannelsParked(target, fixture)) return
+                val fallback = layerResolver.fallbackFor(target, fixture, fixtureKey)
                 target.resetToFallback(fixture, fallback)
                 wrote = true
             } catch (e: Exception) {
-                logThrottled("layer4-publish-${key.targetKey}.${key.propertyName}", e) {
-                    "FX engine: failed to publish Layer 4 for ${key.targetKey}.${key.propertyName}"
+                logThrottled("layer4-publish-$fixtureKey.$propertyName", e) {
+                    "FX engine: failed to publish Layer 4 for $fixtureKey.$propertyName"
+                }
+            }
+        }
+
+        for ((fixtureKey, afterProperties) in afterIndex) {
+            val beforeProperties = beforeIndex[fixtureKey]
+            for ((propertyName, afterValue) in afterProperties) {
+                publishKey(fixtureKey, propertyName, beforeProperties?.get(propertyName), afterValue)
+            }
+        }
+        // Keys present before but released in this publish.
+        for ((fixtureKey, beforeProperties) in beforeIndex) {
+            val afterProperties = afterIndex[fixtureKey]
+            for ((propertyName, beforeValue) in beforeProperties) {
+                if (afterProperties?.containsKey(propertyName) != true) {
+                    publishKey(fixtureKey, propertyName, beforeValue, null)
                 }
             }
         }
@@ -1619,19 +1699,24 @@ class FxEngine(
         if (wrote) transaction.apply()
     }
 
-    /** Construct the [FxTarget] for a Layer 4 [key], deriving target kind from [typeSource]. */
+    /**
+     * Construct the [FxTarget] for a Layer 4 key, deriving target kind from [typeSource].
+     * Takes the key's two strings rather than a [CueAssignmentResolver.Key] so the ~62 fps
+     * crossfade publish path doesn't materialise a compound key per changed entry.
+     */
     private fun resolveTargetForCueLayerKey(
-        key: CueAssignmentResolver.Key,
+        fixtureKey: String,
+        propertyName: String,
         typeSource: CueAssignmentResolver.PropertyValue,
     ): FxTarget = when (typeSource) {
         is CueAssignmentResolver.PropertyValue.Slider ->
-            SliderTarget(key.targetKey, key.propertyName)
+            SliderTarget(fixtureKey, propertyName)
         is CueAssignmentResolver.PropertyValue.Colour ->
-            ColourTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
+            ColourTarget(FxTargetRef.fixture(fixtureKey), propertyName)
         is CueAssignmentResolver.PropertyValue.Position ->
-            PositionTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
+            PositionTarget(FxTargetRef.fixture(fixtureKey), propertyName)
         is CueAssignmentResolver.PropertyValue.Setting ->
-            SettingTarget(key.targetKey, key.propertyName)
+            SettingTarget(fixtureKey, propertyName)
     }
 
     /**
@@ -2012,6 +2097,10 @@ class FxEngine(
         if (needsSwap) {
             activeEffects[effectId] = updated
             rebuildSortedSnapshots()
+        } else {
+            // A non-swap update can still move coverage (elementFilter changes the expansion);
+            // see [rebuildSortedSnapshots].
+            effectListEpoch.incrementAndGet()
         }
         emitStateUpdate()
         return updated
@@ -2022,6 +2111,8 @@ class FxEngine(
      */
     fun pauseEffect(effectId: Long) {
         activeEffects[effectId]?.pause()
+        // isRunning is part of effect coverage; see [rebuildSortedSnapshots].
+        effectListEpoch.incrementAndGet()
         emitStateUpdate()
     }
 
@@ -2030,6 +2121,8 @@ class FxEngine(
      */
     fun resumeEffect(effectId: Long) {
         activeEffects[effectId]?.resume()
+        // isRunning is part of effect coverage; see [rebuildSortedSnapshots].
+        effectListEpoch.incrementAndGet()
         emitStateUpdate()
     }
 
@@ -3064,6 +3157,10 @@ class FxEngine(
     }
 
     private fun emitStateUpdate() {
+        // Deliberately does NOT touch [effectListEpoch]: this is a broadcaster, and the
+        // coverage-cache invalidation must happen at the mutation itself (see
+        // [rebuildSortedSnapshots]) — the flows between a mutation and this call include the
+        // very Layer 4 publishes that consult the cache.
         // One bank snapshot for the whole emit — masterStates() maps every slot into a
         // fresh list, and calling it per effect made this O(effects x masters) allocation.
         val masterStates = speedMasters.masterStates()

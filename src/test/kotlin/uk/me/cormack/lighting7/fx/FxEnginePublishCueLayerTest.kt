@@ -391,4 +391,80 @@ class FxEnginePublishCueLayerTest {
         assertEquals(10u.toUByte(), rig.controller.currentValues[3])
         assertEquals(10u.toUByte(), rig.controller.currentValues[4])
     }
+
+    // ─── Sweep item C3: crossfade republish hot path ─────────────────────
+
+    @Test
+    fun `weight ticks reuse the winner maps and a cue mutation recomputes them`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 200u)))
+        rig.engine.setCueAssignments(11, listOf(slider(cueId = 11, priority = 2, value = 90u)))
+        val winners = rig.engine.layerResolver.current.winners
+        assertEquals(11, winners[CueAssignmentResolver.Key.fixture("hex-a", "dimmer")])
+
+        rig.engine.updateCueFadeWeights(mapOf(10 to 0.7, 11 to 0.3))
+        kotlin.test.assertSame(
+            winners, rig.engine.layerResolver.current.winners,
+            "a weight-only republish must carry the winner maps forward, not re-resolve them",
+        )
+        // The composed value still recomputes: LTP blend 200 + (90 - 200) * 0.3 = 167.
+        assertEquals(167u.toUByte(), rig.controller.currentValues[1])
+
+        rig.engine.setCueAssignments(12, listOf(slider(cueId = 12, priority = 3, value = 40u)))
+        kotlin.test.assertNotSame(
+            winners, rig.engine.layerResolver.current.winners,
+            "a row-set mutation must re-resolve the winner maps",
+        )
+    }
+
+    @Test
+    fun `a weight reaching 1_0 re-resolves the winner maps`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 200u)))
+        rig.engine.setCueAssignments(11, listOf(slider(cueId = 11, priority = 1, value = 90u)))
+        rig.engine.updateCueFadeWeights(mapOf(10 to 0.9, 11 to 0.1))
+        val pinned = rig.engine.layerResolver.current.winners
+
+        // End the fade the way CueStackManager does when the outgoing cue contributed no
+        // Layer 4 rows: its removal is a silent no-op, so this call is the fade's last
+        // publish — it must not carry the pinned winner maps into steady state.
+        rig.engine.updateCueFadeWeights(mapOf(11 to 1.0))
+        kotlin.test.assertNotSame(
+            pinned, rig.engine.layerResolver.current.winners,
+            "a completed weight must force a full winner re-resolve",
+        )
+        assertEquals(
+            11,
+            rig.engine.layerResolver.current.winners[CueAssignmentResolver.Key.fixture("hex-a", "dimmer")],
+            "steady-state attribution must reflect steady-state weights",
+        )
+    }
+
+    @Test
+    fun `an effect added mid-crossfade is respected by the next weight tick`() {
+        val rig = newRig(firstChannel = 1)
+        rig.engine.setCueAssignments(10, listOf(slider(cueId = 10, priority = 1, value = 200u)))
+        rig.engine.setCueAssignments(11, listOf(slider(cueId = 11, priority = 2, value = 90u)))
+
+        rig.engine.updateCueFadeWeights(mapOf(10 to 0.9, 11 to 0.1))
+        // LTP blend 200 + (90 - 200) * 0.1 = 189.
+        assertEquals(189u.toUByte(), rig.controller.currentValues[1])
+
+        // A running effect now covers the key; the effect-coverage cache built by the earlier
+        // publishes must be invalidated, or the next weight tick would keep painting Layer 4
+        // under the effect (visible flicker between the effect's ticks).
+        rig.engine.addEffect(
+            FxInstance(
+                effect = uk.me.cormack.lighting7.testsupport.SineSlider(),
+                target = SliderTarget("hex-a", "dimmer"),
+                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            ),
+        )
+
+        rig.engine.updateCueFadeWeights(mapOf(10 to 0.5, 11 to 0.5))
+        assertEquals(
+            189u.toUByte(), rig.controller.currentValues[1],
+            "a weight tick must skip keys a running effect covers",
+        )
+    }
 }

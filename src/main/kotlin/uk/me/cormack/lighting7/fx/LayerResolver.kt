@@ -32,7 +32,7 @@ class LayerResolver(
     private val programmer: ProgrammerStore,
 ) {
     /**
-     * The four Layer 4 maps, published as ONE volatile reference. They must never be
+     * The Layer 4 maps, published as ONE volatile reference. They must never be
      * separate fields: readers are lock-free and consume them as a tuple — the tick loops,
      * provenance ([FxEngine.computeProvenance]), and the Update checklist
      * ([FxEngine.underlyingSources]) — and a read straddling an [applyAssignments] swap of
@@ -42,14 +42,10 @@ class LayerResolver(
      */
     class CueLayerSnapshot internal constructor(
         /**
-         * Layer 4 composition output, indexed by (targetKey, propertyName). Rebuilt when
-         * cues change active state.
-         */
-        val state: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
-        /**
-         * Hot-path index keyed by fixtureKey → propertyName → value. Lets the per-tick reset
-         * path look up a Layer 4 contribution without allocating a compound
-         * `CueAssignmentResolver.Key` per call.
+         * Layer 4 composition output, keyed fixtureKey → propertyName → value — the shape
+         * [CueAssignmentResolver.resolveIndexed] builds. The hot-path index: it lets the
+         * per-tick reset path look up a Layer 4 contribution without allocating a compound
+         * `CueAssignmentResolver.Key` per call, and is the map the publish-time diff walks.
          */
         val index: Map<String, Map<String, CueAssignmentResolver.PropertyValue>>,
         /**
@@ -68,8 +64,19 @@ class LayerResolver(
          */
         val layerWinners: Map<CueAssignmentResolver.Key, CookWinner>,
     ) {
+        /**
+         * [index] flattened to (targetKey, propertyName) keys, derived on first read.
+         * Deliberately lazy: crossfade frames rebuild this snapshot at ~62 fps and nothing on
+         * that path reads the flat form — only provenance (coalesced), the Update checklist
+         * and preview/diagnostic sites do — so building it eagerly per publish duplicated the
+         * whole map for nobody (sweep item C3).
+         */
+        val state: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue> by lazy {
+            CueAssignmentResolver.flattenIndexed(index)
+        }
+
         internal companion object {
-            val EMPTY = CueLayerSnapshot(emptyMap(), emptyMap(), emptyMap(), emptyMap())
+            val EMPTY = CueLayerSnapshot(emptyMap(), emptyMap(), emptyMap())
         }
     }
 
@@ -82,13 +89,51 @@ class LayerResolver(
             cueLayer = CueLayerSnapshot.EMPTY
             return
         }
-        val composed = cueAssignmentResolver.resolve(assignments)
         val winners = selectWinners(assignments)
-        cueLayer = CueLayerSnapshot(
-            state = composed,
-            index = buildIndex(composed),
+        publish(
+            assignments,
             winners = winners.mapValues { (_, a) -> a.cueId },
             layerWinners = winners.mapNotNull { (key, a) -> a.layerWinner?.let { key to it } }.toMap(),
+        )
+    }
+
+    /**
+     * Recompose the Layer 4 values from [assignments], carrying the previous snapshot's
+     * winner maps forward — the crossfade weight-tick path (~62 fps), where the assignment
+     * *set* is unchanged since the last [applyAssignments] and only per-cue weights moved.
+     *
+     * Only valid under that invariant, which [FxEngine] guarantees by holding its
+     * `cueAssignmentsLock` across every mutation + republish pair: any change to the row set
+     * republishes through [applyAssignments] first. Reuse is exact for the composed key set
+     * (it derives from the rows alone, not their weights); the winner *attribution* stays
+     * pinned at the weights of the last full publish rather than flipping mid-fade on a
+     * (priority, fadeWeight) tie — within the "dominant contributor" approximation
+     * [CueLayerSnapshot.winners] already documents, and recomputed at end-of-fade when the
+     * outgoing cue's removal republishes fully.
+     */
+    fun reweightAssignments(assignments: List<CueAssignmentResolver.Assignment>) {
+        if (assignments.isEmpty()) {
+            cueLayer = CueLayerSnapshot.EMPTY
+            return
+        }
+        val previous = cueLayer
+        publish(assignments, previous.winners, previous.layerWinners)
+    }
+
+    /**
+     * The one place a non-empty snapshot is composed and swapped in, so a future
+     * [CueLayerSnapshot] field can't be threaded through [applyAssignments] and silently
+     * missed on the ~62 fps [reweightAssignments] path.
+     */
+    private fun publish(
+        assignments: List<CueAssignmentResolver.Assignment>,
+        winners: Map<CueAssignmentResolver.Key, Int>,
+        layerWinners: Map<CueAssignmentResolver.Key, CookWinner>,
+    ) {
+        cueLayer = CueLayerSnapshot(
+            index = cueAssignmentResolver.resolveIndexed(assignments),
+            winners = winners,
+            layerWinners = layerWinners,
         )
     }
 
@@ -114,17 +159,6 @@ class LayerResolver(
             }
         }
         return winners
-    }
-
-    private fun buildIndex(
-        composed: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
-    ): Map<String, Map<String, CueAssignmentResolver.PropertyValue>> {
-        if (composed.isEmpty()) return emptyMap()
-        val idx = HashMap<String, HashMap<String, CueAssignmentResolver.PropertyValue>>()
-        for ((key, value) in composed) {
-            idx.getOrPut(key.targetKey) { HashMap() }[key.propertyName] = value
-        }
-        return idx
     }
 
     /** Clear the Layer 4 state — equivalent to "no cue contributing". */

@@ -357,3 +357,40 @@ measure C2 and was corrected in the same change.
 are disjoint (1.309–1.400 MB vs 1.016–1.055 MB) rather than overlapping inside one noise band, so
 the ~22 % drop is real — it is the same 168 `HexFixture` wraps, paid per frame. C3 should be
 re-measured against this block, not the C1 one.
+
+**2026-08-26, selwyn.local, JDK 25** — sweep item C3 (crossfade republish). Median of four runs
+each side, captured back to back in one sitting. The re-measured "before" (left column) confirmed
+the item's premise was only partly spent by C1/C2: `[crossfade]` still ran the winner-set resolve,
+the effect-coverage walk and a duplicate flat `state` map per frame.
+
+```
+                  before          after C3
+[beat]        alloc 350 837       351 141    —
+[wall]        alloc 341 370       341 389    —
+[chase-beat]  alloc 2 191 780     2 196 535  —
+[chase-wall]  alloc 1 040 916     1 040 382  —
+[crossfade]   alloc 1 033 168     900 663    −12.8%
+[colour-beat] alloc 704 795       700 786    —
+```
+
+The −12.8 % on `[crossfade]`'s per-frame allocation is the honest size of C3's cuts (winner maps
+carried forward on weight ticks, effect coverage cached on a mutation-bumped epoch, the flat
+`Key`-keyed composition map made lazy, plus the review round's `applySpecificity` fast path and
+compound-`Key` removals) — and the figure is *readable*: the before runs varied by 93 bytes, the
+after runs by 14 kB, nothing like the 100 kB band C1 saw. Every other scenario is flat, as it
+should be — none of them tick fade weights.
+
+**The timing columns from this capture are deliberately not recorded.** The after-runs' p50
+varied 485–975 µs on identical `[crossfade]` code (and the *unchanged* scenarios drifted the same
+way — `[chase-wall]` p99 spiked to 11.5 ms), so that column measured the machine, not the change.
+An earlier same-sitting capture with quieter timings read `[crossfade]` p50 as flat (612 → 608 µs):
+the frame's remaining time is what a weight tick genuinely must redo — recomposing 336 keys and
+writing ~168 moved colour fallbacks — which is C6's target, not C3's. The half of C3 no
+single-threaded benchmark can see is the lock: everything the item removed ran inside
+`cueAssignmentsLock`, which programmer writes contend for.
+
+Two capture notes. Absolute numbers this session are ~40 % below the 2026-08-24 session across
+every scenario, unchanged code included — the same environment effect the C0 block warns about.
+And the crossfade rig runs its `FxEngine` without `start()`, so `emitProvenanceUpdate` computes
+provenance *synchronously inside every measured frame* rather than coalescing as it does live —
+`[crossfade]` numbers include a per-frame provenance recompute a real desk pays ~20×/s at most.
