@@ -85,7 +85,7 @@ class FxEngineBenchmark {
         const val CHASE_BEAT_TICKS = 1_200
         const val CHASE_WALL_TICKS = 500
 
-        /** 5 s of crossfade at `CueStackManager.CROSSFADE_TICK_MS` (16 ms) ≈ 312 frames. */
+        /** 5 s of crossfade at `CueCrossfadeDriver.CROSSFADE_TICK_MS` (16 ms) ≈ 312 frames. */
         const val CROSSFADE_FRAMES = 312
 
         /** Colour rig: same fixture count as scenario 1, same tick budget as scenario 2. */

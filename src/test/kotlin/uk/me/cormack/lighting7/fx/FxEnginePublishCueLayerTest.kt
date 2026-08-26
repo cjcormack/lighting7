@@ -308,7 +308,7 @@ class FxEnginePublishCueLayerTest {
     // ─── Layer 4 crossfade-weight integration ───────────────────────────────
     //
     // Drives [FxEngine.updateCueFadeWeights] directly, covering the composition behaviour
-    // that [CueStackManager.runCrossfade] ticks each frame (Layer 4 only — effects snap on
+    // that [CueCrossfadeDriver] ticks each frame (Layer 4 only — effects snap on
     // cue transition and don't participate in the crossfade). Simulates the
     // outgoing-at-1.0 / incoming-at-0.0 start, the 0.5 / 0.5 mid-fade, and the 0.0 / 1.0 end.
 

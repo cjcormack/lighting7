@@ -107,14 +107,14 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
 
         state.show.cueStackManager.activateCueInStack(state, stackId, cue1)
         assertTrue(
-            state.show.cueStackManager.runStateFor(state, stackId).autoAdvance,
+            state.show.cueStackManager.runState.runStateFor(state, stackId).autoAdvance,
             "a live timer means the stack will roll forward",
         )
 
         // What a cue-edit Live session and the surface's Pause binding both do.
         state.show.cueStackManager.pauseAutoAdvance(state, stackId)
 
-        val paused = state.show.cueStackManager.runStateFor(state, stackId)
+        val paused = state.show.cueStackManager.runState.runStateFor(state, stackId)
         assertFalse(
             paused.autoAdvance,
             "the client draws the countdown but no longer drives it: a paused timer must not " +

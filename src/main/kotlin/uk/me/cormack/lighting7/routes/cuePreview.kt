@@ -68,7 +68,7 @@ data class PreviewCueResponse(
 internal fun previewCueLook(state: State, stackId: Int, requestedCueId: Int?): PreviewCueResponse? {
     val engine = state.show.fxEngine
     val cueId = requestedCueId
-        ?: state.show.cueStackManager.effectiveNextCueId(state, stackId)
+        ?: state.show.cueStackManager.runState.effectiveNextCueId(state, stackId)
         ?: return null
 
     val applyData = transaction(state.database) {

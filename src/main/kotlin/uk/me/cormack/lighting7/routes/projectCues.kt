@@ -296,7 +296,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 // Same reasoning for the armed standby: GO already ignores an armed cue that
                 // isn't a STANDARD cue of the stack, but leaving the entry makes
                 // `standbyCueId` report a cue that no longer exists.
-                state.show.cueStackManager.clearStandbyForCue(state, resource.cueId)
+                state.show.cueStackManager.runState.clearStandbyForCue(state, resource.cueId)
                 // And its live output. Nothing else ever will: every republish path rebuilds
                 // from the DB row that no longer exists (and skips it with a warning), so a
                 // live deleted cue would otherwise keep painting its old Layer 4 rows and

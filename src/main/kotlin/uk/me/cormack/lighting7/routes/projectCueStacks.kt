@@ -377,9 +377,9 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
 
             try {
                 if (request.cueId != null) {
-                    manager.setStandby(state, stackId, request.cueId)
+                    manager.runState.setStandby(state, stackId, request.cueId)
                 } else {
-                    manager.clearStandby(state, stackId)
+                    manager.runState.clearStandby(state, stackId)
                 }
                 // No `cueStackListChanged` — the manager already broadcast the run state, and
                 // this changes nothing about the stack collection.
@@ -387,8 +387,8 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     CueStackRunStateResponse(
                         stackId = stackId,
                         activeCueId = manager.getActiveCueId(stackId),
-                        standbyCueId = manager.getStandbyCueId(stackId),
-                        nextCueId = manager.effectiveNextCueId(state, stackId),
+                        standbyCueId = manager.runState.getStandbyCueId(stackId),
+                        nextCueId = manager.runState.effectiveNextCueId(state, stackId),
                     )
                 )
             } catch (e: Exception) {
@@ -535,7 +535,7 @@ data class CueStackDetails(
     val standbyCueId: Int?,
     /**
      * The cue the next GO fires — [standbyCueId] when set, else the positional next. Server-side
-     * so a page load agrees with every other session; see `CueStackManager.effectiveNextCueId`.
+     * so a page load agrees with every other session; see `CueRunStateTracker.effectiveNextCueId`.
      */
     val nextCueId: Int?,
     val canEdit: Boolean,
@@ -678,10 +678,10 @@ private fun DaoCueStack.toCueStackDetails(
         label = label,
         cues = orderedCues,
         activeCueId = manager.getActiveCueId(id.value),
-        standbyCueId = manager.getStandbyCueId(id.value),
+        standbyCueId = manager.runState.getStandbyCueId(id.value),
         // The list overload: the cues are already loaded here, and the rules stay in the
-        // manager rather than being re-derived from `orderedCues` by the client.
-        nextCueId = manager.effectiveNextCueId(id.value, standardCueIds, loop),
+        // tracker rather than being re-derived from `orderedCues` by the client.
+        nextCueId = manager.runState.effectiveNextCueId(id.value, standardCueIds, loop),
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
     )

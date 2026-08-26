@@ -211,8 +211,8 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
     // frame for — a stale-looking `transition = false` frame carrying the newer cue. One
     // transaction for the whole walk, since each `runStateFor` would otherwise open its own.
     val runStateSnapshot = transaction(state.database) {
-        val manager = state.show.cueStackManager
-        manager.stacksWithRunState().map { manager.runStateFor(state, it) }
+        val runState = state.show.cueStackManager.runState
+        runState.stacksWithRunState().map { runState.runStateFor(state, it) }
     }
     if (runStateSnapshot.isNotEmpty()) {
         session.launch {

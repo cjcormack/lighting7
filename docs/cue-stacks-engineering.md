@@ -120,6 +120,18 @@ is next mutated.
 
 `CueStackManager` (`fx/CueStackManager.kt`) manages in-memory state for active stacks. It holds a reference to `FxEngine` but does not own effects — it delegates to FxEngine for effect lifecycle.
 
+Two halves of running a stack live beside it rather than in it, because neither needs the firing
+machinery:
+
+| Class | Owns |
+|-------|------|
+| `fx/CueCrossfadeDriver.kt` | The Layer 4 fade envelope: one in-flight fade per stack, its tick loop, and the outgoing cue it must drop if cancelled |
+| `fx/CueRunStateTracker.kt` | Standby arming, the definition of "next", `CueRunState` and its broadcast. Reached as `cueStackManager.runState` |
+
+The manager keeps the firing path and the per-stack live-cue / auto-advance bookkeeping; the
+tracker reads that bookkeeping through a `LiveStacks` snapshot rather than the mutable entry, so
+one broadcast frame can't describe two moments.
+
 ### Per-Stack State
 
 ```kotlin
@@ -127,7 +139,6 @@ data class ActiveStackState(
     val stackId: Int,
     var activeCueId: Int,
     var autoAdvanceJob: Job?,
-    var crossfadeJob: Job?,
     // Copied from the live cue at activation, so the run-state broadcast can describe
     // the stack without going back to the DB.
     var fadeDurationMs: Long?,
@@ -145,6 +156,8 @@ data class ActiveStackState(
 Stored in a `ConcurrentHashMap<Int, ActiveStackState>`.
 
 ### Standby — the armed "next"
+
+Lives in `CueRunStateTracker`, reached as `cueStackManager.runState`.
 
 `standbyCueIds: ConcurrentHashMap<Int, Int>` (`stackId → cue`) holds the cue an operator has
 armed as the next GO. It sits **beside** `activeStacks`, not inside `ActiveStackState`, for two
@@ -180,13 +193,18 @@ difference is at a non-looping boundary: `positionalCueId` returns null there, w
 | `goToCue(state, stackId, cueId, scope)` | Jump to a specific cue |
 | `deactivateStack(stackId)` | Remove all effects, cancel timers |
 | `getActiveCueId(stackId)` | Query active cue (or null) |
+| `getActiveStackIds()` | All active stack IDs |
+| `isStackActive(stackId)` | Check if active |
+
+On `cueStackManager.runState` (`CueRunStateTracker`):
+
+| Method | Description |
+|--------|-------------|
 | `setStandby(state, stackId, cueId)` / `clearStandby(state, stackId)` | Arm / disarm the next GO. Rejects a MARKER and a cue from another stack — arming is a deferred GO |
 | `getStandbyCueId(stackId)` | The explicitly armed cue, if any |
 | `effectiveNextCueId(...)` | What the next GO fires. Two overloads: one taking the stack's already-loaded cue list (for the details DTO), one that queries |
 | `runStateFor(state, stackId)` | The stack's run state, for the broadcast and the connect-time snapshot |
 | `stacksWithRunState()` | Stacks that are live or hold an armed cue — what the connect snapshot walks |
-| `getActiveStackIds()` | All active stack IDs |
-| `isStackActive(stackId)` | Check if active |
 
 ### Activate Flow
 
@@ -230,21 +248,29 @@ wall-clock paths are twins:
 
 ### Crossfade Coroutine
 
+`CueCrossfadeDriver.runFade`, launched by `CueCrossfadeDriver.start`.
+
 ```kotlin
-private suspend fun runCrossfade(outgoingIds, incomingIds, durationMs, easingCurve) {
+private suspend fun runFade(outgoingCueId, incomingCueId, durationMs, easingCurve) {
     val startTime = System.currentTimeMillis()
     while (true) {
         val progress = (elapsed / durationMs).coerceIn(0.0, 1.0)
         val eased = easingCurve.apply(progress)
-        // Outgoing: 1→0, Incoming: 0→1
-        for (id in outgoingIds) engine.getEffect(id)?.intensityMultiplier = 1.0 - eased
-        for (id in incomingIds) engine.getEffect(id)?.intensityMultiplier = eased
+        // Outgoing: 1→0, Incoming: 0→1 — one map, so the engine republishes once per tick
+        fxEngine.updateCueFadeWeights(buildMap {
+            outgoingCueId?.let { put(it, 1.0 - eased) }
+            incomingCueId?.let { put(it, eased) }
+        })
         if (progress >= 1.0) break
-        delay(16) // ~60fps
+        delay(CROSSFADE_TICK_MS) // 16 ms, ~60fps
     }
-    // Remove outgoing, ensure incoming at 1.0
+    // Remove outgoing's Layer 4, pin incoming at 1.0
 }
 ```
+
+Cancelling mid-flight (a new cue activating, or the stack stopping) drops the outgoing cue's
+assignments too — end-of-fade would have removed them, so without that they'd linger frozen at
+whatever weight the fade had reached.
 
 ### Easing Curves
 
