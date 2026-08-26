@@ -284,7 +284,7 @@ that same rank — overlaying inverts all three. Grew in the landing: the stamp 
 still-visible pre-edit entry would have matched forever. No benchmark comparison — every cost is
 off the tick; reasoned out in `docs/testing-engineering.md` §"Recorded baselines".
 
-**C6. Per-tick allocation bundle** — medium / P1 / M / opus
+~~**C6. Per-tick allocation bundle**~~ — done, `91bb7ff`. medium / P1 / M / opus
 `DistributionStrategy.RANDOM` allocates a `Random` + full Fisher-Yates per member per call
 (`DistributionStrategy.kt:143-155`, O(N²)/tick); `calculateOffset` computed twice per member
 (`FxInstance.kt:396` + call sites); anonymous `DistributionMemberInfo` + `EffectContext` per
@@ -297,6 +297,13 @@ Filed here from C3's review: each crossfade frame still copies every fading row
 moveInDark pre-pass + two-level regroup, all pure functions of the unchanged row set — verified
 safe to hoist by passing a cueId→weight lookup into the resolver and caching the buckets + armed
 set across the fade.
+Landed as four of the five, not five: `calculateOffset` was already computed once per member —
+A6 made `calculatePhaseForMember` take the offset precomputed, and the KDoc there says so.
+Grew in the landing: "skip `rateScales` when unused" turned out to be undefinable without
+settling that `slotFor(null)` is slot 0, so a wall-clock effect with *no* rate master was being
+scaled by master 1 — against both its own KDoc and CLAUDE.md. Taken as a fix (a `NO_RATE_MASTER`
+sentinel) rather than preserved, on the operator's call, with `FU-MANUAL-WALLCLOCK-RATE` for the
+rig check.
 
 **C7. `emitStateUpdate` makes cue apply O(N²)** — medium / P1 / M / opus
 `FxEngine.kt:3009-3045` maps every active effect (with group lookups) once per `addEffect`;
@@ -552,7 +559,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
-| 3 | ~~C3~~ (`d317d93`), ~~C4~~ (`638c0cb`), ~~C5~~ (`ab8c791`), C6–C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
+| 3 | ~~C3~~ (`d317d93`), ~~C4~~ (`638c0cb`), ~~C5~~ (`ab8c791`), ~~C6~~ (`91bb7ff`), C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
