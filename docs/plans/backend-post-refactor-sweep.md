@@ -233,7 +233,7 @@ Numbers and the null result in `docs/testing-engineering.md` §"Recorded baselin
 gap found and *not* fixed here — elements declaring `bundleWithColour` never receive the component
 — is filed in `docs/plans/followups.md`.
 
-**C3. Crossfade republish re-runs the full resolver at ~62 fps under a lock** — high / P1 / M / fable
+~~**C3. Crossfade republish re-runs the full resolver at ~62 fps under a lock**~~ — done, `d317d93`. high / P1 / M / fable
 *(Premise partly spent: C1 cached the per-frame `resolveEffectFixtureKeys` walk this item cites.
 Re-measure `[crossfade]` before implementing.)*
 `CROSSFADE_TICK_MS = 16` → `updateCueFadeWeights` → `republishCueAssignments` (`FxEngine.kt:1405`):
@@ -243,6 +243,11 @@ programmer writes also contend for. The resolver's own doc still claims it runs 
 (rare), not per tick" (`CueAssignmentResolver.kt:169`). **Fix:** precompute effect coverage per
 crossfade; hoist the winner-set resolve out of the per-frame path (only weights change); drop the
 `cueLayerState` duplicate map built per publish (`LayerResolver.kt:39`).
+Grew in the landing: the review moved the coverage-cache invalidation from `emitStateUpdate` to
+the mutation seam (a stale skip between mutate and broadcast is a channel nothing repaints), and
+made a weight reaching 1.0 force a full republish so winner attribution can't stay pinned past
+end-of-fade when the outgoing cue had no Layer 4 rows. The per-frame row copies + regroup that
+remain are filed under C6. Operator check: `FU-MANUAL-CROSSFADE-C3`.
 
 **C4. Template edits can open a JDBC transaction on the 50 Hz tick loop** — high / P1 / M / opus
 `templateListChanged → registry.invalidateAll()` clears the cache and bumps the *global* version;
@@ -268,6 +273,11 @@ element per tick (`FxEngine.kt:2635` et al.); `resetActiveProperties` scratch ma
 (`:2463`); `rateScales()` DoubleArray 50/s unconditionally (`SpeedMasterBank.kt:234`). **Fix:**
 cache the permutation, return offset with phase, reuse scratch structures, skip rateScales when
 unused.
+Filed here from C3's review: each crossfade frame still copies every fading row
+(`assignment.copy(fadeWeight = …)` in `republishCueAssignments`) and re-runs `resolveIndexed`'s
+moveInDark pre-pass + two-level regroup, all pure functions of the unchanged row set — verified
+safe to hoist by passing a cueId→weight lookup into the resolver and caching the buckets + armed
+set across the fade.
 
 **C7. `emitStateUpdate` makes cue apply O(N²)** — medium / P1 / M / opus
 `FxEngine.kt:3009-3045` maps every active effect (with group lookups) once per `addEffect`;
@@ -523,7 +533,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 0 | ~~A1–A4, A11, C0~~ **done** | Data-loss + behavioural bugs, benchmark baseline. Independent, parallelizable. |
 | 1 | ~~C1~~ (`49f3b09`), ~~C2~~ (`503b50d`) **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
-| 3 | C3–C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
+| 3 | ~~C3~~ (`d317d93`), C4–C7, B1, ~~B2~~ | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | E1–E7, C8, B6, B7, F6 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |

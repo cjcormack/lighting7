@@ -20,6 +20,7 @@ as a one-line row.
 | [`FU-MANUAL-SURFACES-FLOW`](#fu-manual-surfaces-flow) | the `/surfaces` MIDI-learn flow works | Control-surface P5 |
 | [`FU-MANUAL-DEAD-ASSIGNMENTS`](#fu-manual-dead-assignments) | dead markers render after a fixture rename | Cue-authoring P6 |
 | [`FU-MANUAL-RUN-STATE-TWO-SESSIONS`](#fu-manual-run-state-two-sessions) | desk, tablet and MIDI surface agree on what GO fires | Server-owned Next, 2026-08-20 |
+| [`FU-MANUAL-CROSSFADE-C3`](#fu-manual-crossfade-c3) | crossfades stay smooth and provenance names the right cue after the C3 republish rework | Sweep C3, 2026-08-26 |
 
 ---
 
@@ -321,6 +322,21 @@ validated end-to-end.
 
 **Test**: rename a fixture in a patch, reload the cue editor, confirm dead markers appear on the
 affected rows and Remove clears them. 10 minutes.
+
+## `FU-MANUAL-CROSSFADE-C3`
+
+**Crossfade smoothness and provenance after the republish rework** · Sweep item C3, 2026-08-26
+
+C3 rebuilt what a crossfade frame recomputes: weight ticks now reuse the previous winner maps and
+a cached effect-coverage set, and the composed state is published index-first. Unit tests cover
+the composition values and the cache-invalidation edges; what they can't judge is the *feel* of a
+long fade on real fixtures, or attribution in the live UI.
+
+**Test**: run a 10 s+ crossfade between two full cues (dimmer + colour rows on every fixture) with
+a handful of effects running. Confirm the fade reads as smooth (no stepping, no flicker on
+effect-covered keys), pause/resume an effect mid-fade and confirm its keys hand over cleanly, and
+at fade end check the provenance/Update views name the incoming cue — not the outgoing one — as
+the owner of shared keys. 10 minutes.
 
 ---
 
