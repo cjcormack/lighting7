@@ -1,4 +1,4 @@
-package uk.me.cormack.lighting7.fx
+package uk.me.cormack.lighting7.models
 
 import kotlinx.serialization.Serializable
 import java.util.UUID
@@ -9,7 +9,7 @@ import java.util.UUID
  * Session 3 makes a layer's referent polymorphic. Before it, "layer" and "Look layer" were the same
  * phrase and the fields were `lookId` / `lookUuid` / `lookName`; a layer can now track a **template**
  * instead, and the two are genuinely different things rather than one thing with a flag — see
- * [uk.me.cormack.lighting7.models.DaoTemplates].
+ * [DaoTemplates].
  */
 enum class LayerSourceKind {
     LOOK,

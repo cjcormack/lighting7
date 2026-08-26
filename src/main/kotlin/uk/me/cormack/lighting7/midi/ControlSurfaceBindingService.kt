@@ -11,8 +11,8 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.fx.AssignmentHealth
-import uk.me.cormack.lighting7.fx.describeAssignmentHealth
+import uk.me.cormack.lighting7.models.AssignmentHealth
+import uk.me.cormack.lighting7.models.describeAssignmentHealth
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings

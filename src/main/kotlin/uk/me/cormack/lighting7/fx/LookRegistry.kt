@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import uk.me.cormack.lighting7.models.AssignmentHealth
 
 /**
  * One stored Look row. [target] is null for a deferred row, which takes its targets from the

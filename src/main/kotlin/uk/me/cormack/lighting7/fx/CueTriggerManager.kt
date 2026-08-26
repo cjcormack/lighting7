@@ -6,8 +6,6 @@ import kotlinx.coroutines.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.routes.createInstanceFromPreset
-import uk.me.cormack.lighting7.routes.resolveTargetForCue
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.ConcurrentHashMap
@@ -63,7 +61,7 @@ class CueTriggerManager(
      * The timed layers of [cueId] that have already fired.
      *
      * Anything that rebuilds a live cue's Layer 4 must pass this to
-     * [uk.me.cormack.lighting7.routes.buildCombinedCueLayerRows] — a Look edit, a preview or any
+     * [buildCombinedCueLayerRows] — a Look edit, a preview or any
      * other republish that omits it re-cooks the cue *without* the fired layers and so silently
      * retracts their contribution, permanently for a one-shot delay.
      */
@@ -81,14 +79,14 @@ class CueTriggerManager(
      * with non-null delayMs or intervalMs should be passed here.
      *
      * [priority] is the cue-derived Layer 4 priority (see
-     * [uk.me.cormack.lighting7.routes.cueDerivedPriority]). Timed preset fires produce Layer 4
+     * [cueDerivedPriority]). Timed preset fires produce Layer 4
      * rows at this priority so they compose consistently with the cue's apply-time rows.
      */
     internal fun activateTimedEffectsForCue(
         cueId: Int,
         cueStackId: Int?,
         priority: Int,
-        cueData: uk.me.cormack.lighting7.routes.CueApplyData,
+        cueData: CueApplyData,
         timedAdHocEffects: List<CueAdHocEffectDto>,
         scope: CoroutineScope,
     ) {
@@ -326,7 +324,7 @@ class CueTriggerManager(
     ) {
         val effectSpec = lookEffect.toEffectSpec()
         val fxTarget = try {
-            resolveTargetForCue(state, CueTargetDto(target), effectSpec)
+            EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
         } catch (e: Exception) {
             logger.warn(
                 "cue {}: timed layer on '{}' — target '{}' unresolvable — skipping effect: {}",
@@ -335,7 +333,7 @@ class CueTriggerManager(
             null
         } ?: return
 
-        val instance = createInstanceFromPreset(
+        val instance = EffectSpawner.createInstanceFromPreset(
             effectSpec, fxTarget, state = state,
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
@@ -380,7 +378,7 @@ class CueTriggerManager(
         )
 
         val fxTarget = try {
-            resolveTargetForCue(state, toggleTarget, presetEffect)
+            EffectSpawner.resolveTargetForCue(state, toggleTarget, presetEffect)
         } catch (e: Exception) {
             logger.warn(
                 "cue {}: timed ad-hoc effect on '{}' — target unresolvable — skipping: {}",
@@ -389,7 +387,7 @@ class CueTriggerManager(
             null
         } ?: return
 
-        val instance = createInstanceFromPreset(presetEffect, fxTarget, state)
+        val instance = EffectSpawner.createInstanceFromPreset(presetEffect, fxTarget, state)
         instance.cueId = cueId
         instance.cueStackId = cueStackId
 
@@ -487,7 +485,7 @@ private class TimedFireCook(
     private val state: State,
     private val cueId: Int,
     private val priority: Int,
-    private val cueData: uk.me.cormack.lighting7.routes.CueApplyData,
+    private val cueData: CueApplyData,
 ) {
     /** Scoped so an edit to some *other* template doesn't drop this cue's memo. */
     private val templateUuids: List<java.util.UUID> = cueData.layers
@@ -526,7 +524,7 @@ private class TimedFireCook(
         cooked?.let { if (firedKey == fired) return it }
 
         val rows = localRows
-            ?: uk.me.cormack.lighting7.routes.buildCueAssignmentsForCue(state.show.fixtures, cueData)
+            ?: buildCueAssignmentsForCue(state.show.fixtures, cueData)
                 .also { localRows = it }
         val result = CueComposer.cook(
             fixtures = state.show.fixtures,

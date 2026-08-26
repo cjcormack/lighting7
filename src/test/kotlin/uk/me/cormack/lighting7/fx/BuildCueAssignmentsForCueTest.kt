@@ -1,8 +1,7 @@
-package uk.me.cormack.lighting7.routes
+package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
-import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color

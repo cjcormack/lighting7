@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.routes
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
-import uk.me.cormack.lighting7.fx.AssignmentHealth
+import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto

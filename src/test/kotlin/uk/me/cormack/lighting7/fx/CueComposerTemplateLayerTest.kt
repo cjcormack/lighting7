@@ -11,6 +11,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import uk.me.cormack.lighting7.models.LayerSource
+import uk.me.cormack.lighting7.models.LayerSourceKind
 
 /**
  * A **template** layer through [CueComposer.cook] — the same cook a GO runs.

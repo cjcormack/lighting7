@@ -4,6 +4,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.models.AssignmentHealth
 
 /**
  * Shared validator for persisted `(target, propertyName)` references.

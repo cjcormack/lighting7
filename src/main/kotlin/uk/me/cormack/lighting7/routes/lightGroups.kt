@@ -294,49 +294,6 @@ private fun FixtureGroup<*>.toDetailedDto(compatibleLookIds: List<Int> = emptyLi
     )
 }
 
-internal fun FixtureGroup<*>.detectCapabilities(): List<String> {
-    val allFixtures = fixtures  // Uses allMembers (includes subgroups)
-    if (allFixtures.isEmpty()) return emptyList()
-
-    val capabilities = mutableListOf<String>()
-
-    if (allFixtures.all { it is WithDimmer }) {
-        capabilities.add("dimmer")
-    }
-    if (allFixtures.all { it is WithColour }) {
-        capabilities.add("colour")
-    }
-    if (allFixtures.all { it is WithPosition }) {
-        capabilities.add("position")
-    }
-    if (allFixtures.all { it is WithUv }) {
-        capabilities.add("uv")
-    }
-    if (allFixtures.all { it is WithStrobe }) {
-        capabilities.add("strobe")
-    }
-
-    // Also detect capabilities available via element group properties on multi-head DmxFixtures
-    val dmxFixtures = allFixtures.filterIsInstance<DmxFixture>()
-    if (dmxFixtures.size == allFixtures.size && dmxFixtures.isNotEmpty()) {
-        val allEgp = dmxFixtures.map { it.generateElementGroupPropertyDescriptors() }
-        if (allEgp.all { it != null }) {
-            val egpList = allEgp.filterNotNull()
-            if ("dimmer" !in capabilities && egpList.all { egp -> egp.any { it is GroupSliderPropertyDescriptor && it.category == "dimmer" } }) {
-                capabilities.add("dimmer")
-            }
-            if ("colour" !in capabilities && egpList.all { egp -> egp.any { it is GroupColourPropertyDescriptor } }) {
-                capabilities.add("colour")
-            }
-            if ("position" !in capabilities && egpList.all { egp -> egp.any { it is GroupPositionPropertyDescriptor } }) {
-                capabilities.add("position")
-            }
-        }
-    }
-
-    return capabilities
-}
-
 /**
  * Check whether a group supports a given property, either directly on the
  * fixtures or via multi-element fixture elements.

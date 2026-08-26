@@ -9,6 +9,7 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import uk.me.cormack.lighting7.models.LayerSource
 
 /**
  * Per-row fades through the programmer's layer stack — the half of sweep item B1 the item text

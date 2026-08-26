@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fx.LayerSource
+import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.PropertyCategory

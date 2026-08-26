@@ -8,7 +8,7 @@ import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.ExtendedColour
-import uk.me.cormack.lighting7.fx.LayerSourceDto
+import uk.me.cormack.lighting7.models.LayerSourceDto
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter

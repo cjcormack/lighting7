@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.midi
 
-import uk.me.cormack.lighting7.fx.AssignmentHealth
+import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.perf.MidiLatencyStage
 import uk.me.cormack.lighting7.perf.MidiLatencyTracker

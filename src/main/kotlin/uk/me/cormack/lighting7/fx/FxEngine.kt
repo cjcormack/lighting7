@@ -22,6 +22,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.awt.Color
+import uk.me.cormack.lighting7.models.LayerSource
 
 private val logger = LoggerFactory.getLogger("FxEngine")
 

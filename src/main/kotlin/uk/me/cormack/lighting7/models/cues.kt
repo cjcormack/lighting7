@@ -8,9 +8,6 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.json.json
 import org.jetbrains.exposed.v1.core.java.javaUUID
-import uk.me.cormack.lighting7.fx.LayerSource
-import uk.me.cormack.lighting7.fx.LayerSourceDto
-import uk.me.cormack.lighting7.fx.AssignmentHealth
 
 // ─── DTOs (used for API serialization) ──────────────────────────────────
 
@@ -451,3 +448,37 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
      */
     val isTimed: Boolean get() = delayMs != null || intervalMs != null
 }
+
+/** Convert a DaoCuePropertyAssignment entity to its DTO form. Health defaults to [AssignmentHealth.Ok]. */
+internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
+    targetType = targetType,
+    targetKey = targetKey,
+    propertyName = propertyName,
+    value = value,
+    fadeDurationMs = fadeDurationMs,
+    sortOrder = sortOrder,
+    moveInDark = moveInDark,
+)
+
+/** Convert a DaoCueAdHocEffect entity to its DTO form. */
+internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
+    targetType = targetType,
+    targetKey = targetKey,
+    effectType = effectType,
+    category = category,
+    propertyName = propertyName,
+    beatDivision = beatDivision,
+    blendMode = blendMode,
+    distribution = distribution,
+    phaseOffset = phaseOffset,
+    elementMode = elementMode,
+    elementFilter = elementFilter,
+    stepTiming = stepTiming,
+    parameters = parameters,
+    delayMs = delayMs,
+    intervalMs = intervalMs,
+    randomWindowMs = randomWindowMs,
+    sortOrder = sortOrder,
+    speedMasterUuid = speedMasterUuid?.toString(),
+    rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+)

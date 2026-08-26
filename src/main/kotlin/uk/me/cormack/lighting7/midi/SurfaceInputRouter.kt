@@ -5,8 +5,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.fx.AssignmentHealth
-import uk.me.cormack.lighting7.fx.describeAssignmentHealth
+import uk.me.cormack.lighting7.models.AssignmentHealth
+import uk.me.cormack.lighting7.models.describeAssignmentHealth
 import uk.me.cormack.lighting7.perf.MidiLatencyStage
 import uk.me.cormack.lighting7.perf.MidiLatencyTracker
 import java.util.Collections

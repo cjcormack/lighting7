@@ -11,6 +11,7 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import uk.me.cormack.lighting7.models.LayerSource
 
 /**
  * The per-row fade's trip through [CueComposer.cook] — sweep item B1.

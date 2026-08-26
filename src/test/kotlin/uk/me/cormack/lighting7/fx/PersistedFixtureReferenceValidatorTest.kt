@@ -8,6 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import uk.me.cormack.lighting7.models.AssignmentHealth
 
 /**
  * Tests for [PersistedFixtureReferenceValidator] — the shared dead-reference check used by

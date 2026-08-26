@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fx.LayerSource
+import uk.me.cormack.lighting7.models.LayerSource
 import io.ktor.client.call.body
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody

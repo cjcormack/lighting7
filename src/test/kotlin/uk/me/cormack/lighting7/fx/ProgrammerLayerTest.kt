@@ -4,8 +4,8 @@ import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
-import uk.me.cormack.lighting7.fx.LayerSource
-import uk.me.cormack.lighting7.fx.LayerSourceKind
+import uk.me.cormack.lighting7.models.LayerSource
+import uk.me.cormack.lighting7.models.LayerSourceKind
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.testsupport.WindowedSlider
 import java.util.UUID

@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
-import uk.me.cormack.lighting7.fx.LayerSource
+import uk.me.cormack.lighting7.models.LayerSource
 import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
@@ -23,6 +23,7 @@ import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import uk.me.cormack.lighting7.fx.buildCueApplyData
 
 /**
  * The touring feature: editing a Look moves every live cue that depends on it, without re-firing a

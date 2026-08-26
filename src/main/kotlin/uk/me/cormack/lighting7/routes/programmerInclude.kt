@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.routes
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fx.EffectSpawner
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
@@ -14,6 +15,8 @@ import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
+import uk.me.cormack.lighting7.fx.CueApplyData
+import uk.me.cormack.lighting7.fx.buildCueAssignmentsForCue
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.models.TargetRef
@@ -291,7 +294,7 @@ private fun spawnIncludedFx(
         }
 
         val fxTarget = try {
-            resolveTargetForCue(state, CueTargetDto(target), presetEffect)
+            EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), presetEffect)
         } catch (e: Exception) {
             logger.warn(
                 "cue {}: included fx on '{}' — target unresolvable — skipping: {}",
@@ -300,7 +303,7 @@ private fun spawnIncludedFx(
             null
         } ?: return
 
-        val instance = createInstanceFromPreset(presetEffect, fxTarget, state)
+        val instance = EffectSpawner.createInstanceFromPreset(presetEffect, fxTarget, state)
         uk.me.cormack.lighting7.routes.markProgrammerOwned(instance, true)
         instance.programmerOrigin = origin
         spawning += instance

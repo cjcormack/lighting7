@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.midi
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
-import uk.me.cormack.lighting7.fx.AssignmentHealth
+import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
 import kotlin.test.Test

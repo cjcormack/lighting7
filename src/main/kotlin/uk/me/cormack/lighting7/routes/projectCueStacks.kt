@@ -15,6 +15,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fx.CueStackManager
+import uk.me.cormack.lighting7.fx.stackCuePriorities
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 

@@ -10,7 +10,6 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.routes.*
 import uk.me.cormack.lighting7.state.State
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
@@ -202,7 +201,7 @@ class CueStackManager(
         )) {
             val effectSpec = lookEffect.toEffectSpec()
             val fxTarget = try {
-                resolveTargetForCue(state, CueTargetDto(target), effectSpec)
+                EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
             } catch (e: Exception) {
                 logger.warn(
                     "cue {}: layer on '{}' — target '{}' unresolvable — skipping effect: {}",
@@ -211,7 +210,7 @@ class CueStackManager(
                 null
             } ?: continue
 
-            val instance = createInstanceFromPreset(
+            val instance = EffectSpawner.createInstanceFromPreset(
                 effectSpec, fxTarget, state = state,
                 overrideSpeedMasterUuid = layer.speedMasterUuid,
                 overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
@@ -246,7 +245,7 @@ class CueStackManager(
                 rateSpeedMasterUuid = adHoc.rateSpeedMasterUuid,
             )
             val fxTarget = try {
-                resolveTargetForCue(state, target, presetEffectDto)
+                EffectSpawner.resolveTargetForCue(state, target, presetEffectDto)
             } catch (e: Exception) {
                 logger.warn(
                     "cue {}: ad-hoc effect on '{}' — target unresolvable — skipping: {}",
@@ -255,7 +254,7 @@ class CueStackManager(
                 null
             } ?: continue
 
-            val instance = createInstanceFromPreset(presetEffectDto, fxTarget, state)
+            val instance = EffectSpawner.createInstanceFromPreset(presetEffectDto, fxTarget, state)
             instance.cueId = cueData.cueId
             instance.cueStackId = stackId
             spawning += instance

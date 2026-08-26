@@ -11,7 +11,7 @@ import io.ktor.server.resources.post
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.fx.AssignmentHealth
+import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry

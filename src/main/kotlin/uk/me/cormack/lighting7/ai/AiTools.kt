@@ -8,6 +8,7 @@ import kotlinx.serialization.json.*
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
+import uk.me.cormack.lighting7.fixture.group.detectCapabilities
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.models.*

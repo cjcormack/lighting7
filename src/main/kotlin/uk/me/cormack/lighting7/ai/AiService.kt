@@ -7,9 +7,9 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.group.detectCapabilities
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.routes.detectCapabilities
 import uk.me.cormack.lighting7.state.State
 
 /**

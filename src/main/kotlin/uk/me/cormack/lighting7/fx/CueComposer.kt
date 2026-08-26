@@ -9,6 +9,8 @@ import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
 import java.util.UUID
+import uk.me.cormack.lighting7.models.LayerSource
+import uk.me.cormack.lighting7.models.LayerSourceKind
 
 private val logger = LoggerFactory.getLogger("CueComposer")
 
@@ -575,7 +577,7 @@ internal object CueComposer {
             // may spell the property any of the three ways.
             val canonical = resolved?.propertyName ?: canonicalPropertyName(p.propertyName)
             if (mask != null && !maskAllows(mask, maskGroupForProperty(p.fixture, canonical))) continue
-            val categoryInfo = uk.me.cormack.lighting7.routes.fixtureCategoryFor(p.fixture, canonical)
+            val categoryInfo = fixtureCategoryFor(p.fixture, canonical)
             if (categoryInfo == null) {
                 logger.warn(
                     "cue {}: {} '{}' — property '{}' not on '{}' — skipping",

@@ -1,9 +1,8 @@
-package uk.me.cormack.lighting7.routes
+package uk.me.cormack.lighting7.fx
 
 import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
-import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
@@ -23,6 +22,7 @@ import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import uk.me.cormack.lighting7.routes.applyCue
 
 /**
  * `CueApplyData` has exactly one builder.

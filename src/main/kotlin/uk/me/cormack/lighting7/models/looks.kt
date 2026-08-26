@@ -8,7 +8,6 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.json.json
 import org.jetbrains.exposed.v1.core.java.javaUUID
-import uk.me.cormack.lighting7.fx.AssignmentHealth
 
 /**
  * The `targetType` discriminator marking a [DaoLookRows] / [DaoLookEffects] row as *deferred*:

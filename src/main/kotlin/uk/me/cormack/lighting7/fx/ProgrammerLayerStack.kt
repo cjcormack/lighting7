@@ -4,11 +4,10 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.sameTargets
-import uk.me.cormack.lighting7.routes.createInstanceFromPreset
-import uk.me.cormack.lighting7.routes.resolveTargetForCue
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
+import uk.me.cormack.lighting7.models.LayerSource
 
 private val logger = LoggerFactory.getLogger("ProgrammerLayerStack")
 
@@ -552,7 +551,7 @@ class ProgrammerLayerStack(
         val spec = effect.toEffectSpec()
             .let { if (beatDivisionOverride == null) it else it.copy(beatDivision = beatDivisionOverride) }
         val fxTarget = try {
-            resolveTargetForCue(st, CueTargetDto(target), spec)
+            EffectSpawner.resolveTargetForCue(st, CueTargetDto(target), spec)
         } catch (e: Exception) {
             logger.warn(
                 "programmer layer on '{}' — target '{}' unresolvable — skipping effect: {}",
@@ -570,7 +569,7 @@ class ProgrammerLayerStack(
         // colour is that retuning it moves everything that follows it, and a programmer layer is no
         // more exempt from that than a cue's.
         val instance = try {
-            createInstanceFromPreset(
+            EffectSpawner.createInstanceFromPreset(
                 spec, fxTarget, state = st,
                 overrideSpeedMasterUuid = layer.speedMasterUuid,
                 overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,

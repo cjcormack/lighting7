@@ -1,4 +1,4 @@
-package uk.me.cormack.lighting7.fx
+package uk.me.cormack.lighting7.models
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -11,7 +11,7 @@ import kotlinx.serialization.Serializable
  * See `docs/plans/completed/cue-authoring-unification-plan.md` §"Phase 6" for the motivating workflow and
  * `docs/plans/completed/control-surface-plan.md` §"Phase 7" for the sibling binding-health pattern this
  * intentionally mirrors — both subsystems consume the same ADT via
- * [PersistedFixtureReferenceValidator] and [uk.me.cormack.lighting7.midi.BindingHealthEvaluator].
+ * [uk.me.cormack.lighting7.fx.PersistedFixtureReferenceValidator] and [uk.me.cormack.lighting7.midi.BindingHealthEvaluator].
  * Cue consumers see [Ok] / [MissingFixture] / [MissingGroup] / [MissingProperty]; the
  * binding-specific variants are produced only by the surface evaluator.
  *

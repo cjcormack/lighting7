@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fx.LayerSource
+import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import kotlin.test.Test
 import kotlin.test.assertEquals

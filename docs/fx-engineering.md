@@ -1154,6 +1154,8 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
 | `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (28 files) |
 | `fx/TemplateColourSource.kt` | Colour-template resolution, and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
+| `fx/EffectSpawner.kt` | Stored effect spec → live `FxInstance` on a live `FxTarget`; the one spawn path for cues, triggers, the programmer stack and Include |
+| `fx/CueApply.kt` | The cue-apply domain: `CueApplyData` and its builders, cue-derived priority, Layer 4 row construction, stomp overlap |
 | `fixture/trait/WithPosition.kt` | Position trait for moving heads |
 | `fixture/trait/WithDimmer.kt` | Dimmer trait |
 | `fixture/trait/WithColour.kt` | Colour trait |

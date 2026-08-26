@@ -6,7 +6,6 @@ import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.dao.IntEntity
 import org.jetbrains.exposed.v1.dao.IntEntityClass
-import uk.me.cormack.lighting7.fx.AssignmentHealth
 
 /**
  * A **Template**: a named value for one attribute family, applied to a selection.
