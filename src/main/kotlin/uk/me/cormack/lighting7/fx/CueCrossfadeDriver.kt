@@ -11,10 +11,10 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * Drives Layer 4 crossfades between an outgoing and an incoming cue, one fade per stack.
  *
- * Each tick, the per-cue fade weight is ticked through [FxEngine.updateCueFadeWeights]
+ * Each tick, the per-cue fade weight is ticked through [CueAssignmentLayer.updateFadeWeights]
  * — outgoing from 1→0, incoming from 0→1 — so sliders / colours / positions blend
  * symmetrically rather than snap-cutting. When the fade completes, outgoing Layer 4 is
- * dropped via [FxEngine.removeCueAssignments] and incoming weight is pinned at 1.0.
+ * dropped via [CueAssignmentLayer.removeAssignments] and incoming weight is pinned at 1.0.
  *
  * Effects are NOT faded here: they are removed at the start of the cue transition (see
  * [CueStackManager.activateCueInStack]) and incoming effects start at full intensity. This
@@ -84,7 +84,7 @@ internal class CueCrossfadeDriver(
         fade.job?.cancel()
         // Mutating the removed entry is harmless: the coroutine's own clear writes to the same
         // orphaned object, and nothing reads it again.
-        fade.outgoingCueId?.let { fxEngine.removeCueAssignments(it) }
+        fade.outgoingCueId?.let { fxEngine.cueLayer.removeAssignments(it) }
         fade.outgoingCueId = null
     }
 
@@ -108,7 +108,7 @@ internal class CueCrossfadeDriver(
                     if (outgoingCueId != null) put(outgoingCueId, 1.0 - easedProgress)
                     if (incomingCueId != null) put(incomingCueId, easedProgress)
                 }
-                fxEngine.updateCueFadeWeights(updates)
+                fxEngine.cueLayer.updateFadeWeights(updates)
             }
 
             if (progress >= 1.0) break
@@ -117,10 +117,10 @@ internal class CueCrossfadeDriver(
 
         // Fade complete — drop outgoing Layer 4 contributions and pin incoming to 1.0.
         if (outgoingCueId != null) {
-            fxEngine.removeCueAssignments(outgoingCueId)
+            fxEngine.cueLayer.removeAssignments(outgoingCueId)
         }
         if (incomingCueId != null) {
-            fxEngine.updateCueFadeWeights(mapOf(incomingCueId to 1.0))
+            fxEngine.cueLayer.updateFadeWeights(mapOf(incomingCueId to 1.0))
         }
     }
 

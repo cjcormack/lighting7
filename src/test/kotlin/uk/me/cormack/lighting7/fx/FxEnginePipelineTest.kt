@@ -236,7 +236,7 @@ class FxEnginePipelineTest {
     fun `suppression is per property — the same effect elsewhere still applies`() {
         val rig = newRig(firstChannel = 1)
         // Programmer holds the dimmer; an effect on the white slider is untouched.
-        rig.engine.writeProgrammerProperty(
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.fixtures.fixture<HexFixture>("hex-a"), "dimmer",
             CueAssignmentResolver.PropertyValue.Slider(180u),
         )
@@ -258,7 +258,7 @@ class FxEnginePipelineTest {
     fun `clearing the programmer entry lets a suppressed effect resume`() {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
-        rig.engine.writeProgrammerProperty(
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, hex, "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
 
@@ -267,7 +267,7 @@ class FxEnginePipelineTest {
         rig.engine.processBeatTick(tick(0))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1], "suppressed under the programmer")
 
-        rig.engine.clearProgrammerProperty(ProgrammerOwner.WEB, hex, "dimmer")
+        rig.engine.programmer.clearProperty(ProgrammerOwner.WEB, hex, "dimmer")
         rig.engine.processBeatTick(tick(1))
         assertEquals(
             30u.toUByte(), rig.controller.currentValues[1],
@@ -280,8 +280,8 @@ class FxEnginePipelineTest {
     @Test
     fun `Worked Example 3 — HTP dimmer composition takes max across cues`() {
         val rig = newRig(firstChannel = 1)
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(cueId = 10, priority = 1, value = 100u)))
-        rig.engine.setCueAssignments(20, listOf(dimmerAssignment(cueId = 20, priority = 2, value = 180u)))
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(cueId = 10, priority = 1, value = 100u)))
+        rig.engine.cueLayer.setAssignments(20, listOf(dimmerAssignment(cueId = 20, priority = 2, value = 180u)))
 
         // With no effect running, Layer 4 publish is enough. Pump a tick to confirm the effect
         // reset path (when it runs) doesn't stomp Layer 4.
@@ -293,7 +293,7 @@ class FxEnginePipelineTest {
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
 
         // Fading cue A out: weight 0.5 scales A to 50. max(50, 180) = 180. Cue B stays dominant.
-        rig.engine.updateCueFadeWeights(mapOf(10 to 0.5))
+        rig.engine.cueLayer.updateFadeWeights(mapOf(10 to 0.5))
         rig.engine.processBeatTick(tick(1))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
     }
@@ -306,23 +306,23 @@ class FxEnginePipelineTest {
         val red = colourAssignment(cueId = 10, priority = 1, color = Color(255, 0, 0))
         val blue = colourAssignment(cueId = 20, priority = 2, color = Color(0, 0, 255))
 
-        rig.engine.setCueAssignments(10, listOf(red))
-        rig.engine.setCueAssignments(20, listOf(blue))
+        rig.engine.cueLayer.setAssignments(10, listOf(red))
+        rig.engine.cueLayer.setAssignments(20, listOf(blue))
 
         // Start of crossfade: B just triggered. Weight B = 0 pins A (red) on stage.
-        rig.engine.updateCueFadeWeights(mapOf(10 to 1.0, 20 to 0.0))
+        rig.engine.cueLayer.updateFadeWeights(mapOf(10 to 1.0, 20 to 0.0))
         assertEquals(255u.toUByte(), rig.controller.currentValues[2], "start: full red")
         assertEquals(0u.toUByte(), rig.controller.currentValues[4], "start: no blue")
 
         // Mid-crossfade at 60% into B as described in the Worked Example. The resolver uses
         // the incoming's weight as the interpolation ratio. (1-0.6)*255=102 red, 0.6*255=153 blue.
-        rig.engine.updateCueFadeWeights(mapOf(10 to 0.4, 20 to 0.6))
+        rig.engine.cueLayer.updateFadeWeights(mapOf(10 to 0.4, 20 to 0.6))
         assertEquals(102u.toUByte(), rig.controller.currentValues[2], "mid: 40% red")
         assertEquals(0u.toUByte(), rig.controller.currentValues[3], "mid: no green")
         assertEquals(153u.toUByte(), rig.controller.currentValues[4], "mid: 60% blue")
 
         // End of crossfade: pure blue.
-        rig.engine.updateCueFadeWeights(mapOf(10 to 0.0, 20 to 1.0))
+        rig.engine.cueLayer.updateFadeWeights(mapOf(10 to 0.0, 20 to 1.0))
         assertEquals(0u.toUByte(), rig.controller.currentValues[2])
         assertEquals(255u.toUByte(), rig.controller.currentValues[4])
     }
@@ -339,13 +339,13 @@ class FxEnginePipelineTest {
             dimmerAssignment(cueId = 42, priority = 1, value = 200u),
             colourAssignment(cueId = 42, priority = 1, color = amber),
         )
-        rig.engine.setCueAssignments(42, snapshot)
+        rig.engine.cueLayer.setAssignments(42, snapshot)
         assertEquals(200u.toUByte(), rig.controller.currentValues[1])
         assertEquals(255u.toUByte(), rig.controller.currentValues[2], "amber red channel")
 
         // Operator edits: dimmer = 50, colour = cyan.
         val cyan = Color(0, 255, 255)
-        rig.engine.setCueAssignments(42, listOf(
+        rig.engine.cueLayer.setAssignments(42, listOf(
             dimmerAssignment(cueId = 42, priority = 1, value = 50u),
             colourAssignment(cueId = 42, priority = 1, color = cyan),
         ))
@@ -355,7 +355,7 @@ class FxEnginePipelineTest {
         assertEquals(255u.toUByte(), rig.controller.currentValues[4], "cyan blue channel")
 
         // Discard: re-apply the snapshot. Stage reflects restored state on the next publish.
-        rig.engine.setCueAssignments(42, snapshot)
+        rig.engine.cueLayer.setAssignments(42, snapshot)
         assertEquals(200u.toUByte(), rig.controller.currentValues[1], "dimmer restored")
         assertEquals(255u.toUByte(), rig.controller.currentValues[2], "amber red restored")
         assertEquals(191u.toUByte(), rig.controller.currentValues[3], "amber green restored")
@@ -473,7 +473,7 @@ class FxEnginePipelineTest {
     @Test
     fun `cue assignments composed under a MAX-blend effect — Layer 4 baseline wins when higher`() {
         val rig = newRig(firstChannel = 1)
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 200u)))
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 200u)))
 
         // MAX-blend effect at 50 should NOT lower the Layer 4 baseline of 200.
         val effect = makeStaticDimmer(value = 50u, blendMode = BlendMode.MAX)
@@ -491,7 +491,7 @@ class FxEnginePipelineTest {
     @Test
     fun `removing the only effect covering a property resets to Layer 4 composed value`() {
         val rig = newRig(firstChannel = 1)
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 120u)))
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 120u)))
 
         val effect = makeStaticDimmer(value = 255u, blendMode = BlendMode.OVERRIDE)
         val id = rig.engine.addEffect(effect)
@@ -508,7 +508,7 @@ class FxEnginePipelineTest {
     @Test
     fun `clearing all cue assignments with an effect running — reset tick paints fallback`() {
         val rig = newRig(firstChannel = 1)
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 180u)))
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 180u)))
 
         // Effect running, Layer 4 asserted: max(180, 40) = 180.
         val effect = makeStaticDimmer(value = 40u, blendMode = BlendMode.MAX)
@@ -516,7 +516,7 @@ class FxEnginePipelineTest {
         rig.engine.processBeatTick(tick(0))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
 
-        rig.engine.clearAllCueAssignments()
+        rig.engine.cueLayer.clearAll()
         // Layer 4 cleared. Next beat tick should reset to programmer (empty) → baseline (0),
         // then compose max(0, 40) = 40.
         rig.engine.processBeatTick(tick(1))
@@ -531,7 +531,7 @@ class FxEnginePipelineTest {
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
         val red = ExtendedColour(Color(255, 0, 0), uv = 128u)
-        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(red))
+        rig.engine.programmer.writeProperty(ProgrammerOwner.WEB, hex, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(red))
 
         // Hex R/G/B at channels 2/3/4, UV at channel 7.
         assertEquals(255u.toUByte(), rig.controller.currentValues[2], "red painted")
@@ -546,19 +546,19 @@ class FxEnginePipelineTest {
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
         val red = ExtendedColour(Color(255, 0, 0))
-        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(red))
+        rig.engine.programmer.writeProperty(ProgrammerOwner.WEB, hex, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(red))
         assertEquals(255u.toUByte(), rig.controller.currentValues[2])
 
         // A raw channel write lands in the sideband; being newer than the colour entry it
         // wins recency arbitration for its channel.
-        rig.engine.writeProgrammerChannel(
+        rig.engine.programmer.writeChannel(
             ProgrammerOwner.WEB, 0, 3, 128u,
             coveringKey = CueAssignmentResolver.Key.fixture("hex-a", "rgbColour"),
         )
         assertEquals(128u.toUByte(), rig.controller.currentValues[3], "manual channel write wins")
 
         // Writing the colour again is newer still — and absorbs the sideband slot.
-        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(red))
+        rig.engine.programmer.writeProperty(ProgrammerOwner.WEB, hex, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(red))
         assertEquals(0u.toUByte(), rig.controller.currentValues[3], "programmer re-write stomps previous")
         assertNull(rig.programmerStore.getChannel(0, 3), "sideband slot absorbed by the property write")
     }
@@ -568,7 +568,7 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
-        rig.engine.writeProgrammerProperty(
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB,
             hex, "rgbColour",
             CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(255, 0, 0))),
@@ -576,7 +576,7 @@ class FxEnginePipelineTest {
         assertEquals(255u.toUByte(), rig.controller.currentValues[2], "programmer red on stage")
 
         // A cue with blue publishes underneath — the programmer keeps winning.
-        rig.engine.setCueAssignments(
+        rig.engine.cueLayer.setAssignments(
             10,
             listOf(colourAssignment(cueId = 10, priority = 1, color = Color(0, 0, 255))),
         )
@@ -584,12 +584,12 @@ class FxEnginePipelineTest {
         assertEquals(0u.toUByte(), rig.controller.currentValues[4], "cue blue held below")
 
         // Clear the programmer entry: the cue's blue lands.
-        rig.engine.clearProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour")
+        rig.engine.programmer.clearProperty(ProgrammerOwner.WEB, hex, "rgbColour")
         assertEquals(0u.toUByte(), rig.controller.currentValues[2], "red released")
         assertEquals(255u.toUByte(), rig.controller.currentValues[4], "cue blue emerges")
 
         // And removing the cue cascades to baseline.
-        rig.engine.removeCueAssignments(10)
+        rig.engine.cueLayer.removeAssignments(10)
         assertEquals(0u.toUByte(), rig.controller.currentValues[4], "cue blue cleared")
     }
 
@@ -598,14 +598,14 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
-        rig.engine.writeProgrammerProperty(
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB,
             hex, "rgbColour",
             CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(200, 100, 50), uv = 128u)),
         )
         assertEquals(200u.toUByte(), rig.controller.currentValues[2])
 
-        rig.engine.clearProgrammerProperty(ProgrammerOwner.WEB, hex, "rgbColour")
+        rig.engine.programmer.clearProperty(ProgrammerOwner.WEB, hex, "rgbColour")
         assertEquals(0u.toUByte(), rig.controller.currentValues[2], "red cleared")
         assertEquals(0u.toUByte(), rig.controller.currentValues[3], "green cleared")
         assertEquals(0u.toUByte(), rig.controller.currentValues[4], "blue cleared")
@@ -620,14 +620,14 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
         val hex = rig.fixtures.fixture<HexFixture>("hex-a")
 
-        rig.engine.writeProgrammerProperty(ProgrammerOwner.WEB, hex, "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u))
+        rig.engine.programmer.writeProperty(ProgrammerOwner.WEB, hex, "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
         assertEquals(
             CueAssignmentResolver.PropertyValue.Slider(180u),
             rig.programmerStore.get("hex-a", "dimmer")?.value?.resolved,
         )
 
-        rig.engine.clearProgrammerProperty(ProgrammerOwner.WEB, hex, "dimmer")
+        rig.engine.programmer.clearProperty(ProgrammerOwner.WEB, hex, "dimmer")
         assertEquals(0u.toUByte(), rig.controller.currentValues[1])
         assertNull(rig.programmerStore.get("hex-a", "dimmer"))
     }
@@ -635,7 +635,7 @@ class FxEnginePipelineTest {
     @Test
     fun `pipeline is deterministic across many ticks for static effects`() {
         val rig = newRig(firstChannel = 1)
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 100u)))
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 100u)))
 
         val effect = makeStaticDimmer(value = 50u, blendMode = BlendMode.ADDITIVE)
         rig.engine.addEffect(effect)
@@ -670,16 +670,16 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
         val outgoing = colourAssignment(cueId = 10, priority = 1, color = Color(255, 0, 0))
         val incoming = colourAssignment(cueId = 20, priority = 2, color = Color(0, 0, 255))
-        rig.engine.setCueAssignments(10, listOf(outgoing))
-        rig.engine.setCueAssignments(20, listOf(incoming))
+        rig.engine.cueLayer.setAssignments(10, listOf(outgoing))
+        rig.engine.cueLayer.setAssignments(20, listOf(incoming))
 
         // Weight-only path: neither weight reaches 1.0, so nothing completes.
-        rig.engine.updateCueFadeWeights(mapOf(10 to 0.35, 20 to 0.65))
+        rig.engine.cueLayer.updateFadeWeights(mapOf(10 to 0.35, 20 to 0.65))
         val fromReweight = rig.engine.layerResolver.current.index
 
         // Same weights, but re-asserting the rows forces the full applyAssignments path.
         // The weight has to be restated: setCueAssignments defaults to 1.0, which ends the fade.
-        rig.engine.setCueAssignments(20, listOf(incoming), weight = 0.65)
+        rig.engine.cueLayer.setAssignments(20, listOf(incoming), weight = 0.65)
         val fromFullPublish = rig.engine.layerResolver.current.index
 
         assertEquals(fromFullPublish, fromReweight)
@@ -926,7 +926,7 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
         // Layer 4 holds 100 — the value the stomping layer asserted, which is why the cook
         // publishes a suppression entry naming the layer beneath it.
-        rig.engine.setCueAssignments(
+        rig.engine.cueLayer.setAssignments(
             cueId = 1,
             assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
             stompSuppression = mapOf(7 to mapOf("hex-a" to setOf("dimmer"))),
@@ -955,7 +955,7 @@ class FxEnginePipelineTest {
         // layer, or pulling its amount to zero, only triggers a recook — and a recook has no
         // removed instance to bring back. Phase survives too, which a respawn would not give.
         val rig = newRig(firstChannel = 1)
-        rig.engine.setCueAssignments(
+        rig.engine.cueLayer.setAssignments(
             cueId = 1,
             assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
             stompSuppression = mapOf(7 to mapOf("hex-a" to setOf("dimmer"))),
@@ -969,7 +969,7 @@ class FxEnginePipelineTest {
         assertEquals(100u.toUByte(), rig.controller.currentValues[1], "stomped")
 
         // Re-cooked with the stomp off: same rows, no suppression.
-        rig.engine.setCueAssignments(
+        rig.engine.cueLayer.setAssignments(
             cueId = 1,
             assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
         )
@@ -985,7 +985,7 @@ class FxEnginePipelineTest {
         // switch them off — they sit alongside the cue's local rows, which already beat every
         // layer on values.
         val rig = newRig(firstChannel = 1)
-        rig.engine.setCueAssignments(
+        rig.engine.cueLayer.setAssignments(
             cueId = 1,
             assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
             stompSuppression = mapOf(7 to mapOf("hex-a" to setOf("dimmer"))),
@@ -1004,7 +1004,7 @@ class FxEnginePipelineTest {
     @Test
     fun `stomp is per property — the stomped layer's other effects still paint`() {
         val rig = newRig(firstChannel = 1)
-        rig.engine.setCueAssignments(
+        rig.engine.cueLayer.setAssignments(
             cueId = 1,
             assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
             stompSuppression = mapOf(7 to mapOf("hex-a" to setOf("dimmer"))),
@@ -1034,7 +1034,7 @@ class FxEnginePipelineTest {
         rig.programmerStore.put(
             ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(100u),
         )
-        rig.engine.setProgrammerStompSuppression(mapOf(3 to mapOf("hex-a" to setOf("dimmer"))))
+        rig.engine.cueLayer.setProgrammerStompSuppression(mapOf(3 to mapOf("hex-a" to setOf("dimmer"))))
 
         val effect = makeStaticDimmer(
             value = 30u,
@@ -1056,7 +1056,7 @@ class FxEnginePipelineTest {
         // same locked mutation as the rows. A stale entry would leave a layer's effect silenced
         // after the cue that silenced it had gone.
         val rig = newRig(firstChannel = 1)
-        rig.engine.setCueAssignments(
+        rig.engine.cueLayer.setAssignments(
             cueId = 1,
             assignments = listOf(dimmerAssignment(cueId = 1, value = 100u)),
             stompSuppression = mapOf(7 to mapOf("hex-a" to setOf("dimmer"))),
@@ -1069,7 +1069,7 @@ class FxEnginePipelineTest {
         rig.engine.processBeatTick(tick(0))
         assertEquals(100u.toUByte(), rig.controller.currentValues[1], "stomped while the cue is live")
 
-        rig.engine.removeCueAssignments(1)
+        rig.engine.cueLayer.removeAssignments(1)
         rig.engine.processBeatTick(tick(1))
 
         assertEquals(30u.toUByte(), rig.controller.currentValues[1])

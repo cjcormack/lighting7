@@ -81,8 +81,8 @@ internal fun previewCueLook(state: State, stackId: Int, requestedCueId: Int?): P
     }
 
     // What the GO leaves alone: every published cue that isn't this stack's — see
-    // [FxEngine.cueAssignmentsExcludingStack] for why the filter lives in the engine.
-    val retained = engine.cueAssignmentsExcludingStack(stackId)
+    // [CueAssignmentLayer.assignmentsExcludingStack] for why the filter lives in the engine.
+    val retained = engine.cueLayer.assignmentsExcludingStack(stackId)
 
     val incoming = buildCombinedCueLayerRows(state, cueId, applyData).rows
 

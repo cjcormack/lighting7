@@ -172,7 +172,7 @@ class LookRepublishTest : RouteIntegrationTest() {
             source = LayerSource.look(look.first, look.second, look.third),
             targets = emptyList(),
         )
-        state.show.fxEngine.setProgrammerBlind(true)
+        state.show.fxEngine.programmer.setBlind(true)
 
         rewriteLookRows(lookUuid, mapOf("hex-1" to "#0000ff"))
         republishForLookEdit(state, lookUuid)

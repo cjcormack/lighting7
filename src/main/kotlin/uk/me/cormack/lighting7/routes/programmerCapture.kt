@@ -211,7 +211,7 @@ internal fun collectProgrammerEntries(
     for (channelEntry in store.channelEntries()) {
         val top = channelEntry.slots.firstOrNull() ?: continue
         if (source == RecordSource.TOUCHED && !top.touched) continue
-        val key = state.show.fxEngine.resolveChannelCoveringKey(channelEntry.universe, channelEntry.channel)
+        val key = state.show.fxEngine.cascade.resolveChannelCoveringKey(channelEntry.universe, channelEntry.channel)
         if (key == null) {
             skips += RecordSkip(
                 universe = channelEntry.universe,

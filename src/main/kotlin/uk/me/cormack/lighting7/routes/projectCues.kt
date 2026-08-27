@@ -303,7 +303,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 // effects until the whole stack was released.
                 state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
                 state.show.fxEngine.removeEffectsForCue(resource.cueId)
-                state.show.fxEngine.removeCueAssignments(resource.cueId)
+                state.show.fxEngine.cueLayer.removeAssignments(resource.cueId)
                 state.show.fixtures.cueListChanged()
                 state.show.fixtures.cueStackListChanged()
                 if (result > 0) state.show.fixtures.promptBookChanged()

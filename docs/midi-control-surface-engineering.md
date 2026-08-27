@@ -231,7 +231,7 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 
 | Variant | Control type | Effect |
 |---|---|---|
-| `FixtureProperty(fixtureKey, propertyName)` | Continuous | Programmer write via `FxEngine.writeProgrammerProperty` (owner `surface`); value typed through `PropertyChannelResolver.toPropertyValue` |
+| `FixtureProperty(fixtureKey, propertyName)` | Continuous | Programmer write via `ProgrammerWriter.writeProperty` (owner `surface`); value typed through `PropertyChannelResolver.toPropertyValue` |
 | `GroupProperty(groupName, propertyName)` | Continuous | Same, fanned out across group members |
 | `CueStackGo(stackId)` | Button | `CueStackManager.activateAtFirstCue` or `advanceStack(FORWARD)` on press |
 | `CueStackBack(stackId)` | Button | `CueStackManager.advanceStack(BACKWARD)` |
@@ -305,7 +305,7 @@ See the `BindingTarget variants` table above. `DefaultSurfaceActions` is a fire-
 
 Press: `PropertyChannelResolver.flashPropertyValue` types the press value, clamping to `minOf(max, sliderMax)` so a Flash at 255 respects a fixture's configured lamp cap (`DmxSlider.max`). The write lands as a programmer slot (owner `flash`) and the engine publishes the composed cascade — store and wire can no longer disagree.
 
-Release: `FxEngine.clearProgrammerProperty` pops the `flash` slot and publishes the composed cascade in one transaction — the surviving owner, the cue layer, or baseline takes over immediately.
+Release: `ProgrammerWriter.clearProperty` pops the `flash` slot and publishes the composed cascade in one transaction — the surviving owner, the cue layer, or baseline takes over immediately.
 
 ## Feedback path (SurfaceFeedbackPublisher)
 
@@ -359,9 +359,9 @@ All subscribers are cancelled together on `SurfaceFeedbackPublisher.stop()`.
 
 | Surface event | Writes to | Layer | Notes |
 |---|---|---|---|
-| Fader → FixtureProperty | `FxEngine.writeProgrammerProperty` | **Layer 2 (programmer)** | Sticky; wins over cues and suppresses effects on the property |
-| Fader → GroupProperty | `FxEngine.writeProgrammerProperties` | **Layer 2 (programmer)** | Fanned to members, slots tagged with the source group |
-| Flash press | `FxEngine.writeProgrammerProperty` (owner `flash`) | **Layer 2 (programmer)** | Cleared on release; cascade republished |
+| Fader → FixtureProperty | `ProgrammerWriter.writeProperty` | **Layer 2 (programmer)** | Sticky; wins over cues and suppresses effects on the property |
+| Fader → GroupProperty | `ProgrammerWriter.writeProperties` | **Layer 2 (programmer)** | Fanned to members, slots tagged with the source group |
+| Flash press | `ProgrammerWriter.writeProperty` (owner `flash`) | **Layer 2 (programmer)** | Cleared on release; cascade republished |
 | Blackout toggle | `GlobalScalerState` (`TransmitModifier`) | **post-composition mask** | Only affects intensity categories |
 | Grand Master toggle | Same as Blackout | **post-composition mask** | Binary in v1; continuous fader deferred |
 | Bank-button press | `ActiveBankState.setBank` | *(no layer — routing state)* | Swaps the binding resolution axis |

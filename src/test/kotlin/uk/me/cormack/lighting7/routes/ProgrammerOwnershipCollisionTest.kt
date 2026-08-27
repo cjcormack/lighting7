@@ -152,7 +152,7 @@ class ProgrammerOwnershipCollisionTest : RouteIntegrationTest() {
         val owner = ProgrammerOwner.INCLUDE
 
         busk(0, 1, 40u)
-        engine.writeProgrammerGroupProperty(owner, group, "dimmer", CueAssignmentResolver.PropertyValue.Slider(90u))
+        engine.programmer.writeGroupProperty(owner, group, "dimmer", CueAssignmentResolver.PropertyValue.Slider(90u))
         assertEquals(90u.toUByte(), programmerChannel(state, 0, 1), "group write covers member 1")
         assertEquals(90u.toUByte(), programmerChannel(state, 0, 20), "group write covers member 2")
         assertEquals(
@@ -161,7 +161,7 @@ class ProgrammerOwnershipCollisionTest : RouteIntegrationTest() {
             "group-shaped writes are tagged with their source group",
         )
 
-        engine.clearProgrammerGroupProperty(owner, group, "dimmer")
+        engine.programmer.clearGroupProperty(owner, group, "dimmer")
         assertEquals(40u.toUByte(), programmerChannel(state, 0, 1), "busked value survives the group clear")
         assertNull(programmerChannel(state, 0, 20), "member without other owners fully released")
     }

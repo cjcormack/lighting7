@@ -52,8 +52,8 @@ class CueTriggerManager(
      * contributors would then sit on one (fixture, property) key inside one cue, and the LTP
      * tie-break between them falls to `HashMap` iteration order in `republishCueAssignments`.
      * Re-cooking keeps the one-row-per-key invariant globally, and publishing through
-     * [FxEngine.replaceCueAssignments] preserves an in-flight crossfade weight where
-     * `setCueAssignments` would reset it to fully-in.
+     * [CueAssignmentLayer.replaceAssignments] preserves an in-flight crossfade weight where
+     * `setAssignments` would reset it to fully-in.
      */
     private val firedTimedLooks = ConcurrentHashMap<Int, MutableSet<Int>>()
 
@@ -114,7 +114,7 @@ class CueTriggerManager(
         // the published rows are always a single cook of "apply-time layers + whatever has fired".
         // Recurring fires are therefore idempotent on Layer 4 — only the effects re-trigger — and
         // the cue's assignment list can never accumulate duplicates. Cue deactivation wipes the
-        // whole cue's Layer 4 via [FxEngine.removeCueAssignments]; no explicit retract is needed.
+        // whole cue's Layer 4 via [CueAssignmentLayer.removeAssignments]; no explicit retract is needed.
         for (layer in timedLayers) {
             val job = launchTimedAction(
                 delayMs = layer.delayMs,
@@ -136,7 +136,7 @@ class CueTriggerManager(
                 // Suppression rides along with the rows: a timed layer asserts nothing until it
                 // fires, so its arrival is exactly when a `stomp` on it must silence the layers
                 // below — and a recurring fire re-states it rather than accumulating.
-                fxEngine.replaceCueAssignments(
+                fxEngine.cueLayer.replaceAssignments(
                     mapOf(cueId to cooked.rows),
                     mapOf(cueId to cooked.stompSuppression),
                     // An arrival: a timed layer asserts nothing until it fires, so this publish is
@@ -248,13 +248,13 @@ class CueTriggerManager(
         firedTimedLooks.remove(cueId)
         cueToStack.remove(cueId)
 
-        // A fired timed layer's most recent `replaceCueAssignments` call may have left this cue's
+        // A fired timed layer's most recent `replaceAssignments` call may have left this cue's
         // within-cue stomp suppression live in the engine. Every current caller also happens to
-        // call `fxEngine.removeCueAssignments` for the same cue (immediately, or at end-of-crossfade),
+        // call `fxEngine.cueLayer.removeAssignments` for the same cue (immediately, or at end-of-crossfade),
         // which clears it as a side effect — but that pairing isn't enforced anywhere, so clear it
-        // here too rather than depend on it. See `FxEngine.clearCueStompSuppression` for why this is
+        // here too rather than depend on it. See `CueAssignmentLayer.clearStompSuppression` for why this is
         // safe mid-crossfade.
-        fxEngine.clearCueStompSuppression(cueId)
+        fxEngine.cueLayer.clearStompSuppression(cueId)
     }
 
     /**

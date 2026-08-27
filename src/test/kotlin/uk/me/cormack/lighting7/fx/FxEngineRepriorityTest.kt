@@ -41,8 +41,8 @@ class FxEngineRepriorityTest {
     fun `swapping two live cues' priorities flips the Layer 4 winner`() {
         val engine = newEngine()
         // Cue 20 sits later in the stack, so it wins.
-        engine.setCueAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1_000, value = 100u)))
-        engine.setCueAssignments(20, listOf(ltpSlider(cueId = 20, priority = 2_000, value = 200u)))
+        engine.cueLayer.setAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1_000, value = 100u)))
+        engine.cueLayer.setAssignments(20, listOf(ltpSlider(cueId = 20, priority = 2_000, value = 200u)))
         assertEquals(200u.toUByte(), engine.dimmer())
 
         // Drag cue 10 below cue 20 — the reorder route hands the new derived priorities here.
@@ -55,16 +55,16 @@ class FxEngineRepriorityTest {
     @Test
     fun `repriority leaves fade weights alone`() {
         val engine = newEngine()
-        engine.setCueAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1_000, value = 100u)))
-        engine.setCueAssignments(20, listOf(ltpSlider(cueId = 20, priority = 2_000, value = 200u)))
+        engine.cueLayer.setAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1_000, value = 100u)))
+        engine.cueLayer.setAssignments(20, listOf(ltpSlider(cueId = 20, priority = 2_000, value = 200u)))
         // Cue 20 mid-fade at a quarter in.
-        engine.updateCueFadeWeights(mapOf(20 to 0.25))
+        engine.cueLayer.updateFadeWeights(mapOf(20 to 0.25))
 
         engine.repriorityCues(mapOf(10 to 3_000))
 
         // Cue 10 now outranks cue 20, and cue 20 is still fading rather than snapped to full.
         assertEquals(100u.toUByte(), engine.dimmer())
-        engine.updateCueFadeWeights(mapOf(20 to 1.0))
+        engine.cueLayer.updateFadeWeights(mapOf(20 to 1.0))
         engine.repriorityCues(mapOf(10 to 1_000))
         assertEquals(200u.toUByte(), engine.dimmer())
     }
@@ -72,7 +72,7 @@ class FxEngineRepriorityTest {
     @Test
     fun `unchanged and unknown priorities are no-ops`() {
         val engine = newEngine()
-        engine.setCueAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1_000, value = 100u)))
+        engine.cueLayer.setAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1_000, value = 100u)))
 
         // Same priority for a live cue, plus a cue that has nothing on stage.
         assertEquals(0, engine.repriorityCues(mapOf(10 to 1_000, 99 to 5_000)))

@@ -206,7 +206,7 @@ registry all persist per rig — sharing one would make the numbers order-depend
 |---|---|---|
 | `[beat]` / `[wall]` | 4 universes × `HexFixture`, one beat + one wall-clock `SliderTarget` each (168 fixtures, 336 effects) | the original Phase 5 harness — **frozen**, it is what the 2026-04-22 baseline was measured on |
 | `[chase-beat]` / `[chase-wall]` | 40 × `LedLightbar12PixelFixture.Mode48Ch` in two groups (480 `RgbwPixel` elements), 4 group colour effects across two speed masters — FLAT and PER_FIXTURE on both tick loops | sweep C1 (per-tick target re-expansion), C2 (reflective property access on the colour write path), C6 (allocation bundle) |
-| `[crossfade]` | 168 `HexFixture`s, two cues × dimmer+colour rows (672 rows), 169 effects; drives `updateCueFadeWeights` at 62 fps | sweep C3 |
+| `[crossfade]` | 168 `HexFixture`s, two cues × dimmer+colour rows (672 rows), 169 effects; drives `cueLayer.updateFadeWeights` at 62 fps | sweep C3 |
 | `[colour-beat]` | 168 `HexFixture`s with colour effects and a half-covered programmer band | sweep C2 — scenario 2 was claimed to cover it and does not |
 | `[spawn-each]` / `[spawn-batch]` | scenario 1's fixtures, a **fresh** engine per sample, 168 dimmer effects put up as one cue GO would | sweep C7 — the only scenario that measures *adding* effects rather than ticking them |
 
@@ -232,7 +232,7 @@ pushes `processGroupEffect` down the element-expansion branch; its `RgbwPixel` e
 pay `ColourTarget.extendedComponent`'s `fixtureProperties.find {}` + `KProperty1.call`. Swap in a
 cheaper fixture and the harness still runs, still passes, and measures none of that — so each
 scenario asserts its own shape before the warmup (`fixtureKeysCoveredBy(...).size`, effect counts,
-`activeCueAssignmentIds()`). Those guards are the only thing standing between a wrong rig and
+`cueLayer.activeCueIds()`). Those guards are the only thing standing between a wrong rig and
 plausible-looking microsecond numbers.
 
 Since C1 the engine caches each effect's expansion, so those guards no longer prove it is *live* —
@@ -241,7 +241,7 @@ once and never repatches. The chase rig re-checks past a `patchListChanged()` to
 serving garbage, but the invalidation itself is covered by `FxExpansionCacheTest`, not here.
 
 The crossfade scenario measures the **single-threaded** per-frame republish cost. C3 also flags
-lock contention on `cueAssignmentsLock` with concurrent programmer writes; that is a different
+lock contention on the Layer 4 publish lock (now `CascadePublisher`'s) with concurrent programmer writes; that is a different
 shape of measurement and is deliberately not in this harness.
 
 ### Recorded baselines
@@ -394,11 +394,11 @@ An earlier same-sitting capture with quieter timings read `[crossfade]` p50 as f
 the frame's remaining time is what a weight tick genuinely must redo — recomposing 336 keys and
 writing ~168 moved colour fallbacks — which is C6's target, not C3's. The half of C3 no
 single-threaded benchmark can see is the lock: everything the item removed ran inside
-`cueAssignmentsLock`, which programmer writes contend for.
+the Layer 4 publish lock (now `CascadePublisher`'s), which programmer writes contend for.
 
 Two capture notes. Absolute numbers this session are ~40 % below the 2026-08-24 session across
 every scenario, unchanged code included — the same environment effect the C0 block warns about.
-And the crossfade rig runs its `FxEngine` without `start()`, so `emitProvenanceUpdate` computes
+And the crossfade rig runs its `FxEngine` without `start()`, so the provenance emit computes
 provenance *synchronously inside every measured frame* rather than coalescing as it does live —
 `[crossfade]` numbers include a per-frame provenance recompute a real desk pays ~20×/s at most.
 

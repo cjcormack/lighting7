@@ -148,7 +148,7 @@ class CueStackManager(
             if (!useCrossfade) {
                 // Snap path: drop outgoing Layer 4 immediately. Crossfade path keeps
                 // assignments live and ticks the weight down — removal happens at end-of-crossfade.
-                fxEngine.removeCueAssignments(outgoingCueId)
+                fxEngine.cueLayer.removeAssignments(outgoingCueId)
             }
         }
 
@@ -255,7 +255,7 @@ class CueStackManager(
         )
         val incomingStartWeight = if (useCrossfade) 0.0 else 1.0
         if (cooked.rows.isNotEmpty()) {
-            fxEngine.setCueAssignments(
+            fxEngine.cueLayer.setAssignments(
                 cueData.cueId, cooked.rows, incomingStartWeight, cueStackId = stackId,
                 stompSuppression = cooked.stompSuppression,
                 // An arrival, so the rows' own fades time it — **unless** the cue is crossfading in,
@@ -264,12 +264,12 @@ class CueStackManager(
                 honourRowFades = !useCrossfade,
             )
         } else {
-            fxEngine.removeCueAssignments(cueData.cueId)
+            fxEngine.cueLayer.removeAssignments(cueData.cueId)
         }
         // Restore outgoing to 1.0 in case a prior mid-flight crossfade left it partial.
         // `useCrossfade` already implies `outgoingCueId != null`.
         if (useCrossfade && cooked.rows.isNotEmpty()) {
-            fxEngine.updateCueFadeWeights(mapOf(outgoingCueId!! to 1.0))
+            fxEngine.cueLayer.updateFadeWeights(mapOf(outgoingCueId!! to 1.0))
         }
         if (cueData.stomp) {
             fxEngine.stompForCue(
@@ -462,7 +462,7 @@ class CueStackManager(
 
         // `removeEffectsForCueStack` below wipes effects but not Layer 4 — clear the active
         // cue's assignments here so an assignment-only cue doesn't leave stale state behind.
-        stackState?.activeCueId?.let { fxEngine.removeCueAssignments(it) }
+        stackState?.activeCueId?.let { fxEngine.cueLayer.removeAssignments(it) }
 
         // Deactivate triggers for the active cue in this stack
         appState?.cueTriggerManager?.deactivateTriggersForStack(stackId)

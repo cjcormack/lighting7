@@ -99,7 +99,7 @@ internal fun includeExpandedIntoProgrammer(
     val expanded = state.show.lookRegistry.expanded(sourceUuid)
         ?: return LookIncludeOutcome(0, emptyList(), emptyList())
 
-    val writes = ArrayList<uk.me.cormack.lighting7.fx.FxEngine.ProgrammerPropertyWrite>()
+    val writes = ArrayList<uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite>()
     val skips = ArrayList<RecordSkip>()
     val fixtureKeys = LinkedHashSet<String>()
 
@@ -142,7 +142,7 @@ internal fun includeExpandedIntoProgrammer(
                 skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MISSING_PROPERTY)
                 continue
             }
-            writes += uk.me.cormack.lighting7.fx.FxEngine.ProgrammerPropertyWrite(
+            writes += uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite(
                 fixture, propertyName, value,
                 sourceGroup = groupHints[fixtureKey to propertyName],
             )
@@ -153,7 +153,7 @@ internal fun includeExpandedIntoProgrammer(
     if (writes.isNotEmpty()) {
         // One batched write, as Include-a-cue does: a large palette is hundreds of properties and
         // per-property publishing would visibly stutter the rig.
-        state.show.fxEngine.writeProgrammerProperties(
+        state.show.fxEngine.programmer.writeProperties(
             uk.me.cormack.lighting7.fx.ProgrammerOwner.INCLUDE, writes, fadeMs = fadeMs,
         )
     }

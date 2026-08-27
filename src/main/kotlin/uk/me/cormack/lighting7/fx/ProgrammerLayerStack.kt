@@ -98,11 +98,12 @@ data class ProgrammerLayerOutcome(
  *
  * 1. **Cook outside every engine lock.** [LookRegistry.expanded] can fall through to
  *    `loadLookSnapshot`, which opens its own transaction and must never run under
- *    `FxEngine.cueAssignmentsLock`. So a recook is always: cook → [ProgrammerStore.putLayerSlots]
- *    (lock-free) → [FxEngine.republishProgrammerKeys] (which takes the lock, and is the only step
+ *    the Layer 4 publish lock (`CascadePublisher`'s, reached via `locked`). So a recook is always: cook → [ProgrammerStore.putLayerSlots]
+ *    (lock-free) → [ProgrammerWriter.republishKeys] (which takes the lock, and is the only step
  *    that does).
- * 2. **Lock order is `layersLock` → `cueAssignmentsLock`.** Nothing in `FxEngine` calls back into
- *    this class, so the reverse never arises today; it is stated so it stays that way.
+ * 2. **Lock order is `layersLock` → the publish lock.** Nothing in `CascadePublisher` or
+ *    `FxEngine` calls back into this class, so the reverse never arises today; it is stated so
+ *    it stays that way.
  * 3. **One recook per mutation.** [ProgrammerStore.mutateLayers] serialises the list edit, then the
  *    cook happens outside it — two mutations racing therefore both cook, and the later publish
  *    wins. That is correct rather than merely tolerable: both cooked from a list that really
@@ -330,7 +331,7 @@ class ProgrammerLayerStack(
         // that deliberately doesn't recook. It would be inert either way — `mintLayerId` is
         // monotonic for the life of the process, so no future layer can inherit a stale entry — but
         // relying on that makes a local invariant depend on a distant one.
-        engine().setProgrammerStompSuppression(emptyMap())
+        engine().cueLayer.setProgrammerStompSuppression(emptyMap())
     }
 
     /**
@@ -384,9 +385,9 @@ class ProgrammerLayerStack(
                 // A caller-supplied `fadeMs` covers every key and wins outright: an explicit fade on
                 // Include is the operator's instruction, and it overrides the source's stored
                 // default exactly as `POST /templates/{id}/apply` does with `request.fadeMs`.
-                eng.republishProgrammerKeys(moved, fadeMs)
+                eng.programmer.republishKeys(moved, fadeMs)
             } else {
-                eng.republishProgrammerKeys(moved, rowFades)
+                eng.programmer.republishKeys(moved, rowFades)
             }
         }
         return ProgrammerLayerOutcome(moved.size, fx.spawned, fx.retracted, fx.repriorised)
@@ -425,7 +426,7 @@ class ProgrammerLayerStack(
             resolveLook = lookRegistry()::snapshot,
             resolveTemplate = templateRegistry()::snapshot,
         )
-        engine().setProgrammerStompSuppression(cooked.stompSuppression)
+        engine().cueLayer.setProgrammerStompSuppression(cooked.stompSuppression)
         val moved = store.putLayerSlots(
             cooked.rows.map { row ->
                 ProgrammerStore.LayerSlotWrite(

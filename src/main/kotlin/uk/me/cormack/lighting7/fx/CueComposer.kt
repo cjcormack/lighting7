@@ -313,7 +313,7 @@ internal object CueComposer {
                 cueId = cueId,
                 priority = priority,
                 // Always 1.0: crossfade progress is applied per-cue by
-                // [FxEngine.updateCueFadeWeights] at publish time, never baked into a row.
+                // [CueAssignmentLayer.updateFadeWeights] at publish time, never baked into a row.
                 fadeWeight = 1.0,
                 targetKey = c.targetKey,
                 targetIsGroup = c.targetIsGroup,

@@ -34,8 +34,8 @@ class LayerResolver(
     /**
      * The Layer 4 maps, published as ONE volatile reference. They must never be
      * separate fields: readers are lock-free and consume them as a tuple — the tick loops,
-     * provenance ([FxEngine.computeProvenance]), and the Update checklist
-     * ([FxEngine.underlyingSources]) — and a read straddling an [applyAssignments] swap of
+     * provenance ([ProvenanceService.compute]), and the Update checklist
+     * ([ProvenanceService.underlyingSources]) — and a read straddling an [applyAssignments] swap of
      * separate fields could find a key in the new [state] with no entry in the old
      * [winners]: "a cue owns this" naming no cue, or a checklist pairing one cue's value
      * with another's attribution.

@@ -400,10 +400,10 @@ class TemplateRoutesTest : RouteIntegrationTest() {
 
         // Both heads set to the same colour, so the recording should collapse to one row.
         for (key in listOf("hex-1", "hex-2")) {
-            state.show.fxEngine.writeProgrammerProperties(
+            state.show.fxEngine.programmer.writeProperties(
                 uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB,
                 listOf(
-                    uk.me.cormack.lighting7.fx.FxEngine.ProgrammerPropertyWrite(
+                    uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite(
                         state.show.fixtures.untypedGroupableFixture(key),
                         "rgbColour",
                         uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Colour(
@@ -449,10 +449,10 @@ class TemplateRoutesTest : RouteIntegrationTest() {
 
         // Different levels per head — the focus-position shape, in the cheapest family to set up.
         for ((key, level) in listOf("hex-1" to 255, "hex-2" to 128)) {
-            state.show.fxEngine.writeProgrammerProperties(
+            state.show.fxEngine.programmer.writeProperties(
                 uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB,
                 listOf(
-                    uk.me.cormack.lighting7.fx.FxEngine.ProgrammerPropertyWrite(
+                    uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite(
                         state.show.fixtures.untypedGroupableFixture(key),
                         "dimmer",
                         uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Slider(level.toUByte()),

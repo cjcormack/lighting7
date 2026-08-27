@@ -46,7 +46,7 @@ internal data class LookRepublishOutcome(
  *
  * 1. Invalidate the registry, before anything reads through it.
  * 2. Re-cook the programmer's layer stack — *without publishing yet*.
- * 3. Rebuild and replace the affected cues' rows via [uk.me.cormack.lighting7.fx.FxEngine.replaceCueAssignments],
+ * 3. Rebuild and replace the affected cues' rows via [uk.me.cormack.lighting7.fx.CueAssignmentLayer.replaceAssignments],
  *    one call per scan pass — normally exactly one.
  * 4. Publish the programmer keys, then emit provenance.
  *
@@ -120,7 +120,7 @@ private fun republishForSourceEdit(
     val scanned = HashSet<Int>()
     var pass = 0
     while (pass++ < MAX_ACTIVE_CUE_SCANS) {
-        val newlyActive = engine.activeCueAssignmentIds() - scanned
+        val newlyActive = engine.cueLayer.activeCueIds() - scanned
         if (newlyActive.isEmpty()) break
         scanned += newlyActive
         val referencingCues = referencing(newlyActive)
@@ -148,21 +148,21 @@ private fun republishForSourceEdit(
             rebuilt[cueId] = cooked.rows
             // Carried per cue, and *always* — including when it is empty. An edit that deleted the
             // rows a stomping layer used to assert must shrink its suppression set too, and
-            // `replaceCueAssignments` reads an absent entry as "this cook found no stomper".
+            // `replaceAssignments` reads an absent entry as "this cook found no stomper".
             rebuiltStomp[cueId] = cooked.stompSuppression
         }
-        if (rebuilt.isNotEmpty()) republished += engine.replaceCueAssignments(rebuilt, rebuiltStomp)
+        if (rebuilt.isNotEmpty()) republished += engine.cueLayer.replaceAssignments(rebuilt, rebuiltStomp)
     }
 
-    // 4. Now the programmer's own keys, then tell the clients to re-read. republishProgrammerKeys
+    // 4. Now the programmer's own keys, then tell the clients to re-read. republishKeys
     //    emits provenance itself, but only when it has keys — so cover the empty case here rather
-    //    than emitting twice when it doesn't. (emitProvenanceUpdate coalesces, so a double call is
+    //    than emitting twice when it doesn't. (the provenance emit coalesces, so a double call is
     //    harmless in a running engine; being exact keeps the intent readable.)
     val programmerKeys = layerKeys
     if (programmerKeys.isEmpty()) {
-        engine.emitProvenanceUpdate()
+        engine.provenance.emitUpdate()
     } else {
-        engine.republishProgrammerKeys(programmerKeys)
+        engine.programmer.republishKeys(programmerKeys)
     }
 
     logger.info(

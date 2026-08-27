@@ -223,21 +223,21 @@ class ProgrammerLayerStackEffectsTest : RouteIntegrationTest() {
             val upper = add(stomper, "hex-1")
 
             assertTrue(
-                engine.programmerStompSuppressionForTest().isEmpty(),
+                engine.cueLayer.programmerStompSuppressionForTest().isEmpty(),
                 "nothing stomps until a layer says so",
             )
 
             stack.patch(upper.layerId, stomp = true)
             assertEquals(
                 mapOf(lower.layerId to mapOf("hex-1" to setOf("dimmer"))),
-                engine.programmerStompSuppressionForTest(),
+                engine.cueLayer.programmerStompSuppressionForTest(),
             )
 
             // And it retracts: an order change alone moves the suppression, which is why it is
             // published from the cook rather than from the spawn/retract classifier.
             stack.move(upper.layerId, 0)
             assertTrue(
-                engine.programmerStompSuppressionForTest().isEmpty(),
+                engine.cueLayer.programmerStompSuppressionForTest().isEmpty(),
                 "the stomper is now the bottom layer, so there is nothing below it to stomp",
             )
         }

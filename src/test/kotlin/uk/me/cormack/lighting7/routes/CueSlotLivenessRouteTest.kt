@@ -124,7 +124,7 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, applyResp.status, applyResp.bodyAsText())
         assertEquals(cueId, stack(client, stackId).activeCueId)
         assertTrue(
-            cueId in state.show.fxEngine.activeCueAssignmentIds(),
+            cueId in state.show.fxEngine.cueLayer.activeCueIds(),
             "the rows-only cue's assignments are live",
         )
 
@@ -133,7 +133,7 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, stopResp.status, stopResp.bodyAsText())
         assertNull(stack(client, stackId).activeCueId, "the playhead reads dark again")
         assertFalse(
-            cueId in state.show.fxEngine.activeCueAssignmentIds(),
+            cueId in state.show.fxEngine.cueLayer.activeCueIds(),
             "the rows-only cue's assignments are gone",
         )
     }

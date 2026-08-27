@@ -257,7 +257,7 @@ private suspend fun runFade(outgoingCueId, incomingCueId, durationMs, easingCurv
         val progress = (elapsed / durationMs).coerceIn(0.0, 1.0)
         val eased = easingCurve.apply(progress)
         // Outgoing: 1→0, Incoming: 0→1 — one map, so the engine republishes once per tick
-        fxEngine.updateCueFadeWeights(buildMap {
+        fxEngine.cueLayer.updateFadeWeights(buildMap {
             outgoingCueId?.let { put(it, 1.0 - eased) }
             incomingCueId?.let { put(it, eased) }
         })
@@ -336,7 +336,7 @@ arming client-side.
 
 `routes/cuePreview.kt`, and it is reuse end to end:
 
-1. **Retained rows** — `FxEngine.cueAssignmentsExcludingStack(stackId)`: every published cue
+1. **Retained rows** — `CueAssignmentLayer.assignmentsExcludingStack(stackId)`: every published cue
    that isn't this stack's, because firing a cue replaces its own stack's contribution and
    nothing else. Cues published without a stack (a cue-edit live apply) survive a stack GO, so
    they are retained too. The filter lives in the engine so the rows and the `cueId → stackId`

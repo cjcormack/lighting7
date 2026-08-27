@@ -129,10 +129,10 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
     val level = message.level
     val fade = message.fadeTime
 
-    val key = engine.resolveChannelCoveringKey(universe, channel)
+    val key = engine.cascade.resolveChannelCoveringKey(universe, channel)
     if (key == null) {
         // No backing property — raw sideband write; nothing sits below it in the cascade.
-        engine.writeProgrammerChannel(
+        engine.programmer.writeChannel(
             ProgrammerOwner.WEB, universe, channel, level, coveringKey = null, fadeMs = fade,
         )
         return
@@ -140,7 +140,7 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
     if (key.propertyName.equals("position", ignoreCase = true)) {
         // Pan/tilt axes stay channel-shaped: lifting one axis to a position entry would
         // freeze the other axis into the programmer too.
-        engine.writeProgrammerChannel(
+        engine.programmer.writeChannel(
             ProgrammerOwner.WEB, universe, channel, level, coveringKey = key, fadeMs = fade,
         )
         return
@@ -149,7 +149,7 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
     val fixture = try {
         show.fixtures.untypedFixture(key.targetKey)
     } catch (_: Exception) {
-        engine.writeProgrammerChannel(
+        engine.programmer.writeChannel(
             ProgrammerOwner.WEB, universe, channel, level, coveringKey = null, fadeMs = fade,
         )
         return
@@ -172,20 +172,20 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
                     current.white, current.amber, current.uv,
                 )
             }
-            engine.writeProgrammerProperty(
+            engine.programmer.writeProperty(
                 ProgrammerOwner.WEB, fixture, key.propertyName,
                 CueAssignmentResolver.PropertyValue.Colour(replaced), fadeMs = fade,
             )
         }
-        is DmxFixtureSetting<*> -> engine.writeProgrammerProperty(
+        is DmxFixtureSetting<*> -> engine.programmer.writeProperty(
             ProgrammerOwner.WEB, fixture, key.propertyName,
             CueAssignmentResolver.PropertyValue.Setting(level), fadeMs = fade,
         )
-        is DmxSlider -> engine.writeProgrammerProperty(
+        is DmxSlider -> engine.programmer.writeProperty(
             ProgrammerOwner.WEB, fixture, key.propertyName,
             CueAssignmentResolver.PropertyValue.Slider(level), fadeMs = fade,
         )
-        else -> engine.writeProgrammerChannel(
+        else -> engine.programmer.writeChannel(
             ProgrammerOwner.WEB, universe, channel, level, coveringKey = key, fadeMs = fade,
         )
     }

@@ -591,7 +591,7 @@ that read it no longer existed.)
 
 Park sits above all of that at transmit time, so a locate cannot move a parked channel.
 One filter keeps the sides honest: **`applyLocate` drops unpublishable assignments** using
-`FxEngine.programmerPublishability`. That helper applies the *same two guards the cascade
+`ProgrammerWriter.publishability`. That helper applies the *same two guards the cascade
 publish applies*, in the same order and through the same helpers
 (`inferTargetForProperty`, then `allChannelsParked`), so the pre-filter cannot disagree
 with what the write then does — which matters because `ColourTarget` scopes its
@@ -1172,7 +1172,12 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/FxInstance.kt` | Running effect state, distributionStrategy, ElementMode, speed-master refs |
 | `fx/FxTarget.kt` | Fixture/group property targeting, FxTargetRef |
 | `fx/FxTargetable.kt` | Common interface for Fixture and FixtureGroup |
-| `fx/FxEngine.kt` | Effect processing loop, group expansion |
+| `fx/FxEngine.kt` | Tick loops, active-effect set, group expansion (post-E1 split) |
+| `fx/CascadePublisher.kt` | Layer-4/cascade → controller transmit, the Layer 4 publish lock, channel-covering-key lookup |
+| `fx/CueAssignmentLayer.kt` | Per-cue Layer 4 assignment bookkeeping, within-cue stomp registry |
+| `fx/ProvenanceService.kt` | "Who owns this value" computation + broadcast, `underlyingSources` |
+| `fx/ProgrammerWriter.kt` | PROGRAMMER-layer write delegation (write/clear/blind/republish) |
+| `fx/FxLogThrottle.kt` | Per-cause throttled logging shared by the tick loops and publish paths |
 | `fx/FxExtensions.kt` | Script DSL helpers |
 | `fx/group/DistributionStrategy.kt` | Phase distribution strategies |
 | `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
@@ -1238,7 +1243,7 @@ do not — they only ever check the first expansion.
 ### Tick-path failures
 
 Everything on the tick path logs through SLF4J (`logger` in `FxEngine.kt`), never `System.err`,
-and every tick-path log line goes through `FxEngine.logThrottled`: one line per distinct fault per
+and every tick-path log line goes through `FxLogThrottle`: one line per distinct fault per
 `LOG_THROTTLE_NANOS` (10s), with the repeats counted into the next line that gets through. Without
 that, a fault on a 120 Hz pass writes thousands of lines a minute and buries the rest of the log —
 and the fault worth reading about is usually the *first* one. Two rules for throttle keys:

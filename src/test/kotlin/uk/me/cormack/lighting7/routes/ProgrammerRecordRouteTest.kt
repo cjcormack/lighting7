@@ -78,7 +78,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         // A cue on stage, nothing in the programmer. TOUCHED records the operator's edits,
         // not the show — otherwise every Record would smear the running look into the new cue.
-        state.show.fxEngine.setCueAssignments(
+        state.show.fxEngine.cueLayer.setAssignments(
             991,
             listOf(
                 CueAssignmentResolver.Assignment(
@@ -111,7 +111,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         seedHex("hex-2", 13)
         val stackId = createStack(client, "stack-a")
 
-        state.show.fxEngine.setCueAssignments(
+        state.show.fxEngine.cueLayer.setAssignments(
             992,
             listOf(
                 CueAssignmentResolver.Assignment(
@@ -582,7 +582,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         // This source bypasses collectProgrammerEntries entirely, so it needs its own scope
         // filter — the easiest place for a scoped record to silently capture the whole rig.
-        state.show.fxEngine.setCueAssignments(
+        state.show.fxEngine.cueLayer.setAssignments(
             993,
             listOf(
                 CueAssignmentResolver.Assignment(

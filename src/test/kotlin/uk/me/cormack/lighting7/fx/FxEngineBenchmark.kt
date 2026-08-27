@@ -185,7 +185,7 @@ class FxEngineBenchmark {
                 value = CueAssignmentResolver.PropertyValue.Slider(128u),
             )
         }
-        engine.setCueAssignments(1, assignments)
+        engine.cueLayer.setAssignments(1, assignments)
 
         // Two effects per fixture: one beat-synced SineSlider, one wall-clock WindowedSlider.
         val allFixtures = fixtures.fixtures
@@ -334,7 +334,7 @@ class FxEngineBenchmark {
         // effect-reset pass has real Layer 4 work under the chase, as scenario 1 does with
         // dimmers. `Fixtures.resolveElement` is what turns these keys back into elements.
         val elementKeys = barsA.flatMap { bar -> bar.elements.map { it.elementKey } }
-        engine.setCueAssignments(
+        engine.cueLayer.setAssignments(
             1,
             elementKeys.map { key ->
                 CueAssignmentResolver.Assignment(
@@ -438,7 +438,7 @@ class FxEngineBenchmark {
         check(engine.fixtureKeysCoveredBy(wallFlatChase).size == elementsPerGroup) {
             "wall-clock FLAT effect must expand to $elementsPerGroup element keys"
         }
-        check(1 in engine.activeCueAssignmentIds()) { "Layer 4 colour rows did not land" }
+        check(1 in engine.cueLayer.activeCueIds()) { "Layer 4 colour rows did not land" }
 
         // Since the engine caches each effect's expansion, the checks above only prove the
         // *first* one. Re-check past an invalidation so the numbers below can't be a cache
@@ -597,8 +597,8 @@ class FxEngineBenchmark {
 
         val outgoing = rowsFor(OUTGOING_CUE, priority = 1, level = 200u, colour = Color(255, 40, 0))
         val incoming = rowsFor(INCOMING_CUE, priority = 2, level = 90u, colour = Color(0, 60, 255))
-        engine.setCueAssignments(OUTGOING_CUE, outgoing)
-        engine.setCueAssignments(INCOMING_CUE, incoming)
+        engine.cueLayer.setAssignments(OUTGOING_CUE, outgoing)
+        engine.cueLayer.setAssignments(INCOMING_CUE, incoming)
 
         for (f in fixtures.fixtures) {
             engine.addEffect(
@@ -619,7 +619,7 @@ class FxEngineBenchmark {
             ),
         )
 
-        val live = engine.activeCueAssignmentIds()
+        val live = engine.cueLayer.activeCueIds()
         check(OUTGOING_CUE in live && INCOMING_CUE in live) {
             "both cues must hold Layer 4 rows before the fade; live=$live"
         }
@@ -629,7 +629,7 @@ class FxEngineBenchmark {
 
     /**
      * Weight for frame [i] of [frames]. Deliberately strictly inside `(0, 1)` and different
-     * every frame: [FxEngine.updateCueFadeWeights] skips unchanged weights and *removes* the
+     * every frame: [CueAssignmentLayer.updateFadeWeights] skips unchanged weights and *removes* the
      * entry at exactly 1.0, so a lazier ramp would benchmark early returns instead of the
      * republish.
      */
@@ -648,7 +648,7 @@ class FxEngineBenchmark {
 
         for (i in 0 until WARMUP_FRAMES) {
             val t = fadeWeight(i, WARMUP_FRAMES)
-            rig.engine.updateCueFadeWeights(mapOf(OUTGOING_CUE to 1.0 - t, INCOMING_CUE to t))
+            rig.engine.cueLayer.updateFadeWeights(mapOf(OUTGOING_CUE to 1.0 - t, INCOMING_CUE to t))
         }
 
         val timings = LongArray(CROSSFADE_FRAMES)
@@ -656,7 +656,7 @@ class FxEngineBenchmark {
         for (i in 0 until CROSSFADE_FRAMES) {
             val t = fadeWeight(i, CROSSFADE_FRAMES)
             timings[i] = measureNanoTime {
-                rig.engine.updateCueFadeWeights(mapOf(OUTGOING_CUE to 1.0 - t, INCOMING_CUE to t))
+                rig.engine.cueLayer.updateFadeWeights(mapOf(OUTGOING_CUE to 1.0 - t, INCOMING_CUE to t))
             }
         }
         val alloc = allocatedBytes().takeIf { it >= 0 && allocBefore >= 0 }
@@ -732,7 +732,7 @@ class FxEngineBenchmark {
         // Layer 4 colour rows on every fixture: `resetToFallback` needs something below the
         // effect to reset *to*, and the extended components must be non-zero or
         // `setExtendedChannel` writes zeros and the blend is unmeasurable.
-        engine.setCueAssignments(
+        engine.cueLayer.setAssignments(
             1,
             fixtures.fixtures.map { f ->
                 CueAssignmentResolver.Assignment(
@@ -794,7 +794,7 @@ class FxEngineBenchmark {
         check(engine.getActiveEffects().all { it.target is ColourTarget }) {
             "every effect must be a ColourTarget, or the bundled write path is not exercised"
         }
-        check(1 in engine.activeCueAssignmentIds()) { "Layer 4 colour rows did not land" }
+        check(1 in engine.cueLayer.activeCueIds()) { "Layer 4 colour rows did not land" }
         check(programmerStore.coversFixture(covered.first().key)) {
             "programmer gate never opens — composeProgrammerOver would be unmeasured"
         }

@@ -130,7 +130,7 @@ internal fun buildUpdateChecklist(
     // mid-request cannot pair one cue's value with another cue's name in the checklist.
     val cueLayer = engine.layerResolver.current
     val cueLayerState = cueLayer.state
-    val sources = engine.underlyingSources(byKey.keys, cueLayer)
+    val sources = engine.provenance.underlyingSources(byKey.keys, cueLayer)
 
     val unattributed = ArrayList<ProgrammerChecklistKeyDto>()
     val byCue = LinkedHashMap<Int, MutableList<ProgrammerChecklistKeyDto>>()
@@ -240,7 +240,7 @@ internal fun entriesUnderlyingCue(
     val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
     if (entries.isEmpty()) return emptyList()
     val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.propertyName) }
-    return engine.underlyingSources(byKey.keys)
+    return engine.provenance.underlyingSources(byKey.keys)
         .filter { it.cueId == cueId }
         .mapNotNull { byKey[it.key] }
 }

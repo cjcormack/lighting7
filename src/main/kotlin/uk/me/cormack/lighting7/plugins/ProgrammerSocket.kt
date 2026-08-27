@@ -342,7 +342,7 @@ data class ProvenanceEntryDto(
      * this colour?" by naming *Warm Wash* rather than *a cue*.
      *
      * Additive and defaulted, and not a new `source` value: a client that doesn't know about layers
-     * keeps reading `source` exactly as before. See `FxEngine.ProvenanceEntry`.
+     * keeps reading `source` exactly as before. See `ProvenanceEntry`.
      */
     val layerId: Int? = null,
     /**
@@ -417,7 +417,7 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
     scope.subscribe(scope.state.show.programmerStore.layersFlow) { layers ->
         scope.send(ProgrammerLayerStateOutMessage(layers.map { it.toDto() }))
     }
-    scope.subscribe(scope.state.show.fxEngine.provenanceFlow) { entries ->
+    scope.subscribe(scope.state.show.fxEngine.provenance.flow) { entries ->
         scope.send(
             ProvenanceStateOutMessage(
                 entries.map {
@@ -491,7 +491,7 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
             ProgrammerClearedOutMessage(cleared.entryCount, cleared.effectsCleared)
         }
         is ProgrammerSetBlindInMessage -> {
-            state.show.fxEngine.setProgrammerBlind(message.blind, message.fadeMs ?: 0)
+            state.show.fxEngine.programmer.setBlind(message.blind, message.fadeMs ?: 0)
             ProgrammerBlindStateOutMessage(state.show.programmerStore.blind)
         }
         is ProgrammerStateInMessage -> ProgrammerHandler.stateSnapshot(state)
@@ -570,7 +570,7 @@ object ProgrammerHandler {
                 } catch (_: Exception) {
                     return ProgrammerErrorOutMessage("Unknown fixture '${target.key}'")
                 }
-                engine.writeProgrammerProperty(
+                engine.programmer.writeProperty(
                     ProgrammerOwner.WEB, fixture, propertyName, value,
                     sourceGroup = validateSourceGroup(state, sourceGroup, target.key),
                     fadeMs = fadeMs,
@@ -582,7 +582,7 @@ object ProgrammerHandler {
                 } catch (_: Exception) {
                     return ProgrammerErrorOutMessage("Unknown group '${target.key}'")
                 }
-                engine.writeProgrammerGroupProperty(
+                engine.programmer.writeGroupProperty(
                     ProgrammerOwner.WEB, group, propertyName, value, fadeMs = fadeMs,
                 ).isNotEmpty()
             }
@@ -638,7 +638,7 @@ object ProgrammerHandler {
             store.slotsFor(f.targetKey, propertyName).map { f.targetKey to it.owner }
         }
 
-        engine.clearProgrammerEntries(fixtures.map { it to propertyName }, fadeMs)
+        engine.programmer.clearEntries(fixtures.map { it to propertyName }, fadeMs)
 
         // Locate is the only owner left with bookkeeping to prune. The `preset:{id}` owners went
         // with the toggle machinery: a Look now reaches the programmer as a layer, and

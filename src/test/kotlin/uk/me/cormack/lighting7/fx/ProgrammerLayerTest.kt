@@ -84,13 +84,13 @@ class ProgrammerLayerTest {
     @Test
     fun `blind enter reveals the cue value and exit restores the programmer value`() {
         val rig = newRig()
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)))
-        rig.engine.writeProgrammerProperty(
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)))
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
         assertEquals(180u.toUByte(), rig.controller.currentValues[1], "programmer over cue")
 
-        rig.engine.setProgrammerBlind(true)
+        rig.engine.programmer.setBlind(true)
         assertEquals(100u.toUByte(), rig.controller.currentValues[1], "blind reveals the cue value")
 
         // The stored state is untouched — entry present, touched preserved.
@@ -98,17 +98,17 @@ class ProgrammerLayerTest {
         assertEquals(ProgrammerOwner.WEB, slot.owner)
         assertTrue(slot.touched, "blind must not clear the touched flag")
 
-        rig.engine.setProgrammerBlind(false)
+        rig.engine.programmer.setBlind(false)
         assertEquals(180u.toUByte(), rig.controller.currentValues[1], "exit restores the staged value")
     }
 
     @Test
     fun `writes while blind stage silently and land on exit`() {
         val rig = newRig()
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)))
-        rig.engine.setProgrammerBlind(true)
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)))
+        rig.engine.programmer.setBlind(true)
 
-        rig.engine.writeProgrammerProperty(
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(222u),
         )
         assertEquals(
@@ -116,14 +116,14 @@ class ProgrammerLayerTest {
             "a write while blind must not reach the stage",
         )
 
-        rig.engine.setProgrammerBlind(false)
+        rig.engine.programmer.setBlind(false)
         assertEquals(222u.toUByte(), rig.controller.currentValues[1], "staged value lands on exit")
     }
 
     @Test
     fun `blind gates effect suppression too`() {
         val rig = newRig()
-        rig.engine.writeProgrammerProperty(
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
         val effect = FxInstance(
@@ -137,11 +137,11 @@ class ProgrammerLayerTest {
         rig.engine.processBeatTick(tick(0))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1], "effect suppressed under programmer")
 
-        rig.engine.setProgrammerBlind(true)
+        rig.engine.programmer.setBlind(true)
         rig.engine.processBeatTick(tick(1))
         assertEquals(60u.toUByte(), rig.controller.currentValues[1], "blind releases the suppression")
 
-        rig.engine.setProgrammerBlind(false)
+        rig.engine.programmer.setBlind(false)
         rig.engine.processBeatTick(tick(2))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1], "suppression resumes on exit")
     }
@@ -151,12 +151,12 @@ class ProgrammerLayerTest {
     @Test
     fun `clearing an uncovered key with fadeMs requests a ramp back to the cue value`() {
         val rig = newRig()
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)))
-        rig.engine.writeProgrammerProperty(
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)))
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
 
-        rig.engine.clearProgrammerProperty(ProgrammerOwner.WEB, rig.hex(), "dimmer", fadeMs = 1000)
+        rig.engine.programmer.clearProperty(ProgrammerOwner.WEB, rig.hex(), "dimmer", fadeMs = 1000)
 
         val last = rig.controller.changesTo(1).last()
         assertEquals(100u.toUByte(), last.newValue, "release target is the cue value")
@@ -166,7 +166,7 @@ class ProgrammerLayerTest {
     @Test
     fun `setting a value with fadeMs requests a fade-to-value`() {
         val rig = newRig()
-        rig.engine.writeProgrammerProperty(
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u), fadeMs = 500,
         )
         val last = rig.controller.changesTo(1).last()
@@ -177,7 +177,7 @@ class ProgrammerLayerTest {
     @Test
     fun `clearing an effect-covered key snaps on the next tick instead of fading`() {
         val rig = newRig()
-        rig.engine.writeProgrammerProperty(
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
         val effect = FxInstance(
@@ -192,7 +192,7 @@ class ProgrammerLayerTest {
 
         // The publish skips effect-covered keys entirely — no faded write appears.
         val changesBefore = rig.controller.changesTo(1).size
-        rig.engine.clearProgrammerProperty(ProgrammerOwner.WEB, rig.hex(), "dimmer", fadeMs = 1000)
+        rig.engine.programmer.clearProperty(ProgrammerOwner.WEB, rig.hex(), "dimmer", fadeMs = 1000)
         assertEquals(changesBefore, rig.controller.changesTo(1).size, "covered key publish is skipped")
 
         // The next tick settles the channel: the effect resumes painting (snap).
@@ -207,17 +207,17 @@ class ProgrammerLayerTest {
     fun `provenance follows the winner across programmer, effect, and cue transitions`() {
         val rig = newRig()
 
-        fun sourceOf(property: String = "dimmer"): FxEngine.ProvenanceSource? =
-            rig.engine.computeProvenance()
+        fun sourceOf(property: String = "dimmer"): ProvenanceSource? =
+            rig.engine.provenance.compute()
                 .firstOrNull { it.targetKey == "hex-a" && it.propertyName == property }?.source
 
         assertNull(sourceOf(), "nothing contributes — baseline is omitted")
 
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)))
-        assertEquals(FxEngine.ProvenanceSource.CUE, sourceOf())
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)))
+        assertEquals(ProvenanceSource.CUE, sourceOf())
         assertEquals(
             10,
-            rig.engine.computeProvenance().first { it.propertyName == "dimmer" }.cueId,
+            rig.engine.provenance.compute().first { it.propertyName == "dimmer" }.cueId,
             "the winning cue is named",
         )
 
@@ -229,29 +229,29 @@ class ProgrammerLayerTest {
                 blendMode = BlendMode.OVERRIDE,
             )
         )
-        assertEquals(FxEngine.ProvenanceSource.EFFECT, sourceOf())
+        assertEquals(ProvenanceSource.EFFECT, sourceOf())
         assertEquals(
             effectId,
-            rig.engine.computeProvenance().first { it.propertyName == "dimmer" }.effectId,
+            rig.engine.provenance.compute().first { it.propertyName == "dimmer" }.effectId,
         )
 
-        rig.engine.writeProgrammerProperty(
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
         assertEquals(
-            FxEngine.ProvenanceSource.PROGRAMMER, sourceOf(),
+            ProvenanceSource.PROGRAMMER, sourceOf(),
             "a programmer entry suppresses the effect and owns the value",
         )
 
-        rig.engine.setProgrammerBlind(true)
-        assertEquals(FxEngine.ProvenanceSource.EFFECT, sourceOf(), "blind hands the win back")
-        rig.engine.setProgrammerBlind(false)
+        rig.engine.programmer.setBlind(true)
+        assertEquals(ProvenanceSource.EFFECT, sourceOf(), "blind hands the win back")
+        rig.engine.programmer.setBlind(false)
 
         rig.engine.removeEffect(effectId)
-        rig.engine.clearProgrammerProperty(ProgrammerOwner.WEB, rig.hex(), "dimmer")
-        assertEquals(FxEngine.ProvenanceSource.CUE, sourceOf(), "back to the cue after both release")
+        rig.engine.programmer.clearProperty(ProgrammerOwner.WEB, rig.hex(), "dimmer")
+        assertEquals(ProvenanceSource.CUE, sourceOf(), "back to the cue after both release")
 
-        rig.engine.removeCueAssignments(10)
+        rig.engine.cueLayer.removeAssignments(10)
         assertNull(sourceOf(), "everything released — baseline again")
     }
 
@@ -270,33 +270,33 @@ class ProgrammerLayerTest {
             ).also { it.cueId = 10; it.cueLayerId = 4 }
         )
 
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)))
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)))
         assertEquals(
-            FxEngine.ProvenanceSource.EFFECT,
-            rig.engine.computeProvenance().first { it.propertyName == "dimmer" }.source,
+            ProvenanceSource.EFFECT,
+            rig.engine.provenance.compute().first { it.propertyName == "dimmer" }.source,
             "unstomped, the effect sits above the cue's value and owns it",
         )
 
-        rig.engine.setCueAssignments(
+        rig.engine.cueLayer.setAssignments(
             10, listOf(dimmerAssignment(10, 100u)),
             stompSuppression = mapOf(4 to mapOf("hex-a" to setOf("dimmer"))),
         )
-        val stomped = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
-        assertEquals(FxEngine.ProvenanceSource.CUE, stomped.source)
+        val stomped = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
+        assertEquals(ProvenanceSource.CUE, stomped.source)
         assertNull(stomped.effectId, "and it does not name the effect it stopped reporting")
 
         // Still running, so clearing the stomp hands provenance straight back.
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)))
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)))
         assertEquals(
             effectId,
-            rig.engine.computeProvenance().first { it.propertyName == "dimmer" }.effectId,
+            rig.engine.provenance.compute().first { it.propertyName == "dimmer" }.effectId,
         )
     }
 
     @Test
     fun `a programmer-band effect wins provenance over the programmer value it rides`() {
         val rig = newRig()
-        rig.engine.writeProgrammerProperty(
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
         rig.engine.addEffect(
@@ -307,8 +307,8 @@ class ProgrammerLayerTest {
                 blendMode = BlendMode.ADDITIVE,
             ).also { it.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
         )
-        val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
-        assertEquals(FxEngine.ProvenanceSource.EFFECT, entry.source, "band effects modulate on top")
+        val entry = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
+        assertEquals(ProvenanceSource.EFFECT, entry.source, "band effects modulate on top")
     }
 
     @Test
@@ -317,16 +317,16 @@ class ProgrammerLayerTest {
         // permanently null while EFFECT sources carried it — the asymmetry Update's Mode B
         // checklist needs closed in order to group overridden cues by stack.
         val rig = newRig()
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
 
-        val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
-        assertEquals(FxEngine.ProvenanceSource.CUE, entry.source)
+        val entry = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
+        assertEquals(ProvenanceSource.CUE, entry.source)
         assertEquals(10, entry.cueId)
         assertEquals(7, entry.cueStackId)
-        assertEquals(7, rig.engine.cueStackIdFor(10))
+        assertEquals(7, rig.engine.cueLayer.cueStackIdFor(10))
 
-        rig.engine.removeCueAssignments(10)
-        assertNull(rig.engine.cueStackIdFor(10), "the mapping goes with the assignments")
+        rig.engine.cueLayer.removeAssignments(10)
+        assertNull(rig.engine.cueLayer.cueStackIdFor(10), "the mapping goes with the assignments")
     }
 
     @Test
@@ -335,14 +335,14 @@ class ProgrammerLayerTest {
         // colour?" can answer *Warm Wash* rather than *cue 10*. Carried as extra fields on a CUE
         // entry rather than a new ProvenanceSource, so a client that ignores them is unaffected.
         val rig = newRig()
-        rig.engine.setCueAssignments(
+        rig.engine.cueLayer.setAssignments(
             10,
             listOf(dimmerAssignment(10, 100u, CookWinner(index = 1, layerId = 42, source = LayerSource.look(7, warmWashUuid, "Warm Wash")))),
             cueStackId = 7,
         )
 
-        val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
-        assertEquals(FxEngine.ProvenanceSource.CUE, entry.source, "the source is still the cue")
+        val entry = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
+        assertEquals(ProvenanceSource.CUE, entry.source, "the source is still the cue")
         assertEquals(42, entry.layerId)
         assertEquals(7, entry.layerSource?.id)
         assertEquals("Warm Wash", entry.layerSource?.name)
@@ -362,8 +362,8 @@ class ProgrammerLayerTest {
             listOf(ProgrammerStore.LayerSlotWrite("hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u), layerIndex = 0)),
         )
 
-        val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
-        assertEquals(FxEngine.ProvenanceSource.PROGRAMMER, entry.source, "the source is still the programmer")
+        val entry = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
+        assertEquals(ProvenanceSource.PROGRAMMER, entry.source, "the source is still the programmer")
         assertEquals(9, entry.layerId)
         assertEquals(7, entry.layerSource?.id)
         assertEquals("Warm Wash", entry.layerSource?.name)
@@ -379,12 +379,12 @@ class ProgrammerLayerTest {
         rig.programmerStore.putLayerSlots(
             listOf(ProgrammerStore.LayerSlotWrite("hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u), layerIndex = 0)),
         )
-        rig.engine.writeProgrammerProperty(
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(10u),
         )
 
-        val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
-        assertEquals(FxEngine.ProvenanceSource.PROGRAMMER, entry.source)
+        val entry = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
+        assertEquals(ProvenanceSource.PROGRAMMER, entry.source)
         assertNull(entry.layerId, "the operator's own write won, so no layer is named")
         assertNull(entry.layerSource)
     }
@@ -394,10 +394,10 @@ class ProgrammerLayerTest {
         // Absence, not a null-valued entry: a local row is not attributable to a layer, and the
         // desk must not render an empty layer chip for one.
         val rig = newRig()
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
 
-        val entry = rig.engine.computeProvenance().first { it.propertyName == "dimmer" }
-        assertEquals(FxEngine.ProvenanceSource.CUE, entry.source)
+        val entry = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
+        assertEquals(ProvenanceSource.CUE, entry.source)
         assertNull(entry.layerId)
         assertNull(entry.layerSource)
     }
@@ -408,18 +408,18 @@ class ProgrammerLayerTest {
         // programmer on top, provenance says PROGRAMMER (correctly), so Mode B needs the
         // programmer-independent Layer 4 winner map instead.
         val rig = newRig()
-        rig.engine.setCueAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
-        rig.engine.writeProgrammerProperty(
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
+        rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
 
         assertEquals(
-            FxEngine.ProvenanceSource.PROGRAMMER,
-            rig.engine.computeProvenance().first { it.propertyName == "dimmer" }.source,
+            ProvenanceSource.PROGRAMMER,
+            rig.engine.provenance.compute().first { it.propertyName == "dimmer" }.source,
         )
 
         val key = CueAssignmentResolver.Key.fixture("hex-a", "dimmer")
-        val source = rig.engine.underlyingSources(listOf(key)).single()
+        val source = rig.engine.provenance.underlyingSources(listOf(key)).single()
         assertEquals(10, source.cueId, "the cue underneath, not the programmer on top")
         assertEquals(7, source.cueStackId)
         assertNull(source.viaEffectId)
@@ -438,7 +438,7 @@ class ProgrammerLayerTest {
         ).also { it.cueId = 42; it.cueStackId = 5 }
         val cueEffectId = rig.engine.addEffect(cueEffect)
 
-        val viaEffect = rig.engine.underlyingSources(listOf(key)).single()
+        val viaEffect = rig.engine.provenance.underlyingSources(listOf(key)).single()
         assertEquals(42, viaEffect.cueId, "a cue driving the property through an FX still counts")
         assertEquals(5, viaEffect.cueStackId)
         assertEquals(cueEffectId, viaEffect.viaEffectId)
@@ -452,7 +452,7 @@ class ProgrammerLayerTest {
                 blendMode = BlendMode.OVERRIDE,
             ).also { it.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE },
         )
-        val bandOnly = rig.engine.underlyingSources(listOf(key)).single()
+        val bandOnly = rig.engine.provenance.underlyingSources(listOf(key)).single()
         assertNull(
             bandOnly.cueId,
             "a programmer-band effect is part of the busk being written back, not something under it",
@@ -484,7 +484,7 @@ class ProgrammerLayerTest {
             ).also { it.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE },
         )
 
-        val source = rig.engine.underlyingSources(listOf(key)).single()
+        val source = rig.engine.provenance.underlyingSources(listOf(key)).single()
         assertEquals(42, source.cueId, "the cue's own effect is still what's underneath")
         assertEquals(5, source.cueStackId)
         assertEquals(cueEffectId, source.viaEffectId)

@@ -25,7 +25,7 @@ import kotlin.test.Test
  * `CueEditSessionHandler.setPropertyForSession`, a Hikari borrow + Exposed transaction +
  * Layer 4 republish per event, which is what `FU-PERF-COALESCE-WRITES` was raised against
  * (and cancelled on — p99 2.1 ms). Sweep item D1 retired that family, so a bound fader now
- * lands in `FxEngine.writeProgrammerProperty` instead. The harness is unchanged and still
+ * lands in `ProgrammerWriter.writeProperty` instead. The harness is unchanged and still
  * useful: it is the only load generator for the surface write path, and that path is still
  * per-event work on the operator's hot loop.
  *

@@ -63,7 +63,7 @@ object PropertyChannelWriter {
 
     /**
      * Enumerate every channel that backs [propertyName] on [fixture], without binding a
-     * value. Used by [FxEngine.clearProgrammerProperty] and the cascade publish to know
+     * value. Used by [ProgrammerWriter.clearProperty] and the cascade publish to know
      * which channels back a property. Returns the channel list with `value = 0` as a placeholder — callers
      * must ignore the value field on clear paths.
      */

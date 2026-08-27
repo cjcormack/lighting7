@@ -11,6 +11,7 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.LocateValueResolver
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.LocateManager
@@ -105,7 +106,7 @@ private data class LocateApplyResult(
  * returns the bookkeeping rows for whatever may have landed.
  *
  * Assignments the publish would skip are dropped before anything else happens —
- * [FxEngine.programmerPublishability] answers with the publish's own guards, so this filter
+ * [ProgrammerWriter.publishability] answers with the publish's own guards, so this filter
  * can't disagree with what the write then does. Two reasons it says no: the property has no
  * DMX-backed channels, or park masks every channel it has. Either way the write would
  * achieve nothing, and recording it would strand a bookkeeping row (and, since programmer
@@ -128,13 +129,13 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
     val (assignments, unpublishable) = fixtures
         .flatMap { LocateValueResolver.resolve(it) }
         .partition {
-            engine.programmerPublishability(it.target, it.propertyName) ==
-                FxEngine.ProgrammerPublishability.PUBLISHABLE
+            engine.programmer.publishability(it.target, it.propertyName) ==
+                ProgrammerWriter.Publishability.PUBLISHABLE
         }
     if (assignments.isEmpty()) {
         val parkMasked = unpublishable.any {
-            engine.programmerPublishability(it.target, it.propertyName) ==
-                FxEngine.ProgrammerPublishability.PARK_MASKED
+            engine.programmer.publishability(it.target, it.propertyName) ==
+                ProgrammerWriter.Publishability.PARK_MASKED
         }
         return LocateApplyResult(emptyList(), parkMasked = parkMasked)
     }
@@ -148,10 +149,10 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
     val sourceGroup = (target as? TargetRef.Group)?.key
 
     val writes = try {
-        engine.writeProgrammerProperties(
+        engine.programmer.writeProperties(
             ProgrammerOwner.LOCATE,
             assignments.map {
-                FxEngine.ProgrammerPropertyWrite(it.target, it.propertyName, it.value, sourceGroup)
+                ProgrammerWriter.PropertyWrite(it.target, it.propertyName, it.value, sourceGroup)
             },
             // Momentary owner: don't absorb the sideband — release must reveal what was
             // under it (an unpark hand-down, a raw channel write).
@@ -185,7 +186,7 @@ private fun clearLocateWrites(state: State, writes: List<LocateManager.LocateWri
     }
     if (clears.isEmpty()) return
     try {
-        state.show.fxEngine.clearProgrammerProperties(ProgrammerOwner.LOCATE, clears)
+        state.show.fxEngine.programmer.clearProperties(ProgrammerOwner.LOCATE, clears)
     } catch (_: Exception) {
         // Bookkeeping is already updated; a throw here would strand the manager mid-toggle.
         // Unpublished channels cascade on the next effect tick or cue-layer republish.

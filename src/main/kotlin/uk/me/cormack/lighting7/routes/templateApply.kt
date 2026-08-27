@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.routes
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.TemplateResolver
 import uk.me.cormack.lighting7.fx.TemplateSnapshot
@@ -46,7 +47,7 @@ internal fun applyTemplateToProgrammer(
     // Record can collapse back to a group row — the same hint Include stamps.
     val groupHints = groupHintsForTargets(state.show.fixtures, targets.map { it.target })
 
-    val writes = ArrayList<FxEngine.ProgrammerPropertyWrite>()
+    val writes = ArrayList<ProgrammerWriter.PropertyWrite>()
     val skips = ArrayList<TemplateSkipDto>()
 
     for (row in template.rows) {
@@ -80,7 +81,7 @@ internal fun applyTemplateToProgrammer(
                 )
                 continue
             }
-            writes += FxEngine.ProgrammerPropertyWrite(
+            writes += ProgrammerWriter.PropertyWrite(
                 fixture,
                 // The resolved name, not the row's: on a colour wheel the value lands on `colour`
                 // rather than `rgbColour`, and writing the row's name would address nothing.
@@ -94,7 +95,7 @@ internal fun applyTemplateToProgrammer(
     if (writes.isNotEmpty()) {
         // One batched write, as Include does: a template across a whole rig is hundreds of
         // properties and per-property publishing would visibly stutter it.
-        state.show.fxEngine.writeProgrammerProperties(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
+        state.show.fxEngine.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
     }
     return ApplyTemplateResponse(writes.size, skips)
 }

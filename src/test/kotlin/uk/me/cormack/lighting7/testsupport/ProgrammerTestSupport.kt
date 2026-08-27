@@ -43,7 +43,7 @@ private fun resolvePropertyComponent(
     universe: Int,
     channel: Int,
 ): Pair<Long, UByte>? {
-    val key = state.show.fxEngine.resolveChannelCoveringKey(universe, channel) ?: return null
+    val key = state.show.fxEngine.cascade.resolveChannelCoveringKey(universe, channel) ?: return null
     val fixture = try {
         state.show.fixtures.untypedFixture(key.targetKey)
     } catch (_: Exception) {

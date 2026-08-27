@@ -159,7 +159,7 @@ private fun captureCueAssignments(state: State): List<CuePropertyAssignmentDto> 
     }
     if (cueLayerSnapshot.isEmpty()) return emptyList()
 
-    val activeCueIds = engine.activeCueAssignmentIds()
+    val activeCueIds = engine.cueLayer.activeCueIds()
 
     val cueGroupHints: Set<Pair<String, String>> = if (activeCueIds.isEmpty()) {
         emptySet()
@@ -609,7 +609,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         resolveTemplate = state.show.templateRegistry::snapshot,
     )
     if (cooked.rows.isNotEmpty()) {
-        engine.setCueAssignments(
+        engine.cueLayer.setAssignments(
             cueData.cueId, cooked.rows,
             cueStackId = cueData.cueStackId,
             stompSuppression = cooked.stompSuppression,
@@ -620,7 +620,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         )
     } else {
         // Re-applying a cue that lost its assignments must clear any stale state.
-        engine.removeCueAssignments(cueData.cueId)
+        engine.cueLayer.removeAssignments(cueData.cueId)
     }
 
     if (cueData.stomp) {

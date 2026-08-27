@@ -179,7 +179,7 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
         val viaGo = cueColour("hex-1").value.toSerializedString()
         assertEquals("#ff8800", viaGo, "the GO path composed the cue's Look layer")
 
-        state.show.fxEngine.removeCueAssignments(cueId)
+        state.show.fxEngine.cueLayer.removeAssignments(cueId)
         val applyData = transaction(state.database) { buildCueApplyData(DaoCue.findById(cueId)!!) }
         applyCue(state, applyData, replaceAll = false)
 

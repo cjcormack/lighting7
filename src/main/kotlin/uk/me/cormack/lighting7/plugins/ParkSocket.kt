@@ -56,11 +56,11 @@ suspend fun handlePark(scope: SocketScope, message: ParkInMessage) {
             // Nothing to nudge: controllers consult the ParkSource at transmit time, so the
             // park lands on the next frame of the affected universe.
             parkManager.park(message.universe, message.channel, message.value)
-            scope.state.show.fxEngine.emitProvenanceUpdate()
+            scope.state.show.fxEngine.provenance.emitUpdate()
         }
         is UnparkChannelInMessage -> {
             parkManager.unpark(message.universe, message.channel)
-            scope.state.show.fxEngine.emitProvenanceUpdate()
+            scope.state.show.fxEngine.provenance.emitUpdate()
         }
     }
 }

@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
@@ -95,7 +96,7 @@ class DefaultSurfaceActions(
             logger.debug("Surface write: property '{}' on '{}' not fader-writable", propertyName, fixtureKey)
             return
         }
-        fxEngine.writeProgrammerProperty(ProgrammerOwner.SURFACE, fixture, propertyName, value)
+        fxEngine.programmer.writeProperty(ProgrammerOwner.SURFACE, fixture, propertyName, value)
     }
 
     override fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte) {
@@ -108,18 +109,18 @@ class DefaultSurfaceActions(
         // Convert per member — sliders scale through each member's own min..max sub-range.
         val writes = group.fixtures.filterIsInstance<Fixture>().mapNotNull { member ->
             PropertyChannelResolver.toPropertyValue(member, propertyName, midiValue7Bit)?.let {
-                FxEngine.ProgrammerPropertyWrite(member, propertyName, it, sourceGroup = groupName)
+                ProgrammerWriter.PropertyWrite(member, propertyName, it, sourceGroup = groupName)
             }
         }
         if (writes.isEmpty()) return
-        fxEngine.writeProgrammerProperties(ProgrammerOwner.SURFACE, writes)
+        fxEngine.programmer.writeProperties(ProgrammerOwner.SURFACE, writes)
     }
 
     override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {
         val fixture = fixtures.tryUntypedFixture(fixtureKey) ?: return
         val value = PropertyChannelResolver.flashPropertyValue(fixture, propertyName, max) ?: return
         // Momentary owner: don't absorb the sideband — release must reveal what was under it.
-        fxEngine.writeProgrammerProperty(
+        fxEngine.programmer.writeProperty(
             ProgrammerOwner.FLASH, fixture, propertyName, value, absorbSideband = false,
         )
     }
@@ -129,11 +130,11 @@ class DefaultSurfaceActions(
         // Clamp per member — slider max can differ across heterogeneous group members.
         val writes = group.fixtures.filterIsInstance<Fixture>().mapNotNull { member ->
             PropertyChannelResolver.flashPropertyValue(member, propertyName, max)?.let {
-                FxEngine.ProgrammerPropertyWrite(member, propertyName, it, sourceGroup = groupName)
+                ProgrammerWriter.PropertyWrite(member, propertyName, it, sourceGroup = groupName)
             }
         }
         if (writes.isEmpty()) return
-        fxEngine.writeProgrammerProperties(ProgrammerOwner.FLASH, writes, absorbSideband = false)
+        fxEngine.programmer.writeProperties(ProgrammerOwner.FLASH, writes, absorbSideband = false)
     }
 
     override fun flashFixturePropertyRelease(fixtureKey: String, propertyName: String) {
@@ -141,12 +142,12 @@ class DefaultSurfaceActions(
         // Release pops only the FLASH slot: the property cascades to the surviving owner
         // underneath (fader/busk level), then the cue layer, then baseline — in one
         // transaction, skipping keys a running effect covers.
-        fxEngine.clearProgrammerProperty(ProgrammerOwner.FLASH, fixture, propertyName)
+        fxEngine.programmer.clearProperty(ProgrammerOwner.FLASH, fixture, propertyName)
     }
 
     override fun flashGroupPropertyRelease(groupName: String, propertyName: String) {
         val group = fixtures.tryUntypedGroup(groupName) ?: return
-        fxEngine.clearProgrammerGroupProperty(ProgrammerOwner.FLASH, group, propertyName)
+        fxEngine.programmer.clearGroupProperty(ProgrammerOwner.FLASH, group, propertyName)
     }
 
     @OptIn(DelicateCoroutinesApi::class)

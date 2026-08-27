@@ -396,10 +396,10 @@ The escape hatch is per-layer `stomp` — see [Stomp](#stomp) for the two kinds 
 
 A layer with `delayMs` / `intervalMs` fires on a timer rather than at cue apply. Firing
 **re-cooks the whole cue** with that layer included, publishing through
-`FxEngine.replaceCueAssignments`. It does not append the layer's rows, and the distinction is
+`CueAssignmentLayer.replaceAssignments`. It does not append the layer's rows, and the distinction is
 load-bearing: appending would place two contributors on one (fixture, property) key inside one cue,
 which is exactly the ambiguity cooking removes — and the tie between them would fall to `HashMap`
-iteration order. `replaceCueAssignments` rather than `setCueAssignments` because the latter resets
+iteration order. `replaceAssignments` rather than `setAssignments` because the latter resets
 an in-flight crossfade weight to fully-in.
 
 A recurring layer is therefore idempotent on Layer 4: only its effects re-trigger.
@@ -528,7 +528,7 @@ HTP bucket does not, and must not: `DIMMER` is HTP, so treating every HTP key as
 mean a Look's fade-up never faded.
 
 Settings (discrete wheels) always snap, as they do for every other fade. On the programmer side one
-publish carries the whole gesture — `FxEngine.republishProgrammerKeys` takes a per-key fade map, so a
+publish carries the whole gesture — `ProgrammerWriter.republishKeys` takes a per-key fade map, so a
 Look whose colour row fades over 2 s beside a snapping dimmer row still lands in one
 `ControllerTransaction`. An explicit `fadeMs` from the caller (Include's, say) overrides the source's
 stored default, exactly as `POST /templates/{id}/apply` does with `request.fadeMs`.
@@ -578,8 +578,8 @@ Four boundaries:
 The mechanism: `CueComposer.cook` returns `CookResult.stompSuppression`, a
 `layerId → targetKey → properties` map, because only the cook knows which properties each layer
 asserted — the rows keep the winner per key, and a layer that asserted and then lost still asserted.
-It is published in the same locked mutation as the rows (`setCueAssignments` /
-`replaceCueAssignments` take it as a parameter for exactly that reason), and read per tick by
+It is published in the same locked mutation as the rows (`CueAssignmentLayer.setAssignments` /
+`replaceAssignments` take it as a parameter for exactly that reason), and read per tick by
 `FxEngine.isSuppressed` against `FxInstance.cueLayerId` / `programmerLayerId`. The reset pass has
 already painted the cooked value on the property, so a skipped apply *shows* that value rather than
 freezing the effect's last frame.
@@ -593,7 +593,7 @@ Three details worth knowing:
   mask, amount or order change, and all three move the suppression set.
 - **Provenance is stomp-aware**, through the same `isLayerStomped` helper the tick loops use.
   `highestPriorityEffectByKey` skips a stomped effect *for the stomped key only*, so a
-  lower-priority effect on that key can still be reported — and `computeProvenance` /
+  lower-priority effect on that key can still be reported — and `ProvenanceService.compute` /
   `underlyingSources` therefore name the cue rather than an effect nobody can see. Keeping one
   helper is the point: "what is painting" and "what provenance reports" have no business
   disagreeing.

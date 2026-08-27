@@ -317,7 +317,7 @@ class PropertyChannelWriterTest {
             category = PropertyCategory.COLOUR,
             value = CueAssignmentResolver.PropertyValue.Colour(ext),
         )
-        engine.setCueAssignments(1, listOf(assignment))
+        engine.cueLayer.setAssignments(1, listOf(assignment))
         val cueBytes = mapOf(
             2 to controller.currentValues[2],
             3 to controller.currentValues[3],
@@ -365,7 +365,7 @@ class PropertyChannelWriterTest {
             category = PropertyCategory.DIMMER,
             value = CueAssignmentResolver.PropertyValue.Slider(180u),
         )
-        engine.setCueAssignments(1, listOf(assignment))
+        engine.cueLayer.setAssignments(1, listOf(assignment))
 
         val writerWrite = PropertyChannelWriter.resolve(
             HexFixture(universe, "hex-1", "Hex 1", 1),

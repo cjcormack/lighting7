@@ -232,7 +232,7 @@ class ProgrammerStore {
     /**
      * Blind gate — true excludes the programmer's contribution from the merge without
      * touching the stored state. Consulted by [LayerResolver.fallbackFor] and the effect
-     * suppression pass. Setting it does not republish; [FxEngine.setProgrammerBlind] owns
+     * suppression pass. Setting it does not republish; [ProgrammerWriter.setBlind] owns
      * the publish.
      */
     @Volatile

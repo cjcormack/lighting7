@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.EffectSpawner
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
@@ -83,7 +84,7 @@ internal fun includeCueIntoProgrammer(
     // it so the entries can be recorded back as a group row rather than N fixture rows.
     val groupHints = includeGroupHints(state, cueData)
 
-    val writes = ArrayList<FxEngine.ProgrammerPropertyWrite>(resolved.size)
+    val writes = ArrayList<ProgrammerWriter.PropertyWrite>(resolved.size)
     val fixtureKeys = LinkedHashSet<String>()
     for (row in resolved) {
         val fixture: GroupableFixture = try {
@@ -94,7 +95,7 @@ internal fun includeCueIntoProgrammer(
         }
         val group = maskGroupForProperty(fixture, row.propertyName)
         if (!maskAllows(mask, group)) continue
-        writes += FxEngine.ProgrammerPropertyWrite(
+        writes += ProgrammerWriter.PropertyWrite(
             fixture, row.propertyName, row.value,
             sourceGroup = groupHints[row.targetKey to canonicalPropertyName(row.propertyName)],
         )
@@ -105,7 +106,7 @@ internal fun includeCueIntoProgrammer(
     // emit. A large cue is hundreds of properties, and per-property publishing would make
     // Include visibly stutter the rig.
     if (writes.isNotEmpty()) {
-        engine.writeProgrammerProperties(
+        engine.programmer.writeProperties(
             ProgrammerOwner.INCLUDE,
             writes,
             // Included content is recordable: Record TOUCHED and the Update checklist must

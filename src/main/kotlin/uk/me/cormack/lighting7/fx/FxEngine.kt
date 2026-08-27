@@ -5,32 +5,27 @@ import kotlinx.coroutines.flow.*
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.ParkManager
-import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.dmx.DmxColour
-import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
-import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
-import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
-import uk.me.cormack.lighting7.midi.PropertyChannelResolver
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
-import java.awt.Color
-import uk.me.cormack.lighting7.models.LayerSource
 
 private val logger = LoggerFactory.getLogger("FxEngine")
 
 /**
- * Central effect processing engine.
+ * Central effect processing engine: the tick loops and the active-effect set.
  *
  * FxEngine manages active effects and processes them on each Master Clock tick,
- * applying calculated values to fixture properties through the DMX system.
+ * applying calculated values to fixture properties through the DMX system. The rest of
+ * what historically lived here is split into components reached through the engine
+ * (sweep item E1): [cascade] (Layer-4/cascade transmit + the publish lock), [cueLayer]
+ * (per-cue Layer 4 assignment bookkeeping + the stomp registry), [provenance]
+ * ("who owns this value" computation + broadcast) and [programmer] (PROGRAMMER-layer
+ * write delegation).
  *
  * Usage:
  * ```
@@ -100,70 +95,13 @@ class FxEngine(
     @Volatile private var lastTickMs: Long = 0L
     @Volatile private var lastWallClockTickMs: Long = 0L
 
-    private class LogThrottle {
-        /** `System.nanoTime()` of the last emitted line; 0 until the first one. */
-        val lastLogNanos = AtomicLong(0L)
-        val suppressed = AtomicLong(0L)
-    }
+    // Shared with [CascadePublisher] so one fault keeps one suppression history wherever
+    // it is reported from — see [FxLogThrottle].
+    private val throttle = FxLogThrottle(logger)
 
-    /**
-     * Per-cause log throttles. Entries are never swept, so every key must be drawn from
-     * something the *rig* bounds — a fixture key, a group name, an effect type — and never
-     * from an effect id: ids come from a monotonic counter, so a broken effect re-spawned on
-     * every GO would leave a new permanent entry behind each time. Keying on the stable
-     * identity also throttles the fault properly across those re-spawns, which is what an
-     * operator watching the same effect fail out of every cue actually wants.
-     */
-    private val logThrottles = ConcurrentHashMap<String, LogThrottle>()
-
-    /** Stable throttle key for a fault attributable to [effect] — see [logThrottles]. */
+    /** Stable throttle key for a fault attributable to [effect] — see [FxLogThrottle]. */
     private fun faultKey(prefix: String, effect: FxInstance): String =
         "$prefix-${effect.effectTypeId}-${effect.target.targetKey}.${effect.target.propertyName}"
-
-    /**
-     * Log a tick-path fault at most once per [LOG_THROTTLE_NANOS] per [key].
-     *
-     * The beat pass runs at up to 120 Hz and the wall-clock pass at 50 Hz, so a fault that
-     * recurs every tick — a script effect that throws on every `calculate`, an effect
-     * pointing at a fixture that has gone away — would otherwise write thousands of lines a
-     * minute and bury everything else. Suppressed repeats are counted and reported on the
-     * next line that does get through, so the log still says "this is happening constantly"
-     * rather than looking like an isolated blip.
-     *
-     * [message] is only evaluated when the line is actually emitted. Faults whose real report
-     * comes from somewhere else pass [debug] and cost nothing at all when debug is off.
-     */
-    private fun logThrottled(
-        key: String,
-        error: Throwable? = null,
-        debug: Boolean = false,
-        message: () -> String,
-    ) {
-        if (debug && !logger.isDebugEnabled) return
-        val throttle = logThrottles.getOrPut(key) { LogThrottle() }
-        // nanoTime, not currentTimeMillis: this is an elapsed-time comparison, and an NTP
-        // correction that steps the wall clock backwards would otherwise make every later
-        // `now - last` negative and silence this key until real time caught up again.
-        val now = System.nanoTime()
-        val last = throttle.lastLogNanos.get()
-        // The CAS also resolves the two tick loops racing on one key: the loser suppresses.
-        if ((last != 0L && now - last < LOG_THROTTLE_NANOS) ||
-            !throttle.lastLogNanos.compareAndSet(last, now)
-        ) {
-            throttle.suppressed.incrementAndGet()
-            return
-        }
-        val suppressed = throttle.suppressed.getAndSet(0L)
-        // "since the last report" rather than "in the last 10s": the gap is only the throttle
-        // window when the fault is continuous. A burst that stopped an hour ago and recurred
-        // once would otherwise be reported as if it were still constant.
-        val text = if (suppressed > 0L) "${message()} (+$suppressed since the last report)" else message()
-        when {
-            debug -> logger.debug(text)
-            error != null -> logger.warn(text, error)
-            else -> logger.warn(text)
-        }
-    }
 
     /**
      * Record that [effect] threw out of its pass, and auto-pause it once it has thrown out of
@@ -219,7 +157,7 @@ class FxEngine(
             return
         }
 
-        logThrottled(faultKey("tick-failure", effect), e) { "FX engine error processing $describe" }
+        throttle.log(faultKey("tick-failure", effect), e) { "FX engine error processing $describe" }
     }
 
     /** Clear [effect]'s failure run after a pass it survived. */
@@ -339,35 +277,11 @@ class FxEngine(
         propertyName: String,
         effect: FxInstance,
     ): Boolean {
-        if (isLayerStomped(effect, fixtureKey, propertyName)) return true
+        if (cueLayer.isLayerStomped(effect, fixtureKey, propertyName)) return true
 
         if (suppression.isEmpty()) return false
         if (isProgrammerFxPriority(effect.priority)) return false
         return suppression[fixtureKey]?.contains(propertyName) == true
-    }
-
-    /**
-     * Is [effect] switched off on this key by a stomping layer above it in its own stack?
-     *
-     * Shared by the tick loops' [isSuppressed] and by [highestPriorityEffectByKey], so what is
-     * *painting* and what provenance *reports* cannot disagree. Without that sharing, a stomped
-     * effect would still be named the winner, and "why is this fixture this colour?" would answer
-     * with an effect nobody can see.
-     *
-     * Gated on both snapshots being empty first, which is the overwhelmingly common case — a
-     * stomping layer is an escape hatch, not everyday authoring — so the usual tick pays two
-     * volatile reads and no map lookups.
-     */
-    private fun isLayerStomped(effect: FxInstance, fixtureKey: String, propertyName: String): Boolean {
-        if (cueStompFlat.isEmpty() && programmerStompFlat.isEmpty()) return false
-        val cueLayerId = effect.cueLayerId
-        val programmerLayerId = effect.programmerLayerId
-        val layerStomp = when {
-            cueLayerId != null -> cueStompFlat[cueLayerId]
-            programmerLayerId != null -> programmerStompFlat[programmerLayerId]
-            else -> return false
-        }
-        return layerStomp?.get(fixtureKey)?.contains(propertyName) == true
     }
 
     private fun rebuildSortedSnapshots() {
@@ -412,12 +326,6 @@ class FxEngine(
         /** Wall-clock tick interval in milliseconds (50Hz) */
         const val WALL_CLOCK_INTERVAL_MS = 20L
 
-        /** Coalescing window for provenance recomputes — see [emitProvenanceUpdate]. */
-        const val PROVENANCE_COALESCE_MS = 50L
-
-        /** How often one recurring tick-path fault may write a log line — see [logThrottled]. */
-        const val LOG_THROTTLE_NANOS = 10_000_000_000L
-
         /**
          * How many consecutive passes an effect may throw out of before the engine pauses it.
          *
@@ -447,615 +355,45 @@ class FxEngine(
     /** Flow of FX state updates for WebSocket broadcasting */
     val fxStateFlow: SharedFlow<FxStateUpdate> = _fxStateFlow.asSharedFlow()
 
-    // --- Provenance ---
-
-    /** Which layer produced the current winning value for one (target, property). */
-    enum class ProvenanceSource { PARKED, PROGRAMMER, EFFECT, CUE }
+    // --- E1 split components ---
+    //
+    // Four components extracted from what used to be a ~3,400-line engine (sweep item E1):
+    // the engine keeps the tick loops and the effect set; these own the rest. Constructed in
+    // dependency order — the lambdas defer the two cyclic edges (cueLayer → provenance,
+    // provenance → the engine's effect set) until first call, which is safely after
+    // construction.
 
     /**
-     * The winning contributor for one (target, property) — the "who owns this value"
-     * answer. BASELINE keys are omitted from snapshots entirely (absence = baseline).
+     * Layer-4/cascade → controller transmit machinery, and the Layer 4 publish lock.
+     * Public for [CascadePublisher.resolveChannelCoveringKey], which routes consult; the
+     * publish entry points themselves are internal.
      */
-    data class ProvenanceEntry(
-        val targetKey: String,
-        val propertyName: String,
-        val source: ProvenanceSource,
-        val cueId: Int? = null,
-        val cueStackId: Int? = null,
-        val effectId: Long? = null,
-        /**
-         * The Look layer that won, when one did.
-         *
-         * Deliberately **not** a new [ProvenanceSource] arm: the source is still the cue (or, once
-         * the programmer holds layers, the programmer) — the layer is *which part of it*. Adding an
-         * arm would have forced every consumer's `when` to handle a case that answers the same
-         * question as `CUE` does, and would have made "a cue won" and "a cue's layer won" look like
-         * different kinds of event.
-         */
-        val layerId: Int? = null,
-        /**
-         * What that layer applies — a Look or a template, with its id, uuid and name.
-         *
-         * One value rather than the `lookId`/`lookName` pair it replaces: a layer's referent became
-         * polymorphic in session 3, and a field called `lookName` holding a template's name would
-         * be a lie the compiler could not find.
-         */
-        val layerSource: LayerSource? = null,
+    val cascade: CascadePublisher = CascadePublisher(
+        fixtures, layerResolver, parkManager, ::coveredByRunningEffects, throttle,
     )
 
-    // Conflated: recomputed on layer events only (programmer mutation, cue republish,
-    // effect lifecycle, park change) — never per frame. Full-state snapshots rather than
-    // diffs: the entry set is small (the union of active keys) and event-rate, so diffing
-    // buys nothing over the conflation.
-    private val _provenanceFlow = MutableSharedFlow<List<ProvenanceEntry>>(
-        replay = 1,
-        extraBufferCapacity = 1,
-        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
+    /** Per-cue Layer 4 assignment bookkeeping and the within-cue stomp registry. */
+    val cueLayer: CueAssignmentLayer = CueAssignmentLayer(layerResolver, cascade) {
+        provenance.emitUpdate()
+    }
+
+    /**
+     * Provenance computation + broadcast. The lambdas hand it read access to the engine's
+     * live effect set without a service → engine reference.
+     */
+    val provenance: ProvenanceService = ProvenanceService(
+        fixtures, programmerStore, layerResolver, cascade,
+        activeEffects = { activeEffects.values },
+        coverageKeys = ::resolveEffectFixtureKeys,
+        isLayerStomped = cueLayer::isLayerStomped,
+        cueStackIdFor = cueLayer::cueStackIdFor,
+        effectOrder = sortedEffectsComparator,
     )
 
-    /** Flow of full provenance snapshots for WebSocket broadcasting. */
-    val provenanceFlow: SharedFlow<List<ProvenanceEntry>> = _provenanceFlow.asSharedFlow()
-
-    // Coalesces provenance recomputes: emitProvenanceUpdate is called from every
-    // layer-event site — including per-MIDI-CC programmer writes and per-crossfade-tick
-    // Layer 4 republishes that run while holding [cueAssignmentsLock] — so the marker must
-    // be near-free and the O(effects + keys) recompute must happen off the caller's
-    // thread, outside any lock. `dirty` is flipped false *before* computing so a mutation
-    // landing mid-compute schedules a fresh cycle.
-    private val provenanceDirty = java.util.concurrent.atomic.AtomicBoolean(false)
-    @Volatile private var provenanceScope: CoroutineScope? = null
-
-    /**
-     * Mark provenance stale and schedule a coalesced recompute + broadcast. Called from
-     * every layer-event site (programmer writes/clears/blind, Layer 4 republish, effect
-     * lifecycle changes via [emitStateUpdate]) and by the park handlers. Cheap enough to
-     * call while holding locks. Before [start] wires a scope (unit tests), the recompute
-     * runs synchronously so assertions stay deterministic.
-     */
-    fun emitProvenanceUpdate() {
-        val scope = provenanceScope
-        if (scope == null) {
-            _provenanceFlow.tryEmit(computeProvenance())
-            return
-        }
-        if (provenanceDirty.compareAndSet(false, true)) {
-            scope.launch(Dispatchers.Default) {
-                delay(PROVENANCE_COALESCE_MS)
-                provenanceDirty.set(false)
-                _provenanceFlow.tryEmit(computeProvenance())
-            }
-        }
+    /** PROGRAMMER-layer write delegation. */
+    val programmer: ProgrammerWriter = ProgrammerWriter(fixtures, programmerStore, cascade) {
+        provenance.emitUpdate()
     }
-
-    /**
-     * Compute the winning contributor for every key any layer currently covers. Winner
-     * order mirrors the output stack: park → programmer (unless blind) → highest-priority
-     * running effect → cue layer. Keys nothing covers are omitted (baseline).
-     */
-    fun computeProvenance(): List<ProvenanceEntry> {
-        val programmerKeys = if (programmerStore.blind) {
-            emptySet()
-        } else {
-            val keys = HashSet(programmerStore.activeKeys())
-            // Sideband slots drive the wire too (raw pan/tilt drags, unpark hand-downs):
-            // attribute them to the property covering the channel. Channels with no
-            // backing property stay unreported — there is no (target, property) to name.
-            for (entry in programmerStore.channelEntries()) {
-                resolveChannelCoveringKey(entry.universe, entry.channel)?.let { keys.add(it) }
-            }
-            keys
-        }
-
-        // Which programmer layer won each key it covers, so a programmer-won cell can name
-        // *Warm Wash* rather than just "the programmer" — the same answer the cue branch below
-        // gives from `cueLayerLayerWinners`. Ranks are resolved against the live layer list, and
-        // `getOrNull` guards the window where the stack shrank after its slots were materialised.
-        val programmerLayers = programmerStore.layers
-        val programmerLayerWinners: Map<CueAssignmentResolver.Key, ProgrammerLayer> =
-            if (programmerStore.blind) {
-                emptyMap()
-            } else {
-                buildMap {
-                    for ((key, rank) in programmerStore.layerWinnerRankByKey()) {
-                        programmerLayers.getOrNull(rank)?.let { put(key, it) }
-                    }
-                }
-            }
-
-        val effectByKey = highestPriorityEffectByKey()
-
-        // One snapshot for all three maps — this runs outside [cueAssignmentsLock], so
-        // reading them as separate fields could straddle a concurrent cue apply. Reads the
-        // nested [LayerResolver.CueLayerSnapshot.index], never the lazy flat `state`: this
-        // recomputes per coalesced emit during a crossfade, and only ever needs the keys and
-        // membership, so forcing the flat map would rebuild per snapshot the very duplicate
-        // sweep item C3 removed from the publish path.
-        val cueLayer = layerResolver.current
-        val cueLayerIndex = cueLayer.index
-        val cueLayerWinners = cueLayer.winners
-        val cueLayerLayerWinners = cueLayer.layerWinners
-
-        val keys = HashSet<CueAssignmentResolver.Key>(programmerKeys)
-        for ((targetKey, properties) in cueLayerIndex) {
-            for (propertyName in properties.keys) {
-                keys.add(CueAssignmentResolver.Key.fixture(targetKey, propertyName))
-            }
-        }
-        for ((pair, _) in effectByKey) {
-            keys.add(CueAssignmentResolver.Key.fixture(pair.first, pair.second))
-        }
-
-        val entries = ArrayList<ProvenanceEntry>(keys.size)
-        for (key in keys) {
-            val fixture = try {
-                fixtures.untypedGroupableFixture(key.targetKey)
-            } catch (_: Exception) {
-                continue
-            }
-            val target = inferTargetForProperty(fixture, key)
-
-            val parked = target != null && allChannelsParked(target, fixture)
-            val programmerActive = key in programmerKeys
-            val effect = effectByKey[key.targetKey to key.propertyName]
-            // A programmer entry suppresses non-band effects, so it outranks them here too;
-            // a band effect modulates on top of the programmer and wins the provenance.
-            val bandEffect = effect != null && isProgrammerFxPriority(effect.priority)
-
-            val entry = when {
-                parked -> ProvenanceEntry(key.targetKey, key.propertyName, ProvenanceSource.PARKED)
-                programmerActive && (effect == null || !bandEffect) -> {
-                    val layer = programmerLayerWinners[key]
-                    ProvenanceEntry(
-                        key.targetKey, key.propertyName, ProvenanceSource.PROGRAMMER,
-                        layerId = layer?.layerId,
-                        layerSource = layer?.source,
-                    )
-                }
-                effect != null -> ProvenanceEntry(
-                    key.targetKey, key.propertyName, ProvenanceSource.EFFECT,
-                    cueId = effect.cueId, cueStackId = effect.cueStackId, effectId = effect.id,
-                )
-                cueLayerIndex[key.targetKey]?.containsKey(key.propertyName) == true -> {
-                    val winningCueId = cueLayerWinners[key]
-                    val layer = cueLayerLayerWinners[key]
-                    ProvenanceEntry(
-                        key.targetKey, key.propertyName, ProvenanceSource.CUE,
-                        cueId = winningCueId,
-                        cueStackId = winningCueId?.let { cueStackIdFor(it) },
-                        layerId = layer?.layerId,
-                        layerSource = layer?.source,
-                    )
-                }
-                else -> continue
-            }
-            entries.add(entry)
-        }
-        entries.sortWith(compareBy({ it.targetKey }, { it.propertyName }))
-        return entries
-    }
-
-    /**
-     * Highest-priority running effect per `(fixtureKey, propertyName)`. Shared by
-     * [computeProvenance] and [underlyingSources] so the two can't disagree about which
-     * effect is driving a property.
-     *
-     * A **layer-stomped** effect is skipped for the key it is stomped on, and only for that key: it
-     * is running, but it is not painting there, so reporting it would name a winner the operator
-     * cannot see. Skipping per key rather than per instance is what lets a lower-priority effect on
-     * the same key be reported instead, which is the honest answer when one exists.
-     */
-    private fun highestPriorityEffectByKey(
-        include: (FxInstance) -> Boolean = { true },
-    ): Map<Pair<String, String>, FxInstance> {
-        val effectByKey = HashMap<Pair<String, String>, FxInstance>()
-        for (effect in activeEffects.values) {
-            if (!effect.isRunning) continue
-            if (!include(effect)) continue
-            val propertyName = effect.target.propertyName
-            for (fixtureKey in resolveEffectFixtureKeys(effect)) {
-                if (isLayerStomped(effect, fixtureKey, propertyName)) continue
-                val k = fixtureKey to propertyName
-                val current = effectByKey[k]
-                if (current == null || sortedEffectsComparator.compare(effect, current) > 0) {
-                    effectByKey[k] = effect
-                }
-            }
-        }
-        return effectByKey
-    }
-
-    /**
-     * What would own each of [keys] if the programmer weren't there — the "which cue am I
-     * sitting on top of" question behind Update's Mode B checklist.
-     *
-     * This is deliberately *not* [computeProvenance]: provenance reports the programmer as the
-     * winner (correctly — it is what's on stage), which is exactly the answer Mode B can't use.
-     * `currentCueLayerWinners` is computed at Layer 4 publish time and knows nothing about the
-     * programmer, so it already *is* "the cue underneath". Keys with no cue row fall back to
-     * the highest-priority running cue-owned effect; programmer-band effects are skipped
-     * because they are part of the same busk being written back, not something underneath it.
-     *
-     * Keys with no cue and no cue-owned effect are still returned, with nulls — the caller
-     * buckets them as "programmer over baseline", which is a materially different offer to the
-     * operator ("record a new cue") than "you're overriding cue 3".
-     */
-    data class UnderlyingSource(
-        val key: CueAssignmentResolver.Key,
-        val cueId: Int?,
-        val cueStackId: Int?,
-        val viaEffectId: Long?,
-    )
-
-    fun underlyingSources(
-        keys: Collection<CueAssignmentResolver.Key>,
-        /**
-         * The Layer 4 snapshot to attribute against. A caller that also reads the cue layer
-         * itself (the Update checklist pairs `state` values with this attribution) must pass
-         * the one snapshot it read, or a cue apply landing between the two reads pairs one
-         * cue's value with another's attribution.
-         */
-        cueLayer: LayerResolver.CueLayerSnapshot = layerResolver.current,
-    ): List<UnderlyingSource> {
-        if (keys.isEmpty()) return emptyList()
-        val cueLayerWinners = cueLayer.winners
-        // Band effects are excluded from the *scan*, not filtered from its result. Filtering
-        // afterwards would lose the cue underneath: band effects always outrank cue-derived
-        // priorities, so a single top-priority-per-key map would only ever hold the band one,
-        // and a cue driving that property through its own FX would report as unattributed.
-        val effectByKey = highestPriorityEffectByKey { !isProgrammerFxPriority(it.priority) }
-        return keys.map { key ->
-            val cueId = cueLayerWinners[key]
-            if (cueId != null) {
-                UnderlyingSource(key, cueId, cueStackIdFor(cueId), viaEffectId = null)
-            } else {
-                val effect = effectByKey[key.targetKey to key.propertyName]
-                    ?.takeIf { it.cueId != null }
-                UnderlyingSource(key, effect?.cueId, effect?.cueStackId, effect?.id)
-            }
-        }
-    }
-
-    // --- Per-Cue Layer 4 Assignments ---
-    //
-    // Tracks the property assignments contributed by each currently-active cue. All writes go
-    // through [cueAssignmentsLock] so the "mutate map + republish flat snapshot" step is atomic
-    // — concurrent apply/stop calls must not publish a stale view. Tick-loop reads go through
-    // [LayerResolver.fallbackFor]'s `@Volatile` snapshot and stay lock-free.
-    //
-    // The map is plain [HashMap] because every access is already serialised by the lock; a
-    // [ConcurrentHashMap] would add internal striping we don't need.
-
-    private val cueAssignments = HashMap<Int, List<CueAssignmentResolver.Assignment>>()
-
-    // Per-cue crossfade weight in [0, 1]. Absent entries default to 1.0 (fully in), and an
-    // entry reaching 1.0 is removed rather than stored. Handed to the resolver as a
-    // [CueAssignmentResolver.FadeWeights] lookup, which multiplies it into each row's own
-    // `fadeWeight` at compose time — it used to be folded into row copies while building the
-    // flat list, which re-cooked the whole set every frame (sweep item C6). Kept separate from
-    // `cueAssignments` so the stored assignment list stays constant across a crossfade; only
-    // the scalar per-cue weight ticks. See [updateCueFadeWeights] / Phase 1b in
-    // `docs/plans/completed/cue-authoring-unification-plan.md`.
-    private val cueFadeWeights = HashMap<Int, Double>()
-
-    // cueId → the stack that cue belongs to, recorded when its assignments are published.
-    //
-    // The Layer 4 machinery is keyed by cue alone (`cueAssignments`, and the resolver's
-    // `currentCueLayerWinners: Key → cueId`), so a CUE-sourced provenance entry had nowhere to
-    // read a stack from and always reported null — the wire-format asymmetry against EFFECT
-    // sources that `FU-PROG-PROVENANCE-STACKID` tracked. Every caller of [setCueAssignments]
-    // holds a stack id, so recording it here costs one map write per publish and lets both
-    // provenance and [underlyingSources] answer "which stack" without touching the DB.
-    // Guarded by [cueAssignmentsLock], like the two maps above.
-    private val cueStackIds = HashMap<Int, Int>()
-
-    // cueId → that cue's within-cue stomp suppression, straight off `CookResult`. Held per cue so
-    // the cue's own lifecycle clears it: a cue that stops, or is republished with a layer's stomp
-    // switched off, replaces its whole entry in the same locked mutation as its rows. Guarded by
-    // [cueAssignmentsLock].
-    private val cueStompSuppression = HashMap<Int, LayerStompSuppression>()
-
-    // The flattened `cueLayerId → targetKey → properties` the tick loops read, rebuilt whenever
-    // [cueStompSuppression] changes. Flat because `DaoCueLayer` ids are unique across every cue, so
-    // no cue id is needed to disambiguate — and the hot path must not walk one map per live cue.
-    @Volatile private var cueStompFlat: LayerStompSuppression = emptyMap()
-
-    // The programmer stack's half of the same signal, keyed by `ProgrammerLayer.layerId`. A separate
-    // field rather than merged into [cueStompFlat] because the two id spaces are unrelated — see
-    // [FxInstance.cueLayerId].
-    @Volatile private var programmerStompFlat: LayerStompSuppression = emptyMap()
-
-    private val cueAssignmentsLock = Any()
-
-    /**
-     * Replace the Layer 4 assignments contributed by [cueId]. An empty list removes the cue's
-     * contribution (equivalent to [removeCueAssignments]).
-     *
-     * Does not touch the cue's fade weight — callers that want to publish at a weight other
-     * than 1.0 should follow with [updateCueFadeWeights]. In the common non-crossfade apply
-     * path the absent-entry default (1.0) is correct.
-     */
-    /**
-     * Replace [cueId]'s Layer 4 assignments. Empty [assignments] removes the cue entirely
-     * (equivalent to [removeCueAssignments]). The optional [weight] sets the cue's crossfade
-     * weight atomically in the same publish — used by the crossfade-start path to pin the
-     * incoming cue at 0 without briefly flashing its full value onto stage. A weight of 1.0
-     * (the default) clears any prior entry in the fade-weight map so reapplying a cue resets
-     * it to steady state. Clamped to `[0, 1]`.
-     *
-     * [cueStackId] records which stack the cue belongs to so CUE-sourced provenance and
-     * [underlyingSources] can name it. Defaulted to null rather than required: plenty of
-     * engine-level tests publish assignments for a bare cue id with no stack behind them, and
-     * a null simply means "stack unknown", which is what those callers mean.
-     */
-    fun setCueAssignments(
-        cueId: Int,
-        assignments: List<CueAssignmentResolver.Assignment>,
-        weight: Double = 1.0,
-        cueStackId: Int? = null,
-        /**
-         * [CookResult.stompSuppression] for this publish. Passed alongside the rows rather than set
-         * through a call of its own so the two cannot disagree: they are one cook's output, and a
-         * publish that refreshed the rows while leaving stale suppression behind would keep a
-         * layer's effects switched off after its stomper was disabled.
-         *
-         * Defaulted to empty, which is also what every non-layer caller means — a hand-built row
-         * list belongs to no layer, so nothing can stomp it.
-         */
-        stompSuppression: LayerStompSuppression = emptyMap(),
-        /**
-         * True only when this publish is the cue **arriving** — a GO, or an immediate apply. False
-         * for the cue-edit and Record/Update rewrites of an already-live cue that come through
-         * `republishCueLayer`, which are edits rather than entrances. See
-         * [republishCueAssignments].
-         */
-        honourRowFades: Boolean = false,
-    ) {
-        synchronized(cueAssignmentsLock) {
-            if (assignments.isEmpty()) {
-                val removed = cueAssignments.remove(cueId) != null
-                cueFadeWeights.remove(cueId)
-                cueStackIds.remove(cueId)
-                if (cueStompSuppression.remove(cueId) != null) rebuildStompFlatLocked()
-                if (removed) republishCueAssignments()
-                return
-            }
-            cueAssignments[cueId] = assignments
-            if (cueStackId != null) cueStackIds[cueId] = cueStackId
-            setCueStompLocked(cueId, stompSuppression)
-            val clamped = weight.coerceIn(0.0, 1.0)
-            if (clamped >= 1.0) {
-                cueFadeWeights.remove(cueId)
-            } else {
-                cueFadeWeights[cueId] = clamped
-            }
-            republishCueAssignments(honourRowFades = honourRowFades)
-        }
-    }
-
-    /**
-     * Replace several live cues' Layer 4 rows in one locked mutation with a single republish —
-     * the [repriorityCues] shape, for callers that rebuilt rows rather than re-prioritised them.
-     * Returns the cues actually replaced — a subset of [updates]' keys, so a caller reporting
-     * "these cues moved" must report this set, not what it attempted.
-     *
-     * **Crossfade weights are deliberately left alone**, and that is the whole reason this exists
-     * rather than a loop over [setCueAssignments]. That function's `weight` defaults to 1.0 and
-     * *clears* the cue's [cueFadeWeights] entry, so using it here would snap any in-flight
-     * crossfade on an affected cue to fully-in. A Look edit touches every cue that layers it at
-     * once, which makes that a likely accident rather than a theoretical one.
-     *
-     * Cues absent from [cueAssignments] are skipped: a cue that stopped being live between the
-     * caller's scan and this call has nothing to republish.
-     */
-    fun replaceCueAssignments(
-        updates: Map<Int, List<CueAssignmentResolver.Assignment>>,
-        /**
-         * `cueId → CookResult.stompSuppression`, for the same reason [setCueAssignments] takes one.
-         * A cue present in [updates] but absent here has its suppression **cleared**, not left
-         * alone: the caller re-cooked that cue, so an absent entry means the new cook found no
-         * stomping layer.
-         */
-        stompSuppression: Map<Int, LayerStompSuppression> = emptyMap(),
-        /**
-         * True only when this publish is a source **arriving** — `CueTriggerManager` firing a timed
-         * layer, whose rows appear on stage for the first time at that moment. False for
-         * `republishForLookEdit`, which tours every live cue layering an edited Look and would
-         * otherwise re-ramp the stage once per drag of a colour picker. See
-         * [republishCueAssignments].
-         */
-        honourRowFades: Boolean = false,
-    ): Set<Int> {
-        if (updates.isEmpty()) return emptySet()
-        val replaced = LinkedHashSet<Int>()
-        synchronized(cueAssignmentsLock) {
-            var stompChanged = false
-            for ((cueId, rows) in updates) {
-                if (cueId !in cueAssignments) continue
-                if (rows.isEmpty()) {
-                    cueAssignments.remove(cueId)
-                    // Weight and stack id intentionally survive removal here too: the cue is still
-                    // mid-fade as far as CueStackManager is concerned, and it owns that lifecycle.
-                    if (cueStompSuppression.remove(cueId) != null) stompChanged = true
-                } else {
-                    cueAssignments[cueId] = rows
-                    val stomp = stompSuppression[cueId] ?: emptyMap()
-                    if (setCueStompEntryLocked(cueId, stomp)) stompChanged = true
-                }
-                replaced.add(cueId)
-            }
-            if (stompChanged) rebuildStompFlatLocked()
-            if (replaced.isNotEmpty()) republishCueAssignments(honourRowFades = honourRowFades)
-        }
-        return replaced
-    }
-
-    /**
-     * Update the crossfade weight for one or more cues atomically. Only cues present in
-     * [cueAssignments] have an effect — unknown cue ids are ignored (silent no-op) because a
-     * crossfade tick may fire during the tiny window between an outgoing cue's end-of-fade
-     * [removeCueAssignments] and the next tick being cancelled.
-     *
-     * A single republish runs per call regardless of how many cues are updated, so crossfade
-     * ticks that update both outgoing and incoming cues pay one publish pass per frame.
-     *
-     * Weights are clamped to `[0, 1]`. Setting a weight of exactly 1.0 (the default) clears
-     * the entry — no need to accumulate stale entries once the crossfade is over.
-     */
-    fun updateCueFadeWeights(updates: Map<Int, Double>) {
-        if (updates.isEmpty()) return
-        synchronized(cueAssignmentsLock) {
-            var changed = false
-            var anyCompleted = false
-            for ((cueId, rawWeight) in updates) {
-                if (cueId !in cueAssignments) continue
-                val weight = rawWeight.coerceIn(0.0, 1.0)
-                val previous = cueFadeWeights[cueId] ?: 1.0
-                if (previous == weight) continue
-                if (weight >= 1.0) {
-                    cueFadeWeights.remove(cueId)
-                    anyCompleted = true
-                } else {
-                    cueFadeWeights[cueId] = weight
-                }
-                changed = true
-            }
-            // A weight reaching 1.0 ends that cue's fade, and it may be the *last* Layer 4
-            // publish of the crossfade: the outgoing cue's removal is a silent no-op when it
-            // contributed no rows (an effects-only cue), so nothing downstream is guaranteed
-            // to re-resolve the winner maps a weight-only republish carries forward. Resolve
-            // them here — once per fade end, not per frame.
-            if (changed) republishCueAssignments(weightsOnly = !anyCompleted)
-        }
-    }
-
-    /** Drop all Layer 4 contributions from [cueId]. */
-    fun removeCueAssignments(cueId: Int) {
-        synchronized(cueAssignmentsLock) {
-            val removed = cueAssignments.remove(cueId) != null
-            cueFadeWeights.remove(cueId)
-            cueStackIds.remove(cueId)
-            if (cueStompSuppression.remove(cueId) != null) rebuildStompFlatLocked()
-            if (removed) {
-                republishCueAssignments()
-            }
-        }
-    }
-
-    /**
-     * Drop [cueId]'s within-cue stomp suppression without touching its Layer 4 rows or fade
-     * weight.
-     *
-     * A timed layer's fire can leave a `cueStompSuppression` entry live after the cue's *effects*
-     * are gone — [CueTriggerManager.deactivateTriggersForCue] cancels the firing jobs but has no
-     * other reason to touch [FxEngine], and every call site that also calls [removeCueAssignments]
-     * for the same cue already clears the entry as a side effect of that call. This exists for the
-     * cue-trigger side to close that gap itself rather than depending on every current and future
-     * caller to remember the pairing. Safe to call even while the cue's rows are still fading out
-     * in a crossfade: [isLayerStomped] only suppresses *live effects* tagged with this cue's layer
-     * ids, and those are already removed (via [removeEffectsForCueStack]) before a crossfade starts
-     * — the suppression entry has nothing left to affect by the time this runs.
-     */
-    fun clearCueStompSuppression(cueId: Int) {
-        synchronized(cueAssignmentsLock) {
-            if (cueStompSuppression.remove(cueId) != null) rebuildStompFlatLocked()
-        }
-    }
-
-    /** Drop every cue's Layer 4 contribution — used by [stop] / [clearAllEffects] callers. */
-    fun clearAllCueAssignments() {
-        synchronized(cueAssignmentsLock) {
-            if (cueStompSuppression.isNotEmpty()) {
-                cueStompSuppression.clear()
-                rebuildStompFlatLocked()
-            }
-            if (cueAssignments.isEmpty() && cueFadeWeights.isEmpty()) return
-            cueAssignments.clear()
-            cueFadeWeights.clear()
-            cueStackIds.clear()
-            republishCueAssignments()
-        }
-    }
-
-    // ─── Within-cue stomp suppression ───────────────────────────────────
-
-    /** Store [cueId]'s entry and refresh the flat snapshot if it moved. */
-    private fun setCueStompLocked(cueId: Int, suppression: LayerStompSuppression) {
-        if (setCueStompEntryLocked(cueId, suppression)) rebuildStompFlatLocked()
-    }
-
-    /** Store [cueId]'s entry without refreshing. Returns whether anything changed. */
-    private fun setCueStompEntryLocked(cueId: Int, suppression: LayerStompSuppression): Boolean =
-        if (suppression.isEmpty()) {
-            cueStompSuppression.remove(cueId) != null
-        } else {
-            cueStompSuppression.put(cueId, suppression) != suppression
-        }
-
-    /**
-     * Flatten every live cue's per-layer suppression into the one map the tick loops read.
-     *
-     * Safe to flatten because `DaoCueLayer` ids are unique across cues — two cues can never claim
-     * the same layer id, so no key collides and no cue id is needed to disambiguate.
-     */
-    private fun rebuildStompFlatLocked() {
-        cueStompFlat = when {
-            cueStompSuppression.isEmpty() -> emptyMap()
-            cueStompSuppression.size == 1 -> cueStompSuppression.values.first()
-            else -> HashMap<Int, Map<String, Set<String>>>().apply {
-                for (perCue in cueStompSuppression.values) putAll(perCue)
-            }
-        }
-    }
-
-    /**
-     * Publish the programmer stack's within-cue stomp suppression, replacing whatever it held.
-     *
-     * Called on every recook of the stack — so, unlike the cue path, there is no removal call:
-     * an empty map *is* "nothing stomps any more".
-     */
-    fun setProgrammerStompSuppression(suppression: LayerStompSuppression) {
-        programmerStompFlat = suppression
-    }
-
-    /**
-     * Test seam for the programmer half, which has no behavioural read short of pumping a tick.
-     * The cue half is asserted end-to-end in `FxEnginePipelineTest` instead.
-     */
-    internal fun programmerStompSuppressionForTest(): LayerStompSuppression = programmerStompFlat
-
-    /** Which stack [cueId]'s currently-published assignments belong to, if it named one. */
-    fun cueStackIdFor(cueId: Int): Int? = synchronized(cueAssignmentsLock) { cueStackIds[cueId] }
-
-    /**
-     * Snapshot the set of cue ids currently contributing Layer 4 assignments. Used by
-     * `snapshot-from-live` to read each active cue's pre-expansion DB rows and preserve the
-     * group-scoped shape in the captured state.
-     */
-    fun activeCueAssignmentIds(): Set<Int> = synchronized(cueAssignmentsLock) {
-        cueAssignments.keys.toSet()
-    }
-
-    /**
-     * The published Layer 4 rows of every cue *except* those belonging to [stackId] — what a GO
-     * on that stack would leave alone, since firing a cue replaces its own stack's contribution
-     * and nothing else. Cues published without a stack (a cue-edit live apply) survive a stack
-     * GO, so they are included.
-     *
-     * Used by the cue-preview compose (`routes/cuePreview.kt`) to recompose a hypothetical cue
-     * set against what is already live without touching [layerResolver]'s state. Filtered in
-     * here rather than by the caller so the rows and the `cueId → stackId` map are read under
-     * one [cueAssignmentsLock] acquisition and cannot disagree.
-     *
-     * Rows carry their stored `fadeWeight` (always 1.0 — live crossfade progress lives in
-     * `cueFadeWeights` and is applied at republish time), so the result describes the settled
-     * look rather than a cue caught mid-crossfade.
-     */
-    fun cueAssignmentsExcludingStack(stackId: Int): List<CueAssignmentResolver.Assignment> =
-        synchronized(cueAssignmentsLock) {
-            cueAssignments.entries
-                .filter { cueStackIds[it.key] != stackId }
-                .flatMap { it.value }
-        }
 
     /**
      * Rewrite the composition priority of live rows owned by the cues in [priorities]
@@ -1067,7 +405,7 @@ class FxEngine(
      * change `sort_order` hand the fresh map here to keep the engine consistent with the stack.
      *
      * Touches both layers a cue can own — Layer 3 [FxInstance.priority] and the Layer 4
-     * assignment rows — and leaves [cueFadeWeights] alone so a repriority mid-crossfade doesn't
+     * assignment rows — and leaves the crossfade weights alone so a repriority mid-crossfade doesn't
      * disturb the fade. Entries whose priority already matches are skipped, which makes the
      * common single-live-cue reorder a no-op. Returns the number of rows changed.
      */
@@ -1087,702 +425,9 @@ class FxEngine(
             emitStateUpdate()
         }
 
-        // Layer 4 — Assignment.priority is a val, so the rows are rebuilt by copy.
-        synchronized(cueAssignmentsLock) {
-            var cueLayerChanged = false
-            for ((cueId, target) in priorities) {
-                val rows = cueAssignments[cueId] ?: continue
-                if (rows.all { it.priority == target }) continue
-                cueAssignments[cueId] = rows.map {
-                    if (it.priority == target) it else it.copy(priority = target)
-                }
-                changed += rows.count { it.priority != target }
-                cueLayerChanged = true
-            }
-            if (cueLayerChanged) republishCueAssignments()
-        }
-
+        // Layer 4 — the assignment rows live in [cueLayer]; it rebuilds them by copy.
+        changed += cueLayer.repriorityAssignments(priorities)
         return changed
-    }
-
-    // --- Programmer property writes ---
-    //
-    // Sticky manual values at property granularity. Callers (web busking, MIDI faders,
-    // flash, locate, preset toggles) hand a typed `PropertyValue` plus their
-    // `ProgrammerOwner`; the writer stores one property-level slot in `ProgrammerStore`
-    // under that owner and publishes via `LayerResolver.fallbackFor`. Clears remove only
-    // the caller's own slot; the property falls back to the most recent surviving owner
-    // before cascading to the layers below.
-    //
-    // `fadeMs` is accepted on every write/clear and threaded to the publish; half (a)
-    // ignores it (snap), half (b) drives the DmxController ramp for keys no running effect
-    // covers.
-
-    /**
-     * Lay a [value] onto the programmer for [propertyName] of [fixture] as [owner] and
-     * publish immediately. Returns the resolved channel writes so callers can record
-     * whether the write landed (empty = the property didn't resolve; nothing was stored).
-     *
-     * [absorbSideband] drops raw-channel sideband slots under the property's channels so a
-     * stale unpark or raw-channel value cannot resurface when this entry clears. Sticky
-     * operator writes (web, faders) absorb; momentary owners (flash, locate, presets) pass
-     * false so their release still reveals whatever the sideband held.
-     *
-     * Accepts any [GroupableFixture] — a [Fixture] or a [FixtureElement]. For elements the
-     * publish key is the element's own key so subsequent reads see the write.
-     */
-    fun writeProgrammerProperty(
-        owner: ProgrammerOwner,
-        fixture: GroupableFixture,
-        propertyName: String,
-        value: CueAssignmentResolver.PropertyValue,
-        touched: Boolean = true,
-        sourceGroup: String? = null,
-        absorbSideband: Boolean = true,
-        fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> {
-        val writes = PropertyChannelWriter.resolve(fixture, propertyName, value)
-        if (writes.isEmpty()) return writes
-        programmerStore.putValue(
-            owner, fixture.targetKey, propertyName, ProgrammerValue.Hard(value), touched, sourceGroup,
-        )
-        if (absorbSideband) absorbSidebandUnder(writes)
-        synchronized(cueAssignmentsLock) {
-            publishCascadeForKeys(setOf(CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)), fadeMs)
-        }
-        emitProvenanceUpdate()
-        return writes
-    }
-
-    /** Group overload — fan out to every member, tagging slots with the group name (§7.1). */
-    fun writeProgrammerGroupProperty(
-        owner: ProgrammerOwner,
-        group: FixtureGroup<*>,
-        propertyName: String,
-        value: CueAssignmentResolver.PropertyValue,
-        touched: Boolean = true,
-        absorbSideband: Boolean = true,
-        fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> = writeProgrammerProperties(
-        owner,
-        group.fixtures.filterIsInstance<Fixture>().map {
-            ProgrammerPropertyWrite(it, propertyName, value, sourceGroup = group.name)
-        },
-        touched = touched,
-        absorbSideband = absorbSideband,
-        fadeMs = fadeMs,
-    ).flatten()
-
-    /**
-     * Clear [owner]'s programmer entry for [propertyName] on [fixture]. The property
-     * cascades back to the most recent surviving owner, the cue layer (if a cue asserts
-     * it), or baseline. Accepts any [GroupableFixture].
-     */
-    fun clearProgrammerProperty(
-        owner: ProgrammerOwner,
-        fixture: GroupableFixture,
-        propertyName: String,
-        fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> {
-        val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
-        programmerStore.clear(owner, fixture.targetKey, propertyName)
-        if (channels.isEmpty()) return channels
-        synchronized(cueAssignmentsLock) {
-            publishCascadeForKeys(setOf(CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)), fadeMs)
-        }
-        emitProvenanceUpdate()
-        return channels
-    }
-
-    /** Group overload for [clearProgrammerProperty]. */
-    fun clearProgrammerGroupProperty(
-        owner: ProgrammerOwner,
-        group: FixtureGroup<*>,
-        propertyName: String,
-        fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> = clearProgrammerProperties(
-        owner,
-        group.fixtures.filterIsInstance<Fixture>().map { it to propertyName },
-        fadeMs = fadeMs,
-    )
-
-    /** One entry of a [writeProgrammerProperties] batch. */
-    data class ProgrammerPropertyWrite(
-        val fixture: GroupableFixture,
-        val propertyName: String,
-        val value: CueAssignmentResolver.PropertyValue,
-        /** Group name when this entry came from a group control, else null (§7.1). */
-        val sourceGroup: String? = null,
-    )
-
-    /**
-     * Batch counterpart of [writeProgrammerProperty]: store every entry, then publish all
-     * affected keys under one [cueAssignmentsLock] acquisition and one controller
-     * transaction. A locate on a large group is hundreds of property writes — issuing them
-     * one-by-one would take the lock, rescan the active effects and commit a DMX transaction
-     * per property.
-     *
-     * Returns one channel-write list per input entry (empty where the property didn't
-     * resolve — nothing stored for that entry), in input order, so callers can record which
-     * entries actually landed.
-     */
-    fun writeProgrammerProperties(
-        owner: ProgrammerOwner,
-        writes: List<ProgrammerPropertyWrite>,
-        touched: Boolean = true,
-        absorbSideband: Boolean = true,
-        fadeMs: Long = 0,
-    ): List<List<PropertyChannelResolver.ChannelWrite>> {
-        val resolved = writes.map { PropertyChannelWriter.resolve(it.fixture, it.propertyName, it.value) }
-        val keys = HashSet<CueAssignmentResolver.Key>()
-        for ((index, channelWrites) in resolved.withIndex()) {
-            if (channelWrites.isEmpty()) continue
-            val write = writes[index]
-            programmerStore.putValue(
-                owner,
-                write.fixture.targetKey,
-                write.propertyName,
-                ProgrammerValue.Hard(write.value),
-                touched,
-                write.sourceGroup,
-            )
-            if (absorbSideband) absorbSidebandUnder(channelWrites)
-            keys += CueAssignmentResolver.Key.fixture(write.fixture.targetKey, write.propertyName)
-        }
-        if (keys.isNotEmpty()) {
-            synchronized(cueAssignmentsLock) {
-                publishCascadeForKeys(keys, fadeMs)
-            }
-            emitProvenanceUpdate()
-        }
-        return resolved
-    }
-
-    /**
-     * Batch counterpart of [clearProgrammerProperty]: clear [owner]'s slot for every
-     * (fixture, property) pair, then cascade all affected keys back to the surviving owner /
-     * cue layer / baseline under one lock acquisition and one controller transaction.
-     */
-    fun clearProgrammerProperties(
-        owner: ProgrammerOwner,
-        clears: List<Pair<GroupableFixture, String>>,
-        fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> {
-        val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
-        val keys = HashSet<CueAssignmentResolver.Key>()
-        for ((fixture, propertyName) in clears) {
-            programmerStore.clear(owner, fixture.targetKey, propertyName)
-            val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
-            if (channels.isEmpty()) continue
-            keys += CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)
-            all += channels
-        }
-        if (keys.isNotEmpty()) {
-            synchronized(cueAssignmentsLock) {
-                publishCascadeForKeys(keys, fadeMs)
-            }
-            emitProvenanceUpdate()
-        }
-        return all
-    }
-
-    /**
-     * Release **every** owner's slot on each (fixture, property) pair — the operator
-     * "clear this entry" gesture — with one store sweep, one locked cascade publish, and
-     * one provenance update. Clearing owner-by-owner would transmit each surviving owner's
-     * value as an intermediate step (and, with [fadeMs] > 0, restart the ramp per owner);
-     * this releases each property in a single step to whatever sits below the programmer.
-     *
-     * **[ProgrammerOwner.LAYERS] is exempt, and that exemption is load-bearing.** A layer's
-     * contribution is derived state: the next recook — any Look edit, amount change or reorder —
-     * rebuilds it from the stack, so clearing it here would come back seconds later and read as the
-     * clear having been ignored. "Clear this entry" means *release the local writes on it*; removing
-     * a layer's contribution is done by removing the layer. Nothing is lost by skipping it, because
-     * with local writes gone the layer slot is what should be showing.
-     */
-    fun clearProgrammerEntries(
-        clears: List<Pair<GroupableFixture, String>>,
-        fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> {
-        val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
-        val keys = HashSet<CueAssignmentResolver.Key>()
-        var clearedAny = false
-        for ((fixture, propertyName) in clears) {
-            for (slot in programmerStore.slotsFor(fixture.targetKey, propertyName)) {
-                if (slot.owner == ProgrammerOwner.LAYERS) continue
-                programmerStore.clear(slot.owner, fixture.targetKey, propertyName)
-                clearedAny = true
-            }
-            val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
-            if (channels.isEmpty()) continue
-            keys += CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)
-            all += channels
-        }
-        if (keys.isNotEmpty()) {
-            synchronized(cueAssignmentsLock) {
-                publishCascadeForKeys(keys, fadeMs)
-            }
-        }
-        if (clearedAny) emitProvenanceUpdate()
-        return all
-    }
-
-    /**
-     * Raw-channel write into the programmer's sideband — the compatibility path for
-     * `updateChannel` on channels the property model can't lift (position axes, channels
-     * with no backing property) and for unpark hand-downs.
-     *
-     * When [coveringKey] identifies the (fixture, property) whose channels include this one,
-     * the key is republished so the sideband value reaches the wire through the normal
-     * cascade. When the channel has no backing property at all ([coveringKey] = null),
-     * nothing below it exists in the cascade — the value is written straight to the
-     * controller.
-     */
-    fun writeProgrammerChannel(
-        owner: ProgrammerOwner,
-        universe: Int,
-        channel: Int,
-        value: UByte,
-        coveringKey: CueAssignmentResolver.Key?,
-        touched: Boolean = true,
-        fadeMs: Long = 0,
-    ) {
-        programmerStore.putChannel(owner, universe, channel, value, touched)
-        if (coveringKey != null) {
-            synchronized(cueAssignmentsLock) {
-                publishCascadeForKeys(setOf(coveringKey), fadeMs)
-            }
-        } else if (!programmerStore.blind) {
-            fixtures.controllerOrNull(Universe(0, universe))
-                ?.setValue(channel, value, fadeMs)
-        }
-        emitProvenanceUpdate()
-    }
-
-    /**
-     * Sweep the entire programmer — every owner's property entries and the raw-channel
-     * sideband — and release everything to the layers below in one pass. The operator
-     * escape hatch behind `programmer.clearAll` and `POST /api/rest/programmer/clear-all`.
-     *
-     * Property-backed state (including sideband slots whose channel a property covers)
-     * releases through the normal cascade publish. Sideband channels with no backing
-     * property have nothing below them; they release to DMX 0.
-     *
-     * Returns the number of entries removed (properties + sideband channels). Callers that
-     * own toggle bookkeeping (locate, preset toggles) must reset it themselves — see
-     * `clearProgrammerCompletely` in `routes/programmer.kt`.
-     */
-    fun clearProgrammerAll(fadeMs: Long = 0): Int {
-        val keys = HashSet(programmerStore.activeKeys())
-        val channelEntries = programmerStore.channelEntries()
-        val count = programmerStore.size + channelEntries.size
-        if (count == 0) return 0
-
-        // Map each sideband channel to the property that covers it (so it releases through
-        // the cascade) or remember it as unbacked (released to 0 below).
-        val unbacked = mutableListOf<Pair<Int, Int>>()
-        for (entry in channelEntries) {
-            val key = resolveChannelCoveringKey(entry.universe, entry.channel)
-            if (key != null) keys += key else unbacked += entry.universe to entry.channel
-        }
-
-        programmerStore.clearAll()
-
-        if (keys.isNotEmpty()) {
-            synchronized(cueAssignmentsLock) {
-                publishCascadeForKeys(keys, fadeMs)
-            }
-        }
-        for ((universe, channel) in unbacked) {
-            fixtures.controllerOrNull(Universe(0, universe))
-                ?.setValue(channel, 0u, fadeMs)
-        }
-        emitProvenanceUpdate()
-        return count
-    }
-
-    /**
-     * Set the programmer's blind gate and republish every key it holds so the change lands
-     * on stage: entering blind releases programmer-held properties to the layers below;
-     * exiting restores the staged values. The stored programmer state is untouched either
-     * way. [fadeMs] rides the same publish plumbing as clears (snap in half (a)).
-     */
-    fun setProgrammerBlind(blind: Boolean, fadeMs: Long = 0) {
-        if (programmerStore.blind == blind) return
-        programmerStore.blind = blind
-
-        val keys = HashSet(programmerStore.activeKeys())
-        val unbacked = mutableListOf<ProgrammerStore.ChannelEntryView>()
-        for (entry in programmerStore.channelEntries()) {
-            val key = resolveChannelCoveringKey(entry.universe, entry.channel)
-            if (key != null) keys += key else unbacked += entry
-        }
-        if (keys.isNotEmpty()) {
-            synchronized(cueAssignmentsLock) {
-                publishCascadeForKeys(keys, fadeMs)
-            }
-        }
-        // Unbacked sideband channels have no cascade below them: blind writes 0, unblind
-        // restores the sideband value.
-        for (entry in unbacked) {
-            val value = if (blind) {
-                0u.toUByte()
-            } else {
-                (entry.slots.firstOrNull()?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
-                    ?: continue
-            }
-            fixtures.controllerOrNull(Universe(0, entry.universe))
-                ?.setValue(entry.channel, value, fadeMs)
-        }
-        emitProvenanceUpdate()
-    }
-
-    /** Drop all sideband slots under the given channel writes — see [writeProgrammerProperty]. */
-    private fun absorbSidebandUnder(writes: List<PropertyChannelResolver.ChannelWrite>) {
-        programmerStore.clearChannelsAbsorbedBy(
-            writes.map { packChannelKey(it.universe.universe, it.channel) }
-        )
-    }
-
-    /**
-     * The (fixture, property) key whose channels include (universe, channel), or null when
-     * no property backs the channel. Walks the owning fixture's property catalogue plus the
-     * position axes — the same channel set [FxTarget.fallbackFromProgrammer]'s sideband
-     * lookups consult.
-     */
-    fun resolveChannelCoveringKey(universe: Int, channel: Int): CueAssignmentResolver.Key? {
-        val mappings = fixtures.getChannelMappings()
-        val fixtureKey = mappings[universe]?.get(channel)?.fixtureKey ?: return null
-        val fixture = try {
-            fixtures.untypedFixture(fixtureKey)
-        } catch (_: Exception) {
-            return null
-        }
-
-        for (prop in fixture.fixtureProperties) {
-            val value = try {
-                prop.classProperty.call(fixture)
-            } catch (_: Exception) {
-                continue
-            } ?: continue
-            when (value) {
-                is DmxSlider -> if (value.channelNo == channel) {
-                    return CueAssignmentResolver.Key.fixture(fixture.key, prop.name)
-                }
-                is DmxFixtureSetting<*> -> if (value.channelNo == channel) {
-                    return CueAssignmentResolver.Key.fixture(fixture.key, prop.name)
-                }
-                is DmxColour -> if (
-                    channel == value.redSlider.channelNo ||
-                    channel == value.greenSlider.channelNo ||
-                    channel == value.blueSlider.channelNo
-                ) {
-                    return CueAssignmentResolver.Key.fixture(fixture.key, prop.name)
-                }
-            }
-        }
-
-        val positionFixture = fixture as? WithPosition
-        if (positionFixture != null) {
-            val pan = positionFixture.pan as? DmxSlider
-            val tilt = positionFixture.tilt as? DmxSlider
-            if (pan?.channelNo == channel || tilt?.channelNo == channel) {
-                return CueAssignmentResolver.Key.fixture(fixture.key, "position")
-            }
-        }
-        return null
-    }
-
-    /**
-     * Transmit the composed cascade fallback (cue layer → programmer → baseline) for each
-     * affected (fixtureKey, propertyName) key. Same publish machinery as
-     * [publishCueLayerToControllers], scoped to a caller-supplied key set rather than the
-     * full Layer 4 diff.
-     *
-     * Skips keys a currently-running effect covers and fully-parked targets. The
-     * effect-covered skip stays valid with the programmer above effects because the tick's
-     * reset pass is programmer-aware: it repaints suppressed keys with programmer values
-     * within one frame (≤20 ms) — the consequence is that writes/clears on effect-covered
-     * keys settle on the next tick and do **not** fade. Callers hold [cueAssignmentsLock]
-     * so this doesn't race with a concurrent Layer 4 republish or fade-weight update
-     * reading the same `cueLayerState`.
-     *
-     * [fadeMs] > 0 drives the per-channel [uk.me.cormack.lighting7.dmx.TickerState] ramp
-     * for the uncovered keys this publish writes.
-     */
-    /**
-     * Republish programmer keys whose stored values were rewritten *in place* — today, a Look edit
-     * re-cooking the programmer's layer stack.
-     *
-     * The public door onto [publishCascadeForKeys] for callers that mutated
-     * [ProgrammerStore] directly rather than through a `writeProgrammer*` entry point, and so
-     * have nothing to publish from. Takes the lock and emits provenance the same way those do.
-     */
-    fun republishProgrammerKeys(keys: Set<CueAssignmentResolver.Key>, fadeMs: Long = 0) {
-        if (keys.isEmpty()) return
-        synchronized(cueAssignmentsLock) {
-            publishCascadeForKeys(keys, fadeMs)
-        }
-        emitProvenanceUpdate()
-    }
-
-    /**
-     * As [republishProgrammerKeys], but with a **per-key** ramp: [fadeMs] is the default and
-     * [perKeyFadeMs] overrides it for the keys it names.
-     *
-     * One call rather than one per distinct fade, because a gesture is one transaction: a Look
-     * whose colour row fades over 2 s beside a snapping dimmer row is still one arrival, and
-     * splitting it would let the 50 Hz tick run between the halves and put them in different
-     * ArtNet frames. See `ProgrammerLayerStack.recook`, its only caller.
-     */
-    fun republishProgrammerKeys(
-        keys: Set<CueAssignmentResolver.Key>,
-        perKeyFadeMs: Map<CueAssignmentResolver.Key, Long>,
-        fadeMs: Long = 0,
-    ) {
-        if (keys.isEmpty()) return
-        synchronized(cueAssignmentsLock) {
-            publishCascadeForKeys(keys, fadeMs, perKeyFadeMs)
-        }
-        emitProvenanceUpdate()
-    }
-
-    private fun publishCascadeForKeys(
-        keys: Set<CueAssignmentResolver.Key>,
-        fadeMs: Long = 0,
-        perKeyFadeMs: Map<CueAssignmentResolver.Key, Long> = emptyMap(),
-    ) {
-        if (keys.isEmpty()) return
-
-        val coveredByEffects = coveredByRunningEffects()
-
-        if (coveredByEffects.isNotEmpty() &&
-            keys.all { (it.targetKey to it.propertyName) in coveredByEffects }) {
-            return
-        }
-
-        val transaction = ControllerTransaction(fixtures.controllers)
-        val fixturesWithTx = fixtures.withTransaction(transaction)
-        var wrote = false
-
-        for (key in keys) {
-            if ((key.targetKey to key.propertyName) in coveredByEffects) continue
-
-            val fixture = try {
-                fixturesWithTx.untypedGroupableFixture(key.targetKey)
-            } catch (e: Exception) {
-                logThrottled("cascade-missing-${key.targetKey}", e) {
-                    "FX engine: cascade publish could not find fixture '${key.targetKey}'"
-                }
-                continue
-            }
-
-            val target = inferTargetForProperty(fixture, key) ?: continue
-            if (allChannelsParked(target, fixture)) continue
-
-            try {
-                val fallback = layerResolver.fallbackFor(target, fixture, key.targetKey)
-                target.resetToFallback(fixture, fallback, perKeyFadeMs[key] ?: fadeMs)
-                wrote = true
-            } catch (e: Exception) {
-                logThrottled("cascade-publish-${key.targetKey}.${key.propertyName}", e) {
-                    "FX engine: failed to publish cascade for ${key.targetKey}.${key.propertyName}"
-                }
-            }
-        }
-
-        if (wrote) transaction.apply()
-    }
-
-    /**
-     * Infer the [FxTarget] kind for a cascade publish from the backing DMX property type on
-     * [fixture]. Mirrors the type-dispatch that [resolveTargetForCueLayerKey] does from a
-     * [CueAssignmentResolver.PropertyValue], but resolves the backing value by name via
-     * [PropertyChannelWriter.resolveProperty] instead — the clear path doesn't have a value
-     * in hand. Handles [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement]s
-     * as well as whole fixtures.
-     *
-     * Returns null when the property can't be resolved; caller should skip that key.
-     */
-    private fun inferTargetForProperty(
-        fixture: uk.me.cormack.lighting7.fixture.GroupableFixture,
-        key: CueAssignmentResolver.Key,
-    ): FxTarget? {
-        if (key.propertyName.equals("position", ignoreCase = true)) {
-            if (fixture !is WithPosition) return null
-            return PositionTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
-        }
-        val resolved = PropertyChannelWriter.resolveProperty(fixture, key.propertyName) ?: return null
-        return when (resolved.value) {
-            is DmxColour -> ColourTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
-            is DmxFixtureSetting<*> -> SettingTarget(key.targetKey, key.propertyName)
-            is DmxSlider -> SliderTarget(key.targetKey, key.propertyName)
-            else -> null
-        }
-    }
-
-    /**
-     * Callers hold [cueAssignmentsLock]. [weightsOnly] marks a crossfade weight tick: the
-     * assignment set is unchanged since the last full republish, so neither the flat row list
-     * nor the resolver's cook nor the winner maps are rebuilt — see
-     * [LayerResolver.reweightAssignments]. Every mutation of [cueAssignments] republishes
-     * with `weightsOnly = false`, under the same lock, which is what keeps that reuse valid.
-     *
-     * The per-cue weights ride alongside the rows as a [CueAssignmentResolver.FadeWeights]
-     * lookup rather than being folded into copies of them. Copying was what forced a fresh
-     * cook per frame: new row objects are a new row *set* as far as the resolver can tell.
-     * [cueFadeWeights] is handed over directly and read synchronously under the lock the
-     * caller already holds.
-     *
-     * @param honourRowFades whether the winning rows' own `fadeDurationMs` may ramp this publish.
-     *   Defaults to false, and only a caller that knows this publish is a **source arriving** —
-     *   a cue GO, a timed layer firing, an operator putting a Look on a pad — may pass true. Every
-     *   other republish snaps, each for its own reason: a crossfade weight tick runs at ~62 fps and
-     *   a ramp restarted every frame never arrives; a Look-content edit tours every live cue that
-     *   layers it, so an operator dragging a colour picker would set a 2 s crossfade running per
-     *   drag step; a Record/Update rewrite of a live cue is an edit, not an entrance; and a removal
-     *   or a reveal releases keys to whatever sits underneath, which the row that stopped
-     *   contributing has no business timing. `ProgrammerLayerStack` splits the same way, on the same
-     *   arrival-versus-edit line.
-     */
-    private fun republishCueAssignments(weightsOnly: Boolean = false, honourRowFades: Boolean = false) {
-        val before = layerResolver.current
-        val weights = CueAssignmentResolver.FadeWeights(cueFadeWeights)
-        if (cueAssignments.isEmpty()) {
-            layerResolver.applyAssignments(emptyList())
-        } else if (weightsOnly) {
-            layerResolver.reweightAssignments(weights)
-        } else {
-            val flat = ArrayList<CueAssignmentResolver.Assignment>()
-            for (list in cueAssignments.values) flat.addAll(list)
-            layerResolver.applyAssignments(flat, weights)
-        }
-        // `&& !weightsOnly` belongs here rather than to the callers: a weight tick is a republish
-        // no caller describes as an arrival, and the guarantee that the two fade mechanisms never
-        // compound on one key should not rest on every call site remembering it.
-        publishCueLayerToControllers(before, layerResolver.current, honourRowFades && !weightsOnly)
-        emitProvenanceUpdate()
-    }
-
-    /**
-     * Transmit the composed Layer 2 → Layer 4 → Layer 5 fallback for every property whose
-     * cue-layer state changed. Without this, cues that contribute only property assignments
-     * (no effects) never paint the stage — the tick loop early-returns when no effects are
-     * running, and the effect-reset pass is the only other site that writes the composed
-     * cascade onto controllers.
-     *
-     * Walks the union of (fixtureKey, propertyName) keys from the before and after cue-layer
-     * snapshots' indexes, without materialising a union key set — crossfade ticks run this
-     * per frame. Skips keys a currently-running effect covers (the effect tick will paint
-     * them; the set comes from [coveredByRunningEffects], cached until the effect list or
-     * fixture register moves) and fully-parked targets (park wins at transmit regardless).
-     * Otherwise opens a single [ControllerTransaction] and writes the resolved fallback via
-     * [FxTarget.resetToFallback] — same mechanism [resetActiveProperties] uses.
-     *
-     * Release semantics: when a key is in [before] but not [after],
-     * [LayerResolver.fallbackFor] naturally falls through to the programmer (Layer 2, sticky
-     * direct writes included) then Layer 5 (baseline), so the channel releases to whatever's
-     * underneath rather than to zero.
-     *
-     * Callers hold [cueAssignmentsLock]. The controller write is in-memory buffering on the
-     * transaction; the actual transmit-side work is quick enough that running it under the
-     * lock is fine — mirrors the pattern in the `updateChannel` handler which also writes
-     * through to the controller synchronously.
-     */
-    private fun publishCueLayerToControllers(
-        before: LayerResolver.CueLayerSnapshot,
-        after: LayerResolver.CueLayerSnapshot,
-        honourRowFades: Boolean,
-    ) {
-        val beforeIndex = before.index
-        val afterIndex = after.index
-        if (beforeIndex.isEmpty() && afterIndex.isEmpty()) return
-
-        val coveredByEffects = coveredByRunningEffects()
-        // Empty for every cue whose rows asked for no fade, which is the common case — so the
-        // compound-key allocation `publishKey` otherwise avoids is skipped entirely rather than
-        // done and discarded.
-        val rowFades = if (honourRowFades) after.fadeDurations else emptyMap()
-
-        val transaction = ControllerTransaction(fixtures.controllers)
-        val fixturesWithTx = fixtures.withTransaction(transaction)
-        var wrote = false
-
-        fun publishKey(
-            fixtureKey: String,
-            propertyName: String,
-            beforeValue: CueAssignmentResolver.PropertyValue?,
-            afterValue: CueAssignmentResolver.PropertyValue?,
-        ) {
-            // Skip keys whose composed Layer 4 value didn't actually change. Crossfade ticks
-            // call republish at ~60 fps; mid-fade the eased weight often quantises to the
-            // same UByte for several ticks in a row, and any cue not involved in the fade
-            // keeps a constant composed value the whole way through. Equality is a cheap
-            // data-class check.
-            if (beforeValue == afterValue) return
-            if ((fixtureKey to propertyName) in coveredByEffects) return
-
-            val typeSource = afterValue ?: beforeValue ?: return
-            val target = resolveTargetForCueLayerKey(fixtureKey, propertyName, typeSource)
-
-            try {
-                val fixture = fixturesWithTx.untypedGroupableFixture(fixtureKey)
-                if (allChannelsParked(target, fixture)) return
-                val fallback = layerResolver.fallbackFor(target, fixture, fixtureKey)
-                // A released key (`afterValue == null`) snaps: its fade belonged to the row that
-                // has just stopped contributing, and what it releases *to* is whatever sits
-                // underneath — not something that row gets to time.
-                val fadeMs = if (rowFades.isEmpty() || afterValue == null) {
-                    0L
-                } else {
-                    rowFades[CueAssignmentResolver.Key.fixture(fixtureKey, propertyName)] ?: 0L
-                }
-                target.resetToFallback(fixture, fallback, fadeMs)
-                wrote = true
-            } catch (e: Exception) {
-                logThrottled("layer4-publish-$fixtureKey.$propertyName", e) {
-                    "FX engine: failed to publish Layer 4 for $fixtureKey.$propertyName"
-                }
-            }
-        }
-
-        for ((fixtureKey, afterProperties) in afterIndex) {
-            val beforeProperties = beforeIndex[fixtureKey]
-            for ((propertyName, afterValue) in afterProperties) {
-                publishKey(fixtureKey, propertyName, beforeProperties?.get(propertyName), afterValue)
-            }
-        }
-        // Keys present before but released in this publish.
-        for ((fixtureKey, beforeProperties) in beforeIndex) {
-            val afterProperties = afterIndex[fixtureKey]
-            for ((propertyName, beforeValue) in beforeProperties) {
-                if (afterProperties?.containsKey(propertyName) != true) {
-                    publishKey(fixtureKey, propertyName, beforeValue, null)
-                }
-            }
-        }
-
-        if (wrote) transaction.apply()
-    }
-
-    /**
-     * Construct the [FxTarget] for a Layer 4 key, deriving target kind from [typeSource].
-     * Takes the key's two strings rather than a [CueAssignmentResolver.Key] so the ~62 fps
-     * crossfade publish path doesn't materialise a compound key per changed entry.
-     */
-    private fun resolveTargetForCueLayerKey(
-        fixtureKey: String,
-        propertyName: String,
-        typeSource: CueAssignmentResolver.PropertyValue,
-    ): FxTarget = when (typeSource) {
-        is CueAssignmentResolver.PropertyValue.Slider ->
-            SliderTarget(fixtureKey, propertyName)
-        is CueAssignmentResolver.PropertyValue.Colour ->
-            ColourTarget(FxTargetRef.fixture(fixtureKey), propertyName)
-        is CueAssignmentResolver.PropertyValue.Position ->
-            PositionTarget(FxTargetRef.fixture(fixtureKey), propertyName)
-        is CueAssignmentResolver.PropertyValue.Setting ->
-            SettingTarget(fixtureKey, propertyName)
     }
 
     /**
@@ -1852,11 +497,7 @@ class FxEngine(
      */
     fun start(scope: CoroutineScope) {
         speedMasters.start(scope)
-        provenanceScope = scope
-
-        // Seed the provenance replay so subscribers connecting before any layer event get
-        // a (usually empty) snapshot instead of nothing.
-        emitProvenanceUpdate()
+        provenance.start(scope)
 
         // Beat processing loop: one pass per wake-up, over one coherent frame of every
         // master's current tick. The wake channel is CONFLATED, so ticks from N masters
@@ -1878,7 +519,7 @@ class FxEngine(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (t: Throwable) {
-                    logThrottled("beat-pass", t) { "FX engine: beat pass failed" }
+                    throttle.log("beat-pass", t) { "FX engine: beat pass failed" }
                 }
             }
         }
@@ -1892,7 +533,7 @@ class FxEngine(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (t: Throwable) {
-                    logThrottled("wall-clock-pass", t) { "FX engine: wall-clock pass failed" }
+                    throttle.log("wall-clock-pass", t) { "FX engine: wall-clock pass failed" }
                 }
             }
         }
@@ -1902,7 +543,7 @@ class FxEngine(
      * Stop the FX engine and all active effects.
      */
     fun stop() {
-        provenanceScope = null
+        provenance.stop()
         processingJob?.cancel()
         processingJob = null
         wallClockJob?.cancel()
@@ -1911,7 +552,7 @@ class FxEngine(
         val allEffects = activeEffects.values.toList()
         activeEffects.clear()
         rebuildSortedSnapshots()
-        clearAllCueAssignments()
+        cueLayer.clearAll()
         resetUncoveredProperties(allEffects)
         emitStateUpdate()
     }
@@ -2292,7 +933,7 @@ class FxEngine(
      * — the busking effects the operator added on top of their programmer values. Cue-owned and
      * plain manual effects are untouched.
      *
-     * Kept independently callable (rather than folded into [clearProgrammerAll]) because the
+     * Kept independently callable (rather than folded into [ProgrammerWriter.clearAll]) because the
      * programmer's Clear is specified as "programmer values **and** programmer FX", and a
      * clear-FX-only variant wants the same sweep without touching stored values.
      *
@@ -2356,7 +997,7 @@ class FxEngine(
             resetUncoveredProperties(toRemove)
             emitStateUpdate()
         }
-        removeCueAssignments(cueId)
+        cueLayer.removeAssignments(cueId)
         return toRemove.size
     }
 
@@ -2367,7 +1008,7 @@ class FxEngine(
         val allEffects = activeEffects.values.toList()
         activeEffects.clear()
         rebuildSortedSnapshots()
-        clearAllCueAssignments()
+        cueLayer.clearAll()
         resetUncoveredProperties(allEffects)
         emitStateUpdate()
     }
@@ -2779,7 +1420,7 @@ class FxEngine(
     ) {
         try {
             val fixture = fixturesWithTx.untypedGroupableFixture(fixtureKey)
-            if (allChannelsParked(target, fixture)) return
+            if (cascade.allChannelsParked(target, fixture)) return
             val fallback = layerResolver.fallbackFor(target, fixture, fixtureKey)
             target.resetToFallback(fixture, fallback)
         } catch (e: Exception) {
@@ -2788,72 +1429,12 @@ class FxEngine(
             // next line and report it at warn (and eventually pause the effect). Logging both
             // at warn would double every line for one fault. Throttled all the same — this
             // runs once per (fixture, property) per tick.
-            logThrottled("reset-$fixtureKey.${target.propertyName}", debug = true) {
+            throttle.log("reset-$fixtureKey.${target.propertyName}", debug = true) {
                 "FX engine: reset to fallback failed for $fixtureKey.${target.propertyName}: ${e.message}"
             }
         }
     }
 
-    /**
-     * Is every DMX channel backing [target] on [fixture] parked?
-     *
-     * When true, the caller can skip reset work entirely because [ArtNetController] will
-     * overwrite the value at transmit time with the parked value regardless. Partial parking
-     * (rare) is treated as "not all parked" — the channels that aren't parked still need their
-     * reset path to run.
-     */
-    private fun allChannelsParked(
-        target: FxTarget,
-        fixture: uk.me.cormack.lighting7.fixture.GroupableFixture,
-    ): Boolean {
-        val pm = parkManager ?: return false
-        return target.isPropertyFullyParked(fixture, pm)
-    }
-
-    /** Whether a programmer write of one property would reach the wire, and if not, why. */
-    enum class ProgrammerPublishability {
-        /** The property resolves to channels and at least one of them is unparked. */
-        PUBLISHABLE,
-
-        /** Every channel backing the property is parked — park wins at transmit. */
-        PARK_MASKED,
-
-        /** The property has no DMX-backed channels on this fixture; a write is a no-op. */
-        UNRESOLVED,
-    }
-
-    /**
-     * Would a programmer write of [propertyName] on [fixture] actually reach the wire?
-     *
-     * This is the public, resolved-by-name form of the two guards [publishCascadeForKeys]
-     * applies per key — [inferTargetForProperty] returning null, and [allChannelsParked] —
-     * *in that order and via the same helpers*, so a caller that pre-filters on this can never
-     * disagree with what the publish then does. Resolving park through
-     * [FxTarget.isPropertyFullyParked] rather than enumerating channels directly matters:
-     * [ColourTarget] scopes its extended white/amber/UV channels by `bundleWithColour`, which
-     * is not the same set [PropertyChannelWriter.channelsFor] enumerates by trait.
-     *
-     * Locate is the caller: it must know whether writing a property can achieve anything
-     * before recording a toggle write for it — an unpublishable write would strand a
-     * bookkeeping row for a value that never reached the wire.
-     */
-    fun programmerPublishability(
-        fixture: uk.me.cormack.lighting7.fixture.GroupableFixture,
-        propertyName: String,
-    ): ProgrammerPublishability {
-        val key = CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)
-        val target = inferTargetForProperty(fixture, key) ?: return ProgrammerPublishability.UNRESOLVED
-        if (PropertyChannelWriter.channelsFor(fixture, propertyName).isEmpty()) {
-            // A property whose descriptor exists but is not DMX-backed (e.g. `position` on a
-            // Hue-backed head): `writeProgrammerProperties` resolves zero channels for it.
-            return ProgrammerPublishability.UNRESOLVED
-        }
-        return if (allChannelsParked(target, fixture)) {
-            ProgrammerPublishability.PARK_MASKED
-        } else {
-            ProgrammerPublishability.PUBLISHABLE
-        }
-    }
 
     /**
      * Process an effect targeting a single fixture.
@@ -3046,11 +1627,11 @@ class FxEngine(
         for (affected in uncovered) {
             try {
                 val fixture = fixturesWithTx.untypedGroupableFixture(affected.fixtureKey)
-                if (allChannelsParked(affected.target, fixture)) continue
+                if (cascade.allChannelsParked(affected.target, fixture)) continue
                 val fallback = layerResolver.fallbackFor(affected.target, fixture, affected.fixtureKey)
                 affected.target.resetToFallback(fixture, fallback)
             } catch (e: Exception) {
-                logThrottled("reset-uncovered-${affected.fixtureKey}.${affected.target.propertyName}", e) {
+                throttle.log("reset-uncovered-${affected.fixtureKey}.${affected.target.propertyName}", e) {
                     "FX engine: failed to reset ${affected.target.propertyName} " +
                         "on '${affected.fixtureKey}'"
                 }
@@ -3163,7 +1744,7 @@ class FxEngine(
             val group = try {
                 fixtures.untypedGroup(groupName)
             } catch (e: Exception) {
-                logThrottled("missing-group-$groupName", e) {
+                throttle.log("missing-group-$groupName", e) {
                     "FX engine: group '$groupName' not found for effect ${effect.id}"
                 }
                 return none()
@@ -3233,7 +1814,7 @@ class FxEngine(
         val fixture = try {
             fixtures.untypedFixture(fixtureKey)
         } catch (e: Exception) {
-            logThrottled("missing-fixture-$fixtureKey", e) {
+            throttle.log("missing-fixture-$fixtureKey", e) {
                 "FX engine: fixture '$fixtureKey' not found for effect ${effect.id}"
             }
             return none()
@@ -3370,6 +1951,6 @@ class FxEngine(
             effectStates = states
         ))
         // Effect lifecycle changes move provenance winners — piggyback on the same sites.
-        emitProvenanceUpdate()
+        provenance.emitUpdate()
     }
 }

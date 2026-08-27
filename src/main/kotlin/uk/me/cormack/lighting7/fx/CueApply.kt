@@ -329,7 +329,7 @@ internal fun buildCueAssignmentsForCue(
         }
 
         // Assignment.fadeWeight always 1.0 here — crossfade progress is applied per-cue by
-        // [FxEngine.updateCueFadeWeights] at publish time, not baked into individual rows.
+        // [CueAssignmentLayer.updateFadeWeights] at publish time, not baked into individual rows.
         fun row(
             key: String,
             isGroup: Boolean,
@@ -392,13 +392,13 @@ internal fun republishCueLayer(state: State, cueId: Int, applyData: CueApplyData
     val engine = state.show.fxEngine
     val combined = buildCombinedCueLayerRows(state, cueId, applyData)
     if (combined.rows.isNotEmpty()) {
-        engine.setCueAssignments(
+        engine.cueLayer.setAssignments(
             cueId, combined.rows,
             cueStackId = applyData.cueStackId,
             stompSuppression = combined.stompSuppression,
         )
     } else {
-        engine.removeCueAssignments(cueId)
+        engine.cueLayer.removeAssignments(cueId)
     }
 }
 

@@ -49,7 +49,7 @@ internal data class ProgrammerClearOutcome(val entryCount: Int, val effectsClear
  *   bookkeeping would desync the toggles — and, for the Look-layer stack, would let the next
  *   recook put the whole look back on stage after the operator cleared it;
  * - band FX before the store sweep: removing them restores the cascade under their targets
- *   while the programmer still holds its values, so the single [FxEngine.clearProgrammerAll]
+ *   while the programmer still holds its values, so the single [ProgrammerWriter.clearAll]
  *   republish that follows lands every affected key once instead of twice.
  *
  * Clear is specified as "programmer values **and** programmer FX" — busking effects created
@@ -59,6 +59,6 @@ internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): Programm
     state.show.locateManager.reset()
     state.show.programmerLayerStack.reset()
     val effectsCleared = state.show.fxEngine.removeProgrammerBandEffects()
-    val entryCount = state.show.fxEngine.clearProgrammerAll(fadeMs)
+    val entryCount = state.show.fxEngine.programmer.clearAll(fadeMs)
     return ProgrammerClearOutcome(entryCount, effectsCleared)
 }

@@ -92,7 +92,7 @@ class TimedLayerFireCookTest : RouteIntegrationTest() {
                 sortOrder = 0; targets = emptyList()
                 intervalMs = INTERVAL_MS
             }
-            // A local row so the cue registers Layer 4 at GO. `replaceCueAssignments` — which is
+            // A local row so the cue registers Layer 4 at GO. `replaceAssignments` — which is
             // what a fire publishes through — skips a cue that has no rows registered yet, so a
             // cue holding *only* a timed layer would never light at all. Not this test's subject.
             DaoCuePropertyAssignment.new {
