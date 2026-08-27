@@ -187,11 +187,24 @@ deferred row while actually exercising a bound one on an unpatched fixture. Noth
 added for a stored `deferred` row (no `toDetailsDto` filter, no validation on the sync-import or
 copy paths): the operator's call, on the grounds that no database outside the dev desk has held one.
 
-**B7. Layer source invariant enforced three ways with three behaviours** — medium / P2 / M / opus
+~~**B7. Layer source invariant enforced three ways with three behaviours**~~ — done, `fb50bed`. medium / P2 / M / opus
 `DaoCueLayers.look`/`template` exactly-one invariant: read-time `check{}` throws
 (`models/cues.kt:419`), `resolveCueLayerSource` silently drops (`projectCuesHelpers.kt:501`),
 import raises `ImportError` (`ProjectImporter.kt:709`). **Fix:** a DB CHECK constraint (or
 discriminator column) and one shared resolution behaviour with a warn.
+
+Landed as `layerSourceShape` + a `cue_layer_exactly_one_source` CHECK, with **two** deliberate
+departures. The importer keeps its `ImportError` — operator's call: it shares the verdict but not
+the severity, because archive JSON is untrusted input arriving through a call that can report, and
+silently dropping a layer on a sync pull is worse than failing the pull. And the CHECK only reaches
+a database created after it (Exposed emits CHECKs in `CREATE TABLE` only; SQLite cannot
+`ALTER TABLE ADD CONSTRAINT`), so the dev desk stays unconstrained and the warn-and-drop paths are
+what hold the line there.
+
+Grew in the landing: a **fourth** site, and the one that made the read-time throw reachable at all.
+`POST /cues/{cueId}/copy` copied `look` alone and never `template`, so copying any cue with a
+template layer wrote a row naming neither record — which is why the throw was only ever seen on a
+GO, never on the write that caused it.
 
 ## C — Performance (hot paths)
 
@@ -641,7 +654,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 1 | ~~C1–C2~~ **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
-| 4 | ~~E1–E7, C8, B6~~ **done**, B7, F6, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
+| 4 | ~~E1–E7, C8, B6–B7~~ **done**, F6, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
 
