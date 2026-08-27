@@ -458,12 +458,17 @@ vocabulary is single even where the policy is not. The review then found that th
 endpoints write these fields to the DB with no validation at all, which is where the bad string
 actually enters — filed as E10 rather than folded in here.
 
-**E5. Single source for layer ranking and cook priorities** — medium / P2 / S / opus
+~~**E5. Single source for layer ranking and cook priorities**~~ — done, `7fd70e9`. medium / P2 / S / opus
 The contributing-layer predicate is implemented three times (`CueComposer.cook:242`,
 `cookEffects:374`, `ProgrammerLayerStack.syncEffects:514` — the last missing the timed clause) and
 `priorityFor(rank)` re-derives what `CookWinner.index` carries, with agreement documented but
 unenforced. Also `CueComposer.cook`'s four-parameters-for-two-dependencies resolver signature
 (`CueComposer.kt:212-234`). **Fix:** one `contributingLayers()` helper; pass resolvers only.
+
+Grew in the landing: both of `cook`'s resolvers are *required* rather than defaulting to
+`{ null }`. Failing to resolve a layer is not an error in `cook` — the layer is dropped with a
+warning — so an omitted resolver would cook a cue to darkness and report only that each of its
+layers could not load.
 
 **E6. Programmer-band effect lifecycle has two owners** — medium / P2 / M / fable
 `ProgrammerLayerStack` keeps its own `effectInstances` map + lock and reconciles against
@@ -613,7 +618,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 1 | ~~C1–C2~~ **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
-| 4 | ~~E2–E4~~ **done**, E5–E7, C8, B6, B7, F6, E10, E1 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
+| 4 | ~~E2–E5~~ **done**, E6, E7, C8, B6, B7, F6, E10, E1 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
 
