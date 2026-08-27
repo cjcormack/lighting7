@@ -481,11 +481,16 @@ the engine own the band. Grew in the landing: `reset()` no longer clears effect 
 band instance orphaned across it is retracted by the next recook instead of leaking until a sweep
 — unobservable today, since `reset()`'s only caller sweeps the band on the next line.
 
-**E7. Beat/wall-clock processing twins** — medium / P2 / M / opus
+~~**E7. Beat/wall-clock processing twins**~~ — done, `692d334`. medium / P2 / M / opus
 `processFixture/MultiElement/Group/GroupFlatElement` effects exist twice (~190 duplicated lines,
 `FxEngine.kt:2571-2798` vs `:2212-2398`) differing only in phase function — every C-fix lands
 twice until then. **Fix:** parameterise on a phase supplier. (Distinct from
 `FU-PERF-FRAME-TXN-UNIFY`, which is about unifying the *loops* — leave that trigger-gated.)
+Grew in the landing: the review found that the wall-clock pass's synthetic `ClockTick` pinned
+`tickNumber` at 0, which is not inert — it reaches every `StatefulEffect`, and `CandleFlicker`
+(the only STATEFUL + WALL_CLOCK built-in) therefore held dead-steady at `baseLevel` on the rig.
+Fixed in its own commit, `8b8ffa5`, with the contract pinned at the engine end in
+`FxEnginePipelineTest` rather than against `calculateStateful` directly.
 
 ~~**E8. Tick-path error handling**~~ — done, `c606cfc`. medium / P1 / S / opus
 `System.err.println` with no stack trace at 120/s for a misbehaving script effect
@@ -623,7 +628,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 1 | ~~C1–C2~~ **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
-| 4 | ~~E1–E6~~ **done**, E7, C8, B6, B7, F6, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
+| 4 | ~~E1–E7~~ **done**, C8, B6, B7, F6, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
 
