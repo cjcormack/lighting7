@@ -409,12 +409,15 @@ asserted on it either. ~~`EffectDto.presetId`~~ (gone with A2, along with `Group
 
 ## E — Architecture
 
-**E1. Split `FxEngine` (3,046 lines, ~7 responsibilities)** — high / P2 / L / fable
+~~**E1. Split `FxEngine` (3,046 lines, ~7 responsibilities)**~~ — done, `3041ea2`. high / P2 / L / fable
 Tick loops, Layer-4 cue-assignment bookkeeping, ~300 lines of programmer write delegation,
 provenance computation, cascade publishing, effect registry/CRUD, DTO emission. **Fix:** extract at
 the seams — `CueAssignmentLayer`, `ProgrammerWriter`, `ProvenanceService`, `CascadePublisher` —
 leaving the engine as tick loops + effect set. Do **after** the D-wave deletions and C-wave fixes
 so the split moves less code.
+Grew in the landing: the review's three code nits were taken (one `allChannelsParked`, an inline
+publish-lock wrapper, and a pre-existing `cueStackIds` leak in the new `CueAssignmentLayer.clearAll`
+— see the commit).
 
 ~~**E2. Layering inversions**~~ — done, `4fafce2`. medium / P2 / M / opus
 fx→routes: `ProgrammerLayerStack`, `CueTriggerManager`, `CueStackManager` import
@@ -618,7 +621,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 1 | ~~C1–C2~~ **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
-| 4 | ~~E2–E5~~ **done**, E6, E7, C8, B6, B7, F6, E10, E1 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
+| 4 | ~~E1–E5~~ **done**, E6, E7, C8, B6, B7, F6, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
 
