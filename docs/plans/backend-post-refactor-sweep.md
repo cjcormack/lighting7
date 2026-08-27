@@ -584,7 +584,7 @@ request-messages remain as explicit resync — and fix the double `speedMasters.
 pushes on connect *and* client requests on open). Document the three reply conventions and pick
 one for future ops.
 
-**F6. Auth gating: route-tree composition** *(decision taken)* — high / P1 / M / opus
+~~**F6. Auth gating: route-tree composition** *(decision taken)*~~ — done, `60cc3b3` (+ lighting-react `0d2081d`). high / P1 / M / opus
 Replace `ADMIN_ONLY_PREFIXES` string matching (`auth/AuthGate.kt:134`) with an `adminOnly {}`
 route-tree wrapper; while there, admin-gate the code-execution/filesystem endpoints
 (`scripts/run`, `fx/definitions/{id}/test`, `/script-editor` compile, `project/import|export`
@@ -592,6 +592,17 @@ client-supplied paths, AI `run_lighting_script`). The frontend mirrors the prefi
 (`restApi.ts:15`) — flag for the frontend sweep. Cross-ref `FU-AUTH-WS-PER-MESSAGE`,
 `FU-AUTH-OPERATOR-LOCKDOWN` (this narrows both). Also `/script-editor` mounts outside the
 warm-up gate and the `/api` namespace (`router.kt:66`, `scriptEditor.kt:50`) — bring it inside.
+
+Landed as operator-open scripts, not admin-gated: the desk owner's call, on the grounds that an
+operator is trusted local crew who can already do anything the desk process can. `scripts/run`,
+the FX-definition test, the editor compile and the AI `run_lighting_script` are unchanged, and
+`AuthGateTest` now pins that. Only `project/{id}/export` and `project/import` were gated, on the
+caller-supplied-filesystem-path argument. `/script-editor` moved to `/api/script-editor` inside
+the auth gate but is **exempt from the readiness gate** — nothing under it touches the show, and
+one 503 silently drops every editor on the page to read-only. Grew in the landing: the `/api`
+node is shared with the WebSocket (Ktor reuses an equal selector), so the gates hang off a
+transparent child of it; `transparentChild` in `routes/RouteComposition.kt` is the primitive both
+that and `adminOnly {}` are built on.
 
 **F7. Error envelope hygiene** — low / P2 / S / sonnet
 Move `ErrorResponse` out of `lightFx.kt:287` into a neutral `routes/ApiTypes.kt`; make `code`
@@ -654,7 +665,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 1 | ~~C1–C2~~ **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
-| 4 | ~~E1–E7, C8, B6–B7~~ **done**, F6, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
+| 4 | ~~E1–E7, C8, B6–B7, F6~~ **done**, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
 
@@ -691,7 +702,9 @@ rateSpeedMasterIndex), D4 (`POST`/`DELETE /project/{id}/looks/preview` are gone 
 caller, `ProgrammerLookStack`'s local `isPreview` filter, and the unfiltered-stack special-casing
 in `ProgrammerScopeBand`/`LookRowStoreProvider` that `FU-PROG-FOCUS-PREVIEW-LAYER` flagged are all
 dead code now, not just unreachable),
-F1/F2/F3/F5 (renamed paths/messages/status codes), F6 (hand-copied admin prefix list), B3
+F1/F2/F3/F5 (renamed paths/messages/status codes), ~~F6~~ (landed: the widget's base URL moved to
+`/api/script-editor` in `0d2081d`, and `Projects.tsx` must gate Export/Import on `isAdmin` — see
+below), B3
 (`elementMode` now accepted on `POST /fx/add`, matching `PUT`), B4 (`speedMasterUuid` /
 `rateSpeedMasterUuid` — on the WS `fxState` push and reconnect answer, and on the REST
 `EffectDto`/`IndirectEffectDto` — now null out whichever field the effect's `timingSource` doesn't
@@ -836,6 +849,17 @@ defaults). Frontend-visible only in that the three REST apply endpoints got *str
 and add the effect, and now 400 the request, matching what `blendMode` always did. Casing is now
 tolerated everywhere, which it was not on the two throwing fields. The authoring endpoints that
 write these values to the DB are still unvalidated — E10.
+
+F6 (`60cc3b3`, + lighting-react `0d2081d`) — two frontend-visible changes. The script editor's
+language services moved from `/script-editor/*` to `/api/script-editor/*`; the widget's base URL
+is a module-level global with one assignment, so the client half is one line, and it landed with
+the backend because a mismatch is silent (a failed `/versions` probe drops every editor on the
+page to read-only). And `POST /project/{id}/export` + `POST /project/import` are now admin-only,
+which **`Projects.tsx` does not yet know**: it offers both controls to any signed-in user, so an
+operator gets a bare 403 from something that used to work. Gating them is left to the frontend
+sweep (the desk owner's call), and `FS-COORD-ADMIN-GATE` names the file and the controls. Nothing
+else changed status: the code-execution endpoints stayed operator-reachable, so no existing
+surface becomes a 403 generator and the script editor needs no role handling.
 
 ## Verification
 
