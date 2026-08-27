@@ -324,7 +324,7 @@ children, was batched too — same shape, same family, taken on the operator's c
 it needed a sixth `FxEngineBenchmark` scenario, since the five tick/republish scenarios all spawn
 their effects in rig setup, outside every measured window.
 
-**C8. Cook-internal repeated work** — medium / P2 / M / opus
+~~**C8. Cook-internal repeated work**~~ — done, `2381eae`. medium / P2 / M / opus
 Programmer recook resolves the stack and builds cookLayers twice (`ProgrammerLayerStack.kt:445-450`
 vs `:508`); group expansion + allowed-set allocation per row (`CueComposer.kt:515-516`); template
 intent parsed per head not per row (`:536`); `TemplateResolver` walks the property catalogue twice
@@ -332,6 +332,13 @@ per head (`TemplateResolver.kt:137,147`); `coversTarget` re-expands per bound ef
 `EffectKey` hashes whole parameter maps and forces respawns on unrelated param edits
 (`ProgrammerLayerStack.kt:152`); `TypedParams` blank-case non-local return defeats the cache
 (`TypedParams.kt:93,110`). **Fix:** one cook producing rows+effects; hoist/memoise per cook.
+Grew in the landing: the split-pair snapshot hazard was on the cue GO path too, so
+`CueStackManager.activateCueInStack` and `applyCueToEngine` take `cookAll` as well — nothing calls
+`cook` + `cookEffects` as a pair now. The `EffectKey` respawn half was left alone: the type's KDoc
+documents respawn-on-edit as the reason it keys on the whole `LookEffectEntry`, and changing it
+means updating a live instance's parameters in place, which is a feature rather than a hoist. Only
+its hashing was memoised. Measured on a new sixth `FxEngineBenchmark` scenario — none of the five
+reaches `CueComposer`, so there was no before/after without it.
 
 **C9. `MasterClock.tickFlow` emits to nobody** — low / P2 / S / sonnet
 `MasterClock.kt:202`: production is driven by `onTick`/wake channel; only tests collect the flow.
@@ -628,7 +635,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 1 | ~~C1–C2~~ **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
-| 4 | ~~E1–E7~~ **done**, C8, B6, B7, F6, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
+| 4 | ~~E1–E7, C8~~ **done**, B6, B7, F6, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
 
