@@ -84,7 +84,7 @@ backlog are listed in §14 only.
 | `FS-PERF-SAVELOOK-INVALIDATION` | A layer-scope drag refetches the whole fixture list every 400 ms | S2 | P1 | C1 | sonnet |
 | `FS-PERF-WS-SINGLE-PARSE` | The channelState firehose is `JSON.parse`d 24 times per frame | S2 | P1 | C2 | sonnet |
 | `FS-TEST-LOOKONLY-GATE` | The LOOK-only gate — the guard against silently converting a generic template to per-fixt… | S2 | P1 | C1 | sonnet |
-| `FS-BUG-EDITOR-SILENT-READONLY` | A failed `/script-editor/versions` drops every editor to read-only and the frontend neith… | S2 | P2 | C2 | sonnet |
+| `FS-BUG-EDITOR-SILENT-READONLY` | A failed `/api/script-editor/versions` drops every editor to read-only and the frontend neith… | S2 | P2 | C2 | sonnet |
 | `FS-BUG-PIXEL-CACHE-PERMUTATION` | `useGroupColourValues` never compares per-member colours, so a colour chase across a pixe… | S2 | P2 | C2 | sonnet |
 | `FS-PERF-CODE-SPLITTING` | The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere | S2 | P2 | C2 | opus |
 | `FS-PERF-COLLAPSED-PANELS` | Collapsed overview panels keep doing full live work on every route | S2 | P2 | C2 | opus |
@@ -489,13 +489,13 @@ revert in `EditFxDefinitionSheet`, and theme-flip remounts discard cursor/undo f
 compare before writing and suppress the echo `change`. Then pin Reset with a test.
 
 ### `FS-BUG-EDITOR-SILENT-READONLY`
-**A failed `/script-editor/versions` drops every editor to read-only and the frontend neither
+**A failed `/api/script-editor/versions` drops every editor to read-only and the frontend neither
 detects nor reports it** · S2 · P2 · C2 · sonnet
 `src/kotlinScript/component.mjs`, `src/components/scripts/ScriptEditor.tsx`
 
 kotlin-playground's version probe resolves `undefined` on failure and falls back to
 `highlightOnly`; the backend's own doc names this exact failure mode, but the wrapper discards the
-promise `playground()` returns and no mount site passes `onError`. `/script-editor` sits behind the
+promise `playground()` returns and no mount site passes `onError`. `/api/script-editor` sits behind the
 auth gate and the desk restarts for new routes, so a 401 or a restart window is a live path — and it
 bypasses the 401→Auth-invalidation mechanism because it's a raw fetch. The operator sees a
 normal-looking editor that refuses every keystroke. **Fix**: keep the `playground()` promise, treat
@@ -567,13 +567,13 @@ of what makes it safe** · S3 · P2 · C2 · sonnet
 `src/components/scripts/`, `src/kotlinScript/`
 
 Verified concretely: the module-global `server` is only ever assigned the one hardcoded
-`"/script-editor"`, no page can mount two editor types at once (FxLibrary's three sheets are
+`"/api/script-editor"`, no page can mount two editor types at once (FxLibrary's three sheets are
 exclusive branches of one Sheet), and the wrap→unwrap round-trip is exact rather than lucky. None of
 it is pinned — no test asserts the marker line comes first, the body survives byte-for-byte, the
 `server` assignment is unique, or that `.kotlin-editor` (which the Run-button-hiding CSS keys on) is
 on the wrapper. **Fix**: `ScriptEditor.test.tsx` over a mocked widget pinning the value string per
 type, the round-trip using the widget's own arithmetic, the wrapper class, the
-`readOnly`-omits-attribute rule, and a grep-guard that `"/script-editor"` is assigned exactly once.
+`readOnly`-omits-attribute rule, and a grep-guard that `"/api/script-editor"` is assigned exactly once.
 
 ## 6. Performance
 
@@ -1922,13 +1922,21 @@ changes per wave — consume it change-by-change rather than re-diffing.
 C1 · sonnet
 `src/navigation.ts`, `src/store/restApi.ts`, `src/hooks` (skip guards)
 
-F6 replaces `ADMIN_ONLY_PREFIXES` string matching with route-tree gating and admin-gates the
-code-execution endpoints (`scripts/run`, definition test, script-editor compile, import/export).
-Client half: the `adminOnly` nav ids (pinned by `navigation.test.ts` against nothing backend-side),
-the prefix list the backend doc cites in `restApi.ts`, and — new — any surface an operator can
-reach that calls a newly-gated endpoint needs the `skip: !isAdmin` treatment `useOAuthReauthState` /
-`useUsersQuery` document, or it becomes a 403 generator (the script editor survives for operators
-only if compile stays reachable; check before, not after).
+**Landed backend-side as F6** (`adminOnly {}` route-tree gating). What it actually did, which is
+narrower than this item assumed: the code-execution endpoints stayed **operator-reachable**
+(`scripts/run`, definition test, script-editor compile, AI `run_lighting_script`) — an operator is
+trusted local crew who can already do anything the desk process can — so no surface becomes a 403
+generator and the script editor needs no `skip: !isAdmin` treatment. Only `POST /project/{id}/export`
+and `POST /project/import` were newly gated, on the filesystem-path argument.
+
+Client half remaining, and the first of these is a **live 403 generator** as of F6: `Projects.tsx`
+renders the Export menu item and the Import button unconditionally, so an operator sees controls
+that can now only answer 403. The component already computes `isAdmin`; hide or disable both, the
+way the file gates its other admin controls, and give the queries the `skip: !isAdmin` treatment
+`useOAuthReauthState` / `useUsersQuery` document. Then the `adminOnly` nav ids (pinned by
+`navigation.test.ts` against nothing backend-side) and the prefix list the backend doc cites in
+`restApi.ts`. The `/script-editor` → `/api/script-editor` move landed in this repo alongside F6,
+so that half is done.
 
 ### `FS-COORD-NEW-BROADCASTS`
 **When backend B5 adds `scriptListChanged`/`fxDefinitionListChanged`, add the client bridges** ·

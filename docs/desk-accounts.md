@@ -20,15 +20,33 @@ rationale — and the decisions not to re-litigate — is in
 | User accounts, password resets | yes | no |
 | Install settings (`PUT /api/rest/install`), cloud sync, GitHub OAuth | yes | no |
 
-There are no per-project or per-fixture permissions. Enforcement is central:
-`ADMIN_ONLY_PREFIXES` and the per-project sync path regex in `auth/AuthGate.kt`, plus
-per-handler `call.requireAdmin()` where only some methods are admin-only. The frontend
-hides what an operator can't use (the Users tab, the Sync nav entries), but that is a
-courtesy — the gate is the enforcement.
+There are no per-project or per-fixture permissions. Enforcement is **compositional**: an
+admin-only subtree is wrapped in `adminOnly {}` (`auth/AuthGate.kt`) at its mount point, so
+the requirement is declared by where a route sits in the tree and the router does the
+matching. Where only some methods are admin-only (`PUT /install`), the handler calls
+`call.requireAdmin()` itself. The frontend hides what an operator can't use (the Users tab,
+the Sync nav entries), but that is a courtesy — the gate is the enforcement.
+
+This replaced a list of path-string prefixes the gate compared against every request. Two
+things went with it: a second place to keep in step with the route tree, and the need to
+normalise the request path the way the resolver does before comparing (an encoded or
+double-slashed spelling that satisfied routing but not a `startsWith` was a real hole,
+and `AuthGateTest` still pins it shut).
+
+**Scripts are deliberately not admin territory.** Compiling and running a script is arbitrary
+code execution on the desk, and an operator can do it: they are trusted local crew standing in
+front of the machine, and physical access already grants everything the desk process has.
+Locking scripts to admins would only stop the person holding the desk from fixing a cue
+mid-show. Project **export and import** are the exception — they take a caller-supplied
+absolute filesystem path and read or write it verbatim, which is the one authenticated surface
+reaching outside the app's own data directory, so both are `adminOnly {}`.
 
 WebSocket messages are **not** role-scoped in v1: any authenticated user can send any
 socket message. Deliberate, not an oversight — see `FU-AUTH-WS-PER-MESSAGE` in
-`docs/plans/followups.md`.
+`docs/plans/followups.md`. The socket shares the `/api` routing node with the HTTP API, so the
+gates hang off a transparent child of it rather than the node itself (`routes/router.kt`) —
+installed directly, they would 503 the socket during boot and answer an unauthenticated upgrade
+with a 401 instead of the 4401 close the client is written against.
 
 That is about **inbound** messages. Outbound, one family *is* filtered per recipient: the
 `ownAccountChanged` frame goes only to sockets belonging to the account that changed (see
@@ -250,11 +268,11 @@ with no legitimate use. All answer 409 `SELF_TARGET`. On **your own** account yo
 
 Changing your own display name or password is fine — that's what the user menu's Profile sheet
 is for. Both routes it uses, `PUT /api/rest/auth/profile` and `PUT /api/rest/auth/password`, are
-authenticated but **any role**: they match neither `ADMIN_ONLY_PREFIXES` nor the exempt list, so
-an operator can maintain their own account without an admin. The rename deliberately lives here
-rather than as a self-exception inside admin-only `PUT /users/{id}` — `isAdminOnly` is a plain
-prefix list, and a carve-out inside one of its prefixes would mean the list no longer describes
-its own subtree.
+authenticated but **any role**: they sit under `/auth`, outside every `adminOnly {}` subtree and
+outside the exempt list, so an operator can maintain their own account without an admin. The
+rename deliberately lives here rather than as a self-exception inside admin-only
+`PUT /users/{id}` — `adminOnly {}` means *the whole subtree*, and a carve-out inside one would
+mean the wrapper no longer describes what it wraps.
 
 The two differ in consequence, which is why they are separate controls in the sheet: a rename
 revokes nothing, while a password change revokes every *other* session and retires any live

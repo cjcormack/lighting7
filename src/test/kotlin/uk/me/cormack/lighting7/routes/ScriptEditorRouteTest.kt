@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
 import io.ktor.client.call.body
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -9,9 +10,11 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.Serializable
 import org.junit.Test
+import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
+import uk.me.cormack.lighting7.testsupport.testAppConfig
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -47,7 +50,7 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         // Two user lines; the error is on the second.
-        val response = client.post("/script-editor/api/2.4.10/compiler/highlight") {
+        val response = client.post("/api/script-editor/api/2.4.10/compiler/highlight") {
             contentType(ContentType.Application.Json)
             setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent("val ok = 1\nval bad: Int = \"nope\"")))))
         }
@@ -71,7 +74,7 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val response = client.post("/script-editor/api/2.4.10/compiler/highlight") {
+        val response = client.post("/api/script-editor/api/2.4.10/compiler/highlight") {
             contentType(ContentType.Application.Json)
             setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent("val level = 255")))))
         }
@@ -90,7 +93,7 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         val line = 0 + MARKER_LINES
         val ch = userScript.length
 
-        val response = client.post("/script-editor/api/2.4.10/compiler/complete?line=$line&ch=$ch") {
+        val response = client.post("/api/script-editor/api/2.4.10/compiler/complete?line=$line&ch=$ch") {
             contentType(ContentType.Application.Json)
             setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent(userScript)))))
         }
@@ -108,7 +111,7 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val response = client.post("/script-editor/api/2.4.10/compiler/complete") {
+        val response = client.post("/api/script-editor/api/2.4.10/compiler/complete") {
             contentType(ContentType.Application.Json)
             setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent("show.")))))
         }
@@ -126,7 +129,7 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         // `params` is an FxCalcScript constructor property; it does not exist on LightingScript.
-        val response = client.post("/script-editor/api/2.4.10/compiler/highlight") {
+        val response = client.post("/api/script-editor/api/2.4.10/compiler/highlight") {
             contentType(ContentType.Application.Json)
             setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent("params", "FX_CALC")))))
         }
@@ -151,7 +154,7 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
 
         // Declared GENERAL on line 1; the body claims FX_CALC. `fixtures` is public on
         // LightingScript and absent from FxCalcScript, so it resolving proves the first marker won.
-        val response = client.post("/script-editor/api/2.4.10/compiler/highlight") {
+        val response = client.post("/api/script-editor/api/2.4.10/compiler/highlight") {
             contentType(ContentType.Application.Json)
             setBody(
                 PlaygroundProjectDto(
@@ -182,7 +185,7 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         val document = "//@lighting7-script-type=GENERAL\nfun x() {\n//sampleStart\nval ok = 1\nval bad: Int = \"nope\"\n//sampleEnd\n}\n"
-        val response = client.post("/script-editor/api/2.4.10/compiler/highlight") {
+        val response = client.post("/api/script-editor/api/2.4.10/compiler/highlight") {
             contentType(ContentType.Application.Json)
             setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", document))))
         }
@@ -199,7 +202,7 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val response = client.post("/script-editor/api/2.4.10/compiler/run") {
+        val response = client.post("/api/script-editor/api/2.4.10/compiler/run") {
             contentType(ContentType.Application.Json)
             setBody(PlaygroundProjectDto(files = listOf(PlaygroundFileDto("File.kt", asSent("val x = 1")))))
         }
@@ -207,10 +210,39 @@ class ScriptEditorRouteTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, response.status)
         assertTrue(response.body<ExecutionResultDto>().exception!!.message.contains("Run button"))
     }
+
+    /**
+     * The language services run on the embedded compiler and never look at the show, so the
+     * server-first readiness gate has nothing to protect here — and one 503 costs more than a
+     * 503 normally does: the widget probes `/versions` once per page and, on any failure,
+     * silently drops every editor on the page to read-only with highlighting off until the page
+     * is reloaded. The subtree moved inside the gated `/api` node for its auth gate, so this is
+     * the assertion that keeps the readiness half from coming with it.
+     *
+     * Mounted over a **second, never-started** State rather than the base class's, the same way
+     * `UpdateRoutesTest` does it: `isShowReady` is `showOrNull?.isStarted == true`, so a State
+     * whose show was never initialised is the only way to make the gate genuinely active.
+     */
+    @Test
+    fun `versions answers while the show is not ready`() = testApplication {
+        val unstarted = State(testAppConfig())
+        try {
+            assertEquals(false, unstarted.isShowReady, "the gate must actually be closed")
+
+            mountTestApp(unstarted)
+            val body = jsonClient().get("/api/script-editor/versions").body<List<VersionDto>>()
+            assertTrue(body.single().latestStable)
+        } finally {
+            runCatching { unstarted.shutdown() }
+        }
+    }
 }
 
 /** The frontend's marker line, which the widget keeps as its `prefix` and subtracts client-side. */
 private const val MARKER_LINES = 1
+
+@Serializable
+private data class VersionDto(val version: String, val latestStable: Boolean)
 
 
 @Serializable

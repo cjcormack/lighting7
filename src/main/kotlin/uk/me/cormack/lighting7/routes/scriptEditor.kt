@@ -6,7 +6,6 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.auth.installAuthGate
 import uk.me.cormack.lighting7.scripts.EditorDiagnostic
 import uk.me.cormack.lighting7.scripts.ScriptEditorService
 import uk.me.cormack.lighting7.scripts.ScriptType
@@ -21,8 +20,8 @@ import kotlin.script.experimental.api.ScriptDiagnostic
  * completion, only ever answered `/highlight`. See [ScriptEditorService] for why serving it here
  * is also *more* accurate.
  *
- * The URL shape is dictated by the `kotlin-playground` widget, which owns the whole protocol
- * client-side and cannot be reconfigured beyond its base URL:
+ * The URL shape below the mount point is dictated by the `kotlin-playground` widget, which owns
+ * the whole protocol client-side and cannot be reconfigured beyond its base URL:
  *
  * - `GET  /versions`                       — **must** succeed. The widget fetches this once per
  *   page and, on any failure, silently drops *every* editor on the page to read-only with
@@ -34,15 +33,16 @@ import kotlin.script.experimental.api.ScriptDiagnostic
  * `{version}` is echoed back by the widget from `/versions` and is deliberately ignored: there is
  * exactly one compiler here, the one this app is running.
  *
- * The auth gate covers the whole subtree, exactly as it did for the proxy — it compiles arbitrary
- * Kotlin on a LAN-reachable port, so an open gate here would make the `/api/rest` one decorative.
+ * Mounted at `/api/script-editor`, inside the gated `/api` subtree in [configureRouting] — so the
+ * warm-up gate and the auth gate both cover it with no second install site. It compiles arbitrary
+ * Kotlin on a LAN-reachable port, so an ungated editor would make the `/api/rest` gate decorative.
+ * The widget's base URL is set in `lighting-react/src/kotlinScript/component.mjs`; the two must
+ * agree, and a mismatch is silent — see `/versions` above.
  */
 internal fun Route.routeScriptEditor(state: State) {
     val service = ScriptEditorService(state.scriptingHostConfiguration)
 
     route("/script-editor") {
-        installAuthGate(state)
-
         get("/versions") {
             call.respond(listOf(CompilerVersion(KotlinVersion.CURRENT.toString(), latestStable = true)))
         }

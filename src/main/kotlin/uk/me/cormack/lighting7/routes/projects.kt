@@ -18,6 +18,7 @@ import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.auth.adminOnly
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.ImportError
@@ -343,8 +344,14 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectShow(state)
         routeApiRestProjectPromptBooks(state)
         routeApiRestProjectSurfaceBindings(state)
-        routeApiRestProjectExport(state)
-        routeApiRestProjectCloudSync(state)
+        // Both subtrees are admin territory, for different reasons. Cloud sync carries the
+        // desk's git identity, remotes and credentials. Export/import take a caller-supplied
+        // absolute filesystem path and read or write it verbatim as the desk process — the one
+        // place where an authenticated caller reaches outside the app's own data directory.
+        adminOnly {
+            routeApiRestProjectExport(state)
+            routeApiRestProjectCloudSync(state)
+        }
 
         // POST /{id}/clone - Clone a project, whole graph. Runs through the cloud-sync
         // export/import format with freshly-minted UUIDs (see ProjectCloner) rather than a

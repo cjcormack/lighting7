@@ -18,11 +18,11 @@ import uk.me.cormack.lighting7.update.UpdateSettingsRequest
 /**
  * In-app updates for the Windows distribution.
  *
- * **Auth is per-handler, not by prefix.** `/api/rest/update` is deliberately *not* added to
- * `ADMIN_ONLY_PREFIXES` in `auth/AuthGate.kt`: that gate is method-blind, and `GET /status`
- * should be readable by an operator — knowing what version the desk is on, and that it is about
- * to restart, is not administration. Only the actions call [requireAdmin], which is the same
- * split `PUT /install` already uses.
+ * **Auth is per-handler, not per-subtree.** This subtree is deliberately *not* wrapped in
+ * `adminOnly {}` (`auth/AuthGate.kt`): that wrapper is method-blind, and `GET /status` should be
+ * readable by an operator — knowing what version the desk is on, and that it is about to restart,
+ * is not administration. Only the actions call [requireAdmin], which is the same split
+ * `PUT /install` already uses.
  *
  * **Long-running operations never fail through a status code.** `POST /download` and
  * `POST /apply` answer 202 with the current status, and anything that goes wrong afterwards

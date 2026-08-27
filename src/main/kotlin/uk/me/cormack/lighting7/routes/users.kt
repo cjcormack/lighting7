@@ -30,9 +30,8 @@ private const val USER_NOT_FOUND = "User not found"
 
 /**
  * Desk account administration (multi-user-auth plan, session 3). Every route here is
- * admin-only, enforced centrally: `/api/rest/users` is in `ADMIN_ONLY_PREFIXES` in
- * `auth/AuthGate.kt`, so an operator never reaches a handler. Password hashes never
- * appear in a DTO.
+ * admin-only, and says so at its mount point: `routes/router.kt` wraps this whole subtree in
+ * `adminOnly {}`, so an operator never reaches a handler. Password hashes never appear in a DTO.
  *
  * Two guards shape the mutating routes, and both exist to keep the desk recoverable
  * without the break-glass file drop:

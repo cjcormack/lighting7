@@ -553,9 +553,9 @@ Update eligibility is **both** gates, always: `channel == release` *and* a packa
 Windows. Never gate on a version-string heuristic — the packaged default is `1.0.0` while
 `project.version` is `0.0.1`, so any heuristic is wrong in both directions.
 
-`/api/rest/update` is deliberately **not** in `ADMIN_ONLY_PREFIXES`: that gate is method-blind, and
-`GET /update/status` should be readable by an operator. Actions call `requireAdmin()` per handler,
-the same split `PUT /install` uses.
+`/api/rest/update` is deliberately **not** wrapped in `adminOnly {}`: that wrapper is method-blind,
+and `GET /update/status` should be readable by an operator. Actions call `requireAdmin()` per
+handler, the same split `PUT /install` uses.
 
 ## Follow-ups
 

@@ -34,9 +34,10 @@ import kotlin.test.assertTrue
 /**
  * The auth gate itself: bootstrap-open behaviour, cookie enforcement, the exempt list
  * (the plan's "highest risk" — a gated exempt path bricks the UI), the script-editor
- * subtree, per-method admin checks, and the WebSocket 4401 close.
+ * subtree, the `adminOnly {}` subtrees and per-method admin checks, and the WebSocket
+ * 4401 close.
  */
-/** Mirrors the `/script-editor/versions` element the editor widget parses. */
+/** Mirrors the `/api/script-editor/versions` element the editor widget parses. */
 @kotlinx.serialization.Serializable
 private data class CompilerVersionDto(val version: String, val latestStable: Boolean)
 
@@ -117,10 +118,10 @@ class AuthGateTest : RouteIntegrationTest() {
         seedUser(state, "alice")
         val client = jsonClient()
 
-        assertEquals(HttpStatusCode.Unauthorized, client.get("/script-editor/versions").status)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/script-editor/versions").status)
 
         val cookie = client.loginCookieHeader("alice")
-        val allowed = client.get("/script-editor/versions") { header(HttpHeaders.Cookie, cookie) }
+        val allowed = client.get("/api/script-editor/versions") { header(HttpHeaders.Cookie, cookie) }
         assertEquals(HttpStatusCode.OK, allowed.status)
     }
 
@@ -136,7 +137,7 @@ class AuthGateTest : RouteIntegrationTest() {
         val client = jsonClient()
         val cookie = client.loginCookieHeader("alice")
 
-        val body = client.get("/script-editor/versions") { header(HttpHeaders.Cookie, cookie) }
+        val body = client.get("/api/script-editor/versions") { header(HttpHeaders.Cookie, cookie) }
             .body<List<CompilerVersionDto>>()
 
         val version = body.single()
@@ -171,14 +172,81 @@ class AuthGateTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `admin-only prefixes answer 403 for an operator`() = testApplication {
+    fun `adminOnly subtrees answer 403 for an operator`() = testApplication {
         mountTestApp(state)
         seedUser(state, "op", role = UserRole.OPERATOR)
         val client = jsonClient()
         val cookie = client.loginCookieHeader("op")
 
-        val denied = client.get("/api/rest/cloud-sync/configs") { header(HttpHeaders.Cookie, cookie) }
-        assertEquals(HttpStatusCode.Forbidden, denied.status)
+        assertEquals(
+            HttpStatusCode.Forbidden,
+            client.get("/api/rest/cloud-sync/configs") { header(HttpHeaders.Cookie, cookie) }.status,
+        )
+        assertEquals(
+            HttpStatusCode.Forbidden,
+            client.get("/api/rest/users") { header(HttpHeaders.Cookie, cookie) }.status,
+        )
+    }
+
+    /**
+     * Project export and import take a caller-supplied absolute filesystem path and read or write
+     * it verbatim as the desk process — the one authenticated surface that reaches outside the
+     * app's own data directory, so both are admin-only however the payload is shaped.
+     */
+    @Test
+    fun `project export and import are admin-only`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "boss", role = UserRole.ADMIN)
+        seedUser(state, "op", role = UserRole.OPERATOR)
+        val client = jsonClient()
+        val operatorCookie = client.loginCookieHeader("op")
+
+        val deniedExport = client.post("/api/rest/project/$projectId/export") {
+            header(HttpHeaders.Cookie, operatorCookie)
+            contentType(ContentType.Application.Json)
+            setBody(ProjectExportRequest(path = null))
+        }
+        assertEquals(HttpStatusCode.Forbidden, deniedExport.status)
+
+        val deniedImport = client.post("/api/rest/project/import") {
+            header(HttpHeaders.Cookie, operatorCookie)
+            contentType(ContentType.Application.Json)
+            setBody(ProjectImportRequest(path = "/nowhere"))
+        }
+        assertEquals(HttpStatusCode.Forbidden, deniedImport.status)
+
+        // The same import as an admin reaches the handler and fails on its own terms.
+        val adminCookie = client.loginCookieHeader("boss")
+        val reached = client.post("/api/rest/project/import") {
+            header(HttpHeaders.Cookie, adminCookie)
+            contentType(ContentType.Application.Json)
+            setBody(ProjectImportRequest(path = "/nowhere"))
+        }
+        assertNotEquals(HttpStatusCode.Forbidden, reached.status)
+    }
+
+    /**
+     * Scripts are deliberately **not** admin territory, and this is the assertion that stops
+     * someone "hardening" them later. Running a script is arbitrary code execution on the desk,
+     * but an operator is trusted local crew standing in front of the machine — they can already
+     * do anything the desk process can. Locking scripts to admins would only stop the person
+     * holding the desk from fixing a cue mid-show.
+     */
+    @Test
+    fun `an operator may compile and run scripts`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "op", role = UserRole.OPERATOR)
+        val client = jsonClient()
+        val cookie = client.loginCookieHeader("op")
+
+        assertNotEquals(
+            HttpStatusCode.Forbidden,
+            client.get("/api/script-editor/versions") { header(HttpHeaders.Cookie, cookie) }.status,
+        )
+        assertNotEquals(
+            HttpStatusCode.Forbidden,
+            client.get("/api/rest/project/$projectId/scripts") { header(HttpHeaders.Cookie, cookie) }.status,
+        )
     }
 
     @Test
@@ -189,7 +257,7 @@ class AuthGateTest : RouteIntegrationTest() {
         val cookie = client.loginCookieHeader("op")
 
         // Maintaining your own account is not an administrative act. This is the assertion that
-        // stops the route being moved under `/users` or added to ADMIN_ONLY_PREFIXES later.
+        // stops the route being moved under `/users` or wrapped in `adminOnly {}` later.
         val allowed = client.put("/api/rest/auth/profile") {
             header(HttpHeaders.Cookie, cookie)
             contentType(ContentType.Application.Json)
@@ -215,6 +283,11 @@ class AuthGateTest : RouteIntegrationTest() {
         assertNotEquals(HttpStatusCode.Unauthorized, allowed.status)
     }
 
+    /**
+     * The whole point of `adminOnly {}` being a route-tree node: routing decides what the path
+     * means, so there is no spelling that satisfies the resolver and misses the check. This used
+     * to depend on the gate normalising the path the same way the resolver does.
+     */
     @Test
     fun `encoded and double-slashed spellings cannot bypass the admin check`() = testApplication {
         mountTestApp(state)
@@ -222,8 +295,8 @@ class AuthGateTest : RouteIntegrationTest() {
         val client = jsonClient()
         val cookie = client.loginCookieHeader("op")
 
-        // Routing decodes and collapses these to the admin-only route; the gate must
-        // judge the same normalised path, not the raw spelling.
+        // Routing decodes and collapses each of these to the admin-only route, and the check
+        // now lives on that route rather than on a string comparison beside it.
         val spellings = listOf(
             "/api/rest//cloud-sync/configs",
             "/api//rest/cloud-sync/configs",

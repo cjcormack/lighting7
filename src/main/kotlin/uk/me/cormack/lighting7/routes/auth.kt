@@ -103,10 +103,10 @@ internal fun Route.routeApiRestAuth(state: State) {
     }
 
     // The one thing you may change about yourself without an admin. It lives here, beside
-    // the password route, rather than as a self-exception in `PUT /users/{id}`: the gate's
-    // `ADMIN_ONLY_PREFIXES` is a plain prefix list, and a carve-out inside an admin-only
-    // subtree would mean that list no longer tells the truth about what it covers.
-    // Authenticated-any-role falls out of matching neither that list nor `isAuthExempt`.
+    // the password route, rather than as a self-exception in `PUT /users/{id}`: `adminOnly {}`
+    // means the whole subtree, and a carve-out inside one would mean the wrapper no longer tells
+    // the truth about what it covers. Authenticated-any-role falls out of this subtree being
+    // wrapped in neither `adminOnly {}` nor `isAuthExempt`.
     put<AuthProfileResource> {
         val user = call.authenticatedUser
         val displayName = call.receive<UpdateProfileRequest>().displayName.trim()

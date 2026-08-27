@@ -72,7 +72,7 @@ completion or highlighting backend. For that, either run the whole stack through
 ```
 
 The in-app script editor needs nothing extra: its highlighting and completion are served by the
-backend itself at `/script-editor/*`, from the same embedded Kotlin compiler that runs the
+backend itself at `/api/script-editor/*`, from the same embedded Kotlin compiler that runs the
 scripts ([`routes/scriptEditor.kt`](src/main/kotlin/uk/me/cormack/lighting7/routes/scriptEditor.kt),
 [`scripts/ScriptEditorService.kt`](src/main/kotlin/uk/me/cormack/lighting7/scripts/ScriptEditorService.kt)).
 It used to require a checked-out JetBrains `kotlin-compiler-server` fork, patched in place at

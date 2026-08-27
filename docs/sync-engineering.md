@@ -828,9 +828,9 @@ said so nowhere anyone looked:
   rejection's timestamp so a later one is never pre-dismissed.
 
 All three are admin-only, which is not a policy choice so much as a consequence:
-`/api/rest/oauth/` is in `ADMIN_ONLY_PREFIXES`, so an operator's client can only
-403 — and per the rule the update panel follows, whoever is running a show does
-not get nagged about something they cannot fix.
+the `/api/rest/oauth/` routes are mounted inside `adminOnly {}`, so an operator's
+client can only 403 — and per the rule the update panel follows, whoever is
+running a show does not get nagged about something they cannot fix.
 
 Cleared by any success: `applyRefresh` nulls both fields explicitly (it's a
 `copy`, so a stale flag would otherwise survive the very refresh that proved the

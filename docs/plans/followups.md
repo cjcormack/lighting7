@@ -629,11 +629,13 @@ twice.
 role split is deliberately coarse — two roles, no per-project or per-fixture permissions — because
 the crew is familiar and physically present.
 
-If that changes, `ADMIN_ONLY_PREFIXES` in `auth/AuthGate.kt` is the whole mechanism, and the shape
-matters more than the list: the gate matches **routing-normalised path prefixes**, so anything
-method-sensitive (as `PUT /api/rest/install` already is) needs a per-route `call.requireAdmin()`
-instead — patch editing and script editing are both read-for-everyone, write-for-admin, so they'd
-be the second and third instances of that pattern. Mirror any addition in
+If that changes, `adminOnly {}` in `auth/AuthGate.kt` is the whole mechanism (backend sweep F6
+replaced the old path-prefix list with it), and the shape matters more than the list: it wraps a
+**whole subtree**, so anything method-sensitive (as `PUT /api/rest/install` already is) needs a
+per-handler `call.requireAdmin()` instead — patch editing is read-for-everyone, write-for-admin,
+so it'd be the second instance of that pattern. Script editing is *not* a candidate: F6 settled
+that operators keep scripts, because an operator is trusted local crew who can already do
+anything the desk process can (`docs/desk-accounts.md` §Roles). Mirror any addition in
 `lighting-react/src/navigation.ts` (`adminOnly` on the `NavItem`) so Cmd+K stops offering a page
 that can only answer 403 — and remember that's presentation, never permission.
 

@@ -8,6 +8,7 @@ import io.ktor.server.routing.*
 import io.ktor.util.*
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.routes.ErrorResponse
+import uk.me.cormack.lighting7.routes.transparentChild
 import uk.me.cormack.lighting7.state.State
 
 /** The httpOnly session cookie. Owned by the auth package: `routes/auth.kt` writes it, the gate and the WS upgrade read it. */
@@ -42,10 +43,11 @@ fun ApplicationCall.requireAdmin() {
 }
 
 /**
- * The authentication gate (multi-user-auth plan, session 1). Installed inside
- * `route("/api/rest")` immediately after the warm-up intercept, and on the
- * `/script-editor` subtree — never on the root routing node, because the
- * static SPA (login page included) must stay reachable without credentials.
+ * The authentication gate (multi-user-auth plan, session 1). Installed once, on the gated
+ * `/api` subtree in `routes/router.kt` immediately after the warm-up intercept — never on the
+ * root routing node, because the static SPA (login page included) must stay reachable without
+ * credentials, and never directly on the `/api` node itself, which the WebSocket endpoint
+ * shares (see the comment there).
  *
  * While the desk has zero users the gate passes everything (bootstrap-open,
  * Decision 7): a fresh install behaves exactly as before this feature existed, and
@@ -68,20 +70,35 @@ fun Route.installAuthGate(state: State) {
             return@intercept
         }
         call.attributes.put(AuthenticatedUserKey, user)
-
-        if (user.role != UserRole.ADMIN && isAdminOnly(path)) {
-            call.respond(HttpStatusCode.Forbidden, ErrorResponse("Administrator access required", "forbidden"))
-            finish()
-        }
     }
 }
 
 /**
+ * Wraps a subtree so every route inside it is ADMIN-only. Replaces the string-prefix list this
+ * gate used to carry: the routes themselves now declare the requirement, so there is no second
+ * place to keep in step with the route tree, and no spelling of a path that satisfies the router
+ * but not the check. The subtree keeps its own paths — see [transparentChild].
+ *
+ * The check is [requireAdmin], so it inherits its "missing user attribute passes" rule: a
+ * bootstrap-open desk and the exempt paths behave as they do everywhere else. Mixed subtrees,
+ * where only some methods are admin-only (`PUT /install`), still call [requireAdmin] per handler.
+ */
+// Route.intercept is deprecated in favour of route-scoped plugins, but a plugin's `onCall`
+// cannot halt the pipeline before the matched handler runs — and here it must.
+@Suppress("DEPRECATION")
+fun Route.adminOnly(build: Route.() -> Unit): Route = transparentChild("adminOnly") {
+    intercept(ApplicationCallPipeline.Plugins) { call.requireAdmin() }
+    build()
+}
+
+/**
  * Normalise a raw request path the way Ktor's routing resolver does before matching:
- * split into segments, drop empty ones (`//`), percent-decode each. The exempt and
- * admin checks below must see the same path the router dispatches on, or an encoded
- * or double-slashed spelling of an admin route slips past the prefix check while
- * still reaching the handler.
+ * split into segments, drop empty ones (`//`), percent-decode each. The exempt check below
+ * must see the same path the router dispatches on, or an encoded or double-slashed spelling
+ * of an exempt path is judged against a different string than the one that reaches a handler.
+ *
+ * The admin check no longer needs this: [adminOnly] is a route-tree node, so the router does
+ * the matching and there is no path string to normalise.
  */
 internal fun routingNormalisedPath(rawPath: String): String =
     rawPath.split('/')
@@ -106,7 +123,7 @@ internal fun routingNormalisedPath(rawPath: String): String =
  * none yet, exactly as it has none when it POSTs to `/auth/login`.
  *
  * In both cases only the *redemption* half is exempt. Minting and polling stay behind the
- * gate: reset under the admin-only `/api/rest/users` subtree, device login under
+ * gate: reset under the [adminOnly] `/api/rest/users` subtree, device login under
  * `/api/rest/auth/device-logins`, which is authenticated but open to any role.
  *
  * **The trailing slash on `/auth/device/` is load-bearing.** Without it the prefix also
@@ -120,22 +137,3 @@ private fun isAuthExempt(path: String): Boolean =
         path == "/api/rest/auth/setup" ||
         path.startsWith("/api/rest/auth/reset/") ||
         path.startsWith("/api/rest/auth/device/")
-
-/**
- * Admin territory: user management (Session 3), the install-level cloud-sync batch
- * endpoints, the GitHub OAuth flows, and every per-project cloud-sync route (config,
- * credentials, run, conflicts — they carry the desk's git identity and remotes).
- * Routes where only some methods are admin-only (`PUT /install`) call [requireAdmin]
- * per-handler instead.
- */
-private fun isAdminOnly(path: String): Boolean =
-    ADMIN_ONLY_PREFIXES.any { path.startsWith(it) } || PROJECT_SYNC_PATH.matches(path)
-
-private val ADMIN_ONLY_PREFIXES = listOf(
-    "/api/rest/users",
-    "/api/rest/cloud-sync/",
-    "/api/rest/oauth/",
-)
-
-/** The per-project cloud-sync subtree (`routes/cloudSync.kt`, mounted under `/project`). */
-private val PROJECT_SYNC_PATH = Regex("^/api/rest/project/[^/]+/sync(/.*)?$")

@@ -40,9 +40,9 @@ class UpdateRoutesTest : RouteIntegrationTest() {
     }
 
     /**
-     * `/api/rest/update` is deliberately absent from `ADMIN_ONLY_PREFIXES`: that gate is
+     * `/api/rest/update` is deliberately *not* wrapped in `adminOnly {}`: that wrapper is
      * method-blind, and an operator standing at the desk should be able to see what version it is
-     * on and that it is about to restart. Adding the prefix would silently break this.
+     * on and that it is about to restart. Wrapping the subtree would silently break this.
      */
     @Test
     fun `an operator can read the status`() = testApplication {
