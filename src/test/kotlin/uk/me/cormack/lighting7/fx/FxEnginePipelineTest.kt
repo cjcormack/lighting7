@@ -468,6 +468,66 @@ class FxEnginePipelineTest {
         )
     }
 
+    /**
+     * A stateful wall-clock effect must see `tick.tickNumber` advance.
+     *
+     * The wall-clock pass has no beat position, so it builds a synthetic [MasterClock.ClockTick]
+     * — and `tickNumber` on it used to be pinned at 0 forever. That reaches every
+     * [StatefulEffect] on the path, and the built-in `CandleFlicker` is exactly one: it re-picks
+     * its target from `sin(tickNumber * 127.0) * cos(tickNumber * 311.0)`, which is identically
+     * 0 when the argument never moves, so the candle held dead-steady at `baseLevel` on a real
+     * desk. `BuiltInEffectBehaviourTest` could not catch it — it calls `calculateStateful`
+     * with its own advancing tick, which is not what the engine was handing it — so the contract
+     * gets pinned here, at the engine end, driving the real pass.
+     */
+    @Test
+    fun `stateful wall-clock effects see an advancing tick number`() {
+        val rig = newRig(firstChannel = 1)
+
+        val recorder = TickRecordingSlider()
+        rig.engine.addEffect(
+            FxInstance(
+                effect = recorder,
+                target = SliderTarget("hex-a", "dimmer"),
+                timing = FxTiming(beatDivision = 1.0),
+                blendMode = BlendMode.OVERRIDE,
+            ).apply { timingSource = TimingSource.WALL_CLOCK },
+        )
+
+        repeat(4) { rig.engine.processWallClockTick() }
+
+        assertEquals(
+            listOf(0L, 1L, 2L, 3L), recorder.tickNumbers,
+            "each wall-clock pass must hand stateful effects the next tick number",
+        )
+        assertTrue(
+            recorder.timestamps.distinct().size >= 1 && recorder.timestamps.all { it > 0L },
+            "the pass timestamp must still be real: ${recorder.timestamps}",
+        )
+    }
+
+    /**
+     * Records the ticks the engine hands it. Local to this test rather than in `TestEffects`:
+     * that file is frozen for [FxEngineBenchmark]'s comparability and its effects are stateless.
+     */
+    private class TickRecordingSlider : StatefulEffect {
+        val tickNumbers = mutableListOf<Long>()
+        val timestamps = mutableListOf<Long>()
+
+        override val name = "Tick Recording Slider"
+        override val outputType = FxOutputType.SLIDER
+
+        override fun calculateStateful(
+            tick: MasterClock.ClockTick,
+            deltaMs: Long,
+            context: EffectContext,
+        ): FxOutput {
+            tickNumbers += tick.tickNumber
+            timestamps += tick.timestampMs
+            return FxOutput.Slider(100u)
+        }
+    }
+
     // ─── Additional composition invariants ──────────────────────────────────
 
     @Test

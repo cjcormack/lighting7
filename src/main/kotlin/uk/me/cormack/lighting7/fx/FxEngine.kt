@@ -95,6 +95,15 @@ class FxEngine(
     @Volatile private var lastTickMs: Long = 0L
     @Volatile private var lastWallClockTickMs: Long = 0L
 
+    /**
+     * Productive-pass counter handed to stateful wall-clock effects as `tick.tickNumber`.
+     *
+     * Owned solely by [processWallClockTickSuspend], which is a single coroutine, so it needs
+     * no synchronisation. Counts only passes that reach the apply stage: burning numbers while
+     * nothing is running would hand a re-armed effect an arbitrary jump.
+     */
+    private var wallClockPassNumber: Long = 0L
+
     // Shared with [CascadePublisher] so one fault keeps one suppression history wherever
     // it is reported from — see [FxLogThrottle].
     private val throttle = FxLogThrottle(logger)
@@ -1179,10 +1188,20 @@ class FxEngine(
             effect.advanceWallClock(deltaMs, scale)
         }
 
-        // Create a synthetic ClockTick for stateful effects that need the tick parameter.
-        // The beat/phase fields are unused for wall-clock effects, but the timestampMs is used.
+        // The synthetic ClockTick stateful effects receive. The beat-position fields stay 0 —
+        // a wall-clock pass has no beat position, by definition — but `tickNumber` is a real
+        // monotonically-increasing count of passes.
+        //
+        // It used to be pinned at 0, and that was not the harmless placeholder it looked like:
+        // a StatefulEffect reads the tick, and `CandleFlicker` (STATEFUL + WALL_CLOCK, so this
+        // is the *only* tick it ever sees) re-picks its target from
+        // `sin(tickNumber * 127.0) * cos(tickNumber * 311.0)`. With tickNumber constant that
+        // noise term was always exactly 0, the target was always `baseLevel`, and a candle on
+        // the rig held dead-steady. `BuiltInEffectBehaviourTest` missed it because it drives
+        // `calculateStateful` with its own advancing tick — a sequence the engine never
+        // produced. `FxEnginePipelineTest` now pins the engine end of that contract.
         val syntheticTick = MasterClock.ClockTick(
-            tickNumber = 0,
+            tickNumber = wallClockPassNumber++,
             beatNumber = 0,
             tickInBeat = 0,
             phase = 0.0,
@@ -1354,8 +1373,8 @@ class FxEngine(
      * Objects rather than lambdas: two instances for the life of the process, nothing allocated
      * per tick. [WallClock] ignores `tick` for *phase* — that is a function of
      * `accumulatedScaledMs` — but the tick itself is not inert on that path: it still reaches
-     * stateful effects through [calculateEffectOutput], and the wall-clock pass's synthetic
-     * tick pins `tickNumber` at 0 (see [processWallClockTickSuspend]).
+     * stateful effects through [calculateEffectOutput], carrying the pass timestamp and the
+     * pass counter (see [processWallClockTickSuspend]).
      */
     private sealed interface PhaseSource {
         /** Phase for an effect applied to one fixture or one whole target. */
