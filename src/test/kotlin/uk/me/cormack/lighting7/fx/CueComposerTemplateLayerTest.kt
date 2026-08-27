@@ -75,6 +75,8 @@ class CueComposerTemplateLayerTest {
             priority = priority,
             layers = layers,
             localRows = localRows,
+            // No Look layer in this file — every layer here names a template.
+            resolveLook = { null },
             resolveTemplate = { byUuid[it] },
         )
     }
@@ -234,7 +236,7 @@ class CueComposerTemplateLayerTest {
             fixtures = mixedRig(),
             cueId = cueId,
             layers = listOf(layerFor(amber, targets = listOf(CueTargetDto("fixture", "hex-1")))),
-            lookRegistry = null,
+            resolveLook = { null },
         )
         assertTrue(effects.isEmpty())
     }

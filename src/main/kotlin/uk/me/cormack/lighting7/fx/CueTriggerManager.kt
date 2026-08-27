@@ -90,9 +90,10 @@ class CueTriggerManager(
         timedAdHocEffects: List<CueAdHocEffectDto>,
         scope: CoroutineScope,
     ) {
-        // Matches `CueComposer.cook`'s own filter (`enabled && amount > 0.0`): an amount-0 layer
+        // The `enabled && amount > 0.0` half of [CueComposer.contributingLayers]: an amount-0 layer
         // contributes nothing when it fires, so scheduling it would just spend a timer on a
-        // no-op re-cook.
+        // no-op re-cook. Not the helper itself, because this wants the layers the helper *drops* —
+        // the unfired timed ones are precisely what needs a timer.
         val timedLayers = cueData.layers.filter { it.enabled && it.amount > 0.0 && it.isTimed }
         if (timedLayers.isEmpty() && timedAdHocEffects.isEmpty()) return
 
@@ -125,7 +126,7 @@ class CueTriggerManager(
 
                 // Effects first, so a fire that spawns nothing still publishes its values.
                 for ((firedLayer, lookEffect, target) in CueComposer.cookEffects(
-                    state.show.fixtures, cueId, listOf(layer), state.show.lookRegistry,
+                    state.show.fixtures, cueId, listOf(layer), state.show.lookRegistry::snapshot,
                     includeTimed = setOf(layer.layerId),
                 )) {
                     applyLookEffectToTarget(firedLayer, lookEffect, target, cueId, cueStackId, effectIds)
@@ -532,8 +533,8 @@ private class TimedFireCook(
             priority = priority,
             layers = cueData.layers,
             localRows = rows,
-            lookRegistry = state.show.lookRegistry,
-            templateRegistry = state.show.templateRegistry,
+            resolveLook = state.show.lookRegistry::snapshot,
+            resolveTemplate = state.show.templateRegistry::snapshot,
             includeTimed = fired,
         )
         firedKey = fired

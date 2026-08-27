@@ -605,8 +605,8 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         priority = priority,
         layers = cueData.layers,
         localRows = localRows,
-        lookRegistry = state.show.lookRegistry,
-        templateRegistry = state.show.templateRegistry,
+        resolveLook = state.show.lookRegistry::snapshot,
+        resolveTemplate = state.show.templateRegistry::snapshot,
     )
     if (cooked.rows.isNotEmpty()) {
         engine.setCueAssignments(
@@ -634,7 +634,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // a sequential fold through `FxTarget.applyValue`. So same-priority effects already resolve
     // last-created-wins, and spawn order becomes composition order for free.
     for ((layer, lookEffect, target) in CueComposer.cookEffects(
-        state.show.fixtures, cueData.cueId, cueData.layers, state.show.lookRegistry,
+        state.show.fixtures, cueData.cueId, cueData.layers, state.show.lookRegistry::snapshot,
     )) {
         val effectSpec = lookEffect.toEffectSpec()
         val fxTarget = try {

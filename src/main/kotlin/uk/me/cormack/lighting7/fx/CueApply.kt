@@ -434,8 +434,8 @@ internal fun buildCombinedCueLayerRows(
         priority = cueDerivedPriority(applyData),
         layers = applyData.layers,
         localRows = cueOwn,
-        lookRegistry = state.show.lookRegistry,
-        templateRegistry = state.show.templateRegistry,
+        resolveLook = state.show.lookRegistry::snapshot,
+        resolveTemplate = state.show.templateRegistry::snapshot,
         includeTimed = firedTimedLayerIds ?: state.cueTriggerManager.firedTimedLayerIds(cueId),
     )
 }

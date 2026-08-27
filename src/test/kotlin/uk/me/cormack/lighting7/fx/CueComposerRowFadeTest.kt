@@ -86,7 +86,7 @@ class CueComposerRowFadeTest {
         priority = priority,
         layers = layers,
         localRows = localRows,
-        lookRegistry = registry,
+        resolveLook = { uuid -> registry?.snapshot(uuid) },
         resolveTemplate = { uuid -> templates.firstOrNull { it.templateUuid == uuid } },
     ).rows
 

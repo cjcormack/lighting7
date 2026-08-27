@@ -422,8 +422,8 @@ class ProgrammerLayerStack(
             // them into the layer contribution and lose that distinction: Record could no longer
             // tell the operator's own edits from the stack's output.
             localRows = emptyList(),
-            lookRegistry = lookRegistry(),
-            templateRegistry = templateRegistry(),
+            resolveLook = lookRegistry()::snapshot,
+            resolveTemplate = templateRegistry()::snapshot,
         )
         engine().setProgrammerStompSuppression(cooked.stompSuppression)
         val moved = store.putLayerSlots(
@@ -471,12 +471,12 @@ class ProgrammerLayerStack(
         effectInstances.values.retainAll { it in liveIds }
 
         val cookLayers = layers.map { it.toCookLayer() }
-        val desired = CueComposer.cookEffects(fixtures(), programmerCookCueId, cookLayers, lookRegistry())
+        val desired = CueComposer.cookEffects(fixtures(), programmerCookCueId, cookLayers, lookRegistry()::snapshot)
 
-        // Rank each layer among the ones that contribute, matching CookWinner.index.
-        val rankOf = cookLayers
-            .filter { it.enabled && it.amount > 0.0 }
-            .sortedBy { it.sortOrder }
+        // Rank each layer among the ones that contribute, off the same [CueComposer]
+        // helper `cook` numbers CookWinner.index with — so an effect's band offset and its
+        // layer's cooked rank cannot disagree.
+        val rankOf = CueComposer.contributingLayers(cookLayers)
             .withIndex()
             .associate { (index, layer) -> layer.layerId to index }
 
@@ -526,6 +526,10 @@ class ProgrammerLayerStack(
 
     /**
      * The programmer band, offset by layer rank.
+     *
+     * [rank] is a [CueComposer.contributingLayers] index — the same number [CueComposer.cook] puts
+     * in `CookWinner.index` — so an effect's position in the band and its layer's cooked rank are
+     * one value, not two that have to be kept equal.
      *
      * `sortedEffectsComparator` is `compareBy(priority, id)` with `id` a monotonic creation
      * counter, so without the offset relative order would be *spawn* order and a reorder would need

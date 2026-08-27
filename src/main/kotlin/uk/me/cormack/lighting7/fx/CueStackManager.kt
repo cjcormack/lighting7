@@ -170,7 +170,7 @@ class CueStackManager(
         // Spawn the layers' effects, in layer order — see [CueComposer.cookEffects] for why
         // spawn order alone is enough to make layer order the composition order.
         for ((layer, lookEffect, target) in CueComposer.cookEffects(
-            state.show.fixtures, cueData.cueId, cueData.layers, state.show.lookRegistry,
+            state.show.fixtures, cueData.cueId, cueData.layers, state.show.lookRegistry::snapshot,
         )) {
             val effectSpec = lookEffect.toEffectSpec()
             val fxTarget = try {
@@ -250,8 +250,8 @@ class CueStackManager(
             priority = cueDerivedPriority(cueData),
             layers = cueData.layers,
             localRows = localRows,
-            lookRegistry = state.show.lookRegistry,
-            templateRegistry = state.show.templateRegistry,
+            resolveLook = state.show.lookRegistry::snapshot,
+            resolveTemplate = state.show.templateRegistry::snapshot,
         )
         val incomingStartWeight = if (useCrossfade) 0.0 else 1.0
         if (cooked.rows.isNotEmpty()) {

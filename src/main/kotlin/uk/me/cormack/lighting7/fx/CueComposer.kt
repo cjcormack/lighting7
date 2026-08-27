@@ -186,6 +186,34 @@ internal object CueComposer {
     private data class Key(val targetKey: String, val propertyName: String)
 
     /**
+     * The layers of a cue that actually contribute, in rank order.
+     *
+     * The one definition of "contributing", and deliberately so: it is asked three times —
+     * [cook] (which numbers [CookWinner.index] off it), [cookEffects], and
+     * `ProgrammerLayerStack.syncEffects` (which turns the same rank into an effect priority via
+     * `priorityFor`). Those ranks have to agree, and while the predicate was written out three times
+     * they only agreed by inspection: the programmer's copy omitted the timed clause. Harmless
+     * there *only* because `ProgrammerLayer` carries no timing columns at all, so every layer it
+     * cooks is immediate — which is exactly the kind of agreement that survives until someone gives
+     * the programmer a timed layer.
+     *
+     * Three exclusions, each meaning "asserts nothing at all":
+     * - **disabled** — the operator switched the layer off;
+     * - **amount 0** — muted by pulling Amount to zero, which must silence its effects too, not
+     *   just scale its values to nothing;
+     * - **timed and unfired** — a timed layer asserts nothing until [CueTriggerManager] fires it,
+     *   at which point its `layerId` arrives in [includeTimed] and the cue is re-cooked whole.
+     *
+     * A template layer is *not* excluded. It contributes values, so it takes a rank; that it holds
+     * no effects is [cookEffects]'s own business, applied after numbering so skipping it there
+     * cannot renumber the layers above.
+     */
+    fun contributingLayers(layers: List<CookLayer>, includeTimed: Set<Int> = emptySet()): List<CookLayer> =
+        layers
+            .filter { it.enabled && it.amount > 0.0 && (!it.isTimed || it.layerId in includeTimed) }
+            .sortedBy { it.sortOrder }
+
+    /**
      * Cook [layers] and [localRows] into one contributor per (fixture, property).
      *
      * [localRows] are the cue's own Layer 4 rows, already built by `buildCueAssignmentsForCue` —
@@ -217,25 +245,26 @@ internal object CueComposer {
         priority: Int,
         layers: List<CookLayer>,
         localRows: List<CueAssignmentResolver.Assignment>,
-        lookRegistry: LookRegistry? = null,
-        templateRegistry: TemplateRegistry? = null,
-        includeTimed: Set<Int> = emptySet(),
         /**
-         * How a TEMPLATE layer's `source.uuid` becomes a [TemplateSnapshot]. Defaults to
-         * [templateRegistry], which is what every caller wants; a test can pass a plain map lookup
-         * instead of building a registry.
+         * How a LOOK layer's `source.uuid` becomes a [LookSnapshot] — in production
+         * `LookRegistry::snapshot`. A resolver rather than the registry itself because that is the
+         * only thing cooking ever asks of it, so a test can pass a plain map lookup.
+         *
+         * Required, with no `{ null }` default, because failing to resolve is not an error here —
+         * an unloadable layer is dropped with a warning — so an omitted resolver would cook a cue
+         * to darkness and say only that each of its layers could not be loaded.
          */
-        resolveTemplate: (UUID) -> TemplateSnapshot? = { templateRegistry?.snapshot(it) },
+        resolveLook: (UUID) -> LookSnapshot?,
+        /** How a TEMPLATE layer's `source.uuid` becomes a [TemplateSnapshot]; see [resolveLook]. */
+        resolveTemplate: (UUID) -> TemplateSnapshot?,
+        includeTimed: Set<Int> = emptySet(),
     ): CookResult {
         val acc = LinkedHashMap<Key, Contribution>()
 
-        // Indexed over the *filtered and sorted* list, so a CookWinner.index is a rank within the
-        // layers that actually contribute — which is what the seq band and provenance both mean by
-        // it. Disabled, amount-0 and unfired-timed layers are dropped before numbering; a look that
-        // fails to load is dropped after, so one unreadable Look does not renumber the rest.
-        val contributing = layers
-            .filter { it.enabled && it.amount > 0.0 && (!it.isTimed || it.layerId in includeTimed) }
-            .sortedBy { it.sortOrder }
+        // A CookWinner.index is a rank within the layers that actually contribute — which is what
+        // the seq band and provenance both mean by it. A look that fails to load is dropped *after*
+        // numbering, so one unreadable Look does not renumber the rest.
+        val contributing = contributingLayers(layers, includeTimed)
 
         // What each contributing layer actually asserted, in rank order. Rank order rather than a
         // map keyed by layerId because "stomp" is a statement about *position*: a stomping layer
@@ -245,7 +274,7 @@ internal object CueComposer {
         val asserted = ArrayList<LayerAssertions>(contributing.size)
 
         for ((index, layer) in contributing.withIndex()) {
-            val content = resolveContent(layer.source, lookRegistry, resolveTemplate)
+            val content = resolveContent(layer.source, resolveLook, resolveTemplate)
             if (content == null) {
                 logger.warn(
                     "cue {}: {} '{}' ({}) could not be loaded — skipping layer",
@@ -363,19 +392,18 @@ internal object CueComposer {
         fixtures: Fixtures,
         cueId: Int,
         layers: List<CookLayer>,
-        lookRegistry: LookRegistry?,
+        /** How a LOOK layer's `source.uuid` becomes a [LookSnapshot]; see [cook]'s own parameter. */
+        resolveLook: (UUID) -> LookSnapshot?,
         includeTimed: Set<Int> = emptySet(),
     ): List<Triple<CookLayer, LookEffectEntry, TargetRef>> {
         val out = ArrayList<Triple<CookLayer, LookEffectEntry, TargetRef>>()
-        for (layer in layers.filter { it.enabled }.sortedBy { it.sortOrder }) {
-            if (layer.isTimed && layer.layerId !in includeTimed) continue
-            // Same rule as [cook]: an amount-0 layer contributes nothing at all. Without this an
-            // operator who muted a layer by pulling Amount to zero would still see its effects run.
-            if (layer.amount <= 0.0) continue
+        for (layer in contributingLayers(layers, includeTimed)) {
             // Templates hold no effects at all (D7 — effects live in a Look or on a cue), so a
             // template layer contributes nothing here rather than being resolved and found empty.
+            // Note this is *not* part of [contributingLayers]: a template layer does contribute
+            // values, so it still takes a rank, and skipping it here must not renumber the rest.
             if (layer.source.isTemplate) continue
-            val look = lookRegistry?.snapshot(layer.source.uuid) ?: continue
+            val look = resolveLook(layer.source.uuid) ?: continue
             val layerTargets = layer.targets.map { it.target }
             for (effect in look.effects) {
                 val effectTarget = effect.target
@@ -455,10 +483,10 @@ internal object CueComposer {
 
     private fun resolveContent(
         source: LayerSource,
-        lookRegistry: LookRegistry?,
+        resolveLook: (UUID) -> LookSnapshot?,
         resolveTemplate: (UUID) -> TemplateSnapshot?,
     ): LayerContent? = when (source.kind) {
-        LayerSourceKind.LOOK -> lookRegistry?.snapshot(source.uuid)?.let { LayerContent.OfLook(it) }
+        LayerSourceKind.LOOK -> resolveLook(source.uuid)?.let { LayerContent.OfLook(it) }
         LayerSourceKind.TEMPLATE -> resolveTemplate(source.uuid)?.let { LayerContent.OfTemplate(it) }
     }
 

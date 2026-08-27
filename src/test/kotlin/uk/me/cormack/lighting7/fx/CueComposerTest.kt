@@ -131,7 +131,9 @@ class CueComposerTest {
         priority = priority,
         layers = layers,
         localRows = localRows,
-        lookRegistry = registry,
+        resolveLook = registry::snapshot,
+        // No template layer in this file — `CueComposerTemplateLayerTest` owns that arm.
+        resolveTemplate = { null },
     )
 
     /** The cooked winner for one key, as `lookName@index`, or null when a local row won. */
@@ -569,12 +571,12 @@ class CueComposerTest {
         val registry = registryOf(fixtures, base, timed)
 
         val beforeFire = CueComposer.cook(
-            fixtures, cueId, priority, layers, emptyList(), registry,
+            fixtures, cueId, priority, layers, emptyList(), registry::snapshot, { null },
         ).rows
         assertEquals(100u.toUByte(), sliderAt(beforeFire, "hex-1"))
 
         val afterFire = CueComposer.cook(
-            fixtures, cueId, priority, layers, emptyList(), registry,
+            fixtures, cueId, priority, layers, emptyList(), registry::snapshot, { null },
             includeTimed = setOf(timed.lookId),
         ).rows
         assertEquals(255u.toUByte(), sliderAt(afterFire, "hex-1"))
@@ -598,7 +600,7 @@ class CueComposerTest {
         val registry = registryOf(fixtures, same)
 
         val afterFirstFire = CueComposer.cook(
-            fixtures, cueId, priority, layers, emptyList(), registry,
+            fixtures, cueId, priority, layers, emptyList(), registry::snapshot, { null },
             includeTimed = setOf(first.layerId),
         ).rows
         assertEquals(
@@ -608,7 +610,7 @@ class CueComposerTest {
         )
 
         val afterBoth = CueComposer.cook(
-            fixtures, cueId, priority, layers, emptyList(), registry,
+            fixtures, cueId, priority, layers, emptyList(), registry::snapshot, { null },
             includeTimed = setOf(first.layerId, second.layerId),
         ).rows
         assertEquals(200u.toUByte(), sliderAt(afterBoth, "hex-1"))
@@ -649,12 +651,12 @@ class CueComposerTest {
         assertEquals(
             1,
             CueComposer.cookEffects(
-                fixtures, cueId, listOf(layer(withEffect, 0, targets = target)), registry,
+                fixtures, cueId, listOf(layer(withEffect, 0, targets = target)), registry::snapshot,
             ).size,
         )
         assertTrue(
             CueComposer.cookEffects(
-                fixtures, cueId, listOf(layer(withEffect, 0, targets = target, amount = 0.0)), registry,
+                fixtures, cueId, listOf(layer(withEffect, 0, targets = target, amount = 0.0)), registry::snapshot,
             ).isEmpty(),
         )
     }
@@ -955,5 +957,49 @@ class CueComposerTest {
 
         assertEquals(1, cooked.rows.size, "one contributor per key, as always")
         assertEquals(setOf(FxEngine.PropertyKey("hex-1", "dimmer")), cooked.assertedKeys)
+    }
+    // ─── the contributing-layer predicate ───────────────────────────────
+
+    @Test
+    fun `contributingLayers is the one definition of contributing, in rank order`() {
+        // Sweep item E5: this predicate used to be written out at three call sites, one of which
+        // had drifted. The point of the helper is that a rank means the same thing everywhere, so
+        // this pins both halves of it — who is dropped, and what order the survivors come back in.
+        val look = look("Any", lookRow(propertyName = "dimmer", value = "100"))
+        val live = layer(look, sortOrder = 30, layerId = 1)
+        val disabled = layer(look, sortOrder = 10, layerId = 2, enabled = false)
+        val muted = layer(look, sortOrder = 20, layerId = 3, amount = 0.0)
+        val unfired = layer(look, sortOrder = 5, layerId = 4).copy(delayMs = 500L)
+        val alsoLive = layer(look, sortOrder = 1, layerId = 5)
+        val layers = listOf(live, disabled, muted, unfired, alsoLive)
+
+        assertEquals(
+            listOf(5, 1),
+            CueComposer.contributingLayers(layers).map { it.layerId },
+            "disabled, amount-0 and unfired-timed layers assert nothing; survivors sort by sortOrder",
+        )
+        assertEquals(
+            listOf(5, 4, 1),
+            CueComposer.contributingLayers(layers, includeTimed = setOf(unfired.layerId)).map { it.layerId },
+            "a fired timed layer takes its rank by sortOrder like any other",
+        )
+    }
+
+    @Test
+    fun `a template layer still takes a rank, because it contributes values`() {
+        // The exclusion cookEffects applies to templates deliberately sits *outside* the helper:
+        // a template contributes rows, so it must be numbered, or skipping it for effects would
+        // renumber every layer above it and shift their programmer-band priorities.
+        val look = look("Any", lookRow(propertyName = "dimmer", value = "100"))
+        val templateLayer = CookLayer(
+            source = LayerSource.template(99, UUID.nameUUIDFromBytes("t".toByteArray()), "Amber"),
+            sortOrder = 0,
+            layerId = 99,
+        )
+        assertEquals(
+            listOf(99, 1),
+            CueComposer.contributingLayers(listOf(templateLayer, layer(look, sortOrder = 1, layerId = 1)))
+                .map { it.layerId },
+        )
     }
 }
