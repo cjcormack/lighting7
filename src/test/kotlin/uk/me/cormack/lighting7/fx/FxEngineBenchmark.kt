@@ -381,8 +381,8 @@ class FxEngineBenchmark {
         engine.addEffect(randomChase)
 
         // PER_FIXTURE wall-clock effect rate-scaled by master 2 — exercises
-        // `processWallClockElementKeys` and `SpeedMasterBank.rateScales()` against a bank with
-        // more than one entry.
+        // `processElementKeys` under `PhaseSource.WallClock` and `SpeedMasterBank.rateScales()`
+        // against a bank with more than one entry.
         val wallChase = FxInstance(
             effect = SteppedColour(
                 colours = listOf(

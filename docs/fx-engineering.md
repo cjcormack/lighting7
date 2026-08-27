@@ -1407,6 +1407,12 @@ FxEngine
 
 Each loop resets only the properties controlled by its own effects, preventing the two timing sources from interfering with each other.
 
+The loops are independent, but the per-effect apply below them is **one code path**:
+both call `processFixtureEffect` / `processGroupEffect` / `processElementKeys`, differing
+only in the `PhaseSource` they pass (`Beat` reads the master's tick, `WallClock` reads the
+effect's own scaled accumulator). Expansion, distribution plans, programmer suppression and
+blending are therefore identical by construction rather than by hand-keeping two copies.
+
 ### Beat ↔ Wall-Clock interaction
 
 Because each loop owns its own sorted-snapshot of effects and its own reset pass, effects

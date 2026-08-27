@@ -238,8 +238,9 @@ The `FxOutput` sealed interface has a `scaled(multiplier: Double)` method:
 - **Colour**: scales RGB/W/A/UV toward black
 - **Position**: no scaling (snap — no meaningful position fade)
 
-Applied in `FxEngine` at every effect output site — three per tick loop, since the beat and
-wall-clock paths are twins:
+Applied in `FxEngine` once, inside `calculateEffectOutput`, which the three effect output
+sites all call into. Both the beat and wall-clock passes share those three, differing only in
+the `PhaseSource` they hand them:
 1. `processFixtureEffect` — direct fixture
 2. `processGroupEffect` — group member direct
 3. `processElementKeys` — per-element distribution, serving both the multi-element fixture

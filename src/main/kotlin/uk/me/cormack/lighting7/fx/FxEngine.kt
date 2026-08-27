@@ -1095,9 +1095,9 @@ class FxEngine(
             val tick = frame.tick(effect.speedMasterSlot)
             try {
                 if (effect.isGroupEffect) {
-                    processGroupEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression)
+                    processGroupEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, PhaseSource.Beat)
                 } else {
-                    processFixtureEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression)
+                    processFixtureEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, PhaseSource.Beat)
                 }
                 noteTickSuccess(effect)
             } catch (t: Throwable) {
@@ -1127,10 +1127,10 @@ class FxEngine(
     /**
      * Process all WALL_CLOCK-timed effects on the fixed-interval timer.
      *
-     * Wall-clock effects use elapsed real time for phase calculation instead of
-     * beat position, making them independent of BPM. The phase calculation is
-     * handled by [FxInstance.calculateWallClockPhase] and
-     * [FxInstance.calculateWallClockPhaseForMember].
+     * Wall-clock effects use elapsed real time for phase calculation instead of beat
+     * position, making them independent of BPM. That is the only difference in how *phase* is
+     * derived, so both passes share [processFixtureEffect] / [processGroupEffect] and differ
+     * by the [PhaseSource] they hand them.
      *
      * `internal` so that `FxEnginePipelineTest` can drive the wall-clock path synchronously,
      * through the `processWallClockTick` shim in `FxEngineTickShims.kt` (test source).
@@ -1204,9 +1204,13 @@ class FxEngine(
 
             try {
                 if (effect.isGroupEffect) {
-                    processWallClockGroupEffect(syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression)
+                    processGroupEffect(
+                        syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression, PhaseSource.WallClock,
+                    )
                 } else {
-                    processWallClockFixtureEffect(syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression)
+                    processFixtureEffect(
+                        syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression, PhaseSource.WallClock,
+                    )
                 }
                 noteTickSuccess(effect)
             } catch (t: Throwable) {
@@ -1216,125 +1220,6 @@ class FxEngine(
         }
 
         transaction.applySuspend()
-    }
-
-    /**
-     * Process a wall-clock fixture effect using elapsed time for phase.
-     */
-    private fun processWallClockFixtureEffect(
-        tick: MasterClock.ClockTick,
-        effect: FxInstance,
-        dyn: FxDynamics,
-        fixturesWithTx: Fixtures.FixturesWithTransaction,
-        deltaMs: Long,
-        suppression: Map<String, Set<String>> = emptyMap(),
-    ) {
-        val expansion = expansionFor(effect, dyn)
-        when (expansion.kind) {
-            FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
-                val fixtureKey = effect.target.targetKey
-                val effectPhase = effect.calculateWallClockPhase(dyn)
-                val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
-                if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
-                    effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
-                }
-            }
-
-            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> processWallClockElementKeys(
-                tick, effect, dyn, fixturesWithTx, expansion.flat,
-                plansFor(effect, expansion, dyn).flat, deltaMs, suppression,
-            )
-
-            FxTargetExpansion.Kind.NONE,
-            FxTargetExpansion.Kind.GROUP_MEMBERS,
-            FxTargetExpansion.Kind.GROUP_ELEMENTS,
-            -> {}
-        }
-    }
-
-    /**
-     * Process a wall-clock effect expanded across multi-element fixture elements.
-     */
-    private fun processWallClockElementKeys(
-        tick: MasterClock.ClockTick,
-        effect: FxInstance,
-        dyn: FxDynamics,
-        fixturesWithTx: Fixtures.FixturesWithTransaction,
-        elementKeys: List<String>,
-        plan: DistributionPlan,
-        deltaMs: Long,
-        suppression: Map<String, Set<String>> = emptyMap(),
-    ) {
-        // The beat twin of this is [processElementKeys]; they differ only in which phase
-        // function they call. Already filtered and in distribution order.
-        val filteredCount = elementKeys.size
-        if (filteredCount == 0) return
-
-        var lastMemberPhase = 0.0
-        for ((distributionIdx, elementKey) in elementKeys.withIndex()) {
-            val distOffset = plan.offsets[distributionIdx]
-            val memberPhase = effect.calculateWallClockPhaseForMember(filteredCount, dyn, distOffset)
-            lastMemberPhase = memberPhase
-
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, plan.contexts[distributionIdx])
-            if (!isSuppressed(suppression, elementKey, effect.target.propertyName, effect)) {
-                effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode)
-            }
-        }
-        effect.lastPhase = lastMemberPhase
-    }
-
-    /**
-     * Process a wall-clock group effect using elapsed time for phase.
-     */
-    private fun processWallClockGroupEffect(
-        tick: MasterClock.ClockTick,
-        effect: FxInstance,
-        dyn: FxDynamics,
-        fixturesWithTx: Fixtures.FixturesWithTransaction,
-        deltaMs: Long,
-        suppression: Map<String, Set<String>> = emptyMap(),
-    ) {
-        val expansion = expansionFor(effect, dyn)
-        when (expansion.kind) {
-            FxTargetExpansion.Kind.GROUP_MEMBERS -> {
-                val allMembers = expansion.members
-                val groupSize = allMembers.size
-                val plan = plansFor(effect, expansion, dyn).members
-                var lastMemberPhase = 0.0
-                for ((memberIdx, member) in allMembers.withIndex()) {
-                    val distOffset = plan.offsets[memberIdx]
-                    val memberPhase = effect.calculateWallClockPhaseForMember(groupSize, dyn, distOffset)
-                    lastMemberPhase = memberPhase
-                    val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, plan.contexts[memberIdx])
-                    if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
-                        effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
-                    }
-                }
-                if (allMembers.isNotEmpty()) effect.lastPhase = lastMemberPhase
-            }
-
-            FxTargetExpansion.Kind.GROUP_ELEMENTS -> {
-                val plans = plansFor(effect, expansion, dyn)
-                when (dyn.elementMode) {
-                    ElementMode.PER_FIXTURE ->
-                        for ((memberIdx, memberKeys) in expansion.perFixture.withIndex()) {
-                            processWallClockElementKeys(
-                                tick, effect, dyn, fixturesWithTx, memberKeys,
-                                plans.perFixture[memberIdx], deltaMs, suppression,
-                            )
-                        }
-                    ElementMode.FLAT -> processWallClockElementKeys(
-                        tick, effect, dyn, fixturesWithTx, expansion.flat, plans.flat, deltaMs, suppression,
-                    )
-                }
-            }
-
-            FxTargetExpansion.Kind.NONE,
-            FxTargetExpansion.Kind.DIRECT_FIXTURE,
-            FxTargetExpansion.Kind.FIXTURE_ELEMENTS,
-            -> {}
-        }
     }
 
     /**
@@ -1456,6 +1341,63 @@ class FxEngine(
 
 
     /**
+     * Where an effect's phase comes from on a pass: its master's beat position, or its own
+     * scaled wall-clock accumulator.
+     *
+     * The two passes are otherwise identical over a given effect — same expansion, same
+     * distribution plan, same suppression, same apply — so this is the only thing the shared
+     * `process*` functions below are parameterised on. Before this they were two hand-kept
+     * copies, and every fix *inside the per-effect apply* had to land twice; the two outer
+     * pass functions above still own their own tick sourcing and reset/suppression setup, so
+     * a change to pass mechanics still lands twice one level up.
+     *
+     * Objects rather than lambdas: two instances for the life of the process, nothing allocated
+     * per tick. [WallClock] ignores `tick` for *phase* — that is a function of
+     * `accumulatedScaledMs` — but the tick itself is not inert on that path: it still reaches
+     * stateful effects through [calculateEffectOutput], and the wall-clock pass's synthetic
+     * tick pins `tickNumber` at 0 (see [processWallClockTickSuspend]).
+     */
+    private sealed interface PhaseSource {
+        /** Phase for an effect applied to one fixture or one whole target. */
+        fun single(effect: FxInstance, tick: MasterClock.ClockTick, dyn: FxDynamics): Double
+
+        /** Phase for member/element [memberIndexCount]-way distribution at [distributionOffset]. */
+        fun member(
+            effect: FxInstance,
+            tick: MasterClock.ClockTick,
+            memberIndexCount: Int,
+            dyn: FxDynamics,
+            distributionOffset: Double,
+        ): Double
+
+        object Beat : PhaseSource {
+            override fun single(effect: FxInstance, tick: MasterClock.ClockTick, dyn: FxDynamics) =
+                effect.calculatePhase(tick, dyn)
+
+            override fun member(
+                effect: FxInstance,
+                tick: MasterClock.ClockTick,
+                memberIndexCount: Int,
+                dyn: FxDynamics,
+                distributionOffset: Double,
+            ) = effect.calculatePhaseForMember(tick, memberIndexCount, dyn, distributionOffset)
+        }
+
+        object WallClock : PhaseSource {
+            override fun single(effect: FxInstance, tick: MasterClock.ClockTick, dyn: FxDynamics) =
+                effect.calculateWallClockPhase(dyn)
+
+            override fun member(
+                effect: FxInstance,
+                tick: MasterClock.ClockTick,
+                memberIndexCount: Int,
+                dyn: FxDynamics,
+                distributionOffset: Double,
+            ) = effect.calculateWallClockPhaseForMember(memberIndexCount, dyn, distributionOffset)
+        }
+    }
+
+    /**
      * Process an effect targeting a single fixture.
      *
      * If the parent fixture doesn't have the target property but implements
@@ -1467,14 +1409,15 @@ class FxEngine(
         effect: FxInstance,
         dyn: FxDynamics,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
-        deltaMs: Long = 0L,
-        suppression: Map<String, Set<String>> = emptyMap(),
+        deltaMs: Long,
+        suppression: Map<String, Set<String>>,
+        phases: PhaseSource,
     ) {
         val expansion = expansionFor(effect, dyn)
         when (expansion.kind) {
             FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
                 val fixtureKey = effect.target.targetKey
-                val effectPhase = effect.calculatePhase(tick, dyn)
+                val effectPhase = phases.single(effect, tick, dyn)
                 val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
                 if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
                     effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
@@ -1483,7 +1426,7 @@ class FxEngine(
 
             FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> processElementKeys(
                 tick, effect, dyn, fixturesWithTx, expansion.flat,
-                plansFor(effect, expansion, dyn).flat, deltaMs, suppression,
+                plansFor(effect, expansion, dyn).flat, deltaMs, suppression, phases,
             )
 
             // Neither parent nor elements have the property, or the fixture is gone:
@@ -1508,8 +1451,9 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         elementKeys: List<String>,
         plan: DistributionPlan,
-        deltaMs: Long = 0L,
-        suppression: Map<String, Set<String>> = emptyMap(),
+        deltaMs: Long,
+        suppression: Map<String, Set<String>>,
+        phases: PhaseSource,
     ) {
         // Already filtered and in distribution order — see [FxTargetExpansion.flat] /
         // [FxTargetExpansion.perFixture]. Distribution indices run over the *included* elements,
@@ -1520,7 +1464,7 @@ class FxEngine(
         var lastMemberPhase = 0.0
         for ((distributionIdx, elementKey) in elementKeys.withIndex()) {
             val distOffset = plan.offsets[distributionIdx]
-            val memberPhase = effect.calculatePhaseForMember(tick, filteredCount, dyn, distOffset)
+            val memberPhase = phases.member(effect, tick, filteredCount, dyn, distOffset)
             lastMemberPhase = memberPhase
 
             val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, plan.contexts[distributionIdx])
@@ -1549,8 +1493,9 @@ class FxEngine(
         effect: FxInstance,
         dyn: FxDynamics,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
-        deltaMs: Long = 0L,
-        suppression: Map<String, Set<String>> = emptyMap(),
+        deltaMs: Long,
+        suppression: Map<String, Set<String>>,
+        phases: PhaseSource,
     ) {
         val expansion = expansionFor(effect, dyn)
         when (expansion.kind) {
@@ -1561,7 +1506,7 @@ class FxEngine(
                 var lastMemberPhase = 0.0
                 for ((memberIdx, member) in allMembers.withIndex()) {
                     val distOffset = plan.offsets[memberIdx]
-                    val memberPhase = effect.calculatePhaseForMember(tick, groupSize, dyn, distOffset)
+                    val memberPhase = phases.member(effect, tick, groupSize, dyn, distOffset)
                     lastMemberPhase = memberPhase
                     val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, plan.contexts[memberIdx])
                     if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
@@ -1580,12 +1525,13 @@ class FxEngine(
                         for ((memberIdx, memberKeys) in expansion.perFixture.withIndex()) {
                             processElementKeys(
                                 tick, effect, dyn, fixturesWithTx, memberKeys,
-                                plans.perFixture[memberIdx], deltaMs, suppression,
+                                plans.perFixture[memberIdx], deltaMs, suppression, phases,
                             )
                         }
                     // All elements across all fixtures as one list.
                     ElementMode.FLAT -> processElementKeys(
-                        tick, effect, dyn, fixturesWithTx, expansion.flat, plans.flat, deltaMs, suppression,
+                        tick, effect, dyn, fixturesWithTx, expansion.flat, plans.flat,
+                        deltaMs, suppression, phases,
                     )
                 }
             }
