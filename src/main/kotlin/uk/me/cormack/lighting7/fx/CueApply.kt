@@ -108,7 +108,7 @@ private fun DaoCue.toCueApplyData(): CueApplyData = CueApplyData(
     cueId = id.value,
     cueName = name,
     adHocEffects = adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
-    layers = layers.sortedBy { it.sortOrder }.map { it.toCookLayer() },
+    layers = layers.sortedBy { it.sortOrder }.mapNotNull { it.toCookLayer() },
     propertyAssignments = propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
     triggers = triggers.sortedBy { it.sortOrder }.map { trigger ->
         CueTriggerDto(
@@ -130,12 +130,16 @@ private fun DaoCue.toCueApplyData(): CueApplyData = CueApplyData(
 )
 
 /**
- * Resolve a stored cue layer into the composer's input shape. Must run inside a transaction — it
- * dereferences the layer's Look or template for its uuid and name.
+ * Resolve a stored cue layer into the composer's input shape, or null when the row names neither
+ * record or both — see [DaoCueLayer.source]. A malformed row is dropped from the cue with a warn
+ * rather than taking the GO down, which is what the read-time `check {}` here used to do.
+ *
+ * Must run inside a transaction — it dereferences the layer's Look or template for its uuid and
+ * name.
  */
-internal fun DaoCueLayer.toCookLayer() = CookLayer(
+internal fun DaoCueLayer.toCookLayer(): CookLayer? = CookLayer(
     layerId = id.value,
-    source = source,
+    source = source ?: return null,
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,

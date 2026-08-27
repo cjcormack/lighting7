@@ -34,6 +34,7 @@ import uk.me.cormack.lighting7.models.DaoPromptBookAnchors
 import uk.me.cormack.lighting7.models.DaoPromptBookAnnotation
 import uk.me.cormack.lighting7.models.DaoPromptBookAnnotations
 import uk.me.cormack.lighting7.models.checkPromptBookRegion
+import uk.me.cormack.lighting7.models.layerSourceShape
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoStageRegion
@@ -709,13 +710,19 @@ class ProjectImporter(private val state: State) {
                 ?: throw ImportError.invalidArchive("Cue layer ${l.uuid} references unknown cue $cueUuid")
             // Exactly one referent, checked explicitly. `UUID.fromString` takes a Java platform
             // type, so a null slips straight through it and fails later as an NPE with no archive
-            // context — the reason this is a `when` over the two nullable fields rather than a
-            // `fromString` on whichever one happens to be set.
+            // context — the reason the two nullable fields are inspected here rather than a
+            // `fromString` running on whichever one happens to be set.
+            //
+            // The *verdict* is [layerSourceShape], shared with the read and REST-write paths so
+            // there is one rule; the *severity* deliberately isn't. Everywhere else a malformed
+            // layer warns and is dropped, because a desk mid-show has nowhere to report it. Archive
+            // JSON is untrusted input arriving through a call that can fail, so here it fails —
+            // silently losing a layer of someone's show on a sync pull is the worse outcome.
             val lookUuidRaw = l.lookUuid
             val templateUuidRaw = l.templateUuid
-            if ((lookUuidRaw == null) == (templateUuidRaw == null)) {
+            layerSourceShape(lookUuidRaw, templateUuidRaw).problem?.let { problem ->
                 throw ImportError.invalidArchive(
-                    "Cue layer ${l.uuid} must name exactly one of lookUuid / templateUuid",
+                    "Cue layer ${l.uuid} names $problem; exactly one of lookUuid / templateUuid is required",
                 )
             }
             var look: DaoLook? = null

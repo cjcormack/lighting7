@@ -4,10 +4,15 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.dao.IntEntity
 import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.isNotNull
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.json.json
 import org.jetbrains.exposed.v1.core.java.javaUUID
+import org.slf4j.LoggerFactory
 
 // ─── DTOs (used for API serialization) ──────────────────────────────────
 
@@ -336,8 +341,14 @@ object DaoCueLayers : IntIdTable("cue_layers") {
      *
      * Two nullable FKs rather than a `(kind, uuid)` pair, because the FKs are what make a layer
      * pointing at a deleted record impossible and what let `LOOK_IN_USE` / `TEMPLATE_IN_USE` be a
-     * count rather than a scan. The invariant is enforced at the write boundary and asserted by
-     * [DaoCueLayer.source], which is the only reader — nothing else dereferences either column.
+     * count rather than a scan.
+     *
+     * The invariant now has a single decision behind it — [layerSourceShape] — and a CHECK
+     * constraint below that stops a malformed row reaching the disk in the first place. Before
+     * that it was enforced three ways with three behaviours: a read-time `check {}` that threw
+     * mid-show, a silent drop on the REST write path, and an `ImportError` that aborted a whole
+     * sync pull. Two of those are now one warn-and-drop; the importer keeps its hard failure
+     * because archive JSON is untrusted input with a diagnostic channel of its own.
      */
     val look = reference("look_id", DaoLooks).nullable()
     val template = reference("template_id", DaoTemplates).nullable()
@@ -395,6 +406,82 @@ object DaoCueLayers : IntIdTable("cue_layers") {
     val intervalMs = long("interval_ms").nullable()
     val randomWindowMs = long("random_window_ms").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
+
+    init {
+        // The exactly-one rule, stated to the database as well as to the code.
+        //
+        // **This only reaches a DB created after it was added.** Exposed emits CHECK constraints in
+        // `CREATE TABLE` only, and SQLite cannot `ALTER TABLE ADD CONSTRAINT`, so
+        // `createMissingTablesAndColumns` leaves an existing `cue_layers` unconstrained — the dev
+        // desk included. That is the same one-database bet the whole no-migrations position rests
+        // on (see CLAUDE.md §Database); the shipped MSI's fresh install gets the constraint, and
+        // the warn-and-drop paths are what hold the line on a DB that predates it. Don't read a
+        // green test run as proof the constraint fires on the operator's desk.
+        check("cue_layer_exactly_one_source") {
+            (look.isNotNull() and template.isNull()) or (look.isNull() and template.isNotNull())
+        }
+    }
+}
+
+/** Logger for the shared layer-source rule below — the model layer's only diagnostic. */
+private val layerSourceLogger = LoggerFactory.getLogger("cueLayerSource")
+
+/**
+ * Which of a cue layer's two mutually exclusive referent columns is set.
+ *
+ * Four-valued rather than a boolean because the two malformed shapes want different words in the
+ * diagnostic, and because a caller that resolves the well-formed case still has to branch on
+ * *which* side it got.
+ */
+enum class LayerSourceShape {
+    LOOK,
+    TEMPLATE,
+    NEITHER,
+    BOTH,
+    ;
+
+    /**
+     * How this shape violates the invariant, in words fit for a message — or null when it doesn't.
+     *
+     * Callers switch on nullness rather than on the enum so that adding a third malformed shape
+     * can't leave one of them silently treating it as valid.
+     */
+    val problem: String? get() = when (this) {
+        LOOK, TEMPLATE -> null
+        NEITHER -> "neither a look nor a template"
+        BOTH -> "both a look and a template"
+    }
+}
+
+/**
+ * The `DaoCueLayers.look`/[DaoCueLayers.template] exactly-one rule, decided in one place.
+ *
+ * Takes `Any?` because the rule is purely about which of the two is *present*: the read path holds
+ * entities, the REST write path int ids and the importer uuid strings, and all three want the same
+ * answer. Typing it would mean three overloads agreeing by convention, which is the arrangement
+ * this replaced.
+ */
+fun layerSourceShape(look: Any?, template: Any?): LayerSourceShape = when {
+    look != null && template != null -> LayerSourceShape.BOTH
+    look != null -> LayerSourceShape.LOOK
+    template != null -> LayerSourceShape.TEMPLATE
+    else -> LayerSourceShape.NEITHER
+}
+
+/**
+ * The shared *behaviour*: a malformed pair warns, naming [layer], and the caller drops the layer.
+ *
+ * Returns true when there is nothing to say. A layer that names neither record or both cannot be
+ * composed at all, and there is no reading of it that produces light — so every path short of the
+ * importer treats it as absent rather than inventing a meaning or taking the desk down mid-show.
+ *
+ * [layer] is a lambda so a caller that has to dereference an FK for the description doesn't pay for
+ * it on the overwhelmingly common well-formed path.
+ */
+fun LayerSourceShape.wellFormedOrWarn(layer: () -> String): Boolean {
+    val problem = problem ?: return true
+    layerSourceLogger.warn("cue layer {} names {} — dropping the layer", layer(), problem)
+    return false
 }
 
 class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
@@ -418,21 +505,21 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
     var uuid by DaoCueLayers.uuid
 
     /**
-     * What this layer applies, with the exactly-one-set invariant checked.
+     * What this layer applies, or null when the row violates the exactly-one-set invariant.
      *
-     * A `check` rather than a nullable return: a layer that names neither (or both) is a row that
-     * cannot be composed at all, and every caller would have to invent a behaviour for it. Failing
-     * loudly at the one place that dereferences the columns is how that stays a write-boundary bug
-     * rather than a silent hole in a cue.
+     * This used to `check {}`, on the reasoning that failing loudly at the one place that
+     * dereferences the columns kept a malformed row a write-boundary bug rather than a silent hole
+     * in a cue. It didn't: the throw landed on the *apply* path, so a row written by some other
+     * path — the cue-copy route wrote one on every template layer — took the GO down instead of the
+     * write that caused it. Now [DaoCueLayers]'s CHECK constraint is the loud half, and the two
+     * readers here ([toDto], [toCookLayer]) drop the layer with a warn.
      *
      * Must run inside a transaction — it dereferences the FK for its uuid and name.
      */
-    val source: LayerSource get() {
+    val source: LayerSource? get() {
         val look = look
         val template = template
-        check((look == null) != (template == null)) {
-            "cue layer ${id.value} names ${if (look == null) "neither a look nor a template" else "both a look and a template"}"
-        }
+        if (!layerSourceShape(look, template).wellFormedOrWarn { "id ${id.value}" }) return null
         return if (look != null) {
             LayerSource.look(look.id.value, look.uuid, look.name)
         } else {

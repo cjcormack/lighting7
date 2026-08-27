@@ -354,11 +354,17 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 sortOrder = (targetStack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1
             }
 
-            // Copy child entities
+            // Copy child entities.
+            //
+            // **Both referent columns**, not just `look`. This loop copied `look` alone, so every
+            // template layer arrived in the target cue naming neither record — a row that violates
+            // `DaoCueLayers`' exactly-one invariant, and the reason the read-time `check {}` on
+            // `DaoCueLayer.source` was reachable at all: the copy wrote it and the *GO* threw.
             for (layer in sourceCue.layers) {
                 DaoCueLayer.new {
                     cue = newCue
                     look = layer.look
+                    template = layer.template
                     sortOrder = layer.sortOrder
                     enabled = layer.enabled
                     targets = layer.targets

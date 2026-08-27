@@ -284,8 +284,15 @@ internal fun captureCueAssignmentsFromSnapshot(
 // ─── Entity helpers ─────────────────────────────────────────────────────
 
 
-/** Wire form of a stored cue layer. Must run inside a transaction. */
-internal fun DaoCueLayer.toDto() = CueLayerDto(
+/**
+ * Wire form of a stored cue layer, or null when the row names neither record or both.
+ *
+ * Nullable for the same reason [DaoCueLayer.source] is: a layer with no resolvable referent is
+ * absent as far as every consumer is concerned, and the read path is not where that gets reported.
+ *
+ * Must run inside a transaction.
+ */
+internal fun DaoCueLayer.toDto(): CueLayerDto? = CueLayerDto(
     lookId = look?.id?.value,
     templateId = template?.id?.value,
     sortOrder = sortOrder,
@@ -300,7 +307,7 @@ internal fun DaoCueLayer.toDto() = CueLayerDto(
     delayMs = delayMs,
     intervalMs = intervalMs,
     randomWindowMs = randomWindowMs,
-    source = source.toDto(),
+    source = (source ?: return null).toDto(),
     id = id.value,
 )
 
@@ -355,7 +362,7 @@ internal fun DaoCue.toCueDetails(
     return CueDetails(
         id = this.id.value,
         name = this.name,
-        layers = this.layers.sortedBy { it.sortOrder }.map { it.toDto() },
+        layers = this.layers.sortedBy { it.sortOrder }.mapNotNull { it.toDto() },
         adHocEffects = this.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
         propertyAssignments = assignmentDetails,
         triggers = triggerDetails,
@@ -395,12 +402,21 @@ internal class ResolvedLayerSource private constructor(
 /**
  * Which record a [CueLayerDto] names, or null when it names none, both, or something deleted.
  *
+ * The none/both cases go through [layerSourceShape] so this path and [DaoCueLayer.source] share one
+ * verdict and one warning; the deleted case stays silent, because a layer naming a record the
+ * operator has since deleted is expected rather than malformed.
+ *
  * Must run inside a transaction.
  */
 internal fun resolveCueLayerSource(layer: CueLayerDto): ResolvedLayerSource? {
     val lookId = layer.lookId
     val templateId = layer.templateId
-    if ((lookId == null) == (templateId == null)) return null
+    // A wire DTO has no id on the write path by design, so the warning names what it does have:
+    // without it a malformed write logs a line no operator can trace back to a layer.
+    val wellFormed = layerSourceShape(lookId, templateId).wellFormedOrWarn {
+        "from the wire (sortOrder=${layer.sortOrder}, targets=${layer.targets.joinToString { "${it.type}:${it.key}" }})"
+    }
+    if (!wellFormed) return null
     return if (lookId != null) {
         DaoLook.findById(lookId)?.let { ResolvedLayerSource.ofLook(it) }
     } else {
@@ -443,9 +459,9 @@ internal fun createCueChildren(
     for (layer in layers) {
         // A layer naming a record that no longer exists is dropped rather than failing the write —
         // the rule a preset application used for a deleted preset, kept when that table went. The
-        // same drop covers the malformed shapes (both ids, or neither): `resolveWriteSource` returns
-        // null and this layer simply does not appear, which is what the DTO's exactly-one-of
-        // contract means at the write boundary.
+        // same drop covers the malformed shapes (both ids, or neither): [resolveCueLayerSource]
+        // warns and returns null and this layer simply does not appear, which is what the DTO's
+        // exactly-one-of contract means at the write boundary.
         val resolved = resolveCueLayerSource(layer) ?: continue
         DaoCueLayer.new {
             this.cue = cue
