@@ -199,7 +199,7 @@ Note `:test` rather than `test`: the latter also runs `:launcher:test`, which fa
 
 ### `FxEngineBenchmark` scenarios
 
-Five independent rigs, one per `@Test`, because engine state, cue assignments and the effect
+Six independent rigs, one per `@Test`, because engine state, cue assignments and the effect
 registry all persist per rig — sharing one would make the numbers order-dependent.
 
 | Scenario | Rig | Exists for |
@@ -209,11 +209,21 @@ registry all persist per rig — sharing one would make the numbers order-depend
 | `[crossfade]` | 168 `HexFixture`s, two cues × dimmer+colour rows (672 rows), 169 effects; drives `cueLayer.updateFadeWeights` at 62 fps | sweep C3 |
 | `[colour-beat]` | 168 `HexFixture`s with colour effects and a half-covered programmer band | sweep C2 — scenario 2 was claimed to cover it and does not |
 | `[spawn-each]` / `[spawn-batch]` | scenario 1's fixtures, a **fresh** engine per sample, 168 dimmer effects put up as one cue GO would | sweep C7 — the only scenario that measures *adding* effects rather than ticking them |
+| `[cook-split]` / `[cook-once]` | a three-layer stack over a 168-head group: a 40-row Look bound to the group, a two-row template layer, a Look holding 24 head-bound effects | sweep C8 — the only scenario that measures `CueComposer` rather than `FxEngine` |
 
-`[spawn-each]`/`[spawn-batch]` is shaped differently from the other four on purpose: it reports
-both the per-effect and the batched add in the same run, so it carries its own before/after and
-does not depend on a historical block. Every other scenario spawns its effects in rig setup,
-outside the measured window, which is why none of them could see C7 at all.
+`[spawn-each]`/`[spawn-batch]` and `[cook-split]`/`[cook-once]` are shaped differently from the
+other four on purpose: each reports both shapes in the same run, so it carries its own
+before/after and does not depend on a historical block. Every other scenario spawns its effects in
+rig setup, outside the measured window, which is why none of them could see C7 at all — and none
+of the five reaches the cook, which is why C8 needed a sixth.
+
+The cook rig needs no engine, no `State` and no database: `CueComposer` resolves Looks and
+templates through the two lambdas it is handed, so the scenario is a straight function call over
+plain snapshots. What it *does* need is the group. A bound row naming a group is what makes the
+cook expand per row; the layer naming that same group is what makes the allowed-set rebuild per
+row; and effects bound to individual heads inside it are what push `coversTarget` past its
+name-match fast path. Point the layers at fixtures instead and every one of those paths goes
+quiet while the numbers stay plausible.
 
 The **effects** the harness applies are load-bearing for the same reason the rigs are, and they
 live in `testsupport/TestEffects.kt` rather than coming from the `FxRegistry`. Effect maths runs
@@ -477,3 +487,42 @@ this session are not recorded, because `--rerun-tasks` compile load was running 
 their p99s (`[chase-wall]` 19.8 ms) measured the machine. C7 does not touch a tick path — `insert`
 does exactly what `addEffect`'s body did, and the one rebuild still lands before anything the
 calling flow publishes.
+
+**2026-08-27, selwyn.local, JDK 25** — sweep item C8 (cook-internal repeated work), on the new
+`layer stack cook cost` scenario: a three-layer stack (a 40-row Look bound to a 168-head group, a
+two-row template layer, a Look holding 24 head-bound effects) cooked 200 times after 40 warmups.
+No tick scenario reaches [`CueComposer`] at all, which is why C8 needed a sixth rig rather than a
+before/after on the existing five.
+
+```
+                          p50        mean       allocBytes/cook
+[cook-split]  before      1,937 µs   2,115 µs   3,509,218
+[cook-split]  after       1,312 µs   1,569 µs   2,299,004
+[cook-once]   after       1,041 µs   1,074 µs   2,201,491
+```
+
+Two separate wins, and the table separates them deliberately. **`[cook-split]` before → after** is
+the per-row and per-head hoisting *inside* `applyLayer`, which both arms share — the allowed-set
+and target expansion off the row loop and onto a per-layer `LayerTargets`, the template intent
+parsed per row rather than per head, and `TemplateResolver` walking the head's property catalogue
+once instead of twice. That is ~32 % of the cook and ~35 % of its allocation. **`[cook-split]` →
+`[cook-once]`** is the consolidation: one pass over the stack, one `contributingLayers` sort
+instead of three, each Look snapshot read once, and the layer's targets expanded once for both
+halves rather than once each. Another ~20 %.
+
+Read `[cook-once]` as the real number, because after C8 **nothing calls the split pair any more** —
+the programmer recook, `CueStackManager.activateCueInStack` and the cue-apply route helper all take
+`cookAll`. `[cook-split]` is kept as the arm that carries the historical shape, so the scenario
+stays a self-contained before/after instead of depending on this block.
+
+The part the benchmark cannot show is the one worth having: rows and effects now come out of the
+*same* resolved snapshots, so a Look edited between the two reads can no longer land its rows and
+its effects on stage from different versions of itself.
+
+The first `[cook-split]` "before" run of the session read p50 = 2,754 µs / p99 = 29 ms; the figure
+above is the second, quieter run. Treat the p99 column on this scenario as unusable — the cook
+allocates ~2-3 MB a time, so GC lands inside the timed window at this repeat count.
+
+The five tick scenarios were run either side and are flat, as they must be: C8 touches no tick
+path. `TypedParams`' cache fix is the one part of C8 that *is* per-tick, and it is invisible here —
+it only bites an effect whose colour parameter is blank, which no benchmark rig has.

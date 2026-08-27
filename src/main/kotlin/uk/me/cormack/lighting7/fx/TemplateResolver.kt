@@ -133,9 +133,13 @@ object TemplateResolver {
         val target = parseHex(intent.hex)
             ?: return Resolution(null, propertyName, Note.Unsupported("'${intent.hex}' is not a colour"))
 
+        // One walk of the head's properties, not one per lookup (sweep item C8):
+        // `resolvedProperties` reflects — a `KProperty1.call` per declared property — and the cook
+        // asks this once per head per template row.
+        val properties = PropertyChannelWriter.resolvedProperties(fixture)
+
         // Mixed colour first, whatever it is called on this head.
-        val mixed = PropertyChannelWriter.resolvedProperties(fixture)
-            .firstOrNull { it.value is DmxColour }
+        val mixed = properties.firstOrNull { it.value is DmxColour }
         if (mixed != null) {
             val hasWhite = (fixture as? WithWhite)?.white is DmxSlider
             val hasAmber = (fixture as? WithAmber)?.amber is DmxSlider
@@ -144,7 +148,7 @@ object TemplateResolver {
         }
 
         // Then a colour wheel: a discrete set of slots, each with a declared preview.
-        val wheel = PropertyChannelWriter.resolvedProperties(fixture)
+        val wheel = properties
             .firstOrNull { it.category == PropertyCategory.COLOUR && it.value is DmxFixtureSetting<*> }
         if (wheel != null) {
             val setting = wheel.value as DmxFixtureSetting<*>

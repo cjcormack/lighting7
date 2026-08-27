@@ -258,7 +258,68 @@ internal object CueComposer {
         /** How a TEMPLATE layer's `source.uuid` becomes a [TemplateSnapshot]; see [resolveLook]. */
         resolveTemplate: (UUID) -> TemplateSnapshot?,
         includeTimed: Set<Int> = emptySet(),
-    ): CookResult {
+    ): CookResult = cookInternal(
+        fixtures, cueId, priority, layers, localRows, resolveLook, resolveTemplate, includeTimed,
+        collectEffects = null,
+    ).values
+
+    /**
+     * Everything one [cookAll] produced: the value half, the effect half, and the layer ranks the
+     * two agree on.
+     */
+    internal data class FullCook(
+        val values: CookResult,
+        /** As [cookEffects] returns them; empty when the cook was asked for values only. */
+        val effects: List<Triple<CookLayer, LookEffectEntry, TargetRef>>,
+        /**
+         * `layerId → rank` among the contributing layers — the same number [CookWinner.index]
+         * carries, so a caller turning a rank into an effect priority cannot disagree with the rows.
+         */
+        val ranks: Map<Int, Int>,
+    )
+
+    /**
+     * [cook] and [cookEffects] in **one pass over the layer stack** — sweep item C8.
+     *
+     * The programmer re-cooks on every stack mutation and needs both halves each time. Asking for
+     * them separately walked the stack twice, sorted [contributingLayers] three times (once in each
+     * cook plus once more to rank the effects) and read every layer's [LookSnapshot] out of the
+     * registry twice — the second read being a genuine hazard, not just waste, since a Look edited
+     * between the two would put rows and effects from different versions of it on stage together.
+     *
+     * [withEffects] false yields the values and the ranks with [FullCook.effects] empty, for a
+     * caller that republishes values and deliberately leaves the running effects alone.
+     */
+    fun cookAll(
+        fixtures: Fixtures,
+        cueId: Int,
+        priority: Int,
+        layers: List<CookLayer>,
+        localRows: List<CueAssignmentResolver.Assignment>,
+        resolveLook: (UUID) -> LookSnapshot?,
+        resolveTemplate: (UUID) -> TemplateSnapshot?,
+        includeTimed: Set<Int> = emptySet(),
+        withEffects: Boolean = true,
+    ): FullCook = cookInternal(
+        fixtures, cueId, priority, layers, localRows, resolveLook, resolveTemplate, includeTimed,
+        collectEffects = if (withEffects) ArrayList() else null,
+    )
+
+    /**
+     * The one cook. [collectEffects] non-null asks for the effect triples alongside the rows, out of
+     * the same resolved [LayerContent] the rows came from.
+     */
+    private fun cookInternal(
+        fixtures: Fixtures,
+        cueId: Int,
+        priority: Int,
+        layers: List<CookLayer>,
+        localRows: List<CueAssignmentResolver.Assignment>,
+        resolveLook: (UUID) -> LookSnapshot?,
+        resolveTemplate: (UUID) -> TemplateSnapshot?,
+        includeTimed: Set<Int>,
+        collectEffects: MutableList<Triple<CookLayer, LookEffectEntry, TargetRef>>?,
+    ): FullCook {
         val acc = LinkedHashMap<Key, Contribution>()
 
         // A CookWinner.index is a rank within the layers that actually contribute — which is what
@@ -273,7 +334,14 @@ internal object CueComposer {
         // nothing, so it neither stomps nor needs suppressing.
         val asserted = ArrayList<LayerAssertions>(contributing.size)
 
+        // Accumulated in the loop below rather than by a second pass over `contributing`: the ranks
+        // are exactly the `(index, layer)` pairs it already walks. Stamped **before** the
+        // unresolvable-layer skip, because a layer that failed to load still holds its rank — the
+        // whole point of numbering ahead of the skip.
+        val ranks = HashMap<Int, Int>(contributing.size)
+
         for ((index, layer) in contributing.withIndex()) {
+            ranks[layer.layerId] = index
             val content = resolveContent(layer.source, resolveLook, resolveTemplate)
             if (content == null) {
                 logger.warn(
@@ -282,9 +350,18 @@ internal object CueComposer {
                 )
                 continue
             }
+            // Expanded once and handed to both halves — see [LayerTargets].
+            val layerTargets = LayerTargets(fixtures, cueId, layer)
             val keys = HashMap<String, MutableSet<String>>()
-            applyLayer(fixtures, cueId, layer, index, content, acc, keys)
+            applyLayer(fixtures, cueId, layer, index, content, acc, keys, layerTargets)
             asserted.add(LayerAssertions(layer.layerId, layer.stomp, keys))
+            // Off the content already resolved above. A template layer never reaches the `OfLook`
+            // arm, which is the same "templates hold no effects" skip [cookEffects] applies by
+            // name — and applied here after numbering, for the same reason: a template layer takes
+            // a rank, so skipping it must not renumber the layers above.
+            if (collectEffects != null && content is LayerContent.OfLook) {
+                effectsForLayer(fixtures, cueId, layer, content.look, layerTargets, collectEffects)
+            }
         }
 
         // The local layer always wins. Fixture-level rows beat group-derived ones for the same key,
@@ -326,14 +403,18 @@ internal object CueComposer {
                 fadeDurationMs = c.fadeDurationMs,
             )
         }
-        return CookResult(
-            rows = rows,
-            stompSuppression = buildStompSuppression(asserted),
-            assertedKeys = asserted.flatMapTo(HashSet()) { layer ->
-                layer.keys.entries.flatMap { (targetKey, properties) ->
-                    properties.map { FxEngine.PropertyKey(targetKey, it) }
-                }
-            },
+        return FullCook(
+            values = CookResult(
+                rows = rows,
+                stompSuppression = buildStompSuppression(asserted),
+                assertedKeys = asserted.flatMapTo(HashSet()) { layer ->
+                    layer.keys.entries.flatMap { (targetKey, properties) ->
+                        properties.map { FxEngine.PropertyKey(targetKey, it) }
+                    }
+                },
+            ),
+            effects = collectEffects ?: emptyList(),
+            ranks = ranks,
         )
     }
 
@@ -404,27 +485,46 @@ internal object CueComposer {
             // values, so it still takes a rank, and skipping it here must not renumber the rest.
             if (layer.source.isTemplate) continue
             val look = resolveLook(layer.source.uuid) ?: continue
-            val layerTargets = layer.targets.map { it.target }
-            for (effect in look.effects) {
-                val effectTarget = effect.target
-                if (effectTarget == null) {
-                    if (layerTargets.isEmpty()) {
-                        logger.warn(
-                            "cue {}: look '{}' has a deferred effect but its layer names no targets — skipping",
-                            cueId, layer.source.name,
-                        )
-                        continue
-                    }
-                    for (target in layerTargets) out.add(Triple(layer, effect, target))
-                } else {
-                    // A bound effect survives the layer's restriction only if the layer covers it.
-                    if (layerTargets.isEmpty() || coversTarget(fixtures, layerTargets, effectTarget)) {
-                        out.add(Triple(layer, effect, effectTarget))
-                    }
+            effectsForLayer(fixtures, cueId, layer, look, LayerTargets(fixtures, cueId, layer), out)
+        }
+        return out
+    }
+
+    /**
+     * One Look layer's effect triples, appended to [out].
+     *
+     * Shared by [cookEffects] and [cookAll] so the two cannot disagree about which effects a layer
+     * spawns — the combined cook exists precisely to stop the programmer asking twice, and a second
+     * copy of this fan-out would be a new way for the two answers to drift.
+     */
+    private fun effectsForLayer(
+        fixtures: Fixtures,
+        cueId: Int,
+        layer: CookLayer,
+        look: LookSnapshot,
+        /** The layer's own target set, expanded once — see [LayerTargets]. */
+        layerTargets: LayerTargets,
+        out: MutableList<Triple<CookLayer, LookEffectEntry, TargetRef>>,
+    ) {
+        val refs = layerTargets.refs
+        for (effect in look.effects) {
+            val effectTarget = effect.target
+            if (effectTarget == null) {
+                if (refs.isEmpty()) {
+                    logger.warn(
+                        "cue {}: look '{}' has a deferred effect but its layer names no targets — skipping",
+                        cueId, layer.source.name,
+                    )
+                    continue
+                }
+                for (target in refs) out.add(Triple(layer, effect, target))
+            } else {
+                // A bound effect survives the layer's restriction only if the layer covers it.
+                if (refs.isEmpty() || coversTarget(fixtures, layerTargets, effectTarget)) {
+                    out.add(Triple(layer, effect, effectTarget))
                 }
             }
         }
-        return out
     }
 
     // ─── One layer ──────────────────────────────────────────────────────
@@ -499,6 +599,15 @@ internal object CueComposer {
         val groupKey: String?,
         /** The originating row's [SourceRow.fadeDurationMs]. */
         val fadeDurationMs: Long?,
+        /**
+         * The originating row's parsed [TemplateIntent], for a template layer; null for a Look.
+         *
+         * Parsed once **per row** rather than once per head (sweep item C8): the string belongs to
+         * the row, so a template row fanned over a 24-head group used to parse the same value 24
+         * times. Non-null exactly when the layer is a template — a row whose value is not an
+         * intent is dropped whole, before it fans out.
+         */
+        val intent: TemplateIntent?,
     ) {
         val isGroupOrigin: Boolean get() = groupKey != null
     }
@@ -517,6 +626,8 @@ internal object CueComposer {
          * recorded as an assertion. See [CookResult] for the two things that read it.
          */
         asserted: MutableMap<String, MutableSet<String>>,
+        /** The layer's own target set, expanded once by the caller — see [LayerTargets]. */
+        layerTargets: LayerTargets,
     ) {
         val mask = try {
             parseMaskGroups(layer.propertyMask?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() })
@@ -527,18 +638,35 @@ internal object CueComposer {
         val blendMode = parseLayerBlendMode(layer.blendMode, layer.source.name, cueId)
         val amount = layer.amount.coerceIn(0.0, 1.0)
 
-        // Expand the layer's target set once. Null means "unrestricted"; non-empty means the layer
-        // both *supplies* targets to deferred rows and *filters* bound ones — one meaning serving
-        // two jobs, and what lets the migration preserve coverage exactly.
-        val layerTargets = layer.targets.map { it.target }
-        val layerFixtures: List<Expanded>? =
-            if (layerTargets.isEmpty()) null else expandTargets(fixtures, cueId, layer, layerTargets)
+        // The layer's targets both *supply* targets to deferred rows and *filter* bound ones — one
+        // meaning serving two jobs, and what lets the migration preserve coverage exactly.
+        val layerFixtures: List<Expanded>? = layerTargets.expanded
+
+        // Memoised out of the row loop (sweep item C8): the rows of one source overwhelmingly name
+        // the same handful of targets, so a 60-row Look re-expanded the same group 60 times — and
+        // this also collapses the "group missing" warning to one line per target rather than one
+        // per row. The allowed-set moved further out still, onto [LayerTargets], because the effect
+        // half asks the same question of the same targets.
+        val rowExpansions = HashMap<TargetRef, List<Expanded>>()
 
         val pending = ArrayList<Pending>()
         for (row in content.rows) {
             // Element-scoped rows are handled by the caller-side element path; they never reach the
             // per-fixture accumulator because an element is not a (fixture, property) key.
             if (row.elementKey != null) continue
+            // A template row's intent is the row's, not the head's — parse it here and drop the
+            // whole row if it is not one, rather than repeating the parse and the warning per head.
+            val intent = if (content is LayerContent.OfTemplate) {
+                parseTemplateIntent(row.value) ?: run {
+                    logger.warn(
+                        "cue {}: template '{}' — '{}' is not an intent for '{}' — skipping row",
+                        cueId, layer.source.name, row.value, row.propertyName,
+                    )
+                    continue
+                }
+            } else {
+                null
+            }
             val rowTarget = row.target
             if (rowTarget == null) {
                 if (layerFixtures == null) {
@@ -550,14 +678,15 @@ internal object CueComposer {
                     continue
                 }
                 for (e in layerFixtures) {
-                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey, row.fadeDurationMs))
+                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent))
                 }
             } else {
-                val rowFixtures = expandTargets(fixtures, cueId, layer, listOf(rowTarget))
-                val allowed = layerFixtures?.mapTo(HashSet()) { it.fixture.key }
+                val rowFixtures = rowExpansions.getOrPut(rowTarget) {
+                    expandTargets(fixtures, cueId, layer, listOf(rowTarget))
+                }
                 for (e in rowFixtures) {
-                    if (allowed != null && e.fixture.key !in allowed) continue
-                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey, row.fadeDurationMs))
+                    if (layerFixtures != null && e.fixture.key !in layerTargets.keys) continue
+                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent))
                 }
             }
         }
@@ -571,18 +700,12 @@ internal object CueComposer {
             // property carries the value on this head — the MAC 250's colour is a wheel called
             // `colour`, which `canonicalPropertyName` rewrites to `rgbColour` and then misses. So
             // the resolved name is what the mask, the category lookup and the accumulator key use.
-            val resolved: TemplateResolver.Resolution? = when (content) {
-                is LayerContent.OfLook -> null
-                is LayerContent.OfTemplate -> {
-                    val intent = parseTemplateIntent(p.rawValue)
-                    if (intent == null) {
-                        logger.warn(
-                            "cue {}: template '{}' — '{}' is not an intent for {}.{} — skipping",
-                            cueId, layer.source.name, p.rawValue, p.fixture.key, p.propertyName,
-                        )
-                        continue
-                    }
-                    val resolution = TemplateResolver.resolve(p.fixture, p.propertyName, intent)
+            val pendingIntent = p.intent
+            val resolved: TemplateResolver.Resolution? =
+                if (pendingIntent == null) {
+                    null
+                } else {
+                    val resolution = TemplateResolver.resolve(p.fixture, p.propertyName, pendingIntent)
                     if (!resolution.isSupported) {
                         // **Debug, not warn.** A head that cannot take the intent is the normal
                         // case for a template pointed at a mixed rig — a PAR with no pan is not a
@@ -596,7 +719,6 @@ internal object CueComposer {
                     }
                     resolution
                 }
-            }
             // **Not canonicalised for a template.** `TemplateResolver` already answered with the
             // head's own property name, and canonicalising it would undo exactly the work it did:
             // `canonicalPropertyName("colour")` is `"rgbColour"`, so the MAC 250's colour *wheel*
@@ -658,6 +780,56 @@ internal object CueComposer {
     private class Expanded(val fixture: Fixture, val groupKey: String?)
 
     /**
+     * A layer's own target set, expanded **once per layer** and shared by both halves of the cook.
+     *
+     * The layer's targets serve three jobs — they supply targets to deferred rows, filter bound
+     * ones, and decide whether a bound *effect* survives ([coversTarget]) — and each of the three
+     * used to expand them for itself, so a Look layer with rows and effects walked its groups twice
+     * per cook on top of the per-row rebuild (sweep item C8).
+     *
+     * Both derived forms are computed **on first ask and only then**. A layer whose rows and effects
+     * are all deferred never expands at all, which is what keeps a bare [cookEffects] from paying
+     * for a Look that holds no bound effect — and, since [expandTargets] warns about a missing
+     * group, keeps it from warning about one it had no reason to look up.
+     *
+     * Plain nullable fields rather than `by lazy`: this object is already the once-per-layer
+     * allocation, and two `Lazy` delegates would add two more per layer for nothing.
+     */
+    private class LayerTargets(
+        private val fixtures: Fixtures,
+        private val cueId: Int,
+        private val layer: CookLayer,
+    ) {
+        val refs: List<TargetRef> = layer.targets.map { it.target }
+
+        private var expandedCache: List<Expanded>? = null
+
+        /**
+         * The layer's targets as fixtures, or null when the layer names none.
+         *
+         * Null is "unrestricted" — a different statement from naming targets that all resolved to
+         * nothing, which yields an empty list and restricts everything away.
+         */
+        val expanded: List<Expanded>?
+            get() {
+                if (refs.isEmpty()) return null
+                return expandedCache
+                    ?: expandTargets(fixtures, cueId, layer, refs).also { expandedCache = it }
+            }
+
+        private var keysCache: Set<String>? = null
+
+        /**
+         * [expanded] as a fixture-key set — the allowed-set for bound rows and the coverage set for
+         * bound effects, which are the same question asked twice.
+         */
+        val keys: Set<String>
+            get() = keysCache
+                ?: (expanded?.mapTo(HashSet()) { it.fixture.key } ?: emptySet<String>())
+                    .also { keysCache = it }
+    }
+
+    /**
      * Expand targets to fixtures, remembering the originating group. Missing groups and fixtures are
      * logged at warn and skipped — stale data must not break cue apply.
      */
@@ -698,9 +870,23 @@ internal object CueComposer {
         return out
     }
 
-    /** True when [layerTargets] covers [target] — by naming it, or by naming a group containing it. */
-    private fun coversTarget(fixtures: Fixtures, layerTargets: List<TargetRef>, target: TargetRef): Boolean {
-        if (target in layerTargets) return true
+    /**
+     * True when the layer covers [target] — by naming it, or by naming a group containing it.
+     *
+     * [LayerTargets] is what makes this cheap: the layer's targets are expanded once for the whole
+     * cook, and [LayerTargets.keys] is not built at all unless a bound effect actually reaches past
+     * the name match below.
+     */
+    private fun coversTarget(
+        fixtures: Fixtures,
+        layerTargets: LayerTargets,
+        target: TargetRef,
+    ): Boolean {
+        // Kept ahead of the expansion, and not only as a shortcut: a layer naming a *missing* group
+        // with a bound effect on that same group is covered by this check and by nothing below it,
+        // where the expansion answers "no members" and would drop the effect here instead of
+        // letting the spawner report the missing group.
+        if (target in layerTargets.refs) return true
         val targetKeys = when (target) {
             is TargetRef.Fixture -> setOf(target.key)
             is TargetRef.Group -> runCatching { fixtures.untypedGroup(target.key) }.getOrNull()
@@ -708,15 +894,7 @@ internal object CueComposer {
                 ?: return false
         }
         if (targetKeys.isEmpty()) return false
-        val layerKeys = HashSet<String>()
-        for (lt in layerTargets) {
-            when (lt) {
-                is TargetRef.Fixture -> layerKeys.add(lt.key)
-                is TargetRef.Group -> runCatching { fixtures.untypedGroup(lt.key) }.getOrNull()
-                    ?.fixtures?.filterIsInstance<Fixture>()?.forEach { layerKeys.add(it.key) }
-            }
-        }
-        return targetKeys.any { it in layerKeys }
+        return targetKeys.any { it in layerTargets.keys }
     }
 
     // ─── Blending ───────────────────────────────────────────────────────

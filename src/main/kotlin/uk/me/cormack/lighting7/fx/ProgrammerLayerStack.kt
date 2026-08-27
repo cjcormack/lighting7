@@ -355,7 +355,7 @@ class ProgrammerLayerStack(
         // into one publish across the programmer *and* every live cue, and a Look edit touring to
         // an already-applied layer is not the layer arriving — re-timing it would make every nudge
         // of a colour crossfade on stage.
-        return materialise(layers).moved
+        return materialise(cookStack(layers, withEffects = false).values).moved
     }
 
     // ── The cook ────────────────────────────────────────────────────────────
@@ -373,8 +373,12 @@ class ProgrammerLayerStack(
         fadeMs: Long = 0,
         arrival: Boolean = false,
     ): ProgrammerLayerOutcome {
-        val (moved, rowFades) = materialise(layers)
-        val fx = syncEffects(layers)
+        // One cook for the whole recook (sweep item C8): the rows and the effect triples come out
+        // of a single pass over the stack, so the layers resolve once and both halves see the same
+        // Look snapshots.
+        val cooked = cookStack(layers, withEffects = true)
+        val (moved, rowFades) = materialise(cooked.values)
+        val fx = syncEffects(layers, cooked)
         if (moved.isNotEmpty()) {
             val eng = engine()
             if (!arrival || rowFades.isEmpty() || fadeMs > 0) {
@@ -400,20 +404,23 @@ class ProgrammerLayerStack(
     )
 
     /**
-     * Cook the stack to values and swap them into the store. No publish.
+     * Cook the stack.
      *
-     * Also republishes the stack's within-cue stomp suppression, which has to happen here rather
-     * than in [syncEffects] beside the instances it affects: only the cook knows which properties
-     * each layer asserted, and `syncEffects` deliberately does not rebuild on a mask, amount or
-     * order change — all three of which move the suppression set.
+     * [withEffects] asks for the effect triples alongside the rows, out of the same pass over the
+     * layers — which is what [recook] wants. [recookIfReferences] passes false: it republishes
+     * values and deliberately leaves the running effects alone, so collecting them would be work
+     * thrown away.
+     *
+     * Called **outside** [effectsLock], always. `loadLookSnapshot` opens a transaction, and the
+     * class doc's rule that the cook stays outside every lock is why — the effect half used to be
+     * cooked from inside that lock, which is the violation this consolidation removes.
      */
-    private fun materialise(layers: List<ProgrammerLayer>): Materialised {
-        val cookLayers = layers.map { it.toCookLayer() }
-        val cooked = CueComposer.cook(
+    private fun cookStack(layers: List<ProgrammerLayer>, withEffects: Boolean): CueComposer.FullCook =
+        CueComposer.cookAll(
             fixtures = fixtures(),
             cueId = programmerCookCueId,
             priority = 0,
-            layers = cookLayers,
+            layers = layers.map { it.toCookLayer() },
             // The programmer's *local* layer is the store's other owners — WEB, SURFACE, LOCATE and
             // the rest — which already sit above these slots. Passing them here as well would cook
             // them into the layer contribution and lose that distinction: Record could no longer
@@ -421,7 +428,18 @@ class ProgrammerLayerStack(
             localRows = emptyList(),
             resolveLook = lookRegistry()::snapshot,
             resolveTemplate = templateRegistry()::snapshot,
+            withEffects = withEffects,
         )
+
+    /**
+     * Swap a cook's values into the store. No publish.
+     *
+     * Also republishes the stack's within-cue stomp suppression, which has to happen here rather
+     * than in [syncEffects] beside the instances it affects: only the cook knows which properties
+     * each layer asserted, and `syncEffects` deliberately does not rebuild on a mask, amount or
+     * order change — all three of which move the suppression set.
+     */
+    private fun materialise(cooked: CookResult): Materialised {
         engine().cueLayer.setProgrammerStompSuppression(cooked.stompSuppression)
         val moved = store.putLayerSlots(
             cooked.rows.map { row ->
@@ -460,21 +478,20 @@ class ProgrammerLayerStack(
      * Respawning on a reorder would restart every effect's phase, which is exactly the glitch the
      * layer-index priority scheme exists to avoid.
      */
-    private fun syncEffects(layers: List<ProgrammerLayer>): EffectSync = synchronized(effectsLock) {
+    private fun syncEffects(
+        layers: List<ProgrammerLayer>,
+        cooked: CueComposer.FullCook,
+    ): EffectSync = synchronized(effectsLock) {
         val eng = engine()
         // The engine's record *is* the band: anything removed by another surface (the FX sheet's
         // own remove, a band sweep) is simply absent here, with no bookkeeping to reconcile.
         val live = eng.programmerLayerEffects()
 
-        val cookLayers = layers.map { it.toCookLayer() }
-        val desired = CueComposer.cookEffects(fixtures(), programmerCookCueId, cookLayers, lookRegistry()::snapshot)
+        val desired = cooked.effects
 
-        // Rank each layer among the ones that contribute, off the same [CueComposer]
-        // helper `cook` numbers CookWinner.index with — so an effect's band offset and its
-        // layer's cooked rank cannot disagree.
-        val rankOf = CueComposer.contributingLayers(cookLayers)
-            .withIndex()
-            .associate { (index, layer) -> layer.layerId to index }
+        // Ranks come from the same cook as the rows, so an effect's band offset and its layer's
+        // cooked `CookWinner.index` are one number rather than two computed apart.
+        val rankOf = cooked.ranks
 
         val byLayerId = layers.associateBy { it.layerId }
         val wanted = HashSet<ProgrammerLayerEffectKey>(desired.size)

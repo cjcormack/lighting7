@@ -167,11 +167,32 @@ class CueStackManager(
             it.delayMs == null && it.intervalMs == null
         }
 
+        // One cook for the whole activation (sweep item C8). The effects go up here and the rows
+        // are published further down, but both halves come out of this single pass: the stack is
+        // walked once, and — the part that is a correctness argument rather than a speed one — each
+        // Look snapshot is read once, so a Look edited between the two reads can no longer put its
+        // rows and its effects on stage from different versions of itself.
+        //
+        // `localRows` is hoisted with it. It is a pure read of the cue's own rows, so computing it
+        // here rather than beside the publish changes nothing but the order of its warnings.
+        //
+        // Note this path previously called `buildCueAssignmentsForCue` *alone*, so an immediate
+        // preset's property assignments never reached Layer 4 on a stack GO — unlike `applyCue`,
+        // which concatenated both. Routing both paths through the cook fixes that asymmetry.
+        val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData)
+        val cooked = CueComposer.cookAll(
+            fixtures = state.show.fixtures,
+            cueId = cueData.cueId,
+            priority = cueDerivedPriority(cueData),
+            layers = cueData.layers,
+            localRows = localRows,
+            resolveLook = state.show.lookRegistry::snapshot,
+            resolveTemplate = state.show.templateRegistry::snapshot,
+        )
+
         // Spawn the layers' effects, in layer order — see [CueComposer.cookEffects] for why
         // spawn order alone is enough to make layer order the composition order.
-        for ((layer, lookEffect, target) in CueComposer.cookEffects(
-            state.show.fixtures, cueData.cueId, cueData.layers, state.show.lookRegistry::snapshot,
-        )) {
+        for ((layer, lookEffect, target) in cooked.effects) {
             val effectSpec = lookEffect.toEffectSpec()
             val fxTarget = try {
                 EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
@@ -236,28 +257,14 @@ class CueStackManager(
         fxEngine.addEffects(spawning)
         val effectCount = spawning.size
 
-        // Apply Layer 4 for the incoming cue. Under crossfade the incoming starts at weight 0
-        // atomically with the insert; `CueCrossfadeDriver` ticks it up from there. Stomp runs off
-        // the same assignments so HTP/LTP and stomp overlap agree.
-        // Cook the layer stack with the cue's local rows on top. Note this path previously called
-        // `buildCueAssignmentsForCue` *alone*, so an immediate preset's property assignments never
-        // reached Layer 4 on a stack GO — unlike `applyCue`, which concatenated both. Routing both
-        // paths through `cook` fixes that asymmetry.
-        val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData)
-        val cooked = CueComposer.cook(
-            fixtures = state.show.fixtures,
-            cueId = cueData.cueId,
-            priority = cueDerivedPriority(cueData),
-            layers = cueData.layers,
-            localRows = localRows,
-            resolveLook = state.show.lookRegistry::snapshot,
-            resolveTemplate = state.show.templateRegistry::snapshot,
-        )
+        // Apply Layer 4 for the incoming cue, from the cook hoisted above. Under crossfade the
+        // incoming starts at weight 0 atomically with the insert; `CueCrossfadeDriver` ticks it up
+        // from there. Stomp runs off the same assignments so HTP/LTP and stomp overlap agree.
         val incomingStartWeight = if (useCrossfade) 0.0 else 1.0
-        if (cooked.rows.isNotEmpty()) {
+        if (cooked.values.rows.isNotEmpty()) {
             fxEngine.cueLayer.setAssignments(
-                cueData.cueId, cooked.rows, incomingStartWeight, cueStackId = stackId,
-                stompSuppression = cooked.stompSuppression,
+                cueData.cueId, cooked.values.rows, incomingStartWeight, cueStackId = stackId,
+                stompSuppression = cooked.values.stompSuppression,
                 // An arrival, so the rows' own fades time it — **unless** the cue is crossfading in,
                 // where the cue-level fade is already the transition and this publish only lands
                 // the weight-0 frame a tick later overwrites. The two never compound on one key.
@@ -268,13 +275,13 @@ class CueStackManager(
         }
         // Restore outgoing to 1.0 in case a prior mid-flight crossfade left it partial.
         // `useCrossfade` already implies `outgoingCueId != null`.
-        if (useCrossfade && cooked.rows.isNotEmpty()) {
+        if (useCrossfade && cooked.values.rows.isNotEmpty()) {
             fxEngine.cueLayer.updateFadeWeights(mapOf(outgoingCueId!! to 1.0))
         }
         if (cueData.stomp) {
             fxEngine.stompForCue(
                 cueData.cueId,
-                buildStompOverlap(state.show.fixtures, cueData, cooked),
+                buildStompOverlap(state.show.fixtures, cueData, cooked.values),
             )
         }
 
@@ -303,7 +310,7 @@ class CueStackManager(
             crossfades.start(
                 stackId = stackId,
                 outgoingCueId = outgoingCueId,
-                incomingCueId = if (cooked.rows.isNotEmpty()) cueData.cueId else null,
+                incomingCueId = if (cooked.values.rows.isNotEmpty()) cueData.cueId else null,
                 durationMs = fadeDurationMs,
                 easingCurve = easingCurve,
                 scope = scope,

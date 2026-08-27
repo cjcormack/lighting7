@@ -598,8 +598,13 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // CueTriggerManager, which at fire time re-cooks this cue with the fired layer included. It
     // re-cooks rather than appending because appending would put two contributors on one
     // (fixture, property) key, which is precisely the ambiguity cooking removes.
+    //
+    // One cook for both halves (sweep item C8): the rows publish here and the layers' effects go
+    // up below, out of the same pass over the stack. Beyond walking it once, it means each Look
+    // snapshot is read once — so a Look edited between the two reads cannot land its rows and its
+    // effects on stage from different versions of itself.
     val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData)
-    val cooked = CueComposer.cook(
+    val cooked = CueComposer.cookAll(
         fixtures = state.show.fixtures,
         cueId = cueData.cueId,
         priority = priority,
@@ -608,11 +613,11 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
         resolveLook = state.show.lookRegistry::snapshot,
         resolveTemplate = state.show.templateRegistry::snapshot,
     )
-    if (cooked.rows.isNotEmpty()) {
+    if (cooked.values.rows.isNotEmpty()) {
         engine.cueLayer.setAssignments(
-            cueData.cueId, cooked.rows,
+            cueData.cueId, cooked.values.rows,
             cueStackId = cueData.cueStackId,
-            stompSuppression = cooked.stompSuppression,
+            stompSuppression = cooked.values.stompSuppression,
             // An arrival: this cue is going on stage now, so its rows' own fades time it. The
             // Record/Update rewrite of an already-live cue (`republishCueLayer`) deliberately does
             // not, being an edit rather than an entrance.
@@ -624,7 +629,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     }
 
     if (cueData.stomp) {
-        engine.stompForCue(cueData.cueId, buildStompOverlap(state.show.fixtures, cueData, cooked))
+        engine.stompForCue(cueData.cueId, buildStompOverlap(state.show.fixtures, cueData, cooked.values))
     }
 
     // 2. Spawn the layers' effects, **in layer order**.
@@ -633,9 +638,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // `compareBy(priority, id)` with `id` a monotonic creation counter, and per-tick composition is
     // a sequential fold through `FxTarget.applyValue`. So same-priority effects already resolve
     // last-created-wins, and spawn order becomes composition order for free.
-    for ((layer, lookEffect, target) in CueComposer.cookEffects(
-        state.show.fixtures, cueData.cueId, cueData.layers, state.show.lookRegistry::snapshot,
-    )) {
+    for ((layer, lookEffect, target) in cooked.effects) {
         val effectSpec = lookEffect.toEffectSpec()
         val fxTarget = try {
             EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)

@@ -12,7 +12,10 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.SpeedMasterSource
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.testsupport.HueSweepColour
 import uk.me.cormack.lighting7.testsupport.SineSlider
@@ -26,7 +29,7 @@ import kotlin.test.Test
 /**
  * Per-tick allocation & latency benchmark for [FxEngine]'s hot paths.
  *
- * Five independent scenarios, each with its own rig (engine state, cue assignments and the
+ * Six independent scenarios, each with its own rig (engine state, cue assignments and the
  * effect registry all persist per rig, so sharing one would make the numbers order-dependent):
  *
  * 1. **`beat and wall-clock tick throughput`** — the original scenario. 4 universes of
@@ -42,6 +45,9 @@ import kotlin.test.Test
  *    rather than ticking them: scenarios 1-4 spawn in their rig setup, outside every measured
  *    window, so none of them can see this path at all. It reports both shapes side by side in
  *    one run, which is what makes it a self-contained before/after.
+ * 6. **`layer stack cook cost`** — sweep item C8, and the only scenario that measures
+ *    [CueComposer] rather than [FxEngine]: the cook runs per stack mutation and per cue GO,
+ *    which no tick-path rig reaches. Like scenario 5 it reports both shapes in one run.
  *
  * See `docs/plans/backend-post-refactor-sweep.md` §C. Scenarios 2-4 exist because the
  * original rig touches none of those paths: measuring a C-wave "before" on scenario 1 alone
@@ -99,6 +105,18 @@ class FxEngineBenchmark {
         const val SPAWN_EFFECTS = 168
         const val SPAWN_REPEATS = 8
         const val WARMUP_SPAWNS = 3
+
+        /**
+         * Cook rig — sweep item C8. A Look holding [COOK_LOOK_ROWS] bound rows on one group is
+         * what makes the per-row group expansion and allowed-set rebuild visible; a second Look
+         * carries the bound effects `coversTarget` used to re-expand for, and a template layer
+         * over the same group is what pays the per-head intent parse and the double catalogue
+         * walk in [TemplateResolver].
+         */
+        const val COOK_LOOK_ROWS = 40
+        const val COOK_LOOK_EFFECTS = 24
+        const val COOK_REPEATS = 200
+        const val WARMUP_COOKS = 40
         const val OUTGOING_CUE = 1
         const val INCOMING_CUE = 2
 
@@ -909,5 +927,180 @@ class FxEngineBenchmark {
 
         measure("spawn-each") { engine, instances -> instances.forEach { engine.addEffect(it) } }
         measure("spawn-batch") { engine, instances -> engine.addEffects(instances) }
+    }
+
+    // ─── Scenario 6: the cook ───────────────────────────────────────────────
+
+    private data class CookRig(
+        val fixtures: Fixtures,
+        val layers: List<CookLayer>,
+        val resolveLook: (UUID) -> LookSnapshot?,
+        val resolveTemplate: (UUID) -> TemplateSnapshot?,
+    )
+
+    /**
+     * A three-layer stack over one group of [HexFixture], shaped so every part of C8 is paid.
+     *
+     * The group is the point: a *bound* row names the group, so the cook expands it per row, and
+     * the layer's own target set is a second group reference, so the allowed-set is rebuilt per row
+     * too. The effect Look's effects are bound to the fixtures inside that group, which is the
+     * `coversTarget` case — a fixture the layer covers only *through* a group, so the name-match
+     * fast path misses and the expansion runs. The template layer's rows are deferred, so each fans
+     * over every head and pays [TemplateResolver] per head.
+     *
+     * No `State`, no engine, no database: [CueComposer] cooks values from plain snapshots (see its
+     * `resolveLook` parameter), which is what lets this scenario be a straight function call.
+     */
+    private fun newCookRig(): CookRig {
+        val controllers = (0 until UNIVERSES).map { MockDmxController(Universe(0, it)) }
+        val fixtures = Fixtures()
+        fixtures.register {
+            controllers.forEach { addController(it) }
+            val heads = mutableListOf<HexFixture>()
+            for (u in 0 until UNIVERSES) {
+                val universe = controllers[u].universe
+                for (f in 0 until FIXTURES_PER_UNIVERSE) {
+                    val first = 1 + f * HEX_CHANNELS
+                    if (first + HEX_CHANNELS - 1 > 512) break
+                    heads += addFixture(HexFixture(universe, "u${u}-hex-${f}", "U$u Hex $f", first))
+                }
+            }
+            createGroup<HexFixture>("everything") { addSpread(heads) }
+        }
+        val heads = fixtures.fixtures.map { it.key }
+
+        // Bound rows, all on the group, alternating dimmer and colour so the accumulator holds two
+        // keys per head rather than overwriting one.
+        val valueLook = LookSnapshot(
+            lookId = 1,
+            lookUuid = UUID.nameUUIDFromBytes("cook-values".toByteArray()),
+            name = "Cook Values",
+            rows = (0 until COOK_LOOK_ROWS).map { i ->
+                LookRowEntry(
+                    target = TargetRef.Group("everything"),
+                    propertyName = if (i % 2 == 0) "dimmer" else "rgbColour",
+                    value = if (i % 2 == 0) "${100 + i}" else "#20${"%02x".format(i * 5)}70",
+                )
+            },
+            effects = emptyList(),
+        )
+
+        // Effects bound to individual heads. The layer names the *group*, so each of these reaches
+        // `coversTarget`'s expansion arm rather than its name-match fast path.
+        val effectLook = LookSnapshot(
+            lookId = 2,
+            lookUuid = UUID.nameUUIDFromBytes("cook-effects".toByteArray()),
+            name = "Cook Effects",
+            rows = emptyList(),
+            effects = (0 until COOK_LOOK_EFFECTS).map { i ->
+                LookEffectEntry(
+                    target = TargetRef.Fixture(heads[i % heads.size]),
+                    effectType = "SineWave",
+                    category = "dimmer",
+                    propertyName = "dimmer",
+                    beatDivision = BeatDivision.HALF,
+                    blendMode = "OVERRIDE",
+                    distribution = "LINEAR",
+                    phaseOffset = 0.0,
+                    elementMode = null,
+                    elementFilter = null,
+                    stepTiming = null,
+                    parameters = mapOf("min" to "40", "max" to "220"),
+                    speedMasterUuid = null,
+                    rateSpeedMasterUuid = null,
+                )
+            },
+        )
+
+        // Deferred template rows: each fans over every head in the layer's group.
+        val template = TemplateSnapshot(
+            templateId = 3,
+            templateUuid = UUID.nameUUIDFromBytes("cook-template".toByteArray()),
+            name = "Cook Template",
+            fadeDurationMs = null,
+            rows = listOf(
+                TemplateRowEntry(target = null, propertyName = "rgbColour", value = "#FF9D4A;policy=extract"),
+                TemplateRowEntry(target = null, propertyName = "dimmer", value = "pct:70"),
+            ),
+        )
+
+        val onEverything = listOf(CueTargetDto("group", "everything"))
+        val layers = listOf(
+            CookLayer(
+                source = LayerSource.look(valueLook.lookId, valueLook.lookUuid, valueLook.name),
+                sortOrder = 0, targets = onEverything, layerId = 1,
+            ),
+            CookLayer(
+                source = LayerSource.template(template.templateId, template.templateUuid, template.name),
+                sortOrder = 1, targets = onEverything, layerId = 2,
+            ),
+            CookLayer(
+                source = LayerSource.look(effectLook.lookId, effectLook.lookUuid, effectLook.name),
+                sortOrder = 2, targets = onEverything, layerId = 3,
+            ),
+        )
+
+        val looks = listOf(valueLook, effectLook).associateBy { it.lookUuid }
+        val templates = mapOf(template.templateUuid to template)
+        return CookRig(fixtures, layers, { looks[it] }, { templates[it] })
+    }
+
+    /**
+     * Sweep item C8: the cost of cooking a layer stack.
+     *
+     * `[cook-split]` is the pre-C8 shape — [CueComposer.cook] for the rows, then
+     * [CueComposer.cookEffects] for the effects, then [CueComposer.contributingLayers] a third time
+     * to rank them. `[cook-once]` is [CueComposer.cookAll]: one pass, one sort, each Look snapshot
+     * read once, the layer's targets expanded once for both halves.
+     *
+     * **`[cook-split]` is a historical shape, not a live one** — after C8 the programmer recook,
+     * `CueStackManager.activateCueInStack` and the cue-apply route helper all take `cookAll`. It is
+     * kept because both arms run the same per-layer code, so the hoists inside it move *both*
+     * numbers: without the split arm the scenario could not tell "the cook got cheaper" from "the
+     * consolidation helped", and it would need a historical block to say anything at all.
+     *
+     * The cook is not on the 50 Hz path: it runs once per stack mutation, once per cue GO and once
+     * per Look edit that tours. So the number to read is not µs-per-tick but how much of an
+     * operator's gesture it is — a recook is in the same budget as the publish that follows it.
+     */
+    @Test
+    fun `layer stack cook cost`() {
+        assumeBenchmarkEnabled()
+
+        val rig = newCookRig()
+        println(
+            "[setup] universes=$UNIVERSES fixtures=${rig.fixtures.fixtures.size} " +
+                "layers=${rig.layers.size} lookRows=$COOK_LOOK_ROWS lookEffects=$COOK_LOOK_EFFECTS",
+        )
+
+        fun measure(label: String, cook: (CookRig) -> Unit) {
+            repeat(WARMUP_COOKS) { cook(rig) }
+
+            val timings = LongArray(COOK_REPEATS)
+            val allocBefore = allocatedBytes()
+            for (i in 0 until COOK_REPEATS) {
+                timings[i] = measureNanoTime { cook(rig) }
+            }
+            val alloc = allocatedBytes().takeIf { it >= 0 && allocBefore >= 0 }
+                ?.let { it - allocBefore } ?: -1L
+            summarize(label, timings, alloc, sampleName = "cook")
+        }
+
+        measure("cook-split") { r ->
+            CueComposer.cook(
+                fixtures = r.fixtures, cueId = 1, priority = 1, layers = r.layers,
+                localRows = emptyList(), resolveLook = r.resolveLook, resolveTemplate = r.resolveTemplate,
+            )
+            CueComposer.cookEffects(r.fixtures, 1, r.layers, r.resolveLook)
+            CueComposer.contributingLayers(r.layers)
+                .withIndex()
+                .associate { (index, layer) -> layer.layerId to index }
+        }
+        measure("cook-once") { r ->
+            CueComposer.cookAll(
+                fixtures = r.fixtures, cueId = 1, priority = 1, layers = r.layers,
+                localRows = emptyList(), resolveLook = r.resolveLook, resolveTemplate = r.resolveTemplate,
+            )
+        }
     }
 }

@@ -121,8 +121,14 @@ class TypedParams(
     fun colour(name: String): ExtendedColour {
         return currentColourCaches().colours.getOrPut(name) {
             val value = raw(name)
-            if (value.isBlank()) return ExtendedColour.BLACK
-            resolveColourSource?.invoke(value) ?: parseExtendedColour(value)
+            // The blank case yields BLACK rather than *returning* it: a non-local return out of
+            // `getOrPut` skips the `put`, so an effect whose colour parameter is blank re-ran this
+            // lambda on every read for the life of the instance (sweep item C8).
+            if (value.isBlank()) {
+                ExtendedColour.BLACK
+            } else {
+                resolveColourSource?.invoke(value) ?: parseExtendedColour(value)
+            }
         }
     }
 
@@ -137,13 +143,17 @@ class TypedParams(
     fun colourList(name: String): List<ExtendedColour> {
         return currentColourCaches().colourLists.getOrPut(name) {
             val value = raw(name)
-            if (value.isBlank()) return emptyList()
-            value.split(",").mapNotNull { str ->
-                val trimmed = str.trim()
-                when {
-                    trimmed.isEmpty() -> null
-                    isTemplateColourRef(trimmed) -> resolveColourSource?.invoke(trimmed)
-                    else -> parseExtendedColour(trimmed)
+            // Yielded, not returned — see [colour] for why the non-local return defeated the cache.
+            if (value.isBlank()) {
+                emptyList()
+            } else {
+                value.split(",").mapNotNull { str ->
+                    val trimmed = str.trim()
+                    when {
+                        trimmed.isEmpty() -> null
+                        isTemplateColourRef(trimmed) -> resolveColourSource?.invoke(trimmed)
+                        else -> parseExtendedColour(trimmed)
+                    }
                 }
             }
         }

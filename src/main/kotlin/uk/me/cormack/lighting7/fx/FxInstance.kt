@@ -166,7 +166,23 @@ data class ProgrammerLayerEffectKey(
     val layerId: Int,
     val effect: LookEffectEntry,
     val targetKey: String,
-)
+) {
+    /**
+     * Computed once, at construction, rather than on every hash (sweep item C8).
+     *
+     * [effect] is a whole [LookEffectEntry] — which carries the effect's `parameters` **map** — so
+     * the generated `hashCode` walks that map end to end. A recook hashes each key at least twice
+     * (into the wanted set, then against the live band), and the live band's keys are re-hashed
+     * building the engine's snapshot; every one of those used to re-walk the map.
+     *
+     * Safe to freeze because every field is a `val` on an immutable snapshot: a Look edit produces
+     * a *new* entry and therefore a new key, which is exactly the identity change the retract pass
+     * is built on.
+     */
+    private val hash: Int = (layerId * 31 + effect.hashCode()) * 31 + targetKey.hashCode()
+
+    override fun hashCode(): Int = hash
+}
 
 /**
  * The parameters of a running [FxInstance] that request threads may change while the tick
