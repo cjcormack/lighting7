@@ -174,12 +174,18 @@ bodies, so the two new methods forced empty override stubs at five other impleme
 with the user, who took the refactor now — every member defaults to a no-op and each implementer
 overrides only what it uses.
 
-**B6. Deferred Look *rows* are half-retired** — medium / P2 / M / opus
+~~**B6. Deferred Look *rows* are half-retired**~~ — done, `0dadd42`. medium / P2 / M / opus
 Write-boundary rejects them (`projectLooks.kt:719`) but `LookRegistry.loadLookSnapshot`,
 `LookRowEntry.isDeferred`, `LookRowDto.isDeferred`, `DaoLookRow.isDeferred` and the
 `rowTarget == null` arm of `CueComposer.applyLayer` (`CueComposer.kt:502-513`) still support them.
 **Fix:** drop the row-side `isDeferred` plumbing; only Look *effects* and template rows defer.
 (Related, already tracked: `FU-LOOK-ELEMENT-ROWS` for `elementKey` composing nowhere.)
+
+Grew in the landing: a regression test pinning `validateLookRows`' rejection, and the split of the
+zero-write include warning into its two real causes — the test that pinned it had been describing a
+deferred row while actually exercising a bound one on an unpatched fixture. Nothing defensive was
+added for a stored `deferred` row (no `toDetailsDto` filter, no validation on the sync-import or
+copy paths): the operator's call, on the grounds that no database outside the dev desk has held one.
 
 **B7. Layer source invariant enforced three ways with three behaviours** — medium / P2 / M / opus
 `DaoCueLayers.look`/`template` exactly-one invariant: read-time `check{}` throws
@@ -635,7 +641,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 1 | ~~C1–C2~~ **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
-| 4 | ~~E1–E7, C8~~ **done**, B6, B7, F6, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
+| 4 | ~~E1–E7, C8, B6~~ **done**, B7, F6, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
 
