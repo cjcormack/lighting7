@@ -454,9 +454,10 @@ internal data class LookDto(
      * naming one.
      *
      * Rows can no longer be deferred at all — session 3 moved that half of the entity out to
-     * templates — so this is now only ever about effects, where a deferred target still means "fan
-     * over whatever the layer points at". It stays because a fully-deferred Look asserts nothing
-     * without a layer's targets, which is worth being able to see in the library.
+     * templates, and sweep item B6 removed the plumbing that still read the discriminator on the row
+     * side — so this is only ever about effects, where a deferred target still means "fan over
+     * whatever the layer points at". It stays because a Look whose effects are all deferred asserts
+     * nothing without a layer's targets, which is worth being able to see in the library.
      */
     val hasDeferredEffects: Boolean,
     val preview: List<String>,

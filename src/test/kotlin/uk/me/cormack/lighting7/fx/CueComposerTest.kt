@@ -43,13 +43,18 @@ class CueComposerTest {
 
     // ─── Look / layer builders ──────────────────────────────────────────
 
+    /**
+     * A Look row. Always bound — a Look row names its own fixture or group (sweep item B6), and the
+     * default names `hex-1` because that is what almost every layer in this file targets, so the
+     * row and the layer agree unless a test says otherwise.
+     */
     private fun lookRow(
-        targetType: String = "deferred",
-        targetKey: String = "",
+        targetType: String = "fixture",
+        targetKey: String = "hex-1",
         propertyName: String,
         value: String,
     ) = LookRowEntry(
-        target = if (targetType == "deferred") null else uk.me.cormack.lighting7.models.TargetRef.of(targetType, targetKey),
+        target = uk.me.cormack.lighting7.models.TargetRef.of(targetType, targetKey),
         propertyName = propertyName,
         value = value,
     )
@@ -169,7 +174,9 @@ class CueComposerTest {
         val fixtures = fixturesWithTwoHexesInAGroup()
         // Every way of hitting one key at once: two layers, a group row and a fixture row inside
         // one Look, and a local row on top.
-        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
+        // A's row is a *group* row so that hex-2 has three contributors fighting over it — A, B's
+        // group row and the local row — rather than only two. That is the collision the test is for.
+        val a = look("A", lookRow(targetType = "group", targetKey = "front-wash", propertyName = "dimmer", value = "100"))
         val b = look(
             "B",
             lookRow(targetType = "group", targetKey = "front-wash", propertyName = "dimmer", value = "150"),
@@ -466,27 +473,6 @@ class CueComposerTest {
     }
 
     @Test
-    fun `a deferred Look takes its targets from the layer, expanding groups`() {
-        val fixtures = fixturesWithTwoHexesInAGroup()
-        val deferred = look("Deferred", lookRow(propertyName = "dimmer", value = "90"))
-        val rows = cook(
-            fixtures,
-            registryOf(fixtures, deferred),
-            listOf(layer(deferred, 0, targets = listOf(CueTargetDto("group", "front-wash")))),
-        )
-        assertEquals(setOf("hex-1", "hex-2"), rows.map { it.targetKey }.toSet())
-        assertTrue(rows.all { it.targetIsGroup }, "rows fanned from a group target are group-derived")
-    }
-
-    @Test
-    fun `a deferred Look on a layer with no targets contributes nothing`() {
-        val fixtures = fixturesWithTwoHexesInAGroup()
-        val deferred = look("Deferred", lookRow(propertyName = "dimmer", value = "90"))
-        val rows = cook(fixtures, registryOf(fixtures, deferred), listOf(layer(deferred, 0)))
-        assertTrue(rows.isEmpty(), "nothing to apply to, so nothing is asserted")
-    }
-
-    @Test
     fun `a group layer target filters a Look's bound group row to the intersection`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val grouped = look(
@@ -667,7 +653,7 @@ class CueComposerTest {
     fun `cook names the layer that produced each row`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val warm = look("Warm", lookRow(propertyName = "dimmer", value = "200"))
-        val cool = look("Cool", lookRow(propertyName = "dimmer", value = "40"))
+        val cool = look("Cool", lookRow(targetKey = "hex-2", propertyName = "dimmer", value = "40"))
         val registry = registryOf(fixtures, warm, cool)
 
         val rows = cook(
@@ -919,7 +905,10 @@ class CueComposerTest {
         // effect is matched on the *group's* key, which cook's per-fixture rows never carry — so
         // the alias has to be recorded here or that effect can never overlap.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val wash = look("Wash", lookRow(propertyName = "dimmer", value = "200"))
+        val wash = look(
+            "Wash",
+            lookRow(targetType = "group", targetKey = "front-wash", propertyName = "dimmer", value = "200"),
+        )
         val registry = registryOf(fixtures, wash)
 
         val cooked = cookFull(

@@ -219,10 +219,10 @@ sealed interface FixtureDetails {
     val groups: List<String>
 
     /**
-     * Ids of the **Looks** this fixture can be pointed at — deferred Looks filtered by
-     * [LookCompatibilityInfo.editorFixtureType] and by inferred capability. Bound Looks are absent
-     * by design: they name their own targets, so "is this compatible?" is not a question about
-     * them. See [compatibleIdsFor].
+     * Ids of the **Looks** this fixture can be pointed at, filtered by inferred capability alone
+     * — see [compatibleIdsFor], and the D6 note on its KDoc for the type gate that used to be here
+     * too. A Look's *rows* name their own targets, so the question is only ever about its effects:
+     * a Look holding no effect is compatible with everything.
      */
     val compatibleLookIds: List<Int>
 }

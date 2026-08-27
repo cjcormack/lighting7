@@ -63,9 +63,8 @@ internal fun expandTargetsToFixtureKeys(state: State, targets: List<CueTargetDto
  * include target rather than being allowed to write rows nothing sees. The record rewrite is what
  * closes that.
  *
- * Only bound rows arrive: a deferred row has no target of its own, and the programmer has no layer
- * to take one from until the programmer becomes a layer stack. `LookRegistry.expanded` already
- * drops them.
+ * Every row arrives with a target of its own: a Look row is always bound (sweep item B6), and a
+ * row an older database left deferred never survives `loadLookSnapshot`.
  */
 internal fun includeLookIntoProgrammer(
     state: State,
@@ -205,12 +204,16 @@ internal suspend fun RoutingContext.handleIncludeLook(
                 fxTimedSkipped = 0,
                 lastIncluded = includedTargetDto(state, state.show.programmerStore.lastIncludedTarget),
                 skipped = outcome.skipped.map { it.toDto() },
-                warnings = if (outcome.entriesWritten == 0) {
-                    // A fully-deferred Look has nothing bound to stage, and silently writing
-                    // nothing reads as a broken button.
-                    listOf("'$name' has no rows naming a fixture or group, so nothing was staged.")
-                } else {
-                    emptyList()
+                // Silently writing nothing reads as a broken button, so a zero-write include always
+                // says why. The two reasons point the operator at different places — the Look
+                // editor, or the patch — so they are two messages rather than one hedged one.
+                warnings = when {
+                    outcome.entriesWritten > 0 -> emptyList()
+                    outcome.skipped.isNotEmpty() -> listOf(
+                        "None of '$name''s rows could be staged: the fixtures or properties they " +
+                            "name are not in the current patch, or the mask excluded them.",
+                    )
+                    else -> listOf("'$name' holds no rows to stage — only effects, or nothing at all.")
                 },
             ),
         )

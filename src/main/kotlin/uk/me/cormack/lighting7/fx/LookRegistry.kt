@@ -18,20 +18,22 @@ import java.util.concurrent.ConcurrentHashMap
 import uk.me.cormack.lighting7.models.AssignmentHealth
 
 /**
- * One stored Look row. [target] is null for a deferred row, which takes its targets from the
- * [uk.me.cormack.lighting7.models.DaoCueLayers] line referencing the Look.
+ * One stored Look row. Always bound: a Look row names its own fixture or group, and the deferred
+ * half of the entity is [uk.me.cormack.lighting7.models.DaoTemplates] (sweep item B6). A row
+ * whose stored target does not resolve never becomes a `LookRowEntry` — see [loadLookSnapshot].
  */
 data class LookRowEntry(
-    val target: TargetRef?,
+    val target: TargetRef,
     val propertyName: String,
     val value: String,
     val fadeDurationMs: Long? = null,
     val elementKey: String? = null,
-) {
-    val isDeferred: Boolean get() = target == null
-}
+)
 
-/** One stored Look effect. [target] is null for a deferred effect — see [LookRowEntry]. */
+/**
+ * One stored Look effect. Unlike [LookRowEntry], [target] may be null: a *deferred* effect fans
+ * over the targets of the layer applying the Look.
+ */
 data class LookEffectEntry(
     val target: TargetRef?,
     val effectType: String,
@@ -65,8 +67,7 @@ data class LookSnapshot(
 /**
  * A snapshot flattened for per-fixture lookup: `fixtureKey → canonicalPropertyName → literal`.
  *
- * Built from **bound rows only** — a deferred row names no fixture, so it cannot appear here; and
- * element-scoped rows are skipped, because this map is fixture-shaped by construction. Group rows
+ * Element-scoped rows are skipped, because this map is fixture-shaped by construction. Group rows
  * are expanded to their members first, then fixture rows overwrite, which is the same
  * fixture-beats-group specificity [CueAssignmentResolver.applySpecificity] applies, resolved once
  * here instead of per read.
@@ -210,7 +211,7 @@ class LookRegistry(
         private const val MAX_FILL_ATTEMPTS = 3
 
         /**
-         * Flatten a snapshot's **bound, whole-fixture** rows against the live patch. Group rows
+         * Flatten a snapshot's **whole-fixture** rows against the live patch. Group rows
          * first, then fixture rows, so a fixture row wins. Unknown and empty groups contribute
          * nothing — a Look that outlived a group is a dead reference on those members, reported as
          * [AssignmentHealth.MissingPaletteEntry] at resolve time rather than guessed at here.
@@ -257,13 +258,12 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
             rows = look.rows
                 .orderBy(DaoLookRows.sortOrder to SortOrder.ASC)
                 .mapNotNull { row ->
-                    // A deferred row legitimately has no target; a row whose discriminator names no
-                    // known arm is corrupt and is dropped, as loadPaletteSnapshot did.
-                    val target = if (row.targetType == DEFERRED_TARGET_TYPE) {
-                        null
-                    } else {
-                        TargetRef.ofOrNull(row.targetType, row.targetKey) ?: return@mapNotNull null
-                    }
+                    // A Look row is always bound, so a row whose discriminator names no known arm
+                    // is dropped, as loadPaletteSnapshot did. That covers DEFERRED_TARGET_TYPE:
+                    // it is not a TargetRef arm, so a deferred row written by an older database
+                    // falls out here rather than reaching the composer with nothing to apply to.
+                    val target = TargetRef.ofOrNull(row.targetType, row.targetKey)
+                        ?: return@mapNotNull null
                     LookRowEntry(
                         target = target,
                         propertyName = row.propertyName,

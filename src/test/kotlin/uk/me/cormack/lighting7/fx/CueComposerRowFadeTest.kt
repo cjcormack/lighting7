@@ -94,7 +94,7 @@ class CueComposerRowFadeTest {
     fun `a Look row's fade reaches every fixture the row fanned out to`() {
         val warm = look(
             "Warm Wash",
-            LookRowEntry(target = null, propertyName = "dimmer", value = "200", fadeDurationMs = 2_500),
+            LookRowEntry(target = TargetRef.Group("front-wash"), propertyName = "dimmer", value = "200", fadeDurationMs = 2_500),
         )
         val rows = cook(twoHexes(), registry = registryOf(twoHexes(), warm), layers = listOf(lookLayer(warm)))
         assertEquals(2, rows.size)
@@ -105,8 +105,8 @@ class CueComposerRowFadeTest {
     fun `a Look's rows carry their own fades independently`() {
         val mixed = look(
             "Mixed",
-            LookRowEntry(target = null, propertyName = "dimmer", value = "200", fadeDurationMs = 2_000),
-            LookRowEntry(target = null, propertyName = "rgbColour", value = "#FF0000"),
+            LookRowEntry(target = TargetRef.Group("front-wash"), propertyName = "dimmer", value = "200", fadeDurationMs = 2_000),
+            LookRowEntry(target = TargetRef.Group("front-wash"), propertyName = "rgbColour", value = "#FF0000"),
         )
         val rows = cook(twoHexes(), registry = registryOf(twoHexes(), mixed), layers = listOf(lookLayer(mixed)))
         assertEquals(2_000L, rows.first { it.propertyName == "dimmer" }.fadeDurationMs)
@@ -131,11 +131,11 @@ class CueComposerRowFadeTest {
     fun `the winning layer's fade is the one carried, not the layer beneath it`() {
         val slow = look(
             "Slow",
-            LookRowEntry(target = null, propertyName = "dimmer", value = "100", fadeDurationMs = 5_000),
+            LookRowEntry(target = TargetRef.Group("front-wash"), propertyName = "dimmer", value = "100", fadeDurationMs = 5_000),
         )
         val snappy = look(
             "Snappy",
-            LookRowEntry(target = null, propertyName = "dimmer", value = "255"),
+            LookRowEntry(target = TargetRef.Group("front-wash"), propertyName = "dimmer", value = "255"),
         )
         val fixtures = twoHexes()
         val rows = cook(

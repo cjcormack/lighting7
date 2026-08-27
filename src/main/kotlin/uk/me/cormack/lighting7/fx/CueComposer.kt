@@ -534,8 +534,9 @@ internal object CueComposer {
      *
      * The two arms differ in one place only — how a row's stored string becomes a value — which is
      * why they share [applyLayer] rather than getting a composer each. Everything else about a layer
-     * (targets supplying deferred rows and filtering bound ones, mask, blend, amount, stomp,
-     * specificity, assertion recording) is identical, and duplicating it is how the two would drift.
+     * (targets supplying a template's generic rows and filtering bound ones, mask, blend, amount,
+     * stomp, specificity, assertion recording) is identical, and duplicating it is how the two would
+     * drift.
      */
     private sealed interface LayerContent {
         /** Rows in `sortOrder`, in the shape [applyLayer] consumes. */
@@ -566,6 +567,10 @@ internal object CueComposer {
 
     /** One stored row, whichever kind of source it came from. */
     private class SourceRow(
+        /**
+         * Null only for a **generic template row** — a Look row is always bound (sweep item B6),
+         * so [LayerContent.OfLook] never produces one.
+         */
         val target: TargetRef?,
         val propertyName: String,
         val value: String,
@@ -638,8 +643,8 @@ internal object CueComposer {
         val blendMode = parseLayerBlendMode(layer.blendMode, layer.source.name, cueId)
         val amount = layer.amount.coerceIn(0.0, 1.0)
 
-        // The layer's targets both *supply* targets to deferred rows and *filter* bound ones — one
-        // meaning serving two jobs, and what lets the migration preserve coverage exactly.
+        // The layer's targets both *supply* targets to a template's generic rows and *filter* bound
+        // ones — one meaning serving two jobs, and what lets the migration preserve coverage exactly.
         val layerFixtures: List<Expanded>? = layerTargets.expanded
 
         // Memoised out of the row loop (sweep item C8): the rows of one source overwhelmingly name
@@ -669,6 +674,11 @@ internal object CueComposer {
             }
             val rowTarget = row.target
             if (rowTarget == null) {
+                // A **generic template row** — the only kind that reaches this arm now that a Look
+                // row is always bound (sweep item B6). The message still names `source.kind` rather
+                // than hard-coding "template": the arm is reached through a nullable field, and a
+                // warning that lies about which entity it came from is worse than one word of
+                // generality.
                 if (layerFixtures == null) {
                     logger.warn(
                         "cue {}: {} '{}' has a row for '{}' that takes its targets from the layer, " +
@@ -782,13 +792,13 @@ internal object CueComposer {
     /**
      * A layer's own target set, expanded **once per layer** and shared by both halves of the cook.
      *
-     * The layer's targets serve three jobs — they supply targets to deferred rows, filter bound
-     * ones, and decide whether a bound *effect* survives ([coversTarget]) — and each of the three
-     * used to expand them for itself, so a Look layer with rows and effects walked its groups twice
-     * per cook on top of the per-row rebuild (sweep item C8).
+     * The layer's targets serve three jobs — they supply targets to a template's generic rows,
+     * filter bound ones, and decide whether a bound *effect* survives ([coversTarget]) — and each of
+     * the three used to expand them for itself, so a Look layer with rows and effects walked its
+     * groups twice per cook on top of the per-row rebuild (sweep item C8).
      *
-     * Both derived forms are computed **on first ask and only then**. A layer whose rows and effects
-     * are all deferred never expands at all, which is what keeps a bare [cookEffects] from paying
+     * Both derived forms are computed **on first ask and only then**. A layer whose effects are all
+     * deferred never expands at all, which is what keeps a bare [cookEffects] from paying
      * for a Look that holds no bound effect — and, since [expandTargets] warns about a missing
      * group, keeps it from warning about one it had no reason to look up.
      *

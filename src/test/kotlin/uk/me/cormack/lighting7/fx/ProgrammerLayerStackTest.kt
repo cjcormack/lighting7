@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.models.LayerSource
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.fx.TemplateRegistry
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
@@ -64,19 +65,27 @@ class ProgrammerLayerStackTest {
         return Rig(fixtures, store, engine, stack, looks, registry)
     }
 
-    /** Register a Look of deferred dimmer rows and return its uuid. */
+    /**
+     * Register a Look holding a bound dimmer row for **every** head in the rig, and return its uuid.
+     *
+     * Covering the whole rig rather than only the head a layer names is what keeps the
+     * layer-targets-filter-bound-rows rule under test: a Look row is always bound (sweep item B6),
+     * so if the layer's target set did nothing, every one of these layers would land on both heads.
+     */
     private fun Rig.look(name: String, dimmer: Int): UUID {
         val uuid = UUID.nameUUIDFromBytes(name.toByteArray())
         looks[uuid] = LookSnapshot(
             lookId = name.hashCode(),
             lookUuid = uuid,
             name = name,
-            rows = listOf(
-                LookRowEntry(target = null, propertyName = "dimmer", value = dimmer.toString()),
-            ),
+            rows = rowsForWholeRig(dimmer),
             effects = emptyList(),
         )
         return uuid
+    }
+
+    private fun Rig.rowsForWholeRig(dimmer: Int) = fixtures.fixtures.map {
+        LookRowEntry(target = TargetRef.Fixture(it.key), propertyName = "dimmer", value = dimmer.toString())
     }
 
     private fun Rig.add(name: String, dimmer: Int, vararg fixtureKeys: String) =
@@ -200,7 +209,7 @@ class ProgrammerLayerStackTest {
         // recook reads the cached expansion and nothing moves, which is precisely the stale-cache
         // failure that path's step 1 exists to prevent.
         rig.looks[warmUuid] = rig.looks.getValue(warmUuid).copy(
-            rows = listOf(LookRowEntry(target = null, propertyName = "dimmer", value = "77")),
+            rows = rig.rowsForWholeRig(77),
         )
         rig.registry.invalidate(warmUuid)
         val moved = rig.stack.recookIfReferences(warmUuid)

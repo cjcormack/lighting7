@@ -111,7 +111,7 @@ data class FxDefinitionJson(
 @Serializable
 data class LookRowJson(
     val uuid: String,
-    /** A `TargetRef` discriminator, or `"deferred"` when the row takes its targets from the layer. */
+    /** A `TargetRef` discriminator — `fixture` or `group`. A Look row is always bound. */
     val targetType: String,
     val targetKey: String,
     val propertyName: String,

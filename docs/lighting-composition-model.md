@@ -291,6 +291,12 @@ bound and `hasDeferredRows` could not tell it from a recorded Look.
 still be deferred, because fanning an effect over the layer's targets is a different thing from
 holding a value for nobody — and it is what makes a Look usable from a busking pad.
 
+Sweep item B6 removed the row-side plumbing that outlived the rule: there is no `isDeferred` on a
+Look row at any layer any more, `LookRowEntry.target` is non-null, and `loadLookSnapshot` drops a
+`deferred` row an older database wrote rather than handing the composer a row with nothing to apply
+to. The targets-supply-the-row arm of `CueComposer.applyLayer` survives — it is a *template*
+layer's now.
+
 **A template row holds an intent, not a literal**: a colour plus a white/amber policy, a level or
 beam role as a percentage of each head's own range, a position in degrees. `fx/TemplateIntent.kt`
 owns the grammar; `fx/TemplateResolver.kt` is the **single** implementation that turns one into

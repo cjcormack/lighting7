@@ -55,7 +55,10 @@ class LookRecordTest : RouteIntegrationTest() {
         assertEquals(mapOf("hex-1" to "200", "hex-2" to "120"), response.look.rowsByTarget())
         // Bound, not a template: every row names its own fixture, which is what distinguishes a
         // recorded Look from one authored against a synthetic fixture.
-        assertTrue(response.look.rows.none { it.isDeferred }, "a recorded Look is bound")
+        assertTrue(
+            response.look.rows.all { it.targetType == TargetRef.Fixture.TYPE },
+            "a recorded Look is bound",
+        )
         assertTrue(
             response.look.families.contains("INTENSITY"),
             "families are derived from the rows rather than declared",

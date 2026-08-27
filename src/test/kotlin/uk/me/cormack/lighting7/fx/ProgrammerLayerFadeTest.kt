@@ -10,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import uk.me.cormack.lighting7.models.LayerSource
+import uk.me.cormack.lighting7.models.TargetRef
 
 /**
  * Per-row fades through the programmer's layer stack — the half of sweep item B1 the item text
@@ -57,7 +58,7 @@ class ProgrammerLayerFadeTest {
         return Rig(controller, stack, looks)
     }
 
-    /** A Look of one deferred dimmer row, optionally asking for a fade. */
+    /** A Look of one bound dimmer row on `hex-1`, optionally asking for a fade. */
     private fun Rig.source(name: String, dimmer: Int, fadeDurationMs: Long?): LayerSource {
         val uuid = UUID.nameUUIDFromBytes(name.toByteArray())
         looks[uuid] = LookSnapshot(
@@ -66,7 +67,7 @@ class ProgrammerLayerFadeTest {
             name = name,
             rows = listOf(
                 LookRowEntry(
-                    target = null,
+                    target = TargetRef.Fixture("hex-1"),
                     propertyName = "dimmer",
                     value = dimmer.toString(),
                     fadeDurationMs = fadeDurationMs,

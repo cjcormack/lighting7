@@ -115,6 +115,32 @@ class CueComposerTemplateLayerTest {
         assertEquals(LayerSourceKind.TEMPLATE, winner?.source?.kind, "provenance says which kind, so the desk can label it")
     }
 
+    /** Two hexes in a group — for the one test that is about fanning out, not about resolution. */
+    private fun groupedRig(): Fixtures {
+        val fixtures = Fixtures()
+        fixtures.register {
+            val hex1 = addFixture(HexFixture(universe, "hex-1", "Hex 1", firstChannel = 1))
+            val hex2 = addFixture(HexFixture(universe, "hex-2", "Hex 2", firstChannel = 13))
+            createGroup<HexFixture>("front-wash") { addSpread(listOf(hex1, hex2)) }
+        }
+        return fixtures
+    }
+
+    @Test
+    fun `a generic row fans over a group layer target, and the rows say so`() {
+        // Inherited from `CueComposerTest` when sweep item B6 made a Look row always bound: the
+        // targets-supply-the-row arm is a template's now, and this is the half of it that expands.
+        val amber = template("Amber Key", genericRow("rgbColour", "#FF9D4A;policy=extract"))
+        val rows = cook(
+            groupedRig(),
+            listOf(amber),
+            listOf(layerFor(amber, targets = listOf(CueTargetDto("group", "front-wash")))),
+        ).rows
+
+        assertEquals(setOf("hex-1", "hex-2"), rows.map { it.targetKey }.toSet())
+        assertTrue(rows.all { it.targetIsGroup }, "rows fanned from a group target are group-derived")
+    }
+
     @Test
     fun `a layer with no targets asserts nothing, because a generic row has nowhere to land`() {
         val amber = template("Amber Key", genericRow("rgbColour", "#FF9D4A;policy=extract"))

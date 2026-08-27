@@ -94,8 +94,10 @@ class AiTools(private val state: State) {
                 this.sortOrder = (DaoLook.find { DaoLooks.project eq project.id }
                     .maxOfOrNull { it.sortOrder } ?: -1) + 1
             }
-            // Authored through the AI surface, so every row is deferred: the tool describes the
-            // effects, and the targets come from whatever applies the look.
+            // Authored through the AI surface, so every effect is deferred: the tool describes the
+            // effects, and the targets come from whatever applies the look. (The tool authors no
+            // rows — a Look row would have to name a fixture, which the model has no business
+            // picking here.)
             effects.forEachIndexed { index, effect ->
                 DaoLookEffect.new {
                     this.look = created

@@ -187,6 +187,37 @@ class LookRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a look row naming a deferred target is rejected, because a look row is always bound`() =
+        testApplication {
+            // The guard the rest of B6 rests on: `LookRowEntry.target` is non-null and
+            // `loadLookSnapshot` drops a row whose discriminator names no arm, so this rejection is
+            // the only thing keeping a deferred row from reaching the database and then vanishing
+            // silently at cue time. `validateLookEffects` deliberately permits the same
+            // discriminator, which is exactly how a merge of the two could loosen this unnoticed.
+            mountTestApp(state)
+            val client = jsonClient()
+            val resp = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    CreateLookRequest(
+                        name = "Generic",
+                        rows = listOf(
+                            LookRowDto(
+                                targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                                propertyName = "dimmer", value = "180",
+                            ),
+                        ),
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            assertTrue(
+                resp.bodyAsText().contains("must name its own fixture or group"),
+                resp.bodyAsText(),
+            )
+        }
+
+    @Test
     fun `a duplicate name in one project is rejected`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
@@ -386,12 +417,17 @@ class LookRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `including a fully-deferred look stages nothing and says so`() = testApplication {
+    fun `including a look whose rows name nothing in the patch stages nothing and says so`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
-        // A deferred row names no fixture and the programmer has no layer to take one from, so
-        // there is nothing to stage. Silence would read as a broken button.
+        // `hex-1` is never seeded, so the row is bound to a fixture the patch does not have and
+        // nothing stages. Silence would read as a broken button — and the message has to send the
+        // operator to the *patch*, not to the Look editor where the row is plainly there and bound.
+        //
+        // This test named a *deferred* row until sweep item B6; a Look row cannot be deferred and
+        // has not been able to be since session 3, so it had been testing this case under that name
+        // for a while.
         val lookId = client.post(base()) {
             contentType(ContentType.Application.Json)
             setBody(
@@ -412,7 +448,41 @@ class LookRoutesTest : RouteIntegrationTest() {
             setBody(buildJsonObject { put("projectId", "current"); put("lookId", lookId) })
         }.body<ProgrammerIncludeResponse>()
         assertEquals(0, body.entriesWritten)
-        assertTrue(body.warnings.any { it.contains("no rows naming a fixture") }, body.warnings.toString())
+        assertTrue(
+            body.warnings.any { it.contains("could be staged") },
+            body.warnings.toString(),
+        )
+    }
+
+    @Test
+    fun `including an effects-only look says it holds no rows, not that the patch is wrong`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        // The other zero-write reason, and the one that must *not* blame the patch: a Look holding
+        // only effects has nothing for the programmer by construction.
+        val lookId = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLookRequest(
+                    name = "Pulse Only",
+                    effects = listOf(
+                        LookEffectDto(
+                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
+                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                        ),
+                    ),
+                )
+            )
+        }.body<LookDetails>().id
+
+        val body = client.post("/api/rest/programmer/include") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("projectId", "current"); put("lookId", lookId) })
+        }.body<ProgrammerIncludeResponse>()
+        assertEquals(0, body.entriesWritten)
+        assertTrue(body.warnings.any { it.contains("holds no rows") }, body.warnings.toString())
     }
 
     @Test

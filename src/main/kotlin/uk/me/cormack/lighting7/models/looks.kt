@@ -10,9 +10,14 @@ import org.jetbrains.exposed.v1.json.json
 import org.jetbrains.exposed.v1.core.java.javaUUID
 
 /**
- * The `targetType` discriminator marking a [DaoLookRows] / [DaoLookEffects] row as *deferred*:
- * it names no target of its own and takes its targets from the [DaoCueLayers] line referencing
- * the Look.
+ * The `targetType` discriminator marking a [DaoLookEffects] or [DaoTemplateRows] row as *deferred*:
+ * it names no target of its own and takes its targets from whatever applies it — the [DaoCueLayers]
+ * line referencing the Look, or the selection a template is applied to.
+ *
+ * **Not [DaoLookRows].** A Look *row* is always bound; the deferred half of that entity became
+ * [DaoTemplates] in session 3, and sweep item B6 removed the plumbing that still read the
+ * discriminator on the row side. A stored row carrying it is data from an older database and is
+ * dropped on read.
  *
  * Deliberately not a [TargetRef] arm. `TargetRef.of` must keep rejecting it, because a deferred
  * row reaching a code path that expects a resolvable target is a bug we want loud rather than
@@ -53,11 +58,15 @@ data class LookRowDto(
      */
     val health: AssignmentHealth = AssignmentHealth.Ok,
 ) {
-    /** True when this row takes its targets from the referencing layer rather than naming one. */
-    val isDeferred: Boolean get() = targetType == DEFERRED_TARGET_TYPE
-
-    /** The row's own target, or null when [isDeferred]. */
-    val target: TargetRef? get() = if (isDeferred) null else TargetRef.of(targetType, targetKey)
+    /**
+     * The row's target. A Look row always names one — see [DEFERRED_TARGET_TYPE].
+     *
+     * **Throws** on a discriminator that names no arm, [DEFERRED_TARGET_TYPE] included, because a
+     * `LookRowDto` is a *client-supplied* shape and this is only safe to ask past
+     * `validateLookRows`. [DaoLookRow.target] answers null instead, which is the right reading for
+     * a row already in the database — the two are asymmetric on purpose.
+     */
+    val target: TargetRef get() = TargetRef.of(targetType, targetKey)
 }
 
 /**
@@ -148,10 +157,9 @@ class DaoLook(id: EntityID<Int>) : IntEntity(id) {
 object DaoLookRows : IntIdTable("look_rows") {
     val look = reference("look_id", DaoLooks)
 
-    /** A [TargetRef] discriminator, or [DEFERRED_TARGET_TYPE]. */
+    /** A [TargetRef] discriminator — `fixture` or `group`, never [DEFERRED_TARGET_TYPE]. */
     val targetType = varchar("target_type", 50)
 
-    /** Empty string when [targetType] is [DEFERRED_TARGET_TYPE]. */
     val targetKey = varchar("target_key", 255)
     val propertyName = varchar("property_name", 255)
     val value = text("value")
@@ -180,14 +188,16 @@ class DaoLookRow(id: EntityID<Int>) : IntEntity(id) {
     var sortOrder by DaoLookRows.sortOrder
     var uuid by DaoLookRows.uuid
 
-    val isDeferred: Boolean get() = targetType == DEFERRED_TARGET_TYPE
-
     /**
-     * The row's own target, or null when deferred *or* when the stored discriminator names no
-     * known arm (a corrupt row) — callers skip rather than guess, as `loadPaletteSnapshot` did.
+     * The row's own target, or null when the stored discriminator names no known arm — callers
+     * skip rather than guess, as `loadPaletteSnapshot` did.
+     *
+     * [DEFERRED_TARGET_TYPE] is one such unknown arm, and deliberately so: a Look row is always
+     * bound, so a stored `deferred` row is data an older database wrote and answers null here
+     * rather than getting a second, row-shaped meaning back.
      */
     val target: TargetRef?
-        get() = if (isDeferred) null else TargetRef.ofOrNull(targetType, targetKey)
+        get() = TargetRef.ofOrNull(targetType, targetKey)
 }
 
 // ─── Look Effects table ────────────────────────────────────────────────
