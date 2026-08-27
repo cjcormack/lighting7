@@ -153,6 +153,22 @@ data class ProgrammerFxOrigin(
 }
 
 /**
+ * The identity of one programmer-layer effect instance: which layer spawned it, which of the
+ * Look's stored effects it realises, and on which target.
+ *
+ * Stamped on [FxInstance.programmerLayerEffectKey] at spawn, and matched structurally on recook —
+ * [effect] is the whole [LookEffectEntry] rather than an index, so a Look edit that changes an
+ * effect produces a *different* key and the stale instance retracts instead of surviving with the
+ * old parameters. [targetKey] is [uk.me.cormack.lighting7.models.TargetRef.key], the same string
+ * `CueComposer.cookEffects` fans deferred effects out over.
+ */
+data class ProgrammerLayerEffectKey(
+    val layerId: Int,
+    val effect: LookEffectEntry,
+    val targetKey: String,
+)
+
+/**
  * The parameters of a running [FxInstance] that request threads may change while the tick
  * loops read them, grouped into one immutable value behind a single atomic reference
  * ([FxInstance.dynamics]).
@@ -277,16 +293,26 @@ class FxInstance internal constructor(
     var lookId: Int? = null
 
     /**
-     * Set when this effect was spawned by a **programmer** layer, naming
-     * [ProgrammerLayer.layerId].
+     * Set when this effect was spawned by a **programmer** layer: which layer, which of the
+     * Look's stored effects, on which target.
      *
-     * A third id rather than reusing [lookId], because the programmer's stack may hold the same
+     * This is the instance's full identity within the programmer band, and it lives here — on the
+     * engine's record — rather than in a map of [ProgrammerLayerStack]'s own, so the band has one
+     * owner. The stack's recook classifies live instances by this key straight off
+     * [FxEngine.programmerLayerEffects]; anything that removes an instance behind the stack's back
+     * ([FxEngine.removeProgrammerBandEffects], the FX sheet's own remove) is therefore simply no
+     * longer in the band, with no shadow bookkeeping to fall out of date (sweep item E6).
+     *
+     * A full key rather than reusing [lookId], because the programmer's stack may hold the same
      * Look twice and the two have to be retracted and re-ranked independently — the same reason
      * `CookLayer.layerId` exists beside `CookLayer.lookId`. It is also not
      * [ProgrammerFxOrigin], whose `cueId` is non-null and read by Update to replace a cue child in
      * place; a programmer layer belongs to no cue.
      */
-    var programmerLayerId: Int? = null
+    var programmerLayerEffectKey: ProgrammerLayerEffectKey? = null
+
+    /** [ProgrammerLayerEffectKey.layerId], for the stomp lookup and the capture/record filters. */
+    val programmerLayerId: Int? get() = programmerLayerEffectKey?.layerId
 
     /**
      * Set when this effect was spawned by a **cue's** Look layer, naming the `DaoCueLayer` row.
@@ -296,9 +322,9 @@ class FxInstance internal constructor(
      * two delays is the obvious case — so [lookId] cannot say *which* of them spawned this
      * instance. Within-cue stomp is a statement about one layer, so it needs the id that can.
      *
-     * The programmer's twin is [programmerLayerId], and they are two fields rather than one because
-     * they are ids in different spaces: `DaoCueLayer` row ids and `ProgrammerStore.mintLayerId`'s
-     * in-memory counter, which will collide freely.
+     * The programmer's twin is [programmerLayerEffectKey] (read as an id via [programmerLayerId]),
+     * and they are two ids rather than one because they live in different spaces: `DaoCueLayer`
+     * row ids and `ProgrammerStore.mintLayerId`'s in-memory counter, which will collide freely.
      */
     var cueLayerId: Int? = null
 

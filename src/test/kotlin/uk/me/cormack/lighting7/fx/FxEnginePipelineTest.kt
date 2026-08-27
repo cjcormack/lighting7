@@ -1040,7 +1040,21 @@ class FxEnginePipelineTest {
             value = 30u,
             blendMode = BlendMode.ADDITIVE,
             priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE,
-        ).also { it.programmerLayerId = 3 }
+        ).also {
+            // The stomp lookup reads the layer id off the band key; the entry and target halves
+            // are irrelevant to suppression, so any stamped values do.
+            it.programmerLayerEffectKey = ProgrammerLayerEffectKey(
+                layerId = 3,
+                effect = LookEffectEntry(
+                    target = null, effectType = "StaticValue", category = "dimmer",
+                    propertyName = "dimmer", beatDivision = 1.0, blendMode = "ADDITIVE",
+                    distribution = "LINEAR", phaseOffset = 0.0, elementMode = null,
+                    elementFilter = null, stepTiming = null, parameters = emptyMap(),
+                    speedMasterUuid = null, rateSpeedMasterUuid = null,
+                ),
+                targetKey = "hex-a",
+            )
+        }
         rig.engine.addEffect(effect)
         rig.engine.processBeatTick(tick(0))
 

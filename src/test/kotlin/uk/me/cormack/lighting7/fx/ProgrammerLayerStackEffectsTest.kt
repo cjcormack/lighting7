@@ -174,8 +174,9 @@ class ProgrammerLayerStackEffectsTest : RouteIntegrationTest() {
     @Test
     fun `an effect removed behind the stack's back is not resurrected`() = testApplication {
         // The FX sheet can remove a band effect directly, and `removeProgrammerBandEffects` sweeps
-        // the whole band. Either leaves the stack's instance map holding a dead id; the next recook
-        // must drop it rather than treat the effect as still running.
+        // the whole band. Either way the instance is simply absent from the engine's band record
+        // (`programmerLayerEffects`), so the next recook must respawn it rather than treat the
+        // effect as still running.
         mountTestApp(state)
         val client = jsonClient()
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
@@ -187,7 +188,7 @@ class ProgrammerLayerStackEffectsTest : RouteIntegrationTest() {
         // Any recook: the layer is unchanged, so this is the "nothing to do" path.
         stack.patch(layer.layerId, amount = 0.9)
 
-        assertEquals(1, bandEffects().size, "respawned exactly once, and tracked again")
+        assertEquals(1, bandEffects().size, "respawned exactly once, back in the band record")
         assertEquals(layer.layerId, bandEffects().single().programmerLayerId)
     }
 

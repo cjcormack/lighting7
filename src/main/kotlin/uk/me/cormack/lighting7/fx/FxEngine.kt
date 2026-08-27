@@ -656,6 +656,25 @@ class FxEngine(
     fun getActiveEffects(): List<FxInstance> = activeEffects.values.toList()
 
     /**
+     * The live programmer-*layer* effects, keyed by the identity stamped at spawn.
+     *
+     * This is the engine owning the band (sweep item E6): `ProgrammerLayerStack.syncEffects`
+     * classifies against this snapshot instead of keeping its own instance map, so a removal it
+     * did not perform — [removeProgrammerBandEffects], the FX sheet's remove — needs no
+     * reconciliation step to be seen. Band effects with no key (Include's ad-hoc children, a
+     * manual busk effect at band priority) are not layer effects and are absent by construction.
+     *
+     * One instance per key: two live instances sharing a key would collapse to one here, and the
+     * loser could then never be retracted by a recook — only a band sweep would take it. The
+     * spawn path makes that unreachable (`syncEffects` dedupes desired keys and holds its lock
+     * across the whole classify-spawn-retract pass), which is why collapsing is safe.
+     */
+    fun programmerLayerEffects(): Map<ProgrammerLayerEffectKey, FxInstance> =
+        activeEffects.values.mapNotNull { effect ->
+            effect.programmerLayerEffectKey?.let { it to effect }
+        }.toMap()
+
+    /**
      * Get all active effects targeting a specific group.
      *
      * @param groupName The group name
@@ -785,7 +804,7 @@ class FxEngine(
                 // un-stomps an edited layer effect and makes Record write it back a second
                 // time as an ad-hoc child.
                 cueLayerId = existing.cueLayerId
-                programmerLayerId = existing.programmerLayerId
+                programmerLayerEffectKey = existing.programmerLayerEffectKey
                 programmerOrigin = existing.programmerOrigin
                 cueId = existing.cueId
                 cueStackId = existing.cueStackId

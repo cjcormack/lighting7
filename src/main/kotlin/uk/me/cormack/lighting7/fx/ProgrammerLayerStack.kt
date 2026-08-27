@@ -124,27 +124,21 @@ class ProgrammerLayerStack(
     private val state: () -> State?,
 ) {
     /**
-     * Live programmer-layer effects, keyed by the layer and the effect within it.
+     * Guards the classify-spawn-retract sequence in [syncEffects].
      *
-     * Held here rather than being re-derived from the engine because the key needs the
-     * `LookEffectEntry` that produced the instance, which the instance does not keep. Entries whose
-     * instance has since been removed by anything else — `removeProgrammerBandEffects`, the FX
-     * sheet's own remove — are dropped on the next recook rather than resurrected.
-     */
-    private val effectInstances = HashMap<EffectKey, Long>()
-
-    /**
-     * Guards [effectInstances] and the spawn/retract sequence.
+     * The live band state itself lives on the engine — each instance carries its
+     * [ProgrammerLayerEffectKey], and [FxEngine.programmerLayerEffects] is the only record of
+     * which layer effects exist (sweep item E6) — so there is no map to corrupt here. The lock
+     * remains because the sequence is read-then-write: two recooks racing between the snapshot
+     * and the spawns would each decide to spawn the same missing effect. Same-key twins are worse
+     * than a glitch — [FxEngine.programmerLayerEffects] keeps one instance per key, so the losing
+     * twin could never be retracted by a recook and would sit on stage until a band sweep.
      *
      * Separate from `ProgrammerStore`'s layer lock and taken *after* it, never around it: the cook
      * must stay outside every lock (`loadLookSnapshot` opens a transaction), so two mutations can
-     * legitimately reach here concurrently and the map would otherwise be corrupted by the plain
-     * `HashMap` it is. Holding this across the whole classify-spawn-retract pass is also what stops
-     * two recooks each deciding to spawn the same effect.
+     * legitimately reach here concurrently.
      */
     private val effectsLock = Any()
-
-    private data class EffectKey(val layerId: Int, val effect: LookEffectEntry, val targetKey: String)
 
     /**
      * The pseudo cue id a programmer cook runs under.
@@ -326,11 +320,13 @@ class ProgrammerLayerStack(
      */
     fun reset() {
         store.mutateLayers { emptyList<ProgrammerLayer>() to Unit }
-        synchronized(effectsLock) { effectInstances.clear() }
-        // Cleared explicitly rather than left to the next recook, because this is the one mutation
-        // that deliberately doesn't recook. It would be inert either way — `mintLayerId` is
-        // monotonic for the life of the process, so no future layer can inherit a stale entry — but
-        // relying on that makes a local invariant depend on a distant one.
+        // No effect bookkeeping to drop: the band lives on the engine's instances, and the
+        // band-effect sweep in `clearProgrammerCompletely` is what takes those.
+        //
+        // The suppression is cleared explicitly rather than left to the next recook, because this
+        // is the one mutation that deliberately doesn't recook. It would be inert either way —
+        // `mintLayerId` is monotonic for the life of the process, so no future layer can inherit
+        // a stale entry — but relying on that makes a local invariant depend on a distant one.
         engine().cueLayer.setProgrammerStompSuppression(emptyMap())
     }
 
@@ -466,10 +462,9 @@ class ProgrammerLayerStack(
      */
     private fun syncEffects(layers: List<ProgrammerLayer>): EffectSync = synchronized(effectsLock) {
         val eng = engine()
-        val liveIds = eng.getActiveEffects().mapTo(HashSet()) { it.id }
-        // Anything removed behind our back (the FX sheet's own remove, a band sweep) is forgotten
-        // rather than treated as live and never respawned.
-        effectInstances.values.retainAll { it in liveIds }
+        // The engine's record *is* the band: anything removed by another surface (the FX sheet's
+        // own remove, a band sweep) is simply absent here, with no bookkeeping to reconcile.
+        val live = eng.programmerLayerEffects()
 
         val cookLayers = layers.map { it.toCookLayer() }
         val desired = CueComposer.cookEffects(fixtures(), programmerCookCueId, cookLayers, lookRegistry()::snapshot)
@@ -482,43 +477,36 @@ class ProgrammerLayerStack(
             .associate { (index, layer) -> layer.layerId to index }
 
         val byLayerId = layers.associateBy { it.layerId }
-        val wanted = HashSet<EffectKey>(desired.size)
+        val wanted = HashSet<ProgrammerLayerEffectKey>(desired.size)
         val repriorities = HashMap<Long, Int>()
         // Built here, added in one `addEffects` below: a per-instance add rebuilt the engine's
         // sorted snapshots and re-broadcast the whole active-effect list once per effect, which
         // is O(N²) over a stack of any size (sweep item C7). Build order is add order, so the
         // layer-rank priorities still decide composition exactly as before.
-        val spawning = mutableListOf<Pair<EffectKey, FxInstance>>()
+        val spawning = mutableListOf<FxInstance>()
 
         for ((layer, effect, target) in desired) {
-            val key = EffectKey(layer.layerId, effect, target.key)
+            val key = ProgrammerLayerEffectKey(layer.layerId, effect, target.key)
             // A Look holding the same effect twice on one target would collide here; the second is
-            // dropped rather than spawning an untracked instance nothing can ever retract.
+            // dropped rather than spawning a second instance under the same identity — the retract
+            // pass matches on the key, so only one of the twins could ever be seen.
             if (!wanted.add(key)) continue
             val priority = priorityFor(rankOf[layer.layerId] ?: 0)
-            val existing = effectInstances[key]
+            val existing = live[key]
             if (existing != null) {
-                repriorities[existing] = priority
+                repriorities[existing.id] = priority
                 continue
             }
             val override = byLayerId[layer.layerId]?.beatDivisionOverride
-            val instance = build(layer, effect, target, priority, override) ?: continue
-            spawning += key to instance
+            spawning += build(layer, effect, target, key, priority, override) ?: continue
         }
 
-        val spawnedIds = eng.addEffects(spawning.map { (_, instance) -> instance })
-        // Zipped rather than indexed: the pairing is what makes each key point at its own
-        // instance, and a `spawnedIds[index]` read would go quietly wrong if `addEffects` ever
-        // returned anything but one id per input.
-        for ((entry, id) in spawning.zip(spawnedIds)) {
-            effectInstances[entry.first] = id
-        }
-        val spawned = spawning.size
+        val spawned = eng.addEffects(spawning).size
 
         var retracted = 0
-        val gone = effectInstances.keys.filterNot { it in wanted }
-        for (key in gone) {
-            effectInstances.remove(key)?.let { if (eng.removeEffect(it)) retracted++ }
+        for ((key, instance) in live) {
+            if (key in wanted) continue
+            if (eng.removeEffect(instance.id)) retracted++
         }
 
         val repriorised = eng.repriorityProgrammerLayerEffects(repriorities)
@@ -549,6 +537,7 @@ class ProgrammerLayerStack(
         layer: CookLayer,
         effect: LookEffectEntry,
         target: TargetRef,
+        key: ProgrammerLayerEffectKey,
         priority: Int,
         beatDivisionOverride: Double?,
     ): FxInstance? {
@@ -586,11 +575,14 @@ class ProgrammerLayerStack(
             )
             return null
         }
-        // `lookId` and `programmerLayerId` are the honest fields for where this came from.
+        // `lookId` and the band key are the honest fields for where this came from.
         // Only a Look can own an effect (D7), so only a Look id belongs here — a template layer
         // never reaches `build` because a template holds no effects to spawn.
         instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }
-        instance.programmerLayerId = layer.layerId
+        // The key is the instance's identity in the band: [syncEffects] classifies the engine's
+        // live instances by it on the next recook, so an unstamped instance would be retracted
+        // as unrecognised and respawned every mutation.
+        instance.programmerLayerEffectKey = key
         instance.priority = priority
         return instance
     }
