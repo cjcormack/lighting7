@@ -588,13 +588,22 @@ mid-loop), without which the scoping was decorative on the write path; and
 `/fx/definitions/{definitionId}` had the identical defect — GET/PUT/DELETE/test resolved by bare
 `findById` while list/create filtered by project — fixed in the same commit.
 
-**F3. Normalize mutation responses** — low / P2 / S / sonnet
+~~**F3. Normalize mutation responses**~~ — done, `5c59124`. low / P2 / S / sonnet
 Deletes: 204 everywhere (currently split 204 vs 200-empty by resource); updates: return the DTO
 everywhere (universe-configs returns 204); `show/advance` vs `show/deactivate` reply asymmetry.
 
-**F4. POST-for-read** — low / P3 / S / sonnet
+Shrunk in the landing: universe-configs' PUT already returned its DTO (fixed incidentally by
+`eb190ef`, an unrelated Art-Net streaming change) — verified rather than re-touched.
+
+~~**F4. POST-for-read**~~ — done, `411363b` (+ lighting-react `a5d1853`). low / P3 / S / sonnet
 `cue-stacks/{id}/preview` and `templates/resolve` → GET with query params. Compile-checks stay
 POST (they carry source bodies) — note that in the conventions doc.
+
+Landed as `cue-stacks/{id}/preview` only, not both: `templates/resolve`'s body is an unsaved draft
+(a list of rows), the same "too shaped for a query string, no cache key worth it" reasoning the
+plan already gives for compile-checks — confirmed against lighting-react's own `resolveTemplate`
+comment, which keeps it a mutation for exactly that reason. It stays POST, documented as a second
+named exception alongside compile-checks in api-conventions.md.
 
 **F5. WS naming + snapshot rules** — medium / P2 / M / opus
 Dotted namespaces are the modern scheme; fix the two mixed-scheme stragglers
@@ -686,8 +695,8 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | ~~E1–E7, C8, B6–B7, F6~~ **done**, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
-| 5 | ~~F1–F2~~, F3–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
-| 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
+| 5 | ~~F1–F3~~, F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
+| 6 | H1–H3, G4, ~~D7, F4~~, E9 | Mechanical passes. D7 was pulled forward — see below. |
 
 **Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
 `effect: Effect` signatures, and neither touches the tick path, so pulling them out of waves 3
@@ -725,8 +734,11 @@ dead code now, not just unreachable),
 ~~F1~~ (landed: the whole REST path rename went in with `lighting-react` `85229a7`, so
 nothing is outstanding — see below), ~~F2~~ (landed: `/ai/conversations` moved to
 `/projects/{projectId}/ai/conversations` and the four callers were repointed to
-`projects/current/...` in `481e453`, so nothing is outstanding), F3/F5 (renamed
-paths/messages/status codes), ~~F6~~ (landed: the widget's base URL moved to
+`projects/current/...` in `481e453`, so nothing is outstanding), ~~F3~~ (landed: status-code-only
+changes — RTK Query's `fetchBaseQuery` already treats a `204`/an unread body as a no-op, so nothing
+was outstanding; `deactivateProgram` gained a JSON body it doesn't read, which is harmless), ~~F4~~
+(landed: `previewCueLook` moved to `GET` + `?cueId=` in `lighting-react` `a5d1853`, so nothing is
+outstanding), F5 (renamed messages/status codes), ~~F6~~ (landed: the widget's base URL moved to
 `/api/script-editor` in `0d2081d`, and `Projects.tsx` must gate Export/Import on `isAdmin` — see
 below), B3
 (`elementMode` now accepted on `POST /fx/add`, matching `PUT`), B4 (`speedMasterUuid` /
@@ -910,6 +922,23 @@ keeps its path but gains a `409`: it refuses when the current project changes mi
 `conversationId` belonging to another project is now a `404` rather than being silently continued.
 `/fx/definitions/{definitionId}` is unchanged in shape but now `404`s a definition belonging to a
 different project on GET/PUT/DELETE/test.
+
+F3 (`5c59124`) — `docs/api-conventions.md` gains a "Mutation responses" section. Frontend-visible
+but nothing to change: fx effect delete, cue delete, cue-slot delete, cue-stack delete and script
+delete now answer `204` instead of `200`-empty, and `POST /{id}/show/deactivate` now answers the
+same `ShowActivateResponse` shape as `/activate`/`/advance`/`/go-to` (both fields `null`) instead
+of a bare `200`. Confirmed harmless rather than deferred: RTK Query's `fetchBaseQuery` already
+treats an empty/`204` response as a no-op, and `deactivateProgram` is typed `void` and never reads
+its body, so the new field is inert until something chooses to read it.
+
+F4 (`411363b`, + lighting-react `a5d1853`) — `docs/api-conventions.md` gains a "POST-for-read"
+section. Frontend-visible in full: `GET /{projectId}/cue-stacks/{stackId}/preview` replaces the
+`POST` of the same path; `cueId` moves from the JSON body to a `?cueId=` query parameter (absent
+still means "the stack's effective next"). The client half landed in the same run —
+`previewCueLook`'s RTK Query definition sends `params: { cueId }` instead of a `POST` body.
+`templates/resolve` stays `POST`, and is now a second named exception alongside compile-checks in
+the conventions doc — its body is an unsaved draft (a list of rows), not a scalar, so there is no
+clean query-string spelling and no cache key worth building around it.
 
 ## Verification
 
