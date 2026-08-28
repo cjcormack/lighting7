@@ -64,7 +64,7 @@ class CueCrudRoundTripTest : RouteIntegrationTest() {
         assertEquals(stackId, details.cueStackId)
 
         val deleteResp = client.delete("/api/rest/projects/$projectId/cues/$cueId")
-        assertEquals(HttpStatusCode.OK, deleteResp.status)
+        assertEquals(HttpStatusCode.NoContent, deleteResp.status)
         val getAfterResp = client.get("/api/rest/projects/$projectId/cues/$cueId")
         assertEquals(HttpStatusCode.NotFound, getAfterResp.status)
         assertNull(

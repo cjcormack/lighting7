@@ -124,8 +124,24 @@ buys nothing and costs a second code path on every client.
 The exception is anything that accumulates over time rather than being authored: sync activity and
 history endpoints paginate newest-first with `?limit=&beforeId=`.
 
+## Mutation responses
+
+**Deletes answer `204 No Content`.** Nothing is coming back — the resource is gone — so there is no
+body, and no `200` with an empty one either.
+
+**Updates answer the updated DTO**, not `204`. The point of a `PUT` is "tell me what this looks
+like now" — a client that just edited a name doesn't want a second round trip to see whether a
+collision handler renamed it further, or whether a derived field moved. The one recurring exception
+is an update whose "resource" is a secret rather than something with a representable shape — a
+password change, a stored PAT — those answer `204` because there is nothing safe to echo back.
+
+The two-stack-verb family (`/show/activate`, `/show/advance`, `/show/go-to`, `/show/deactivate`)
+answers with the same DTO shape across all four, `activeStackId`/`activatedStackName` both `null`
+after a deactivate — a client watching "what's live now" reads one response shape regardless of
+which verb got it there, rather than inferring the deactivated state from a bare status code.
+
 ---
 
-One further convention belongs here and is still being applied by its own sweep item: the response
-shape of mutations — 204 versus the updated DTO (**F3**). WebSocket message naming and snapshot
-rules are **F5**, and live in [`websocket-engineering.md`](websocket-engineering.md).
+One further convention belongs here and is still being applied by its own sweep item: POST-for-read
+(**F4**). WebSocket message naming and snapshot rules are **F5**, and live in
+[`websocket-engineering.md`](websocket-engineering.md).

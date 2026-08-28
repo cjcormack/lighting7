@@ -146,7 +146,7 @@ internal fun Route.routeApiRestProjectCueSlots(state: State) {
 
             if (found) {
                 state.show.fixtures.cueSlotListChanged()
-                call.respond(HttpStatusCode.OK)
+                call.respond(HttpStatusCode.NoContent)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue slot not found"))
             }

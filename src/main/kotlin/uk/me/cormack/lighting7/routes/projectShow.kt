@@ -97,7 +97,13 @@ internal fun Route.routeApiRestProjectShow(state: State) {
                 val (projectId, cueStackId) = result
                 state.show.cueStackManager.deactivateStack(cueStackId, state)
                 state.show.fixtures.showChanged(projectId, null, null)
-                call.respond(HttpStatusCode.OK)
+                // Same shape as /activate, /advance and /go-to: a null `activeStackId` reports
+                // the deactivated state instead of leaving the caller to infer it from a bare 200.
+                call.respond(ShowActivateResponse(
+                    projectId = projectId,
+                    activeStackId = null,
+                    activatedStackName = null,
+                ))
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Show not active"))
             }

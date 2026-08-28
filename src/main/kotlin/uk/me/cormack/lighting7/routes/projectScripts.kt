@@ -142,7 +142,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
                 ScriptDeleteResult.NOT_FOUND -> call.respond(HttpStatusCode.NotFound, ErrorResponse("Script not found"))
                 ScriptDeleteResult.SUCCESS -> {
                     state.show.fixtures.scriptListChanged()
-                    call.respond(HttpStatusCode.OK)
+                    call.respond(HttpStatusCode.NoContent)
                 }
             }
         }

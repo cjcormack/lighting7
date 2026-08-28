@@ -77,7 +77,7 @@ internal fun Route.routeApiRestFx(state: State) {
         delete<EffectId> {
             val removed = state.show.fxEngine.removeEffect(it.id)
             if (removed) {
-                call.respond(HttpStatusCode.OK)
+                call.respond(HttpStatusCode.NoContent)
             } else {
                 call.respond(HttpStatusCode.NotFound)
             }
