@@ -660,11 +660,20 @@ Audited all five live UI code-branch points (`lighting-react`'s `CODE_SPEED_MAST
 `LOOK_IN_USE`, `TEMPLATE_IN_USE`, `INCLUDE_TARGET_GONE`, `LAST_ADMIN`, `SELF_TARGET`) — every one
 already carries a machine code, so no prose-only site needed one added opportunistically.
 
-**F8. DTO unification across transports** — medium / P2 / M / opus
+~~**F8. DTO unification across transports**~~ — done, `974e6c0` (+ lighting-react `d6c26c4`). medium / P2 / M / opus
 `GroupSummary` (WS) vs `GroupSummaryDto` (REST), each with its own capability detection;
 `FxEffectState` (WS, 12 fields) vs `EffectDto` (REST, 20 fields); `FxEffectState` built twice
 differently in one file (`FxSocket.kt:163` vs `:228`, already diverged once). **Fix:** one DTO per
 concept, one builder; client's missing `rateSpeedMasterIndex` goes to the frontend sweep.
+The `GroupSummary` half needed nothing — D3 (`de2e1d5`) had already deleted `GroupSocket.kt` and
+with it the WS type. The third representation the item doesn't name, `FxEngine.FxInstanceState`,
+went too: the surviving `EffectDto` lives in `fx/EffectDto.kt` and the engine's state flow carries
+it directly.
+Grew in the landing: the five call sites were hand-assembling the `masterStates()` snapshot and
+the `isMultiElementExpanded()` answer that the one builder needs, so `FxEngine.effectDtos` /
+`effectDto` now own that pairing. B4's speed-master gating became one pair of accessors instead of
+the same conditional written out per builder — which surfaced the one effect report B4 had missed,
+`GroupEffectDto` (`GET /groups/{name}/fx`), fixed here with the operator's agreement.
 
 ## G — AI surface refresh
 
@@ -717,7 +726,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | ~~E1–E7, E10, C8, B6–B7, F6~~ **done** | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
-| 5 | ~~F1–F3, F5, F7~~ **done**, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
+| 5 | ~~F1–F3, F5, F7–F8~~ **done**, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7, F4~~, E9 | Mechanical passes. D7 was pulled forward — see below. |
 
 **Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
@@ -777,7 +786,11 @@ broadcast messages, script and FX-definition CRUD now invalidate a second client
 of leaving them stale forever), E4 (`POST /fx/add`, `PUT /fx/{id}` and `POST /groups/{name}/fx`
 now **400** an unrecognised `distributionStrategy` or `elementFilter` instead of quietly using
 LINEAR / ALL — the shipped UI only sends canonical names so nothing needs changing, but any
-hand-built or replayed request with a legacy value now loses the whole effect).
+hand-built or replayed request with a legacy value now loses the whole effect), ~~F8~~ (landed: the
+`fxState` frame is now the same `EffectDto` REST returns, so `phase` became `currentPhase`,
+`targetKey` lost its `.property` suffix in favour of a sibling `propertyName`, and `effectType`
+became the registry id rather than the display name — `lighting-react` `d6c26c4` follows, and
+nothing is outstanding. See below).
 
 **F5.** Two WS messages are renamed on the wire: `speedMasterListChanged` →
 `speedMasters.listChanged` and `surfaceBindingsChanged` → `surfaceBank.bindingsChanged`. No
@@ -791,6 +804,20 @@ messages all still exist, but only as explicit resync. `lighting-react` dropped 
 request-on-open sends accordingly, and `projectState` in particular is a new connect frame where
 the client previously had to ask (the replay-1 `projectChanged` it used to lean on only arrived on
 a desk that had already switched project once).
+
+**F8.** The `fxState` WebSocket frame and `GET /api/rest/fx/active` now return the *same* object.
+Three fields changed spelling or meaning on the WS side: `phase` → `currentPhase`; `targetKey` is
+the bare fixture/group key with a new sibling `propertyName`, not the composite `"key.property"`;
+and `effectType` is the registry id rather than the effect's display name. Nothing was removed —
+the frame gained the whole REST field set, and REST gained `cueStackId`, `speedMasterIndex` and
+`rateSpeedMasterIndex`. `lighting-react` `d6c26c4` updated the type declaration; the only
+behavioural consequence there was a fix, since Kill All's `removeFx({ fixtureKey })` cache tag was
+built from the composite key and so could never match the bare key REST tags with.
+
+Separately, `GET /groups/{name}/fx` now nulls whichever of `speedMasterUuid` /
+`rateSpeedMasterUuid` the effect's `timingSource` doesn't read, matching what B4 already did for
+every other effect report. The group FX sheet should stop showing a rate-master chip on BEAT-timed
+effects that carry a stale stored rate master.
 
 **D7.** `GET /fx/library` now returns each parameter's real `type`, `defaultValue` and
 `description` instead of `"string"`, `""`, `""`. Same payload shape, so nothing breaks and
