@@ -232,13 +232,6 @@ data class AddEffectRequest(
 data class AddEffectResponse(val effectId: Long)
 
 @Serializable
-data class ErrorResponse(
-    val error: String,
-    /** Machine-readable error code for responses a client branches on (e.g. delete guards). */
-    val code: String? = null,
-)
-
-@Serializable
 data class FixtureEffectsResponse(
     val direct: List<EffectDto>,
     val indirect: List<IndirectEffectDto>
