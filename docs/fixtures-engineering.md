@@ -725,7 +725,7 @@ local frame.
 Composition order is yaw → pitch → roll (intrinsic Tait-Bryan). For a typical
 flown truss with only `yawDeg` set, this collapses to a single 2D rotation
 in the X/Y plane. CRUD: `GET`/`POST`/`PUT`/`DELETE` under
-`/api/rest/project/{projectId}/riggings`. Deleting a rigging detaches any
+`/api/rest/projects/{projectId}/riggings`. Deleting a rigging detaches any
 patches that reference it (`rigging_id` is set to NULL; the fixtures are not
 deleted).
 
@@ -748,4 +748,4 @@ regions handle thrusts, raised platforms, pits, and multi-level stages.
 Regions are additive — the union of all regions is the playable surface. A
 plain rectangular stage is a single region whose `width_m`/`depth_m` match
 the project's bounding box. CRUD endpoints mirror riggings under
-`/api/rest/project/{projectId}/stageRegions`.
+`/api/rest/projects/{projectId}/stage-regions`.

@@ -431,7 +431,7 @@ From `State.kt`:
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/rest/controlSurfaceTypes` | Device profile metadata for the frontend |
+| `GET /api/rest/control-surface-types` | Device profile metadata for the frontend |
 | `GET /api/rest/projects/{projectId}/surface-bindings` | List bindings |
 | `POST /api/rest/projects/{projectId}/surface-bindings` | Create binding |
 | `PATCH /api/rest/projects/{projectId}/surface-bindings/{id}` | Update (uses `FieldUpdate<T>` sentinel for nullable fields) |

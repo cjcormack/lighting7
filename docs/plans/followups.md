@@ -812,7 +812,7 @@ that reviving a long-dormant install needs a clean clone.
 `Application.module()` parallel to `AutoSyncScheduler`, ticking daily over every
 `sync_configs.enabled = true` project — not just auto-sync ones, since manual-sync projects
 accumulate tombstones too. A manual
-`POST /api/rest/project/{id}/sync/maintenance/gc-tombstones` surfaces the same operation for
+`POST /api/rest/projects/{id}/sync/maintenance/gc-tombstones` surfaces the same operation for
 operators and tests.
 
 **Ordering is an invariant.** Per project: (1) snapshot a commit that `git rm`s the tombstone,

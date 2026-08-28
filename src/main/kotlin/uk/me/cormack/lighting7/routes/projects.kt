@@ -9,6 +9,7 @@ import io.ktor.server.resources.post
 import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.server.routing.get as routingGet
 import io.ktor.server.routing.post as routingPost
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -99,9 +100,9 @@ internal suspend inline fun RoutingContext.withCurrentProject(
 }
 
 internal fun Route.routeApiRestProjects(state: State) {
-    route("/project") {
-        // GET /list - List all projects
-        get("/list") {
+    route("/projects") {
+        // GET / - List all projects
+        routingGet {
             val projects = transaction(state.database) {
                 DaoProject.all().orderBy(DaoProjects.name to SortOrder.ASC).map { it.toListDto() }
             }
@@ -109,7 +110,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         }
 
         // GET /current - Get current project
-        get("/current") {
+        routingGet("/current") {
             val project = transaction(state.database) {
                 state.projectManager.currentProject.toDetailDto()
             }

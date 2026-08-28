@@ -301,7 +301,7 @@ class UsersRoutesTest : RouteIntegrationTest() {
         val admin = client.loginCookieHeader("boss")
         val victim = client.loginCookieHeader("op")
 
-        assertEquals(HttpStatusCode.OK, client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, victim) }.status)
+        assertEquals(HttpStatusCode.OK, client.get("/api/rest/projects") { header(HttpHeaders.Cookie, victim) }.status)
 
         val disable = client.put("/api/rest/users/${operator.userId}") {
             header(HttpHeaders.Cookie, admin)
@@ -312,7 +312,7 @@ class UsersRoutesTest : RouteIntegrationTest() {
 
         assertEquals(
             HttpStatusCode.Unauthorized,
-            client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, victim) }.status,
+            client.get("/api/rest/projects") { header(HttpHeaders.Cookie, victim) }.status,
             "a disabled account's live session must stop working, not just stop logging in",
         )
     }
@@ -335,7 +335,7 @@ class UsersRoutesTest : RouteIntegrationTest() {
 
         assertEquals(
             HttpStatusCode.Unauthorized,
-            client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, victim) }.status,
+            client.get("/api/rest/projects") { header(HttpHeaders.Cookie, victim) }.status,
         )
         val old = client.post("/api/rest/auth/login") {
             contentType(ContentType.Application.Json)

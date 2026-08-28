@@ -149,8 +149,8 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
                 rows = listOf(assignment("fixture", "hex-2", "dimmer", "100")),
                 stackId = stackB,
             )
-            client.post("/api/rest/project/$projectId/cues/$cueA/apply")
-            client.post("/api/rest/project/$projectId/cues/$cueB/apply")
+            client.post("/api/rest/projects/$projectId/cues/$cueA/apply")
+            client.post("/api/rest/projects/$projectId/cues/$cueB/apply")
 
             // Busk over both, plus one property no cue drives at all.
             setProgrammer("hex-1", "dimmer", "255")
@@ -201,8 +201,8 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
             rows = listOf(assignment("fixture", "hex-2", "dimmer", "100")),
             stackId = stackB,
         )
-        client.post("/api/rest/project/$projectId/cues/$cueA/apply")
-        client.post("/api/rest/project/$projectId/cues/$cueB/apply")
+        client.post("/api/rest/projects/$projectId/cues/$cueA/apply")
+        client.post("/api/rest/projects/$projectId/cues/$cueB/apply")
         setProgrammer("hex-1", "dimmer", "255")
         setProgrammer("hex-2", "dimmer", "10")
 
@@ -438,11 +438,11 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
 
     /** The cue's assignments as `targetKey → value`. */
     private suspend fun HttpClient.cueRows(cueId: Int): Map<String, String> =
-        get("/api/rest/project/$projectId/cues/$cueId")
+        get("/api/rest/projects/$projectId/cues/$cueId")
             .body<CueDetails>().propertyAssignments.associate { it.targetKey to it.value }
 
     private suspend fun HttpClient.cueRowsByProperty(cueId: Int): Map<String, String> =
-        get("/api/rest/project/$projectId/cues/$cueId")
+        get("/api/rest/projects/$projectId/cues/$cueId")
             .body<CueDetails>().propertyAssignments.associate { it.propertyName to it.value }
 
     private fun assignment(type: String, key: String, property: String, value: String) =
@@ -461,7 +461,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
     )
 
     private suspend fun HttpClient.cueLayers(cueId: Int): List<CueLayerDto> =
-        get("/api/rest/project/$projectId/cues/$cueId").body<CueDetails>().layers
+        get("/api/rest/projects/$projectId/cues/$cueId").body<CueDetails>().layers
 
     private fun setProgrammer(fixtureKey: String, property: String, value: String) {
         ProgrammerHandler.set(state, TargetRef.Fixture(fixtureKey), property, value, 0)

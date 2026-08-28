@@ -61,7 +61,7 @@ private const val TEMPLATE_NOT_FOUND = "Template not found"
  *    property where every target agrees and keeping per-fixture rows where they do not.
  */
 internal fun Route.routeApiRestProjectTemplates(state: State) {
-    // GET /project/{id}/templates?family=COLOUR
+    // GET /projects/{id}/templates?family=COLOUR
     get<ProjectTemplatesResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val familyFilter = resource.family?.trim()?.takeIf { it.isNotEmpty() }
@@ -94,7 +94,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // GET /project/{id}/templates/{templateId}
+    // GET /projects/{id}/templates/{templateId}
     get<ProjectTemplateResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val dto = transaction(state.database) {
@@ -110,7 +110,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /project/{id}/templates
+    // POST /projects/{id}/templates
     post<ProjectTemplatesResource> { resource ->
         withCurrentProject(state, resource.projectId) { project ->
             val request = call.receive<TemplateInput>()
@@ -153,7 +153,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // PUT /project/{id}/templates/{templateId}
+    // PUT /projects/{id}/templates/{templateId}
     //
     // Unlike the Look PUT this takes a typed body rather than a raw `JsonObject`. The
     // absent-versus-empty distinction that forced the raw decode there does not arise: a template
@@ -220,7 +220,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // DELETE /project/{id}/templates/{templateId}?force=true
+    // DELETE /projects/{id}/templates/{templateId}?force=true
     delete<ProjectTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val outcome = transaction(state.database) {
@@ -268,7 +268,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /project/{id}/templates/resolve — the editor's "resolves to" panel.
+    // POST /projects/{id}/templates/resolve — the editor's "resolves to" panel.
     post<TemplateResolveResource> { resource ->
         withProject(state, resource.parent.projectId) { _ ->
             val request = call.receive<TemplateResolveRequest>()
@@ -280,7 +280,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /project/{id}/templates/{templateId}/apply — click: literals into the programmer.
+    // POST /projects/{id}/templates/{templateId}/apply — click: literals into the programmer.
     post<ApplyTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<ApplyTemplateRequest>()
@@ -303,7 +303,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /project/{id}/templates/{templateId}/toggle — ⌥click and the busking pads.
+    // POST /projects/{id}/templates/{templateId}/toggle — ⌥click and the busking pads.
     post<ToggleTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<ToggleTemplateRequest>()

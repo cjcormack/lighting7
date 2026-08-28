@@ -12,7 +12,7 @@ import java.util.UUID
 /**
  * The `speedMasters.*` WS family — live tempo control and streaming for the speed-master
  * bank, and the desk's only WS tempo surface. CRUD (create/rename/delete) is REST
- * (`/project/{id}/speed-masters`) with a `speedMasterListChanged` invalidation broadcast;
+ * (`/projects/{id}/speed-masters`) with a `speedMasterListChanged` invalidation broadcast;
  * this family carries only what changes at performance rate: per-master BPM.
  *
  * A master is addressed by uuid throughout, with `null` meaning master 1 on every *inbound*

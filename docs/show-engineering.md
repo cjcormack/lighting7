@@ -53,7 +53,7 @@ show_entries
 
 ## REST API
 
-All endpoints under `/api/rest/project/{projectId}/show`.
+All endpoints under `/api/rest/projects/{projectId}/show`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

@@ -22,11 +22,11 @@ import uk.me.cormack.lighting7.state.State
 /**
  * Control-surface binding CRUD.
  *
- *   - `GET    /api/rest/project/{projectId}/surfaceBindings`
- *   - `POST   /api/rest/project/{projectId}/surfaceBindings`
- *   - `GET    /api/rest/project/{projectId}/surfaceBindings/{bindingId}`
- *   - `PATCH  /api/rest/project/{projectId}/surfaceBindings/{bindingId}`
- *   - `DELETE /api/rest/project/{projectId}/surfaceBindings/{bindingId}`
+ *   - `GET    /api/rest/projects/{projectId}/surface-bindings`
+ *   - `POST   /api/rest/projects/{projectId}/surface-bindings`
+ *   - `GET    /api/rest/projects/{projectId}/surface-bindings/{bindingId}`
+ *   - `PATCH  /api/rest/projects/{projectId}/surface-bindings/{bindingId}`
+ *   - `DELETE /api/rest/projects/{projectId}/surface-bindings/{bindingId}`
  *
  * All mutations go through [ControlSurfaceBindingService], which keeps an in-memory cache
  * in sync with the DB and broadcasts [ControlSurfaceBindingService.BindingChange] events.
@@ -159,7 +159,7 @@ private fun validateRequestShape(
 
 // ─── Resources ─────────────────────────────────────────────────────────────
 
-@Resource("/{projectId}/surfaceBindings")
+@Resource("/{projectId}/surface-bindings")
 data class ProjectSurfaceBindingsResource(val projectId: String)
 
 @Resource("/{bindingId}")

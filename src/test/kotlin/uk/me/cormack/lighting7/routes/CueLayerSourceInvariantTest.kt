@@ -180,7 +180,7 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
 
         // Into the same project: a cross-project copy would also carry the source project's
         // template reference across, which is a different problem and not this test's.
-        val resp = client.post("/api/rest/project/$projectId/cues/$sourceCueId/copy") {
+        val resp = client.post("/api/rest/projects/$projectId/cues/$sourceCueId/copy") {
             contentType(ContentType.Application.Json)
             setBody(CopyCueRequest(targetProjectId = projectId, newName = "copied"))
         }
@@ -198,7 +198,7 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
 
         // And the copy is readable: `toDto` resolves the layer's source rather than dropping it,
         // which is what a row naming neither record would now do.
-        val details = client.get("/api/rest/project/$projectId/cues/$copiedCueId")
+        val details = client.get("/api/rest/projects/$projectId/cues/$copiedCueId")
         assertEquals(HttpStatusCode.OK, details.status, details.bodyAsText())
         val source = assertNotNull(details.body<CueDetails>().layers.single().source)
         assertEquals(LayerSourceKind.TEMPLATE.name, source.kind)

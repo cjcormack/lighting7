@@ -49,7 +49,7 @@ private const val LOOK_PREVIEW_SIZE = 8
 private const val LOOK_NOT_FOUND = "Look not found"
 
 internal fun Route.routeApiRestProjectLooks(state: State) {
-    // GET /project/{id}/looks?family=COLOUR
+    // GET /projects/{id}/looks?family=COLOUR
     get<ProjectLooksResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val familyFilter = resource.family?.trim()?.takeIf { it.isNotEmpty() }
@@ -81,7 +81,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
         }
     }
 
-    // GET /project/{id}/looks/{lookId}
+    // GET /projects/{id}/looks/{lookId}
     get<ProjectLookResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val details = transaction(state.database) {
@@ -97,7 +97,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
         }
     }
 
-    // POST /project/{id}/looks
+    // POST /projects/{id}/looks
     post<ProjectLooksResource> { resource ->
         withCurrentProject(state, resource.projectId) { project ->
             val request = call.receive<CreateLookRequest>()
@@ -142,7 +142,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
         }
     }
 
-    // PUT /project/{id}/looks/{lookId}
+    // PUT /projects/{id}/looks/{lookId}
     //
     // Received as a raw JsonObject so absent and explicitly-null are distinguishable: omitting
     // `rows` leaves the contents alone (metadata-only edit), while sending `[]` empties them.
@@ -210,7 +210,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
         }
     }
 
-    // DELETE /project/{id}/looks/{lookId}?force=true
+    // DELETE /projects/{id}/looks/{lookId}?force=true
     delete<ProjectLookResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val outcome = transaction(state.database) {
@@ -253,7 +253,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
         }
     }
 
-    // POST /project/{id}/looks/{lookId}/copy
+    // POST /projects/{id}/looks/{lookId}/copy
     post<CopyLookResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val request = call.receive<CopyLookRequest>()
@@ -333,7 +333,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
         }
     }
 
-    // POST /project/{id}/looks/{lookId}/toggle
+    // POST /projects/{id}/looks/{lookId}/toggle
     //
     // The busking-pad path: put this Look on these targets, or take it off again. Addresses a Look
     // as a *bundle* rather than through a layer, which is what a pad wants — and only its

@@ -29,14 +29,14 @@ class CueCrudRoundTripTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val stackResp = client.post("/api/rest/project/$projectId/cue-stacks") {
+        val stackResp = client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = "stack-a"))
         }
         assertEquals(HttpStatusCode.Created, stackResp.status, stackResp.bodyAsText())
         val stackId = stackResp.body<CueStackDetails>().id
 
-        val createResp = client.post("/api/rest/project/$projectId/cues") {
+        val createResp = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "cue-1", cueStackId = stackId))
         }
@@ -44,7 +44,7 @@ class CueCrudRoundTripTest : RouteIntegrationTest() {
         val cueId = createResp.body<CueDetails>().id
 
         // Partial update: change notes only, leave name unchanged.
-        val patchResp = client.patch("/api/rest/project/$projectId/cues/$cueId") {
+        val patchResp = client.patch("/api/rest/projects/$projectId/cues/$cueId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("notes", JsonPrimitive("backstage change"))
@@ -54,21 +54,21 @@ class CueCrudRoundTripTest : RouteIntegrationTest() {
         val patched = patchResp.body<CueDetails>()
         assertEquals("cue-1", patched.name, "PATCH without 'name' must leave name unchanged")
 
-        val list = client.get("/api/rest/project/$projectId/cues").body<List<CueDetails>>()
+        val list = client.get("/api/rest/projects/$projectId/cues").body<List<CueDetails>>()
         assertTrue(list.any { it.id == cueId }, "listed cues should include the created one")
 
-        val getResp = client.get("/api/rest/project/$projectId/cues/$cueId")
+        val getResp = client.get("/api/rest/projects/$projectId/cues/$cueId")
         assertEquals(HttpStatusCode.OK, getResp.status)
         val details = getResp.body<CueDetails>()
         assertEquals("cue-1", details.name)
         assertEquals(stackId, details.cueStackId)
 
-        val deleteResp = client.delete("/api/rest/project/$projectId/cues/$cueId")
+        val deleteResp = client.delete("/api/rest/projects/$projectId/cues/$cueId")
         assertEquals(HttpStatusCode.OK, deleteResp.status)
-        val getAfterResp = client.get("/api/rest/project/$projectId/cues/$cueId")
+        val getAfterResp = client.get("/api/rest/projects/$projectId/cues/$cueId")
         assertEquals(HttpStatusCode.NotFound, getAfterResp.status)
         assertNull(
-            client.get("/api/rest/project/$projectId/cues").body<List<CueDetails>>()
+            client.get("/api/rest/projects/$projectId/cues").body<List<CueDetails>>()
                 .firstOrNull { it.id == cueId },
             "deleted cue should not appear in list",
         )
@@ -79,7 +79,7 @@ class CueCrudRoundTripTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val resp = client.post("/api/rest/project/$projectId/cues") {
+        val resp = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "loose", cueStackId = null))
         }

@@ -46,7 +46,7 @@ class HttpRoundTripTest : RouteIntegrationTest() {
 
         // Universe 0 is pre-seeded as MOCK so DbFixtureLoader instantiates
         // MockDmxController (no UDP socket, no GlobalScope coroutines).
-        val patchResp = client.post("/api/rest/project/$projectId/patches") {
+        val patchResp = client.post("/api/rest/projects/$projectId/patches") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreatePatchRequest(
@@ -96,7 +96,7 @@ class HttpRoundTripTest : RouteIntegrationTest() {
             assertEquals(HttpStatusCode.OK, snapResp.status, "snapshot body: ${snapResp.bodyAsText()}")
         }
 
-        val getResp = client.get("/api/rest/project/$projectId/cues/$targetCueId")
+        val getResp = client.get("/api/rest/projects/$projectId/cues/$targetCueId")
         assertEquals(HttpStatusCode.OK, getResp.status)
         val details = getResp.body<CueDetails>()
         val dimmerRow = details.propertyAssignments.singleOrNull {
@@ -109,14 +109,14 @@ class HttpRoundTripTest : RouteIntegrationTest() {
 
     private suspend fun createEmptyCue(client: HttpClient, name: String): Int {
         // Every cue belongs to a stack now; give each test cue its own stack.
-        val stackResp = client.post("/api/rest/project/$projectId/cue-stacks") {
+        val stackResp = client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = "$name stack"))
         }
         assertEquals(HttpStatusCode.Created, stackResp.status, "create stack for '$name' body: ${stackResp.bodyAsText()}")
         val stackId = stackResp.body<CueStackDetails>().id
 
-        val resp = client.post("/api/rest/project/$projectId/cues") {
+        val resp = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = name, cueStackId = stackId))
         }

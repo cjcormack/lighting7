@@ -19,7 +19,7 @@ import uk.me.cormack.lighting7.state.State
  */
 internal fun Route.routeApiRestFx(state: State) {
     route("/fx") {
-        // Tempo is not here. Speed masters own it: `PUT /project/{id}/speed-masters/{mid}`
+        // Tempo is not here. Speed masters own it: `PUT /projects/{id}/speed-masters/{mid}`
         // for a typed/stored tempo, and the `speedMasters.*` WS family for live control.
         // Active effects endpoints
         get<ActiveEffects> {

@@ -96,7 +96,7 @@ remain unique per stack via the partial index `uq_cue_number_per_stack`.
 
 ## REST API
 
-All endpoints are scoped under `/api/rest/project/{projectId}/cues`.
+All endpoints are scoped under `/api/rest/projects/{projectId}/cues`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

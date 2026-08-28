@@ -175,14 +175,14 @@ R3F is Y-up by default. Either:
 
 ### Per-patch geometry — `FixturePatchDto`
 
-Returned by `GET /api/rest/project/{projectId}/patches`:
+Returned by `GET /api/rest/projects/{projectId}/patches`:
 
 ```typescript
 interface FixturePatchDto {
   id: number;
   key: string;            // stable per-rig identifier; matches fixtureId in the live DMX feed
   displayName: string;
-  fixtureTypeKey: string; // looks up channelCount + capability flags from /fixture/types
+  fixtureTypeKey: string; // looks up channelCount + capability flags from /fixture-types
   // …channel + group fields…
 
   // Patch-frame offsets — interpreted in the rigging's local frame if riggingUuid is set,
@@ -210,7 +210,7 @@ angle, not the live aim. Live aim = base composed with the runtime
 
 ### Riggings — `RiggingDto`
 
-Returned by `GET /api/rest/project/{projectId}/riggings`:
+Returned by `GET /api/rest/projects/{projectId}/riggings`:
 
 ```typescript
 interface RiggingDto {
@@ -242,7 +242,7 @@ The visualiser can either:
 
 ### Stage shape — `StageRegionDto`
 
-Returned by `GET /api/rest/project/{projectId}/stageRegions`:
+Returned by `GET /api/rest/projects/{projectId}/stage-regions`:
 
 ```typescript
 interface StageRegionDto {

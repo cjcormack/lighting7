@@ -54,7 +54,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         assertEquals(3, body.updated.size)
         assertTrue(body.failed.isEmpty())
 
-        val list = client.get("/api/rest/project/$projectId/patches").body<List<FixturePatchDto>>()
+        val list = client.get("/api/rest/projects/$projectId/patches").body<List<FixturePatchDto>>()
         assertEquals(1.0, list.first { it.key == "bulk-a" }.stageX)
         assertEquals(6.0, list.first { it.key == "bulk-c" }.stageY)
     }
@@ -70,7 +70,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
             assertEquals(HttpStatusCode.OK, it.status, it.bodyAsText())
         }
 
-        val patch = client.get("/api/rest/project/$projectId/patches/$id").body<FixturePatchDto>()
+        val patch = client.get("/api/rest/projects/$projectId/patches/$id").body<FixturePatchDto>()
         assertEquals(7.0, patch.stageX, "stageX was absent from the second request, so it must be unchanged")
         assertNull(patch.stageZ, "an explicit JSON null must clear the field")
     }
@@ -95,7 +95,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         }
 
         // And nothing was written.
-        val patch = client.get("/api/rest/project/$projectId/patches/$id").body<FixturePatchDto>()
+        val patch = client.get("/api/rest/projects/$projectId/patches/$id").body<FixturePatchDto>()
         assertNull(patch.stageX)
     }
 
@@ -105,7 +105,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         createPatch(client, "needs-id", 1)
 
-        val resp = client.put("/api/rest/project/$projectId/patches/placements") {
+        val resp = client.put("/api/rest/projects/$projectId/patches/placements") {
             contentType(ContentType.Application.Json)
             setBody(
                 BulkPlacementRequest(
@@ -132,7 +132,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         )
         assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
 
-        val list = client.get("/api/rest/project/$projectId/patches").body<List<FixturePatchDto>>()
+        val list = client.get("/api/rest/projects/$projectId/patches").body<List<FixturePatchDto>>()
         assertNull(
             list.first { it.key == "atomic-good" }.stageX,
             "the valid entry must not be applied when an atomic batch fails",
@@ -159,7 +159,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         )
         assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
 
-        val patch = client.get("/api/rest/project/$projectId/patches/$good").body<FixturePatchDto>()
+        val patch = client.get("/api/rest/projects/$projectId/patches/$good").body<FixturePatchDto>()
         assertNull(patch.stageX, "the earlier entry must not have been committed")
     }
 
@@ -178,7 +178,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         )
         assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
 
-        val patch = client.get("/api/rest/project/$projectId/patches/$good").body<FixturePatchDto>()
+        val patch = client.get("/api/rest/projects/$projectId/patches/$good").body<FixturePatchDto>()
         assertNull(patch.stageX, "the earlier entry must not have been committed")
     }
 
@@ -189,7 +189,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         val good = createPatch(client, "partial-good", 1)
         val missing = 999_999
 
-        val resp = client.put("/api/rest/project/$projectId/patches/placements") {
+        val resp = client.put("/api/rest/projects/$projectId/patches/placements") {
             contentType(ContentType.Application.Json)
             setBody(
                 BulkPlacementRequest(
@@ -207,7 +207,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         assertEquals(1, body.failed.size)
         assertEquals(missing, body.failed.first().patchId)
 
-        val patch = client.get("/api/rest/project/$projectId/patches/$good").body<FixturePatchDto>()
+        val patch = client.get("/api/rest/projects/$projectId/patches/$good").body<FixturePatchDto>()
         assertEquals(4.0, patch.stageX)
     }
 
@@ -218,7 +218,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         val id = createPatch(client, "cross-project", 1)
 
         // Same patch id, wrong project — the id must not be reachable.
-        val resp = client.put("/api/rest/project/${projectId + 5000}/patches/placements") {
+        val resp = client.put("/api/rest/projects/${projectId + 5000}/patches/placements") {
             contentType(ContentType.Application.Json)
             setBody(BulkPlacementRequest(updates = listOf(entry(id, "stageX" to JsonPrimitive(1.0)))))
         }
@@ -233,7 +233,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val rigging = client.post("/api/rest/project/$projectId/riggings") {
+        val rigging = client.post("/api/rest/projects/$projectId/riggings") {
             contentType(ContentType.Application.Json)
             setBody(CreateRiggingRequest(name = "Short Bar", lengthM = 4.0))
         }.body<RiggingDto>()
@@ -257,7 +257,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         assertTrue(body.warnings.first().contains("Short Bar"), body.warnings.first())
 
         // Reported, never clamped — the value the user asked for is what's stored.
-        val patch = client.get("/api/rest/project/$projectId/patches/$id").body<FixturePatchDto>()
+        val patch = client.get("/api/rest/projects/$projectId/patches/$id").body<FixturePatchDto>()
         assertEquals(5.0, patch.stageX)
     }
 
@@ -265,7 +265,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
     fun `no warning for a placement inside the truss`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val rigging = client.post("/api/rest/project/$projectId/riggings") {
+        val rigging = client.post("/api/rest/projects/$projectId/riggings") {
             contentType(ContentType.Application.Json)
             setBody(CreateRiggingRequest(name = "Long Bar", lengthM = 12.0))
         }.body<RiggingDto>()
@@ -313,7 +313,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
     fun `empty update list is a no-op`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val resp = client.put("/api/rest/project/$projectId/patches/placements") {
+        val resp = client.put("/api/rest/projects/$projectId/patches/placements") {
             contentType(ContentType.Application.Json)
             setBody(BulkPlacementRequest(updates = emptyList()))
         }
@@ -327,7 +327,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val updates = (1..501).map { entry(it, "stageX" to JsonPrimitive(0.0)) }
-        val resp = client.put("/api/rest/project/$projectId/patches/placements") {
+        val resp = client.put("/api/rest/projects/$projectId/patches/placements") {
             contentType(ContentType.Application.Json)
             setBody(BulkPlacementRequest(updates = updates))
         }
@@ -345,7 +345,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
     private suspend fun placements(
         client: io.ktor.client.HttpClient,
         vararg updates: JsonObject,
-    ) = client.put("/api/rest/project/$projectId/patches/placements") {
+    ) = client.put("/api/rest/projects/$projectId/patches/placements") {
         contentType(ContentType.Application.Json)
         setBody(BulkPlacementRequest(updates = updates.toList()))
     }
@@ -355,7 +355,7 @@ class BulkPlacementRouteTest : RouteIntegrationTest() {
         key: String,
         startChannel: Int,
     ): Int {
-        val resp = client.post("/api/rest/project/$projectId/patches") {
+        val resp = client.post("/api/rest/projects/$projectId/patches") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreatePatchRequest(

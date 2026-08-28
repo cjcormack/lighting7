@@ -351,7 +351,7 @@ The universe-configs route is the consumer, with two fields:
 | `address` | `resolveUniverseAddress` / `setUniverseAddress` | Controller IP. Changing it rebuilds controllers via `DbFixtureLoader`. |
 | `refreshIntervalMs` | `resolveUniverseRefreshIntervalMs` / `setUniverseRefreshIntervalMs` | Art-Net transmit interval, `23..1000` ms, default 25. Hot-swaps on the running controller — no rebuild. See [dmx-engineering.md §Refresh interval](dmx-engineering.md#refresh-interval). |
 
-`PUT /api/rest/project/{id}/universe-configs/{configId}` upserts either; `GET`
+`PUT /api/rest/projects/{id}/universe-configs/{configId}` upserts either; `GET`
 reads them back, reporting `refreshIntervalMs` as an *effective* value plus a
 `refreshIntervalOverridden` flag so the UI can distinguish "the default" from
 "pinned on this desk". Clearing the interval needs the explicit
@@ -605,7 +605,7 @@ so the UI form always has data to render even on the very first visit.
 
 ### REST surface
 
-All endpoints live under `/api/rest/project/{projectId}/sync/...`:
+All endpoints live under `/api/rest/projects/{projectId}/sync/...`:
 
 | Method | Path | What it does |
 |---|---|---|
@@ -639,7 +639,7 @@ own log/status calls.
 Phase 4 turns the local-only working tree into a sharing surface: one project,
 one GitHub repo, push and pull via [JGit][jgit]. The user clicks **Sync now**
 on `/projects/{id}/sync` and a single REST endpoint —
-`POST /api/rest/project/{id}/sync/run` — owns the entire pipeline.
+`POST /api/rest/projects/{id}/sync/run` — owns the entire pipeline.
 
 ### `sync/run` pipeline
 
@@ -960,11 +960,11 @@ the old PAT lookup; the user has to re-enter the token under the new URL.
 
 REST surface:
 
-* `PUT /api/rest/project/{id}/sync/credentials` — body `{ pat }`. The repo
+* `PUT /api/rest/projects/{id}/sync/credentials` — body `{ pat }`. The repo
   URL must be set first; the PAT is keyed against it.
-* `DELETE /api/rest/project/{id}/sync/credentials` — clears the entry.
+* `DELETE /api/rest/projects/{id}/sync/credentials` — clears the entry.
   No-op if none exists.
-* `GET /api/rest/project/{id}/sync/config` returns `tokenPresent: Boolean`
+* `GET /api/rest/projects/{id}/sync/config` returns `tokenPresent: Boolean`
   so the UI can render "✓ stored" without round-tripping the secret.
 
 The PAT itself is **never** sent to the client. Rotation = clear + re-enter.
@@ -1487,7 +1487,7 @@ so the frontend's activity feed updates live. Consumers don't need to re-fetch
 `/sync/activity` while the WS is connected — but a fresh page-load reads from the
 endpoint, so the persisted ring is the source of truth.
 
-`GET /api/rest/project/{id}/sync/activity?limit=…&beforeId=…` paginates newest-first.
+`GET /api/rest/projects/{id}/sync/activity?limit=…&beforeId=…` paginates newest-first.
 `beforeId` is the smallest id from the previous page; `limit` is clamped to
 [`MAX_LIST_LIMIT`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SyncLogger.kt) = 500.
 

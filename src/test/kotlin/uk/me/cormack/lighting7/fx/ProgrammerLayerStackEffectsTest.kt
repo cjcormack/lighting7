@@ -52,7 +52,7 @@ class ProgrammerLayerStackEffectsTest : RouteIntegrationTest() {
      * actually about: it fans over whatever targets the layer names.
      */
     private suspend fun io.ktor.client.HttpClient.createLook(name: String, dimmer: String): LookDetails =
-        post("/api/rest/project/$projectId/looks") {
+        post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreateLookRequest(

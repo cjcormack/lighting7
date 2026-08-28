@@ -103,7 +103,7 @@ class ProgrammerOwnershipCollisionTest : RouteIntegrationTest() {
         seedHex("hex-layer", startChannel = 1)
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
 
-        val look = client.post("/api/rest/project/$projectId/looks") {
+        val look = client.post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreateLookRequest(

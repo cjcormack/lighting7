@@ -22,19 +22,19 @@ import kotlin.test.assertEquals
 class ProgramTransportTest : RouteIntegrationTest() {
 
     private suspend fun createStack(client: io.ktor.client.HttpClient, name: String): Int =
-        client.post("/api/rest/project/$projectId/cue-stacks") {
+        client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = name))
         }.body<CueStackDetails>().id
 
     private suspend fun createSeparator(client: io.ktor.client.HttpClient, label: String): Int =
-        client.post("/api/rest/project/$projectId/cue-stacks") {
+        client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = label, type = "SEPARATOR", label = label))
         }.body<CueStackDetails>().id
 
     private suspend fun createCue(client: io.ktor.client.HttpClient, name: String, stackId: Int) {
-        val resp = client.post("/api/rest/project/$projectId/cues") {
+        val resp = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = name, cueStackId = stackId))
         }
@@ -53,20 +53,20 @@ class ProgramTransportTest : RouteIntegrationTest() {
         createCue(client, "a1", stackA)
         createCue(client, "b1", stackB)
 
-        val activated = client.post("/api/rest/project/$projectId/show/activate")
+        val activated = client.post("/api/rest/projects/$projectId/show/activate")
             .body<ShowActivateResponse>()
         assertEquals(stackA, activated.activeStackId, "activate should land on the first runnable stack")
 
-        val advanced = client.post("/api/rest/project/$projectId/show/advance") {
+        val advanced = client.post("/api/rest/projects/$projectId/show/advance") {
             contentType(ContentType.Application.Json)
             setBody(AdvanceShowRequest(direction = "FORWARD"))
         }.body<ShowActivateResponse>()
         assertEquals(stackB, advanced.activeStackId, "advance FORWARD should skip the separator")
 
-        val show = client.get("/api/rest/project/$projectId/show").body<ShowDetails>()
+        val show = client.get("/api/rest/projects/$projectId/show").body<ShowDetails>()
         assertEquals(stackB, show.activeStackId)
 
-        val goToSeparator = client.post("/api/rest/project/$projectId/show/go-to") {
+        val goToSeparator = client.post("/api/rest/projects/$projectId/show/go-to") {
             contentType(ContentType.Application.Json)
             setBody(GoToStackRequest(stackId = separator))
         }

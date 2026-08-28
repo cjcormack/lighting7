@@ -25,7 +25,7 @@ import kotlin.test.assertNull
 class CueStandbyRouteTest : RouteIntegrationTest() {
 
     private suspend fun createStack(client: HttpClient, name: String): Int =
-        client.post("/api/rest/project/$projectId/cue-stacks") {
+        client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = name))
         }.body<CueStackDetails>().id
@@ -36,7 +36,7 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
         stackId: Int,
         cueType: String = "STANDARD",
     ): Int {
-        val resp = client.post("/api/rest/project/$projectId/cues") {
+        val resp = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = name, cueStackId = stackId, cueType = cueType))
         }
@@ -45,16 +45,16 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
     }
 
     private suspend fun stack(client: HttpClient, stackId: Int): CueStackDetails =
-        client.get("/api/rest/project/$projectId/cue-stacks/$stackId").body()
+        client.get("/api/rest/projects/$projectId/cue-stacks/$stackId").body()
 
     private suspend fun arm(client: HttpClient, stackId: Int, cueId: Int?) =
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackId/standby") {
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/standby") {
             contentType(ContentType.Application.Json)
             setBody(SetStandbyRequest(cueId = cueId))
         }
 
     private suspend fun advance(client: HttpClient, stackId: Int, direction: String = "FORWARD") =
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackId/advance") {
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/advance") {
             contentType(ContentType.Application.Json)
             setBody(AdvanceCueStackRequest(direction = direction))
         }
@@ -69,7 +69,7 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
         val cue2 = createCue(client, "a2", stackId)
         val cue3 = createCue(client, "a3", stackId)
 
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackId/activate") {
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
             setBody(ActivateCueStackRequest(cueId = cue1))
         }
@@ -111,7 +111,7 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
         val cue2 = createCue(client, "a2", stackId)
         val cue3 = createCue(client, "a3", stackId)
 
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackId/activate") {
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
             setBody(ActivateCueStackRequest(cueId = cue1))
         }
@@ -165,7 +165,7 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
         }
 
         // The client calls activate with no cueId — the armed cue is the server's business now.
-        val started = client.post("/api/rest/project/$projectId/cue-stacks/$stackId/activate") {
+        val started = client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
             setBody(ActivateCueStackRequest())
         }.body<CueStackActivateResponse>()
@@ -184,7 +184,7 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
         val cue2 = createCue(client, "a2", stackId)
         val cue3 = createCue(client, "a3", stackId)
 
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackId/activate") {
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
             setBody(ActivateCueStackRequest(cueId = cue2))
         }
@@ -203,12 +203,12 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
         val cue1 = createCue(client, "a1", stackId)
         val cue2 = createCue(client, "a2", stackId)
 
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackId/activate") {
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
             setBody(ActivateCueStackRequest(cueId = cue1))
         }
         arm(client, stackId, cue2)
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackId/deactivate")
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/deactivate")
 
         stack(client, stackId).let {
             assertNull(it.activeCueId)

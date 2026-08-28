@@ -33,7 +33,7 @@ import kotlin.test.assertTrue
  */
 class TemplateRoutesTest : RouteIntegrationTest() {
 
-    private fun base() = "/api/rest/project/$projectId/templates"
+    private fun base() = "/api/rest/projects/$projectId/templates"
 
     private fun colourRow(value: String = "#FF9D4A;policy=extract") = TemplateRowDto(
         targetType = DEFERRED_TARGET_TYPE, targetKey = "",
@@ -370,7 +370,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
     fun `a look row may no longer be deferred, because that is a template now`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val resp = client.post("/api/rest/project/$projectId/looks") {
+        val resp = client.post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreateLookRequest(
@@ -386,7 +386,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         }
         assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
         assertTrue(resp.bodyAsText().contains("is a template"), resp.bodyAsText())
-        assertNull(client.get("/api/rest/project/$projectId/looks").body<List<LookDto>>()
+        assertNull(client.get("/api/rest/projects/$projectId/looks").body<List<LookDto>>()
             .firstOrNull { it.name == "should-not-exist" })
     }
     // ─── New from selection ─────────────────────────────────────────────

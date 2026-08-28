@@ -315,7 +315,7 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - **Swagger UI**: `http://localhost:8413/openapi`
 
 ### FX REST Endpoints
-- `GET/POST /api/rest/project/{id}/speed-masters` + `GET/PUT/DELETE .../{mid}` - Speed-master CRUD, and the only REST tempo surface: `PUT` with `bpm` sets the stored default *and* retunes the live clock when the project is current (delete guards: `SPEED_MASTER_PROTECTED` for master 1, `SPEED_MASTER_IN_USE` when referenced). Tap is WS-only (`speedMasters.tap`)
+- `GET/POST /api/rest/projects/{id}/speed-masters` + `GET/PUT/DELETE .../{mid}` - Speed-master CRUD, and the only REST tempo surface: `PUT` with `bpm` sets the stored default *and* retunes the live clock when the project is current (delete guards: `SPEED_MASTER_PROTECTED` for master 1, `SPEED_MASTER_IN_USE` when referenced). Tap is WS-only (`speedMasters.tap`)
 - `GET /api/rest/fx/active` - List active effects
 - `POST /api/rest/fx/add` - Add effect to fixture
 - `DELETE /api/rest/fx/{id}` - Remove effect
@@ -323,8 +323,8 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `GET /api/rest/fx/library` - Available effect types
 
 ### Cue Stack Run Endpoints
-- `POST /api/rest/project/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{cueId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby"
-- `POST /api/rest/project/{id}/cue-stacks/{stackId}/preview` - Compose a cue without firing it (`{cueId?}`, null → the effective next). Layer 4 only; see §"Preview compose"
+- `POST /api/rest/projects/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{cueId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby"
+- `POST /api/rest/projects/{id}/cue-stacks/{stackId}/preview` - Compose a cue without firing it (`{cueId?}`, null → the effective next). Layer 4 only; see §"Preview compose"
 
 ### Group REST Endpoints
 - `GET /api/rest/groups` - List all fixture groups
@@ -516,6 +516,7 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 
 For deeper technical details, see the docs in `docs/`:
 
+- [API Conventions](docs/api-conventions.md) - Kebab-case paths, plural collections with the list GET on the collection, one spelling for vocabulary enumerations, `?force=true` as the guard-override, and why unbounded lists are deliberate at desk scale
 - [Testing](docs/testing-engineering.md) - What makes the suite ~1 min rather than ~14 (the four changes, each load-bearing), the warm/cold script-cache regimes, why `build/test-data` is pinned, the tests that assert real elapsed time, and the order-dependence detector
 - [DMX Subsystem](docs/dmx-engineering.md) - Low-level DMX control architecture, ArtNet implementation, fading, transactions
 - [Fixture System](docs/fixtures-engineering.md) - Fixture abstractions, traits, property types, adding new fixtures

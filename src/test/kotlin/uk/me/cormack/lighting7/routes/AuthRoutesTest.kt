@@ -141,7 +141,7 @@ class AuthRoutesTest : RouteIntegrationTest() {
         assertEquals(0, cleared.maxAge, "logout must expire the cookie")
 
         // The revoke is server-side: replaying the old cookie no longer works.
-        val replay = client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, cookie) }
+        val replay = client.get("/api/rest/projects") { header(HttpHeaders.Cookie, cookie) }
         assertEquals(HttpStatusCode.Unauthorized, replay.status)
     }
 
@@ -160,8 +160,8 @@ class AuthRoutesTest : RouteIntegrationTest() {
         }
         assertEquals(HttpStatusCode.NoContent, change.status, change.bodyAsText())
 
-        assertEquals(HttpStatusCode.OK, client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, keeper) }.status)
-        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, doomed) }.status)
+        assertEquals(HttpStatusCode.OK, client.get("/api/rest/projects") { header(HttpHeaders.Cookie, keeper) }.status)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/rest/projects") { header(HttpHeaders.Cookie, doomed) }.status)
     }
 
     @Test
@@ -177,7 +177,7 @@ class AuthRoutesTest : RouteIntegrationTest() {
             setBody(ChangePasswordRequest(currentPassword = "not-the-password", newPassword = "a-new-password"))
         }
         assertEquals(HttpStatusCode.Unauthorized, change.status)
-        assertEquals(HttpStatusCode.OK, client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, cookie) }.status)
+        assertEquals(HttpStatusCode.OK, client.get("/api/rest/projects") { header(HttpHeaders.Cookie, cookie) }.status)
     }
 
     @Test
@@ -204,7 +204,7 @@ class AuthRoutesTest : RouteIntegrationTest() {
 
         // The deliberate contrast with `PUT /auth/password`: a rename revokes nothing, so the
         // session on another device survives it.
-        assertEquals(HttpStatusCode.OK, client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, other) }.status)
+        assertEquals(HttpStatusCode.OK, client.get("/api/rest/projects") { header(HttpHeaders.Cookie, other) }.status)
     }
 
     @Test
@@ -270,8 +270,8 @@ class AuthRoutesTest : RouteIntegrationTest() {
         val revoke = client.delete("/api/rest/auth/sessions") { header(HttpHeaders.Cookie, mine) }
         assertEquals(HttpStatusCode.NoContent, revoke.status)
 
-        assertEquals(HttpStatusCode.OK, client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, mine) }.status)
-        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, other) }.status)
+        assertEquals(HttpStatusCode.OK, client.get("/api/rest/projects") { header(HttpHeaders.Cookie, mine) }.status)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/rest/projects") { header(HttpHeaders.Cookie, other) }.status)
 
         val remaining = client.get("/api/rest/auth/sessions") { header(HttpHeaders.Cookie, mine) }.body<List<SessionInfo>>()
         assertEquals(1, remaining.size)

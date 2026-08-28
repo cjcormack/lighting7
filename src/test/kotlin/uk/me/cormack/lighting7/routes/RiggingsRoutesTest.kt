@@ -30,7 +30,7 @@ class RiggingsRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val createResp = client.post("/api/rest/project/$projectId/riggings") {
+        val createResp = client.post("/api/rest/projects/$projectId/riggings") {
             contentType(ContentType.Application.Json)
             setBody(CreateRiggingRequest(
                 name = "FOH-1",
@@ -50,14 +50,14 @@ class RiggingsRoutesTest : RouteIntegrationTest() {
         assertEquals(6.0, created.positionZ)
         assertEquals(5.0, created.yawDeg)
 
-        val list = client.get("/api/rest/project/$projectId/riggings").body<List<RiggingDto>>()
+        val list = client.get("/api/rest/projects/$projectId/riggings").body<List<RiggingDto>>()
         assertEquals(1, list.size)
         assertEquals(created.id, list[0].id)
 
-        val fetched = client.get("/api/rest/project/$projectId/riggings/${created.id}").body<RiggingDto>()
+        val fetched = client.get("/api/rest/projects/$projectId/riggings/${created.id}").body<RiggingDto>()
         assertEquals(created.uuid, fetched.uuid)
 
-        val putResp = client.put("/api/rest/project/$projectId/riggings/${created.id}") {
+        val putResp = client.put("/api/rest/projects/$projectId/riggings/${created.id}") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("name", JsonPrimitive("FOH Front"))
@@ -75,7 +75,7 @@ class RiggingsRoutesTest : RouteIntegrationTest() {
         assertEquals(-2.0, updated.positionY)
         assertEquals(6.0, updated.positionZ)
 
-        val deleteResp = client.put("/api/rest/project/$projectId/riggings/${created.id}") {
+        val deleteResp = client.put("/api/rest/projects/$projectId/riggings/${created.id}") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("positionX", JsonNull)
@@ -84,9 +84,9 @@ class RiggingsRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, deleteResp.status, "PUT with explicit null clears coord")
         assertNull(deleteResp.body<RiggingDto>().positionX)
 
-        val del = client.delete("/api/rest/project/$projectId/riggings/${created.id}")
+        val del = client.delete("/api/rest/projects/$projectId/riggings/${created.id}")
         assertEquals(HttpStatusCode.NoContent, del.status)
-        val gone = client.get("/api/rest/project/$projectId/riggings/${created.id}")
+        val gone = client.get("/api/rest/projects/$projectId/riggings/${created.id}")
         assertEquals(HttpStatusCode.NotFound, gone.status)
     }
 
@@ -96,21 +96,21 @@ class RiggingsRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         // First rigging — succeeds.
-        val ok = client.post("/api/rest/project/$projectId/riggings") {
+        val ok = client.post("/api/rest/projects/$projectId/riggings") {
             contentType(ContentType.Application.Json)
             setBody(CreateRiggingRequest(name = "Truss A"))
         }
         assertEquals(HttpStatusCode.Created, ok.status)
 
         // Duplicate name — Conflict.
-        val dup = client.post("/api/rest/project/$projectId/riggings") {
+        val dup = client.post("/api/rest/projects/$projectId/riggings") {
             contentType(ContentType.Application.Json)
             setBody(CreateRiggingRequest(name = "Truss A"))
         }
         assertEquals(HttpStatusCode.Conflict, dup.status)
 
         // Out-of-range yaw.
-        val badYaw = client.post("/api/rest/project/$projectId/riggings") {
+        val badYaw = client.post("/api/rest/projects/$projectId/riggings") {
             contentType(ContentType.Application.Json)
             setBody(CreateRiggingRequest(name = "Truss B", yawDeg = 900.0))
         }
@@ -118,7 +118,7 @@ class RiggingsRoutesTest : RouteIntegrationTest() {
         assertTrue(badYaw.bodyAsText().contains("yawDeg"))
 
         // Out-of-range positionZ.
-        val badZ = client.post("/api/rest/project/$projectId/riggings") {
+        val badZ = client.post("/api/rest/projects/$projectId/riggings") {
             contentType(ContentType.Application.Json)
             setBody(CreateRiggingRequest(name = "Truss C", positionZ = 9999.0))
         }
@@ -126,7 +126,7 @@ class RiggingsRoutesTest : RouteIntegrationTest() {
         assertTrue(badZ.bodyAsText().contains("positionZ"))
 
         // Blank name.
-        val blank = client.post("/api/rest/project/$projectId/riggings") {
+        val blank = client.post("/api/rest/projects/$projectId/riggings") {
             contentType(ContentType.Application.Json)
             setBody(CreateRiggingRequest(name = "   "))
         }
@@ -138,12 +138,12 @@ class RiggingsRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val rigging = client.post("/api/rest/project/$projectId/riggings") {
+        val rigging = client.post("/api/rest/projects/$projectId/riggings") {
             contentType(ContentType.Application.Json)
             setBody(CreateRiggingRequest(name = "doomed"))
         }.body<RiggingDto>()
 
-        val patch = client.post("/api/rest/project/$projectId/patches") {
+        val patch = client.post("/api/rest/projects/$projectId/patches") {
             contentType(ContentType.Application.Json)
             setBody(CreatePatchRequest(
                 universe = 0,
@@ -156,10 +156,10 @@ class RiggingsRoutesTest : RouteIntegrationTest() {
         }.body<FixturePatchDto>()
         assertEquals(rigging.uuid, patch.riggingUuid)
 
-        val del = client.delete("/api/rest/project/$projectId/riggings/${rigging.id}")
+        val del = client.delete("/api/rest/projects/$projectId/riggings/${rigging.id}")
         assertEquals(HttpStatusCode.NoContent, del.status)
 
-        val orphaned = client.get("/api/rest/project/$projectId/patches/${patch.id}").body<FixturePatchDto>()
+        val orphaned = client.get("/api/rest/projects/$projectId/patches/${patch.id}").body<FixturePatchDto>()
         assertNull(orphaned.riggingUuid, "patch must be detached when its rigging is deleted")
     }
 
@@ -168,7 +168,7 @@ class RiggingsRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val resp = client.post("/api/rest/project/$projectId/patches") {
+        val resp = client.post("/api/rest/projects/$projectId/patches") {
             contentType(ContentType.Application.Json)
             setBody(CreatePatchRequest(
                 universe = 0,

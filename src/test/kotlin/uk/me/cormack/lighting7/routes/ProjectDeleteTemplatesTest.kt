@@ -52,7 +52,7 @@ class ProjectDeleteTemplatesTest : RouteIntegrationTest() {
             project.id.value to template.id.value
         }
 
-        val del = client.delete("/api/rest/project/$doomedProjectId")
+        val del = client.delete("/api/rest/projects/$doomedProjectId")
         assertEquals(HttpStatusCode.NoContent, del.status, del.bodyAsText())
 
         transaction(state.database) {

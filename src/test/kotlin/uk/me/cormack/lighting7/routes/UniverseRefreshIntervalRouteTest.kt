@@ -32,7 +32,7 @@ import kotlin.test.assertTrue
 class UniverseRefreshIntervalRouteTest : RouteIntegrationTest() {
 
     private suspend fun io.ktor.client.HttpClient.universeConfigs(): List<UniverseConfigDto> =
-        get("/api/rest/project/$projectId/universe-configs").body()
+        get("/api/rest/projects/$projectId/universe-configs").body()
 
     private fun overrideRowCount(field: String): Int = transaction(state.database) {
         Overrides.listForProject(projectId).count { it.fieldName == field }
@@ -57,7 +57,7 @@ class UniverseRefreshIntervalRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val config = client.universeConfigs().single()
 
-        val response = client.put("/api/rest/project/$projectId/universe-configs/${config.id}") {
+        val response = client.put("/api/rest/projects/$projectId/universe-configs/${config.id}") {
             contentType(ContentType.Application.Json)
             setBody(UpdateUniverseConfigRequest(refreshIntervalMs = 44))
         }
@@ -75,13 +75,13 @@ class UniverseRefreshIntervalRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val config = client.universeConfigs().single()
 
-        client.put("/api/rest/project/$projectId/universe-configs/${config.id}") {
+        client.put("/api/rest/projects/$projectId/universe-configs/${config.id}") {
             contentType(ContentType.Application.Json)
             setBody(UpdateUniverseConfigRequest(refreshIntervalMs = 44))
         }
         assertEquals(1, overrideRowCount("refreshIntervalMs"))
 
-        val response = client.put("/api/rest/project/$projectId/universe-configs/${config.id}") {
+        val response = client.put("/api/rest/projects/$projectId/universe-configs/${config.id}") {
             contentType(ContentType.Application.Json)
             setBody(UpdateUniverseConfigRequest(resetRefreshInterval = true))
         }
@@ -104,13 +104,13 @@ class UniverseRefreshIntervalRouteTest : RouteIntegrationTest() {
 
         // Below the DMX512 floor: a full 513-slot frame occupies ~22.6 ms on the wire, so
         // anything faster is packets the node discards.
-        val tooFast = client.put("/api/rest/project/$projectId/universe-configs/${config.id}") {
+        val tooFast = client.put("/api/rest/projects/$projectId/universe-configs/${config.id}") {
             contentType(ContentType.Application.Json)
             setBody(UpdateUniverseConfigRequest(refreshIntervalMs = 5))
         }
         assertEquals(HttpStatusCode.BadRequest, tooFast.status)
 
-        val tooSlow = client.put("/api/rest/project/$projectId/universe-configs/${config.id}") {
+        val tooSlow = client.put("/api/rest/projects/$projectId/universe-configs/${config.id}") {
             contentType(ContentType.Application.Json)
             setBody(UpdateUniverseConfigRequest(refreshIntervalMs = 5_000))
         }
@@ -128,13 +128,13 @@ class UniverseRefreshIntervalRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val config = client.universeConfigs().single()
 
-        client.put("/api/rest/project/$projectId/universe-configs/${config.id}") {
+        client.put("/api/rest/projects/$projectId/universe-configs/${config.id}") {
             contentType(ContentType.Application.Json)
             setBody(UpdateUniverseConfigRequest(address = "10.0.0.7"))
         }
 
         val updated: UniverseConfigDto =
-            client.put("/api/rest/project/$projectId/universe-configs/${config.id}") {
+            client.put("/api/rest/projects/$projectId/universe-configs/${config.id}") {
                 contentType(ContentType.Application.Json)
                 setBody(UpdateUniverseConfigRequest(refreshIntervalMs = 44))
             }.body()
@@ -149,14 +149,14 @@ class UniverseRefreshIntervalRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val config = client.universeConfigs().single()
 
-        client.put("/api/rest/project/$projectId/universe-configs/${config.id}") {
+        client.put("/api/rest/projects/$projectId/universe-configs/${config.id}") {
             contentType(ContentType.Application.Json)
             setBody(UpdateUniverseConfigRequest(address = "10.0.0.7", refreshIntervalMs = 44))
         }
         assertEquals(1, overrideRowCount("address"))
         assertEquals(1, overrideRowCount("refreshIntervalMs"))
 
-        val response = client.delete("/api/rest/project/$projectId/universe-configs/${config.id}")
+        val response = client.delete("/api/rest/projects/$projectId/universe-configs/${config.id}")
         assertEquals(HttpStatusCode.NoContent, response.status)
 
         // Overrides FK to the project, not the universe row, so anything left behind is an

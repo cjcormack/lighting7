@@ -44,7 +44,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         val rigging = createRigging(client, name = "FOH-1")
         val rigging2 = createRigging(client, name = "MID")
 
-        val createResp = client.post("/api/rest/project/$projectId/patches") {
+        val createResp = client.post("/api/rest/projects/$projectId/patches") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreatePatchRequest(
@@ -71,7 +71,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
 
         val patchId = created.id
 
-        val getResp = client.get("/api/rest/project/$projectId/patches/$patchId")
+        val getResp = client.get("/api/rest/projects/$projectId/patches/$patchId")
         assertEquals(HttpStatusCode.OK, getResp.status)
         val fetched = getResp.body<FixturePatchDto>()
         assertEquals(25.0, fetched.stageX)
@@ -80,7 +80,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         assertEquals(36, fetched.beamAngleDeg)
         assertEquals("L201", fetched.gelCode)
 
-        val listed = client.get("/api/rest/project/$projectId/patches")
+        val listed = client.get("/api/rest/projects/$projectId/patches")
             .body<List<FixturePatchDto>>()
         val listedDim = listed.firstOrNull { it.id == patchId }
         assertNotNull(listedDim, "list should include the created patch")
@@ -90,7 +90,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         // PUT replaces stage metadata. Keys not present must be left unchanged —
         // we change only stageX, riggingUuid, gelCode and verify stageY +
         // beamAngleDeg survive untouched.
-        val putSet = client.put("/api/rest/project/$projectId/patches/$patchId") {
+        val putSet = client.put("/api/rest/projects/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("stageX", JsonPrimitive(10.0))
@@ -107,7 +107,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         assertEquals("R26", updated.gelCode)
 
         // PUT with explicit JSON null clears the fields.
-        val putClear = client.put("/api/rest/project/$projectId/patches/$patchId") {
+        val putClear = client.put("/api/rest/projects/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("stageX", JsonNull)
@@ -126,7 +126,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         assertNull(cleared.gelCode)
 
         // Final GET confirms the cleared state was persisted.
-        val finalGet = client.get("/api/rest/project/$projectId/patches/$patchId")
+        val finalGet = client.get("/api/rest/projects/$projectId/patches/$patchId")
             .body<FixturePatchDto>()
         assertNull(finalGet.stageX)
         assertNull(finalGet.stageY)
@@ -146,7 +146,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val createResp = client.post("/api/rest/project/$projectId/patches") {
+        val createResp = client.post("/api/rest/projects/$projectId/patches") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreatePatchRequest(
@@ -165,7 +165,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
 
         val before = state.show.fixtures.untypedFixture("dim-hard-power")
 
-        val hide = client.put("/api/rest/project/$projectId/patches/$patchId") {
+        val hide = client.put("/api/rest/projects/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("stageHidden", JsonPrimitive(true)) })
         }
@@ -179,19 +179,19 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
 
         assertEquals(
             true,
-            client.get("/api/rest/project/$projectId/patches/$patchId").body<FixturePatchDto>().stageHidden,
+            client.get("/api/rest/projects/$projectId/patches/$patchId").body<FixturePatchDto>().stageHidden,
             "stageHidden must persist",
         )
 
         // Survives a PUT that touches something else entirely.
-        val unrelated = client.put("/api/rest/project/$projectId/patches/$patchId") {
+        val unrelated = client.put("/api/rest/projects/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("stageX", JsonPrimitive(2.0)) })
         }
         assertEquals(HttpStatusCode.OK, unrelated.status, unrelated.bodyAsText())
         assertEquals(true, unrelated.body<FixturePatchDto>().stageHidden)
 
-        val show = client.put("/api/rest/project/$projectId/patches/$patchId") {
+        val show = client.put("/api/rest/projects/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("stageHidden", JsonPrimitive(false)) })
         }
@@ -204,7 +204,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val createOk = client.post("/api/rest/project/$projectId/patches") {
+        val createOk = client.post("/api/rest/projects/$projectId/patches") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreatePatchRequest(
@@ -221,7 +221,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
 
         // stageX out of range on PUT — coordinates are FOH-relative metres with a generous
         // ±500 m bound, so use a value well past that to exercise rejection.
-        val badStageX = client.put("/api/rest/project/$projectId/patches/$patchId") {
+        val badStageX = client.put("/api/rest/projects/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("stageX", JsonPrimitive(600.0)) })
         }
@@ -229,7 +229,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         assertTrue(badStageX.bodyAsText().contains("stageX"), "error should mention stageX")
 
         // beamAngleDeg below the floor on PUT
-        val badBeam = client.put("/api/rest/project/$projectId/patches/$patchId") {
+        val badBeam = client.put("/api/rest/projects/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("beamAngleDeg", JsonPrimitive(1)) })
         }
@@ -237,7 +237,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         assertTrue(badBeam.bodyAsText().contains("beamAngleDeg"), "error should mention beamAngleDeg")
 
         // beamAngleDeg above the ceiling on POST
-        val badPost = client.post("/api/rest/project/$projectId/patches") {
+        val badPost = client.post("/api/rest/projects/$projectId/patches") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreatePatchRequest(
@@ -254,7 +254,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         assertTrue(badPost.bodyAsText().contains("beamAngleDeg"))
 
         // The original patch must still be intact and field-free.
-        val final = client.get("/api/rest/project/$projectId/patches/$patchId")
+        val final = client.get("/api/rest/projects/$projectId/patches/$patchId")
             .body<FixturePatchDto>()
         assertNull(final.stageX)
         assertNull(final.beamAngleDeg)
@@ -265,7 +265,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val types = client.get("/api/rest/fixture/types").body<List<FixtureTypeDetails>>()
+        val types = client.get("/api/rest/fixture-types").body<List<FixtureTypeDetails>>()
         val genericDimmer = types.firstOrNull { it.typeKey == "generic-dimmer" }
         assertNotNull(genericDimmer, "Generic Dimmer fixture type must be registered")
         assertTrue(genericDimmer.acceptsBeamAngle, "generic-dimmer should accept a beam angle")
@@ -304,7 +304,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val createResp = client.post("/api/rest/project/$projectId/patches") {
+        val createResp = client.post("/api/rest/projects/$projectId/patches") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreatePatchRequest(
@@ -322,14 +322,14 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
 
         // POST goes through the full DbFixtureLoader rebuild — gelCode should be cached
         // and surfaced on the fixture details DTO.
-        val afterCreate = client.get("/api/rest/fixture/dim-gel").body<DmxFixtureDetails>()
+        val afterCreate = client.get("/api/rest/fixtures/dim-gel").body<DmxFixtureDetails>()
         assertEquals("L201", afterCreate.gelCode)
 
         val before = state.show.fixtures.untypedFixture("dim-gel")
 
         // Metadata-only PUT changes the gel — must NOT rebuild fixtures, but the cached
         // gelCode must update and the next GET must reflect it.
-        val putGel = client.put("/api/rest/project/$projectId/patches/$patchId") {
+        val putGel = client.put("/api/rest/projects/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("gelCode", JsonPrimitive("R26")) })
         }
@@ -338,17 +338,17 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         val after = state.show.fixtures.untypedFixture("dim-gel")
         assertSame(before, after, "gelCode-only PUT must reuse the same runtime fixture")
 
-        val afterPut = client.get("/api/rest/fixture/dim-gel").body<DmxFixtureDetails>()
+        val afterPut = client.get("/api/rest/fixtures/dim-gel").body<DmxFixtureDetails>()
         assertEquals("R26", afterPut.gelCode, "metadata-only PUT must update the cached gelCode")
 
         // Clearing the gel via JSON null must propagate through the cache too.
-        val putClear = client.put("/api/rest/project/$projectId/patches/$patchId") {
+        val putClear = client.put("/api/rest/projects/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("gelCode", JsonNull) })
         }
         assertEquals(HttpStatusCode.OK, putClear.status, putClear.bodyAsText())
 
-        val afterClear = client.get("/api/rest/fixture/dim-gel").body<DmxFixtureDetails>()
+        val afterClear = client.get("/api/rest/fixtures/dim-gel").body<DmxFixtureDetails>()
         assertNull(afterClear.gelCode)
     }
 
@@ -368,7 +368,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
 
         val rigging = createRigging(client, name = "Rebuild Truss")
 
-        val createResp = client.post("/api/rest/project/$projectId/patches") {
+        val createResp = client.post("/api/rest/projects/$projectId/patches") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreatePatchRequest(
@@ -385,7 +385,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
 
         val before = state.show.fixtures.untypedFixture("dim-rebuild")
 
-        val metaPut = client.put("/api/rest/project/$projectId/patches/$patchId") {
+        val metaPut = client.put("/api/rest/projects/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("stageX", JsonPrimitive(40.0))
@@ -402,7 +402,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
             "metadata-only PUT must reuse the same runtime fixture — DbFixtureLoader rebuild was skipped",
         )
 
-        val displayPut = client.put("/api/rest/project/$projectId/patches/$patchId") {
+        val displayPut = client.put("/api/rest/projects/$projectId/patches/$patchId") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("displayName", JsonPrimitive("Rebuild Probe Renamed"))
@@ -422,7 +422,7 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         client: io.ktor.client.HttpClient,
         name: String,
     ): RiggingDto {
-        val resp = client.post("/api/rest/project/$projectId/riggings") {
+        val resp = client.post("/api/rest/projects/$projectId/riggings") {
             contentType(ContentType.Application.Json)
             setBody(CreateRiggingRequest(name = name))
         }

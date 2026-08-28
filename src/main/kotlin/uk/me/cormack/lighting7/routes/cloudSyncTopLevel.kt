@@ -27,7 +27,7 @@ import uk.me.cormack.lighting7.sync.SyncException
 
 /**
  * Install-scoped cloud-sync REST endpoints — the per-project routes live in `cloudSync.kt`
- * under `/project/{projectId}/sync/`. These two are siblings of `/project` because they
+ * under `/projects/{projectId}/sync/`. These two are siblings of `/projects` because they
  * either span all projects (`/cloud-sync/configs`) or pre-date a project's existence
  * (`/cloud-sync/import`).
  */
@@ -35,7 +35,7 @@ internal fun Route.routeApiRestCloudSync(state: State) {
 
     /**
      * Batch fetch of every project's sync configuration. The hub used to fire one
-     * `GET /project/{id}/sync/config` per row; this collapses the whole hub render into
+     * `GET /projects/{id}/sync/config` per row; this collapses the whole hub render into
      * a single round-trip. The result is sparse — projects without a `sync_configs` row
      * are absent from the map (rather than auto-created) so simply visiting the hub
      * doesn't materialise empty config rows.

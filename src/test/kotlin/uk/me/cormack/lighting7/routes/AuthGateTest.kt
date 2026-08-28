@@ -44,7 +44,7 @@ private data class CompilerVersionDto(val version: String, val latestStable: Boo
 class AuthGateTest : RouteIntegrationTest() {
 
     /** An arbitrary show route with no auth-specific behaviour of its own. */
-    private val gatedProbe = "/api/rest/project/list"
+    private val gatedProbe = "/api/rest/projects"
 
     @Test
     fun `bootstrap-open - every route answers without a cookie while zero users exist`() = testApplication {
@@ -201,14 +201,14 @@ class AuthGateTest : RouteIntegrationTest() {
         val client = jsonClient()
         val operatorCookie = client.loginCookieHeader("op")
 
-        val deniedExport = client.post("/api/rest/project/$projectId/export") {
+        val deniedExport = client.post("/api/rest/projects/$projectId/export") {
             header(HttpHeaders.Cookie, operatorCookie)
             contentType(ContentType.Application.Json)
             setBody(ProjectExportRequest(path = null))
         }
         assertEquals(HttpStatusCode.Forbidden, deniedExport.status)
 
-        val deniedImport = client.post("/api/rest/project/import") {
+        val deniedImport = client.post("/api/rest/projects/import") {
             header(HttpHeaders.Cookie, operatorCookie)
             contentType(ContentType.Application.Json)
             setBody(ProjectImportRequest(path = "/nowhere"))
@@ -217,7 +217,7 @@ class AuthGateTest : RouteIntegrationTest() {
 
         // The same import as an admin reaches the handler and fails on its own terms.
         val adminCookie = client.loginCookieHeader("boss")
-        val reached = client.post("/api/rest/project/import") {
+        val reached = client.post("/api/rest/projects/import") {
             header(HttpHeaders.Cookie, adminCookie)
             contentType(ContentType.Application.Json)
             setBody(ProjectImportRequest(path = "/nowhere"))
@@ -245,7 +245,7 @@ class AuthGateTest : RouteIntegrationTest() {
         )
         assertNotEquals(
             HttpStatusCode.Forbidden,
-            client.get("/api/rest/project/$projectId/scripts") { header(HttpHeaders.Cookie, cookie) }.status,
+            client.get("/api/rest/projects/$projectId/scripts") { header(HttpHeaders.Cookie, cookie) }.status,
         )
     }
 
@@ -274,11 +274,11 @@ class AuthGateTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         val operatorCookie = client.loginCookieHeader("op")
-        val denied = client.get("/api/rest/project/$projectId/sync/config") { header(HttpHeaders.Cookie, operatorCookie) }
+        val denied = client.get("/api/rest/projects/$projectId/sync/config") { header(HttpHeaders.Cookie, operatorCookie) }
         assertEquals(HttpStatusCode.Forbidden, denied.status, "operators must not reach sync credentials/config")
 
         val adminCookie = client.loginCookieHeader("boss")
-        val allowed = client.get("/api/rest/project/$projectId/sync/config") { header(HttpHeaders.Cookie, adminCookie) }
+        val allowed = client.get("/api/rest/projects/$projectId/sync/config") { header(HttpHeaders.Cookie, adminCookie) }
         assertNotEquals(HttpStatusCode.Forbidden, allowed.status)
         assertNotEquals(HttpStatusCode.Unauthorized, allowed.status)
     }

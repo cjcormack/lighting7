@@ -28,7 +28,7 @@ import kotlin.test.assertTrue
 class CueErrorHandlingTest : RouteIntegrationTest() {
 
     private suspend fun io.ktor.client.HttpClient.newStack(name: String): Int {
-        val resp = post("/api/rest/project/$projectId/cue-stacks") {
+        val resp = post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = name))
         }
@@ -43,13 +43,13 @@ class CueErrorHandlingTest : RouteIntegrationTest() {
         val actOne = client.newStack("Act 1")
         val actTwo = client.newStack("Act 2")
 
-        val first = client.post("/api/rest/project/$projectId/cues") {
+        val first = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "Blackout", cueStackId = actOne))
         }
         assertEquals(HttpStatusCode.Created, first.status, first.bodyAsText())
 
-        val second = client.post("/api/rest/project/$projectId/cues") {
+        val second = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "Blackout", cueStackId = actTwo))
         }
@@ -64,7 +64,7 @@ class CueErrorHandlingTest : RouteIntegrationTest() {
         val stack = client.newStack("Act 1")
 
         repeat(2) {
-            val resp = client.post("/api/rest/project/$projectId/cues") {
+            val resp = client.post("/api/rest/projects/$projectId/cues") {
                 contentType(ContentType.Application.Json)
                 setBody(NewCue(name = "Blackout", cueStackId = stack))
             }
@@ -78,16 +78,16 @@ class CueErrorHandlingTest : RouteIntegrationTest() {
         val client = jsonClient()
         val stack = client.newStack("Act 1")
 
-        client.post("/api/rest/project/$projectId/cues") {
+        client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "Pre-show", cueStackId = stack))
         }
-        val other = client.post("/api/rest/project/$projectId/cues") {
+        val other = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "Cradle Glows", cueStackId = stack))
         }.body<CueDetails>()
 
-        val resp = client.patch("/api/rest/project/$projectId/cues/${other.id}") {
+        val resp = client.patch("/api/rest/projects/$projectId/cues/${other.id}") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("name", JsonPrimitive("Pre-show")) })
         }
@@ -101,7 +101,7 @@ class CueErrorHandlingTest : RouteIntegrationTest() {
         val client = jsonClient()
         val stack = client.newStack("Act 1")
 
-        val first = client.post("/api/rest/project/$projectId/cues") {
+        val first = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "one", cueStackId = stack, cueNumber = "1"))
         }
@@ -109,7 +109,7 @@ class CueErrorHandlingTest : RouteIntegrationTest() {
 
         // cue_number *is* still unique per stack, so this genuinely violates a constraint —
         // exactly the case that used to escape as a bodyless 500.
-        val clash = client.post("/api/rest/project/$projectId/cues") {
+        val clash = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "two", cueStackId = stack, cueNumber = "1"))
         }
@@ -128,7 +128,7 @@ class CueErrorHandlingTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val resp = client.post("/api/rest/project/$projectId/cues") {
+        val resp = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody("{ not json")
         }

@@ -30,7 +30,7 @@ object ProgrammerRouteTestSupport {
 
     /** Create a stack via the real route, returning its id. */
     suspend fun createStack(client: HttpClient, projectId: Int, name: String): Int =
-        client.post("/api/rest/project/$projectId/cue-stacks") {
+        client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = name))
         }.body<CueStackDetails>().id
@@ -49,7 +49,7 @@ object ProgrammerRouteTestSupport {
         layers: List<CueLayerDto> = emptyList(),
     ): Int {
         val stack = stackId ?: createStack(client, projectId, "stack-for-$name")
-        return client.post("/api/rest/project/$projectId/cues") {
+        return client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(
                 NewCue(
@@ -80,7 +80,7 @@ object ProgrammerRouteTestSupport {
         targetKey: String = "hex-1",
         /** `fixture` or `group` — a *Look* row may name either; only a template may not. */
         targetType: String = "fixture",
-    ): LookDetails = client.post("/api/rest/project/$projectId/looks") {
+    ): LookDetails = client.post("/api/rest/projects/$projectId/looks") {
         contentType(ContentType.Application.Json)
         setBody(
             CreateLookRequest(

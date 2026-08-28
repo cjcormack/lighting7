@@ -171,7 +171,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                 ),
             ),
         )
-        client.post("/api/rest/project/$projectId/cues/$cueId/apply")
+        client.post("/api/rest/projects/$projectId/cues/$cueId/apply")
         assertEquals(1, state.show.fxEngine.getActiveEffects().size)
 
         val response: ProgrammerIncludeResponse = client.include(cueId).body()
@@ -214,14 +214,14 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                 ),
             )
             val cueId = createCue(client, "layered", layers = layers)
-            client.post("/api/rest/project/$projectId/cues/$cueId/apply")
+            client.post("/api/rest/projects/$projectId/cues/$cueId/apply")
             assertEquals(
                 listOf("Pulse"),
                 state.show.fxEngine.getActiveEffects().map { it.registrationId },
                 "only the layer's effect is on stage",
             )
 
-            client.put("/api/rest/project/$projectId/cues/$cueId") {
+            client.put("/api/rest/projects/$projectId/cues/$cueId") {
                 contentType(ContentType.Application.Json)
                 setBody(
                     NewCue(

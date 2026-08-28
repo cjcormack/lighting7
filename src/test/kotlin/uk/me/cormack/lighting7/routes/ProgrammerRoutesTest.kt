@@ -94,7 +94,7 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
                 .body<ToggleLocateResponse>().active,
         )
         // A Look applied as a programmer layer, which is what the pads now do.
-        val look = client.post("/api/rest/project/$projectId/looks") {
+        val look = client.post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreateLookRequest(

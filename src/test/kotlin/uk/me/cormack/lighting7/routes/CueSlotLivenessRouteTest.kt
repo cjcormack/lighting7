@@ -32,7 +32,7 @@ import kotlin.test.assertTrue
 class CueSlotLivenessRouteTest : RouteIntegrationTest() {
 
     private suspend fun createStack(client: HttpClient, name: String): Int =
-        client.post("/api/rest/project/$projectId/cue-stacks") {
+        client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = name))
         }.body<CueStackDetails>().id
@@ -44,7 +44,7 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
         stackId: Int,
         dimmer: Int,
     ): Int {
-        val resp = client.post("/api/rest/project/$projectId/cues") {
+        val resp = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(
                 NewCue(
@@ -66,13 +66,13 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
     }
 
     private suspend fun activate(client: HttpClient, stackId: Int, cueId: Int? = null): CueStackActivateResponse =
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackId/activate") {
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
             setBody(ActivateCueStackRequest(cueId = cueId))
         }.body()
 
     private suspend fun stack(client: HttpClient, stackId: Int): CueStackDetails =
-        client.get("/api/rest/project/$projectId/cue-stacks/$stackId").body()
+        client.get("/api/rest/projects/$projectId/cue-stacks/$stackId").body()
 
     @Test
     fun `bare activate on an already-active stack does not rewind the playhead`() = testApplication {
@@ -120,7 +120,7 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
 
         // The pad's fire: apply routes through the stack manager, so the stack is genuinely
         // active and the cue's rows are live on Layer 4 — with no effect ever existing.
-        val applyResp = client.post("/api/rest/project/$projectId/cues/$cueId/apply")
+        val applyResp = client.post("/api/rest/projects/$projectId/cues/$cueId/apply")
         assertEquals(HttpStatusCode.OK, applyResp.status, applyResp.bodyAsText())
         assertEquals(cueId, stack(client, stackId).activeCueId)
         assertTrue(
@@ -129,7 +129,7 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
         )
 
         // The pad's stop: takes the stack-deactivate branch and clears Layer 4.
-        val stopResp = client.post("/api/rest/project/$projectId/cues/$cueId/stop")
+        val stopResp = client.post("/api/rest/projects/$projectId/cues/$cueId/stop")
         assertEquals(HttpStatusCode.OK, stopResp.status, stopResp.bodyAsText())
         assertNull(stack(client, stackId).activeCueId, "the playhead reads dark again")
         assertFalse(

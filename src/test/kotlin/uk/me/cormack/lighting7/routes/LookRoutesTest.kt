@@ -34,7 +34,7 @@ import kotlin.test.assertTrue
  */
 class LookRoutesTest : RouteIntegrationTest() {
 
-    private fun base() = "/api/rest/project/$projectId/looks"
+    private fun base() = "/api/rest/projects/$projectId/looks"
 
     @Test
     fun `create, list, GET, PUT, DELETE round-trip rows and effects`() = testApplication {
@@ -275,12 +275,12 @@ class LookRoutesTest : RouteIntegrationTest() {
             setBody(CreateLookRequest(name = "Warm"))
         }.body<LookDetails>().id
 
-        val stackId = client.post("/api/rest/project/$projectId/cue-stacks") {
+        val stackId = client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("name", "show-1") })
         }.body<CueStackDetails>().id
 
-        client.post("/api/rest/project/$projectId/cues") {
+        client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(
                 buildJsonObject {

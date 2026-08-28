@@ -329,14 +329,14 @@ class LookRecordTest : RouteIntegrationTest() {
         }
 
     private suspend fun HttpClient.createLook(name: String, vararg rows: LookRowDto): Int =
-        post("/api/rest/project/$projectId/looks") {
+        post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
             setBody(CreateLookRequest(name = name, rows = rows.toList()))
         }.body<LookDetails>().id
 
     /** The Look's rows as `(targetKey, propertyName) → value`. */
     private suspend fun HttpClient.lookRows(lookId: Int): Map<Pair<String, String>, String> =
-        get("/api/rest/project/$projectId/looks/$lookId")
+        get("/api/rest/projects/$projectId/looks/$lookId")
             .body<LookDetails>().rows.associate { (it.targetKey to it.propertyName) to it.value }
 
     private fun LookDetails.rowsByTarget(): Map<String, String> =

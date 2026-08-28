@@ -29,7 +29,7 @@ class StageRegionsRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val createResp = client.post("/api/rest/project/$projectId/stageRegions") {
+        val createResp = client.post("/api/rest/projects/$projectId/stage-regions") {
             contentType(ContentType.Application.Json)
             setBody(CreateStageRegionRequest(
                 name = "main",
@@ -46,10 +46,10 @@ class StageRegionsRoutesTest : RouteIntegrationTest() {
         assertEquals("main", created.name)
         assertEquals(12.0, created.widthM)
 
-        val list = client.get("/api/rest/project/$projectId/stageRegions").body<List<StageRegionDto>>()
+        val list = client.get("/api/rest/projects/$projectId/stage-regions").body<List<StageRegionDto>>()
         assertEquals(1, list.size)
 
-        val putResp = client.put("/api/rest/project/$projectId/stageRegions/${created.id}") {
+        val putResp = client.put("/api/rest/projects/$projectId/stage-regions/${created.id}") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("widthM", JsonPrimitive(14.0))
@@ -62,15 +62,15 @@ class StageRegionsRoutesTest : RouteIntegrationTest() {
         assertEquals(8.0, updated.depthM, "untouched depth survives")
         assertEquals(10.0, updated.yawDeg)
 
-        val clearResp = client.put("/api/rest/project/$projectId/stageRegions/${created.id}") {
+        val clearResp = client.put("/api/rest/projects/$projectId/stage-regions/${created.id}") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("yawDeg", JsonNull) })
         }
         assertNull(clearResp.body<StageRegionDto>().yawDeg)
 
-        val del = client.delete("/api/rest/project/$projectId/stageRegions/${created.id}")
+        val del = client.delete("/api/rest/projects/$projectId/stage-regions/${created.id}")
         assertEquals(HttpStatusCode.NoContent, del.status)
-        val gone = client.get("/api/rest/project/$projectId/stageRegions/${created.id}")
+        val gone = client.get("/api/rest/projects/$projectId/stage-regions/${created.id}")
         assertEquals(HttpStatusCode.NotFound, gone.status)
     }
 
@@ -79,26 +79,26 @@ class StageRegionsRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val first = client.post("/api/rest/project/$projectId/stageRegions") {
+        val first = client.post("/api/rest/projects/$projectId/stage-regions") {
             contentType(ContentType.Application.Json)
             setBody(CreateStageRegionRequest(name = "main"))
         }
         assertEquals(HttpStatusCode.Created, first.status)
 
-        val dup = client.post("/api/rest/project/$projectId/stageRegions") {
+        val dup = client.post("/api/rest/projects/$projectId/stage-regions") {
             contentType(ContentType.Application.Json)
             setBody(CreateStageRegionRequest(name = "main"))
         }
         assertEquals(HttpStatusCode.Conflict, dup.status)
 
-        val bad = client.post("/api/rest/project/$projectId/stageRegions") {
+        val bad = client.post("/api/rest/projects/$projectId/stage-regions") {
             contentType(ContentType.Application.Json)
             setBody(CreateStageRegionRequest(name = "huge", widthM = 9999.0))
         }
         assertEquals(HttpStatusCode.BadRequest, bad.status)
         assertTrue(bad.bodyAsText().contains("widthM"))
 
-        val negative = client.post("/api/rest/project/$projectId/stageRegions") {
+        val negative = client.post("/api/rest/projects/$projectId/stage-regions") {
             contentType(ContentType.Application.Json)
             setBody(CreateStageRegionRequest(name = "neg", depthM = -1.0))
         }

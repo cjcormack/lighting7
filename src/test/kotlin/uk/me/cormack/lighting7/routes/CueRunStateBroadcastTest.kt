@@ -31,13 +31,13 @@ import kotlin.test.assertTrue
 class CueRunStateBroadcastTest : RouteIntegrationTest() {
 
     private suspend fun createStack(client: HttpClient, name: String): Int =
-        client.post("/api/rest/project/$projectId/cue-stacks") {
+        client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = name))
         }.body<CueStackDetails>().id
 
     private suspend fun createCue(client: HttpClient, name: String, stackId: Int): Int =
-        client.post("/api/rest/project/$projectId/cues") {
+        client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = name, cueStackId = stackId))
         }.body<CueDetails>().id
@@ -60,7 +60,7 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
             awaitOfType<ChannelMappingStateOutMessage>()
 
             // A GO fired over HTTP — the "desk" — observed from this socket, the "tablet".
-            client.post("/api/rest/project/$projectId/cue-stacks/$stackId/activate") {
+            client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
                 contentType(ContentType.Application.Json)
                 setBody(ActivateCueStackRequest(cueId = cue1))
             }
@@ -73,7 +73,7 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
             assertTrue(fired.transition, "a GO is a transition — the client animates the fade")
 
             // Somebody arms a different cue.
-            client.post("/api/rest/project/$projectId/cue-stacks/$stackId/standby") {
+            client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/standby") {
                 contentType(ContentType.Application.Json)
                 setBody(SetStandbyRequest(cueId = cue3))
             }
@@ -92,7 +92,7 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
         val client = createWsClient()
 
         val stackId = createStack(client, "Act 1")
-        val cue1 = client.post("/api/rest/project/$projectId/cues") {
+        val cue1 = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(
                 NewCue(
@@ -132,7 +132,7 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
         val cue1 = createCue(client, "a1", stackId)
         val cue2 = createCue(client, "a2", stackId)
 
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackId/activate") {
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
             setBody(ActivateCueStackRequest(cueId = cue1))
         }

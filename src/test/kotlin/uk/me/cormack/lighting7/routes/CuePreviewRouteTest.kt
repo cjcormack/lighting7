@@ -32,7 +32,7 @@ class CuePreviewRouteTest : RouteIntegrationTest() {
     private val hex2Dimmer = 21
 
     private suspend fun createStack(client: HttpClient, name: String): Int =
-        client.post("/api/rest/project/$projectId/cue-stacks") {
+        client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = name))
         }.body<CueStackDetails>().id
@@ -44,7 +44,7 @@ class CuePreviewRouteTest : RouteIntegrationTest() {
         fixtureKey: String,
         dimmer: Int,
     ): Int {
-        val resp = client.post("/api/rest/project/$projectId/cues") {
+        val resp = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(
                 NewCue(
@@ -66,13 +66,13 @@ class CuePreviewRouteTest : RouteIntegrationTest() {
     }
 
     private suspend fun activate(client: HttpClient, stackId: Int, cueId: Int) =
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackId/activate") {
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
             setBody(ActivateCueStackRequest(cueId = cueId))
         }
 
     private suspend fun preview(client: HttpClient, stackId: Int, cueId: Int? = null) =
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackId/preview") {
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/preview") {
             contentType(ContentType.Application.Json)
             setBody(PreviewCueRequest(cueId = cueId))
         }
@@ -131,7 +131,7 @@ class CuePreviewRouteTest : RouteIntegrationTest() {
 
         val previewed = preview(client, stackA).body<PreviewCueResponse>()
 
-        client.post("/api/rest/project/$projectId/cue-stacks/$stackA/advance") {
+        client.post("/api/rest/projects/$projectId/cue-stacks/$stackA/advance") {
             contentType(ContentType.Application.Json)
             setBody(AdvanceCueStackRequest(direction = "FORWARD"))
         }

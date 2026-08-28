@@ -158,8 +158,11 @@ internal fun List<LookCompatibilityInfo>.compatibleIdsFor(
 }.map { it.id }
 
 internal fun Route.routeApiRestLightsFixtures(state: State) {
-    route("/fixture") {
-        get("/list") {
+    // Two sibling resources, not one tree: `/fixtures` is the patched rig, `/fixture-types` is a
+    // vocabulary enumeration of every type the build knows about — most of which are not patched.
+    // It sits alongside `/control-surface-types` rather than under the rig it doesn't describe.
+    route("/fixtures") {
+        get {
             val fixtures = state.show.fixtures
             val currentProject = state.projectManager.currentProject
 
@@ -175,36 +178,36 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
             })
         }
 
-        get("/types") {
-            val registeredTypeKeys = state.show.fixtures.fixtures.map { it.typeKey }.toSet()
-            call.respond(FixtureTypeRegistry.allTypes.map { info ->
-                FixtureTypeDetails(
-                    typeKey = info.typeKey,
-                    manufacturer = info.manufacturer.ifEmpty { null },
-                    model = info.model.ifEmpty { null },
-                    modeName = info.modeName,
-                    channelCount = info.channelCount,
-                    isRegistered = info.typeKey in registeredTypeKeys,
-                    capabilities = info.capabilities,
-                    properties = info.properties,
-                    elementGroupProperties = info.elementGroupProperties,
-                    acceptsBeamAngle = info.acceptsBeamAngle,
-                    acceptsGel = info.acceptsGel,
-                    gelCompactDisplay = info.gelCompactDisplay.serialized(),
-                    kind = info.kind.name,
-                    lengthM = info.lengthM,
-                    widthM = info.widthM,
-                    heightM = info.heightM,
-                    beamShape = info.beamShape.name,
-                    beamEdge = info.beamEdge.name,
-                )
-            })
-        }
-
         get<FixtureKey> {
             val fixtures = state.show.fixtures
             call.respond(fixtures.fixture<Fixture>(it.key).details(fixtures))
         }
+    }
+
+    get("/fixture-types") {
+        val registeredTypeKeys = state.show.fixtures.fixtures.map { it.typeKey }.toSet()
+        call.respond(FixtureTypeRegistry.allTypes.map { info ->
+            FixtureTypeDetails(
+                typeKey = info.typeKey,
+                manufacturer = info.manufacturer.ifEmpty { null },
+                model = info.model.ifEmpty { null },
+                modeName = info.modeName,
+                channelCount = info.channelCount,
+                isRegistered = info.typeKey in registeredTypeKeys,
+                capabilities = info.capabilities,
+                properties = info.properties,
+                elementGroupProperties = info.elementGroupProperties,
+                acceptsBeamAngle = info.acceptsBeamAngle,
+                acceptsGel = info.acceptsGel,
+                gelCompactDisplay = info.gelCompactDisplay.serialized(),
+                kind = info.kind.name,
+                lengthM = info.lengthM,
+                widthM = info.widthM,
+                heightM = info.heightM,
+                beamShape = info.beamShape.name,
+                beamEdge = info.beamEdge.name,
+            )
+        })
     }
 }
 

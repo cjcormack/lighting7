@@ -17,7 +17,7 @@ import uk.me.cormack.lighting7.midi.FaderDescriptor
 import uk.me.cormack.lighting7.state.State
 
 @Serializable
-@Resource("/controlSurfaceTypes")
+@Resource("/control-surface-types")
 class ControlSurfaceTypesResource
 
 @Serializable
@@ -130,8 +130,8 @@ private fun ControlDescriptor.toDto(): ControlDescriptorDto = when (this) {
 private fun BankDefinition.toDto(): BankDto = BankDto(id = id, name = name)
 
 /**
- * `GET /api/rest/controlSurfaceTypes` — list all registered control-surface device
- * profiles with their controls and banks. Mirrors `/api/rest/fixture/types`.
+ * `GET /api/rest/control-surface-types` — list all registered control-surface device
+ * profiles with their controls and banks. Mirrors `/api/rest/fixture-types`.
  */
 @Suppress("UNUSED_PARAMETER")
 internal fun Route.routeApiRestControlSurfaceTypes(state: State) {

@@ -87,7 +87,7 @@ class PasswordResetRoutesTest : RouteIntegrationTest() {
         // Their old session is gone and the old password no longer works...
         assertEquals(
             HttpStatusCode.Unauthorized,
-            client.get("/api/rest/project/list") { header(HttpHeaders.Cookie, victim) }.status,
+            client.get("/api/rest/projects") { header(HttpHeaders.Cookie, victim) }.status,
         )
         val oldPassword = client.post("/api/rest/auth/login") {
             contentType(ContentType.Application.Json)

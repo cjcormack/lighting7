@@ -279,7 +279,7 @@ whatever weight the fade had reached.
 
 ## REST API
 
-All endpoints under `/api/rest/project/{projectId}/cue-stacks`.
+All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

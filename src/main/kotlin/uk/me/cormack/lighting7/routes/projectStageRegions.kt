@@ -182,7 +182,7 @@ internal fun Route.routeApiRestProjectStageRegions(state: State) {
     }
 }
 
-@Resource("/{projectId}/stageRegions")
+@Resource("/{projectId}/stage-regions")
 data class ProjectStageRegionsResource(val projectId: String)
 
 @Resource("/{regionId}")

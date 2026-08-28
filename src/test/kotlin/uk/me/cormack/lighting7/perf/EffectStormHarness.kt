@@ -50,7 +50,7 @@ import kotlin.test.Test
  * 1. Boot the backend (`./gradlew run`) in a separate process.
  * 2. Patch a project with at least 4 fixtures (8+ recommended) — DMX, any type that exposes
  *    a `dimmer` slider works. Either pass the keys via `--fixtures=key1,key2,...`, or omit
- *    the flag and the harness will GET `/api/rest/fixture/list` and pick the first 8.
+ *    the flag and the harness will GET `/api/rest/fixtures` and pick the first 8.
  * 3. Launch the harness against `http://localhost:8413` (override with `--url`). Defaults:
  *    100 ops/sec for 60 s.
  * 4. The CSV at `--out` lands one row per HTTP call: emit timestamp, op (add/remove),
@@ -259,8 +259,8 @@ private suspend fun fetchLibrary(client: HttpClient, baseUrl: String): List<Effe
 }
 
 private suspend fun fetchFixtures(client: HttpClient, baseUrl: String): List<String> {
-    val resp = client.get("$baseUrl/api/rest/fixture/list")
-    require(resp.status.isSuccess()) { "GET /fixture/list returned ${resp.status}" }
+    val resp = client.get("$baseUrl/api/rest/fixtures")
+    require(resp.status.isSuccess()) { "GET /fixtures returned ${resp.status}" }
     val items: List<FixtureSummary> = resp.body()
     return items.map { it.key }
 }
@@ -298,7 +298,7 @@ private fun printEffectStormUsage() {
         |  --rate=<int>                 add+remove ops issued per second (default: 100)
         |  --duration-sec=<int>         Run length in seconds (default: 60)
         |  --concurrency=<int>          Max in-flight HTTP calls (default: 16)
-        |  --fixtures=<key1,key2,...>   Fixture pool. Omit to GET /fixture/list and take 8.
+        |  --fixtures=<key1,key2,...>   Fixture pool. Omit to GET /fixtures and take 8.
         |  --out=<path>                 CSV output path (default: /tmp/effect-storm.csv)
         |  --help                       Show this message and exit 0
         |

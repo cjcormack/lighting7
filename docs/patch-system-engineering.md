@@ -54,7 +54,7 @@ Reads DB tables and calls the same `Fixtures.register {}` DSL that the rest of t
 
 ## API Endpoints
 
-All scoped under `/api/rest/project/{projectId}/`:
+All scoped under `/api/rest/projects/{projectId}/`:
 
 ### Patches
 - `GET /patches` — List all patches (enriched with type info from registry)

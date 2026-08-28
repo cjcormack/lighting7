@@ -64,7 +64,7 @@ class PromptBookRoutesIntegrationTest {
     private fun newBook() =
         NewPromptBook(scriptHash = hashA, pageCount = 10, scriptFileName = "act-one.pdf")
 
-    private fun bookUrl() = "/api/rest/project/$projectId/prompt-book"
+    private fun bookUrl() = "/api/rest/projects/$projectId/prompt-book"
 
     @Test
     fun `book create-replace-delete lifecycle`() = testApplication {
@@ -142,11 +142,11 @@ class PromptBookRoutesIntegrationTest {
             setBody(newBook())
         }
 
-        val stackId = client.post("/api/rest/project/$projectId/cue-stacks") {
+        val stackId = client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = "stack-a"))
         }.body<CueStackDetails>().id
-        val cueId = client.post("/api/rest/project/$projectId/cues") {
+        val cueId = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "cue-1", cueStackId = stackId))
         }.body<CueDetails>().id
@@ -187,7 +187,7 @@ class PromptBookRoutesIntegrationTest {
         assertEquals(HttpStatusCode.NotFound, unknownCue.status)
 
         // Deleting the cue removes its anchor with it
-        client.delete("/api/rest/project/$projectId/cues/$cueId")
+        client.delete("/api/rest/projects/$projectId/cues/$cueId")
         val afterCueDelete = client.get(bookUrl()).body<PromptBookDetails>()
         assertEquals(0, afterCueDelete.anchors.size, "cue deletion must take its anchor with it")
     }
@@ -197,11 +197,11 @@ class PromptBookRoutesIntegrationTest {
         mountTestApp(state)
         val client = jsonClient()
 
-        val stackId = client.post("/api/rest/project/$projectId/cue-stacks") {
+        val stackId = client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = "stack-a"))
         }.body<CueStackDetails>().id
-        val cueId = client.post("/api/rest/project/$projectId/cues") {
+        val cueId = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "cue-1", cueStackId = stackId))
         }.body<CueDetails>().id
@@ -315,15 +315,15 @@ class PromptBookRoutesIntegrationTest {
             setBody(newBook())
         }
 
-        val stackId = client.post("/api/rest/project/$projectId/cue-stacks") {
+        val stackId = client.post("/api/rest/projects/$projectId/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = "stack-a"))
         }.body<CueStackDetails>().id
-        val cue1 = client.post("/api/rest/project/$projectId/cues") {
+        val cue1 = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "cue-1", cueStackId = stackId))
         }.body<CueDetails>().id
-        val cue2 = client.post("/api/rest/project/$projectId/cues") {
+        val cue2 = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "cue-2", cueStackId = stackId))
         }.body<CueDetails>().id
@@ -344,7 +344,7 @@ class PromptBookRoutesIntegrationTest {
             )
         }
 
-        val locations = client.get("/api/rest/project/$projectId/cue-locations")
+        val locations = client.get("/api/rest/projects/$projectId/cue-locations")
             .body<List<CueLocationDto>>()
         val byCue = locations.associateBy { it.cueId }
         assertEquals(2, locations.size)
@@ -359,7 +359,7 @@ class PromptBookRoutesIntegrationTest {
         mountTestApp(state)
         val client = jsonClient()
 
-        val locations = client.get("/api/rest/project/$projectId/cue-locations")
+        val locations = client.get("/api/rest/projects/$projectId/cue-locations")
             .body<List<CueLocationDto>>()
         assertTrue(locations.isEmpty())
     }

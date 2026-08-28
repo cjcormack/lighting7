@@ -1003,11 +1003,11 @@ project is live, retunes the running clock. Knob-drag and tap go over
 project-scoped too:
 
 ```
-GET    /api/rest/project/{id}/speed-masters        → [SpeedMasterDto...]  (lazily seeds 4)
-GET    /api/rest/project/{id}/speed-masters/{mid}  → SpeedMasterDto
-POST   /api/rest/project/{id}/speed-masters        ← { name?, bpm?, notes? }
-PUT    /api/rest/project/{id}/speed-masters/{mid}  ← { name?, bpm?, notes? }
-DELETE /api/rest/project/{id}/speed-masters/{mid}  → 409 SPEED_MASTER_PROTECTED (master 1)
+GET    /api/rest/projects/{id}/speed-masters        → [SpeedMasterDto...]  (lazily seeds 4)
+GET    /api/rest/projects/{id}/speed-masters/{mid}  → SpeedMasterDto
+POST   /api/rest/projects/{id}/speed-masters        ← { name?, bpm?, notes? }
+PUT    /api/rest/projects/{id}/speed-masters/{mid}  ← { name?, bpm?, notes? }
+DELETE /api/rest/projects/{id}/speed-masters/{mid}  → 409 SPEED_MASTER_PROTECTED (master 1)
                                                      | 409 SPEED_MASTER_IN_USE (?force=true overrides)
 ```
 

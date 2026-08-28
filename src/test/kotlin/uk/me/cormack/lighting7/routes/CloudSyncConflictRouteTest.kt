@@ -65,7 +65,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
     fun `GET conflicts returns activeSession=false when no session`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val resp = client.get("/api/rest/project/$projectId/sync/conflicts")
+        val resp = client.get("/api/rest/projects/$projectId/sync/conflicts")
         assertEquals(HttpStatusCode.OK, resp.status)
         val body = resp.body<uk.me.cormack.lighting7.routes.ConflictsResponse>()
         assertEquals(false, body.activeSession)
@@ -77,7 +77,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val (sessionId, stackUuid) = seedSession()
         val client = jsonClient()
-        val resp = client.get("/api/rest/project/$projectId/sync/conflicts")
+        val resp = client.get("/api/rest/projects/$projectId/sync/conflicts")
         assertEquals(HttpStatusCode.OK, resp.status)
         val body = resp.body<uk.me.cormack.lighting7.routes.ConflictsResponse>()
         assertEquals(true, body.activeSession)
@@ -99,7 +99,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         val (sessionId, stackUuid) = seedSession()
         val client = jsonClient()
 
-        val resolve = client.post("/api/rest/project/$projectId/sync/resolve") {
+        val resolve = client.post("/api/rest/projects/$projectId/sync/resolve") {
             contentType(ContentType.Application.Json)
             setBody(
                 ResolveRequest(
@@ -117,7 +117,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         assertEquals("LOCAL", after)
 
         // Idempotent: re-applying the same value still 204s.
-        val resolveAgain = client.post("/api/rest/project/$projectId/sync/resolve") {
+        val resolveAgain = client.post("/api/rest/projects/$projectId/sync/resolve") {
             contentType(ContentType.Application.Json)
             setBody(
                 ResolveRequest(
@@ -133,7 +133,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val (_, stackUuid) = seedSession()
         val client = jsonClient()
-        val resp = client.post("/api/rest/project/$projectId/sync/resolve") {
+        val resp = client.post("/api/rest/projects/$projectId/sync/resolve") {
             contentType(ContentType.Application.Json)
             setBody(
                 ResolveRequest(
@@ -148,7 +148,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
     fun `POST resolve with no active session is 404`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val resp = client.post("/api/rest/project/$projectId/sync/resolve") {
+        val resp = client.post("/api/rest/projects/$projectId/sync/resolve") {
             contentType(ContentType.Application.Json)
             setBody(
                 ResolveRequest(
@@ -164,7 +164,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val (sessionId, _) = seedSession()
         val client = jsonClient()
-        val resp = client.post("/api/rest/project/$projectId/sync/abort")
+        val resp = client.post("/api/rest/projects/$projectId/sync/abort")
         assertEquals(HttpStatusCode.OK, resp.status)
         transaction(state.database) {
             val session = DaoSyncSession.findById(sessionId)!!
@@ -210,7 +210,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
             stack.uuid
         }
         val client = jsonClient()
-        val resp = client.post("/api/rest/project/$projectId/sync/resolve") {
+        val resp = client.post("/api/rest/projects/$projectId/sync/resolve") {
             contentType(ContentType.Application.Json)
             setBody(
                 ResolveRequest(
@@ -261,7 +261,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
             stack.uuid
         }
         val client = jsonClient()
-        val resp = client.post("/api/rest/project/$projectId/sync/resolve") {
+        val resp = client.post("/api/rest/projects/$projectId/sync/resolve") {
             contentType(ContentType.Application.Json)
             setBody(
                 ResolveRequest(
@@ -279,7 +279,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.NoContent, resp.status)
 
         // The conflict's `manualEditAllowed` must be true for EDIT_DELETE.
-        val getResp = client.get("/api/rest/project/$projectId/sync/conflicts")
+        val getResp = client.get("/api/rest/projects/$projectId/sync/conflicts")
         val body = getResp.body<uk.me.cormack.lighting7.routes.ConflictsResponse>()
         val c = body.conflicts.first()
         assertEquals("EDIT_DELETE", c.conflictKind)
@@ -313,7 +313,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
             )
         }
         val client = jsonClient()
-        val resp = client.get("/api/rest/project/$projectId/sync/conflicts")
+        val resp = client.get("/api/rest/projects/$projectId/sync/conflicts")
         val body = resp.body<uk.me.cormack.lighting7.routes.ConflictsResponse>()
         val c = body.conflicts.single()
         assertEquals("DELETE_EDIT", c.conflictKind)
@@ -325,7 +325,7 @@ class CloudSyncConflictRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         seedSession()
         val client = jsonClient()
-        val resp = client.post("/api/rest/project/$projectId/sync/snapshot") {
+        val resp = client.post("/api/rest/projects/$projectId/sync/snapshot") {
             // Empty JSON body so ContentNegotiation accepts the request before the
             // route handler's session-pending guard runs.
             contentType(ContentType.Application.Json)

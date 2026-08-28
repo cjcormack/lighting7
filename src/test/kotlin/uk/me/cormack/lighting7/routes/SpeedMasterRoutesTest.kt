@@ -35,7 +35,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val list = client.get("/api/rest/project/$projectId/speed-masters").body<List<SpeedMasterDto>>()
+        val list = client.get("/api/rest/projects/$projectId/speed-masters").body<List<SpeedMasterDto>>()
         assertEquals(DEFAULT_SPEED_MASTER_COUNT, list.size, "first read seeds the default bank")
         assertEquals((1..DEFAULT_SPEED_MASTER_COUNT).toList(), list.map { it.masterIndex })
         assertEquals("Master 1", list.first().name)
@@ -43,7 +43,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         assertTrue(list.all { it.referenceCount == 0 })
 
         // Seeding is idempotent — a second read must not mint another bank.
-        val second = client.get("/api/rest/project/$projectId/speed-masters").body<List<SpeedMasterDto>>()
+        val second = client.get("/api/rest/projects/$projectId/speed-masters").body<List<SpeedMasterDto>>()
         assertEquals(list.map { it.uuid }, second.map { it.uuid })
     }
 
@@ -52,7 +52,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val createResp = client.post("/api/rest/project/$projectId/speed-masters") {
+        val createResp = client.post("/api/rest/projects/$projectId/speed-masters") {
             contentType(ContentType.Application.Json)
             setBody(CreateSpeedMasterRequest(name = "Strobe Bus", bpm = 240.0, notes = "chorus only"))
         }
@@ -61,11 +61,11 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         assertEquals(DEFAULT_SPEED_MASTER_COUNT + 1, created.masterIndex, "create takes the next free index")
         assertEquals(240.0, created.bpm)
 
-        val fetched = client.get("/api/rest/project/$projectId/speed-masters/${created.id}")
+        val fetched = client.get("/api/rest/projects/$projectId/speed-masters/${created.id}")
             .body<SpeedMasterDto>()
         assertEquals(created.uuid, fetched.uuid)
 
-        val putResp = client.put("/api/rest/project/$projectId/speed-masters/${created.id}") {
+        val putResp = client.put("/api/rest/projects/$projectId/speed-masters/${created.id}") {
             contentType(ContentType.Application.Json)
             setBody(
                 buildJsonObject {
@@ -81,11 +81,11 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         assertEquals("MANUAL", updated.source, "a typed bpm records MANUAL provenance")
         assertEquals("chorus only", updated.notes, "untouched notes survive a rename")
 
-        val del = client.delete("/api/rest/project/$projectId/speed-masters/${created.id}")
+        val del = client.delete("/api/rest/projects/$projectId/speed-masters/${created.id}")
         assertEquals(HttpStatusCode.NoContent, del.status)
         assertEquals(
             HttpStatusCode.NotFound,
-            client.get("/api/rest/project/$projectId/speed-masters/${created.id}").status,
+            client.get("/api/rest/projects/$projectId/speed-masters/${created.id}").status,
         )
     }
 
@@ -94,17 +94,17 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val master1 = client.get("/api/rest/project/$projectId/speed-masters")
+        val master1 = client.get("/api/rest/projects/$projectId/speed-masters")
             .body<List<SpeedMasterDto>>()
             .single { it.masterIndex == 1 }
 
-        val del = client.delete("/api/rest/project/$projectId/speed-masters/${master1.id}")
+        val del = client.delete("/api/rest/projects/$projectId/speed-masters/${master1.id}")
         assertEquals(HttpStatusCode.Conflict, del.status)
         val error = del.body<ErrorResponse>()
         assertEquals(CODE_SPEED_MASTER_PROTECTED, error.code)
 
         // Force does not bypass protection — master 1 is what null references resolve to.
-        val forced = client.delete("/api/rest/project/$projectId/speed-masters/${master1.id}?force=true")
+        val forced = client.delete("/api/rest/projects/$projectId/speed-masters/${master1.id}?force=true")
         assertEquals(HttpStatusCode.Conflict, forced.status)
     }
 
@@ -113,7 +113,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val master2 = client.get("/api/rest/project/$projectId/speed-masters")
+        val master2 = client.get("/api/rest/projects/$projectId/speed-masters")
             .body<List<SpeedMasterDto>>()
             .single { it.masterIndex == 2 }
 
@@ -137,19 +137,19 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             cue.id.value
         }
 
-        val listed = client.get("/api/rest/project/$projectId/speed-masters")
+        val listed = client.get("/api/rest/projects/$projectId/speed-masters")
             .body<List<SpeedMasterDto>>()
             .single { it.masterIndex == 2 }
         assertEquals(1, listed.referenceCount, "the list surfaces persisted references")
 
-        val del = client.delete("/api/rest/project/$projectId/speed-masters/${master2.id}")
+        val del = client.delete("/api/rest/projects/$projectId/speed-masters/${master2.id}")
         assertEquals(HttpStatusCode.Conflict, del.status)
         val inUse = del.body<SpeedMasterInUseResponse>()
         assertEquals(CODE_SPEED_MASTER_IN_USE, inUse.code)
         assertEquals(1, inUse.cueAdHocEffectCount)
         assertEquals(listOf(cueId), inUse.cueIds)
 
-        val forced = client.delete("/api/rest/project/$projectId/speed-masters/${master2.id}?force=true")
+        val forced = client.delete("/api/rest/projects/$projectId/speed-masters/${master2.id}?force=true")
         assertEquals(HttpStatusCode.NoContent, forced.status, "force leaves the reference dangling on purpose")
     }
 
@@ -163,7 +163,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val master2 = client.get("/api/rest/project/$projectId/speed-masters")
+        val master2 = client.get("/api/rest/projects/$projectId/speed-masters")
             .body<List<SpeedMasterDto>>()
             .single { it.masterIndex == 2 }
 
@@ -187,12 +187,12 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             cue.id.value
         }
 
-        val listed = client.get("/api/rest/project/$projectId/speed-masters")
+        val listed = client.get("/api/rest/projects/$projectId/speed-masters")
             .body<List<SpeedMasterDto>>()
             .single { it.masterIndex == 2 }
         assertEquals(1, listed.referenceCount)
 
-        val del = client.delete("/api/rest/project/$projectId/speed-masters/${master2.id}")
+        val del = client.delete("/api/rest/projects/$projectId/speed-masters/${master2.id}")
         assertEquals(HttpStatusCode.Conflict, del.status)
         val inUse = del.body<SpeedMasterInUseResponse>()
         assertEquals(CODE_SPEED_MASTER_IN_USE, inUse.code)
@@ -205,7 +205,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val master2 = client.get("/api/rest/project/$projectId/speed-masters")
+        val master2 = client.get("/api/rest/projects/$projectId/speed-masters")
             .body<List<SpeedMasterDto>>()
             .single { it.masterIndex == 2 }
 
@@ -228,7 +228,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             }
         }
 
-        val listed = client.get("/api/rest/project/$projectId/speed-masters")
+        val listed = client.get("/api/rest/projects/$projectId/speed-masters")
             .body<List<SpeedMasterDto>>()
             .single { it.masterIndex == 2 }
         assertEquals(1, listed.referenceCount, "one row, one reference — not one per role")
@@ -239,11 +239,11 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val master1 = client.get("/api/rest/project/$projectId/speed-masters")
+        val master1 = client.get("/api/rest/projects/$projectId/speed-masters")
             .body<List<SpeedMasterDto>>()
             .first()
 
-        val tooFast = client.put("/api/rest/project/$projectId/speed-masters/${master1.id}") {
+        val tooFast = client.put("/api/rest/projects/$projectId/speed-masters/${master1.id}") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("bpm", JsonPrimitive(999.0)) })
         }
@@ -256,8 +256,8 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         // Seed the bank, then collide with a seeded name.
-        client.get("/api/rest/project/$projectId/speed-masters")
-        val dup = client.post("/api/rest/project/$projectId/speed-masters") {
+        client.get("/api/rest/projects/$projectId/speed-masters")
+        val dup = client.post("/api/rest/projects/$projectId/speed-masters") {
             contentType(ContentType.Application.Json)
             setBody(CreateSpeedMasterRequest(name = "Master 1"))
         }
