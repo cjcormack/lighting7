@@ -677,12 +677,20 @@ the same conditional written out per builder — which surfaced the one effect r
 
 ## G — AI surface refresh
 
-**G1. Speed-master awareness** — high / P1 / M / opus
+~~**G1. Speed-master awareness**~~ — done, `996a94e`. high / P1 / M / opus
 `set_bpm` is master-1-only; no list/create/retune tools; the system prompt never mentions masters.
 And the schemas can't express fields the handlers already read: `AiTools.kt:113-115` reads
 `speedMasterUuid`/`rateSpeedMasterUuid` off effects but `lookEffectSchema`, `adHocEffectSchema`,
 and `cueLayerSchema` (`AiToolSchemas.kt`) declare neither. **Fix:** add the schema fields; add a
 speed-masters tool (or extend `set_bpm` with a master ref).
+Landed as both halves of the parenthetical: `set_bpm` took the optional master ref and
+`create_speed_master` is the new tool, sharing `createSpeedMaster` lifted out of the REST POST
+handler. Listing masters stayed out — the system prompt now carries them with their uuids, and
+G2 owns the `get_current_state` section. References are validated against the live bank at parse
+time rather than written through, since `slotFor` would resolve a typo to master 1 silently.
+Grew in the landing: `SpeedMasterBank.setBpm` returns whether it applied (a master deleted
+between resolve and write was being reported as success), and `AiService`'s fixture line had a
+pre-existing precedence bug dropping its closing paren for grouped fixtures, fixed here.
 
 **G2. `get_current_state` misses the new subsystems** — medium / P1 / M / opus
 No `speed_masters`, no programmer (which the AI itself mutates via `apply_look`), no cue run state
@@ -726,7 +734,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | ~~E1–E7, E10, C8, B6–B7, F6~~ **done** | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
-| 5 | ~~F1–F3, F5, F7–F8~~ **done**, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
+| 5 | ~~F1–F3, F5, F7–F8, G1~~ **done**, G2–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7, F4~~, E9 | Mechanical passes. D7 was pulled forward — see below. |
 
 **Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
