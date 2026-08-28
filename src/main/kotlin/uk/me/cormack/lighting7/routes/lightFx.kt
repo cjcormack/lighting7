@@ -24,8 +24,7 @@ internal fun Route.routeApiRestFx(state: State) {
         // Active effects endpoints
         get<ActiveEffects> {
             val engine = state.show.fxEngine
-            val effects = engine.getActiveEffects().map { it.toDto(engine.isMultiElementExpanded(it)) }
-            call.respond(effects)
+            call.respond(engine.effectDtos(engine.getActiveEffects()))
         }
 
         post<AddEffect> {
@@ -147,7 +146,7 @@ internal fun Route.routeApiRestFx(state: State) {
                 )
 
                 if (updated != null) {
-                    call.respond(updated.toDto(engine.isMultiElementExpanded(updated)))
+                    call.respond(engine.effectDto(updated))
                 } else {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("Effect not found"))
                 }
@@ -160,7 +159,7 @@ internal fun Route.routeApiRestFx(state: State) {
         get<FixtureEffects> { resource ->
             val fixtureKey = resource.fixtureKey
             val engine = state.show.fxEngine
-            val direct = engine.getEffectsForFixture(fixtureKey).map { it.toDto(engine.isMultiElementExpanded(it)) }
+            val direct = engine.effectDtos(engine.getEffectsForFixture(fixtureKey))
             val indirect = engine.getIndirectEffectsForFixture(fixtureKey).map { it.toIndirectDto() }
             call.respond(FixtureEffectsResponse(direct, indirect))
         }
@@ -282,42 +281,6 @@ data class UpdateEffectRequest(
     val rateSpeedMasterUuid: String? = null,
 )
 
-@Serializable
-data class EffectDto(
-    val id: Long,
-    val effectType: String,
-    val targetKey: String,
-    val propertyName: String,
-    val beatDivision: Double,
-    val blendMode: String,
-    val isRunning: Boolean,
-    val phaseOffset: Double,
-    val currentPhase: Double,
-    val parameters: Map<String, String>,
-    val isGroupTarget: Boolean,
-    val distributionStrategy: String? = null,
-    val elementMode: String? = null,
-    val elementFilter: String? = null,
-    val stepTiming: Boolean = false,
-    /**
-     * The Look this effect came from, when it came from one. The field the busking pads' active
-     * ring matches on.
-     */
-    val lookId: Int? = null,
-    /** The programmer layer that spawned this effect, when one did. */
-    val programmerLayerId: Int? = null,
-    val cueId: Int? = null,
-    val timingSource: String = "BEAT",
-    /** True when this effect sits in the programmer's reserved priority band. */
-    val programmerOwned: Boolean = false,
-    /** Fade envelope in `[0, 1]`; the effect's output is scaled by this before blending. */
-    val intensityMultiplier: Double = 1.0,
-    /** Speed master this effect subscribes to (null → master 1). */
-    val speedMasterUuid: String? = null,
-    /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
-    val rateSpeedMasterUuid: String? = null,
-)
-
 
 // Helper functions
 
@@ -344,38 +307,6 @@ internal fun requireSpeedMasterUuid(raw: String?): java.util.UUID? = raw?.let {
         ?: throw IllegalArgumentException("Invalid speedMasterUuid: '$it' is not a uuid")
 }
 
-private fun FxInstance.toDto(isMultiElementExpanded: Boolean = false) = EffectDto(
-    id = id,
-    effectType = effectTypeId,
-    targetKey = target.targetKey,
-    propertyName = target.propertyName,
-    beatDivision = timing.beatDivision,
-    blendMode = blendMode.name,
-    isRunning = isRunning,
-    phaseOffset = phaseOffset,
-    currentPhase = lastPhase,
-    parameters = effect.parameters,
-    isGroupTarget = isGroupEffect,
-    distributionStrategy = if (isGroupEffect || isMultiElementExpanded)
-        distributionStrategy.javaClass.simpleName else null,
-    elementMode = if (isGroupEffect && isMultiElementExpanded)
-        elementMode.name else null,
-    elementFilter = if ((isGroupEffect || isMultiElementExpanded) && elementFilter != ElementFilter.ALL)
-        elementFilter.name else null,
-    stepTiming = stepTiming,
-    lookId = lookId,
-    programmerLayerId = programmerLayerId,
-    cueId = cueId,
-    timingSource = timingSource.name,
-    programmerOwned = FxEngine.isProgrammerFxPriority(priority),
-    intensityMultiplier = intensityMultiplier,
-    // BEAT effects read only speedMasterUuid, WALL_CLOCK only rateSpeedMasterUuid — report just
-    // the consumed identity, not both (sweep item B4; matches FxEngine.emitStateUpdate's gating
-    // for the WS-facing FxInstanceState).
-    speedMasterUuid = if (timingSource == TimingSource.BEAT) speedMasterUuid?.toString() else null,
-    rateSpeedMasterUuid = if (timingSource == TimingSource.WALL_CLOCK) rateSpeedMasterUuid?.toString() else null,
-)
-
 private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     id = id,
     effectType = effectTypeId,
@@ -391,8 +322,8 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     stepTiming = stepTiming,
     programmerOwned = FxEngine.isProgrammerFxPriority(priority),
     intensityMultiplier = intensityMultiplier,
-    speedMasterUuid = if (timingSource == TimingSource.BEAT) speedMasterUuid?.toString() else null,
-    rateSpeedMasterUuid = if (timingSource == TimingSource.WALL_CLOCK) rateSpeedMasterUuid?.toString() else null,
+    speedMasterUuid = reportedSpeedMasterUuid,
+    rateSpeedMasterUuid = reportedRateSpeedMasterUuid,
 )
 
 private fun createTargetFromRequest(

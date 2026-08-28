@@ -1025,6 +1025,14 @@ DELETE /api/rest/fx/fixture/{key}    (clear fixture effects)
 POST   /api/rest/fx/clear            (clear all effects)
 ```
 
+`EffectDto` lives in `fx/EffectDto.kt` and is the *only* effect report on any transport — the
+`fxState` WebSocket frame carries the same objects. Sweep item F8 collapsed the two, so these
+REST responses gained the three fields that used to be WebSocket-only: `cueStackId`,
+`speedMasterIndex` and `rateSpeedMasterIndex`. Nothing was removed, and `effectType` is
+`FxInstance.effectTypeId` on every transport now (the WS frame used to send the display name).
+Build one with `FxEngine.effectDtos` / `FxEngine.effectDto` rather than calling `toEffectDto`
+directly — the engine owns the speed-master snapshot and the multi-element answer it needs.
+
 ### Effect Library
 
 ```
@@ -1108,7 +1116,7 @@ and behaves identically to the null default).
 
 | Message | Description |
 |---------|-------------|
-| `fxState` | The active-effect list `{ activeEffects }`; each effect carries `speedMasterUuid`/`speedMasterIndex` and `rateSpeedMasterUuid`/`rateSpeedMasterIndex`. No tempo — it used to carry `bpm`/`isClockRunning` for master 1 |
+| `fxState` | The active-effect list `{ activeEffects }`, each entry the shared `EffectDto` (`fx/EffectDto.kt`) that `GET /fx/active` also returns — so it carries `speedMasterUuid`/`speedMasterIndex` and `rateSpeedMasterUuid`/`rateSpeedMasterIndex` alongside the full REST field set. No tempo — it used to carry `bpm`/`isClockRunning` for master 1 |
 | `fxChanged` | Effect change notification `{ changeType, effectId }` |
 | `speedMasters.state` | Full bank `{ masters: [{ uuid, index, name, bpm, isRunning, source }] }` — sent on connect, on request, and as the reply to every `speedMasters.*` write |
 | `speedMasters.changed` | One master's tempo moved `{ masterUuid, index, bpm, source, timestampMs }` — the live-BPM stream; CRUD invalidation goes via `speedMasters.listChanged` instead |

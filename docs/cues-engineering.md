@@ -247,9 +247,9 @@ Manual effects and effects owned by the stomping cue itself are never stomped. S
 ## Active Cue Tracking
 
 Active cues are derived from `FxInstance.cueId` — there is no separate "active cue" registry. The `cueId` field is included in:
-- `FxInstanceState` (FxEngine state flow)
-- `FxEffectState` (WebSocket broadcast to frontend)
-- `EffectDto` and `GroupEffectDto` (REST API responses)
+- `EffectDto` (`fx/EffectDto.kt`) — the one effect report, carried by the FxEngine state flow,
+  the `fxState` WebSocket broadcast and the REST active-effect responses alike
+- `GroupEffectDto` (REST group responses)
 - `get_current_state` AI tool output
 
 The frontend derives active cue IDs from the real-time FxState WebSocket stream using the `useActiveCueIds()` hook (no additional WebSocket message needed).

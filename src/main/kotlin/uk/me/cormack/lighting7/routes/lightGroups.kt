@@ -123,8 +123,11 @@ internal fun Route.routeApiRestGroups(state: State) {
                         cueId = instance.cueId,
                         programmerOwned = FxEngine.isProgrammerFxPriority(instance.priority),
                         intensityMultiplier = instance.intensityMultiplier,
-                        speedMasterUuid = instance.speedMasterUuid?.toString(),
-                        rateSpeedMasterUuid = instance.rateSpeedMasterUuid?.toString(),
+                        // Gated exactly as EffectDto and IndirectEffectDto are — this was the
+                        // one effect report sweep item B4 missed, so a BEAT-timed group effect
+                        // showed a live rate-master chip for a field it cannot read.
+                        speedMasterUuid = instance.reportedSpeedMasterUuid,
+                        rateSpeedMasterUuid = instance.reportedRateSpeedMasterUuid,
                     )
                 }
                 call.respond(dtos)

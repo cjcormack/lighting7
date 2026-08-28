@@ -473,38 +473,13 @@ class FxEngine(
     }
 
     /**
-     * Represents a state update for broadcasting.
+     * Represents a state update for broadcasting. Carries [EffectDto] directly: the effect
+     * report has one shape across every transport, so there is nothing left for a
+     * broadcast-only intermediate to add (sweep item F8).
      */
     data class FxStateUpdate(
         val activeEffectIds: List<Long>,
-        val effectStates: Map<Long, FxInstanceState>
-    )
-
-    /**
-     * State of a single effect instance.
-     */
-    data class FxInstanceState(
-        val id: Long,
-        val effectType: String,
-        val targetKey: String,
-        val propertyName: String,
-        val isGroupTarget: Boolean,
-        val distributionStrategy: String?,
-        val elementMode: String?,
-        val isRunning: Boolean,
-        val currentPhase: Double,
-        val blendMode: BlendMode,
-        val cueId: Int? = null,
-        val cueStackId: Int? = null,
-        val timingSource: String = "BEAT",
-        /** Speed master this effect subscribes to (null → master 1). */
-        val speedMasterUuid: String? = null,
-        /** 1-based display index of that master, resolved at emit time for the FX-sheet chips. */
-        val speedMasterIndex: Int = 1,
-        /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
-        val rateSpeedMasterUuid: String? = null,
-        /** 1-based display index of the rate master, resolved at emit time. */
-        val rateSpeedMasterIndex: Int = 1,
+        val effectStates: Map<Long, EffectDto>
     )
 
     /**
@@ -671,6 +646,21 @@ class FxEngine(
      * Get all active effect instances.
      */
     fun getActiveEffects(): List<FxInstance> = activeEffects.values.toList()
+
+    /**
+     * Report a batch of live effects. The only shape callers should use: [toEffectDto] needs a
+     * [SpeedMasterBank.masterStates] snapshot and an [isMultiElementExpanded] answer, both of
+     * which only the engine can supply, and hoisting the snapshot once per batch is what keeps
+     * this off O(effects x masters).
+     */
+    fun effectDtos(instances: Collection<FxInstance>): List<EffectDto> {
+        val masterStates = speedMasters.masterStates()
+        return instances.map { it.toEffectDto(masterStates, isMultiElementExpanded(it)) }
+    }
+
+    /** Report a single live effect; see [effectDtos]. */
+    fun effectDto(instance: FxInstance): EffectDto =
+        instance.toEffectDto(speedMasters.masterStates(), isMultiElementExpanded(instance))
 
     /**
      * The live programmer-*layer* effects, keyed by the identity stamped at spawn.
@@ -1906,36 +1896,7 @@ class FxEngine(
         // fresh list, and calling it per effect made this O(effects x masters) allocation.
         val masterStates = speedMasters.masterStates()
         val states = activeEffects.mapValues { (_, instance) ->
-            val expanded = isMultiElementExpanded(instance)
-            val showDistribution = instance.isGroupEffect || expanded
-            FxInstanceState(
-                id = instance.id,
-                effectType = instance.effect.name,
-                targetKey = instance.target.targetKey,
-                propertyName = instance.target.propertyName,
-                isGroupTarget = instance.isGroupEffect,
-                distributionStrategy = if (showDistribution)
-                    instance.distributionStrategy.javaClass.simpleName else null,
-                elementMode = if (instance.isGroupEffect && expanded)
-                    instance.elementMode.name else null,
-                isRunning = instance.isRunning,
-                currentPhase = instance.lastPhase,
-                blendMode = instance.blendMode,
-                cueId = instance.cueId,
-                cueStackId = instance.cueStackId,
-                timingSource = instance.timingSource.name,
-                // BEAT effects read only speedMasterSlot, WALL_CLOCK only rateMasterSlot — report
-                // just the consumed identity, not both, so the FX sheet doesn't show a live chip
-                // for a field the effect cannot read. The paired *Index* field stays unconditional
-                // (matching the null-uuid → index-1 "master 1" convention used everywhere else in
-                // this DTO) rather than a second gate that could disagree with it.
-                speedMasterUuid = if (instance.timingSource == TimingSource.BEAT)
-                    instance.speedMasterUuid?.toString() else null,
-                speedMasterIndex = masterStates.getOrNull(instance.speedMasterSlot)?.index ?: 1,
-                rateSpeedMasterUuid = if (instance.timingSource == TimingSource.WALL_CLOCK)
-                    instance.rateSpeedMasterUuid?.toString() else null,
-                rateSpeedMasterIndex = masterStates.getOrNull(instance.rateMasterSlot)?.index ?: 1,
-            )
+            instance.toEffectDto(masterStates, isMultiElementExpanded(instance))
         }
 
         _fxStateFlow.value = FxStateUpdate(
